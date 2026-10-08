@@ -308,6 +308,12 @@ int ObLogHandler::get_begin_lsn(LSN &lsn) const
   return ret;
 }
 
+int ObLogHandler::get_base_lsn(LSN &lsn) const
+{
+  RLockGuard guard(lock_);
+  return palf_handle_.get_base_lsn(lsn);
+}
+
 int ObLogHandler::get_end_lsn(LSN &lsn) const
 {
   RLockGuard guard(lock_);

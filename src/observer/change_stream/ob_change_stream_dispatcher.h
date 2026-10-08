@@ -28,6 +28,7 @@
 #include "lib/container/ob_ext_ring_buffer.h"
 #include "lib/atomic/ob_atomic.h"
 #include "lib/lock/ob_thread_cond.h"
+#include "lib/lock/ob_spin_lock.h"
 #include "common/ob_tablet_id.h"
 #include "common/rowkey/ob_store_rowkey.h"
 #include "share/ob_thread_pool.h"
@@ -117,7 +118,7 @@ public:
   int64_t task_finish_;    // Updated atomically by workers.
   int64_t task_fail_;
   int64_t row_count_;
-  int64_t refresh_scn_;    // Max commit_version of tx in batch; advance after commit.
+  int64_t max_commit_scn_; // Max commit_version of tx in batch; persisted as applied_scn after commit.
   int64_t schema_version_;
   int64_t epoch_;           // Creation epoch snapshot; mismatch with dispatcher.epoch_ → abort.
 
@@ -174,16 +175,25 @@ public:
   /// Fetcher calls this when a transaction commits.
   int push(ObCSTxInfo *tx);
 
-  int64_t get_refresh_scn() const { return ATOMIC_LOAD(&refresh_scn_); }
-  int update_refresh_scn(const int64_t refresh_scn);
+  /// Last SCN durably applied by Worker.  Dispatcher uses only this value
+  /// when deciding whether a transaction can be skipped during recovery.
+  int64_t get_applied_scn() const { return ATOMIC_LOAD(&applied_scn_); }
+  int update_applied_scn(const int64_t applied_scn);
 
+  int64_t get_next_sn() const { return ATOMIC_LOAD(&next_sn_); }
   int64_t get_next_commit_sn() const { return ATOMIC_LOAD(&next_commit_sn_); }
   void set_next_commit_sn(int64_t sn) { ATOMIC_STORE(&next_commit_sn_, sn); }
 
   /// Global abort epoch — incremented by last-worker on batch failure.
   /// Workers compare ctx->epoch_ with this to detect abort.
   int64_t get_epoch() const { return ATOMIC_LOAD(&epoch_); }
-  void inc_epoch() { ATOMIC_INC(&epoch_); }
+  bool is_recovering() const { return 0 != ATOMIC_LOAD(&recovery_in_progress_); }
+  void inc_epoch();
+  /// Try to publish an explicit refresh proof only if recovery has not changed epoch
+  /// and the new epoch has finished reloading its persisted baseline.
+  int try_publish_refresh_scn(const int64_t refresh_scn,
+                              const int64_t expected_epoch,
+                              bool &published);
 
   /// Active in-flight batch count.  Incremented by Dispatcher before pushing
   /// subtasks, decremented by last-worker in cleanup.  Dispatcher waits for
@@ -198,15 +208,15 @@ public:
 protected:
   void run1() override;
   int do_dispatch_();
-  int init_refresh_scn_();
+  int init_applied_scn_();
 
 private:
   static const int64_t CS_AGGREGATE_ROW_THRESHOLD = 1000;  // Aggregate small tx until >= 1000 rows or queue empty.
 
   bool is_inited_;
   common::ObExtendibleRingBuffer<ObCSTxInfo> tx_ring_;  // Stores ObCSTxInfo*
-  int64_t refresh_scn_;
-  int64_t next_sn_;           // Serial number for ring buffer set (Fetcher side)
+  int64_t applied_scn_;
+  int64_t next_sn_;           // Atomic publication of the next ring-buffer serial number.
   int64_t dispatch_sn_;       // Next position to read from ring buffer (dispatch cursor).
                               // Always: begin_sn() <= dispatch_sn_ <= end_sn().
                               // begin_sn() = committed watermark (advanced by release_batch after Worker commit).
@@ -217,6 +227,8 @@ private:
   int64_t epoch_;              // Global abort epoch (atomic).  Incremented on batch failure.
   int64_t dispatcher_epoch_;   // Dispatcher's local epoch cache; compared with epoch_ to detect failure.
   int64_t active_batch_count_; // Atomic count of in-flight batches.
+  int64_t recovery_in_progress_; // Atomic flag: startup/recovery baseline reload is incomplete.
+  common::ObSpinLock refresh_epoch_lock_; // Serializes epoch changes, recovery reset and refresh publish.
 
   // Condition variable: Fetcher signals after push(), Dispatcher waits when idle.
   common::ObThreadCond dispatch_cond_;
