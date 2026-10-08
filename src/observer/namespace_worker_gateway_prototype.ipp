@@ -297,6 +297,40 @@ int open_in_process_scan(StorageSpaceHandle storage_space,
   THIS_WORKER.set_timeout_ts(old_timeout);
   return ret;
 }
+int capture_statement_read_view(sql::ObSQLSessionInfo &session,
+    transaction::ObTxReadSnapshot &snapshot, const std::function<int()> &acquire,
+    ns::NamespaceCatalogViews::Handle &view)
+{
+  // Native instance/bootstrap SQL without a Namespace binding has no catalog
+  // view. A bound Namespace must use its explicitly installed lifecycle.
+  if (!serves_namespace_schema()) { return acquire(); }
+  StorageSessionScope scope(&session);
+  auto *ctx = in_process_storage;
+  if (scope.error()) { return scope.error(); }
+  if (ctx == nullptr || !ctx->writes) { return OB_NOT_INIT; }
+  auto *lifecycle = namespace_schema_lifecycle(ctx->ns);
+  if (lifecycle == nullptr) { return OB_NOT_INIT; }
+  const bool fixed = transaction::is_RR_or_SERIAL_isolevel(session.get_tx_isolation());
+  ns::NamespaceCatalogViews::Handle selected;
+  const int ret = lifecycle->acquire_read_view([&](share::SCN &scn) {
+    const int rc = acquire();
+    if (rc == OB_SUCCESS) { scn = snapshot.core_.version_; }
+    return rc;
+  }, selected, fixed ? ctx->writes->transaction_view : ns::NamespaceCatalogViews::Handle{});
+  if (ret == OB_SUCCESS) {
+    view = selected;
+    if (fixed) { ctx->writes->transaction_view = selected; }
+  }
+  return ret;
+}
+
+int find_statement_read_view(uint64_t namespace_id, int64_t snapshot,
+    ns::NamespaceCatalogViews::Handle &view)
+{
+  auto *lifecycle = namespace_schema_lifecycle(namespace_id);
+  return lifecycle == nullptr ? OB_NOT_INIT : lifecycle->find_read_view(snapshot, view);
+}
+
 int release_in_process_tx(const transaction::ObTxDesc &tx)
 {
   InProcessStorage *ctx = in_process_storage;
@@ -356,6 +390,10 @@ int call_in_process_tx_state(char operation, transaction::ObTxDesc &view,
     }
   }
   if (!ret) {
+    if (operation == 'C' || operation == 'R' || operation == 'U'
+        || operation == 'N' || operation == 'H') {
+      ctx->writes->transaction_view.reset();
+    }
     ret = operation == 'U'
         ? view.sync_reused_state_from(*native)
         : view.sync_serialized_state_from(*native);

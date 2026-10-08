@@ -2,6 +2,7 @@
 #ifndef SEEKDB_NAMESPACE_WORKER_PROTOCOL_PROTOTYPE_H_
 #define SEEKDB_NAMESPACE_WORKER_PROTOCOL_PROTOTYPE_H_
 #include "namespace/namespace.h"
+#include "namespace/catalog.h"
 #include "lib/ob_errno.h"
 #include "lib/string/ob_string.h"
 #include "common/object/ob_object.h"
@@ -15,6 +16,8 @@
 #include <vector>
 namespace oceanbase { namespace sql { class ObSQLSessionInfo; } }
 namespace oceanbase { namespace transaction { class ObTxDesc; } }
+namespace oceanbase { namespace transaction { struct ObTxReadSnapshot; } }
+namespace oceanbase { namespace share { class SCN; } }
 namespace oceanbase { namespace sql { class ObBasicSessionInfo; } }
 namespace oceanbase { namespace sql { class ObPlanCache; } }
 namespace oceanbase { namespace common { class ObITabletScan; } }
@@ -48,6 +51,10 @@ class INamespaceSchemaLifecycle
 public:
   virtual ~INamespaceSchemaLifecycle() = default;
   virtual int refresh() = 0;
+  virtual int acquire_read_view(const std::function<int(share::SCN &)> &acquire,
+      ns::NamespaceCatalogViews::Handle &view,
+      const ns::NamespaceCatalogViews::Handle &previous) = 0;
+  virtual int find_read_view(int64_t snapshot, ns::NamespaceCatalogViews::Handle &view) = 0;
   virtual int fetch_version(bool published, bool core_version, int64_t &version) = 0;
   virtual int begin_change() = 0;
   virtual int finish_change(int64_t committed_schema_version) = 0;
@@ -58,9 +65,14 @@ public:
                       int64_t &published_schema_version) = 0;
 };
 constexpr size_t MAX_FRAME = 256 * 1024;
+int capture_statement_read_view(sql::ObSQLSessionInfo &session,
+    transaction::ObTxReadSnapshot &snapshot, const std::function<int()> &acquire,
+    ns::NamespaceCatalogViews::Handle &view);
 int stage_namespace_schema_publication(uint64_t namespace_id, common::ObMySQLTransaction &sql,
     share::schema::ObMultiVersionSchemaService &schema_service, int64_t version,
     std::unique_ptr<rootserver::NamespaceSchemaPublication> &publication);
+int find_statement_read_view(uint64_t namespace_id, int64_t snapshot,
+    ns::NamespaceCatalogViews::Handle &view);
 constexpr size_t MAX_SQL_MESSAGE = 64 * 1024 * 1024;
 struct RequestTag { uint64_t slot = 0, generation = 0; };
 class StorageSpaceHandle final

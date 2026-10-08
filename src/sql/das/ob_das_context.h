@@ -17,6 +17,7 @@
 #ifndef DEV_SRC_SQL_DAS_OB_DAS_CONTEXT_H_
 #define DEV_SRC_SQL_DAS_OB_DAS_CONTEXT_H_
 #include "data_plane/transaction/ob_tx_read_snapshot.h"
+#include "namespace/catalog.h"
 #include "sql/das/ob_das_define.h"
 #include "sql/das/ob_das_tablet_mapper.h"
 #include "share/schema/ob_schema_getter_guard.h"
@@ -133,6 +134,7 @@ public:
   int64_t get_related_tablet_cnt() const;
   int set_snapshot(const transaction::ObTxReadSnapshot &snapshot) { return snapshot_.assign(snapshot); }
   transaction::ObTxReadSnapshot &get_snapshot() { return snapshot_; }
+  ns::NamespaceCatalogViews::Handle &namespace_read_view() { return namespace_read_view_; }
   transaction::ObTxSEQ get_savepoint() const { return savepoint_; }
   void set_savepoint(const transaction::ObTxSEQ savepoint) { savepoint_ = savepoint; }
   void set_write_branch_id(const int16_t branch_id) { write_branch_id_ = branch_id; }
@@ -208,6 +210,7 @@ private:
   DASRelatedTabletMap related_tablet_map_;
   common::ObIAllocator &allocator_;
   transaction::ObTxReadSnapshot snapshot_;           // Mvcc snapshot
+  ns::NamespaceCatalogViews::Handle namespace_read_view_; // Local lifetime, not serialized.
   transaction::ObTxSEQ savepoint_;                   // DML savepoint
   // for DML like `insert update` and `replace`, which use savepoint to
   // resolve conflicts and when these DML executed under partition-wise

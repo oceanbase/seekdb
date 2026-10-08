@@ -82,6 +82,9 @@ public:
   using Handle = std::shared_ptr<const View>;
   NamespaceCatalogViews();
   Handle hold(uint64_t namespace_id, int64_t snapshot, const CatalogRoots &roots);
+  // Share an already protected coordinator view with local parallel workers.
+  // This never reopens a historical root after its last holder has released it.
+  Handle find(uint64_t namespace_id, int64_t snapshot) const;
   void list(std::vector<Entry> &entries) const;
 private:
   std::shared_ptr<State> state_;

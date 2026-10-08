@@ -250,8 +250,14 @@ int NamespaceSchemaPublication::stage(common::ObMySQLTransaction &sql,
   }
   std::set<uint64_t> pending, processed;
   for (int64_t i = 0; ret == OB_SUCCESS && i < operations.count(); ++i) {
-    const uint64_t id = operations.at(i).table_id_;
-    if (id != 0 && id != OB_INVALID_ID) { pending.insert(id); }
+    const auto &operation = operations.at(i);
+    // Other schema operations reuse table_id_ for unrelated object IDs
+    // (for example, routine privileges). Only table DDL changes these roots.
+    if (operation.op_type_ > OB_DDL_TABLE_OPERATION_BEGIN
+        && operation.op_type_ < OB_DDL_TABLE_OPERATION_END
+        && operation.table_id_ != 0 && operation.table_id_ != OB_INVALID_ID) {
+      pending.insert(operation.table_id_);
+    }
   }
   ObArenaAllocator allocator("CatalogPublish");
   Schemas current, previous;

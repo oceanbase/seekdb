@@ -662,8 +662,13 @@ int ObSqlTransControl::stmt_setup_snapshot_(ObSQLSessionInfo *session,
   bool can_plain_insert = false;
   if (cl == ObConsistencyLevel::WEAK || cl == ObConsistencyLevel::FROZEN) {
     SCN snapshot_version = SCN::min_scn();
-    if (OB_FAIL(txs->get_weak_read_snapshot_version(session->get_ob_max_read_stale_time(),
-                                                    snapshot_version))) {
+    if (OB_FAIL(observer::namespace_worker_prototype::capture_statement_read_view(
+        *session, snapshot, [&]() {
+          const int rc = txs->get_weak_read_snapshot_version(
+              session->get_ob_max_read_stale_time(), snapshot_version);
+          if (rc == OB_SUCCESS) { snapshot.init_weak_read(snapshot_version); }
+          return rc;
+        }, das_ctx.namespace_read_view()))) {
       TRANS_LOG(WARN, "get weak read snapshot fail", KPC(txs));
       int64_t stale_time = session->get_ob_max_read_stale_time();
       int64_t refresh_interval = GCONF.weak_read_version_refresh_interval;
@@ -680,6 +685,7 @@ int ObSqlTransControl::stmt_setup_snapshot_(ObSQLSessionInfo *session,
     OB_FAIL(can_do_plain_insert(session, plan, exec_ctx, can_plain_insert))) {
     TRANS_LOG(WARN, "check can do plain insert failed", KPC(txs));
   } else if (can_plain_insert) {
+    das_ctx.namespace_read_view().reset();
     das_ctx.set_use_snapshot_opt(true);
     data_plane::initialize_plain_insert_snapshot(
         *session->get_tx_desc(), snapshot);
@@ -687,10 +693,11 @@ int ObSqlTransControl::stmt_setup_snapshot_(ObSQLSessionInfo *session,
     ObTxDesc &tx_desc = *session->get_tx_desc();
     int64_t stmt_expire_ts = get_stmt_expire_ts(plan_ctx, *session);
     if (OB_SUCC(ret)) {
-      ret = txs->get_read_snapshot(tx_desc,
-                                   session->get_tx_isolation(),
-                                   stmt_expire_ts,
-                                   snapshot);
+      ret = observer::namespace_worker_prototype::capture_statement_read_view(
+          *session, snapshot, [&]() {
+            return txs->get_read_snapshot(tx_desc, session->get_tx_isolation(),
+                stmt_expire_ts, snapshot);
+          }, das_ctx.namespace_read_view());
       // per-opt: set read elr for DML stmt
       if (OB_SUCC(ret) && !plan->is_plain_select() && txs->can_elr()) {
         snapshot.try_set_read_elr();
@@ -720,28 +727,9 @@ int ObSqlTransControl::stmt_refresh_snapshot(ObExecContext &exec_ctx) {
 
 int ObSqlTransControl::set_fk_check_snapshot(ObExecContext &exec_ctx)
 {
-  int ret = OB_SUCCESS;
-  ObSQLSessionInfo *session = GET_MY_SESSION(exec_ctx);
-  ObDASCtx &das_ctx = DAS_CTX(exec_ctx);
-  ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(exec_ctx);
-  const ObPhysicalPlan *plan = plan_ctx->get_phy_plan();
-  // insert stmt does not set snapshot by default, set snapshopt for foreign key check induced by insert heres
-  if (plan->is_plain_insert()) {
-    data_plane::ObITransactionService *txs = NULL;
-    ObTxReadSnapshot &snapshot = das_ctx.get_snapshot();
-    ObTxDesc &tx_desc = *session->get_tx_desc();
-    int64_t stmt_expire_ts = get_stmt_expire_ts(plan_ctx, *session);
-    if (OB_FAIL(get_tx_service(session, txs))) {
-    } else {
-      ret = txs->get_read_snapshot(tx_desc,
-                                   session->get_tx_isolation(),
-                                   stmt_expire_ts,
-                                   snapshot);
-      if (OB_FAIL(ret)) {
-      }
-    }
-  }
-  return ret;
+  // Plain INSERT defers snapshot selection until its foreign-key read.
+  const ObPhysicalPlan *plan = GET_PHY_PLAN_CTX(exec_ctx)->get_phy_plan();
+  return plan->is_plain_insert() ? get_read_snapshot(exec_ctx) : OB_SUCCESS;
 }
 
 int ObSqlTransControl::can_do_plain_insert(ObSQLSessionInfo *session,
@@ -778,10 +766,12 @@ int ObSqlTransControl::can_do_plain_insert(ObSQLSessionInfo *session,
   return ret;
 }
 
-int ObSqlTransControl::get_read_snapshot(ObSQLSessionInfo *session,
-                                         ObPhysicalPlanCtx *plan_ctx,
-                                         transaction::ObTxReadSnapshot &snapshot)
+int ObSqlTransControl::get_read_snapshot(ObExecContext &exec_ctx)
 {
+  ObSQLSessionInfo *session = GET_MY_SESSION(exec_ctx);
+  ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(exec_ctx);
+  ObDASCtx &das_ctx = DAS_CTX(exec_ctx);
+  ObTxReadSnapshot &snapshot = das_ctx.get_snapshot();
   int ret = OB_SUCCESS;
   ObTxIsolationLevel isolation = session->get_tx_isolation();
   const ObPhysicalPlan *plan = plan_ctx->get_phy_plan();
@@ -789,7 +779,10 @@ int ObSqlTransControl::get_read_snapshot(ObSQLSessionInfo *session,
   data_plane::ObITransactionService *txs = NULL;
   transaction::ObTxDesc &tx_desc = *session->get_tx_desc();
   if (OB_FAIL(get_tx_service(session, txs))) {
-  } else if (OB_FAIL(txs->get_read_snapshot(tx_desc, isolation, expire_ts, snapshot))) {
+  } else if (OB_FAIL(observer::namespace_worker_prototype::capture_statement_read_view(
+      *session, snapshot, [&]() {
+        return txs->get_read_snapshot(tx_desc, isolation, expire_ts, snapshot);
+      }, das_ctx.namespace_read_view()))) {
   } else if (!snapshot.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected invalid snapshot", K(ret),
@@ -991,6 +984,7 @@ int ObSqlTransControl::end_stmt(ObExecContext &exec_ctx, const bool rollback, co
   if (OB_SUCC(ret) && !ObSQLUtils::is_nested_sql(&exec_ctx)) {
     session->reset_reserved_snapshot_version();
   }
+  das_ctx.namespace_read_view().reset();
 
   // add tx id to AuditRecord
   set_audit_tx_id_(session);

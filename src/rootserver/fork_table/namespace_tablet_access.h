@@ -39,9 +39,11 @@ public:
                        data_plane::ObNamespaceAccessMode mode);
   int prepare_read(uint64_t namespace_id, uint64_t table_id,
                    const common::ObTabletID &logical_tablet,
-                   data_plane::ObNamespaceAccessMode mode);
+                   data_plane::ObNamespaceAccessMode mode,
+                   const NamespaceCatalogViews::Handle &view = {});
   int prepare_scan(uint64_t namespace_id, data_plane::ObNamespaceAccessMode mode,
-                   storage::ObTableScanParam &param);
+                   storage::ObTableScanParam &param,
+                   const NamespaceCatalogViews::Handle &view);
   int prepare_write(uint64_t namespace_id, uint64_t table_id,
                     const common::ObTabletID &logical_tablet,
                     data_plane::ObNamespaceAccessMode mode);
@@ -51,6 +53,7 @@ public:
 private:
   int route(uint64_t namespace_id, const common::ObTabletID &logical_tablet);
   storage::TabletAccessProtection protection_;
+  NamespaceCatalogViews::Handle view_;
   common::ObTabletID tablet_;
   common::ObTabletID schema_tablet_;
   int64_t cap_scn_ = 0;

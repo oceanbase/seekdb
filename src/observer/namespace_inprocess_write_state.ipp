@@ -213,6 +213,7 @@ struct EngineWrite {
 };
 
 struct EngineWrites {
+  ns::NamespaceCatalogViews::Handle transaction_view;
   StorageSpaceHandle storage_space;
   data_plane::ObNamespaceAccessMode namespace_access_mode;
   sql::ObSQLSessionInfo &session;
@@ -235,6 +236,7 @@ struct EngineWrites {
       tx = nullptr;
       fprintf(stderr, "PROTOTYPE_V14_TX_RELEASED session=%u rollback=%d\n", sid, rollback);
     }
+    transaction_view.reset();
   }
   ~EngineWrites() { reset(); }
   int release(uint64_t txid) {

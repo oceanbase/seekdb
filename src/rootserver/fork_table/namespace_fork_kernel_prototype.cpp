@@ -166,9 +166,10 @@ public:
       if (std::chrono::steady_clock::now() >= deadline) { return; }
     }
     held_ = true;
+    ++metadata_depth;
     ret_ = OB_SUCCESS;
   }
-  ~PhysicalReclamationGuard() { if (held_) { metadata_mutex.unlock(); } }
+  ~PhysicalReclamationGuard() { if (held_) { --metadata_depth; metadata_mutex.unlock(); } }
   int error() const { return ret_; }
 private:
   std::unique_lock<std::mutex> serial_;
@@ -1439,23 +1440,89 @@ int NamespaceForkKernelPrototype::schedule_baseline_impl(const ObTablet &tablet,
   return (ret == OB_ITER_END || ret == OB_ENTRY_NOT_EXIST) ? OB_SUCCESS : ret;
 }
 int NamespaceForkKernelPrototype::acquire_read_view(uint64_t namespace_id,
-    const std::function<int(SCN &)> &acquire, ns::NamespaceCatalogViews::Handle &view)
+    const std::function<int(SCN &)> &acquire, ns::NamespaceCatalogViews::Handle &view,
+    const ns::NamespaceCatalogViews::Handle &previous)
 {
   MetadataReadGuard publication;
   if (publication.error() != OB_SUCCESS) { return publication.error(); }
   auto *store = directory_kv_store();
   if (store == nullptr) { return OB_NOT_INIT; }
   rootserver::InstanceNamespaceDirectory directory(*store);
-  return directory.acquire_read_view(namespace_id, directory_deadline(), acquire, view);
+  return directory.acquire_read_view(namespace_id, directory_deadline(), acquire, view, previous);
 }
 
 int NamespaceForkKernelPrototype::resolve_read_tablet(
-    const ObTabletID &tablet_id, ObTabletID &physical_tablet_id, int64_t &cap_scn) {
+    const ObTabletID &tablet_id, ObTabletID &physical_tablet_id, int64_t &cap_scn,
+    const ns::NamespaceCatalogViews::Handle &view) {
   physical_tablet_id = tablet_id;
   cap_scn = 0;
   if (!is_encoded_id(tablet_id.id())) { return OB_SUCCESS; }
   auto *store = directory_kv_store();
   if (store == nullptr) { return OB_NOT_INIT; }
+  if (view) {
+    if (view->entry().namespace_id != database_of(tablet_id.id())) { return OB_INVALID_ARGUMENT; }
+    InstanceMetaStore::Transaction tx;
+    ns::CatalogTabletSource source;
+    int ret = store->begin(tx, directory_deadline(), true);
+    if (OB_SUCC(ret)) {
+      rootserver::InstanceNamespaceMetadata metadata(*store, tx);
+      ret = metadata.find_tablet_source(view->entry().roots.directory,
+          local_of(tablet_id.id()), source, cap_scn);
+      if (ret == OB_ENTRY_NOT_EXIST) { ret = OB_TABLET_NOT_EXIST; }
+    }
+    if (tx.is_active()) {
+      const int end = store->rollback(tx);
+      if (OB_SUCC(ret)) { ret = end; }
+    }
+    ObTabletHandle origin;
+    if (OB_SUCC(ret)) {
+      ret = ObTabletCreateDeleteHelper::check_and_get_tablet(
+          ObTabletMapKey(ObTabletID(source.physical_tablet_id)), origin, 0,
+          ObMDSGetTabletMode::READ_WITHOUT_CHECK, transaction::ObTransVersion::MAX_TRANS_VERSION);
+      if (ret == OB_TABLET_NOT_EXIST || ret == OB_ENTRY_NOT_EXIST
+          || (OB_SUCC(ret) && origin.get_obj()->is_empty_shell())) { ret = OB_SNAPSHOT_DISCARDED; }
+    }
+    if (OB_SUCC(ret)) {
+      ObTabletCreateDeleteMdsUserData status;
+      mds::MdsWriter writer;
+      mds::TwoPhaseCommitState state;
+      SCN version;
+      ret = origin.get_obj()->get_latest_tablet_status(status, writer, state, version);
+      if (OB_SUCC(ret) && status.create_transaction_id_ != source.create_transaction_id) {
+        ret = OB_SNAPSHOT_DISCARDED;
+      }
+    }
+    rootserver::TabletVisibility visible = rootserver::TabletVisibility::ABSENT;
+    const int64_t snapshot = ns::NamespaceCatalogCodec::cap_min(view->entry().snapshot, cap_scn);
+    if (OB_SUCC(ret)) { ret = probe_historical_tablet(source.physical_tablet_id, snapshot, visible); }
+    if (OB_SUCC(ret) && visible != rootserver::TabletVisibility::READABLE) { ret = OB_SNAPSHOT_DISCARDED; }
+    if (OB_SUCC(ret)) {
+      physical_tablet_id = ObTabletID(source.physical_tablet_id);
+      if (physical_tablet_id != tablet_id) {
+        // A local copy may have materialized after the fixed read snapshot.
+        // Use it only when it represents this exact inherited view, so the
+        // native iterator sees the transaction's own subsequent writes.
+        ObTabletHandle local;
+        const int found = ObTabletCreateDeleteHelper::check_and_get_tablet(
+            ObTabletMapKey(tablet_id), local, 0, ObMDSGetTabletMode::READ_WITHOUT_CHECK,
+            transaction::ObTransVersion::MAX_TRANS_VERSION);
+        if (found == OB_SUCCESS && !local.get_obj()->is_empty_shell()) {
+          const auto &fork = local.get_obj()->get_tablet_meta().fork_info_;
+          if (fork.is_valid() && fork.get_fork_src_tablet_id() == physical_tablet_id
+              && fork.get_fork_snapshot_version() == cap_scn) {
+            ret = probe_historical_tablet(tablet_id.id(), view->entry().snapshot, visible);
+            if (OB_SUCC(ret) && visible == rootserver::TabletVisibility::READABLE) {
+              physical_tablet_id = tablet_id;
+              cap_scn = 0;
+            }
+          }
+        } else if (found != OB_SUCCESS && found != OB_TABLET_NOT_EXIST && found != OB_ENTRY_NOT_EXIST) {
+          ret = found;
+        }
+      }
+    }
+    return ret;
+  }
   rootserver::InstanceNamespaceDirectory directory(*store);
   uint64_t physical = 0;
   int ret = directory.resolve_read_tablet(database_of(tablet_id.id()),

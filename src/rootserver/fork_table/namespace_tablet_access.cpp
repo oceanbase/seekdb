@@ -24,6 +24,7 @@ using storage::NamespaceForkKernelPrototype;
 void TabletAccess::reset()
 {
   protection_.reset();
+  view_.reset();
   tablet_.reset();
   schema_tablet_.reset();
   cap_scn_ = 0;
@@ -65,14 +66,16 @@ int TabletAccess::route(uint64_t namespace_id, const ObTabletID &logical_tablet)
 
 int TabletAccess::prepare_read(uint64_t namespace_id, uint64_t table_id,
                                const ObTabletID &logical_tablet,
-                               data_plane::ObNamespaceAccessMode mode)
+                               data_plane::ObNamespaceAccessMode mode,
+                               const NamespaceCatalogViews::Handle &view)
 {
   int ret = route(namespace_id, logical_tablet);
   if (OB_SUCC(ret)) {
+    view_ = view;
     ret = NamespaceForkKernelPrototype::prepare_access(namespace_id, table_id,
         tablet_, true, mode, protection_, [&](ObTabletID &physical) {
       return NamespaceForkKernelPrototype::resolve_read_tablet(
-          schema_tablet_, physical, cap_scn_);
+          schema_tablet_, physical, cap_scn_, view_);
     });
   }
   return ret;
@@ -94,9 +97,10 @@ int TabletAccess::prepare_write(uint64_t namespace_id, uint64_t table_id,
 
 int TabletAccess::prepare_scan(uint64_t namespace_id,
                                data_plane::ObNamespaceAccessMode mode,
-                               storage::ObTableScanParam &param)
+                               storage::ObTableScanParam &param,
+                               const NamespaceCatalogViews::Handle &view)
 {
-  int ret = prepare_read(namespace_id, param.index_id_, param.tablet_id_, mode);
+  int ret = prepare_read(namespace_id, param.index_id_, param.tablet_id_, mode, view);
   if (OB_SUCC(ret)) {
     param.tablet_id_ = tablet_;
     param.schema_tablet_id_ = schema_tablet_;

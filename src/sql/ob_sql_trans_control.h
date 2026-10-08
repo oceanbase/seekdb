@@ -160,9 +160,7 @@ public:
                            const int64_t expire_ts,
                            ObEndTransAsyncCallback *callback);
   static int start_stmt(ObExecContext &ctx);
-  static int get_read_snapshot(ObSQLSessionInfo *session,
-                               ObPhysicalPlanCtx *plan_ctx,
-                               transaction::ObTxReadSnapshot &snapshot);
+  static int get_read_snapshot(ObExecContext &exec_ctx);
   static int stmt_sanity_check_(ObSQLSessionInfo *session,
                                 const ObPhysicalPlan *plan,
                                 ObPhysicalPlanCtx *plan_ctx);

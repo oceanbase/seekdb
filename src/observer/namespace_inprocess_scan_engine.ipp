@@ -200,7 +200,9 @@ struct EngineScan {
     table.get_enable_lob_locator_v2() = true;
     // Resolve the Namespace view before entering physical storage. The lease
     // lives with this scan, including rescans, and outlives its iterator.
-    ret = access.prepare_scan(ns, access_mode, param);
+    ns::NamespaceCatalogViews::Handle read_view;
+    ret = find_statement_read_view(ns, param.snapshot_.core_.version_.get_val_for_tx(), read_view);
+    if (!ret) { ret = access.prepare_scan(ns, access_mode, param, read_view); }
     if (!ret) { ret = table.convert(*schema, param.column_ids_, sql::ObStoragePushdownFlag()); }
     if (!ret) {
       param.table_param_ = &table;

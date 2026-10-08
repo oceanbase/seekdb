@@ -283,7 +283,8 @@ public:
   // for the returned view's lifetime.
   int acquire_read_view(uint64_t namespace_id, int64_t deadline,
       const storage::InstanceMetaStore::SnapshotAcquirer &acquire,
-      ns::NamespaceCatalogViews::Handle &view);
+      ns::NamespaceCatalogViews::Handle &view,
+      const ns::NamespaceCatalogViews::Handle &previous = {});
   int resolve_read_tablet(uint64_t namespace_id, uint64_t local_tablet,
       const InstanceNamespaceMetadata::StorageTabletProbe &probe,
       int64_t deadline, uint64_t &physical_tablet, int64_t &cap_scn);

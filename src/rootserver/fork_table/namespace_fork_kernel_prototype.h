@@ -72,7 +72,8 @@ public:
   // retain it until every operation using this view has finished.
   static int acquire_read_view(uint64_t namespace_id,
       const std::function<int(share::SCN &)> &acquire,
-      ns::NamespaceCatalogViews::Handle &view);
+      ns::NamespaceCatalogViews::Handle &view,
+      const ns::NamespaceCatalogViews::Handle &previous = {});
   // Persistent lifecycle fence between namespace-local DDL and namespace fork.
   static int begin_schema_change(uint64_t namespace_id);
   static int finish_schema_change(uint64_t namespace_id, int64_t schema_version);
@@ -118,7 +119,8 @@ private:
   // snapshot the read must not exceed. Unencoded tablets pass through.
   static int resolve_read_tablet(const common::ObTabletID &tablet_id,
                                  common::ObTabletID &physical_tablet_id,
-                                 int64_t &cap_scn);
+                                 int64_t &cap_scn,
+                                 const ns::NamespaceCatalogViews::Handle &view = {});
 
 
   static int ensure_tablet(const common::ObTabletID &tablet_id);

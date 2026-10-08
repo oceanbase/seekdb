@@ -8,30 +8,51 @@
 namespace oceanbase {
 namespace ns {
 struct NamespaceCatalogViews::State {
+  struct Registered {
+    Entry entry;
+    std::weak_ptr<const View> handle;
+    const View *identity;
+  };
   std::mutex mutex;
-  std::unordered_map<const View *, Entry> views;
+  std::multimap<std::pair<uint64_t, int64_t>, Registered> views;
 };
 
 NamespaceCatalogViews::NamespaceCatalogViews() : state_(std::make_shared<State>()) {}
 
 NamespaceCatalogViews::View::View(std::shared_ptr<State> state, const Entry &entry)
     : state_(std::move(state)), entry_(entry)
-{
-  std::lock_guard<std::mutex> lock(state_->mutex);
-  state_->views.emplace(this, entry_);
-}
+{}
 
 NamespaceCatalogViews::View::~View()
 {
   std::lock_guard<std::mutex> lock(state_->mutex);
-  state_->views.erase(this);
+  const auto range = state_->views.equal_range({entry_.namespace_id, entry_.snapshot});
+  for (auto it = range.first; it != range.second; ++it) {
+    if (it->second.identity == this) { state_->views.erase(it); break; }
+  }
 }
 
 NamespaceCatalogViews::Handle NamespaceCatalogViews::hold(
     uint64_t namespace_id, int64_t snapshot, const CatalogRoots &roots)
 {
   if (namespace_id == 0 || snapshot <= 0 || roots.schema_version <= 0) { return {}; }
-  return Handle(new View(state_, {namespace_id, snapshot, roots}));
+  Handle view(new View(state_, {namespace_id, snapshot, roots}));
+  {
+    std::lock_guard<std::mutex> lock(state_->mutex);
+    state_->views.emplace(std::make_pair(namespace_id, snapshot),
+        State::Registered{view->entry(), view, view.get()});
+  }
+  return view;
+}
+
+NamespaceCatalogViews::Handle NamespaceCatalogViews::find(uint64_t namespace_id, int64_t snapshot) const
+{
+  std::lock_guard<std::mutex> lock(state_->mutex);
+  const auto range = state_->views.equal_range({namespace_id, snapshot});
+  for (auto it = range.first; it != range.second; ++it) {
+    if (auto view = it->second.handle.lock()) { return view; }
+  }
+  return {};
 }
 
 void NamespaceCatalogViews::list(std::vector<Entry> &entries) const
@@ -39,7 +60,7 @@ void NamespaceCatalogViews::list(std::vector<Entry> &entries) const
   entries.clear();
   std::lock_guard<std::mutex> lock(state_->mutex);
   entries.reserve(state_->views.size());
-  for (const auto &view : state_->views) { entries.push_back(view.second); }
+  for (const auto &view : state_->views) { entries.push_back(view.second.entry); }
 }
 
 namespace {

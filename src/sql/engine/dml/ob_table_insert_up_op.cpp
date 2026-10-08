@@ -992,11 +992,7 @@ int ObTableInsertUpOp::post_all_try_insert_das_task(ObDMLRtCtx &dml_rtctx)
   int ret = OB_SUCCESS;
   if (dml_rtctx.das_ref_.has_task()) {
     if (snapshot_state_ == USE_STMT_SNAPSHOT_STATE) {
-      ObSQLSessionInfo *my_session = GET_MY_SESSION(ctx_);
-      ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
-      if (OB_FAIL(ObSqlTransControl::get_read_snapshot(my_session,
-                                                       plan_ctx,
-                                                       ctx_.get_das_ctx().get_snapshot()))) {
+      if (OB_FAIL(ObSqlTransControl::get_read_snapshot(ctx_))) {
       } else {
         LOG_TRACE("get read snapshot", K(ctx_.get_das_ctx().get_snapshot()));
       }

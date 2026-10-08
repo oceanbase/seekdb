@@ -119,6 +119,23 @@ public:
                                     bool bootstrap = false)
       : ns_(ns), load_on_access_(load_on_access), bootstrap_(bootstrap) {}
   void complete_bootstrap() { bootstrap_.store(false, std::memory_order_release); }
+  int acquire_read_view(const std::function<int(share::SCN &)> &acquire,
+      ns::NamespaceCatalogViews::Handle &view,
+      const ns::NamespaceCatalogViews::Handle &previous) override
+  {
+    if (bootstrap_.load(std::memory_order_acquire)) {
+      share::SCN snapshot;
+      return acquire(snapshot);
+    }
+    return storage::NamespaceForkKernelPrototype::acquire_read_view(ns_, acquire, view, previous);
+  }
+  int find_read_view(int64_t snapshot, ns::NamespaceCatalogViews::Handle &view) override
+  {
+    view.reset();
+    if (bootstrap_.load(std::memory_order_acquire)) { return OB_SUCCESS; }
+    view = ns::namespace_registry().catalog_views().find(ns_, snapshot);
+    return view ? OB_SUCCESS : OB_STATE_NOT_MATCH;
+  }
   int refresh() override
   {
     if (bootstrap_.load(std::memory_order_acquire)) { return OB_SUCCESS; }

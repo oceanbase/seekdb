@@ -115,9 +115,12 @@ int ObDASScanIter::do_table_scan()
         THIS_WORKER.get_session());
     requested_snapshot_ = scan_param_->fb_snapshot_;
     data_plane::ObNamespaceAccessMode mode;
-    if (OB_FAIL(observer::namespace_worker_prototype::storage_access_mode(
+    ns::NamespaceCatalogViews::Handle read_view;
+    if (OB_FAIL(observer::namespace_worker_prototype::find_statement_read_view(
+            namespace_id_, scan_param_->snapshot_.core_.version_.get_val_for_tx(), read_view))) {
+    } else if (OB_FAIL(observer::namespace_worker_prototype::storage_access_mode(
             observer::namespace_worker_prototype::StorageSpaceHandle::namespace_space(namespace_id_), mode))) {
-    } else if (OB_FAIL(tablet_access_.prepare_scan(namespace_id_, mode, *scan_param_))) {
+    } else if (OB_FAIL(tablet_access_.prepare_scan(namespace_id_, mode, *scan_param_, read_view))) {
     } else {
       tsc_service_ = share::server_service<common::ObITabletScan>();
       ret = OB_ISNULL(tsc_service_) ? OB_NOT_INIT
@@ -147,10 +150,13 @@ int ObDASScanIter::rescan()
       }
       scan_param_->fb_snapshot_ = requested_snapshot_;
       data_plane::ObNamespaceAccessMode mode;
-      if (OB_FAIL(observer::namespace_worker_prototype::storage_access_mode(
+      ns::NamespaceCatalogViews::Handle read_view;
+      if (OB_FAIL(observer::namespace_worker_prototype::find_statement_read_view(
+              namespace_id_, scan_param_->snapshot_.core_.version_.get_val_for_tx(), read_view))) {
+      } else if (OB_FAIL(observer::namespace_worker_prototype::storage_access_mode(
               observer::namespace_worker_prototype::StorageSpaceHandle::namespace_space(namespace_id_), mode))) {
       } else {
-        ret = tablet_access_.prepare_scan(namespace_id_, mode, *scan_param_);
+        ret = tablet_access_.prepare_scan(namespace_id_, mode, *scan_param_, read_view);
       }
     }
   }

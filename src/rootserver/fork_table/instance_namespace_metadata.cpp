@@ -1654,13 +1654,19 @@ int InstanceNamespaceDirectory::get(uint64_t id,
 
 int InstanceNamespaceDirectory::acquire_read_view(uint64_t namespace_id,
     int64_t deadline, const storage::InstanceMetaStore::SnapshotAcquirer &acquire,
-    ns::NamespaceCatalogViews::Handle &view)
+    ns::NamespaceCatalogViews::Handle &view,
+    const ns::NamespaceCatalogViews::Handle &previous)
 {
   if (namespace_id == 0 || view || !acquire) { return OB_INVALID_ARGUMENT; }
   storage::InstanceMetaStore::Transaction tx;
   int ret = store_.begin_read(tx, deadline, acquire);
   ns::NamespaceCatalogViews::Handle held;
-  if (ret == OB_SUCCESS) {
+  if (ret == OB_SUCCESS && previous && previous->entry().namespace_id == namespace_id
+      && previous->entry().snapshot == tx.snapshot_version().get_val_for_tx()) {
+    // RR already holds this immutable root. Its Namespace row's historical
+    // MVCC version need not remain in the KV table for the user's entire tx.
+    held = previous;
+  } else if (ret == OB_SUCCESS) {
     InstanceNamespaceMetadata metadata(store_, tx);
     InstanceNamespaceRecord record;
     ret = metadata.get_namespace(namespace_id, record);
