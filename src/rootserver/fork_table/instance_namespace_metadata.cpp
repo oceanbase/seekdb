@@ -781,61 +781,6 @@ int InstanceNamespaceMetadata::scan_exceptions(uint64_t ns_id,
       });
 }
 
-int InstanceNamespaceMetadata::resolve_read_tablet(uint64_t namespace_id,
-    uint64_t local_tablet, const StorageTabletProbe &probe,
-    uint64_t &physical_tablet, int64_t &cap_scn)
-{
-  physical_tablet = 0;
-  cap_scn = 0;
-  if (!ns::NamespaceObjectKey{namespace_id, local_tablet}.is_valid() || !probe) {
-    return OB_INVALID_ARGUMENT;
-  }
-  InstanceExceptionRecord exception;
-  int ret = get_exception(namespace_id, local_tablet, exception);
-  if (ret == OB_SUCCESS && exception.kind == 1) { return OB_TABLET_NOT_EXIST; }
-  if (ret != OB_SUCCESS && ret != OB_ENTRY_NOT_EXIST) { return ret; }
-  const bool owned = ret == OB_SUCCESS;
-  const uint64_t local_storage = ns::NamespaceObjectKey{
-      namespace_id, local_tablet}.storage_id();
-  TabletVisibility visibility = TabletVisibility::ABSENT;
-  ret = probe(local_storage, 0, visibility);
-  if (ret != OB_SUCCESS) { return ret; }
-  if (visibility == TabletVisibility::READABLE || owned) {
-    physical_tablet = local_storage;
-    return OB_SUCCESS;
-  }
-  uint64_t current = namespace_id;
-  int64_t cap = 0;
-  for (int depth = 0; depth < 64; ++depth) {
-    InstanceNamespaceRecord record;
-    ret = get_namespace(current, record);
-    if (ret != OB_SUCCESS) { return ret; }
-    if (record.parent_namespace == 0) { return OB_TABLET_NOT_EXIST; }
-    cap = ns::NamespaceCatalogCodec::cap_min(cap, record.fork_cap);
-    current = record.parent_namespace;
-    const uint64_t candidate = ns::NamespaceObjectKey{
-        current, local_tablet}.storage_id();
-    InstanceExceptionRecord inherited;
-    int lookup = get_exception(current, local_tablet, inherited);
-    if (lookup == OB_SUCCESS && inherited.kind == 1
-        && inherited.drop_scn <= cap) { return OB_TABLET_NOT_EXIST; }
-    if (lookup != OB_SUCCESS && lookup != OB_ENTRY_NOT_EXIST) { return lookup; }
-    if (lookup == OB_SUCCESS && inherited.was_owned && cap < inherited.create_scn) {
-      continue; // This copy did not exist in the inherited view.
-    }
-    ret = probe(candidate, cap, visibility);
-    if (ret != OB_SUCCESS) { return ret; }
-    if (visibility == TabletVisibility::ABSENT && lookup == OB_SUCCESS
-        && (inherited.kind == 0 || inherited.was_owned)) { return OB_SNAPSHOT_DISCARDED; }
-    if (visibility == TabletVisibility::READABLE) {
-      physical_tablet = candidate;
-      cap_scn = cap;
-      return OB_SUCCESS;
-    }
-  }
-  return OB_SIZE_OVERFLOW;
-}
-
 int InstanceExceptionLoader::load(uint64_t namespace_id, IRowSink &sink)
 {
   return metadata_.scan_exceptions(namespace_id,
@@ -1679,64 +1624,27 @@ int InstanceNamespaceDirectory::acquire_read_view(uint64_t namespace_id,
   return ret;
 }
 
-int InstanceNamespaceDirectory::resolve_read_tablet(uint64_t namespace_id,
-    uint64_t local_tablet,
-    const InstanceNamespaceMetadata::StorageTabletProbe &probe,
-    int64_t deadline, uint64_t &physical_tablet, int64_t &cap_scn)
-{
-  physical_tablet = 0;
-  cap_scn = 0;
-  storage::InstanceMetaStore::Transaction tx;
-  int ret = store_.begin(tx, deadline, true);
-  uint64_t staged_tablet = 0;
-  int64_t staged_cap = 0;
-  if (ret == OB_SUCCESS) {
-    InstanceNamespaceMetadata metadata(store_, tx);
-    ret = metadata.resolve_read_tablet(namespace_id, local_tablet, probe,
-        staged_tablet, staged_cap);
-  }
-  ret = finish_directory_transaction(store_, tx, ret);
-  if (ret == OB_SUCCESS) {
-    physical_tablet = staged_tablet;
-    cap_scn = staged_cap;
-  }
-  return ret;
-}
-
 int InstanceNamespaceDirectory::filter_unreferenced_tablets(
     const std::vector<uint64_t> &candidates,
-    const InstanceNamespaceMetadata::StorageTabletProbe &probe,
     const std::map<uint64_t, uint64_t> &sources, int64_t deadline,
     std::vector<uint64_t> &unreferenced, bool &need_retry)
 {
   unreferenced.clear();
   need_retry = false;
-  if (!probe) { return OB_INVALID_ARGUMENT; }
   storage::InstanceMetaStore::Transaction tx;
   int ret = store_.begin(tx, deadline, true);
-  std::vector<uint64_t> live;
-  std::unordered_set<uint64_t> locals;
+  std::vector<ns::CatalogPageRef> live;
   std::unordered_set<uint64_t> referenced;
   std::vector<uint64_t> staged;
   if (ret == OB_SUCCESS) {
     InstanceNamespaceMetadata metadata(store_, tx);
     ret = metadata.scan_namespaces([&](const InstanceNamespaceRecord &record) {
       // DELETING still has admitted users until its access drain completes.
-      if (record.roots.state != 2) { live.push_back(record.id); }
+      if (record.roots.state != 2 && record.roots.directory.page != 0) {
+        live.push_back(record.roots.directory);
+      }
       return OB_SUCCESS;
     });
-    for (uint64_t candidate : candidates) {
-      if (ns::NamespaceObjectKey::is_encoded(candidate)) {
-        locals.insert(ns::NamespaceObjectKey::local_part(candidate));
-      }
-    }
-    // An incomplete copy can refer to a source with a different local ID.
-    // Resolve its own logical identity before following physical source edges.
-    for (const auto &source : sources) {
-      if (ns::NamespaceObjectKey::is_encoded(source.first)) {
-        locals.insert(ns::NamespaceObjectKey::local_part(source.first));
-      }
-    }
     auto mark_source = [&](uint64_t physical) {
       bool terminated = false;
       for (int depth = 0; depth < 64; ++depth) {
@@ -1747,39 +1655,68 @@ int InstanceNamespaceDirectory::filter_unreferenced_tablets(
       }
       return terminated ? OB_SUCCESS : OB_SIZE_OVERFLOW;
     };
+    // This pass decides physical existence only. Caps and creation identities
+    // stay in the source entries; never infer an address from Namespace ancestry.
+    // Shared pages in this KV snapshot need to be visited only once.
+    auto mark_roots = [&](InstanceNamespaceMetadata &reader,
+                          const std::vector<ns::CatalogPageRef> &roots) {
+      InstanceCatalogPageStore pages(reader);
+      ns::NamespaceCatalogTree tree(pages);
+      std::unordered_set<uint64_t> visited;
+      std::unordered_set<uint64_t> path;
+      std::function<int(ns::CatalogPageRef, int)> walk;
+      walk = [&](ns::CatalogPageRef ref, int depth) -> int {
+        if (ref.page == 0) { return OB_SUCCESS; }
+        if (path.count(ref.page) != 0) { return OB_CHECKSUM_ERROR; }
+        if (visited.count(ref.page) != 0) { return OB_SUCCESS; }
+        if (depth >= 64) { return OB_SIZE_OVERFLOW; }
+        path.insert(ref.page);
+        ns::CatalogNode node;
+        const auto result = tree.read_node(ref, node);
+        int rc = result.ok() ? OB_SUCCESS
+            : result.error == ns::CatalogTreeError::STORE ? result.store_error : OB_CHECKSUM_ERROR;
+        if (rc == OB_SUCCESS && node.leaf) {
+          for (const auto &value : node.values) {
+            ns::CatalogTabletSource source;
+            if (!ns::NamespaceCatalogCodec::decode_source(value.data, source)) {
+              rc = OB_CHECKSUM_ERROR;
+            } else {
+              rc = mark_source(source.physical_tablet_id);
+            }
+            if (rc != OB_SUCCESS) { break; }
+          }
+        } else if (rc == OB_SUCCESS) {
+          for (const auto &child : node.children) {
+            rc = walk(child, depth + 1);
+            if (rc != OB_SUCCESS) { break; }
+          }
+        }
+        path.erase(ref.page);
+        if (rc == OB_SUCCESS) { visited.insert(ref.page); }
+        return rc;
+      };
+      int rc = OB_SUCCESS;
+      for (const auto &root : roots) {
+        rc = walk(root, 0);
+        if (rc != OB_SUCCESS) { break; }
+      }
+      return rc;
+    };
+    if (ret == OB_SUCCESS) { ret = mark_roots(metadata, live); }
     // A transaction may have acquired its view before DROP, without opening
     // this tablet yet. Its immutable root is a dependency even without a native
     // tablet handle. Include incomplete physical fork edges as for live roots.
     std::vector<ns::NamespaceCatalogViews::Entry> views;
     ns::namespace_registry().catalog_views().list(views);
     for (const auto &view : views) {
+      if (ret != OB_SUCCESS) { break; }
       storage::InstanceMetaStore::Transaction view_tx;
       ret = store_.begin_read(view_tx, deadline, [&](share::SCN &snapshot) {
         return snapshot.convert_for_tx(view.snapshot);
       });
       InstanceNamespaceMetadata view_metadata(store_, view_tx);
-      for (uint64_t local : locals) {
-        if (ret != OB_SUCCESS) { break; }
-        ns::CatalogTabletSource source;
-        int64_t cap = 0;
-        ret = view_metadata.find_tablet_source(view.roots.directory, local, source, cap);
-        if (ret == OB_ENTRY_NOT_EXIST) { ret = OB_SUCCESS; continue; }
-        if (ret == OB_SUCCESS) { ret = mark_source(source.physical_tablet_id); }
-      }
+      if (ret == OB_SUCCESS) { ret = mark_roots(view_metadata, {view.roots.directory}); }
       ret = finish_directory_transaction(store_, view_tx, ret);
-      if (ret != OB_SUCCESS) { break; }
-    }
-    for (uint64_t reader : live) {
-      for (uint64_t local : locals) {
-        if (ret != OB_SUCCESS) { break; }
-        uint64_t physical = 0;
-        int64_t cap = 0;
-        ret = metadata.resolve_read_tablet(reader, local, probe, physical, cap);
-        if (ret == OB_TABLET_NOT_EXIST) { ret = OB_SUCCESS; continue; }
-        if (ret != OB_SUCCESS) { break; }
-        ret = mark_source(physical);
-      }
-      if (ret != OB_SUCCESS) { break; }
     }
     if (ret == OB_SUCCESS) {
       for (uint64_t candidate : candidates) {

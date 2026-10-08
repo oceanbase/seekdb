@@ -807,8 +807,7 @@ int NamespaceForkKernelPrototype::protect_snapshot_tablets(
   }
   bool retained = false;
   if (OB_SUCC(ret)) {
-    ret = directory.filter_unreferenced_tablets(physical_ids, probe_historical_tablet,
-        sources, directory_deadline(), unreferenced, retained);
+    ret = directory.filter_unreferenced_tablets(physical_ids, sources, directory_deadline(), unreferenced, retained);
   }
   ObArray<ObTabletID> filtered;
   for (uint64_t id : unreferenced) {

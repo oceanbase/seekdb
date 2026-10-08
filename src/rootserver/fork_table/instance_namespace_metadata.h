@@ -76,7 +76,6 @@ public:
   using SnapshotAcquirer = std::function<int(int64_t &)>;
   using PhysicalTabletProbe = std::function<int(uint64_t, bool &)>;
   using PhysicalTabletBirthProbe = std::function<int(uint64_t, int64_t &)>;
-  using StorageTabletProbe = std::function<int(uint64_t, int64_t, TabletVisibility &)>;
   using NamespacePhysicalProbe = std::function<int(uint64_t, bool &)>;
 
   InstanceNamespaceMetadata(storage::InstanceMetaStore &store, Transaction &transaction)
@@ -169,15 +168,6 @@ public:
   int put_exception(const InstanceExceptionRecord &record);
   int erase_exception(uint64_t ns_id, uint64_t local_tablet);
   int scan_exceptions(uint64_t ns_id, const ExceptionVisitor &visitor);
-
-  // Resolves one namespace-local tablet to the nearest historical physical
-  // copy. StorageTabletProbe receives a physical ID and the effective SCN
-  // (zero means current). Errors must not be treated as absence. A local
-  // owned record whose tablet is not yet visible resolves to its local ID so
-  // the caller can wait for tablet-manager visibility. A local tombstone stops lookup.
-  int resolve_read_tablet(uint64_t namespace_id, uint64_t local_tablet,
-      const StorageTabletProbe &probe, uint64_t &physical_tablet,
-      int64_t &cap_scn);
 
   int read_page(uint64_t page_id, std::string &data);
   int save_page(const std::string &data, uint64_t &page_id);
@@ -285,14 +275,10 @@ public:
       const storage::InstanceMetaStore::SnapshotAcquirer &acquire,
       ns::NamespaceCatalogViews::Handle &view,
       const ns::NamespaceCatalogViews::Handle &previous = {});
-  int resolve_read_tablet(uint64_t namespace_id, uint64_t local_tablet,
-      const InstanceNamespaceMetadata::StorageTabletProbe &probe,
-      int64_t deadline, uint64_t &physical_tablet, int64_t &cap_scn);
-  // Use the same historical source resolution as reads in one KV snapshot.
+  // Mark source trees of live/closing Namespaces and protected reader roots.
   // sources maps incomplete physical copies to their baseline sources. The
   // caller fences new dependencies through the actual physical reclamation.
   int filter_unreferenced_tablets(const std::vector<uint64_t> &candidates,
-      const InstanceNamespaceMetadata::StorageTabletProbe &probe,
       const std::map<uint64_t, uint64_t> &sources,
       int64_t deadline, std::vector<uint64_t> &unreferenced, bool &need_retry);
   int list_live(int64_t deadline, std::vector<InstanceNamespaceRecord> &records);
