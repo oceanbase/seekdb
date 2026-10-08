@@ -2068,7 +2068,6 @@ public:
                         
                         start_operation_schema_version_(OB_INVALID_VERSION),
                         namespace_id_(1),
-                        namespace_schema_change_started_(false),
                         need_end_signal_(need_end_signal),
                         enable_ddl_parallel_(enable_ddl_parallel),
                         enable_check_ddl_epoch_(enable_check_ddl_epoch),
@@ -2107,7 +2106,6 @@ private:
   // Filter out only one 1503 DDL transaction to prevent the schema from being invalidly pushed up
   int64_t start_operation_schema_version_;
   uint64_t namespace_id_;
-  bool namespace_schema_change_started_;
   
   //no need to set end_signal while ddl end transaction
   bool need_end_signal_;

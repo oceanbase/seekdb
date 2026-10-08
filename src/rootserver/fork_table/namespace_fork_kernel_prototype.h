@@ -74,17 +74,6 @@ public:
       const std::function<int(share::SCN &)> &acquire,
       ns::NamespaceCatalogViews::Handle &view,
       const ns::NamespaceCatalogViews::Handle &previous = {});
-  // Persistent lifecycle fence between namespace-local DDL and namespace fork.
-  static int begin_schema_change(uint64_t namespace_id);
-  static int finish_schema_change(uint64_t namespace_id, int64_t schema_version);
-  static int begin_schema_recovery(uint64_t namespace_id, bool &needed);
-  static int finish_schema_recovery(uint64_t namespace_id, int64_t schema_version);
-  static int publish_schema_delta(
-      uint64_t namespace_id,
-      int64_t base_schema_version,
-      int64_t schema_version,
-      const common::ObIArray<const share::schema::ObTableSchema *> &current_schemas,
-      const common::ObIArray<const share::schema::ObTableSchema *> &previous_schemas);
   static int finish_schema_publication(uint64_t namespace_id, int64_t schema_version,
                                        const std::vector<uint64_t> &removed_owned);
   static int is_tablet_owned(uint64_t namespace_id,

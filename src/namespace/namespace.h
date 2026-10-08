@@ -25,7 +25,6 @@ namespace oceanbase
 namespace ns
 {
 
-class NamespaceControlState;
 class NamespaceCatalogViews;
 
 // Bounded translation from a namespace-local storage resource id to the
@@ -171,7 +170,6 @@ public:
   void mark_ready();
   bool is_ready() const;
   // Catalog caches are owned by the same process-wide namespace authority.
-  NamespaceControlState &control_state();
   NamespaceCatalogViews &catalog_views();
 private:
   struct Impl;

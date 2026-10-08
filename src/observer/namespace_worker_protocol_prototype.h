@@ -57,13 +57,9 @@ public:
       const ns::NamespaceCatalogViews::Handle &previous) = 0;
   virtual int find_read_view(int64_t snapshot, ns::NamespaceCatalogViews::Handle &view) = 0;
   virtual int fetch_version(bool published, bool core_version, int64_t &version) = 0;
-  virtual int begin_change() = 0;
-  virtual int finish_change(int64_t committed_schema_version) = 0;
   virtual int stage_publication(common::ObMySQLTransaction &sql,
       share::schema::ObMultiVersionSchemaService &schema_service, int64_t version,
       std::unique_ptr<rootserver::NamespaceSchemaPublication> &publication) = 0;
-  virtual int publish(share::schema::ObMultiVersionSchemaService &schema_service,
-                      int64_t &published_schema_version) = 0;
 };
 constexpr size_t MAX_FRAME = 256 * 1024;
 int capture_statement_read_view(sql::ObSQLSessionInfo &session,
@@ -223,11 +219,6 @@ int drain_storage_namespace_access(uint64_t namespace_id);
 int load_namespace_registry();
 // Restore names and initialize the primary's namespace template.
 int restore_namespace_registry();
-// Publish the table-schema delta committed by a namespace-local DDL into the
-// shared namespace directory before the SQL command is acknowledged.
-int sync_namespace_schema_delta(uint64_t namespace_id,
-                                share::schema::ObMultiVersionSchemaService &schema_service,
-                                int64_t &published_schema_version);
 int fetch_schema_version(bool published, bool core_version, int64_t &version);
 struct SessionBinding;
 // Native inner SQL can switch sessions while keeping the same execution stack.
@@ -268,11 +259,6 @@ private:
 uint64_t in_process_session_ns(sql::ObSQLSessionInfo *session);
 INamespaceSchemaLifecycle *namespace_schema_lifecycle(uint64_t namespace_id);
 int refresh_session_schema(sql::ObSQLSessionInfo *session);
-int begin_namespace_schema_change(uint64_t namespace_id);
-int finish_namespace_schema_change(uint64_t namespace_id, int64_t committed_schema_version);
-int publish_namespace_schema_change(uint64_t namespace_id,
-    share::schema::ObMultiVersionSchemaService &schema_service,
-    int64_t &published_schema_version);
 rootserver::ObIRootserverLocalRuntime *root_namespace_ddl_runtime();
 void register_root_namespace_storage_services(ns::NamespaceRuntime &runtime);
 // Finish bootstrap and publish/recover the initial Namespace's directory

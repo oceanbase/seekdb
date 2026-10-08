@@ -41,7 +41,6 @@ struct NamespaceRegistry::Impl
   };
   std::mutex mutex;
   std::unordered_map<uint64_t, Entry *> entries;
-  NamespaceControlState control_state;
   NamespaceCatalogViews catalog_views;
   std::atomic<bool> ready{false};
 };
@@ -177,10 +176,6 @@ void NamespaceRegistry::remove(uint64_t id)
   if (it != impl_->entries.end()) { it->second->registered = false; }
 }
 
-NamespaceControlState &NamespaceRegistry::control_state()
-{
-  return impl_->control_state;
-}
 
 NamespaceCatalogViews &NamespaceRegistry::catalog_views()
 {

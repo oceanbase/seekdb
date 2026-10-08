@@ -235,8 +235,6 @@ void append_roots_json(std::string &out, const ns::CatalogRoots &roots)
   append_json_u64(out, "parent_ref", roots.parent_ref);
   append_json_i64(out, "ref_count", roots.ref_count);
   append_json_i64(out, "state", roots.state);
-  append_json_i64(out, "active_schema_changes", roots.active_schema_changes);
-  append_json_i64(out, "pending_schema_version", roots.pending_schema_version);
 }
 
 int read_roots_json(const ObJsonObject &object, ns::CatalogRoots &roots)
@@ -252,8 +250,6 @@ int read_roots_json(const ObJsonObject &object, ns::CatalogRoots &roots)
   if (ret == OB_SUCCESS) { ret = json_u64(object, "parent_ref", roots.parent_ref); }
   if (ret == OB_SUCCESS) { ret = json_i64(object, "ref_count", roots.ref_count); }
   if (ret == OB_SUCCESS) { ret = json_i64(object, "state", roots.state); }
-  if (ret == OB_SUCCESS) { ret = json_i64(object, "active_schema_changes", roots.active_schema_changes); }
-  if (ret == OB_SUCCESS) { ret = json_i64(object, "pending_schema_version", roots.pending_schema_version); }
   return ret;
 }
 
@@ -263,8 +259,6 @@ int encode_namespace(const InstanceNamespaceRecord &record, std::string &value)
       || (record.name.empty() && record.roots.state != 2)
       || record.name.size() > 128
       || record.roots.state < 0 || record.roots.state > 2
-      || record.roots.active_schema_changes < 0
-      || record.roots.pending_schema_version < 0
       || record.parent_namespace >= record.id
       || record.fork_cap < 0) { return OB_INVALID_ARGUMENT; }
   value = "{";
@@ -292,8 +286,6 @@ int decode_namespace(uint64_t id, const std::string &value, InstanceNamespaceRec
       || (decoded.name.empty() && decoded.roots.state != 2)
       || decoded.name.size() > 128
       || decoded.roots.state < 0 || decoded.roots.state > 2
-      || decoded.roots.active_schema_changes < 0
-      || decoded.roots.pending_schema_version < 0
       || decoded.parent_namespace >= id || decoded.fork_cap < 0) {
     return OB_CHECKSUM_ERROR;
   }
@@ -781,15 +773,6 @@ int InstanceNamespaceMetadata::scan_exceptions(uint64_t ns_id,
       });
 }
 
-int InstanceExceptionLoader::load(uint64_t namespace_id, IRowSink &sink)
-{
-  return metadata_.scan_exceptions(namespace_id,
-      [&](const InstanceExceptionRecord &record) {
-        sink.add({record.tablet_id, record.table_id, record.kind});
-        return OB_SUCCESS;
-      });
-}
-
 int InstanceNamespaceMetadata::read_page(uint64_t page_id, std::string &data)
 {
   const int ret = get_value(store_, transaction_, MetaCollection::PAGES,
@@ -1142,10 +1125,6 @@ int InstanceNamespaceMetadata::fork_namespace(const std::string &source_name,
   if (ret == OB_SUCCESS && (source.name != source_name || source.roots.state != 0)) {
     ret = OB_STATE_NOT_MATCH;
   }
-  if (ret == OB_SUCCESS && (source.roots.active_schema_changes != 0
-      || source.roots.pending_schema_version != 0)) {
-    ret = OB_EAGAIN;
-  }
   ns::CatalogRoots roots = source.roots;
   if (ret == OB_SUCCESS) { ret = acquire_snapshot(roots.snapshot); }
   if (ret == OB_SUCCESS && (roots.snapshot <= 0 || roots.schema_version <= 0)) {
@@ -1183,10 +1162,6 @@ int InstanceNamespaceMetadata::mark_namespace_deleting(uint64_t id, bool &done)
   if (id == 1) { return OB_OP_NOT_ALLOW; }
   InstanceNamespaceRecord record;
   int ret = get_namespace(id, record, true);
-  if (ret == OB_SUCCESS && (record.roots.active_schema_changes != 0
-      || record.roots.pending_schema_version != 0)) {
-    ret = OB_EAGAIN;
-  }
   if (ret == OB_SUCCESS) {
     if (record.roots.state == 2) {
       done = true;
@@ -1254,78 +1229,6 @@ int InstanceNamespaceMetadata::prune_deleted_namespace(uint64_t id,
   }
   if (ret == OB_SUCCESS) { ret = erase_namespace(id); }
   if (ret == OB_SUCCESS) { pruned = true; }
-  return ret;
-}
-
-int InstanceNamespaceMetadata::begin_schema_change(uint64_t id)
-{
-  InstanceNamespaceRecord record;
-  int ret = get_namespace(id, record, true);
-  if (ret == OB_SUCCESS && (record.roots.state != 0
-      || record.roots.active_schema_changes == INT64_MAX)) {
-    ret = OB_STATE_NOT_MATCH;
-  }
-  if (ret == OB_SUCCESS) {
-    ++record.roots.active_schema_changes;
-    ret = update_namespace(record);
-  }
-  return ret;
-}
-
-int InstanceNamespaceMetadata::finish_schema_change(uint64_t id,
-    int64_t schema_version)
-{
-  if (schema_version < 0) { return OB_INVALID_ARGUMENT; }
-  InstanceNamespaceRecord record;
-  int ret = get_namespace(id, record, true);
-  if (ret == OB_SUCCESS && (record.roots.state != 0
-      || record.roots.active_schema_changes == 0)) {
-    ret = OB_STATE_NOT_MATCH;
-  }
-  if (ret == OB_SUCCESS) {
-    --record.roots.active_schema_changes;
-    if (schema_version > record.roots.pending_schema_version) {
-      record.roots.pending_schema_version = schema_version;
-    }
-    ret = update_namespace(record);
-  }
-  return ret;
-}
-
-int InstanceNamespaceMetadata::begin_schema_recovery(uint64_t id, bool &needed)
-{
-  needed = false;
-  InstanceNamespaceRecord record;
-  int ret = get_namespace(id, record, true);
-  if (ret == OB_SUCCESS && record.roots.state != 0) { ret = OB_STATE_NOT_MATCH; }
-  if (ret == OB_SUCCESS) {
-    needed = record.roots.active_schema_changes != 0
-        || record.roots.pending_schema_version != 0;
-    if (needed) {
-      record.roots.active_schema_changes = 0;
-      record.roots.pending_schema_version = INT64_MAX;
-      ret = update_namespace(record);
-    }
-  }
-  return ret;
-}
-
-int InstanceNamespaceMetadata::finish_schema_recovery(uint64_t id,
-    int64_t schema_version)
-{
-  if (schema_version <= 0) { return OB_INVALID_ARGUMENT; }
-  InstanceNamespaceRecord record;
-  int ret = get_namespace(id, record, true);
-  if (ret == OB_SUCCESS && (record.roots.state != 0
-      || record.roots.active_schema_changes != 0
-      || record.roots.schema_version > schema_version)) {
-    ret = OB_STATE_NOT_MATCH;
-  }
-  if (ret == OB_SUCCESS) {
-    record.roots.schema_version = schema_version;
-    record.roots.pending_schema_version = 0;
-    ret = update_namespace(record);
-  }
   return ret;
 }
 
@@ -1399,60 +1302,9 @@ int InstanceNamespaceMetadata::stage_schema_delta(uint64_t id,
       record.roots.schema_version = schema_version;
       changed = true;
     }
-    if (record.roots.pending_schema_version > 0
-        && record.roots.pending_schema_version != INT64_MAX
-        && record.roots.pending_schema_version <= schema_version) {
-      record.roots.pending_schema_version = 0;
-      changed = true;
-    }
     if (changed) { ret = update_namespace(record); }
   }
   if (ret == OB_SUCCESS) { removed_owned.swap(pending_removal); }
-  return ret;
-}
-
-int InstanceNamespaceMetadata::reconcile_owned_tablets(uint64_t id,
-    int64_t base_schema_version, int64_t current_schema_version,
-    const std::map<uint64_t, uint64_t> &current_tablets,
-    const PhysicalTabletProbe &probe)
-{
-  if (base_schema_version <= 0 || current_schema_version < base_schema_version
-      || !probe) { return OB_INVALID_ARGUMENT; }
-  InstanceNamespaceRecord record;
-  int ret = get_namespace(id, record, true);
-  if (ret == OB_SUCCESS && record.roots.state != 0) {
-    ret = OB_STATE_NOT_MATCH;
-  } else if (ret == OB_SUCCESS && (record.roots.schema_version != base_schema_version
-      || record.roots.active_schema_changes != 0
-      || (record.roots.pending_schema_version != INT64_MAX
-          && record.roots.pending_schema_version > current_schema_version))) {
-    ret = OB_EAGAIN;
-  }
-  for (const auto &tablet : current_tablets) {
-    if (ret != OB_SUCCESS) { break; }
-    if (!ns::NamespaceObjectKey{id, tablet.first}.is_valid()
-        || tablet.second == 0 || tablet.second >= (1ULL << 32)) {
-      ret = OB_INVALID_ARGUMENT;
-      break;
-    }
-    bool local_exists = false;
-    ret = probe(tablet.first, local_exists);
-    if (ret != OB_SUCCESS) { break; }
-    InstanceExceptionRecord old;
-    ret = get_exception(id, tablet.first, old, true);
-    const bool had_old = ret == OB_SUCCESS;
-    if (ret == OB_ENTRY_NOT_EXIST) { ret = OB_SUCCESS; }
-    if (ret != OB_SUCCESS) { break; }
-    if (local_exists) {
-      if (had_old && old.kind == 1) {
-        ret = OB_STATE_NOT_MATCH;
-      } else if (!had_old || old.table_id != tablet.second) {
-        ret = put_exception({id, tablet.first, tablet.second, 0, 0});
-      }
-    } else if (had_old && old.kind == 0) {
-      ret = OB_EAGAIN;
-    }
-  }
   return ret;
 }
 
@@ -1512,8 +1364,8 @@ int InstanceNamespaceDirectory::ensure_root(const std::string &name,
         if (ret == OB_SUCCESS && stored_watermark < gc_watermark) {
           ret = metadata.advance_snapshot_gc_watermark(gc_watermark);
         }
-        // Startup must reconcile any committed SQL DDL from this published
-        // base; advancing here would discard its missing exception delta.
+        // SQL schema and catalog publication share the native commit.
+        // Startup validates the existing publication without repairing it.
       }
     }
   }
@@ -1932,95 +1784,6 @@ int InstanceNamespaceDirectory::schema_version(uint64_t id,
   ret = finish_directory_transaction(store_, tx, ret);
   if (ret == OB_SUCCESS) { version = staged; }
   return ret;
-}
-
-int InstanceNamespaceDirectory::begin_schema_change(uint64_t id, int64_t deadline)
-{
-  storage::InstanceMetaStore::Transaction tx;
-  int ret = store_.begin(tx, deadline);
-  if (ret == OB_SUCCESS) {
-    InstanceNamespaceMetadata metadata(store_, tx);
-    ret = metadata.begin_schema_change(id);
-  }
-  return finish_directory_transaction(store_, tx, ret);
-}
-
-int InstanceNamespaceDirectory::finish_schema_change(uint64_t id,
-    int64_t version, int64_t deadline)
-{
-  storage::InstanceMetaStore::Transaction tx;
-  int ret = store_.begin(tx, deadline);
-  if (ret == OB_SUCCESS) {
-    InstanceNamespaceMetadata metadata(store_, tx);
-    ret = metadata.finish_schema_change(id, version);
-  }
-  return finish_directory_transaction(store_, tx, ret);
-}
-
-int InstanceNamespaceDirectory::begin_schema_recovery(uint64_t id,
-    int64_t deadline, bool &needed)
-{
-  needed = false;
-  storage::InstanceMetaStore::Transaction tx;
-  int ret = store_.begin(tx, deadline);
-  bool staged = false;
-  if (ret == OB_SUCCESS) {
-    InstanceNamespaceMetadata metadata(store_, tx);
-    ret = metadata.begin_schema_recovery(id, staged);
-  }
-  ret = finish_directory_transaction(store_, tx, ret);
-  if (ret == OB_SUCCESS) { needed = staged; }
-  return ret;
-}
-
-int InstanceNamespaceDirectory::finish_schema_recovery(uint64_t id,
-    int64_t version, int64_t deadline)
-{
-  storage::InstanceMetaStore::Transaction tx;
-  int ret = store_.begin(tx, deadline);
-  if (ret == OB_SUCCESS) {
-    InstanceNamespaceMetadata metadata(store_, tx);
-    ret = metadata.finish_schema_recovery(id, version);
-  }
-  return finish_directory_transaction(store_, tx, ret);
-}
-
-int InstanceNamespaceDirectory::publish_schema_delta(uint64_t id,
-    int64_t base_version, int64_t version, int64_t drop_scn,
-    const std::map<uint64_t, uint64_t> &previous_tablets,
-    const std::map<uint64_t, uint64_t> &current_tablets,
-    const InstanceNamespaceMetadata::PhysicalTabletProbe &probe,
-    const InstanceNamespaceMetadata::PhysicalTabletBirthProbe &birth_probe,
-    int64_t deadline, std::vector<uint64_t> &removed_owned)
-{
-  removed_owned.clear();
-  storage::InstanceMetaStore::Transaction tx;
-  int ret = store_.begin(tx, deadline);
-  std::vector<uint64_t> staged;
-  if (ret == OB_SUCCESS) {
-    InstanceNamespaceMetadata metadata(store_, tx);
-    ret = metadata.stage_schema_delta(id, base_version, version, drop_scn,
-        previous_tablets, current_tablets, probe, birth_probe, staged);
-  }
-  ret = finish_directory_transaction(store_, tx, ret);
-  if (ret == OB_SUCCESS) { removed_owned.swap(staged); }
-  return ret;
-}
-
-int InstanceNamespaceDirectory::reconcile_owned(uint64_t id,
-    int64_t base_version, int64_t schema_version,
-    const std::map<uint64_t, uint64_t> &current_tablets,
-    const InstanceNamespaceMetadata::PhysicalTabletProbe &probe,
-    int64_t deadline)
-{
-  storage::InstanceMetaStore::Transaction tx;
-  int ret = store_.begin(tx, deadline);
-  if (ret == OB_SUCCESS) {
-    InstanceNamespaceMetadata metadata(store_, tx);
-    ret = metadata.reconcile_owned_tablets(id, base_version, schema_version,
-        current_tablets, probe);
-  }
-  return finish_directory_transaction(store_, tx, ret);
 }
 
 } // namespace rootserver

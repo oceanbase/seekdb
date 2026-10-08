@@ -51,8 +51,6 @@ struct CatalogRoots {
   uint64_t snapshot_ref = 0;
   uint64_t parent_ref = 0; int64_t ref_count = 0; // Canonical snapshot rows only.
   int64_t state = 0; // 0 LIVE, 1 DELETING, 2 DELETED; ids are never reused.
-  int64_t active_schema_changes = 0;
-  int64_t pending_schema_version = 0;
   bool valid_snapshot(uint64_t expected_id) const;
 };
 
@@ -201,12 +199,6 @@ private:
   ICatalogPageStore &store_;
 };
 
-struct NamespaceExceptionRow {
-  uint64_t tablet = 0;
-  uint64_t table = 0;
-  int64_t kind = 0;
-};
-
 enum class ExceptionDeltaKind : uint8_t { TOMBSTONE, PROBE_NEW, UPDATE_TABLE };
 struct ExceptionDeltaAction {
   ExceptionDeltaKind kind;
@@ -221,46 +213,6 @@ public:
   static std::vector<ExceptionDeltaAction> plan(
       const std::map<uint64_t, uint64_t> &previous,
       const std::map<uint64_t, uint64_t> &current);
-};
-
-class IExceptionLoader {
-public:
-  virtual ~IExceptionLoader() = default;
-  // Return zero on success; the caller's storage error passes through unchanged.
-  class IRowSink {
-  public:
-    virtual ~IRowSink() = default;
-    virtual void add(const NamespaceExceptionRow &row) = 0;
-  };
-  virtual int load(uint64_t namespace_id, IRowSink &sink) = 0;
-};
-
-// One namespace's immutable lineage links and committed tablet exceptions.
-// Registry owns this state so there is still only one process-wide namespace
-// authority. Loading, post-commit insertions and invalidation share a lock,
-// so an older load cannot republish a snapshot after its invalidation.
-class NamespaceControlState final {
-public:
-  bool chain_link(uint64_t namespace_id, uint64_t &parent, int64_t &fork_cap) const;
-  void remember_chain_link(uint64_t namespace_id, uint64_t parent, int64_t fork_cap);
-  void forget_chain_link(uint64_t namespace_id);
-  int load_exceptions(uint64_t namespace_id, IExceptionLoader &loader, bool reload = false);
-  void clear_exceptions();
-  bool owned(uint64_t namespace_id, uint64_t local_tablet,
-             uint64_t *table = nullptr) const;
-  bool tombstoned(uint64_t namespace_id, uint64_t local_tablet) const;
-  void apply_owned(uint64_t namespace_id, uint64_t local_tablet, uint64_t table);
-  void drop_exceptions(uint64_t namespace_id);
-private:
-  struct ExceptionSet {
-    bool loaded = false;
-    std::unordered_map<uint64_t, uint64_t> owned;
-    std::unordered_set<uint64_t> tombstoned;
-  };
-  mutable std::shared_mutex chain_mutex_;
-  std::unordered_map<uint64_t, std::pair<uint64_t, int64_t>> chain_links_;
-  mutable std::mutex exceptions_mutex_;
-  std::unordered_map<uint64_t, ExceptionSet> exception_sets_;
 };
 
 } // namespace ns

@@ -288,22 +288,6 @@ int probe_historical_tablet(uint64_t id, int64_t cap, rootserver::TabletVisibili
   }
   return ret;
 }
-int physical_tablet_birth(uint64_t id, int64_t &birth)
-{
-  birth = 0;
-  ObTabletHandle handle;
-  int ret = ObTabletCreateDeleteHelper::check_and_get_tablet(
-      ObTabletMapKey(ObTabletID(id)), handle, 0, ObMDSGetTabletMode::READ_WITHOUT_CHECK,
-      transaction::ObTransVersion::MAX_TRANS_VERSION);
-  if (ret != OB_SUCCESS) { return ret; }
-  ObTabletCreateDeleteMdsUserData data;
-  mds::MdsWriter writer;
-  mds::TwoPhaseCommitState state;
-  SCN version;
-  ret = handle.get_obj()->get_latest(data, writer, state, version);
-  if (ret == OB_SUCCESS) { birth = data.create_commit_version_; }
-  return ret;
-}
 int schema_tablet_ids(const ObTableSchema &schema,
                       ObIArray<ObTabletID> &tablet_ids)
 {
@@ -951,32 +935,6 @@ int NamespaceForkKernelPrototype::namespace_schema_version(uint64_t ns, int64_t 
   rootserver::InstanceNamespaceDirectory directory(*store);
   return directory.schema_version(ns, directory_deadline(), version);
 }
-int NamespaceForkKernelPrototype::begin_schema_change(uint64_t ns) {
-  auto *store = directory_kv_store();
-  if (store == nullptr) { return OB_NOT_INIT; }
-  rootserver::InstanceNamespaceDirectory directory(*store);
-  return directory.begin_schema_change(ns, directory_deadline());
-}
-int NamespaceForkKernelPrototype::finish_schema_change(
-    uint64_t ns, int64_t schema_version) {
-  auto *store = directory_kv_store();
-  if (store == nullptr) { return OB_NOT_INIT; }
-  rootserver::InstanceNamespaceDirectory directory(*store);
-  return directory.finish_schema_change(ns, schema_version, directory_deadline());
-}
-int NamespaceForkKernelPrototype::begin_schema_recovery(uint64_t ns, bool &needed) {
-  auto *store = directory_kv_store();
-  if (store == nullptr) { return OB_NOT_INIT; }
-  rootserver::InstanceNamespaceDirectory directory(*store);
-  return directory.begin_schema_recovery(ns, directory_deadline(), needed);
-}
-int NamespaceForkKernelPrototype::finish_schema_recovery(
-    uint64_t ns, int64_t schema_version) {
-  auto *store = directory_kv_store();
-  if (store == nullptr) { return OB_NOT_INIT; }
-  rootserver::InstanceNamespaceDirectory directory(*store);
-  return directory.finish_schema_recovery(ns, schema_version, directory_deadline());
-}
 int NamespaceForkKernelPrototype::observe_database(ObISQLClient &trans, const ObDatabaseSchema &schema) {
   // Namespace schema authority is native: databases live in each worker's own
   // schema cache, no legacy catalog enrollment.
@@ -1041,113 +999,7 @@ bool owns_namespace_directory_entries(const ObTableSchema &schema)
       || schema.is_aux_lob_table();
 }
 
-int collect_directory_tablets(
-    uint64_t namespace_id,
-    const ObIArray<const ObTableSchema *> &schemas,
-    std::map<uint64_t, uint64_t> &tablets)
-{
-  int ret = OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && i < schemas.count(); ++i) {
-    const ObTableSchema *schema = schemas.at(i);
-    if (schema == nullptr) {
-      ret = OB_INVALID_ARGUMENT;
-    } else if (!owns_namespace_directory_entries(*schema)) {
-      continue;
-    } else if (!directory_supported(*schema)) {
-      ret = OB_NOT_SUPPORTED;
-    } else {
-      const uint64_t table_id = schema->get_table_id();
-      ObArray<ObTabletID> schema_tablets;
-      if (NamespaceForkKernelPrototype::is_encoded_id(table_id)
-          || NamespaceForkKernelPrototype::is_encoded_id(schema->get_database_id())
-          || table_id >= (1ULL << 32)
-          || OB_FAIL(schema_tablet_ids(*schema, schema_tablets))) {
-        if (OB_SUCC(ret)) { ret = OB_INVALID_ARGUMENT; }
-      }
-      for (int64_t j = 0; OB_SUCC(ret) && j < schema_tablets.count(); ++j) {
-        const uint64_t tablet_id = schema_tablets.at(j).id();
-        const NamespaceObjectKey storage_key{namespace_id, tablet_id};
-        if (NamespaceForkKernelPrototype::is_encoded_id(tablet_id)
-            || !storage_key.is_valid()) {
-          ret = OB_INVALID_ARGUMENT;
-        } else {
-          if (!tablets.emplace(tablet_id, table_id).second) {
-            ret = OB_STATE_NOT_MATCH;
-          }
-        }
-      }
-    }
-  }
-  return ret;
-}
-
 } // namespace
-
-int NamespaceForkKernelPrototype::publish_schema_delta(
-    uint64_t namespace_id,
-    int64_t base_schema_version,
-    int64_t schema_version,
-    const ObIArray<const ObTableSchema *> &current_schemas,
-    const ObIArray<const ObTableSchema *> &previous_schemas) {
-  if (namespace_id == 0 || namespace_id >= NamespaceObjectKey::NAMESPACE_LIMIT
-      || base_schema_version <= 0 || schema_version < base_schema_version
-      || directory_kv_store() == nullptr) {
-    return OB_INVALID_ARGUMENT;
-  }
-  int ret = OB_SUCCESS;
-  MetadataReadGuard publication;
-  if (publication.error() != OB_SUCCESS) { return publication.error(); }
-  std::unordered_set<uint64_t> current_table_ids;
-  std::unordered_set<uint64_t> previous_table_ids;
-  for (int64_t i = 0; OB_SUCC(ret) && i < current_schemas.count(); ++i) {
-    const ObTableSchema *schema = current_schemas.at(i);
-    if (schema == nullptr) {
-      ret = OB_INVALID_ARGUMENT;
-    } else if (is_encoded_id(schema->get_table_id())
-        || is_encoded_id(schema->get_database_id())
-        || !current_table_ids.insert(schema->get_table_id()).second) {
-      ret = OB_INVALID_ARGUMENT;
-    }
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && i < previous_schemas.count(); ++i) {
-    const ObTableSchema *schema = previous_schemas.at(i);
-    if (schema == nullptr) {
-      ret = OB_INVALID_ARGUMENT;
-    } else if (is_encoded_id(schema->get_table_id())
-        || is_encoded_id(schema->get_database_id())
-        || !previous_table_ids.insert(schema->get_table_id()).second) {
-      ret = OB_INVALID_ARGUMENT;
-    }
-  }
-  std::map<uint64_t, uint64_t> previous_tablets;
-  std::map<uint64_t, uint64_t> current_tablets;
-  std::vector<uint64_t> removed_owned;
-  if (OB_SUCC(ret)) {
-    ret = collect_directory_tablets(namespace_id, previous_schemas, previous_tablets);
-  }
-  if (OB_SUCC(ret)) {
-    ret = collect_directory_tablets(namespace_id, current_schemas, current_tablets);
-  }
-  if (OB_SUCC(ret)) {
-    // DDL has committed, and its persistent pending marker prevents fork
-    // until this delta publishes. A later fork must therefore be beyond this
-    // deletion boundary, even though SQL and instance KV commit separately.
-    int64_t drop_scn = 0;
-    ret = observer::namespace_worker_prototype::acquire_storage_snapshot(drop_scn);
-    rootserver::InstanceNamespaceDirectory directory(*directory_kv_store());
-    if (OB_SUCC(ret)) { ret = directory.publish_schema_delta(namespace_id, base_schema_version,
-        schema_version, drop_scn, previous_tablets, current_tablets,
-        [&](uint64_t local_tablet, bool &exists) {
-          return probe_physical_tablet(encoded(namespace_id, local_tablet), exists);
-        }, [&](uint64_t local_tablet, int64_t &birth) {
-          return physical_tablet_birth(encoded(namespace_id, local_tablet), birth);
-        }, directory_deadline(), removed_owned); }
-  }
-  if (OB_SUCC(ret)) { ret = finish_schema_publication(namespace_id, schema_version, removed_owned); }
-  LOG_INFO("PROTOTYPE_NAMESPACE_SCHEMA_DELTA", K(ret), K(namespace_id), K(schema_version),
-      "current_count", current_schemas.count(), "previous_count", previous_schemas.count());
-  return ret;
-}
 
 int NamespaceForkKernelPrototype::finish_schema_publication(uint64_t namespace_id,
     int64_t schema_version, const std::vector<uint64_t> &removed_owned)

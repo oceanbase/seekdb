@@ -61,7 +61,6 @@ OBSERVER_PRIVATE_HEADERS = [
     "namespace_inprocess_transaction_services.ipp",
     "namespace_inprocess_write_state.ipp",
     "namespace_template_registry.ipp",
-    "namespace_worker_commands_prototype.ipp",
     "namespace_worker_direct_insert_prototype.ipp",
     "namespace_worker_gateway_prototype.ipp",
     "namespace_worker_protocol_prototype.h",

@@ -110,14 +110,6 @@ public:
   int prune_deleted_namespace(uint64_t id,
       const NamespacePhysicalProbe &has_physical, bool &pruned);
 
-  // The native schema transaction is separate from this KV transaction. Mark
-  // it before native DDL, then publish its version after reconciling the
-  // directory. Recovery treats an interrupted change as requiring a rescan.
-  int begin_schema_change(uint64_t id);
-  int finish_schema_change(uint64_t id, int64_t schema_version);
-  int begin_schema_recovery(uint64_t id, bool &needed);
-  int finish_schema_recovery(uint64_t id, int64_t schema_version);
-
   // Stage a complete native-schema delta and its directory version together.
   // A stale base returns OB_EAGAIN; the caller must reread the directory
   // version and rebuild both schema views before retrying.
@@ -131,17 +123,6 @@ public:
       const PhysicalTabletProbe &probe,
       const PhysicalTabletBirthProbe &birth_probe,
       std::vector<uint64_t> &removed_owned);
-
-  // Repair a physical creation committed before its owned exception. The map
-  // comes from this namespace's current schema; the probe checks that same
-  // namespace's physical tablet. The caller supplies both the observed
-  // directory version and the native schema version for stale-input checks.
-  // This does not publish a schema version or clear a pending DDL marker.
-  // Caller rolls back its KV transaction on error.
-  int reconcile_owned_tablets(uint64_t id, int64_t base_schema_version,
-      int64_t current_schema_version,
-      const std::map<uint64_t, uint64_t> &current_tablets,
-      const PhysicalTabletProbe &probe);
 
   int initialize_namespace_counter(uint64_t high_watermark);
   int allocate_namespace_id(uint64_t &id);
@@ -212,18 +193,6 @@ public:
   {
     return metadata_.save_page(data, page);
   }
-private:
-  InstanceNamespaceMetadata &metadata_;
-};
-
-// Feeds the existing Namespace exception cache from a read-only KV view.
-// The caller owns the metadata transaction.
-class InstanceExceptionLoader final : public ns::IExceptionLoader
-{
-public:
-  explicit InstanceExceptionLoader(InstanceNamespaceMetadata &metadata)
-      : metadata_(metadata) {}
-  int load(uint64_t namespace_id, IRowSink &sink) override;
 private:
   InstanceNamespaceMetadata &metadata_;
 };
@@ -304,25 +273,6 @@ public:
   // reclaims unreferenced owned and orphan tablets.
   int finish_drop(uint64_t id, int64_t deadline);
   int schema_version(uint64_t id, int64_t deadline, int64_t &version);
-  int begin_schema_change(uint64_t id, int64_t deadline);
-  int finish_schema_change(uint64_t id, int64_t version, int64_t deadline);
-  int begin_schema_recovery(uint64_t id, int64_t deadline, bool &needed);
-  int finish_schema_recovery(uint64_t id, int64_t version, int64_t deadline);
-  // The physical probe checks this Namespace's encoded tablet address and
-  // cannot reenter the KV transaction. Removed IDs become actionable only
-  // after the directory transaction commits.
-  int publish_schema_delta(uint64_t id, int64_t base_version, int64_t version, int64_t drop_scn,
-      const std::map<uint64_t, uint64_t> &previous_tablets,
-      const std::map<uint64_t, uint64_t> &current_tablets,
-      const InstanceNamespaceMetadata::PhysicalTabletProbe &probe,
-      const InstanceNamespaceMetadata::PhysicalTabletBirthProbe &birth_probe,
-      int64_t deadline, std::vector<uint64_t> &removed_owned);
-  // Repairs physical creations committed before their owned rows. The caller
-  // supplies tablet->table relations from this Namespace's current schema.
-  int reconcile_owned(uint64_t id, int64_t base_version, int64_t schema_version,
-      const std::map<uint64_t, uint64_t> &current_tablets,
-      const InstanceNamespaceMetadata::PhysicalTabletProbe &probe,
-      int64_t deadline);
 private:
   storage::InstanceMetaStore &store_;
 };

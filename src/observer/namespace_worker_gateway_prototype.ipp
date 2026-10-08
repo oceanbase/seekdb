@@ -14,7 +14,6 @@
 #include "observer/namespace_worker_scan_prototype.ipp"
 #include "observer/namespace_worker_write_prototype.ipp"
 #include "observer/namespace_worker_direct_insert_prototype.ipp"
-#include "observer/namespace_worker_commands_prototype.ipp"
 #include "namespace/namespace.h"
 namespace oceanbase { namespace observer { namespace namespace_worker_prototype {
 using namespace common;

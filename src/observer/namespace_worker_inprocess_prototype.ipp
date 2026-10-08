@@ -67,17 +67,6 @@ int load_committed_namespace_schema(uint64_t namespace_id,
     if (OB_FAIL(metadata.get_namespace(namespace_id, record))) {
     } else if (record.roots.state != 0) {
       ret = OB_ENTRY_NOT_EXIST;
-    } else if (record.roots.active_schema_changes != 0
-               || record.roots.pending_schema_version != 0) {
-      // Keep an already installed publication usable during the next DDL.
-      // In particular progress/management reads must keep serving while a
-      // table changes. A cold runtime still waits for a complete publication.
-      int64_t installed = OB_INVALID_VERSION;
-      ret = schema.get_runtime_refreshed_schema_version(installed);
-      if (OB_SUCC(ret) && (!schema.is_runtime_schema_ready()
-                          || installed < record.roots.schema_version)) {
-        ret = OB_SCHEMA_EAGAIN;
-      }
     } else {
       ObRefreshSchemaStatus status;
       status.snapshot_timestamp_ = tx.snapshot_version().get_val_for_tx();
@@ -87,28 +76,6 @@ int load_committed_namespace_schema(uint64_t namespace_id,
     }
     const int cleanup = store.rollback(tx);
     if (OB_SUCC(ret)) { ret = cleanup; }
-  }
-  return ret;
-}
-int recover_namespace_schema_publication(uint64_t namespace_id,
-                                        ObMultiVersionSchemaService &schema)
-{
-  bool needed = false;
-  int ret = storage::NamespaceForkKernelPrototype::begin_schema_recovery(namespace_id, needed);
-  int64_t published = OB_INVALID_VERSION;
-  int64_t installed = OB_INVALID_VERSION;
-  if (OB_SUCC(ret) && needed) {
-    if (OB_FAIL(storage::NamespaceForkKernelPrototype::namespace_schema_version(namespace_id, published))) {
-    } else if (OB_FAIL(schema.refresh_runtime_schema_from_static_system())) {
-    } else if (OB_FAIL(schema.get_runtime_refreshed_schema_version(installed))) {
-    } else if (installed < published) {
-      ret = OB_STATE_NOT_MATCH;
-    } else if (installed > published) {
-      ret = sync_namespace_schema_delta(namespace_id, schema, installed);
-    }
-    if (OB_SUCC(ret)) {
-      ret = storage::NamespaceForkKernelPrototype::finish_schema_recovery(namespace_id, installed);
-    }
   }
   return ret;
 }
@@ -142,21 +109,8 @@ public:
     if (bootstrap_.load(std::memory_order_acquire)) { return OB_SUCCESS; }
     if (namespace_schema_loading(ns_)) { return OB_SUCCESS; }
     if (share::server_is_recovery_mode()) {
-      primary_recovery_pending_.store(true, std::memory_order_release);
       auto *schema = namespace_schema_service(ns_);
       return schema == nullptr ? OB_NOT_INIT : load_committed_namespace_schema(ns_, *schema);
-    }
-    if (primary_recovery_pending_.load(std::memory_order_acquire)) {
-      std::lock_guard<std::mutex> guard(recovery_mutex_);
-      if (primary_recovery_pending_.load(std::memory_order_acquire)) {
-        NamespaceSchemaLoadScope scope(ns_);
-        auto *schema = namespace_schema_service(ns_);
-        const int ret = schema == nullptr ? OB_NOT_INIT
-            : load_on_access_ ? inprocess_refresh_schema(ns_)
-                              : recover_namespace_schema_publication(ns_, *schema);
-        if (ret != OB_SUCCESS) { return ret; }
-        primary_recovery_pending_.store(false, std::memory_order_release);
-      }
     }
     return load_on_access_ ? inprocess_refresh_schema(ns_) : OB_SUCCESS;
   }
@@ -170,16 +124,6 @@ public:
     }
     return storage::NamespaceForkKernelPrototype::namespace_schema_version(ns_, version);
   }
-  int begin_change() override
-  {
-    return bootstrap_.load(std::memory_order_acquire) ? OB_SUCCESS
-        : storage::NamespaceForkKernelPrototype::begin_schema_change(ns_);
-  }
-  int finish_change(int64_t committed_schema_version) override
-  {
-    return bootstrap_.load(std::memory_order_acquire) ? OB_SUCCESS
-        : storage::NamespaceForkKernelPrototype::finish_schema_change(ns_, committed_schema_version);
-  }
   int stage_publication(common::ObMySQLTransaction &sql, ObMultiVersionSchemaService &schema,
       int64_t version, std::unique_ptr<rootserver::NamespaceSchemaPublication> &publication) override
   {
@@ -190,27 +134,10 @@ public:
     publication.reset(new rootserver::NamespaceSchemaPublication(access->instance_meta_store(), ns_));
     return publication->stage(sql, schema, version);
   }
-  int publish(ObMultiVersionSchemaService &schema_service,
-              int64_t &published_schema_version) override
-  {
-    if (bootstrap_.load(std::memory_order_acquire)) {
-      return schema_service.get_runtime_refreshed_schema_version(published_schema_version);
-    }
-    if (const char *delay_text = std::getenv("SEEKDB_NAMESPACE_DDL_PUBLISH_DELAY_US")) {
-      char *end = nullptr;
-      const int64_t delay_us = std::strtoll(delay_text, &end, 10);
-      if (*delay_text && end && !*end && delay_us > 0 && delay_us <= 2000000) {
-        ob_usleep(delay_us);
-      }
-    }
-    return sync_namespace_schema_delta(ns_, schema_service, published_schema_version);
-  }
 private:
   uint64_t ns_;
   bool load_on_access_;
   std::atomic<bool> bootstrap_;
-  std::atomic<bool> primary_recovery_pending_{false};
-  std::mutex recovery_mutex_;
 };
 NamespaceSchemaLifecycle &bootstrap_schema_lifecycle()
 {
@@ -222,17 +149,7 @@ NamespaceSchemaLifecycle &bootstrap_schema_lifecycle()
 int complete_namespace_schema_bootstrap(ObMultiVersionSchemaService &service)
 {
   bootstrap_schema_lifecycle().complete_bootstrap();
-  // A replica loads the publication already committed by its primary.
-  // Persistent recovery is only permitted after local writes are admitted.
-  if (!share::server_is_write_enabled()) { return OB_SUCCESS; }
-  bool needed = false;
-  int ret = storage::NamespaceForkKernelPrototype::begin_schema_recovery(1, needed);
-  int64_t version = OB_INVALID_VERSION;
-  if (OB_SUCC(ret)) { ret = sync_namespace_schema_delta(1, service, version); }
-  if (OB_SUCC(ret) && needed) {
-    ret = storage::NamespaceForkKernelPrototype::finish_schema_recovery(1, version);
-  }
-  return ret;
+  return OB_SUCCESS;
 }
 INamespaceSchemaLifecycle *namespace_schema_lifecycle(uint64_t namespace_id)
 {
@@ -249,26 +166,6 @@ int refresh_session_schema(sql::ObSQLSessionInfo *session)
   auto *lifecycle = static_cast<INamespaceSchemaLifecycle *>(
       runtime->service(ns::NamespaceRuntime::SCHEMA_LIFECYCLE));
   return lifecycle == nullptr ? OB_NOT_INIT : lifecycle->refresh();
-}
-int begin_namespace_schema_change(uint64_t namespace_id)
-{
-  auto *lifecycle = namespace_schema_lifecycle(namespace_id);
-  return lifecycle == nullptr ? OB_NOT_INIT : lifecycle->begin_change();
-}
-int finish_namespace_schema_change(uint64_t namespace_id,
-                                   int64_t committed_schema_version)
-{
-  auto *lifecycle = namespace_schema_lifecycle(namespace_id);
-  return lifecycle == nullptr ? OB_NOT_INIT
-      : lifecycle->finish_change(committed_schema_version);
-}
-int publish_namespace_schema_change(uint64_t namespace_id,
-    ObMultiVersionSchemaService &schema_service,
-    int64_t &published_schema_version)
-{
-  auto *lifecycle = namespace_schema_lifecycle(namespace_id);
-  return lifecycle == nullptr ? OB_NOT_INIT
-      : lifecycle->publish(schema_service, published_schema_version);
 }
 int stage_namespace_schema_publication(uint64_t namespace_id, common::ObMySQLTransaction &sql,
     ObMultiVersionSchemaService &schema, int64_t version,
@@ -380,7 +277,7 @@ query::ObIRootCommandService *effective_root_command_service(
 // Per-namespace service group, constructed lazily on first use (ticket 05c).
 // The composition mirrors the worker bootstrap: a routing sql proxy pins the
 // namespace on inner SQL, the schema service instance gets the worker-style
-// static system baseline, and recovery reconciles a possibly dirty fence.
+// static system baseline, then loads the committed catalog version.
 // ---------------------------------------------------------------------------
 class NamespaceRoutingSqlProxy final : public common::ObMySQLProxy
 {
@@ -1131,40 +1028,9 @@ int inprocess_refresh_schema(uint64_t ns)
     if (!services.schema_loaded.load(std::memory_order_acquire)) {
       services.schema_loading_thread = std::this_thread::get_id();
       load_guard.unlock();
-      // All runtime services are installed before this load. Recovery uses
-      // inner SQL, which needs the same fully bound runtime as normal reads.
-      // Keep schema_loaded false until both schema and directory are current.
-      bool recovery_needed = false;
-      int64_t directory_schema_version = OB_INVALID_VERSION;
-      int64_t local_schema_version = OB_INVALID_VERSION;
-      int64_t published_schema_version = OB_INVALID_VERSION;
-      if (OB_SUCC(ret)) {
-        ret = storage::NamespaceForkKernelPrototype::begin_schema_recovery(
-            ns, recovery_needed);
-      }
-      if (OB_SUCC(ret) && recovery_needed) {
-        ret = services.schema_lifecycle.fetch_version(
-            false, false, directory_schema_version);
-      }
-      if (OB_SUCC(ret)) {
-        ret = services.schema_service->refresh_runtime_schema_from_static_system();
-      }
-      if (OB_SUCC(ret) && recovery_needed) {
-        if (OB_FAIL(services.schema_service->get_runtime_refreshed_schema_version(
-                local_schema_version))) {
-        } else if (local_schema_version < directory_schema_version) {
-          ret = OB_STATE_NOT_MATCH;
-        } else if (local_schema_version > directory_schema_version) {
-          ret = sync_namespace_schema_delta(
-              ns, *services.schema_service, published_schema_version);
-        } else {
-          published_schema_version = local_schema_version;
-        }
-        if (OB_SUCC(ret)) {
-          ret = storage::NamespaceForkKernelPrototype::finish_schema_recovery(
-              ns, published_schema_version);
-        }
-      }
+      // The schema version and source roots were committed with SQL metadata.
+      // Initial load reads that publication at one retained MVCC boundary.
+      ret = load_committed_namespace_schema(ns, *services.schema_service);
       load_guard.lock();
       services.schema_loaded.store(ret == OB_SUCCESS, std::memory_order_release);
       services.schema_loading_thread = std::thread::id();
