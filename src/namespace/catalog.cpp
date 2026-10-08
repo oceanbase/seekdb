@@ -1,4 +1,5 @@
 #include "namespace/catalog.h"
+#include <functional>
 
 #include <algorithm>
 #include <cstdio>
@@ -550,6 +551,65 @@ CatalogTreeResult NamespaceCatalogTree::remove(CatalogPageRef root,
   next = staged;
   return staged.page == root.page && staged.cap == root.cap
       ? CatalogTreeResult{CatalogTreeError::NOT_FOUND, 0} : result;
+}
+
+CatalogTreeResult NamespaceCatalogTree::retain_sources(
+    const std::vector<CatalogPageRef> &roots, int64_t snapshot, size_t max_entries,
+    std::map<uint64_t, PhysicalRetention> &retained)
+{
+  if (snapshot <= 0 || max_entries == 0 || retained.size() > max_entries) {
+    return {CatalogTreeError::INVALID, 0};
+  }
+  std::unordered_map<uint64_t, int64_t> visited;
+  std::unordered_set<uint64_t> path;
+  std::function<CatalogTreeResult(CatalogPageRef, int)> walk;
+  walk = [&](CatalogPageRef ref, int depth) -> CatalogTreeResult {
+    if (ref.cap < 0 || path.count(ref.page) != 0) { return {CatalogTreeError::CORRUPT, 0}; }
+    if (ref.page == 0) { return {}; }
+    if (depth >= 64) { return {CatalogTreeError::TOO_DEEP, 0}; }
+    ref.cap = NamespaceCatalogCodec::cap_min(ref.cap, snapshot);
+    const auto seen = visited.find(ref.page);
+    if (seen != visited.end() && seen->second <= ref.cap) { return {}; }
+    if (seen == visited.end() && visited.size() >= max_entries) { return {CatalogTreeError::TOO_LARGE, 0}; }
+    path.insert(ref.page);
+    CatalogNode node;
+    auto result = read_node(ref, node);
+    if (result.ok() && node.leaf) {
+      for (const auto &value : node.values) {
+        CatalogTabletSource source;
+        if (!NamespaceCatalogCodec::decode_source(value.data, source) || value.cap <= 0) {
+          result = {CatalogTreeError::CORRUPT, 0};
+          break;
+        }
+        const auto found = retained.find(source.physical_tablet_id);
+        if (found == retained.end()) {
+          if (retained.size() >= max_entries) { result = {CatalogTreeError::TOO_LARGE, 0}; break; }
+          retained.emplace(source.physical_tablet_id,
+              PhysicalRetention{source.create_transaction_id, value.cap});
+        } else if (found->second.create_transaction_id != source.create_transaction_id) {
+          // Reusing a committed address while an older incarnation is still
+          // referenced is a broken graph, not permission to reclaim either.
+          result = {CatalogTreeError::CORRUPT, 0};
+          break;
+        } else {
+          found->second.snapshot = std::min(found->second.snapshot, value.cap);
+        }
+      }
+    } else if (result.ok()) {
+      for (const auto &child : node.children) {
+        result = walk(child, depth + 1);
+        if (!result.ok()) { break; }
+      }
+    }
+    path.erase(ref.page);
+    if (result.ok()) { visited[ref.page] = ref.cap; }
+    return result;
+  };
+  for (const auto &root : roots) {
+    const auto result = walk(root, 0);
+    if (!result.ok()) { return result; }
+  }
+  return {};
 }
 
 } // namespace ns

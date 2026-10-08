@@ -33,6 +33,12 @@ struct CatalogTabletSource {
         && create_transaction_id > 0 && data_tablet_id != 0;
   }
 };
+// One physical incarnation and the oldest snapshot needed by the collected
+// source views. This is transient GC work, never a Namespace ownership index.
+struct PhysicalRetention {
+  int64_t create_transaction_id = 0;
+  int64_t snapshot = 0;
+};
 struct CatalogChange {
   CatalogValue value;
   bool erase = false;
@@ -166,6 +172,12 @@ class NamespaceCatalogTree final {
 public:
   explicit NamespaceCatalogTree(ICatalogPageStore &store) : store_(store) {}
   CatalogTreeResult read_node(CatalogPageRef ref, CatalogNode &node);
+  // Merge source roots read through this store's fixed MVCC view. Shared pages
+  // are revisited only when a path imposes an older cap. An error invalidates
+  // the caller's whole workset; it must never publish a partial retention plan.
+  CatalogTreeResult retain_sources(const std::vector<CatalogPageRef> &roots,
+      int64_t snapshot, size_t max_entries,
+      std::map<uint64_t, PhysicalRetention> &retained);
   CatalogTreeResult find(CatalogPageRef root, const std::string &key, CatalogValue &value);
   CatalogTreeResult put(CatalogPageRef root, const std::string &key,
                         CatalogValue value, CatalogPageRef &next);

@@ -1317,54 +1317,20 @@ int InstanceNamespaceDirectory::filter_unreferenced_tablets(
       }
       return terminated ? OB_SUCCESS : OB_SIZE_OVERFLOW;
     };
-    // This pass decides physical existence only. Caps and creation identities
-    // stay in the source entries; never infer an address from Namespace ancestry.
-    // Shared pages in this KV snapshot need to be visited only once.
+    std::map<uint64_t, ns::PhysicalRetention> retained;
     auto mark_roots = [&](InstanceNamespaceMetadata &reader,
-                          const std::vector<ns::CatalogPageRef> &roots) {
+                          const std::vector<ns::CatalogPageRef> &roots, int64_t snapshot) {
       InstanceCatalogPageStore pages(reader);
       ns::NamespaceCatalogTree tree(pages);
-      std::unordered_set<uint64_t> visited;
-      std::unordered_set<uint64_t> path;
-      std::function<int(ns::CatalogPageRef, int)> walk;
-      walk = [&](ns::CatalogPageRef ref, int depth) -> int {
-        if (ref.page == 0) { return OB_SUCCESS; }
-        if (path.count(ref.page) != 0) { return OB_CHECKSUM_ERROR; }
-        if (visited.count(ref.page) != 0) { return OB_SUCCESS; }
-        if (depth >= 64) { return OB_SIZE_OVERFLOW; }
-        path.insert(ref.page);
-        ns::CatalogNode node;
-        const auto result = tree.read_node(ref, node);
-        int rc = result.ok() ? OB_SUCCESS
-            : result.error == ns::CatalogTreeError::STORE ? result.store_error : OB_CHECKSUM_ERROR;
-        if (rc == OB_SUCCESS && node.leaf) {
-          for (const auto &value : node.values) {
-            ns::CatalogTabletSource source;
-            if (!ns::NamespaceCatalogCodec::decode_source(value.data, source)) {
-              rc = OB_CHECKSUM_ERROR;
-            } else {
-              rc = mark_source(source.physical_tablet_id);
-            }
-            if (rc != OB_SUCCESS) { break; }
-          }
-        } else if (rc == OB_SUCCESS) {
-          for (const auto &child : node.children) {
-            rc = walk(child, depth + 1);
-            if (rc != OB_SUCCESS) { break; }
-          }
-        }
-        path.erase(ref.page);
-        if (rc == OB_SUCCESS) { visited.insert(ref.page); }
-        return rc;
-      };
-      int rc = OB_SUCCESS;
-      for (const auto &root : roots) {
-        rc = walk(root, 0);
-        if (rc != OB_SUCCESS) { break; }
-      }
-      return rc;
+      // Bound this transient in-memory workset. A failed/oversized pass cannot
+      // authorize any deletion; the caller retries a complete plan later.
+      const auto result = tree.retain_sources(roots, snapshot, 262144, retained);
+      if (result.ok()) { return OB_SUCCESS; }
+      if (result.error == ns::CatalogTreeError::STORE) { return result.store_error; }
+      return result.error == ns::CatalogTreeError::TOO_LARGE
+          || result.error == ns::CatalogTreeError::TOO_DEEP ? OB_SIZE_OVERFLOW : OB_CHECKSUM_ERROR;
     };
-    if (ret == OB_SUCCESS) { ret = mark_roots(metadata, live); }
+    if (ret == OB_SUCCESS) { ret = mark_roots(metadata, live, tx.snapshot_version().get_val_for_tx()); }
     // A transaction may have acquired its view before DROP, without opening
     // this tablet yet. Its immutable root is a dependency even without a native
     // tablet handle. Include incomplete physical fork edges as for live roots.
@@ -1377,8 +1343,12 @@ int InstanceNamespaceDirectory::filter_unreferenced_tablets(
         return snapshot.convert_for_tx(view.snapshot);
       });
       InstanceNamespaceMetadata view_metadata(store_, view_tx);
-      if (ret == OB_SUCCESS) { ret = mark_roots(view_metadata, {view.roots.directory}); }
+      if (ret == OB_SUCCESS) { ret = mark_roots(view_metadata, {view.roots.directory}, view.snapshot); }
       ret = finish_directory_transaction(store_, view_tx, ret);
+    }
+    for (const auto &entry : retained) {
+      if (ret != OB_SUCCESS) { break; }
+      ret = mark_source(entry.first);
     }
     if (ret == OB_SUCCESS) {
       for (uint64_t candidate : candidates) {
