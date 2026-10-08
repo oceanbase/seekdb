@@ -54,7 +54,7 @@ int ObIvfAsyncTaskExector::LoadTaskCallback::is_cache_mgr_deprecated(ObIvfCacheM
     data_plane::ObNamespaceAccessMode mode;
     if (OB_FAIL(observer::namespace_worker_prototype::storage_access_mode(
             observer::namespace_worker_prototype::StorageSpaceHandle::namespace_space(namespace_id), mode))) {
-    } else if (OB_FAIL(access.prepare_read(namespace_id, cache_mgr.get_table_id(), tablet_id, mode))) {
+    } else if (OB_FAIL(access.prepare_current_read(namespace_id, cache_mgr.get_table_id(), tablet_id, mode))) {
     } else {
       ret = ls_->get_tablet_svr()->get_tablet(access.tablet(), tablet_handle);
     }
@@ -275,7 +275,7 @@ int ObIvfAsyncTaskExector::get_tablet_ids_by_ls(uint64_t namespace_id,
     for (int64_t i = 0; OB_SUCC(ret) && i < tmp_tablet_id_array.count(); ++i) {
       ns::TabletAccess access;
       ObTabletHandle tablet_handle;
-      ret = access.prepare_read(namespace_id, index_table_schema.get_table_id(),
+      ret = access.prepare_current_read(namespace_id, index_table_schema.get_table_id(),
           tmp_tablet_id_array.at(i), mode);
       if (OB_SUCC(ret)) {
         ret = ls_->get_tablet_svr()->get_tablet(access.tablet(), tablet_handle);

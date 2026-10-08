@@ -50,6 +50,7 @@ class INamespaceSchemaLifecycle
 {
 public:
   virtual ~INamespaceSchemaLifecycle() = default;
+  virtual bool is_bootstrapping() const = 0;
   virtual int refresh() = 0;
   virtual int acquire_read_view(const std::function<int(share::SCN &)> &acquire,
       ns::NamespaceCatalogViews::Handle &view,

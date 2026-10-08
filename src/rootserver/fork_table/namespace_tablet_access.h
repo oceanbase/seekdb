@@ -40,7 +40,12 @@ public:
   int prepare_read(uint64_t namespace_id, uint64_t table_id,
                    const common::ObTabletID &logical_tablet,
                    data_plane::ObNamespaceAccessMode mode,
-                   const NamespaceCatalogViews::Handle &view = {});
+                   const NamespaceCatalogViews::Handle &view);
+  // Estimates and maintenance explicitly select a fresh committed view.
+  // SQL scans instead pass the view already held by their statement/transaction.
+  int prepare_current_read(uint64_t namespace_id, uint64_t table_id,
+                           const common::ObTabletID &logical_tablet,
+                           data_plane::ObNamespaceAccessMode mode);
   int prepare_scan(uint64_t namespace_id, data_plane::ObNamespaceAccessMode mode,
                    storage::ObTableScanParam &param,
                    const NamespaceCatalogViews::Handle &view);

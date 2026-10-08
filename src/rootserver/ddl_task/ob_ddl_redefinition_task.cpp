@@ -2169,7 +2169,7 @@ int ObSyncTabletAutoincSeqCtx::call_and_process_all_tablet_autoinc_seqs(const bo
       ObTabletAutoincSeqCopyParam autoinc_param;
       // Sequence values are high-water marks, so reading the ancestor's
       // current value is safe. Keep its access protection through the call.
-      if (OB_FAIL(access.prepare_read(namespace_id_, src_table_id_, src_tablet_ids_.at(i), mode))) {
+      if (OB_FAIL(access.prepare_current_read(namespace_id_, src_table_id_, src_tablet_ids_.at(i), mode))) {
         break;
       }
       autoinc_param.src_tablet_id_ = access.tablet();

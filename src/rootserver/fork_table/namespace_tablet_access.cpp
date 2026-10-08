@@ -14,6 +14,9 @@
 #include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "data_plane/access/ob_table_scan_param.h"
+#include "data_plane/transaction/ob_i_transaction_service.h"
+#include "observer/namespace_worker_protocol_prototype.h"
+#include "lib/time/ob_time_utility.h"
 
 namespace oceanbase {
 namespace ns {
@@ -61,6 +64,21 @@ int TabletAccess::route(uint64_t namespace_id, const ObTabletID &logical_tablet)
     tablet_ = schema_tablet_;
     cap_scn_ = 0;
   }
+  return ret;
+}
+
+int TabletAccess::prepare_current_read(uint64_t namespace_id, uint64_t table_id,
+    const ObTabletID &logical_tablet, data_plane::ObNamespaceAccessMode mode)
+{
+  auto *lifecycle = observer::namespace_worker_prototype::namespace_schema_lifecycle(namespace_id);
+  auto *transactions = data_plane::query_transaction_service();
+  if (lifecycle == nullptr || transactions == nullptr) { return OB_NOT_INIT; }
+  NamespaceCatalogViews::Handle view;
+  int ret = lifecycle->acquire_read_view([&](share::SCN &snapshot) {
+    return transactions->get_read_snapshot_version(
+        ObTimeUtility::current_time() + 1000000, snapshot);
+  }, view, {});
+  if (OB_SUCC(ret)) { ret = prepare_read(namespace_id, table_id, logical_tablet, mode, view); }
   return ret;
 }
 

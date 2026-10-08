@@ -64,7 +64,7 @@ int ObStorageEstimator::estimate_row_count(const obcall::ObEstPartArg &arg,
       data_plane::ObNamespaceAccessMode mode;
       using namespace observer::namespace_worker_prototype;
       if (OB_FAIL(storage_access_mode(StorageSpaceHandle::namespace_space(namespace_id), mode))) {
-      } else if (OB_FAIL(access.prepare_read(
+      } else if (OB_FAIL(access.prepare_current_read(
           namespace_id, source.index_id_, source.tablet_id_, mode))) {
       } else {
         inherited_with_cap = access.cap_scn() > 0;
@@ -110,7 +110,7 @@ int ObStorageEstimator::estimate_block_count_and_row_count(const obcall::ObEstBl
       data_plane::ObNamespaceAccessMode mode;
       using namespace observer::namespace_worker_prototype;
       if (OB_FAIL(storage_access_mode(StorageSpaceHandle::namespace_space(namespace_id), mode))) {
-      } else if (OB_FAIL(access.prepare_read(
+      } else if (OB_FAIL(access.prepare_current_read(
           namespace_id, OB_INVALID_ID, routed.tablet_id_, mode))) {
       } else {
         routed.tablet_id_ = access.tablet();

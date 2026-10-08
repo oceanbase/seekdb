@@ -600,7 +600,7 @@ int ObForkTableHelper::get_tablet_handle_(
           observer::namespace_worker_prototype::StorageSpaceHandle::namespace_space(namespace_id), mode))) {
     return ret;
   }
-  if (OB_FAIL(access.prepare_read(namespace_id, src_table_id_, tablet_id, mode))) {
+  if (OB_FAIL(access.prepare_current_read(namespace_id, src_table_id_, tablet_id, mode))) {
     return ret;
   }
 

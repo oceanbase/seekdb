@@ -120,7 +120,7 @@ private:
   static int resolve_read_tablet(const common::ObTabletID &tablet_id,
                                  common::ObTabletID &physical_tablet_id,
                                  int64_t &cap_scn,
-                                 const ns::NamespaceCatalogViews::Handle &view = {});
+                                 const ns::NamespaceCatalogViews::Handle &view);
 
 
   static int ensure_tablet(const common::ObTabletID &tablet_id);

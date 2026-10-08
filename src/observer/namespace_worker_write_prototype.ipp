@@ -209,7 +209,7 @@ int route_tablet_mds(StorageSpaceHandle storage_space,
         if (!fork.is_valid()) {
           ret = OB_INVALID_ARGUMENT;
         } else if (OB_FAIL(storage_access_mode(storage_space, mode))) {
-        } else if (OB_FAIL(access.prepare_read(ns, OB_INVALID_ID,
+        } else if (OB_FAIL(access.prepare_current_read(ns, OB_INVALID_ID,
             fork.get_fork_src_tablet_id(), mode))) {
         } else {
           fork.set_fork_src_tablet_id(access.tablet());

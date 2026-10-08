@@ -907,6 +907,7 @@ int ObFTDMLIterator::init_doc_word_iterator()
   share::schema::ObSchemaGetterGuard guard;
   const share::schema::ObTableSchema *logical = nullptr;
   transaction::ObTxReadSnapshot snapshot;
+  ns::NamespaceCatalogViews::Handle view;
   // A previous iterator is reset before replacing its protected source.
   data_plane::reset_ft_doc_word_iterator(ft_doc_word_iter_);
   doc_word_access_.reset();
@@ -916,8 +917,10 @@ int ObFTDMLIterator::init_doc_word_iterator()
   } else if (OB_FAIL(guard.get_table_schema(info.doc_word_table_id_, logical))) {
   } else if (logical == nullptr || logical->get_schema_version() != info.doc_word_schema_version_) {
     ret = OB_SCHEMA_EAGAIN;
+  } else if (OB_FAIL(observer::namespace_worker_prototype::find_statement_read_view(
+      info.namespace_id_, info.snapshot_.core_.version_.get_val_for_tx(), view))) {
   } else if (OB_FAIL(doc_word_access_.prepare_read(info.namespace_id_,
-      info.doc_word_table_id_, info.doc_word_tablet_id_, info.namespace_access_mode_))) {
+      info.doc_word_table_id_, info.doc_word_tablet_id_, info.namespace_access_mode_, view))) {
   } else if (OB_FAIL(snapshot.assign(info.snapshot_))) {
   } else {
     if (doc_word_access_.cap_scn() > 0) {

@@ -1525,13 +1525,12 @@ int NamespaceForkKernelPrototype::resolve_read_tablet(
     }
     return ret;
   }
-  rootserver::InstanceNamespaceDirectory directory(*store);
-  uint64_t physical = 0;
-  int ret = directory.resolve_read_tablet(database_of(tablet_id.id()),
-      local_of(tablet_id.id()), probe_historical_tablet,
-      directory_deadline(), physical, cap_scn);
-  if (ret == OB_SUCCESS) { physical_tablet_id = ObTabletID(physical); }
-  return ret;
+  // Bootstrap creates local tablets before the initial catalog is published.
+  // Ordinary requests must carry a protected view; no parent-chain fallback.
+  auto *lifecycle = observer::namespace_worker_prototype::namespace_schema_lifecycle(
+      database_of(tablet_id.id()));
+  return lifecycle != nullptr && lifecycle->is_bootstrapping()
+      ? OB_SUCCESS : OB_STATE_NOT_MATCH;
 }
 int NamespaceForkKernelPrototype::ensure_tablet(const ObTabletID &tablet_id) {
 

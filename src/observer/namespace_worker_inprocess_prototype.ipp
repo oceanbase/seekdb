@@ -119,11 +119,12 @@ public:
                                     bool bootstrap = false)
       : ns_(ns), load_on_access_(load_on_access), bootstrap_(bootstrap) {}
   void complete_bootstrap() { bootstrap_.store(false, std::memory_order_release); }
+  bool is_bootstrapping() const override { return bootstrap_.load(std::memory_order_acquire); }
   int acquire_read_view(const std::function<int(share::SCN &)> &acquire,
       ns::NamespaceCatalogViews::Handle &view,
       const ns::NamespaceCatalogViews::Handle &previous) override
   {
-    if (bootstrap_.load(std::memory_order_acquire)) {
+    if (is_bootstrapping()) {
       share::SCN snapshot;
       return acquire(snapshot);
     }
@@ -132,7 +133,7 @@ public:
   int find_read_view(int64_t snapshot, ns::NamespaceCatalogViews::Handle &view) override
   {
     view.reset();
-    if (bootstrap_.load(std::memory_order_acquire)) { return OB_SUCCESS; }
+    if (is_bootstrapping()) { return OB_SUCCESS; }
     view = ns::namespace_registry().catalog_views().find(ns_, snapshot);
     return view ? OB_SUCCESS : OB_STATE_NOT_MATCH;
   }
@@ -556,7 +557,7 @@ private:
     data_plane::ObNamespaceAccessMode mode;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(storage_access_mode(storage_space, mode))) {
-    } else if (OB_FAIL(access.prepare_read(storage_space.tablet_namespace_id(),
+    } else if (OB_FAIL(access.prepare_current_read(storage_space.tablet_namespace_id(),
         logical_table_id, logical_tablet, mode))) {
     } else {
       storage_tablet = access.tablet();
