@@ -180,11 +180,8 @@ public:
   }
   bool can_use_basic_native_runtime() const
   {
-    // Keep native full-scan activation separate from the whole-level source
-    // batching contract so its remaining lookup costs can be validated first.
-    return expand_access_desc_.uses_adjacency_index()
-        && output_row_desc_.supports_basic_native_output(
-               path_desc_, expand_access_desc_);
+    return output_row_desc_.supports_basic_native_output(
+        path_desc_, expand_access_desc_);
   }
 
 private:
