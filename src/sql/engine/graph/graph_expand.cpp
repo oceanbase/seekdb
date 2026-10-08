@@ -35,6 +35,9 @@ namespace sql
 // buffers; variable-length ObObj payloads are accounted by identity_allocator_.
 static constexpr int64_t GRAPH_EXPAND_INPUT_MEMORY_RESERVE_BYTES = 128;
 static constexpr int64_t GRAPH_EXPAND_EDGE_MEMORY_RESERVE_BYTES = 256;
+static constexpr int64_t GRAPH_EXPAND_INPUT_KEY_SLOT_MULTIPLIER = 2;
+static constexpr int64_t GRAPH_EXPAND_INPUT_KEY_BYTES_PER_INPUT =
+    GRAPH_EXPAND_INPUT_KEY_SLOT_MULTIPLIER * sizeof(int64_t);
 
 namespace
 {
@@ -504,6 +507,8 @@ GraphExpand::GraphExpand(ObIAllocator &allocator,
     fixed_memory_bytes_(0),
     direction_(GraphPathDirection::OUT),
     inputs_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "GraphExpand")),
+    input_key_slots_(OB_MALLOC_NORMAL_BLOCK_SIZE,
+                     ModulePageAllocator(allocator, "GraphExpand")),
     source_identities_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "GraphExpand")),
     source_input_groups_(OB_MALLOC_NORMAL_BLOCK_SIZE,
                          ModulePageAllocator(allocator, "GraphExpand")),
@@ -550,6 +555,62 @@ int GraphExpand::deep_copy_inputs(const ObIArray<GraphExpandInput> &inputs)
     } else if (OB_FAIL(inputs_.push_back(stable))) {
     }
   }
+  return ret;
+}
+
+int GraphExpand::validate_input_keys(
+    const ObIArray<GraphExpandInput> &inputs)
+{
+  int ret = OB_SUCCESS;
+  if (!inputs.empty()) {
+    if (OB_UNLIKELY(inputs.count()
+                    > (INT64_MAX - (OB_MALLOC_NORMAL_BLOCK_SIZE - 1))
+                          / GRAPH_EXPAND_INPUT_KEY_BYTES_PER_INPUT)) {
+      ret = OB_SIZE_OVERFLOW;
+    } else {
+      const int64_t slot_count =
+          inputs.count() * GRAPH_EXPAND_INPUT_KEY_SLOT_MULTIPLIER;
+      if (OB_FAIL(input_key_slots_.prepare_allocate(slot_count))) {
+        LOG_WARN("failed to allocate graph input key index", K(ret),
+                 K(slot_count));
+      } else if (OB_FAIL(check_memory_limit())) {
+        LOG_WARN("graph input key index exceeds memory limit", K(ret),
+                 K(slot_count));
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && i < slot_count; ++i) {
+        input_key_slots_.at(i) = -1;
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && i < inputs.count(); ++i) {
+        const GraphExpandInput &input = inputs.at(i);
+        uint64_t hash = do_hash(input.binding_id_, 0);
+        hash = do_hash(input.path_state_id_, hash);
+        int64_t slot = static_cast<int64_t>(hash % slot_count);
+        int64_t probed = 0;
+        while (OB_SUCC(ret) && input_key_slots_.at(slot) >= 0
+               && probed < slot_count) {
+          const GraphExpandInput &existing =
+              inputs.at(input_key_slots_.at(slot));
+          if (input.binding_id_ == existing.binding_id_
+              && input.path_state_id_ == existing.path_state_id_) {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_WARN("duplicate graph expand input key", K(ret), K(i),
+                     "existing_index", input_key_slots_.at(slot), K(input));
+          } else {
+            slot = (slot + 1) % slot_count;
+            ++probed;
+          }
+        }
+        if (OB_SUCC(ret) && OB_UNLIKELY(probed >= slot_count)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("graph input key index is full", K(ret), K(i),
+                   K(slot_count));
+        } else if (OB_SUCC(ret)) {
+          input_key_slots_.at(slot) = i;
+        }
+      }
+    }
+  }
+  input_key_slots_.reset();
   return ret;
 }
 
@@ -722,6 +783,7 @@ int64_t GraphExpand::used_memory() const
   // capacity so small batches still account every allocated container block.
   const int64_t container_parts[] = {
       inputs_.get_data_size(),
+      input_key_slots_.get_data_size(),
       source_identities_.get_data_size(),
       source_input_index_.used_memory(),
       source_input_groups_.get_data_size(),
@@ -809,12 +871,6 @@ int GraphExpand::validate_and_account(const ObIArray<GraphExpandInput> &inputs)
         || !inputs.at(i).source_identity_.is_valid()) {
       ret = OB_INVALID_ARGUMENT;
     }
-    for (int64_t j = 0; OB_SUCC(ret) && j < i; ++j) {
-      if (inputs.at(i).binding_id_ == inputs.at(j).binding_id_
-          && inputs.at(i).path_state_id_ == inputs.at(j).path_state_id_) {
-        ret = OB_INVALID_ARGUMENT;
-      }
-    }
   }
   if (OB_SUCC(ret)) {
     // Reserve the worst case of one distinct source per input: one identity
@@ -826,20 +882,39 @@ int GraphExpand::validate_and_account(const ObIArray<GraphExpandInput> &inputs)
         sizeof(SourceInputGroup) + sizeof(int64_t);
     const int64_t per_input = sizeof(GraphExpandInput) + sizeof(GraphElementIdentity)
         + source_index_entry_bytes + source_index_bucket_bytes
-        + source_input_group_bytes + GRAPH_EXPAND_INPUT_MEMORY_RESERVE_BYTES;
+        + source_input_group_bytes
+        + GRAPH_EXPAND_INPUT_MEMORY_RESERVE_BYTES;
     const int64_t per_edge = sizeof(GraphExpandEdge) + 2 * sizeof(GraphElementIdentity)
         + GRAPH_EXPAND_EDGE_MEMORY_RESERVE_BYTES;
     if (inputs.count() > INT64_MAX / per_input
+        || inputs.count()
+               > (INT64_MAX - (OB_MALLOC_NORMAL_BLOCK_SIZE - 1))
+                     / GRAPH_EXPAND_INPUT_KEY_BYTES_PER_INPUT
         || page_size_ > (INT64_MAX - inputs.count() * per_input) / per_edge) {
       ret = OB_SIZE_OVERFLOW;
     } else {
-      bytes = inputs.count() * per_input + page_size_ * per_edge;
-      fixed_memory_bytes_ = bytes;
+      const int64_t steady_bytes =
+          inputs.count() * per_input + page_size_ * per_edge;
+      const int64_t slot_payload_bytes =
+          inputs.count() * GRAPH_EXPAND_INPUT_KEY_BYTES_PER_INPUT;
+      const int64_t slot_remainder =
+          slot_payload_bytes % OB_MALLOC_NORMAL_BLOCK_SIZE;
+      const int64_t transient_bytes = slot_payload_bytes == 0
+          ? 0
+          : slot_payload_bytes
+                + (slot_remainder == 0
+                       ? 0 : OB_MALLOC_NORMAL_BLOCK_SIZE - slot_remainder);
+      bytes = std::max(steady_bytes, transient_bytes);
+      fixed_memory_bytes_ = steady_bytes;
       stats_.peak_path_memory_ = bytes;
       if (bytes > memory_limit_) {
         ret = OB_EXCEED_QUERY_MEM_LIMIT;
       }
     }
+  }
+  if (OB_SUCC(ret) && OB_FAIL(validate_input_keys(inputs))) {
+    LOG_WARN("invalid graph expand input keys", K(ret),
+             "input_count", inputs.count());
   }
   return ret;
 }
@@ -1041,6 +1116,7 @@ void GraphExpand::release()
 {
   access_.release();
   inputs_.reset();
+  input_key_slots_.reset();
   source_input_index_.reset();
   source_identities_.reset();
   source_input_groups_.reset();

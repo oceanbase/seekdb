@@ -211,6 +211,8 @@ private:
   int deep_copy_identity(const GraphElementIdentity &source,
                          GraphElementIdentity &destination);
   int deep_copy_inputs(const common::ObIArray<GraphExpandInput> &inputs);
+  int validate_input_keys(
+      const common::ObIArray<GraphExpandInput> &inputs);
   int stabilize_identities(common::ObIArray<GraphElementIdentity> &identities);
   int stabilize_edge_page();
   int check_memory_limit();
@@ -232,6 +234,9 @@ private:
   int64_t fixed_memory_bytes_;
   GraphPathDirection direction_;
   common::ObArray<GraphExpandInput> inputs_;
+  // Transient open-addressed slots replace quadratic duplicate handle checks.
+  // validate_input_keys() releases them before adjacency state is allocated.
+  common::ObArray<int64_t> input_key_slots_;
   common::ObArray<GraphElementIdentity> source_identities_;
   common::ObArray<SourceInputGroup> source_input_groups_;
   common::ObArray<int64_t> next_input_indices_;
