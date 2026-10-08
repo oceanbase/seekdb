@@ -21,74 +21,6 @@ using namespace common;
 using namespace share::schema;
 using storage::NamespaceForkKernelPrototype;
 
-int TabletBinding::prepare()
-{
-  int ret = OB_SUCCESS;
-  if (!positions_.empty()) { return ret; }
-  schemas_.reset();
-  tablets_.reset();
-  const ObTableSchema *main = requested_;
-  if (requested_->is_aux_lob_table()) {
-    if (OB_FAIL(guard_.get_table_schema(requested_->get_data_table_id(), main))) {
-    } else if (main == nullptr || main->is_aux_lob_table()) {
-      ret = OB_SCHEMA_EAGAIN;
-    }
-  }
-  if (OB_SUCC(ret)) { ret = schemas_.push_back(main); }
-  const uint64_t auxiliary_ids[] = {
-      OB_SUCC(ret) ? main->get_aux_lob_meta_tid() : OB_INVALID_ID,
-      OB_SUCC(ret) ? main->get_aux_lob_piece_tid() : OB_INVALID_ID};
-  for (uint64_t id : auxiliary_ids) {
-    if (OB_SUCC(ret) && id != 0 && id != OB_INVALID_ID) {
-      const ObTableSchema *auxiliary = nullptr;
-      if (id == requested_->get_table_id()) { auxiliary = requested_; }
-      else { ret = guard_.get_table_schema(id, auxiliary); }
-      if (OB_FAIL(ret)) {
-      } else if (auxiliary == nullptr || !auxiliary->is_aux_lob_table()
-          || auxiliary->get_data_table_id() != main->get_table_id()) {
-        ret = OB_SCHEMA_EAGAIN;
-      } else { ret = schemas_.push_back(auxiliary); }
-    }
-  }
-  bool found = false;
-  for (int64_t i = 0; OB_SUCC(ret) && i < schemas_.count(); ++i) {
-    ObArray<ObTabletID> ids;
-    const auto &schema = *schemas_.at(i);
-    if (OB_FAIL(schema.get_tablet_ids(ids))) {
-    } else if (schema.get_hidden_partition_num() > 0
-        && OB_FAIL(schema.get_first_level_hidden_tablet_ids(ids))) {
-    } else if (ids.empty() || (i > 0 && ids.count() != tablets_.at(0).count())) {
-      ret = OB_STATE_NOT_MATCH;
-    } else if (OB_FAIL(tablets_.push_back(ids))) {
-    } else if (schema.get_table_id() == requested_->get_table_id()) {
-      found = true;
-      for (int64_t j = 0; OB_SUCC(ret) && j < ids.count(); ++j) {
-        if (!positions_.emplace(ids.at(j).id(), j).second) { ret = OB_STATE_NOT_MATCH; }
-      }
-    }
-  }
-  if (OB_SUCC(ret) && !found) { ret = OB_SCHEMA_EAGAIN; }
-  if (OB_FAIL(ret)) { positions_.clear(); }
-  return ret;
-}
-
-int TabletBinding::resolve(const ObTabletID &logical_tablet,
-    ObIArray<const ObTableSchema *> &schemas, ObIArray<ObTabletID> &tablets)
-{
-  int ret = prepare();
-  if (OB_SUCC(ret)) {
-    const auto found = positions_.find(logical_tablet.id());
-    if (found == positions_.end()) { ret = OB_TABLET_NOT_EXIST; }
-    else if (OB_FAIL(schemas.assign(schemas_))) {
-    } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < tablets_.count(); ++i) {
-        ret = tablets.push_back(tablets_.at(i).at(found->second));
-      }
-    }
-  }
-  return ret;
-}
-
 void TabletAccess::reset()
 {
   protection_.reset();
@@ -148,14 +80,13 @@ int TabletAccess::prepare_read(uint64_t namespace_id, uint64_t table_id,
 
 int TabletAccess::prepare_write(uint64_t namespace_id, uint64_t table_id,
                                 const ObTabletID &logical_tablet,
-                                data_plane::ObNamespaceAccessMode mode,
-                                const PrepareBinding &prepare)
+                                data_plane::ObNamespaceAccessMode mode)
 {
   int ret = route(namespace_id, logical_tablet);
   if (OB_SUCC(ret)) {
     ret = NamespaceForkKernelPrototype::prepare_access(namespace_id, table_id,
         tablet_, false, mode, protection_, [&](ObTabletID &physical) {
-      return NamespaceForkKernelPrototype::ensure_tablet(physical, prepare);
+      return NamespaceForkKernelPrototype::ensure_tablet(physical);
     });
   }
   return ret;

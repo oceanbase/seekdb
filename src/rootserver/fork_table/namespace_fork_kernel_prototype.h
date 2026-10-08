@@ -114,9 +114,7 @@ private:
                                  int64_t &cap_scn);
 
 
-  static int ensure_tablet(const common::ObTabletID &tablet_id,
-      const std::function<int(common::ObIArray<const share::schema::ObTableSchema *> &,
-                              common::ObIArray<common::ObTabletID> &)> &prepare);
+  static int ensure_tablet(const common::ObTabletID &tablet_id);
   static int schedule_baseline_impl(const ObTablet &tablet, int depth);
 };
 }

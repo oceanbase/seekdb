@@ -1453,10 +1453,7 @@ int NamespaceForkKernelPrototype::resolve_read_tablet(
   if (ret == OB_SUCCESS) { physical_tablet_id = ObTabletID(physical); }
   return ret;
 }
-int NamespaceForkKernelPrototype::ensure_tablet(
-    const ObTabletID &tablet_id,
-    const std::function<int(ObIArray<const ObTableSchema *> &,
-                            ObIArray<ObTabletID> &)> &prepare) {
+int NamespaceForkKernelPrototype::ensure_tablet(const ObTabletID &tablet_id) {
 
   if (!is_encoded_id(tablet_id.id())) { return OB_SUCCESS; }
   int ret = OB_SUCCESS;
@@ -1480,20 +1477,11 @@ int NamespaceForkKernelPrototype::ensure_tablet(
   LOG_INFO("PROTOTYPE_V4_DIRECTORY_SLOW_PATH", K(tablet_id));
   if (directory_kv_store() == nullptr) { return OB_NOT_INIT; }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
-  if (OB_FAIL(load_kv_exceptions(db))) { return ret; }
-  if (control_state().tombstoned(db, local)) {
-    // Dropped in this namespace: there is nothing to materialize onto.
-    return OB_TABLET_NOT_EXIST;
-  }
-  if (control_state().owned(db, local)) {
-    // Creation commit is ahead of tablet-manager visibility.
-    return OB_SUCCESS;
-  }
   struct MaterializeItem {
-    const ObTableSchema *schema = nullptr;
+    ns::CatalogTabletSource source;
     uint64_t local_tablet = 0;
-    uint64_t source_tablet = 0;
     int64_t cap = 0;
+    std::string definition;
   };
   std::vector<MaterializeItem> items;
   Roots root;
@@ -1524,49 +1512,59 @@ int NamespaceForkKernelPrototype::ensure_tablet(
           root = record.roots;
         }
       }
+      ns::CatalogTabletSource requested;
+      int64_t requested_cap = 0;
       if (OB_SUCC(ret)) {
         failure_stage = "recheck";
-        // A creator may have committed while we waited on the namespace row.
-        // Locked reads acquire a fresh snapshot; neither the cache nor the
-        // snapshot pinned at attach may describe that creator's commit.
-        rootserver::InstanceExceptionRecord owned;
-        ret = metadata.get_exception(db, local, owned, true);
-        if (ret == OB_ENTRY_NOT_EXIST) {
-          ret = probe_physical_tablet(tablet_id.id(), already);
-          // Other DDL can create tablets before its schema delta publishes.
-          // That publication owns their directory registration, not this path.
-        } else if (OB_SUCC(ret)) {
-          if (owned.kind != 0) { ret = OB_TABLET_NOT_EXIST; }
-          else { already = true; }
-        }
+        ret = metadata.find_tablet_source(root.directory, local, requested, requested_cap);
+        if (ret == OB_ENTRY_NOT_EXIST) { ret = OB_TABLET_NOT_EXIST; }
+        if (OB_SUCC(ret)) { already = requested.physical_tablet_id == tablet_id.id(); }
       }
       if (OB_SUCC(ret) && !already) {
-        failure_stage = "schema";
-        ObSEArray<const ObTableSchema *, 3> schemas;
-        ObSEArray<ObTabletID, 3> logical_tablets;
-        if (OB_FAIL(prepare(schemas, logical_tablets))) {
-        } else if (schemas.empty() || schemas.count() != logical_tablets.count()) {
-          ret = OB_INVALID_ARGUMENT;
-        }
+        failure_stage = "source_definition";
+        const uint64_t binding[] = {requested.data_tablet_id,
+            requested.lob_meta_tablet_id, requested.lob_piece_tablet_id};
         bool requested_found = false;
-        for (int64_t i = 0; OB_SUCC(ret) && i < schemas.count(); ++i) {
+        for (uint64_t logical : binding) {
+          if (OB_FAIL(ret)) { break; }
+          if (logical == 0) { continue; }
           MaterializeItem item;
-          item.schema = schemas.at(i);
-          item.local_tablet = logical_tablets.at(i).id();
-          requested_found |= item.local_tablet == local;
-          if (item.schema == nullptr || !logical_tablets.at(i).is_valid()
-              || is_encoded_id(item.local_tablet)) {
-            ret = OB_INVALID_ARGUMENT;
-          } else if (OB_FAIL(metadata.resolve_read_tablet(
-                         db, item.local_tablet, probe_historical_tablet,
-                         item.source_tablet, item.cap))) {
-          } else if (item.source_tablet == encoded(db, item.local_tablet)) {
-            ret = OB_EAGAIN;
-          } else if (item.cap <= 0 || item.cap > root.snapshot) {
+          item.local_tablet = logical;
+          requested_found |= logical == local;
+          if (OB_FAIL(metadata.find_tablet_source(root.directory, logical, item.source, item.cap))) {
+          } else if (item.source.data_tablet_id != requested.data_tablet_id
+              || item.source.lob_meta_tablet_id != requested.lob_meta_tablet_id
+              || item.source.lob_piece_tablet_id != requested.lob_piece_tablet_id
+              || item.source.physical_tablet_id == encoded(db, logical)
+              || item.cap <= 0 || item.cap > root.snapshot) {
             ret = OB_STATE_NOT_MATCH;
-          } else { items.push_back(item); }
+          } else if (OB_FAIL(metadata.read_table_definition(
+                         root.catalog, item.source.table_id, item.definition))) {
+          } else {
+            // The immutable entry identifies an exact physical incarnation.
+            // Never substitute a newly created object with the same tablet ID.
+            ObTabletHandle source_handle;
+            ret = ObTabletCreateDeleteHelper::check_and_get_tablet(
+                ObTabletMapKey(ObTabletID(item.source.physical_tablet_id)), source_handle, 0,
+                ObMDSGetTabletMode::READ_WITHOUT_CHECK, transaction::ObTransVersion::MAX_TRANS_VERSION);
+            if (OB_SUCC(ret) && source_handle.get_obj()->is_empty_shell()) { ret = OB_SNAPSHOT_DISCARDED; }
+            if (OB_SUCC(ret)) {
+              ObTabletCreateDeleteMdsUserData status;
+              mds::MdsWriter writer;
+              mds::TwoPhaseCommitState state;
+              SCN version;
+              ret = source_handle.get_obj()->get_latest_tablet_status(status, writer, state, version);
+              if (OB_SUCC(ret) && status.create_transaction_id_ != item.source.create_transaction_id) {
+                ret = OB_SNAPSHOT_DISCARDED;
+              }
+            }
+            rootserver::TabletVisibility visibility = rootserver::TabletVisibility::ABSENT;
+            if (OB_SUCC(ret)) { ret = probe_historical_tablet(item.source.physical_tablet_id, item.cap, visibility); }
+            if (OB_SUCC(ret) && visibility != rootserver::TabletVisibility::READABLE) { ret = OB_SNAPSHOT_DISCARDED; }
+            if (OB_SUCC(ret)) { items.push_back(std::move(item)); }
+          }
         }
-        if (OB_SUCC(ret) && !requested_found) { ret = OB_INVALID_ARGUMENT; }
+        if (OB_SUCC(ret) && !requested_found) { ret = OB_STATE_NOT_MATCH; }
         auto *freeze = share::server_service<ObFreezeInfoMgr>();
         if (OB_SUCC(ret) && !freeze) {
           ret = OB_STATE_NOT_MATCH;
@@ -1585,7 +1583,7 @@ int NamespaceForkKernelPrototype::ensure_tablet(
             if (pin.schema_version != inherited.schema_version) {
               ret = OB_STATE_NOT_MATCH;
             } else if (OB_FAIL(freeze->get_min_reserved_snapshot(
-                           ObTabletID(item.source_tablet), item.cap, reserved))) {
+                           ObTabletID(item.source.physical_tablet_id), item.cap, reserved))) {
             } else if (reserved.snapshot_ > item.cap) {
               ret = OB_SNAPSHOT_DISCARDED;
             }
@@ -1611,18 +1609,20 @@ int NamespaceForkKernelPrototype::ensure_tablet(
       if (OB_FAIL(ret)) { break; }
       ObForkTabletInfo fork;
       fork.set_fork_snapshot_version(item.cap);
-      fork.set_fork_src_tablet_id(ObTabletID(item.source_tablet));
+      fork.set_fork_src_tablet_id(ObTabletID(item.source.physical_tablet_id));
       const ObTabletID destination(encoded(db, item.local_tablet));
       rootserver::TableCreationDescriptor definition;
       int64_t schema_index = -1;
-      if (OB_FAIL(definition.init(*item.schema, DATA_CURRENT_VERSION))) {
+      if (OB_FAIL(definition.decode(item.definition))) {
+      } else if (definition.schema().get_table_id() != item.source.table_id) {
+        ret = OB_CHECKSUM_ERROR;
       } else if (OB_FAIL(definition.append_to(batch, schema_index))) {
       } else if (OB_FAIL(ids.push_back(destination)) || OB_FAIL(schema_indexes.push_back(schema_index))
           || OB_FAIL(logical_birth.push_back(item.cap))
           || OB_FAIL(fork_infos.push_back(fork))
-          || OB_FAIL(source_ids.push_back(ObTabletID(item.source_tablet)))
+          || OB_FAIL(source_ids.push_back(ObTabletID(item.source.physical_tablet_id)))
           || OB_FAIL(source_snapshot_versions.push_back(item.cap))
-          || OB_FAIL(mappings.push_back(ObTabletTablePair(destination, item.schema->get_table_id())))) {
+          || OB_FAIL(mappings.push_back(ObTabletTablePair(destination, item.source.table_id)))) {
       }
     }
     const ObTabletID data_tablet(encoded(db, items.front().local_tablet));
@@ -1661,13 +1661,13 @@ int NamespaceForkKernelPrototype::ensure_tablet(
       for (const auto &item : items) {
         if (OB_FAIL(ret)) { break; }
         ret = metadata.put_exception({db, item.local_tablet,
-            local_of(item.schema->get_table_id()), 0, 0});
+            local_of(item.source.table_id), 0, 0});
         ns::CatalogTabletSource source;
         int64_t cap = 0;
         if (OB_SUCC(ret)) { ret = metadata.find_tablet_source(root.directory, item.local_tablet, source, cap); }
         source.physical_tablet_id = encoded(db, item.local_tablet);
         source.create_transaction_id = native.get_tx_id().get_id();
-        if (OB_SUCC(ret) && (!source.is_valid() || source.table_id != item.schema->get_table_id())) {
+        if (OB_SUCC(ret) && (!source.is_valid() || source.table_id != item.source.table_id)) {
           ret = OB_STATE_NOT_MATCH;
         }
         if (OB_SUCC(ret)) {
@@ -1692,7 +1692,7 @@ int NamespaceForkKernelPrototype::ensure_tablet(
   }
   if (ret == OB_SUCCESS && !already) {
     for (const auto &item : items) {
-      control_state().apply_owned(db, item.local_tablet, local_of(item.schema->get_table_id()));
+      control_state().apply_owned(db, item.local_tablet, local_of(item.source.table_id));
     }
   } else {
     // Commit may have succeeded even when its response was lost. A later
@@ -1709,7 +1709,7 @@ int NamespaceForkKernelPrototype::ensure_tablet(
         static_cast<long>(root.snapshot),
         static_cast<unsigned long long>(root.snapshot_ref), items.size(),
         static_cast<long>(item ? item->cap : 0),
-        static_cast<unsigned long long>(item ? item->source_tablet : 0),
+        static_cast<unsigned long long>(item ? item->source.physical_tablet_id : 0),
         static_cast<unsigned long long>(item ? item->local_tablet : 0));
     LOG_WARN("prototype storage materialization failed", K(ret), K(tablet_id));
   }

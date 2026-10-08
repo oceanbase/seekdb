@@ -2,7 +2,6 @@
 struct EngineWrite {
   ObArenaAllocator allocator{ObMemAttr("NsRemoteWrite")};
   std::shared_ptr<ObSchemaGetterGuard> schema_guard;
-  std::unique_ptr<ns::TabletBinding> binding;
   ns::TabletAccess access;
   uint64_t logical_table_id = OB_INVALID_ID;
   data_plane::ObNamespaceAccessMode access_mode_ = data_plane::ObNamespaceAccessMode::UNBOUND;
@@ -51,7 +50,6 @@ struct EngineWrite {
       ret = OB_INVALID_ARGUMENT;
     } else {
       schema_guard = request.schema_guard;
-      binding = std::make_unique<ns::TabletBinding>(logical_schema, *schema_guard);
       schema = &logical_schema;
     }
     if (!ret) {
@@ -121,10 +119,7 @@ struct EngineWrite {
         || request.cells.size() != count * columns.count()
         || request.lob_headers.size() != request.cells.size()) { return OB_INVALID_ARGUMENT; }
     int ret = access.prepare_write(namespace_id, logical_table_id,
-        ObTabletID(tablet_id), access_mode_,
-        [&](ObIArray<const ObTableSchema *> &schemas, ObIArray<ObTabletID> &ids) {
-          return binding->resolve(ObTabletID(tablet_id), schemas, ids);
-        });
+        ObTabletID(tablet_id), access_mode_);
     if (OB_FAIL(ret)) { return ret; }
     const ObTabletID tablet = access.tablet();
     if (OB_SUCC(ret)) { ret = acquire(tx); }

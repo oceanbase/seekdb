@@ -230,18 +230,13 @@ public:
       ObIArray<int> &statuses) override {
     return call_in_process_rootserver_runtime(namespace_id_,
         [&](rootserver::ObIRootserverLocalRuntime &runtime, StorageSpaceHandle space) {
-          std::unordered_map<int64_t, std::unique_ptr<MetadataTabletPreparation>> preparations;
           int ret = OB_SUCCESS;
           for (int64_t i = 0; OB_SUCC(ret) && i < args.count(); ++i) {
             const auto &arg = args.at(i);
-            auto &preparation = preparations[arg.schema_version_];
-            if (!preparation) {
-              preparation = std::make_unique<MetadataTabletPreparation>(space, arg.schema_version_);
-            }
             ns::TabletAccess access;
             obcall::ObDDLLocalBuildArg routed;
             obcall::ObDDLLocalBuildResult result;
-            int status = preparation->prepare(arg.source_tablet_id_, arg.source_table_id_, access);
+            int status = prepare_metadata_tablet(space, arg.source_tablet_id_, access);
             if (status == OB_SUCCESS) { status = route_rootserver_build_arg(space, arg, routed); }
             if (status == OB_SUCCESS) { status = runtime.build_ddl_local(routed, result); }
             if (OB_FAIL(results.push_back(result))) {

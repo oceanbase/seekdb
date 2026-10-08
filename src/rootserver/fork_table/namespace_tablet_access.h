@@ -25,37 +25,12 @@ namespace share { namespace schema { class ObSchemaGetterGuard; } }
 namespace storage { class ObTableScanParam; }
 namespace ns {
 
-// Borrows immutable definitions from the caller's pinned guard. Creation-only
-// LOB definitions and tablet correspondences are prepared on first materialization
-// and reused for this operation. No full table schema is copied or rewritten.
-class TabletBinding final
-{
-public:
-  TabletBinding(const share::schema::ObTableSchema &requested,
-                share::schema::ObSchemaGetterGuard &guard) : guard_(guard), requested_(&requested) {}
-  const share::schema::ObTableSchema &schema() const { return *requested_; }
-  int resolve(const common::ObTabletID &logical_tablet,
-              common::ObIArray<const share::schema::ObTableSchema *> &schemas,
-              common::ObIArray<common::ObTabletID> &tablets);
-private:
-  int prepare();
-  share::schema::ObSchemaGetterGuard &guard_;
-  common::ObSEArray<const share::schema::ObTableSchema *, 3> schemas_;
-  common::ObSEArray<common::ObArray<common::ObTabletID>, 3> tablets_;
-  std::unordered_map<uint64_t, int64_t> positions_;
-  const share::schema::ObTableSchema *requested_;
-  DISALLOW_COPY_AND_ASSIGN(TabletBinding);
-};
-
 // Keeps logical access admitted until the caller releases its physical
 // iterators/store contexts. Resolution is read-only; only prepare_write may
 // create a binding. Physical replay, compaction and GC do not enter here.
 class TabletAccess final
 {
 public:
-  using PrepareBinding = std::function<int(
-      common::ObIArray<const share::schema::ObTableSchema *> &,
-      common::ObIArray<common::ObTabletID> &)>;
   TabletAccess() = default;
   ~TabletAccess() { reset(); }
   void reset();
@@ -69,8 +44,7 @@ public:
                    storage::ObTableScanParam &param);
   int prepare_write(uint64_t namespace_id, uint64_t table_id,
                     const common::ObTabletID &logical_tablet,
-                    data_plane::ObNamespaceAccessMode mode,
-                    const PrepareBinding &prepare);
+                    data_plane::ObNamespaceAccessMode mode);
   const common::ObTabletID &tablet() const { return tablet_; }
   const common::ObTabletID &schema_tablet() const { return schema_tablet_; }
   int64_t cap_scn() const { return cap_scn_; }

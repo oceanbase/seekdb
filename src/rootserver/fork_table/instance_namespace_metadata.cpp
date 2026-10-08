@@ -943,6 +943,25 @@ int InstanceNamespaceMetadata::find_tablet_source(ns::CatalogPageRef root,
   return OB_SUCCESS;
 }
 
+int InstanceNamespaceMetadata::read_table_definition(ns::CatalogPageRef root,
+    uint64_t table_id, std::string &definition)
+{
+  InstanceCatalogPageStore pages(*this);
+  ns::NamespaceCatalogTree tree(pages);
+  ns::CatalogValue value;
+  const auto result = tree.find(root, ns::NamespaceCatalogCodec::object_key(table_id), value);
+  if (!result.ok()) {
+    return result.error == ns::CatalogTreeError::NOT_FOUND ? OB_ENTRY_NOT_EXIST
+        : result.error == ns::CatalogTreeError::STORE ? result.store_error : OB_CHECKSUM_ERROR;
+  }
+  uint64_t object = 0, table = 0, tablet = 0, bound = 0;
+  if (!ns::NamespaceCatalogCodec::decode_entry(value.data, object, table, tablet, bound)
+      || object == 0 || table != table_id || tablet != 0 || bound != 0) {
+    return OB_CHECKSUM_ERROR;
+  }
+  return read_object(object, definition);
+}
+
 int InstanceNamespaceMetadata::stage_catalog_delta(uint64_t namespace_id,
     int64_t base_schema_version, int64_t schema_version,
     const ns::CatalogChanges &definitions, const ns::CatalogChanges &sources)
