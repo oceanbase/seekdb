@@ -43,7 +43,7 @@ struct ObRetryMajorInfo
     : frozen_scn_(0)
   {}
   bool is_valid() const {
-    return true;
+    return frozen_scn_ > 0;
   }
   void reset() {
     frozen_scn_ = 0;
