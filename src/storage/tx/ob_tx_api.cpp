@@ -587,6 +587,14 @@ int ObTransService::get_read_snapshot(ObTxDesc &tx,
   ObSpinLockGuard guard(tx.lock_);
   ObTxIsolationLevel isolation = iso_level;
   if (OB_SUCC(tx_sanity_check_(tx))) {
+    // An autocommit plain SELECT can acquire its snapshot without start_tx.
+    // Admit that implicit reader through the same write fence as explicit
+    // transactions before RR snapshot registration can allocate a log-backed ID.
+    if (tx.state_ == ObTxDesc::State::IDLE && !tx.tx_id_.is_valid()
+        && !share::server_is_write_enabled()) {
+      tx.access_mode_ = ObTxAccessMode::RD_ONLY;
+      tx.flags_.WRITE_FENCED_ = true;
+    }
     if (tx.is_in_tx() && isolation != tx.isolation_) {
       //use txn's isolation if txn is active
       isolation = tx.isolation_;

@@ -18,6 +18,7 @@
 #define OCEANBASE_STORAGE_INSTANCE_META_STORE_H_
 
 #include <functional>
+#include <memory>
 #include "common/ob_tablet_id.h"
 #include "data_plane/transaction/ob_tx_read_snapshot.h"
 #include "lib/string/ob_string.h"
@@ -36,6 +37,7 @@ using share::instance_meta::MetaCollection;
 
 class InstanceMetaStore final
 {
+  struct ReadSnapshots;
 public:
   static constexpr int64_t MAX_KEY_LENGTH = 512;
   static constexpr int64_t MAX_VALUE_LENGTH = 64 * 1024;
@@ -64,6 +66,24 @@ public:
     Transaction *next_;
     DISALLOW_COPY_AND_ASSIGN(Transaction);
   };
+
+  // A retained KV snapshot outlives its selecting transaction without holding
+  // the directory GC gate or a native transaction descriptor. It protects
+  // historical row versions, including deletes replayed from another server.
+  class Snapshot final
+  {
+  public:
+    ~Snapshot();
+    const share::SCN &version() const { return version_; }
+  private:
+    friend class InstanceMetaStore;
+    Snapshot(std::shared_ptr<ReadSnapshots> readers, const share::SCN &version);
+    std::shared_ptr<ReadSnapshots> readers_;
+    share::SCN version_;
+    DISALLOW_COPY_AND_ASSIGN(Snapshot);
+  };
+  using SnapshotHandle = std::shared_ptr<const Snapshot>;
+  int retain_snapshot(const Transaction &tx, SnapshotHandle &snapshot);
 
   // Bounds apply to the key within one collection. Empty byte strings are
   // valid keys; bound presence is therefore separate from bound contents.
@@ -106,7 +126,7 @@ public:
   int detach(Transaction &tx);
   int commit(Transaction &tx);
   int rollback(Transaction &tx);
-  // Compaction must retain every snapshot held by a native KV transaction.
+  // Compaction retains active KV transactions and independent snapshot handles.
   int min_retained_snapshot(share::SCN &snapshot);
   int get(Transaction &tx, MetaCollection collection, const common::ObString &key,
           common::ObIAllocator &allocator, common::ObString &value);

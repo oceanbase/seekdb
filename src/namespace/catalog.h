@@ -66,6 +66,9 @@ public:
     uint64_t namespace_id;
     int64_t snapshot;
     CatalogRoots roots;
+    // Opaque storage retention; copied GC entries keep historical pages alive
+    // even if the last SQL View holder concurrently releases its registration.
+    std::shared_ptr<const void> retention;
   };
   class View final {
   public:
@@ -81,7 +84,8 @@ public:
   };
   using Handle = std::shared_ptr<const View>;
   NamespaceCatalogViews();
-  Handle hold(uint64_t namespace_id, int64_t snapshot, const CatalogRoots &roots);
+  Handle hold(uint64_t namespace_id, int64_t snapshot, const CatalogRoots &roots,
+              std::shared_ptr<const void> retention = {});
   // Share an already protected coordinator view with local parallel workers.
   // This never reopens a historical root after its last holder has released it.
   Handle find(uint64_t namespace_id, int64_t snapshot) const;

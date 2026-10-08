@@ -33,10 +33,11 @@ NamespaceCatalogViews::View::~View()
 }
 
 NamespaceCatalogViews::Handle NamespaceCatalogViews::hold(
-    uint64_t namespace_id, int64_t snapshot, const CatalogRoots &roots)
+    uint64_t namespace_id, int64_t snapshot, const CatalogRoots &roots,
+    std::shared_ptr<const void> retention)
 {
   if (namespace_id == 0 || snapshot <= 0 || roots.schema_version <= 0) { return {}; }
-  Handle view(new View(state_, {namespace_id, snapshot, roots}));
+  Handle view(new View(state_, {namespace_id, snapshot, roots, std::move(retention)}));
   {
     std::lock_guard<std::mutex> lock(state_->mutex);
     state_->views.emplace(std::make_pair(namespace_id, snapshot),

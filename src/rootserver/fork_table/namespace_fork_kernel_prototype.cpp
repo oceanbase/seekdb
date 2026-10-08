@@ -1463,7 +1463,9 @@ int NamespaceForkKernelPrototype::resolve_read_tablet(
     if (view->entry().namespace_id != database_of(tablet_id.id())) { return OB_INVALID_ARGUMENT; }
     InstanceMetaStore::Transaction tx;
     ns::CatalogTabletSource source;
-    int ret = store->begin(tx, directory_deadline(), true);
+    int ret = store->begin_read(tx, directory_deadline(), [&](SCN &snapshot) {
+      return snapshot.convert_for_tx(view->entry().snapshot);
+    });
     if (OB_SUCC(ret)) {
       rootserver::InstanceNamespaceMetadata metadata(*store, tx);
       ret = metadata.find_tablet_source(view->entry().roots.directory,

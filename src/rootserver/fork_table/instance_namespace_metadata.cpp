@@ -1023,14 +1023,9 @@ int InstanceNamespaceMetadata::collect_unreachable_pages(
       return OB_SUCCESS;
     });
   }
-  if (ret == OB_SUCCESS) {
-    std::vector<ns::NamespaceCatalogViews::Entry> views;
-    ns::namespace_registry().catalog_views().list(views);
-    for (const auto &view : views) {
-      if (view.roots.catalog.page != 0) { pending.push_back({view.roots.catalog, true}); }
-      if (view.roots.directory.page != 0) { pending.push_back({view.roots.directory, false}); }
-    }
-  }
+  // Active readers retain their KV snapshot, so logical page deletes may
+  // proceed. Their historical page versions remain readable until the last
+  // holder releases, including when deletes originate on another server.
   InstanceCatalogPageStore pages(*this);
   ns::NamespaceCatalogTree tree(pages);
   std::unordered_set<uint64_t> reachable;
@@ -1663,17 +1658,19 @@ int InstanceNamespaceDirectory::acquire_read_view(uint64_t namespace_id,
   ns::NamespaceCatalogViews::Handle held;
   if (ret == OB_SUCCESS && previous && previous->entry().namespace_id == namespace_id
       && previous->entry().snapshot == tx.snapshot_version().get_val_for_tx()) {
-    // RR already holds this immutable root. Its Namespace row's historical
-    // MVCC version need not remain in the KV table for the user's entire tx.
+    // RR already holds this immutable root and its KV snapshot lease. Reuse
+    // both without consulting the Namespace row again.
     held = previous;
   } else if (ret == OB_SUCCESS) {
     InstanceNamespaceMetadata metadata(store_, tx);
     InstanceNamespaceRecord record;
     ret = metadata.get_namespace(namespace_id, record);
     if (ret == OB_SUCCESS && record.roots.state != 0) { ret = OB_OP_NOT_ALLOW; }
+    storage::InstanceMetaStore::SnapshotHandle retention;
+    if (ret == OB_SUCCESS) { ret = store_.retain_snapshot(tx, retention); }
     if (ret == OB_SUCCESS) {
       held = ns::namespace_registry().catalog_views().hold(
-          namespace_id, tx.snapshot_version().get_val_for_tx(), record.roots);
+          namespace_id, tx.snapshot_version().get_val_for_tx(), record.roots, std::move(retention));
       if (!held) { ret = OB_STATE_NOT_MATCH; }
     }
   }
@@ -1756,14 +1753,20 @@ int InstanceNamespaceDirectory::filter_unreferenced_tablets(
     std::vector<ns::NamespaceCatalogViews::Entry> views;
     ns::namespace_registry().catalog_views().list(views);
     for (const auto &view : views) {
+      storage::InstanceMetaStore::Transaction view_tx;
+      ret = store_.begin_read(view_tx, deadline, [&](share::SCN &snapshot) {
+        return snapshot.convert_for_tx(view.snapshot);
+      });
+      InstanceNamespaceMetadata view_metadata(store_, view_tx);
       for (uint64_t local : locals) {
         if (ret != OB_SUCCESS) { break; }
         ns::CatalogTabletSource source;
         int64_t cap = 0;
-        ret = metadata.find_tablet_source(view.roots.directory, local, source, cap);
+        ret = view_metadata.find_tablet_source(view.roots.directory, local, source, cap);
         if (ret == OB_ENTRY_NOT_EXIST) { ret = OB_SUCCESS; continue; }
         if (ret == OB_SUCCESS) { ret = mark_source(source.physical_tablet_id); }
       }
+      ret = finish_directory_transaction(store_, view_tx, ret);
       if (ret != OB_SUCCESS) { break; }
     }
     for (uint64_t reader : live) {

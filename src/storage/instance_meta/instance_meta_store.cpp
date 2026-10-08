@@ -20,6 +20,7 @@
 #include <condition_variable>
 #include <new>
 #include <mutex>
+#include <unordered_map>
 #include "share/schema/ob_table_schema.h"
 #include "storage/access/ob_dml_table_plan_access.h"
 #include "storage/access/ob_dml_param.h"
@@ -35,6 +36,26 @@ using namespace share::schema;
 using namespace transaction;
 namespace storage
 {
+struct InstanceMetaStore::ReadSnapshots
+{
+  std::mutex mutex;
+  Transaction *transactions = nullptr;
+  std::unordered_map<const Snapshot *, share::SCN> retained;
+};
+
+InstanceMetaStore::Snapshot::Snapshot(std::shared_ptr<ReadSnapshots> readers,
+    const share::SCN &version) : readers_(std::move(readers)), version_(version)
+{
+  std::lock_guard<std::mutex> guard(readers_->mutex);
+  readers_->retained.emplace(this, version_);
+}
+
+InstanceMetaStore::Snapshot::~Snapshot()
+{
+  std::lock_guard<std::mutex> guard(readers_->mutex);
+  readers_->retained.erase(this);
+}
+
 struct InstanceMetaStore::State
 {
   ObArenaAllocator allocator{ObMemAttr("InstanceMeta")};
@@ -43,8 +64,7 @@ struct InstanceMetaStore::State
   data_plane::ObDmlTablePlan write_plan{allocator};
   ObSEArray<uint64_t, 3> columns;
   ObTabletID tablet;
-  std::mutex transactions_mutex;
-  Transaction *transactions = nullptr;
+  std::shared_ptr<ReadSnapshots> readers = std::make_shared<ReadSnapshots>();
   std::mutex directory_guard_mutex;
   std::condition_variable directory_guard_changed;
   int64_t ordinary_transactions = 0;
@@ -217,10 +237,10 @@ int InstanceMetaStore::begin_impl(Transaction &tx, const int64_t deadline,
       // Register before acquiring a timestamp. A not-yet-published snapshot
       // conservatively prevents compaction from advancing past this reader.
       {
-        std::lock_guard<std::mutex> guard(state_->transactions_mutex);
-        tx.next_ = state_->transactions;
+        std::lock_guard<std::mutex> guard(state_->readers->mutex);
+        tx.next_ = state_->readers->transactions;
         if (tx.next_ != nullptr) { tx.next_->previous_ = &tx; }
-        state_->transactions = &tx;
+        state_->readers->transactions = &tx;
       }
       ObTxReadSnapshot snapshot;
       if (!tx.borrowed_ && OB_FAIL(transactions_.start_tx(*tx.descriptor_, param))) {
@@ -236,7 +256,7 @@ int InstanceMetaStore::begin_impl(Transaction &tx, const int64_t deadline,
         }
       }
       if (OB_SUCC(ret)) {
-        std::lock_guard<std::mutex> guard(state_->transactions_mutex);
+        std::lock_guard<std::mutex> guard(state_->readers->mutex);
         ret = tx.snapshot_.assign(snapshot);
       }
       if (OB_FAIL(ret)) {
@@ -291,9 +311,9 @@ void InstanceMetaStore::reset_transaction(Transaction &tx)
   // The owner may already have released the native descriptor. Cleanup only
   // touches our reader registration and never dereferences that descriptor.
   {
-    std::lock_guard<std::mutex> guard(state_->transactions_mutex);
+    std::lock_guard<std::mutex> guard(state_->readers->mutex);
     if (tx.previous_ != nullptr) { tx.previous_->next_ = tx.next_; }
-    else { state_->transactions = tx.next_; }
+    else { state_->readers->transactions = tx.next_; }
     if (tx.next_ != nullptr) { tx.next_->previous_ = tx.previous_; }
     tx.previous_ = tx.next_ = nullptr;
     tx.descriptor_ = nullptr;
@@ -307,20 +327,41 @@ void InstanceMetaStore::reset_transaction(Transaction &tx)
 int InstanceMetaStore::commit(Transaction &tx) { return end(tx, true); }
 int InstanceMetaStore::rollback(Transaction &tx) { return end(tx, false); }
 
+int InstanceMetaStore::retain_snapshot(const Transaction &tx, SnapshotHandle &snapshot)
+{
+  if (state_ == nullptr) { return OB_NOT_INIT; }
+  if (snapshot || tx.owner_ != this || !tx.is_active() || !tx.snapshot_.is_valid()) {
+    return OB_INVALID_ARGUMENT;
+  }
+  // tx remains registered throughout construction: no gap between the short
+  // transaction's retention and the independent handle's retention.
+  auto *retained = new (std::nothrow) Snapshot(state_->readers, tx.snapshot_.core_.version_);
+  if (retained == nullptr) { return OB_ALLOCATE_MEMORY_FAILED; }
+  snapshot.reset(retained);
+  return OB_SUCCESS;
+}
+
 int InstanceMetaStore::min_retained_snapshot(share::SCN &snapshot)
 {
   int ret = OB_SUCCESS;
+  share::SCN weak_snapshot;
   if (state_ == nullptr) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(transactions_.get_read_snapshot_version(
       ObTimeUtility::current_time() + 1000000, snapshot))) {
+  } else if (OB_FAIL(transactions_.get_weak_read_snapshot_version(-1, weak_snapshot))) {
   } else {
-    // Sample a new timestamp before inspecting readers: any transaction that
-    // registers after this inspection will receive a newer snapshot.
-    std::lock_guard<std::mutex> guard(state_->transactions_mutex);
-    for (Transaction *tx = state_->transactions; tx != nullptr; tx = tx->next_) {
+    // Future weak readers can select an older timestamp than a strong reader.
+    // Sample both native horizons before inspecting registered readers. Reads
+    // at an older fixed snapshot must already have a transaction or lease.
+    if (weak_snapshot < snapshot) { snapshot = weak_snapshot; }
+    std::lock_guard<std::mutex> guard(state_->readers->mutex);
+    for (Transaction *tx = state_->readers->transactions; tx != nullptr; tx = tx->next_) {
       if (!tx->snapshot_.is_valid()) { snapshot.set_min(); }
       else if (tx->snapshot_.core_.version_ < snapshot) { snapshot = tx->snapshot_.core_.version_; }
+    }
+    for (const auto &held : state_->readers->retained) {
+      if (held.second < snapshot) { snapshot = held.second; }
     }
   }
   return ret;
