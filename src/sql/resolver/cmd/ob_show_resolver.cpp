@@ -2538,13 +2538,13 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_COUNT_ERRORS,
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_PARAMETERS,
                        NULL,
-                       "SELECT svr_type, name, data_type, value, info, section, scope, source, edit_level, options from %s.%s where name not like '\\_%%'",
-                       R"(SELECT "SVR_TYPE", "NAME", "DATA_TYPE", "VALUE", "INFO", "SECTION", "SCOPE", "SOURCE", "EDIT_LEVEL", "OPTIONS" FROM %s.%s WHERE NAME NOT LIKE '\_%%' ESCAPE '\')",
+                       "SELECT svr_type, name, data_type, value, info, section, scope, source, edit_level from %s.%s where name not like '\\_%%'",
+                       R"(SELECT "SVR_TYPE", "NAME", "DATA_TYPE", "VALUE", "INFO", "SECTION", "SCOPE", "SOURCE", "EDIT_LEVEL" FROM %s.%s WHERE NAME NOT LIKE '\_%%' ESCAPE '\')",
                        "name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_PARAMETERS_WITH_DEFAULT_VALUE,
                        NULL,
-                      "SELECT svr_type, name, data_type, value, info, section, scope, source, edit_level, default_value, isdefault, options from %s.%s where (name not like '\\_%%' or isdefault=0)",
-                      R"(SELECT "SVR_TYPE", "NAME", "DATA_TYPE", "VALUE", "INFO", "SECTION", "SCOPE", "SOURCE", "EDIT_LEVEL", "DEFAULT_VALUE", "ISDEFAULT", "OPTIONS" FROM %s.%s WHERE (NAME NOT LIKE '\_%%' ESCAPE '\' or ISDEFAULT=0))",
+                      "SELECT svr_type, name, data_type, value, info, section, scope, source, edit_level, default_value, isdefault from %s.%s where (name not like '\\_%%' or isdefault=0)",
+                      R"(SELECT "SVR_TYPE", "NAME", "DATA_TYPE", "VALUE", "INFO", "SECTION", "SCOPE", "SOURCE", "EDIT_LEVEL", "DEFAULT_VALUE", "ISDEFAULT" FROM %s.%s WHERE (NAME NOT LIKE '\_%%' ESCAPE '\' or ISDEFAULT=0))",
                       "name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_PARAMETERS_UNSYS,
                        NULL,
