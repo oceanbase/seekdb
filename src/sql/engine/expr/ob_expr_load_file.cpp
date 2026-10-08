@@ -14,9 +14,11 @@
  * limitations under the License.
  */
 
+#define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_load_file.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/ob_physical_plan_ctx.h"
+#include "lib/oblog/ob_log_module.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/schema/ob_location_schema_struct.h"
@@ -59,7 +61,9 @@ int ObExprLoadFile::calc_result_type2(ObExprResType &type,
   location_name.set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
   file_name.set_calc_type(ObVarcharType);
   file_name.set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
-  type.set_blob();
+  // varchar + binary keeps arbitrary bytes and avoids the LOB result path,
+  // which mysqltest cannot stream back for in-row function results
+  type.set_varchar();
   type.set_collation_level(CS_LEVEL_COERCIBLE);
   type.set_collation_type(CS_TYPE_BINARY);
   type.set_length(OB_MAX_MYSQL_VARCHAR_LENGTH);
