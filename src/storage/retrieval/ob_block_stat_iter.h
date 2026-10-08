@@ -184,6 +184,7 @@ private:
   int advance_memtable_iters(const ObDatumRowkey &advance_key, const bool inclusive);
   int check_rowkey_in_range(const ObDatumRow &row, bool &rowkey_in_range) const;
   int check_rowkey_in_range(const ObDatumRowkey &rowkey, bool &rowkey_in_range) const;
+  int prepare_memtable_scan_range(const ObDatumRowkey &start_key);
   int shrink_scan_range(const ObDatumRowkey &start_key);
   SSTableIter &get_baseline_block_iter() { return sstable_iters_.at(0); }
   bool is_all_iter_end() const;
@@ -194,6 +195,8 @@ private:
   const ObBlockStatScanParam *scan_param_;
   ObArenaAllocator allocator_;
   ObArenaAllocator merged_endkey_allocator_;
+  ObArenaAllocator scan_start_key_allocator_;
+  ObArenaAllocator memtable_scan_start_key_allocator_;
   ObBlockStatCollector stat_collector_;
   ObTableScanRange scan_range_;
   ObGetTableParam get_table_param_;
@@ -213,6 +216,8 @@ private:
   ObDatumRowkey curr_merged_endkey_;
   ObDatumRange curr_scan_range_;
   ObDatumRowkey curr_scan_start_key_;
+  ObDatumRange memtable_scan_range_;
+  ObDatumRowkey memtable_scan_start_key_;
   ObIAllocator *iter_allocator_;
   bool is_baseline_merged_endkey_;
   bool iter_end_;
