@@ -552,27 +552,5 @@ CatalogTreeResult NamespaceCatalogTree::remove(CatalogPageRef root,
       ? CatalogTreeResult{CatalogTreeError::NOT_FOUND, 0} : result;
 }
 
-std::vector<ExceptionDeltaAction> NamespaceExceptionDelta::plan(
-    const std::map<uint64_t, uint64_t> &previous,
-    const std::map<uint64_t, uint64_t> &current)
-{
-  std::vector<ExceptionDeltaAction> actions;
-  actions.reserve(previous.size() + current.size());
-  for (const auto &tablet : previous) {
-    if (current.count(tablet.first) == 0) {
-      actions.push_back({ExceptionDeltaKind::TOMBSTONE, tablet.first, tablet.second});
-    }
-  }
-  for (const auto &tablet : current) {
-    const auto old = previous.find(tablet.first);
-    if (old == previous.end()) {
-      actions.push_back({ExceptionDeltaKind::PROBE_NEW, tablet.first, tablet.second});
-    } else if (old->second != tablet.second) {
-      actions.push_back({ExceptionDeltaKind::UPDATE_TABLE, tablet.first, tablet.second});
-    }
-  }
-  return actions;
-}
-
 } // namespace ns
 } // namespace oceanbase

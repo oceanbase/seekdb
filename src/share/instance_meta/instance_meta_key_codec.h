@@ -44,15 +44,13 @@ public:
     static const KeyFieldDesc namespace_id[] = {{"namespace_id", KeyFieldType::UINT64_BE}};
     static const KeyFieldDesc namespace_name[] = {{"name", KeyFieldType::UTF8}};
     static const KeyFieldDesc snapshot_id[] = {{"snapshot_id", KeyFieldType::UINT64_BE}};
-    static const KeyFieldDesc exception[] = {
-        {"namespace_id", KeyFieldType::UINT64_BE}, {"tablet_id", KeyFieldType::UINT64_BE}};
     static const KeyFieldDesc page_id[] = {{"page_id", KeyFieldType::UINT64_BE}};
     static const KeyFieldDesc record_id[] = {{"record_id", KeyFieldType::UINT64_BE}};
     static const CollectionKeyDesc descriptions[] = {
         {"NAMESPACES", namespace_id, 1},
         {"NAMESPACE_NAMES", namespace_name, 1},
         {"SNAPSHOTS", snapshot_id, 1},
-        {"EXCEPTIONS", exception, 2},
+        {nullptr, nullptr, 0},
         {"PAGES", page_id, 1},
         {"COUNTERS", record_id, 1},
         {"SNAPSHOT_COORDINATION", record_id, 1},
@@ -60,6 +58,7 @@ public:
     };
     const uint64_t id = static_cast<uint64_t>(collection);
     return id >= 1 && id <= sizeof(descriptions) / sizeof(descriptions[0])
+        && descriptions[id - 1].name != nullptr
         ? &descriptions[id - 1] : nullptr;
   }
 

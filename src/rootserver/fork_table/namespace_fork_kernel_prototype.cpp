@@ -17,7 +17,6 @@
 #include "share/ob_snapshot_table_proxy.h"
 #include "share/ob_global_stat_proxy.h"
 #include "share/ob_debug_sync.h"
-#include "share/tablet/ob_tablet_mapping_operator.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/compaction/ob_freeze_info_mgr.h"
@@ -119,7 +118,7 @@ void invalidate_namespace_state(uint64_t id) {
   std::unique_lock<std::shared_mutex> lock(namespace_state_mutex);
   namespace_state_cache.erase(id);
 }
-// Physical reclamation excludes lineage/exception publication. Shared nesting
+// Physical reclamation excludes source publication. Shared nesting
 // allows materialization and DDL helpers to compose without a reader registry.
 std::shared_timed_mutex metadata_mutex;
 thread_local int metadata_depth = 0;
@@ -511,20 +510,6 @@ int NamespaceForkKernelPrototype::begin_namespace_drop(const ObString &name, uin
   LOG_INFO("PROTOTYPE_V7_NAMESPACE_CLOSE", K(ret), K(id), K(done));
   return ret;
 }
-int NamespaceForkKernelPrototype::lock_namespace_drop(uint64_t id,
-    ObIArray<ObTabletID> &bound_tablets) {
-  auto *store = directory_kv_store();
-  if (store == nullptr) { return OB_NOT_INIT; }
-  MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
-  rootserver::InstanceNamespaceDirectory directory(*store);
-  std::vector<uint64_t> local_tablets;
-  int ret = directory.list_deleting_owned(id, directory_deadline(), local_tablets);
-  for (uint64_t tablet : local_tablets) {
-    if (OB_FAIL(ret)) { break; }
-    ret = bound_tablets.push_back(ObTabletID(encoded(id, tablet)));
-  }
-  return ret;
-}
 int NamespaceForkKernelPrototype::finish_namespace_drop(uint64_t id) {
   auto *store = directory_kv_store();
   if (store == nullptr) { return OB_NOT_INIT; }
@@ -543,7 +528,7 @@ int NamespaceForkKernelPrototype::check_baseline_access(
   if (OB_SUCC(ret)) { ret = protect_tablet_sources(tablet_id, protection); }
   if (OB_FAIL(ret)) { return ret; }
   // A baseline DAG is only valid on a tablet its namespace still owns. DROP
-  // drains active accesses before deleting the owned rows, so an admitted DAG
+  // drains active accesses before deleting the source roots, so an admitted DAG
   // always finishes against a valid binding.
   int64_t state = 0;
   bool owned = false;
@@ -796,14 +781,6 @@ int NamespaceForkKernelPrototype::collect_dropped_namespace_tablets() {
   if (OB_FAIL(exclude_active_tablets(candidates, deferred))) { return ret; }
 
   if (!candidates.empty()) {
-    int64_t schema_version = 0;
-    ObSchemaGetterGuard guard;
-    ObMultiVersionSchemaService *directory_schema = directory_schema_service();
-    if (directory_schema == nullptr) {
-      ret = OB_NOT_INIT;
-    } else if (OB_FAIL(directory_schema->get_runtime_schema_guard(guard))) {
-    } else if (OB_FAIL(guard.get_schema_version(schema_version))) {
-    }
     ObMySQLTransaction trans;
     if (OB_SUCC(ret)) { ret = trans.start(directory_sql_proxy()); }
     if (OB_SUCC(ret)) {
@@ -815,13 +792,8 @@ int NamespaceForkKernelPrototype::collect_dropped_namespace_tablets() {
       } else if (OB_FAIL(query::ObInnerSQLConnectionAccess::lock_tablet(
               locks, trans.get_connection()))) {
       } else {
-        rootserver::ObTabletDrop drop(trans, schema_version);
-        if (OB_FAIL(drop.init())) {
-        } else if (OB_FAIL(drop.add_drop_tablets_arg(candidates))) {
-        } else {
-          observer::namespace_worker_prototype::PhysicalTabletMdsScope physical_mds(true);
-          ret = drop.execute();
-        }
+        observer::namespace_worker_prototype::PhysicalTabletMdsScope physical_mds(true);
+        ret = rootserver::ObTabletDrop::register_delete(trans, candidates);
       }
     }
     if (trans.is_started()) {
@@ -829,30 +801,10 @@ int NamespaceForkKernelPrototype::collect_dropped_namespace_tablets() {
       if (OB_SUCC(ret)) { ret = end; }
     }
   }
-  // Physical cleanup commits before removing the directory's owned entries.
-  // A crash in this gap is repaired by probing the same physical IDs next pass.
+  // A deleted Namespace can disappear after its physical objects and children
+  // are gone. A restart resumes from the same native object inventory.
   for (const auto &record : deleted) {
     if (OB_FAIL(ret)) { break; }
-    std::vector<uint64_t> owned;
-    if (OB_FAIL(directory.list_deleted_owned(record.id, directory_deadline(), owned))) {
-      break;
-    }
-    std::vector<uint64_t> missing;
-    for (uint64_t local : owned) {
-      ObTabletHandle handle;
-      ret = ObTabletCreateDeleteHelper::check_and_get_tablet(
-          ObTabletMapKey(ObTabletID(encoded(record.id, local))), handle, 0,
-          ObMDSGetTabletMode::READ_WITHOUT_CHECK,
-          transaction::ObTransVersion::MAX_TRANS_VERSION);
-      if (ret == OB_TABLET_NOT_EXIST || ret == OB_ENTRY_NOT_EXIST) {
-        ret = OB_SUCCESS;
-        missing.push_back(local);
-      } else if (OB_FAIL(ret)) { break; }
-      else if (handle.get_obj()->is_empty_shell()) { missing.push_back(local); }
-    }
-    if (OB_SUCC(ret) && !missing.empty()) {
-      ret = directory.erase_deleted_owned(record.id, missing, directory_deadline());
-    }
     bool pruned = false;
     if (OB_SUCC(ret)) {
       ret = directory.prune_deleted(record.id, namespace_has_physical_tablet,
@@ -1001,51 +953,6 @@ bool owns_namespace_directory_entries(const ObTableSchema &schema)
 
 } // namespace
 
-int NamespaceForkKernelPrototype::finish_schema_publication(uint64_t namespace_id,
-    int64_t schema_version, const std::vector<uint64_t> &removed_owned)
-{
-  int ret = OB_SUCCESS;
-  ObArray<ObTabletID> private_tablets;
-  for (uint64_t local_tablet : removed_owned) {
-    if (OB_FAIL(ret)) { break; }
-    ret = private_tablets.push_back(ObTabletID(encoded(namespace_id, local_tablet)));
-  }
-
-  // Native schema rows live in the namespace worker. Physical tablet mappings
-  // are shared engine metadata, so reclaim them only after the namespace
-  // catalog commit and through a control-namespace transaction.
-  if (OB_SUCC(ret) && !private_tablets.empty()) {
-    ObMySQLTransaction trans;
-    ObLockAloneTabletRequest locks;
-    locks.lock_mode_ = EXCLUSIVE;
-    locks.op_type_ = ObTableLockOpType::IN_TRANS_COMMON_LOCK;
-    locks.timeout_us_ = std::max(int64_t(1), THIS_WORKER.get_timeout_remain());
-    ret = trans.start(directory_sql_proxy());
-    for (int64_t i = 0; OB_SUCC(ret) && i < private_tablets.count(); ++i) {
-      ret = locks.tablet_ids_.push_back(private_tablets.at(i));
-    }
-    if (OB_SUCC(ret) && !locks.tablet_ids_.empty()
-        && OB_FAIL(query::ObInnerSQLConnectionAccess::lock_tablet(
-            locks, trans.get_connection()))) {
-    }
-    if (OB_SUCC(ret)) {
-      rootserver::ObTabletDrop tablet_drop(trans, schema_version);
-      if (OB_FAIL(tablet_drop.init())) {
-      } else if (OB_FAIL(tablet_drop.add_drop_tablets_arg(private_tablets))) {
-      } else {
-        observer::namespace_worker_prototype::PhysicalTabletMdsScope physical_mds(true);
-        ret = tablet_drop.execute();
-      }
-    }
-    if (trans.is_started()) {
-      const int end_ret = trans.end(OB_SUCC(ret));
-      if (OB_SUCC(ret)) { ret = end_ret; }
-    }
-  }
-  LOG_INFO("namespace physical schema cleanup", K(ret), K(namespace_id), K(schema_version),
-      "private_delete_count", private_tablets.count());
-  return ret;
-}
 int NamespaceForkKernelPrototype::is_tablet_owned(
     uint64_t namespace_id, const ObTabletID &tablet_id, bool &owned) {
   owned = false;
@@ -1304,7 +1211,7 @@ int NamespaceForkKernelPrototype::ensure_tablet(const ObTabletID &tablet_id) {
   rootserver::InstanceNamespaceMetadata metadata(*directory_kv_store(), directory_tx);
   bool already = false;
   const int64_t deadline = directory_deadline();
-  // CREATE MDS, mappings and owned rows share the connection's native
+  // CREATE MDS and source roots share the connection's native
   // transaction. Its namespace row lock serializes the entire binding unit.
   if (OB_FAIL(materialize_step("transaction", trans.start(directory_sql_proxy())))) {
   } else {
@@ -1411,7 +1318,6 @@ int NamespaceForkKernelPrototype::ensure_tablet(const ObTabletID &tablet_id) {
     ObArray<int64_t> schema_indexes;
     ObArray<int64_t> logical_birth;
     ObArray<ObForkTabletInfo> fork_infos;
-    ObArray<ObTabletTablePair> mappings;
     ObArray<ObTabletID> source_ids;
     ObArray<int64_t> source_snapshot_versions;
     for (const auto &item : items) {
@@ -1430,8 +1336,7 @@ int NamespaceForkKernelPrototype::ensure_tablet(const ObTabletID &tablet_id) {
           || OB_FAIL(logical_birth.push_back(item.cap))
           || OB_FAIL(fork_infos.push_back(fork))
           || OB_FAIL(source_ids.push_back(ObTabletID(item.source.physical_tablet_id)))
-          || OB_FAIL(source_snapshot_versions.push_back(item.cap))
-          || OB_FAIL(mappings.push_back(ObTabletTablePair(destination, item.source.table_id)))) {
+          || OB_FAIL(source_snapshot_versions.push_back(item.cap))) {
       }
     }
     const ObTabletID data_tablet(encoded(db, items.front().local_tablet));
@@ -1450,9 +1355,8 @@ int NamespaceForkKernelPrototype::ensure_tablet(const ObTabletID &tablet_id) {
     } else if (FALSE_IT(creator.set_materialization_for_prototype())) {
     } else if (OB_FAIL(creator.execute())) {
     } else if (OB_FAIL(copy_physical_sequences())) {
-    } else if (OB_FAIL(ObTabletMappingTableOperator::batch_update(trans, mappings))) {
     } else {
-      // The physical binding unit is staged; owned rows join this same
+      // The physical binding unit is staged; source roots join this same
       // transaction before it can commit.
       DEBUG_SYNC(AFTER_UPDATE_TABLET_TO_LS);
       ret = THIS_WORKER.check_status();
@@ -1463,14 +1367,12 @@ int NamespaceForkKernelPrototype::ensure_tablet(const ObTabletID &tablet_id) {
     batch.reset();
   }
   if (OB_SUCC(ret) && !already) {
-    failure_stage = "exceptions";
+    failure_stage = "sources";
     ret = query::ObInnerSQLConnectionAccess::with_native_transaction(
         trans.get_connection(), [&](transaction::ObTxDesc &native) -> int {
       ns::CatalogChanges sources;
       for (const auto &item : items) {
         if (OB_FAIL(ret)) { break; }
-        ret = metadata.put_exception({db, item.local_tablet,
-            local_of(item.source.table_id), 0, 0});
         ns::CatalogTabletSource source;
         int64_t cap = 0;
         if (OB_SUCC(ret)) { ret = metadata.find_tablet_source(root.directory, item.local_tablet, source, cap); }

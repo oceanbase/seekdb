@@ -36,8 +36,6 @@ public:
   // Called after replay is sealed, before publishing primary write admission.
   static void invalidate_replayed_metadata();
   static int begin_namespace_drop(const common::ObString &name, uint64_t &id, bool &done);
-  static int lock_namespace_drop(uint64_t id,
-                                 common::ObIArray<common::ObTabletID> &bound);
   static int finish_namespace_drop(uint64_t id);
   static int check_baseline_access(const common::ObTabletID &tablet_id,
                                    TabletAccessProtection &protection);
@@ -74,8 +72,6 @@ public:
       const std::function<int(share::SCN &)> &acquire,
       ns::NamespaceCatalogViews::Handle &view,
       const ns::NamespaceCatalogViews::Handle &previous = {});
-  static int finish_schema_publication(uint64_t namespace_id, int64_t schema_version,
-                                       const std::vector<uint64_t> &removed_owned);
   static int is_tablet_owned(uint64_t namespace_id,
                              const common::ObTabletID &tablet_id,
                              bool &owned);

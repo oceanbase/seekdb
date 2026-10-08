@@ -47,9 +47,7 @@ int ObDDLService::drop_namespace_prototype_(const ObString &name)
   bool done = false; uint64_t id = 0;
   int ret = NamespaceForkKernelPrototype::begin_namespace_drop(name, id, done);
   if (ret != OB_SUCCESS || done) { return ret; }
-  ObArray<ObTabletID> bound;
   if (OB_FAIL(observer::namespace_worker_prototype::drain_storage_namespace_access(id))) {
-  } else if (OB_FAIL(NamespaceForkKernelPrototype::lock_namespace_drop(id, bound))) {
   } else {
     if (OB_SUCC(ret)) {
       DEBUG_SYNC(AFTER_UPDATE_TABLET_TO_LS);
@@ -63,8 +61,7 @@ int ObDDLService::drop_namespace_prototype_(const ObString &name)
     ret = freeze ? freeze->reload_for_test() : OB_NOT_INIT;
   }
   // A failed attempt leaves DELETING persisted. Reissuing the same operation resumes it.
-  LOG_INFO("PROTOTYPE_V7_NAMESPACE_DROP", K(ret), K(name), K(id),
-      "private_tablets", bound.count());
+  LOG_INFO("PROTOTYPE_V7_NAMESPACE_DROP", K(ret), K(name), K(id));
   return ret;
 }
 

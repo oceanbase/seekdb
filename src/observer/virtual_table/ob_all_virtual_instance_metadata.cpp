@@ -70,7 +70,7 @@ int InstanceMetadataTable::load_next()
   while (ret == OB_SUCCESS && collection_id_ <= 8) {
     const MetaCollection collection = static_cast<MetaCollection>(collection_id_);
     const auto *desc = InstanceMetaKeyCodec::describe(collection);
-    if (desc == nullptr) { return OB_ERR_UNEXPECTED; }
+    if (desc == nullptr) { ++collection_id_; continue; }
     // Keep the bound stable while the callback advances last_key_.
     const std::string lower_key = last_key_;
     storage::InstanceMetaStore::KeyRange range;

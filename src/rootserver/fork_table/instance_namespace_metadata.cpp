@@ -153,13 +153,6 @@ std::string id_key(MetaCollection collection, uint64_t id)
   return key;
 }
 
-std::string exception_key(uint64_t ns_id, uint64_t local_tablet)
-{
-  std::string key;
-  (void)InstanceMetaKeyCodec::encode_pair(MetaCollection::EXCEPTIONS, ns_id, local_tablet, key);
-  return key;
-}
-
 std::string name_key(const std::string &name)
 {
   std::string key;
@@ -366,48 +359,6 @@ std::string encode_gc_watermark(int64_t watermark)
   append_json_i64(value, "watermark", watermark);
   value += '}';
   return value;
-}
-
-int encode_exception(const InstanceExceptionRecord &record, std::string &value)
-{
-  if (!ns::NamespaceObjectKey{record.namespace_id, record.tablet_id}.is_valid()
-      || record.kind < 0 || record.kind > 1 || record.drop_scn < 0
-      || record.create_scn < 0
-      || (record.kind == 1 && (record.drop_scn == 0
-          || (record.was_owned && record.create_scn == 0)))) { return OB_INVALID_ARGUMENT; }
-  value = "{";
-  append_json_u64(value, "table_id", record.table_id);
-  append_json_i64(value, "kind", record.kind);
-  append_json_i64(value, "drop_scn", record.drop_scn);
-  append_json_i64(value, "was_owned", record.was_owned ? 1 : 0);
-  append_json_i64(value, "create_scn", record.create_scn);
-  value += '}';
-  return OB_SUCCESS;
-}
-
-int decode_exception(uint64_t ns_id, uint64_t tablet_id,
-                     const std::string &value, InstanceExceptionRecord &record)
-{
-  InstanceExceptionRecord decoded;
-  decoded.namespace_id = ns_id;
-  decoded.tablet_id = tablet_id;
-  ObArenaAllocator allocator(ObMemAttr("InstMetaJson"));
-  ObJsonObject *object = nullptr;
-  int ret = parse_json_object(value, allocator, object);
-  if (ret == OB_SUCCESS) { ret = json_u64(*object, "table_id", decoded.table_id); }
-  if (ret == OB_SUCCESS) { ret = json_i64(*object, "kind", decoded.kind); }
-  if (ret == OB_SUCCESS) { ret = json_i64(*object, "drop_scn", decoded.drop_scn); }
-  int64_t was_owned = 0;
-  if (ret == OB_SUCCESS) { ret = json_i64(*object, "was_owned", was_owned); }
-  if (ret == OB_SUCCESS) { ret = json_i64(*object, "create_scn", decoded.create_scn); }
-  if (ret != OB_SUCCESS || decoded.kind < 0 || decoded.kind > 1
-      || decoded.drop_scn < 0 || was_owned < 0 || was_owned > 1
-      || decoded.create_scn < 0
-      || (decoded.kind == 1 && (decoded.drop_scn == 0
-          || (was_owned == 1 && decoded.create_scn == 0)))) { return OB_CHECKSUM_ERROR; }
-  decoded.was_owned = was_owned == 1;
-  record = decoded;
-  return OB_SUCCESS;
 }
 
 bool key_id(MetaCollection collection, const ObString &key, uint64_t &id)
@@ -716,60 +667,6 @@ int InstanceNamespaceMetadata::scan_pins(const PinVisitor &visitor)
         int ret = scan_value(value, ValueFormat::JSON, payload);
         if (ret == OB_SUCCESS) { ret = decode_pin(id, payload, pin); }
         return ret == OB_SUCCESS ? visitor(pin) : ret;
-      });
-}
-
-int InstanceNamespaceMetadata::get_exception(uint64_t ns_id, uint64_t local_tablet,
-    InstanceExceptionRecord &record, bool lock)
-{
-  if (!ns::NamespaceObjectKey{ns_id, local_tablet}.is_valid()) { return OB_INVALID_ARGUMENT; }
-  std::string value;
-  const int ret = get_value(store_, transaction_, MetaCollection::EXCEPTIONS,
-                            exception_key(ns_id, local_tablet), value, lock);
-  return ret == OB_SUCCESS
-      ? decode_exception(ns_id, local_tablet, value, record) : ret;
-}
-
-int InstanceNamespaceMetadata::put_exception(const InstanceExceptionRecord &record)
-{
-  std::string value;
-  const int ret = encode_exception(record, value);
-  return ret == OB_SUCCESS
-      ? put_value(store_, transaction_, MetaCollection::EXCEPTIONS,
-                  exception_key(record.namespace_id, record.tablet_id), value, false)
-      : ret;
-}
-
-int InstanceNamespaceMetadata::erase_exception(uint64_t ns_id, uint64_t local_tablet)
-{
-  if (!ns::NamespaceObjectKey{ns_id, local_tablet}.is_valid()) { return OB_INVALID_ARGUMENT; }
-  return erase_value(store_, transaction_, MetaCollection::EXCEPTIONS,
-                     exception_key(ns_id, local_tablet));
-}
-
-int InstanceNamespaceMetadata::scan_exceptions(uint64_t ns_id,
-    const ExceptionVisitor &visitor)
-{
-  if (!ns::NamespaceObjectKey{ns_id, 1}.is_valid() || !visitor) { return OB_INVALID_ARGUMENT; }
-  std::string first, end;
-  (void)InstanceMetaKeyCodec::encode_first_u64(MetaCollection::EXCEPTIONS, ns_id, first);
-  (void)InstanceMetaKeyCodec::encode_first_u64(MetaCollection::EXCEPTIONS, ns_id + 1, end);
-  InstanceMetaStore::KeyRange range;
-  range.has_lower = range.has_upper = range.include_lower = true;
-  range.include_upper = false;
-  range.lower = meta_bytes(first);
-  range.upper = meta_bytes(end);
-  return store_.scan(transaction_, MetaCollection::EXCEPTIONS, range,
-      [&](const ObString &key, const ObString &value, bool &) {
-        uint64_t row_ns = 0, tablet = 0;
-        if (OB_SUCCESS != InstanceMetaKeyCodec::decode_pair(
-                MetaCollection::EXCEPTIONS, key, row_ns, tablet)
-            || row_ns != ns_id) { return OB_CHECKSUM_ERROR; }
-        InstanceExceptionRecord record;
-        std::string payload;
-        int ret = scan_value(value, ValueFormat::JSON, payload);
-        if (ret == OB_SUCCESS) { ret = decode_exception(row_ns, tablet, payload, record); }
-        return ret == OB_SUCCESS ? visitor(record) : ret;
       });
 }
 
@@ -1213,98 +1110,11 @@ int InstanceNamespaceMetadata::prune_deleted_namespace(uint64_t id,
     });
   }
   if (ret != OB_SUCCESS || has_child) { return ret; }
-  bool has_owned = false;
-  std::vector<uint64_t> exceptions;
-  ret = scan_exceptions(id, [&](const InstanceExceptionRecord &exception) {
-    if (exception.kind == 0) { has_owned = true; }
-    exceptions.push_back(exception.tablet_id);
-    return OB_SUCCESS;
-  });
-  if (ret != OB_SUCCESS || has_owned) { return ret; }
   bool physical = false;
   ret = has_physical(id, physical);
   if (ret != OB_SUCCESS || physical) { return ret; }
-  for (const uint64_t tablet : exceptions) {
-    if (ret == OB_SUCCESS) { ret = erase_exception(id, tablet); }
-  }
   if (ret == OB_SUCCESS) { ret = erase_namespace(id); }
   if (ret == OB_SUCCESS) { pruned = true; }
-  return ret;
-}
-
-int InstanceNamespaceMetadata::stage_schema_delta(uint64_t id,
-    int64_t base_schema_version, int64_t schema_version, int64_t drop_scn,
-    const std::map<uint64_t, uint64_t> &previous_tablets,
-    const std::map<uint64_t, uint64_t> &current_tablets,
-    const PhysicalTabletProbe &probe,
-    const PhysicalTabletBirthProbe &birth_probe,
-    std::vector<uint64_t> &removed_owned)
-{
-  removed_owned.clear();
-  if (base_schema_version <= 0 || schema_version < base_schema_version
-      || drop_scn <= 0 || !probe || !birth_probe) {
-    return OB_INVALID_ARGUMENT;
-  }
-  InstanceNamespaceRecord record;
-  int ret = get_namespace(id, record, true);
-  if (ret == OB_SUCCESS && record.roots.state != 0) {
-    ret = OB_STATE_NOT_MATCH;
-  } else if (ret == OB_SUCCESS && record.roots.schema_version != base_schema_version) {
-    ret = OB_EAGAIN;
-  }
-  const auto actions = ns::NamespaceExceptionDelta::plan(
-      previous_tablets, current_tablets);
-  std::vector<uint64_t> pending_removal;
-  for (const auto &action : actions) {
-    if (ret != OB_SUCCESS) { break; }
-    if (!ns::NamespaceObjectKey{id, action.tablet_id}.is_valid()
-        || action.table_id == 0 || action.table_id >= (1ULL << 32)) {
-      ret = OB_INVALID_ARGUMENT;
-      break;
-    }
-    InstanceExceptionRecord old;
-    ret = get_exception(id, action.tablet_id, old, true);
-    const bool had_old = ret == OB_SUCCESS;
-    if (ret == OB_ENTRY_NOT_EXIST) { ret = OB_SUCCESS; }
-    if (ret != OB_SUCCESS) { break; }
-    if (action.kind == ns::ExceptionDeltaKind::TOMBSTONE) {
-      bool local_exists = false;
-      ret = probe(action.tablet_id, local_exists);
-      if (ret != OB_SUCCESS) { break; }
-      const bool was_owned = local_exists || (had_old && (old.kind == 0 || old.was_owned));
-      int64_t create_scn = had_old ? old.create_scn : 0;
-      if (was_owned && create_scn == 0) {
-        ret = birth_probe(action.tablet_id, create_scn);
-        if (ret != OB_SUCCESS) { break; }
-        if (create_scn <= 0) { ret = OB_STATE_NOT_MATCH; break; }
-      }
-      if (local_exists || (had_old && old.kind == 0)) {
-        pending_removal.push_back(action.tablet_id);
-      }
-      ret = put_exception({id, action.tablet_id, action.table_id, 1,
-          had_old && old.kind == 1 ? old.drop_scn : drop_scn, was_owned, create_scn});
-    } else {
-      bool local_exists = false;
-      ret = probe(action.tablet_id, local_exists);
-      if (ret != OB_SUCCESS) { break; }
-      if (local_exists) {
-        ret = put_exception({id, action.tablet_id, action.table_id, 0, 0});
-      } else if (had_old && old.kind == 0) {
-        ret = OB_STATE_NOT_MATCH;
-      } else if (had_old) {
-        ret = erase_exception(id, action.tablet_id);
-      }
-    }
-  }
-  if (ret == OB_SUCCESS) {
-    bool changed = false;
-    if (schema_version > record.roots.schema_version) {
-      record.roots.schema_version = schema_version;
-      changed = true;
-    }
-    if (changed) { ret = update_namespace(record); }
-  }
-  if (ret == OB_SUCCESS) { removed_owned.swap(pending_removal); }
   return ret;
 }
 
@@ -1658,81 +1468,6 @@ int InstanceNamespaceDirectory::mark_deleting(uint64_t id,
   ret = finish_directory_transaction(store_, tx, ret);
   if (ret == OB_SUCCESS) { done = staged_done; }
   return ret;
-}
-
-int InstanceNamespaceDirectory::list_deleting_owned(uint64_t id,
-    int64_t deadline, std::vector<uint64_t> &local_tablets)
-{
-  local_tablets.clear();
-  if (id <= 1) { return OB_INVALID_ARGUMENT; }
-  storage::InstanceMetaStore::Transaction tx;
-  int ret = store_.begin(tx, deadline, true);
-  std::vector<uint64_t> staged;
-  if (ret == OB_SUCCESS) {
-    InstanceNamespaceMetadata metadata(store_, tx);
-    InstanceNamespaceRecord record;
-    ret = metadata.get_namespace(id, record);
-    if (ret == OB_SUCCESS && record.roots.state != 1) {
-      ret = OB_STATE_NOT_MATCH;
-    }
-    if (ret == OB_SUCCESS) {
-      ret = metadata.scan_exceptions(id, [&](const InstanceExceptionRecord &exception) {
-        if (exception.kind == 0) { staged.push_back(exception.tablet_id); }
-        return OB_SUCCESS;
-      });
-    }
-  }
-  ret = finish_directory_transaction(store_, tx, ret);
-  if (ret == OB_SUCCESS) { local_tablets.swap(staged); }
-  return ret;
-}
-
-int InstanceNamespaceDirectory::list_deleted_owned(uint64_t id,
-    int64_t deadline, std::vector<uint64_t> &local_tablets)
-{
-  local_tablets.clear();
-  if (id <= 1) { return OB_INVALID_ARGUMENT; }
-  storage::InstanceMetaStore::Transaction tx;
-  int ret = store_.begin(tx, deadline, true);
-  std::vector<uint64_t> staged;
-  if (ret == OB_SUCCESS) {
-    InstanceNamespaceMetadata metadata(store_, tx);
-    InstanceNamespaceRecord record;
-    ret = metadata.get_namespace(id, record);
-    if (ret == OB_SUCCESS && record.roots.state != 2) { ret = OB_STATE_NOT_MATCH; }
-    if (ret == OB_SUCCESS) {
-      ret = metadata.scan_exceptions(id, [&](const InstanceExceptionRecord &exception) {
-        if (exception.kind == 0) { staged.push_back(exception.tablet_id); }
-        return OB_SUCCESS;
-      });
-    }
-  }
-  ret = finish_directory_transaction(store_, tx, ret);
-  if (ret == OB_SUCCESS) { local_tablets.swap(staged); }
-  return ret;
-}
-
-int InstanceNamespaceDirectory::erase_deleted_owned(uint64_t id,
-    const std::vector<uint64_t> &local_tablets, int64_t deadline)
-{
-  if (id <= 1) { return OB_INVALID_ARGUMENT; }
-  storage::InstanceMetaStore::Transaction tx;
-  int ret = store_.begin(tx, deadline);
-  if (ret == OB_SUCCESS) {
-    InstanceNamespaceMetadata metadata(store_, tx);
-    InstanceNamespaceRecord record;
-    ret = metadata.get_namespace(id, record, true);
-    if (ret == OB_SUCCESS && record.roots.state != 2) { ret = OB_STATE_NOT_MATCH; }
-    for (uint64_t local : local_tablets) {
-      if (ret != OB_SUCCESS) { break; }
-      InstanceExceptionRecord exception;
-      ret = metadata.get_exception(id, local, exception, true);
-      if (ret == OB_ENTRY_NOT_EXIST) { ret = OB_SUCCESS; }
-      else if (ret == OB_SUCCESS && exception.kind != 0) { ret = OB_STATE_NOT_MATCH; }
-      else if (ret == OB_SUCCESS) { ret = metadata.erase_exception(id, local); }
-    }
-  }
-  return finish_directory_transaction(store_, tx, ret);
 }
 
 int InstanceNamespaceDirectory::prune_deleted(uint64_t id,

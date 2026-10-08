@@ -56,6 +56,10 @@ public:
   virtual ~ObTabletDrop();
   int init();
   int execute();
+  // Register native DELETE in the caller's transaction. SQL mapping/history
+  // updates belong to the logical DDL owner, not to physical reclamation.
+  static int register_delete(ObMySQLTransaction &trans,
+      const common::ObIArray<common::ObTabletID> &tablets);
   // drop tablets in some table:
   // 1. one of which is data table, other are its local indexes,
   // 2. or all are local indexes of a table

@@ -267,11 +267,9 @@ int route_tablet_mds(StorageSpaceHandle storage_space,
       ret = OB_INVALID_ARGUMENT;
     }
     if (OB_SUCC(ret)) {
-      // The namespace directory is the ownership authority for both inherited
-      // and materialized tablets.  Let the post-commit schema replacement
-      // remove stale bindings and reclaim only child-owned physical tablets.
-      // Keeping one cleanup owner also makes DROP, TRUNCATE and repartitioning
-      // follow the same path instead of teaching MDS about statement kinds.
+      // The DDL publication stages DELETE MDS for the local physical
+      // incarnations removed from its source tree, in this same transaction.
+      // An inherited logical tablet must never delete its ancestor's object.
       skip_mds = true;
     }
   } else if (type == transaction::ObTxDataSourceType::SYNC_TRUNCATE_INFO) {

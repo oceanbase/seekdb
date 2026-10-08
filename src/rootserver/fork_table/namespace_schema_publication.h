@@ -3,7 +3,6 @@
 #define OCEANBASE_ROOTSERVER_NAMESPACE_SCHEMA_PUBLICATION_H_
 
 #include "storage/instance_meta/instance_meta_store.h"
-#include <vector>
 
 namespace oceanbase {
 namespace common { class ObMySQLTransaction; }
@@ -26,12 +25,10 @@ public:
   // Explicit installation boundary, before the template or user forks exist.
   int initialize(share::schema::ObSchemaGetterGuard &guard);
   int detach();
-  const std::vector<uint64_t> &removed_owned() const { return removed_owned_; }
 private:
   storage::InstanceMetaStore &store_;
   const uint64_t namespace_id_;
   storage::InstanceMetaStore::Transaction transaction_;
-  std::vector<uint64_t> removed_owned_;
   DISALLOW_COPY_AND_ASSIGN(NamespaceSchemaPublication);
 };
 

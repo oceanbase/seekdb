@@ -1,5 +1,6 @@
 /* Copyright (c) 2025 OceanBase. Licensed under the Apache License, Version 2.0. */
 #include "rootserver/fork_table/namespace_schema_publication.h"
+#include "rootserver/ob_tablet_drop.h"
 #include "rootserver/fork_table/instance_namespace_metadata.h"
 #include "rootserver/fork_table/table_creation_descriptor.h"
 #include "query/session/ob_inner_sql_connection_access.h"
@@ -89,7 +90,7 @@ int publication_schema(ObSchemaService &backend, const ObRefreshSchemaStatus &st
 int build_publication(InstanceNamespaceMetadata &metadata,
     const InstanceNamespaceRecord &record, int64_t version,
     const Schemas &current, const Schemas &previous,
-    bool initialize, std::vector<uint64_t> &removed_owned)
+    std::vector<uint64_t> &removed_physical)
 {
   int ret = OB_SUCCESS;
   ns::CatalogChanges definitions, sources;
@@ -143,7 +144,22 @@ int build_publication(InstanceNamespaceMetadata &metadata,
     }
   }
   for (const auto &entry : previous_tablets) {
+    if (ret != OB_SUCCESS) { break; }
     if (current_tablets.count(entry.first) == 0) {
+      ns::CatalogTabletSource previous_source;
+      int64_t cap = 0;
+      ret = metadata.find_tablet_source(record.roots.directory, entry.first, previous_source, cap);
+      if (ret != OB_SUCCESS) { break; }
+      if (previous_source.physical_tablet_id == ns::NamespaceObjectKey{record.id, entry.first}.storage_id()) {
+        ObTabletCreateDeleteMdsUserData status;
+        ret = publication_physical_status(previous_source.physical_tablet_id, status);
+        if (ret != OB_SUCCESS) { break; }
+        if (status.create_transaction_id_ != previous_source.create_transaction_id) {
+          ret = OB_STATE_NOT_MATCH;
+          break;
+        }
+        removed_physical.push_back(previous_source.physical_tablet_id);
+      }
       sources[NamespaceCatalogCodec::object_key(entry.first)] = {{}, true};
     }
   }
@@ -172,29 +188,8 @@ int build_publication(InstanceNamespaceMetadata &metadata,
           {NamespaceCatalogCodec::encode_source(source), cap}, false};
     }
   }
-  // Until read/GC routing is switched to the source tree, update the existing
-  // ownership consumer in this same transaction. It must never publish later.
-  if (ret == OB_SUCCESS && !initialize) {
-    int64_t drop_scn = 0;
-    ret = observer::namespace_worker_prototype::acquire_storage_snapshot(drop_scn);
-    if (ret == OB_SUCCESS) {
-      ret = metadata.stage_schema_delta(record.id, record.roots.schema_version, version, drop_scn,
-          previous_tablets, current_tablets,
-          [&](uint64_t logical, bool &exists) -> int {
-            ObTabletCreateDeleteMdsUserData status;
-            const int rc = publication_physical_status(ns::NamespaceObjectKey{record.id, logical}.storage_id(), status);
-            exists = rc == OB_SUCCESS;
-            return rc == OB_TABLET_NOT_EXIST || rc == OB_ENTRY_NOT_EXIST ? OB_SUCCESS : rc;
-          }, [&](uint64_t logical, int64_t &birth) -> int {
-            ObTabletCreateDeleteMdsUserData status;
-            const int rc = publication_physical_status(ns::NamespaceObjectKey{record.id, logical}.storage_id(), status);
-            if (rc == OB_SUCCESS) { birth = status.create_commit_version_; }
-            return rc;
-          }, removed_owned);
-    }
-  }
   if (ret == OB_SUCCESS) {
-    ret = metadata.stage_catalog_delta(record.id, initialize ? record.roots.schema_version : version,
+    ret = metadata.stage_catalog_delta(record.id, record.roots.schema_version,
         version, definitions, sources);
   }
   return ret;
@@ -216,7 +211,8 @@ int NamespaceSchemaPublication::initialize(share::schema::ObSchemaGetterGuard &g
   Schemas current;
   for (const auto *table : tables) { if (table->has_tablet()) { current[table->get_table_id()] = table; } }
   if (ret == OB_SUCCESS) {
-    ret = build_publication(metadata, record, record.roots.schema_version, current, {}, true, removed_owned_);
+    std::vector<uint64_t> removed;
+    ret = build_publication(metadata, record, record.roots.schema_version, current, {}, removed);
   }
   if (transaction_.is_active()) {
     const int end = ret == OB_SUCCESS ? store_.commit(transaction_) : store_.rollback(transaction_);
@@ -287,7 +283,22 @@ int NamespaceSchemaPublication::stage(common::ObMySQLTransaction &sql,
     current[id] = schema;
     include_family(schema);
   }
-  if (ret == OB_SUCCESS) { ret = build_publication(metadata, record, version, current, previous, false, removed_owned_); }
+  std::vector<uint64_t> removed_physical;
+  if (ret == OB_SUCCESS) { ret = build_publication(metadata, record, version, current, previous, removed_physical); }
+  // Native mapping/history SQL has already run in this DDL transaction. Only
+  // register physical DELETE here, for the local incarnations removed from its
+  // source tree. Inherited sources remain owned by their original physical copy.
+  // SQL, source roots and DELETE MDS share the same commit/rollback boundary.
+  if (ret == OB_SUCCESS && !removed_physical.empty()) {
+    ObArray<ObTabletID> tablets;
+    for (uint64_t physical : removed_physical) {
+      if (OB_FAIL(tablets.push_back(ObTabletID(physical)))) { break; }
+    }
+    if (ret == OB_SUCCESS) {
+      observer::namespace_worker_prototype::PhysicalTabletMdsScope physical_mds(true);
+      ret = ObTabletDrop::register_delete(sql, tablets);
+    }
+  }
   for (auto *schema : allocated) { schema->~ObTableSchema(); }
   return ret;
 }

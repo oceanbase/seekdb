@@ -25321,14 +25321,9 @@ int ObDDLSQLTransaction::end(const bool commit)
     LOG_WARN("failed to end transaction", K(ret), K(tmp_ret), K(commit));
   }
   ret = OB_SUCC(ret) ? tmp_ret : ret;
-  const bool namespace_transaction_committed = commit && OB_SUCC(ret);
   if (publication != nullptr) {
     const int detach_ret = publication->detach();
     if (OB_SUCC(ret)) { ret = detach_ret; }
-  }
-  if (namespace_transaction_committed && OB_SUCC(ret) && publication != nullptr) {
-    ret = storage::NamespaceForkKernelPrototype::finish_schema_publication(
-        namespace_id_, committed_schema_version, publication->removed_owned());
   }
   // Clear runtime_ for success or failure
   

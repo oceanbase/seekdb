@@ -260,30 +260,42 @@ int ObTabletDrop::drop_tablet_(
 int ObTabletDrop::execute()
 {
   int ret = OB_SUCCESS;
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+  } else if (tablet_ids_ == nullptr || tablet_ids_->empty()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(share::ObTabletMappingTableOperator::batch_remove(trans_, *tablet_ids_))) {
+  } else if (OB_FAIL(share::ObTabletToTableHistoryOperator::drop_tablet_to_table_history(
+      trans_, schema_version_, *tablet_ids_))) {
+  } else {
+    ret = register_delete(trans_, *tablet_ids_);
+  }
+  return ret;
+}
+
+int ObTabletDrop::register_delete(ObMySQLTransaction &trans,
+    const ObIArray<ObTabletID> &tablets)
+{
+  int ret = OB_SUCCESS;
+  ObArenaAllocator allocator("TbtDrop");
   ObTimeoutCtx ctx;
   const int64_t default_timeout_ts = GCONF.rpc_timeout;
   const int64_t SLEEP_INTERVAL = 100 * 1000L; // 100ms
   common::sqlclient::ObISQLConnection *conn = NULL;
-  if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObTabletCreator not init", KR(ret));
-  } else if (OB_ISNULL(conn = trans_.get_connection())) {
+  if (OB_ISNULL(conn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("conn_ is NULL", KR(ret));
-  } else if (OB_ISNULL(tablet_ids_) || OB_UNLIKELY(tablet_ids_->count() < 1)) {
+  } else if (tablets.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("batch arg count is invalid", KR(ret));
   } else {
     obcall::ObBatchRemoveTabletArg arg;
-    if (OB_FAIL(share::ObTabletMappingTableOperator::batch_remove(trans_, *tablet_ids_))) {
-    } else if (OB_FAIL(share::ObTabletToTableHistoryOperator::drop_tablet_to_table_history(
-                       trans_, schema_version_, *tablet_ids_))) {
-    } else if (OB_FAIL(arg.init(*tablet_ids_))) {
+    if (OB_FAIL(arg.init(tablets))) {
     } else {
-      LOG_INFO("generate remove arg", K(arg), K(lbt()), KPC(tablet_ids_));
+      LOG_INFO("generate remove arg", K(arg), K(lbt()), K(tablets));
       int64_t buf_len = arg.get_serialize_size();
       int64_t pos = 0;
-      char *buf = (char*)allocator_.alloc(buf_len);
+      char *buf = (char*)allocator.alloc(buf_len);
       if (OB_ISNULL(buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail alloc memory", KR(ret));

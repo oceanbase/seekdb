@@ -37,17 +37,6 @@ struct InstanceNamespaceRecord
   int64_t fork_cap = 0;
 };
 
-struct InstanceExceptionRecord
-{
-  uint64_t namespace_id = 0;
-  uint64_t tablet_id = 0; // Namespace-local physical tablet identity.
-  uint64_t table_id = 0;  // Raw schema table identity.
-  int64_t kind = 0;       // 0 owned, 1 tombstone.
-  int64_t drop_scn = 0;
-  bool was_owned = false; // A tombstone must not hide a lost historical copy.
-  int64_t create_scn = 0; // Logical birth of that copy, retained after physical GC.
-};
-
 struct InstanceNamespacePin
 {
   uint64_t snapshot_id = 0;
@@ -70,12 +59,9 @@ public:
   using Transaction = storage::InstanceMetaStore::Transaction;
   using NamespaceVisitor = std::function<int(const InstanceNamespaceRecord &)>;
   using SnapshotVisitor = std::function<int(uint64_t, const ns::CatalogRoots &)>;
-  using ExceptionVisitor = std::function<int(const InstanceExceptionRecord &)>;
   using PageVisitor = std::function<int(uint64_t)>;
   using PinVisitor = std::function<int(const InstanceNamespacePin &)>;
   using SnapshotAcquirer = std::function<int(int64_t &)>;
-  using PhysicalTabletProbe = std::function<int(uint64_t, bool &)>;
-  using PhysicalTabletBirthProbe = std::function<int(uint64_t, int64_t &)>;
   using NamespacePhysicalProbe = std::function<int(uint64_t, bool &)>;
 
   InstanceNamespaceMetadata(storage::InstanceMetaStore &store, Transaction &transaction)
@@ -105,24 +91,10 @@ public:
   // access before finishing the logical drop in a later KV transaction.
   int mark_namespace_deleting(uint64_t id, bool &done);
   int finish_namespace_drop(uint64_t id);
-  // Stage final tombstone removal only after all descendants, owned records,
+  // Stage final tombstone removal only after all descendants
   // and physical tablets have gone. Caller commits the KV transaction.
   int prune_deleted_namespace(uint64_t id,
       const NamespacePhysicalProbe &has_physical, bool &pruned);
-
-  // Stage a complete native-schema delta and its directory version together.
-  // A stale base returns OB_EAGAIN; the caller must reread the directory
-  // version and rebuild both schema views before retrying.
-  // A local tablet in removed_owned must be dropped only after this KV commit.
-  // Roll back the caller's transaction on error. The physical probe must not
-  // reenter this transaction.
-  int stage_schema_delta(uint64_t id, int64_t base_schema_version,
-      int64_t schema_version, int64_t drop_scn,
-      const std::map<uint64_t, uint64_t> &previous_tablets,
-      const std::map<uint64_t, uint64_t> &current_tablets,
-      const PhysicalTabletProbe &probe,
-      const PhysicalTabletBirthProbe &birth_probe,
-      std::vector<uint64_t> &removed_owned);
 
   int initialize_namespace_counter(uint64_t high_watermark);
   int allocate_namespace_id(uint64_t &id);
@@ -143,12 +115,6 @@ public:
   int insert_pin(const InstanceNamespacePin &pin);
   int erase_pin(uint64_t snapshot_id);
   int scan_pins(const PinVisitor &visitor);
-
-  int get_exception(uint64_t ns_id, uint64_t local_tablet,
-                    InstanceExceptionRecord &record, bool lock = false);
-  int put_exception(const InstanceExceptionRecord &record);
-  int erase_exception(uint64_t ns_id, uint64_t local_tablet);
-  int scan_exceptions(uint64_t ns_id, const ExceptionVisitor &visitor);
 
   int read_page(uint64_t page_id, std::string &data);
   int save_page(const std::string &data, uint64_t &page_id);
@@ -258,14 +224,6 @@ public:
   // access; if commit returns an uncertain result, leave access closed.
   int mark_deleting(uint64_t id, const std::string &expected_name,
                     int64_t deadline, bool &done);
-  // Enumerate owned local tablet IDs only after DELETING has committed.
-  // Physical cleanup also scans this Namespace's encoded addresses for orphans.
-  int list_deleting_owned(uint64_t id, int64_t deadline,
-                          std::vector<uint64_t> &local_tablets);
-  int list_deleted_owned(uint64_t id, int64_t deadline,
-                         std::vector<uint64_t> &local_tablets);
-  int erase_deleted_owned(uint64_t id, const std::vector<uint64_t> &local_tablets,
-                          int64_t deadline);
   int prune_deleted(uint64_t id,
       const InstanceNamespaceMetadata::NamespacePhysicalProbe &has_physical,
       int64_t deadline, bool &pruned);
