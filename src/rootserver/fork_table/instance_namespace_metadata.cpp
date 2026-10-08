@@ -883,6 +883,42 @@ int InstanceNamespaceMetadata::scan_pages(const PageVisitor &visitor)
       });
 }
 
+int InstanceNamespaceMetadata::stage_catalog_delta(uint64_t namespace_id,
+    int64_t base_schema_version, int64_t schema_version,
+    const ns::CatalogChanges &definitions, const ns::CatalogChanges &sources)
+{
+  if (base_schema_version < 0 || schema_version <= 0
+      || schema_version < base_schema_version) { return OB_INVALID_ARGUMENT; }
+  InstanceNamespaceRecord record;
+  int ret = get_namespace(namespace_id, record, true);
+  if (ret == OB_SUCCESS && record.roots.state != 0) { ret = OB_OP_NOT_ALLOW; }
+  if (ret == OB_SUCCESS && record.roots.schema_version != base_schema_version) {
+    ret = OB_EAGAIN;
+  }
+  if (ret == OB_SUCCESS) {
+    InstanceCatalogPageStore pages(*this);
+    ns::NamespaceCatalogTree tree(pages);
+    auto result = tree.apply(record.roots.catalog, definitions, record.roots.catalog);
+    if (result.ok()) {
+      result = tree.apply(record.roots.directory, sources, record.roots.directory);
+    }
+    switch (result.error) {
+      case ns::CatalogTreeError::NONE: break;
+      case ns::CatalogTreeError::INVALID: ret = OB_INVALID_ARGUMENT; break;
+      case ns::CatalogTreeError::TOO_LARGE:
+      case ns::CatalogTreeError::TOO_DEEP: ret = OB_SIZE_OVERFLOW; break;
+      case ns::CatalogTreeError::CORRUPT: ret = OB_CHECKSUM_ERROR; break;
+      case ns::CatalogTreeError::STORE: ret = result.store_error; break;
+      default: ret = OB_ERR_UNEXPECTED; break;
+    }
+    if (ret == OB_SUCCESS) {
+      record.roots.schema_version = schema_version;
+      ret = update_namespace(record);
+    }
+  }
+  return ret;
+}
+
 int InstanceNamespaceMetadata::collect_unreachable_pages(
     int64_t max_deletes, int64_t &deleted)
 {

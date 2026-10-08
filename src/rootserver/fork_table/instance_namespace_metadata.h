@@ -183,6 +183,13 @@ public:
   int save_page(const std::string &data, uint64_t &page_id);
   int erase_page(uint64_t page_id);
   int scan_pages(const PageVisitor &visitor);
+  // Locks the Namespace root, checks the caller's schema base, and stages both
+  // COW trees and their schema version in this transaction. Equal versions are
+  // permitted for physical materialization. The caller must roll back on any
+  // error and commit together with its native schema/physical-object changes.
+  int stage_catalog_delta(uint64_t namespace_id, int64_t base_schema_version,
+      int64_t schema_version, const ns::CatalogChanges &definitions,
+      const ns::CatalogChanges &sources);
   // Requires a store.begin_directory_gc transaction. Marks current namespace
   // and retained snapshot roots, then stages at most max_deletes page erases.
   // The caller commits the transaction or rolls it back on any error.

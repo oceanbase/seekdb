@@ -150,11 +150,14 @@ bool NamespaceCatalogCodec::decode_node(const std::string &data, int64_t cap,
   size_t pos = 0;
   if (!number(data, pos, version) || version != 1
       || !number(data, pos, leaf) || leaf > 1
-      || !number(data, pos, count) || count > FANOUT) { return false; }
+      || !number(data, pos, count) || data.size() > PAGE_BYTES
+      || count > PAGE_BYTES / 16 || cap < 0) { return false; }
   node = CatalogNode();
   node.leaf = leaf;
   node.keys.resize(count);
-  for (auto &key : node.keys) { if (!bytes(data, pos, key)) { return false; } }
+  for (auto &key : node.keys) {
+    if (!bytes(data, pos, key) || key.size() > MAX_KEY_BYTES) { return false; }
+  }
   if (!std::is_sorted(node.keys.begin(), node.keys.end())
       || std::adjacent_find(node.keys.begin(), node.keys.end()) != node.keys.end()) {
     return false;
@@ -162,14 +165,20 @@ bool NamespaceCatalogCodec::decode_node(const std::string &data, int64_t cap,
   if (node.leaf) {
     node.values.resize(count);
     for (auto &value : node.values) {
-      if (!bytes(data, pos, value.data) || !number(data, pos, value_cap)) { return false; }
+      if (!bytes(data, pos, value.data) || !number(data, pos, value_cap)
+          || value_cap > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+        return false;
+      }
       value.cap = cap_min(value_cap, cap);
     }
   } else {
     node.children.resize(count + 1);
     for (auto &child : node.children) {
       if (!number(data, pos, child.page) || !child.page
-          || !number(data, pos, value_cap)) { return false; }
+          || !number(data, pos, value_cap)
+          || value_cap > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+        return false;
+      }
       child.cap = cap_min(value_cap, cap);
     }
   }
@@ -189,6 +198,9 @@ CatalogTreeResult NamespaceCatalogTree::read_node(CatalogPageRef ref, CatalogNod
 CatalogTreeResult NamespaceCatalogTree::save_node(const CatalogNode &node, CatalogPageRef &ref)
 {
   const std::string data = NamespaceCatalogCodec::encode_node(node);
+  if (data.size() > NamespaceCatalogCodec::PAGE_BYTES) {
+    return {CatalogTreeError::TOO_LARGE, 0};
+  }
   ref.cap = 0;
   const int error = store_.write(data, ref.page);
   return error == 0 ? CatalogTreeResult{} : CatalogTreeResult::from_store(error);
@@ -216,150 +228,208 @@ CatalogTreeResult NamespaceCatalogTree::find(CatalogPageRef ref,
   return {CatalogTreeError::TOO_DEEP, 0};
 }
 
-CatalogTreeResult NamespaceCatalogTree::put_path(CatalogPageRef root,
-    const std::string &key, CatalogValue value, Split &out, int depth)
+CatalogTreeResult NamespaceCatalogTree::stage_leaves(const CatalogNode &node,
+    const std::string &lower, std::vector<Branch> &out)
 {
-  if (depth > 32) { return {CatalogTreeError::TOO_DEEP, 0}; }
+  for (size_t begin = 0; begin < node.keys.size();) {
+    CatalogNode leaf;
+    size_t bytes = 24;
+    size_t end = begin;
+    while (end < node.keys.size()) {
+      const size_t entry_bytes = 24 + node.keys[end].size() + node.values[end].data.size();
+      if (bytes + entry_bytes > NamespaceCatalogCodec::PAGE_BYTES) { break; }
+      bytes += entry_bytes;
+      leaf.keys.push_back(node.keys[end]);
+      leaf.values.push_back(node.values[end]);
+      ++end;
+    }
+    if (end == begin) { return {CatalogTreeError::TOO_LARGE, 0}; }
+    Branch branch;
+    branch.lower = begin == 0 ? lower : leaf.keys.front();
+    branch.pending = std::make_shared<PendingPage>();
+    branch.pending->node = std::move(leaf);
+    out.push_back(std::move(branch));
+    begin = end;
+  }
+  return {};
+}
+
+CatalogTreeResult NamespaceCatalogTree::stage_branches(
+    const std::vector<Branch> &children, std::vector<Branch> &out)
+{
+  for (size_t begin = 0; begin < children.size();) {
+    CatalogNode node;
+    node.leaf = false;
+    node.children.push_back(children[begin].ref);
+    size_t bytes = 24 + 16;
+    size_t end = begin + 1;
+    while (end < children.size()) {
+      const size_t entry_bytes = 24 + children[end].lower.size();
+      if (bytes + entry_bytes > NamespaceCatalogCodec::PAGE_BYTES) { break; }
+      bytes += entry_bytes;
+      node.keys.push_back(children[end].lower);
+      node.children.push_back(children[end].ref);
+      ++end;
+    }
+    Branch branch;
+    branch.lower = children[begin].lower;
+    branch.pending = std::make_shared<PendingPage>();
+    branch.pending->node = std::move(node);
+    branch.pending->children.assign(children.begin() + begin, children.begin() + end);
+    out.push_back(std::move(branch));
+    begin = end;
+  }
+  return {};
+}
+
+CatalogTreeResult NamespaceCatalogTree::apply_path(CatalogPageRef root,
+    const std::string &lower, ChangeIterator begin, ChangeIterator end,
+    std::vector<Branch> &out, int depth)
+{
+  if (depth >= 32) { return {CatalogTreeError::TOO_DEEP, 0}; }
+  if (begin == end) {
+    if (root.page != 0) { out.push_back({root, lower, nullptr}); }
+    return {};
+  }
   CatalogNode node;
-  CatalogTreeResult result = read_node(root, node);
+  auto result = read_node(root, node);
   if (!result.ok()) { return result; }
+  bool changed = false;
   if (node.leaf) {
-    const size_t i = std::lower_bound(node.keys.begin(), node.keys.end(), key)
-        - node.keys.begin();
-    if (i < node.keys.size() && node.keys[i] == key) {
-      node.values[i] = std::move(value);
-    } else {
-      node.keys.insert(node.keys.begin() + i, key);
-      node.values.insert(node.values.begin() + i, std::move(value));
+    CatalogNode merged;
+    size_t i = 0;
+    auto change = begin;
+    while (i < node.keys.size() || change != end) {
+      if (change == end || (i < node.keys.size() && node.keys[i] < change->first)) {
+        merged.keys.push_back(std::move(node.keys[i]));
+        merged.values.push_back(std::move(node.values[i++]));
+      } else {
+        const bool exists = i < node.keys.size() && node.keys[i] == change->first;
+        if (change->second.erase) {
+          changed = changed || exists;
+        } else {
+          changed = changed || !exists
+              || node.values[i].data != change->second.value.data
+              || node.values[i].cap != change->second.value.cap;
+          merged.keys.push_back(change->first);
+          merged.values.push_back(change->second.value);
+        }
+        if (exists) { ++i; }
+        ++change;
+      }
     }
+    if (changed) { return stage_leaves(merged, lower, out); }
   } else {
-    const size_t i = std::upper_bound(node.keys.begin(), node.keys.end(), key)
-        - node.keys.begin();
-    Split child;
-    result = put_path(node.children[i], key, std::move(value), child, depth + 1);
+    std::vector<Branch> children;
+    auto change = begin;
+    for (size_t i = 0; i < node.children.size(); ++i) {
+      auto limit = change;
+      if (i == node.keys.size()) { limit = end; }
+      else { while (limit != end && limit->first < node.keys[i]) { ++limit; } }
+      const size_t before = children.size();
+      result = apply_path(node.children[i], i == 0 ? lower : node.keys[i - 1],
+          change, limit, children, depth + 1);
+      if (!result.ok()) { return result; }
+      changed = changed || children.size() != before + 1
+          || children[before].pending != nullptr
+          || children[before].ref.page != node.children[i].page
+          || children[before].ref.cap != node.children[i].cap;
+      change = limit;
+    }
+    if (changed) {
+      // A deleted first child must not leave its former key range unroutable.
+      if (!children.empty()) { children.front().lower = lower; }
+      return stage_branches(children, out);
+    }
+  }
+  if (root.page != 0) { out.push_back({root, lower, nullptr}); }
+  return {};
+}
+
+CatalogTreeResult NamespaceCatalogTree::apply(CatalogPageRef root,
+    const CatalogChanges &changes, CatalogPageRef &next)
+{
+  if (root.cap < 0) { return {CatalogTreeError::INVALID, 0}; }
+  // Validate the whole batch before persisting any replacements.
+  for (const auto &change : changes) {
+    if (change.first.size() > NamespaceCatalogCodec::MAX_KEY_BYTES
+        || (!change.second.erase && change.second.value.cap < 0)) {
+      return {CatalogTreeError::INVALID, 0};
+    }
+    if (!change.second.erase && change.second.value.data.size()
+        > NamespaceCatalogCodec::PAGE_BYTES - 48 - change.first.size()) {
+      return {CatalogTreeError::TOO_LARGE, 0};
+    }
+  }
+  if (changes.empty()) { next = root; return {}; }
+  std::vector<Branch> branches;
+  auto result = apply_path(root, std::string(), changes.begin(), changes.end(), branches, 0);
+  if (!result.ok()) { return result; }
+  while (branches.size() > 1) {
+    std::vector<Branch> parents;
+    result = stage_branches(branches, parents);
     if (!result.ok()) { return result; }
-    node.children[i] = child.left;
-    if (child.right.page) {
-      node.keys.insert(node.keys.begin() + i, child.separator);
-      node.children.insert(node.children.begin() + i + 1, child.right);
+    branches.swap(parents);
+  }
+  CatalogPageRef staged;
+  if (!branches.empty()) {
+    Branch root_branch = std::move(branches.front());
+    // Internal nodes keep their level during editing. Only the final root may
+    // collapse; discarded pending nodes have never reached the page store.
+    for (int depth = 0; ; ++depth) {
+      if (depth >= 32) { return {CatalogTreeError::TOO_DEEP, 0}; }
+      if (root_branch.pending != nullptr) {
+        if (root_branch.pending->node.leaf
+            || root_branch.pending->children.size() != 1) { break; }
+        Branch child = root_branch.pending->children.front();
+        root_branch = std::move(child);
+      } else {
+        if (root_branch.ref.page == root.page && root_branch.ref.cap == root.cap) { break; }
+        CatalogNode node;
+        result = read_node(root_branch.ref, node);
+        if (!result.ok()) { return result; }
+        if (node.leaf || node.children.size() != 1) { break; }
+        root_branch.ref = node.children.front();
+      }
     }
+    result = persist(root_branch, staged, 0);
+    if (!result.ok()) { return result; }
   }
-  if (node.keys.size() <= NamespaceCatalogCodec::FANOUT) {
-    return save_node(node, out.left);
+  next = staged;
+  return {};
+}
+
+CatalogTreeResult NamespaceCatalogTree::persist(Branch &branch,
+    CatalogPageRef &ref, int depth)
+{
+  if (depth >= 32) { return {CatalogTreeError::TOO_DEEP, 0}; }
+  if (branch.pending == nullptr) { ref = branch.ref; return {}; }
+  auto &page = *branch.pending;
+  for (size_t i = 0; i < page.children.size(); ++i) {
+    const auto result = persist(page.children[i], page.node.children[i], depth + 1);
+    if (!result.ok()) { return result; }
   }
-  const size_t mid = node.keys.size() / 2;
-  CatalogNode right;
-  right.leaf = node.leaf;
-  out.separator = node.keys[mid];
-  if (node.leaf) {
-    right.keys.assign(node.keys.begin() + mid, node.keys.end());
-    right.values.assign(node.values.begin() + mid, node.values.end());
-    node.keys.resize(mid);
-    node.values.resize(mid);
-  } else {
-    right.keys.assign(node.keys.begin() + mid + 1, node.keys.end());
-    right.children.assign(node.children.begin() + mid + 1, node.children.end());
-    node.keys.resize(mid);
-    node.children.resize(mid + 1);
-  }
-  result = save_node(node, out.left);
-  return result.ok() ? save_node(right, out.right) : result;
+  return save_node(page.node, ref);
 }
 
 CatalogTreeResult NamespaceCatalogTree::put(CatalogPageRef root,
     const std::string &key, CatalogValue value, CatalogPageRef &next)
 {
-  Split split;
-  CatalogTreeResult result = put_path(root, key, std::move(value), split, 0);
-  if (!result.ok()) { return result; }
-  if (!split.right.page) { next = split.left; return {}; }
-  CatalogNode node;
-  node.leaf = false;
-  node.keys.push_back(split.separator);
-  node.children = {split.left, split.right};
-  return save_node(node, next);
-}
-
-CatalogTreeResult NamespaceCatalogTree::first_key(CatalogPageRef ref, std::string &key)
-{
-  for (int depth = 0; depth < 32; ++depth) {
-    CatalogNode node;
-    const CatalogTreeResult result = read_node(ref, node);
-    if (!result.ok()) { return result; }
-    if (node.leaf) {
-      if (node.keys.empty()) { return {CatalogTreeError::CORRUPT, 0}; }
-      key = node.keys.front();
-      return {};
-    }
-    if (node.children.empty()) { return {CatalogTreeError::CORRUPT, 0}; }
-    ref = node.children.front();
-  }
-  return {CatalogTreeError::TOO_DEEP, 0};
-}
-
-CatalogTreeResult NamespaceCatalogTree::remove_path(CatalogPageRef root,
-    const std::string &key, CatalogPageRef &next, bool &found,
-    std::string &minimum, int depth)
-{
-  if (depth > 32) { return {CatalogTreeError::TOO_DEEP, 0}; }
-  if (!root.page) { next = root; return {}; }
-  CatalogNode node;
-  CatalogTreeResult result = read_node(root, node);
-  if (!result.ok()) { return result; }
-  if (node.leaf) {
-    const size_t i = std::lower_bound(node.keys.begin(), node.keys.end(), key)
-        - node.keys.begin();
-    if (i == node.keys.size() || node.keys[i] != key) {
-      next = root;
-    } else {
-      found = true;
-      node.keys.erase(node.keys.begin() + i);
-      node.values.erase(node.values.begin() + i);
-      if (node.keys.empty()) { next = CatalogPageRef(); }
-      else {
-        minimum = node.keys.front();
-        result = save_node(node, next);
-      }
-    }
-  } else {
-    const size_t i = std::upper_bound(node.keys.begin(), node.keys.end(), key)
-        - node.keys.begin();
-    CatalogPageRef child;
-    std::string child_minimum;
-    result = remove_path(node.children[i], key, child, found, child_minimum,
-                         depth + 1);
-    if (!result.ok()) {
-    } else if (!found) {
-      next = root;
-    } else {
-      if (child.page) {
-        node.children[i] = child;
-        if (i > 0) { node.keys[i - 1] = child_minimum; }
-      } else {
-        node.children.erase(node.children.begin() + i);
-        node.keys.erase(node.keys.begin() + (i == 0 ? 0 : i - 1));
-      }
-      if (node.children.empty()) {
-        result = {CatalogTreeError::CORRUPT, 0};
-      } else {
-        result = first_key(node.children.front(), minimum);
-        if (result.ok()) {
-          if (node.keys.empty()) { next = node.children.front(); }
-          else { result = save_node(node, next); }
-        }
-      }
-    }
-  }
-  return result;
+  CatalogChanges changes;
+  changes.emplace(key, CatalogChange{std::move(value), false});
+  return apply(root, changes, next);
 }
 
 CatalogTreeResult NamespaceCatalogTree::remove(CatalogPageRef root,
     const std::string &key, CatalogPageRef &next)
 {
-  bool found = false;
-  std::string minimum;
-  const CatalogTreeResult result = remove_path(root, key, next, found, minimum, 0);
-  return result.ok() && !found
+  CatalogChanges changes;
+  changes.emplace(key, CatalogChange{CatalogValue(), true});
+  CatalogPageRef staged;
+  const auto result = apply(root, changes, staged);
+  if (!result.ok()) { return result; }
+  next = staged;
+  return staged.page == root.page && staged.cap == root.cap
       ? CatalogTreeResult{CatalogTreeError::NOT_FOUND, 0} : result;
 }
 

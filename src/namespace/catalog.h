@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <shared_mutex>
 #include <string>
@@ -18,6 +19,11 @@ namespace ns {
 
 struct CatalogPageRef { uint64_t page = 0; int64_t cap = 0; };
 struct CatalogValue { std::string data; int64_t cap = 0; };
+struct CatalogChange {
+  CatalogValue value;
+  bool erase = false;
+};
+using CatalogChanges = std::map<std::string, CatalogChange>;
 struct CatalogNode {
   bool leaf = true;
   std::vector<std::string> keys;
@@ -65,7 +71,8 @@ public:
 
 class NamespaceCatalogCodec final {
 public:
-  static constexpr size_t FANOUT = 8;
+  static constexpr size_t PAGE_BYTES = 16 * 1024;
+  static constexpr size_t MAX_KEY_BYTES = 512;
   static int64_t cap_min(int64_t a, int64_t b);
   static std::string object_key(uint64_t id);
   static std::string encode_entry(uint64_t schema_object, uint64_t local_table,
@@ -86,7 +93,7 @@ public:
   virtual int write(const std::string &data, uint64_t &page) = 0;
 };
 
-enum class CatalogTreeError : uint8_t { NONE, NOT_FOUND, CORRUPT, TOO_DEEP, STORE };
+enum class CatalogTreeError : uint8_t { NONE, NOT_FOUND, CORRUPT, TOO_DEEP, STORE, INVALID, TOO_LARGE };
 struct CatalogTreeResult {
   CatalogTreeError error = CatalogTreeError::NONE;
   int store_error = 0;
@@ -105,15 +112,31 @@ public:
                         CatalogValue value, CatalogPageRef &next);
   CatalogTreeResult remove(CatalogPageRef root, const std::string &key,
                            CatalogPageRef &next);
+  // Apply a complete transaction's ordered changes. Each affected old page is
+  // visited once; only the final replacement pages are written. Missing erases
+  // are harmless. The caller publishes next in the same page-store transaction,
+  // and rolls that transaction back on failure. next is unchanged on failure.
+  CatalogTreeResult apply(CatalogPageRef root, const CatalogChanges &changes,
+                          CatalogPageRef &next);
 private:
-  struct Split { CatalogPageRef left, right; std::string separator; };
+  struct PendingPage;
+  struct Branch {
+    CatalogPageRef ref;
+    std::string lower;
+    std::shared_ptr<PendingPage> pending;
+  };
+  // Lives only for one edit batch. Delay persistence until the final root is
+  // known, including root collapse after deletion; no intermediate roots leak.
+  struct PendingPage { CatalogNode node; std::vector<Branch> children; };
+  using ChangeIterator = CatalogChanges::const_iterator;
   CatalogTreeResult save_node(const CatalogNode &node, CatalogPageRef &ref);
-  CatalogTreeResult put_path(CatalogPageRef root, const std::string &key,
-                             CatalogValue value, Split &out, int depth);
-  CatalogTreeResult first_key(CatalogPageRef ref, std::string &key);
-  CatalogTreeResult remove_path(CatalogPageRef root, const std::string &key,
-                                CatalogPageRef &next, bool &found,
-                                std::string &minimum, int depth);
+  CatalogTreeResult apply_path(CatalogPageRef root, const std::string &lower,
+      ChangeIterator begin, ChangeIterator end, std::vector<Branch> &out, int depth);
+  CatalogTreeResult stage_leaves(const CatalogNode &node, const std::string &lower,
+                                std::vector<Branch> &out);
+  CatalogTreeResult stage_branches(const std::vector<Branch> &children,
+                                  std::vector<Branch> &out);
+  CatalogTreeResult persist(Branch &branch, CatalogPageRef &ref, int depth);
   ICatalogPageStore &store_;
 };
 
