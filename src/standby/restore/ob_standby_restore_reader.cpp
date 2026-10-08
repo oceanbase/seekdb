@@ -252,7 +252,8 @@ int ObCopyMacroBlockObProducer::init(
   } else if (OB_UNLIKELY(nullptr == ls)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("log stream should not be NULL", KR(ret), K(ls_id), KPC(ls));
-  } else if (OB_FAIL(ls->get_tablet(table_key.get_tablet_id(), tablet_handle_))) {
+  } else if (OB_FAIL(ls->get_tablet(table_key.get_tablet_id(), tablet_handle_,
+      ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
     LOG_WARN("failed to get tablet", K(ret), K(table_key));
   } else if (OB_UNLIKELY(nullptr == (tablet = tablet_handle_.get_obj()))) {
     ret = OB_ERR_UNEXPECTED;
@@ -555,7 +556,8 @@ int ObCopyTabletInfoObProducer::get_next_tablet_info(obcall::ObCopyTabletInfo &t
     if (OB_ISNULL(ls = ls_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("log stream should not be NULL", K(ret), KP(ls));
-    } else if (OB_FAIL(ls->get_tablet(tablet_id, tablet_handle))
+    } else if (OB_FAIL(ls->get_tablet(tablet_id, tablet_handle,
+        ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US, ObMDSGetTabletMode::READ_WITHOUT_CHECK))
                && OB_TABLET_NOT_EXIST != ret) {
       LOG_WARN("failed to get tablet", K(ret), K(tablet_id), K(tablet_handle));
     } else if (OB_TABLET_NOT_EXIST == ret) {
@@ -707,7 +709,10 @@ int ObCopySSTableInfoObProducer::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("copy sstable info ob producer init get invalid argument",
         K(ret), K(tablet_sstable_info), KP(ls));
-  } else if (OB_FAIL(ls->get_tablet(tablet_sstable_info.tablet_id_, tablet_handle_))) {
+  // Physical restore must include retired tablets still used as fork sources,
+  // and CREATE records whose committed state has not reached the checkpoint.
+  } else if (OB_FAIL(ls->get_tablet(tablet_sstable_info.tablet_id_, tablet_handle_,
+      ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
     if (OB_TABLET_NOT_EXIST == ret) {
       status_ = ObCopyTabletStatus::TABLET_NOT_EXIST;
       ret = OB_SUCCESS;
@@ -717,6 +722,9 @@ int ObCopySSTableInfoObProducer::init(
   } else if (OB_ISNULL(tablet = tablet_handle_.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet should not be NULL", K(ret), K(tablet_sstable_info));
+  } else if (tablet->is_empty_shell()) {
+    status_ = ObCopyTabletStatus::TABLET_NOT_EXIST;
+    tablet = nullptr;
   } else if (!tablet_sstable_info.ddl_sstable_scn_range_.is_empty()) {
     if (tablet->get_tablet_meta().get_ddl_sstable_start_scn() < tablet_sstable_info.ddl_sstable_scn_range_.start_scn_) {
       ret = OB_ERR_UNEXPECTED;
@@ -981,7 +989,8 @@ int ObCopySSTableMacroObProducer::init(
   } else if (OB_UNLIKELY(nullptr == (ls = ls_))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("log stream should not be NULL", KR(ret), K(ls_id));
-  } else if (OB_FAIL(ls->get_tablet(tablet_id, tablet_handle_))) {
+  } else if (OB_FAIL(ls->get_tablet(tablet_id, tablet_handle_,
+      ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
     LOG_WARN("failed to get tablet", K(ret), K(tablet_id));
   } else if (OB_FAIL(copy_table_key_array_.assign(copy_table_key_array))) {
     LOG_WARN("failed to assign sstable array", K(ret), K(ls_id), K(tablet_id), K(copy_table_key_array));
@@ -1107,7 +1116,8 @@ int ObCopySSTableMacroRangeObProducer::init(
   } else if (OB_UNLIKELY(nullptr == ls)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("log stream should not be NULL", KR(ret), K(ls_id));
-  } else if (OB_FAIL(ls->get_tablet(tablet_id, tablet_handle_))) {
+  } else if (OB_FAIL(ls->get_tablet(tablet_id, tablet_handle_,
+      ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
     LOG_WARN("failed to get tablet", K(ret), K(tablet_id));
   } else if (OB_ISNULL(tablet = tablet_handle_.get_obj())) {
     ret = OB_ERR_UNEXPECTED;

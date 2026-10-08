@@ -147,6 +147,11 @@ public:
       int64_t snapshot, size_t max_entries,
       std::map<uint64_t, PhysicalRetention> &retained);
   CatalogTreeResult find(CatalogPageRef root, const std::string &key, CatalogValue &value);
+  // Read at most limit ordered entries strictly after after. An empty after
+  // starts at the first entry. The caller resumes by the last returned key;
+  // no iterator or page remains pinned between batches. Output is empty on error.
+  CatalogTreeResult scan(CatalogPageRef root, const std::string &after, size_t limit,
+      std::vector<std::pair<std::string, CatalogValue>> &entries);
   CatalogTreeResult put(CatalogPageRef root, const std::string &key,
                         CatalogValue value, CatalogPageRef &next);
   CatalogTreeResult remove(CatalogPageRef root, const std::string &key,

@@ -325,13 +325,18 @@ int ObStandbySSTableCopier::build_table_info_(
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_id_array.count(); ++i) {
       ObTabletHandle tablet_handle;
-      if (OB_FAIL(ls->get_tablet(tablet_id_array.at(i), tablet_handle))) {
+      // CREATE state may still be in the logs that replay after this copy.
+      // Restore works on physical objects, including retained deleted sources.
+      if (OB_FAIL(ls->get_tablet(tablet_id_array.at(i), tablet_handle,
+          ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
         if (OB_TABLET_NOT_EXIST == ret) {
           LOG_INFO("local tablet not exist, skip sstable info fetch", K(ret), K(tablet_id_array.at(i)));
           ret = OB_SUCCESS;
         } else {
           LOG_WARN("failed to get local tablet", K(ret), K(tablet_id_array.at(i)));
         }
+      } else if (tablet_handle.get_obj()->is_empty_shell()) {
+        // Empty shells have no SSTables to copy.
       } else if (OB_FAIL(tablet_handle_array.push_back(tablet_handle))) {
         LOG_WARN("failed to push tablet handle", K(ret), K(tablet_id_array.at(i)));
       }
@@ -430,7 +435,8 @@ int ObStandbySSTableCopier::finish_tablet_restore_(
   if (OB_ISNULL(ls) || !tablet_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid finish tablet restore argument", K(ret), KP(ls), K(tablet_id));
-  } else if (OB_FAIL(ls->get_tablet(tablet_id, tablet_handle))) {
+  } else if (OB_FAIL(ls->get_tablet(tablet_id, tablet_handle,
+      ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
     if (OB_TABLET_NOT_EXIST == ret) {
       LOG_INFO("standby tablet not exist or is empty shell, skip finish restore", K(ret), K(tablet_id));
       ret = OB_SUCCESS;
@@ -440,6 +446,8 @@ int ObStandbySSTableCopier::finish_tablet_restore_(
   } else if (OB_ISNULL(tablet = tablet_handle.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("standby tablet is null", K(ret), K(tablet_id));
+  } else if (tablet->is_empty_shell()) {
+    // There is no data restore status to advance for an empty shell.
   } else if (tablet->get_tablet_meta().local_status_.is_restore_status_full()) {
     LOG_INFO("standby tablet restore already complete", K(tablet_id));
   } else if (OB_FAIL(ls->update_tablet_restore_status(tablet_id, restore_status))) {

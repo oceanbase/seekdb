@@ -274,7 +274,8 @@ int ObTabletCopyFinishTask::create_new_table_store_with_minor_()
     LOG_WARN("tablet copy finish task do not init", K(ret));
   } else if (param_.is_only_replace_major_) {
     FLOG_INFO("only replace major, no need build minor tables", K(ret), "tablet_id", param_.tablet_id_);
-  } else if (OB_FAIL(param_.ls_->get_tablet(param_.tablet_id_, tablet_handle))) {
+  } else if (OB_FAIL(param_.ls_->get_tablet(param_.tablet_id_, tablet_handle,
+      ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
     LOG_WARN("failed to get tablet", K(ret), "tablet_id", param_.tablet_id_);
   } else if (OB_ISNULL(tablet = tablet_handle.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
@@ -310,7 +311,8 @@ int ObTabletCopyFinishTask::check_finish_copy_tablet_data_valid_()
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("tablet copy finish task do not init", K(ret));
-  } else if (OB_FAIL(param_.ls_->get_tablet(param_.tablet_id_, tablet_handle))) {
+  } else if (OB_FAIL(param_.ls_->get_tablet(param_.tablet_id_, tablet_handle,
+      ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
     LOG_WARN("failed to get tablet", K(ret), "tablet_id", param_.tablet_id_);
   } else if (OB_ISNULL(tablet = tablet_handle.get_obj())) {
     ret = OB_ERR_UNEXPECTED;

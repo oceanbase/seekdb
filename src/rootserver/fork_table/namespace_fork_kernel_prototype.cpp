@@ -906,6 +906,104 @@ int NamespaceForkKernelPrototype::reclaim_unreferenced_tablets(
   return ret;
 }
 
+int NamespaceForkKernelPrototype::materialize_inherited_tablets()
+{
+  auto *store = directory_kv_store();
+  if (store == nullptr || !ATOMIC_LOAD(&GCTX.sys_package_ready_)
+      || !share::server_is_write_enabled()) { return OB_SUCCESS; }
+  // Only scan positions live here. Sources and committed physical CREATEs
+  // remain authoritative, so restart and promotion simply start a new sweep.
+  static std::mutex mutex;
+  static uint64_t last_namespace = 0;
+  static std::map<uint64_t, std::string> positions;
+  std::unique_lock<std::mutex> lock(mutex, std::try_to_lock);
+  if (!lock.owns_lock()) { return OB_SUCCESS; }
+  const int64_t previous_timeout = THIS_WORKER.get_timeout_ts();
+  const int64_t deadline = std::min(directory_deadline(),
+      ObTimeUtility::current_time() + 2 * 1000 * 1000L);
+  THIS_WORKER.set_timeout_ts(deadline);
+  rootserver::InstanceNamespaceDirectory directory(*store);
+  std::vector<rootserver::InstanceNamespaceRecord> live;
+  int ret = directory.list_live(deadline, live);
+  uint64_t selected = 0, first = 0;
+  std::unordered_set<uint64_t> ids;
+  if (OB_SUCC(ret)) {
+    for (const auto &record : live) {
+      if (record.parent_namespace == 0) { continue; }
+      ids.insert(record.id);
+      if (first == 0 || record.id < first) { first = record.id; }
+      if (record.id > last_namespace && (selected == 0 || record.id < selected)) {
+        selected = record.id;
+      }
+    }
+    for (auto it = positions.begin(); it != positions.end();) {
+      if (ids.count(it->first) == 0) { it = positions.erase(it); }
+      else { ++it; }
+    }
+    if (selected == 0) { selected = first; }
+  }
+  int64_t materialized = 0;
+  if (OB_SUCC(ret) && selected != 0) {
+    last_namespace = selected;
+    auto &position = positions[selected];
+    std::vector<std::pair<std::string, ns::CatalogValue>> entries;
+    InstanceMetaStore::Transaction tx;
+    ret = store->begin(tx, deadline, true);
+    rootserver::InstanceNamespaceMetadata metadata(*store, tx);
+    rootserver::InstanceNamespaceRecord record;
+    if (OB_SUCC(ret)) { ret = metadata.get_namespace(selected, record); }
+    if (OB_SUCC(ret) && record.roots.state != 0) { ret = OB_OP_NOT_ALLOW; }
+    if (OB_SUCC(ret)) {
+      rootserver::InstanceCatalogPageStore pages(metadata);
+      ns::NamespaceCatalogTree tree(pages);
+      const auto result = tree.scan(record.roots.directory, position, 64, entries);
+      if (!result.ok()) {
+        ret = result.error == ns::CatalogTreeError::STORE ? result.store_error : OB_CHECKSUM_ERROR;
+      }
+    }
+    if (tx.is_active()) {
+      const int end = store->rollback(tx);
+      if (OB_SUCC(ret)) { ret = end; }
+    }
+    if (OB_SUCC(ret)) {
+      size_t consumed = 0;
+      for (const auto &entry : entries) {
+        if (materialized >= 16 || ObTimeUtility::current_time() >= deadline) { break; }
+        position = entry.first;
+        ++consumed;
+        ns::CatalogTabletSource source;
+        if (!ns::NamespaceCatalogCodec::decode_source(entry.second.data, source)) {
+          ret = OB_CHECKSUM_ERROR;
+          break;
+        }
+        // A main tablet and its LOB tablets form one creation transaction.
+        // Visiting the main entry suffices; indexes have their own binding unit.
+        if (entry.first != ns::NamespaceCatalogCodec::object_key(source.data_tablet_id)
+            || source.physical_tablet_id == encoded(selected, source.data_tablet_id)) { continue; }
+        ObTabletID tablet(encoded(selected, source.data_tablet_id));
+        TabletAccessProtection protection;
+        // Recheck the latest binding under the same admission and root lock
+        // as a user write. A concurrent DROP/DDL cannot resurrect a scanned entry.
+        const int rc = prepare_access(selected, source.table_id, tablet, false,
+            data_plane::ObNamespaceAccessMode::LEASED, protection,
+            [&](ObTabletID &physical) { return ensure_tablet(physical); });
+        ++materialized;
+        if (rc != OB_SUCCESS && rc != OB_TABLET_NOT_EXIST
+            && rc != OB_ENTRY_NOT_EXIST && rc != OB_OP_NOT_ALLOW) {
+          ret = rc;
+          break;
+        }
+      }
+      if (consumed == entries.size() && entries.size() < 64) { position.clear(); }
+    }
+  }
+  THIS_WORKER.set_timeout_ts(previous_timeout);
+  if (materialized != 0 || OB_FAIL(ret)) {
+    LOG_INFO("namespace background materialization", K(ret), K(selected), K(materialized));
+  }
+  return ret;
+}
+
 int NamespaceForkKernelPrototype::collect_dropped_namespace_tablets() {
   auto *store = directory_kv_store();
   if (store == nullptr || !ATOMIC_LOAD(&GCTX.sys_package_ready_)) { return OB_SUCCESS; }

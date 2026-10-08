@@ -500,7 +500,8 @@ int ObSSTableCopyFinishTask::prepare_data_store_desc_(
       && FALSE_IT(storage_schema = ObMdsSchemaHelper::get_instance().get_storage_schema())) {
   } else if (OB_FAIL(get_merge_type_(sstable_param, merge_type))) {
     LOG_WARN("failed to get merge type", K(ret), KPC(sstable_param));
-  } else if (OB_FAIL(ls_->get_tablet(tablet_id, tablet_handle))) {
+  } else if (OB_FAIL(ls_->get_tablet(tablet_id, tablet_handle,
+      ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
     LOG_WARN("failed to get tablet", K(ret), K(tablet_id));
   }
 
@@ -517,12 +518,18 @@ int ObSSTableCopyFinishTask::prepare_data_store_desc_(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet should not be NULL", K(ret), K(tablet_id));
   } else {
+    // MDS flushes have their own snapshot, even before the data tablet has
+    // produced its first SSTable. Match the native MDS mini merger: its
+    // snapshot is the flush/end SCN, not the data tablet's snapshot (possibly 0).
+    const int64_t snapshot_version = sstable_param->table_key_.is_mds_sstable()
+        ? sstable_param->table_key_.get_end_scn().get_val_for_tx()
+        : tablet->get_snapshot_version();
     if (OB_FAIL(desc.init(
         false/*is ddl*/,
         *storage_schema,
         tablet_id,
         merge_type,
-        tablet->get_snapshot_version(),
+        snapshot_version,
         DATA_CURRENT_VERSION,
         tablet_handle.get_obj()->get_tablet_meta().micro_index_clustered_,
         0/*concurrent_cnt*/,

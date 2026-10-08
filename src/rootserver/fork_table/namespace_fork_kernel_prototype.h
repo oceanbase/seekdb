@@ -46,6 +46,9 @@ public:
       bool &need_retry,
       const std::function<int(const common::ObIArray<common::ObTabletID> &)> &reclaim);
   static int collect_dropped_namespace_tablets();
+  // Bounded primary-side creation from persisted sources. Existing physical
+  // tablets subsequently complete takeover through the native scheduler.
+  static int materialize_inherited_tablets();
   // Build from one readable cut without holding the publication fence during
   // tree/native traversal. Failure leaves the caller's previous plan intact.
   static int load_physical_retention(PhysicalSnapshotRetention &plan);

@@ -561,7 +561,21 @@ int InstanceMetaStore::get_for_update(Transaction &tx, MetaCollection collection
                                       ObIAllocator &allocator, ObString &value)
 {
   value.reset();
-  int ret = write(tx, collection, key, ObString(), Write::LOCK);
+  int ret = OB_SUCCESS;
+  // AccessService returns a transient conflict instead of waiting for the
+  // holder. This direct KV caller owns the wait, just as the SQL executor does
+  // for SELECT FOR UPDATE. Retry only the lock operation, preserving all prior
+  // work in a borrowed DDL transaction and its original deadline.
+  while (OB_TRY_LOCK_ROW_CONFLICT ==
+      (ret = write(tx, collection, key, ObString(), Write::LOCK))) {
+    if (ObTimeUtility::current_time() >= tx.deadline_) {
+      ret = OB_TIMEOUT;
+      break;
+    } else if (OB_FAIL(THIS_WORKER.check_status())) {
+      break;
+    }
+    ob_usleep(1000);
+  }
   if (OB_SUCC(ret)) { ret = read(tx, collection, key, allocator, value, true); }
   return ret;
 }

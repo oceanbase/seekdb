@@ -292,6 +292,43 @@ CatalogTreeResult NamespaceCatalogTree::find(CatalogPageRef ref,
   return {CatalogTreeError::TOO_DEEP, 0};
 }
 
+CatalogTreeResult NamespaceCatalogTree::scan(CatalogPageRef root,
+    const std::string &after, size_t limit,
+    std::vector<std::pair<std::string, CatalogValue>> &entries)
+{
+  entries.clear();
+  if (limit == 0) { return {CatalogTreeError::INVALID, 0}; }
+  std::unordered_set<uint64_t> path;
+  std::function<CatalogTreeResult(CatalogPageRef, int)> walk;
+  walk = [&](CatalogPageRef ref, int depth) -> CatalogTreeResult {
+    if (ref.page == 0) { return {}; }
+    if (path.count(ref.page) != 0) { return {CatalogTreeError::CORRUPT, 0}; }
+    if (depth >= 64) { return {CatalogTreeError::TOO_DEEP, 0}; }
+    path.insert(ref.page);
+    CatalogNode node;
+    auto result = read_node(ref, node);
+    if (result.ok()) {
+      const size_t first = after.empty() ? 0
+          : std::upper_bound(node.keys.begin(), node.keys.end(), after) - node.keys.begin();
+      if (node.leaf) {
+        for (size_t i = first; i < node.keys.size() && entries.size() < limit; ++i) {
+          entries.emplace_back(node.keys[i], std::move(node.values[i]));
+        }
+      } else {
+        for (size_t i = first; i < node.children.size() && entries.size() < limit; ++i) {
+          result = walk(node.children[i], depth + 1);
+          if (!result.ok()) { break; }
+        }
+      }
+    }
+    path.erase(ref.page);
+    return result;
+  };
+  const auto result = walk(root, 0);
+  if (!result.ok()) { entries.clear(); }
+  return result;
+}
+
 CatalogTreeResult NamespaceCatalogTree::stage_leaves(const CatalogNode &node,
     const std::string &lower, std::vector<Branch> &out)
 {

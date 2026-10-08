@@ -638,7 +638,8 @@ int ObStandbyRestoreTabletBuilderUtil::get_tablet_(
     ObTabletHandle &tablet_handle)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ls->get_tablet(tablet_id, tablet_handle))) {
+  if (OB_FAIL(ls->get_tablet(tablet_id, tablet_handle,
+      ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
     LOG_WARN("failed to get tablet", K(ret), K(tablet_id), KPC(ls));
   }
   return ret;
@@ -887,7 +888,8 @@ int ObStandbyRestoreTabletBuilderUtil::inner_update_tablet_table_store_with_mino
       }
       if (OB_SUCCESS != install_ret) {
       } else if (FALSE_IT(sstable = static_cast<const blocksstable::ObSSTable *>(table))) {
-      } else if (OB_SUCCESS != (install_ret = param.ls_->get_tablet(tablet_id, current_tablet_handle))) {
+      } else if (OB_SUCCESS != (install_ret = param.ls_->get_tablet(tablet_id, current_tablet_handle,
+          ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
         LOG_WARN("failed to reload tablet before installing copied sstable", K(install_ret), K(tablet_id));
       } else if (OB_ISNULL(current_tablet_handle.get_obj())) {
         install_ret = OB_ERR_UNEXPECTED;
