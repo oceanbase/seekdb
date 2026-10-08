@@ -38,6 +38,8 @@ static constexpr int64_t GRAPH_EXPAND_EDGE_MEMORY_RESERVE_BYTES = 256;
 static constexpr int64_t GRAPH_EXPAND_INPUT_KEY_SLOT_MULTIPLIER = 2;
 static constexpr int64_t GRAPH_EXPAND_INPUT_KEY_BYTES_PER_INPUT =
     GRAPH_EXPAND_INPUT_KEY_SLOT_MULTIPLIER * sizeof(int64_t);
+static constexpr int64_t GRAPH_EXPAND_VERTEX_LOOKUP_BATCH_SIZE =
+    GRAPH_EXPAND_MAX_INPUT_STATE_COUNT;
 
 namespace
 {
@@ -515,6 +517,10 @@ GraphExpand::GraphExpand(ObIAllocator &allocator,
                          ModulePageAllocator(allocator, "GraphExpand")),
     next_input_indices_(OB_MALLOC_NORMAL_BLOCK_SIZE,
                         ModulePageAllocator(allocator, "GraphExpand")),
+    source_lookup_batch_(OB_MALLOC_NORMAL_BLOCK_SIZE,
+                         ModulePageAllocator(allocator, "GraphExpand")),
+    source_lookup_results_(OB_MALLOC_NORMAL_BLOCK_SIZE,
+                           ModulePageAllocator(allocator, "GraphExpand")),
     existing_sources_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "GraphExpand")),
     edge_page_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "GraphExpand")),
     target_identities_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "GraphExpand")),
@@ -699,6 +705,53 @@ int GraphExpand::build_source_input_groups()
   return ret;
 }
 
+int GraphExpand::lookup_source_vertices()
+{
+  int ret = OB_SUCCESS;
+  existing_sources_.reuse();
+  for (int64_t start = 0;
+       OB_SUCC(ret) && start < source_identities_.count();) {
+    source_lookup_batch_.reuse();
+    source_lookup_results_.reuse();
+    const int64_t batch_count = std::min(
+        GRAPH_EXPAND_VERTEX_LOOKUP_BATCH_SIZE,
+        source_identities_.count() - start);
+    const int64_t end = start + batch_count;
+    for (int64_t i = start; OB_SUCC(ret) && i < end; ++i) {
+      if (OB_FAIL(source_lookup_batch_.push_back(source_identities_.at(i)))) {
+        LOG_WARN("failed to append graph source lookup request", K(ret), K(i));
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(check_memory_limit())) {
+      LOG_WARN("graph source lookup batch exceeds memory limit", K(ret),
+               K(start), K(end));
+    } else if (OB_SUCC(ret)
+               && OB_FAIL(access_.lookup_vertices(
+                   source_lookup_batch_, source_lookup_results_))) {
+      LOG_WARN("failed to look up graph source vertices", K(ret),
+               K(start), K(end));
+    } else if (OB_SUCC(ret) && OB_FAIL(access_.check_status())) {
+    }
+    for (int64_t i = 0;
+         OB_SUCC(ret) && i < source_lookup_results_.count(); ++i) {
+      GraphElementIdentity stable;
+      if (OB_FAIL(deep_copy_identity(source_lookup_results_.at(i), stable))) {
+        LOG_WARN("failed to stabilize graph source lookup result", K(ret),
+                 K(i), K(start), K(end));
+      } else if (OB_FAIL(existing_sources_.push_back(stable))) {
+        LOG_WARN("failed to append existing graph source", K(ret), K(i),
+                 K(start), K(end));
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(check_memory_limit())) {
+      LOG_WARN("graph source lookup result exceeds memory limit", K(ret),
+               K(start), K(end));
+    }
+    start = end;
+  }
+  return ret;
+}
+
 int GraphExpand::start_edge_input_group(const GraphExpandEdge &edge)
 {
   int ret = OB_SUCCESS;
@@ -826,6 +879,8 @@ int64_t GraphExpand::used_memory() const
       existing_source_index_.used_memory(),
       source_input_groups_.get_data_size(),
       next_input_indices_.get_data_size(),
+      source_lookup_batch_.get_data_size(),
+      source_lookup_results_.get_data_size(),
       existing_sources_.get_data_size(),
       edge_page_.get_data_size(),
       target_identities_.get_data_size(),
@@ -920,22 +975,29 @@ int GraphExpand::validate_and_account(const ObIArray<GraphExpandInput> &inputs)
         source_index_entry_bytes + source_index_bucket_bytes;
     const int64_t source_input_group_bytes =
         sizeof(SourceInputGroup) + sizeof(int64_t);
-    const int64_t per_input = sizeof(GraphExpandInput) + sizeof(GraphElementIdentity)
+    const int64_t per_input = sizeof(GraphExpandInput)
+        + 2 * sizeof(GraphElementIdentity)
         + source_index_entry_bytes + source_index_bucket_bytes
         + existing_source_index_bytes
         + source_input_group_bytes
         + GRAPH_EXPAND_INPUT_MEMORY_RESERVE_BYTES;
     const int64_t per_edge = sizeof(GraphExpandEdge) + 2 * sizeof(GraphElementIdentity)
         + GRAPH_EXPAND_EDGE_MEMORY_RESERVE_BYTES;
-    if (inputs.count() > INT64_MAX / per_input
+    const int64_t lookup_batch_count = std::min(
+        inputs.count(), GRAPH_EXPAND_VERTEX_LOOKUP_BATCH_SIZE);
+    const int64_t lookup_batch_bytes = lookup_batch_count
+        * 2 * sizeof(GraphElementIdentity);
+    if (inputs.count() > (INT64_MAX - lookup_batch_bytes) / per_input
         || inputs.count()
                > (INT64_MAX - (OB_MALLOC_NORMAL_BLOCK_SIZE - 1))
                      / GRAPH_EXPAND_INPUT_KEY_BYTES_PER_INPUT
-        || page_size_ > (INT64_MAX - inputs.count() * per_input) / per_edge) {
+        || page_size_ > (INT64_MAX - lookup_batch_bytes
+                         - inputs.count() * per_input) / per_edge) {
       ret = OB_SIZE_OVERFLOW;
     } else {
       const int64_t steady_bytes =
-          inputs.count() * per_input + page_size_ * per_edge;
+          inputs.count() * per_input + lookup_batch_bytes
+          + page_size_ * per_edge;
       const int64_t slot_payload_bytes =
           inputs.count() * GRAPH_EXPAND_INPUT_KEY_BYTES_PER_INPUT;
       const int64_t slot_remainder =
@@ -980,10 +1042,7 @@ int GraphExpand::open(const ObIArray<GraphExpandInput> &inputs,
     stats_.distinct_sources_ = source_identities_.count();
     if (source_identities_.empty()) {
       end_ = true;
-    } else if (OB_FAIL(access_.lookup_vertices(source_identities_, existing_sources_))) {
-    } else if (OB_FAIL(access_.check_status())) {
-    } else if (OB_FAIL(stabilize_identities(existing_sources_))) {
-    } else if (OB_FAIL(check_memory_limit())) {
+    } else if (OB_FAIL(lookup_source_vertices())) {
     } else if (existing_sources_.empty()) {
       end_ = true;
     } else if (source_input_groups_enabled_
@@ -1180,6 +1239,8 @@ void GraphExpand::release()
   source_identities_.reset();
   source_input_groups_.reset();
   next_input_indices_.reset();
+  source_lookup_batch_.reset();
+  source_lookup_results_.reset();
   existing_sources_.reset();
   edge_page_.reset();
   target_identities_.reset();

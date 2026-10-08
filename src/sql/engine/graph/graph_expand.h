@@ -202,6 +202,7 @@ private:
   int load_next_page();
   int validate_and_account(const common::ObIArray<GraphExpandInput> &inputs);
   int build_source_input_groups();
+  int lookup_source_vertices();
   int build_existing_source_index();
   int start_edge_input_group(const GraphExpandEdge &edge);
   bool contains(const common::ObIArray<GraphElementIdentity> &identities,
@@ -245,6 +246,11 @@ private:
   common::ObArray<GraphElementIdentity> source_identities_;
   common::ObArray<SourceInputGroup> source_input_groups_;
   common::ObArray<int64_t> next_input_indices_;
+  // A full-scan frontier remains whole for the edge scan, but source vertex
+  // existence checks are bounded so DAS never fans an unbounded range set to
+  // every selected tablet.
+  common::ObArray<GraphElementIdentity> source_lookup_batch_;
+  common::ObArray<GraphElementIdentity> source_lookup_results_;
   common::ObArray<GraphElementIdentity> existing_sources_;
   common::ObArray<GraphExpandEdge> edge_page_;
   common::ObArray<GraphElementIdentity> target_identities_;
