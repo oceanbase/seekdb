@@ -116,6 +116,9 @@ public:
   // a user's native transaction. It never observes that user's uncommitted rows.
   using SnapshotAcquirer = std::function<int(share::SCN &)>;
   int begin_read(Transaction &tx, int64_t deadline, const SnapshotAcquirer &acquire);
+  // Read at the local horizon available to a newly admitted weak reader.
+  // Retention collectors need this view in addition to the latest committed one.
+  int begin_weak_read(Transaction &tx, int64_t deadline);
   // Excludes ordinary KV transactions while a directory page collector marks
   // roots and removes unreachable pages in this transaction.
   int begin_directory_gc(Transaction &tx, int64_t deadline);

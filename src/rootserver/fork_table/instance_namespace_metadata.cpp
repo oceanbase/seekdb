@@ -1293,20 +1293,14 @@ int InstanceNamespaceDirectory::filter_unreferenced_tablets(
 {
   unreferenced.clear();
   need_retry = false;
+  storage::InstanceMetaStore::Transaction weak_tx;
   storage::InstanceMetaStore::Transaction tx;
-  int ret = store_.begin(tx, deadline, true);
-  std::vector<ns::CatalogPageRef> live;
+  int ret = store_.begin_weak_read(weak_tx, deadline);
+  if (ret == OB_SUCCESS) { ret = store_.begin(tx, deadline, true); }
   std::unordered_set<uint64_t> referenced;
   std::vector<uint64_t> staged;
   if (ret == OB_SUCCESS) {
     InstanceNamespaceMetadata metadata(store_, tx);
-    ret = metadata.scan_namespaces([&](const InstanceNamespaceRecord &record) {
-      // DELETING still has admitted users until its access drain completes.
-      if (record.roots.state != 2 && record.roots.directory.page != 0) {
-        live.push_back(record.roots.directory);
-      }
-      return OB_SUCCESS;
-    });
     auto mark_source = [&](uint64_t physical) {
       bool terminated = false;
       for (int depth = 0; depth < 64; ++depth) {
@@ -1330,7 +1324,23 @@ int InstanceNamespaceDirectory::filter_unreferenced_tablets(
       return result.error == ns::CatalogTreeError::TOO_LARGE
           || result.error == ns::CatalogTreeError::TOO_DEEP ? OB_SIZE_OVERFLOW : OB_CHECKSUM_ERROR;
     };
-    if (ret == OB_SUCCESS) { ret = mark_roots(metadata, live, tx.snapshot_version().get_val_for_tx()); }
+    auto mark_directory = [&](InstanceNamespaceMetadata &reader, int64_t snapshot) {
+      std::vector<ns::CatalogPageRef> roots;
+      int rc = reader.scan_namespaces([&](const InstanceNamespaceRecord &record) {
+        // DELETING still has admitted users until its access drain completes.
+        if (record.roots.state != 2 && record.roots.directory.page != 0) {
+          roots.push_back(record.roots.directory);
+        }
+        return OB_SUCCESS;
+      });
+      return rc == OB_SUCCESS ? mark_roots(reader, roots, snapshot) : rc;
+    };
+    if (ret == OB_SUCCESS) { ret = mark_directory(metadata, tx.snapshot_version().get_val_for_tx()); }
+    // A new weak reader has no registered View yet and can still select an
+    // older root. Keep that root's sources until the readable horizon passes
+    // the publication that removed them. KV history stays leased by weak_tx.
+    InstanceNamespaceMetadata weak_metadata(store_, weak_tx);
+    if (ret == OB_SUCCESS) { ret = mark_directory(weak_metadata, weak_tx.snapshot_version().get_val_for_tx()); }
     // A transaction may have acquired its view before DROP, without opening
     // this tablet yet. Its immutable root is a dependency even without a native
     // tablet handle. Include incomplete physical fork edges as for live roots.
@@ -1358,6 +1368,7 @@ int InstanceNamespaceDirectory::filter_unreferenced_tablets(
     }
   }
   ret = finish_directory_transaction(store_, tx, ret);
+  ret = finish_directory_transaction(store_, weak_tx, ret);
   if (ret == OB_SUCCESS) { unreferenced.swap(staged); }
   return ret;
 }

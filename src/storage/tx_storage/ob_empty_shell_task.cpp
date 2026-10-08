@@ -21,6 +21,7 @@
 #include "storage/tx_storage/ob_ls_service.h" // ObLSService
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
+#include "storage/tx/ob_trans_service.h"
 #include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
 
 namespace oceanbase
@@ -148,13 +149,18 @@ int ObTabletEmptyShellHandler::get_empty_shell_tablet_ids(
 {
   int ret = OB_SUCCESS;
   ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
+  auto *transactions = share::server_service<transaction::ObTransService>();
+  share::SCN new_read_snapshot;
   ObLSTabletIterator tablet_iter(ObMDSGetTabletMode::READ_WITHOUT_CHECK);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "tablet empty shell handler is not inited", KR(ret));
-  } else if (OB_ISNULL(t3m)) {
+  } else if (OB_ISNULL(t3m) || OB_ISNULL(transactions)) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "failed to get t3m", KR(ret), KP(t3m));
+  } else if (OB_FAIL(transactions->get_weak_read_snapshot_version(-1, new_read_snapshot))) {
+  } else if (!new_read_snapshot.is_valid_and_not_min() || new_read_snapshot.is_max()) {
+    ret = OB_EAGAIN;
   } else if (OB_FAIL(ls_->get_tablet_svr()->build_tablet_iter(tablet_iter))) {
   } else {
     
@@ -186,7 +192,8 @@ int ObTabletEmptyShellHandler::get_empty_shell_tablet_ids(
       } else if (is_locked) {
         STORAGE_LOG(INFO, "tablet_status is changing", KR(ret), KPC(tablet));
         need_retry = true;
-      } else if (OB_FAIL(check_candidate_tablet_(*tablet, can_become_shell, aborted_create))) {
+      } else if (OB_FAIL(check_candidate_tablet_(*tablet, new_read_snapshot,
+          can_become_shell, aborted_create, need_retry))) {
       } else if (!can_become_shell) {
         STORAGE_LOG(INFO, "tablet can not become shell", KR(ret), "tablet_meta", tablet->get_tablet_meta());
       } else if (aborted_create) {
@@ -228,7 +235,8 @@ int ObTabletEmptyShellHandler::update_tablets_to_empty_shell(ObLS *ls, const com
 }
 
 int ObTabletEmptyShellHandler::check_candidate_tablet_(
-    const ObTablet &tablet, bool &can_become_shell, bool &aborted_create)
+    const ObTablet &tablet, const share::SCN &new_read_snapshot,
+    bool &can_become_shell, bool &aborted_create, bool &need_retry)
 {
   int ret = OB_SUCCESS;
   
@@ -270,8 +278,16 @@ int ObTabletEmptyShellHandler::check_candidate_tablet_(
     } else if (mds::TwoPhaseCommitState::ON_COMMIT == trans_stat && data.tablet_status_.is_deleted_for_gc()) {
       STORAGE_LOG(INFO, "delete tx is committed", K(ret), K(tablet_id), K(trans_stat), K(data));
 
-      can_become_shell = true;
-      STORAGE_LOG(INFO, "inner tablet can become shell", KR(ret), K(tablet_id));
+      // Committed DELETE can be ahead of the local readable horizon, notably
+      // during replay. Newly admitted weak readers can still see the tablet.
+      // Existing readers and inherited physical sources are checked separately
+      // by the reclamation owner before actually replacing it with a shell.
+      if (data.delete_commit_version_ <= 0) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        can_become_shell = data.delete_commit_version_ <= new_read_snapshot.get_val_for_tx();
+        need_retry |= !can_become_shell;
+      }
     }
   }
 

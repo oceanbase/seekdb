@@ -175,6 +175,13 @@ int InstanceMetaStore::begin_read(Transaction &tx, int64_t deadline,
                  : OB_INVALID_ARGUMENT;
 }
 
+int InstanceMetaStore::begin_weak_read(Transaction &tx, int64_t deadline)
+{
+  return begin_read(tx, deadline, [&](share::SCN &snapshot) {
+    return transactions_.get_weak_read_snapshot_version(-1, snapshot);
+  });
+}
+
 int InstanceMetaStore::attach(Transaction &tx, ObTxDesc &descriptor, const int64_t deadline)
 {
   if (!descriptor.is_in_tx() || descriptor.is_shadow()

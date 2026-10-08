@@ -52,7 +52,8 @@ private:
   void set_stop() { ATOMIC_STORE(&stopped_, true); }
   void set_start() { ATOMIC_STORE(&stopped_, false); }
   bool is_finish() { obsys::ObWLockGuard lock(wait_lock_, false); return lock.acquired(); }
-  int check_candidate_tablet_(const ObTablet &tablet, bool &can_become_shell, bool &aborted_create);
+  int check_candidate_tablet_(const ObTablet &tablet, const share::SCN &new_read_snapshot,
+      bool &can_become_shell, bool &aborted_create, bool &need_retry);
   int get_empty_shell_tablet_ids(common::ObTabletIDArray &empty_shell_tablet_ids,
       common::ObIArray<ObTabletHandle> &aborted_tablets, bool &need_retry);
   int update_aborted_tablets_to_empty_shell(ObLS *ls,
