@@ -1122,6 +1122,21 @@ int NamespaceForkKernelPrototype::materialize_inherited_tablets()
   return ret;
 }
 
+int NamespaceForkKernelPrototype::collect_catalog_pages()
+{
+  if (directory_kv_store() == nullptr || !ATOMIC_LOAD(&GCTX.sys_package_ready_)
+      || !share::server_is_write_enabled()) { return OB_SUCCESS; }
+  // Reuse the directory transaction guard: publication cannot race the mark
+  // and delete pass, and held read views retain historical page versions.
+  // Keep this periodic pass bounded; a timeout rolls the whole batch back.
+  const int64_t previous_timeout = THIS_WORKER.get_timeout_ts();
+  THIS_WORKER.set_timeout_ts(std::min(directory_deadline(),
+      ObTimeUtility::current_time() + 2 * 1000 * 1000L));
+  const int ret = collect_metadata();
+  THIS_WORKER.set_timeout_ts(previous_timeout);
+  return ret;
+}
+
 int NamespaceForkKernelPrototype::collect_dropped_namespace_tablets() {
   auto *store = directory_kv_store();
   if (store == nullptr || !ATOMIC_LOAD(&GCTX.sys_package_ready_)) { return OB_SUCCESS; }

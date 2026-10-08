@@ -108,6 +108,10 @@ void ObEmptyShellTask::runTimerTask()
   if (materialize_ret != OB_SUCCESS) {
     STORAGE_LOG(WARN, "failed to materialize inherited namespace tablets", K(materialize_ret));
   }
+  const int catalog_gc_ret = NamespaceForkKernelPrototype::collect_catalog_pages();
+  if (catalog_gc_ret != OB_SUCCESS) {
+    STORAGE_LOG(WARN, "failed to collect namespace catalog pages", K(catalog_gc_ret));
+  }
   THIS_WORKER.set_timeout_ts(previous_timeout);
 }
 
