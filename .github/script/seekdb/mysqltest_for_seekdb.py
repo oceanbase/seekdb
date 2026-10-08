@@ -193,7 +193,7 @@ def prepare_instance(args, repo_root, sdb_script, deploy_dir):
     execute_init_sql(args.obclient, args.host, args.port, deploy_dir)
 
 
-def load_configured_case_names(config_path):
+def load_excluded_case_names(config_path):
     try:
         with config_path.open("r", encoding="utf-8") as config_file:
             lines = config_file.readlines()
@@ -201,9 +201,10 @@ def load_configured_case_names(config_path):
         raise RunnerError("cannot read mysqltest config {}: {}".format(config_path, exc))
 
     case_names = []
+    found_exclude_set = False
     in_runtime_configs = False
     in_psmall = False
-    in_test_set = False
+    in_exclude_set = False
     for line_number, raw_line in enumerate(lines, 1):
         line = raw_line.rstrip()
         stripped = line.strip()
@@ -213,13 +214,15 @@ def load_configured_case_names(config_path):
         if indent == 0:
             in_runtime_configs = stripped == "runtime_configs:"
             in_psmall = False
-            in_test_set = False
+            in_exclude_set = False
         elif in_runtime_configs and indent == 2:
             in_psmall = stripped == "psmall:"
-            in_test_set = False
+            in_exclude_set = False
         elif in_psmall and indent == 4:
-            in_test_set = stripped == "test-set:"
-        elif in_test_set and indent == 6 and stripped.startswith("- "):
+            in_exclude_set = stripped == "exclude-set:"
+            if in_exclude_set:
+                found_exclude_set = True
+        elif in_exclude_set and indent == 6 and stripped.startswith("- "):
             case_name = stripped[2:].strip()
             if not case_name:
                 raise RunnerError(
@@ -227,9 +230,9 @@ def load_configured_case_names(config_path):
                 )
             case_names.append(case_name)
 
-    if not case_names:
+    if not found_exclude_set:
         raise RunnerError(
-            "runtime_configs.psmall.test-set is empty in {}".format(config_path)
+            "runtime_configs.psmall.exclude-set is missing in {}".format(config_path)
         )
     duplicates = sorted(
         name for name, count in Counter(case_names).items() if count > 1
@@ -251,9 +254,8 @@ def discover_cases(repo_root):
     suite_dir = mysql_test_dir / "test_suite"
     if not test_dir.is_dir():
         raise RunnerError("mysqltest case directory does not exist: {}".format(test_dir))
-    case_names = load_configured_case_names(config_path)
+    excluded_cases = set(load_excluded_case_names(config_path))
     available_cases = {}
-    top_level_names = set()
 
     for test_file in sorted(test_dir.glob("*.test")):
         if not test_file.is_file():
@@ -262,7 +264,6 @@ def discover_cases(repo_root):
         available_cases[name] = MysqltestCase(
             name, test_file, result_dir / (name + ".result")
         )
-        top_level_names.add(name)
 
     if suite_dir.is_dir():
         for test_file in sorted(suite_dir.glob("*/t/*.test")):
@@ -278,18 +279,19 @@ def discover_cases(repo_root):
                 test_file.parent.parent / "r" / "mysql" / (test_file.stem + ".result"),
             )
 
-    missing_cases = sorted(set(case_names) - set(available_cases))
-    if missing_cases:
+    unknown_exclusions = sorted(excluded_cases - set(available_cases))
+    if unknown_exclusions:
         raise RunnerError(
-            "mysqltest config references missing cases: {}".format(
-                ", ".join(missing_cases)
+            "mysqltest exclude-set references missing cases: {}".format(
+                ", ".join(unknown_exclusions)
             )
         )
-    unconfigured_top_level_cases = sorted(top_level_names - set(case_names))
-    if unconfigured_top_level_cases:
+
+    case_names = [name for name in available_cases if name not in excluded_cases]
+    if not case_names:
         raise RunnerError(
-            "top-level mysqltest cases are missing from {}: {}".format(
-                config_path, ", ".join(unconfigured_top_level_cases)
+            "no mysqltest cases left after applying exclude-set in {}".format(
+                config_path
             )
         )
     missing_results = [
