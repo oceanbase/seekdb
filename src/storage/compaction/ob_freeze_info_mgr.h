@@ -31,6 +31,7 @@
 #include "share/scn.h"
 #include "storage/compaction/ob_snapshot_gc_scn_renewal_state.h"
 #include "storage/physical_snapshot_retention.h"
+#include <memory>
 
 namespace oceanbase
 {
@@ -133,6 +134,9 @@ public:
       const int64_t create_transaction_id,
       const int64_t merged_version,
       ObStorageSnapshotInfo &snapshot_info);
+  // Readers retain an immutable plan without holding this service's lock
+  // during physical IO or reclamation. No graph is copied or rebuilt here.
+  int get_physical_retention(std::shared_ptr<const PhysicalSnapshotRetention> &plan);
 
   int get_min_dependent_freeze_info(share::ObFreezeInfo &freeze_info);
   int64_t get_snapshot_gc_ts();
@@ -208,7 +212,7 @@ private:
   ObSnapshotGcScnRenewalState snapshot_gc_scn_renewal_state_;
   common::ObTimer reload_timer_;
   PhysicalRetentionLoader physical_retention_loader_;
-  PhysicalSnapshotRetention physical_retention_;
+  std::shared_ptr<const PhysicalSnapshotRetention> physical_retention_;
   bool inited_;
 };
 

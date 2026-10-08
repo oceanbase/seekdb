@@ -395,12 +395,27 @@ int ObFreezeInfoMgr::get_min_reserved_snapshot(
     }
     if (OB_SUCC(ret)) {
       int64_t retained = 0;
-      if (!physical_retention_.get(tablet_id.id(), create_transaction_id, retained)) {
+      if (!physical_retention_
+          || !physical_retention_->get(tablet_id.id(), create_transaction_id, retained)) {
         ret = OB_STATE_NOT_MATCH;
       } else {
         snapshot_info.update_by_smaller_snapshot(share::SNAPSHOT_FOR_MULTI_VERSION, retained);
       }
     }
+  }
+  return ret;
+}
+
+int ObFreezeInfoMgr::get_physical_retention(
+    std::shared_ptr<const PhysicalSnapshotRetention> &plan)
+{
+  int ret = OB_SUCCESS;
+  plan.reset();
+  const int64_t deadline = common::ObTimeUtility::current_time() + RLOCK_TIMEOUT_US;
+  RLockGuardWithTimeout guard(lock_, deadline, ret);
+  if (OB_SUCC(ret)) {
+    if (!inited_ || !physical_retention_) { ret = OB_NOT_INIT; }
+    else { plan = physical_retention_; }
   }
   return ret;
 }
@@ -526,16 +541,19 @@ int ObFreezeInfoMgr::inner_update_info(
 {
   int ret = OB_SUCCESS;
   int64_t snapshot_gc_ts = 0;
+  std::shared_ptr<const PhysicalSnapshotRetention> incoming =
+      std::make_shared<PhysicalSnapshotRetention>(std::move(new_retention));
   {
     WLockGuard lock_guard(lock_);
-    if (!new_retention.is_valid()
-        || new_retention.read_snapshot < physical_retention_.read_snapshot) {
+    if (!incoming->is_valid()
+        || (physical_retention_ && incoming->read_snapshot < physical_retention_->read_snapshot)) {
       ret = OB_EAGAIN;
     } else if (OB_FAIL(freeze_info_mgr_.update_freeze_info(new_freeze_infos, new_snapshot_gc_scn))) {
     } else if (OB_FAIL(update_next_snapshots(new_snapshots))) {
     } else {
-      // The old workset is destroyed by the caller after this short lock ends.
-      std::swap(physical_retention_, new_retention);
+      // The retired plan is released after this short lock ends. Existing
+      // physical readers may keep it until their candidate batch finishes.
+      physical_retention_.swap(incoming);
       snapshot_gc_ts = freeze_info_mgr_.get_snapshot_gc_scn().get_val_for_tx();
     }
   }
