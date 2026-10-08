@@ -37,12 +37,6 @@ struct InstanceNamespaceRecord
   int64_t fork_cap = 0;
 };
 
-struct InstanceNamespacePin
-{
-  uint64_t snapshot_id = 0;
-  int64_t schema_version = 0;
-};
-
 enum class TabletVisibility
 {
   ABSENT,
@@ -58,9 +52,7 @@ class InstanceNamespaceMetadata final
 public:
   using Transaction = storage::InstanceMetaStore::Transaction;
   using NamespaceVisitor = std::function<int(const InstanceNamespaceRecord &)>;
-  using SnapshotVisitor = std::function<int(uint64_t, const ns::CatalogRoots &)>;
   using PageVisitor = std::function<int(uint64_t)>;
-  using PinVisitor = std::function<int(const InstanceNamespacePin &)>;
   using SnapshotAcquirer = std::function<int(int64_t &)>;
   using NamespacePhysicalProbe = std::function<int(uint64_t, bool &)>;
 
@@ -83,7 +75,8 @@ public:
   int insert_root_namespace(const std::string &name, int64_t schema_version);
 
   // Locks the source through snapshot acquisition, then stages the child,
-  // name, pin, and lineage in this transaction. Caller commits or rolls back.
+  // name and capped roots in this transaction. The coordination row lock
+  // fences this publication against watermark advancement until commit.
   int fork_namespace(const std::string &source_name, const std::string &target_name,
                      const SnapshotAcquirer &acquire_snapshot, uint64_t &child_id);
 
@@ -99,22 +92,10 @@ public:
   int initialize_namespace_counter(uint64_t high_watermark);
   int allocate_namespace_id(uint64_t &id);
 
-  int get_snapshot(uint64_t id, ns::CatalogRoots &roots, bool lock = false);
-  int insert_snapshot(uint64_t id, const ns::CatalogRoots &roots);
-  int update_snapshot(uint64_t id, const ns::CatalogRoots &roots);
-  int erase_snapshot(uint64_t id);
-  int scan_snapshots(const SnapshotVisitor &visitor);
-
   int initialize_snapshot_gc_watermark(int64_t watermark);
   int get_snapshot_gc_watermark(int64_t &watermark, bool lock = false);
   // Advances to at least watermark; stale concurrent requests leave it unchanged.
   int advance_snapshot_gc_watermark(int64_t watermark);
-
-  int get_pin(uint64_t snapshot_id, InstanceNamespacePin &pin, bool lock = false);
-  // Serializes registration with watermark advancement in this KV store.
-  int insert_pin(const InstanceNamespacePin &pin);
-  int erase_pin(uint64_t snapshot_id);
-  int scan_pins(const PinVisitor &visitor);
 
   int read_page(uint64_t page_id, std::string &data);
   int save_page(const std::string &data, uint64_t &page_id);
@@ -137,7 +118,7 @@ public:
       int64_t schema_version, const ns::CatalogChanges &definitions,
       const ns::CatalogChanges &sources);
   // Requires a store.begin_directory_gc transaction. Marks current namespace
-  // and retained snapshot roots, then stages at most max_deletes page erases.
+  // roots, then stages at most max_deletes page erases.
   // The caller commits the transaction or rolls it back on any error.
   int collect_unreachable_pages(int64_t max_deletes, int64_t &deleted);
 
@@ -163,24 +144,6 @@ private:
   InstanceNamespaceMetadata &metadata_;
 };
 
-// The lineage algorithm owns ordering and reference decisions; this adapter
-// keeps its snapshot rows, child attachment, and pin removal in one KV transaction.
-class InstanceSnapshotLineageStore final : public ns::ISnapshotLineageStore
-{
-public:
-  explicit InstanceSnapshotLineageStore(InstanceNamespaceMetadata &metadata)
-      : metadata_(metadata) {}
-  int load_for_update(uint64_t snapshot_id, ns::CatalogRoots &roots) override;
-  int increment_ref(uint64_t snapshot_id) override;
-  int decrement_ref(uint64_t snapshot_id) override;
-  int insert_snapshot(const ns::CatalogRoots &roots) override;
-  int attach_child(uint64_t child_id, uint64_t parent_namespace_id,
-                   const ns::CatalogRoots &roots) override;
-  int remove_snapshot(uint64_t snapshot_id, const ns::CatalogRoots &roots) override;
-private:
-  InstanceNamespaceMetadata &metadata_;
-};
-
 // One call owns one native KV transaction. Construct on the management path;
 // this object has no Namespace runtime, SQL proxy, cache, or background thread.
 class InstanceNamespaceDirectory final
@@ -193,7 +156,7 @@ public:
   // Repeated startup validates the root and advances a stale watermark.
   int ensure_root(const std::string &name, int64_t schema_version,
                   int64_t gc_watermark, int64_t deadline, bool &created);
-  // Commits the child, name, snapshot pin and lineage before returning child.
+  // Commits the child, name and shared capped roots before returning child.
   int fork_namespace(const std::string &source_name, const std::string &target_name,
                      const InstanceNamespaceMetadata::SnapshotAcquirer &acquire_snapshot,
                      int64_t deadline, InstanceNamespaceRecord &child);
@@ -227,7 +190,7 @@ public:
   int prune_deleted(uint64_t id,
       const InstanceNamespaceMetadata::NamespacePhysicalProbe &has_physical,
       int64_t deadline, bool &pruned);
-  // Releases lineage and marks DELETED. Shared physical GC subsequently
+  // Clears the owned roots and marks DELETED. Shared physical GC subsequently
   // reclaims unreferenced owned and orphan tablets.
   int finish_drop(uint64_t id, int64_t deadline);
   int schema_version(uint64_t id, int64_t deadline, int64_t &version);

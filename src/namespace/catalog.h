@@ -52,10 +52,7 @@ struct CatalogRoots {
   uint64_t source = 0;
   CatalogPageRef catalog, directory;
   int64_t snapshot = 0, schema_version = 0;
-  uint64_t snapshot_ref = 0;
-  uint64_t parent_ref = 0; int64_t ref_count = 0; // Canonical snapshot rows only.
   int64_t state = 0; // 0 LIVE, 1 DELETING, 2 DELETED; ids are never reused.
-  bool valid_snapshot(uint64_t expected_id) const;
 };
 
 // Live read roots are independent of KV transaction lifetimes. A holder must
@@ -96,33 +93,6 @@ private:
   std::shared_ptr<State> state_;
   NamespaceCatalogViews(const NamespaceCatalogViews &) = delete;
   NamespaceCatalogViews &operator=(const NamespaceCatalogViews &) = delete;
-};
-
-// The caller owns one transaction for the whole release. Each load locks a
-// snapshot row, and removing a row also removes its persistent snapshot pin.
-class ISnapshotLineageStore {
-public:
-  virtual ~ISnapshotLineageStore() = default;
-  virtual int load_for_update(uint64_t snapshot_id, CatalogRoots &roots) = 0;
-  virtual int increment_ref(uint64_t snapshot_id) = 0;
-  virtual int decrement_ref(uint64_t snapshot_id) = 0;
-  virtual int insert_snapshot(const CatalogRoots &roots) = 0;
-  virtual int attach_child(uint64_t child_id, uint64_t parent_namespace_id,
-                           const CatalogRoots &roots) = 0;
-  virtual int remove_snapshot(uint64_t snapshot_id, const CatalogRoots &roots) = 0;
-};
-
-enum class SnapshotForkError : uint8_t { NONE, INVALID, OVERFLOW, STORE };
-struct SnapshotForkResult {
-  SnapshotForkError error = SnapshotForkError::NONE;
-  int store_error = 0;
-};
-
-class NamespaceSnapshotLineage final {
-public:
-  static SnapshotForkResult fork(uint64_t parent_namespace_id, uint64_t child_id,
-                                 CatalogRoots &roots, ISnapshotLineageStore &store);
-  static int release(uint64_t snapshot_id, ISnapshotLineageStore &store);
 };
 
 class NamespaceCatalogCodec final {

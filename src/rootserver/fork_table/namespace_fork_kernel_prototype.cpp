@@ -1527,11 +1527,11 @@ int NamespaceForkKernelPrototype::ensure_tablet(const ObTabletID &tablet_id) {
     const MaterializeItem *item = items.empty() ? nullptr : &items.front();
     fprintf(stderr,
         "PROTOTYPE_NAMESPACE_MATERIALIZE_FAILED ret=%d stage=%s namespace=%llu tablet=%llu "
-        "snapshot=%ld snapshot_ref=%llu items=%zu cap=%ld source=%llu local=%llu\n",
+        "snapshot=%ld items=%zu cap=%ld source=%llu local=%llu\n",
         ret, failure_stage, static_cast<unsigned long long>(db),
         static_cast<unsigned long long>(tablet_id.id()),
         static_cast<long>(root.snapshot),
-        static_cast<unsigned long long>(root.snapshot_ref), items.size(),
+        items.size(),
         static_cast<long>(item ? item->cap : 0),
         static_cast<unsigned long long>(item ? item->source.physical_tablet_id : 0),
         static_cast<unsigned long long>(item ? item->local_tablet : 0));

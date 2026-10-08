@@ -20,11 +20,9 @@ enum class MetaCollection : uint64_t
 {
   NAMESPACES = 1,
   NAMESPACE_NAMES = 2,
-  SNAPSHOTS = 3,
   PAGES = 5,
   COUNTERS = 6,
   SNAPSHOT_COORDINATION = 7,
-  SNAPSHOT_PINS = 8,
 };
 
 } // namespace instance_meta

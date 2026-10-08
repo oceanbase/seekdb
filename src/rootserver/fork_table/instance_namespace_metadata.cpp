@@ -224,9 +224,6 @@ void append_roots_json(std::string &out, const ns::CatalogRoots &roots)
   append_json_i64(out, "directory_cap", roots.directory.cap);
   append_json_i64(out, "snapshot", roots.snapshot);
   append_json_i64(out, "schema_version", roots.schema_version);
-  append_json_u64(out, "snapshot_ref", roots.snapshot_ref);
-  append_json_u64(out, "parent_ref", roots.parent_ref);
-  append_json_i64(out, "ref_count", roots.ref_count);
   append_json_i64(out, "state", roots.state);
 }
 
@@ -239,9 +236,6 @@ int read_roots_json(const ObJsonObject &object, ns::CatalogRoots &roots)
   if (ret == OB_SUCCESS) { ret = json_i64(object, "directory_cap", roots.directory.cap); }
   if (ret == OB_SUCCESS) { ret = json_i64(object, "snapshot", roots.snapshot); }
   if (ret == OB_SUCCESS) { ret = json_i64(object, "schema_version", roots.schema_version); }
-  if (ret == OB_SUCCESS) { ret = json_u64(object, "snapshot_ref", roots.snapshot_ref); }
-  if (ret == OB_SUCCESS) { ret = json_u64(object, "parent_ref", roots.parent_ref); }
-  if (ret == OB_SUCCESS) { ret = json_i64(object, "ref_count", roots.ref_count); }
   if (ret == OB_SUCCESS) { ret = json_i64(object, "state", roots.state); }
   return ret;
 }
@@ -283,63 +277,6 @@ int decode_namespace(uint64_t id, const std::string &value, InstanceNamespaceRec
     return OB_CHECKSUM_ERROR;
   }
   record = std::move(decoded);
-  return OB_SUCCESS;
-}
-
-int encode_snapshot(uint64_t id, const ns::CatalogRoots &roots,
-                    std::string &value, bool inserting)
-{
-  ns::CatalogRoots canonical = roots;
-  if (inserting) {
-    canonical.parent_ref = roots.snapshot_ref;
-    canonical.ref_count = 1;
-  }
-  canonical.snapshot_ref = id;
-  if (!canonical.valid_snapshot(id)) { return OB_INVALID_ARGUMENT; }
-  value = "{";
-  append_roots_json(value, canonical);
-  value += '}';
-  return OB_SUCCESS;
-}
-
-int decode_snapshot(uint64_t id, const std::string &value, ns::CatalogRoots &roots)
-{
-  ns::CatalogRoots decoded;
-  ObArenaAllocator allocator(ObMemAttr("InstMetaJson"));
-  ObJsonObject *object = nullptr;
-  int ret = parse_json_object(value, allocator, object);
-  if (ret == OB_SUCCESS) { ret = read_roots_json(*object, decoded); }
-  if (ret != OB_SUCCESS || !decoded.valid_snapshot(id)) { return OB_CHECKSUM_ERROR; }
-  roots = decoded;
-  return OB_SUCCESS;
-}
-
-int encode_pin(const InstanceNamespacePin &pin, std::string &value)
-{
-  if (pin.snapshot_id == 0
-      || pin.snapshot_id > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())
-      || pin.schema_version < 0) { return OB_INVALID_ARGUMENT; }
-  value = "{";
-  append_json_i64(value, "schema_version", pin.schema_version);
-  value += '}';
-  return OB_SUCCESS;
-}
-
-int decode_pin(uint64_t snapshot_id, const std::string &value,
-               InstanceNamespacePin &pin)
-{
-  InstanceNamespacePin decoded;
-  decoded.snapshot_id = snapshot_id;
-  ObArenaAllocator allocator(ObMemAttr("InstMetaJson"));
-  ObJsonObject *object = nullptr;
-  int ret = parse_json_object(value, allocator, object);
-  if (ret == OB_SUCCESS) { ret = json_i64(*object, "schema_version", decoded.schema_version); }
-  if (ret != OB_SUCCESS || decoded.schema_version < 0
-      || snapshot_id == 0
-      || snapshot_id > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
-    return OB_CHECKSUM_ERROR;
-  }
-  pin = decoded;
   return OB_SUCCESS;
 }
 
@@ -536,60 +473,6 @@ int InstanceNamespaceMetadata::allocate_namespace_id(uint64_t &id)
                    id_key(MetaCollection::COUNTERS, 1), value, false);
 }
 
-int InstanceNamespaceMetadata::get_snapshot(uint64_t id,
-    ns::CatalogRoots &roots, bool lock)
-{
-  std::string value;
-  const int ret = get_value(store_, transaction_, MetaCollection::SNAPSHOTS,
-                            id_key(MetaCollection::SNAPSHOTS, id), value, lock);
-  return ret == OB_SUCCESS ? decode_snapshot(id, value, roots) : ret;
-}
-
-int InstanceNamespaceMetadata::insert_snapshot(uint64_t id,
-    const ns::CatalogRoots &roots)
-{
-  std::string value;
-  const int ret = encode_snapshot(id, roots, value, true);
-  return ret == OB_SUCCESS
-      ? put_value(store_, transaction_, MetaCollection::SNAPSHOTS, id_key(MetaCollection::SNAPSHOTS, id), value, true)
-      : ret;
-}
-
-int InstanceNamespaceMetadata::update_snapshot(uint64_t id,
-    const ns::CatalogRoots &roots)
-{
-  std::string old, value;
-  int ret = encode_snapshot(id, roots, value, false);
-  if (ret == OB_SUCCESS) {
-    ret = get_value(store_, transaction_, MetaCollection::SNAPSHOTS,
-                    id_key(MetaCollection::SNAPSHOTS, id), old, true);
-  }
-  return ret == OB_SUCCESS
-      ? put_value(store_, transaction_, MetaCollection::SNAPSHOTS, id_key(MetaCollection::SNAPSHOTS, id), value, false)
-      : ret;
-}
-
-int InstanceNamespaceMetadata::erase_snapshot(uint64_t id)
-{
-  return erase_value(store_, transaction_, MetaCollection::SNAPSHOTS, id_key(MetaCollection::SNAPSHOTS, id));
-}
-
-int InstanceNamespaceMetadata::scan_snapshots(const SnapshotVisitor &visitor)
-{
-  if (!visitor) { return OB_INVALID_ARGUMENT; }
-  InstanceMetaStore::KeyRange range;
-  return store_.scan(transaction_, MetaCollection::SNAPSHOTS, range,
-      [&](const ObString &key, const ObString &value, bool &) {
-        uint64_t id = 0;
-        if (!key_id(MetaCollection::SNAPSHOTS, key, id)) { return OB_CHECKSUM_ERROR; }
-        ns::CatalogRoots roots;
-        std::string payload;
-        int ret = scan_value(value, ValueFormat::JSON, payload);
-        if (ret == OB_SUCCESS) { ret = decode_snapshot(id, payload, roots); }
-        return ret == OB_SUCCESS ? visitor(id, roots) : ret;
-      });
-}
-
 int InstanceNamespaceMetadata::initialize_snapshot_gc_watermark(int64_t watermark)
 {
   if (watermark < 0) { return OB_INVALID_ARGUMENT; }
@@ -618,56 +501,6 @@ int InstanceNamespaceMetadata::advance_snapshot_gc_watermark(int64_t watermark)
                     id_key(MetaCollection::SNAPSHOT_COORDINATION, 1), encode_gc_watermark(watermark), false);
   }
   return ret;
-}
-
-int InstanceNamespaceMetadata::get_pin(uint64_t snapshot_id,
-    InstanceNamespacePin &pin, bool lock)
-{
-  if (snapshot_id == 0) { return OB_INVALID_ARGUMENT; }
-  std::string value;
-  const int ret = get_value(store_, transaction_, MetaCollection::SNAPSHOT_PINS,
-                            id_key(MetaCollection::SNAPSHOT_PINS, snapshot_id), value, lock);
-  return ret == OB_SUCCESS ? decode_pin(snapshot_id, value, pin) : ret;
-}
-
-int InstanceNamespaceMetadata::insert_pin(const InstanceNamespacePin &pin)
-{
-  std::string value;
-  int ret = encode_pin(pin, value);
-  int64_t watermark = 0;
-  if (ret == OB_SUCCESS) { ret = get_snapshot_gc_watermark(watermark, true); }
-  if (ret == OB_ENTRY_NOT_EXIST) { return OB_NOT_INIT; }
-  if (ret == OB_SUCCESS && pin.snapshot_id <= static_cast<uint64_t>(watermark)) {
-    ret = OB_SNAPSHOT_DISCARDED;
-  }
-  if (ret == OB_SUCCESS) {
-    ret = put_value(store_, transaction_, MetaCollection::SNAPSHOT_PINS,
-                    id_key(MetaCollection::SNAPSHOT_PINS, pin.snapshot_id), value, true);
-  }
-  return ret;
-}
-
-int InstanceNamespaceMetadata::erase_pin(uint64_t snapshot_id)
-{
-  if (snapshot_id == 0) { return OB_INVALID_ARGUMENT; }
-  return erase_value(store_, transaction_, MetaCollection::SNAPSHOT_PINS,
-                     id_key(MetaCollection::SNAPSHOT_PINS, snapshot_id));
-}
-
-int InstanceNamespaceMetadata::scan_pins(const PinVisitor &visitor)
-{
-  if (!visitor) { return OB_INVALID_ARGUMENT; }
-  InstanceMetaStore::KeyRange range;
-  return store_.scan(transaction_, MetaCollection::SNAPSHOT_PINS, range,
-      [&](const ObString &key, const ObString &value, bool &) {
-        uint64_t id = 0;
-        if (!key_id(MetaCollection::SNAPSHOT_PINS, key, id)) { return OB_CHECKSUM_ERROR; }
-        InstanceNamespacePin pin;
-        std::string payload;
-        int ret = scan_value(value, ValueFormat::JSON, payload);
-        if (ret == OB_SUCCESS) { ret = decode_pin(id, payload, pin); }
-        return ret == OB_SUCCESS ? visitor(pin) : ret;
-      });
 }
 
 int InstanceNamespaceMetadata::read_page(uint64_t page_id, std::string &data)
@@ -839,15 +672,6 @@ int InstanceNamespaceMetadata::collect_unreachable_pages(
     if (record.roots.directory.page != 0) { pending.push_back({record.roots.directory, false}); }
     return OB_SUCCESS;
   });
-  if (ret == OB_SUCCESS) {
-    ret = scan_snapshots([&](uint64_t, const ns::CatalogRoots &roots) {
-      if (roots.ref_count > 0) {
-        if (roots.catalog.page != 0) { pending.push_back({roots.catalog, true}); }
-        if (roots.directory.page != 0) { pending.push_back({roots.directory, false}); }
-      }
-      return OB_SUCCESS;
-    });
-  }
   // Active readers retain their KV snapshot, so logical page deletes may
   // proceed. Their historical page versions remain readable until the last
   // holder releases, including when deletes originate on another server.
@@ -922,90 +746,6 @@ int InstanceNamespaceMetadata::collect_unreachable_pages(
   return ret;
 }
 
-int InstanceSnapshotLineageStore::load_for_update(uint64_t snapshot_id,
-    ns::CatalogRoots &roots)
-{
-  int ret = metadata_.get_snapshot(snapshot_id, roots, true);
-  InstanceNamespacePin pin;
-  if (ret == OB_SUCCESS) {
-    ret = metadata_.get_pin(snapshot_id, pin);
-    if (ret == OB_ENTRY_NOT_EXIST) { ret = OB_STATE_NOT_MATCH; }
-  }
-  if (ret == OB_SUCCESS && pin.schema_version != roots.schema_version) {
-    ret = OB_STATE_NOT_MATCH;
-  }
-  return ret;
-}
-
-int InstanceSnapshotLineageStore::increment_ref(uint64_t snapshot_id)
-{
-  ns::CatalogRoots roots;
-  int ret = load_for_update(snapshot_id, roots);
-  if (ret == OB_SUCCESS && roots.ref_count == std::numeric_limits<int64_t>::max()) {
-    ret = OB_SIZE_OVERFLOW;
-  }
-  if (ret == OB_SUCCESS) {
-    ++roots.ref_count;
-    ret = metadata_.update_snapshot(snapshot_id, roots);
-  }
-  return ret;
-}
-
-int InstanceSnapshotLineageStore::decrement_ref(uint64_t snapshot_id)
-{
-  ns::CatalogRoots roots;
-  int ret = load_for_update(snapshot_id, roots);
-  if (ret == OB_SUCCESS && roots.ref_count <= 1) { ret = OB_STATE_NOT_MATCH; }
-  if (ret == OB_SUCCESS) {
-    --roots.ref_count;
-    ret = metadata_.update_snapshot(snapshot_id, roots);
-  }
-  return ret;
-}
-
-int InstanceSnapshotLineageStore::insert_snapshot(const ns::CatalogRoots &roots)
-{
-  return roots.snapshot <= 0 ? OB_INVALID_ARGUMENT
-      : metadata_.insert_snapshot(static_cast<uint64_t>(roots.snapshot), roots);
-}
-
-int InstanceSnapshotLineageStore::attach_child(uint64_t child_id,
-    uint64_t parent_namespace_id, const ns::CatalogRoots &roots)
-{
-  if (parent_namespace_id == 0 || parent_namespace_id >= child_id
-      || roots.snapshot <= 0
-      || roots.snapshot_ref != static_cast<uint64_t>(roots.snapshot)) {
-    return OB_INVALID_ARGUMENT;
-  }
-  InstanceNamespaceRecord child;
-  int ret = metadata_.get_namespace(child_id, child, true);
-  if (ret == OB_SUCCESS && (child.roots.state != 0
-      || child.roots.snapshot_ref != 0 || child.parent_namespace != 0)) {
-    ret = OB_STATE_NOT_MATCH;
-  }
-  if (ret == OB_SUCCESS) {
-    child.roots = roots;
-    child.parent_namespace = parent_namespace_id;
-    child.fork_cap = roots.snapshot;
-    ret = metadata_.update_namespace(child);
-  }
-  return ret;
-}
-
-int InstanceSnapshotLineageStore::remove_snapshot(uint64_t snapshot_id,
-    const ns::CatalogRoots &roots)
-{
-  InstanceNamespacePin pin;
-  int ret = metadata_.get_pin(snapshot_id, pin, true);
-  if (ret == OB_SUCCESS && (roots.snapshot != static_cast<int64_t>(snapshot_id)
-      || roots.ref_count != 1 || pin.schema_version != roots.schema_version)) {
-    ret = OB_STATE_NOT_MATCH;
-  }
-  if (ret == OB_SUCCESS) { ret = metadata_.erase_pin(snapshot_id); }
-  if (ret == OB_SUCCESS) { ret = metadata_.erase_snapshot(snapshot_id); }
-  return ret;
-}
-
 int InstanceNamespaceMetadata::fork_namespace(const std::string &source_name,
     const std::string &target_name, const SnapshotAcquirer &acquire_snapshot,
     uint64_t &child_id)
@@ -1027,27 +767,28 @@ int InstanceNamespaceMetadata::fork_namespace(const std::string &source_name,
   if (ret == OB_SUCCESS && (roots.snapshot <= 0 || roots.schema_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
   }
+  // Hold this row lock through publication. A collector which observes C
+  // sees every already admitted fork at S<=C; later forks cannot introduce
+  // a dependency older than that floor. Roots carry all inherited older caps.
+  int64_t watermark = 0;
+  if (ret == OB_SUCCESS) {
+    ret = get_snapshot_gc_watermark(watermark, true);
+    if (ret == OB_ENTRY_NOT_EXIST) { ret = OB_NOT_INIT; }
+  }
+  if (ret == OB_SUCCESS && roots.snapshot <= watermark) { ret = OB_SNAPSHOT_DISCARDED; }
   uint64_t allocated_id = 0;
   if (ret == OB_SUCCESS) { ret = allocate_namespace_id(allocated_id); }
   if (ret == OB_SUCCESS) {
+    roots.catalog.cap = ns::NamespaceCatalogCodec::cap_min(roots.catalog.cap, roots.snapshot);
+    roots.directory.cap = ns::NamespaceCatalogCodec::cap_min(roots.directory.cap, roots.snapshot);
+    roots.source = 0;
     InstanceNamespaceRecord child;
     child.id = allocated_id;
     child.name = target_name;
+    child.roots = roots;
+    child.parent_namespace = source_id;
+    child.fork_cap = roots.snapshot;
     ret = insert_namespace(child);
-  }
-  if (ret == OB_SUCCESS) {
-    ret = insert_pin({static_cast<uint64_t>(roots.snapshot), roots.schema_version});
-  }
-  if (ret == OB_SUCCESS) {
-    InstanceSnapshotLineageStore lineage(*this);
-    const auto result = ns::NamespaceSnapshotLineage::fork(
-        source_id, allocated_id, roots, lineage);
-    switch (result.error) {
-      case ns::SnapshotForkError::NONE: break;
-      case ns::SnapshotForkError::INVALID: ret = OB_INVALID_ARGUMENT; break;
-      case ns::SnapshotForkError::OVERFLOW: ret = OB_SIZE_OVERFLOW; break;
-      case ns::SnapshotForkError::STORE: ret = result.store_error; break;
-    }
   }
   if (ret == OB_SUCCESS) { child_id = allocated_id; }
   return ret;
@@ -1081,15 +822,10 @@ int InstanceNamespaceMetadata::finish_namespace_drop(uint64_t id)
     ret = OB_STATE_NOT_MATCH;
   }
   if (ret == OB_SUCCESS) {
-    const uint64_t snapshot_ref = record.roots.snapshot_ref;
     record.name.clear();
     record.roots = ns::CatalogRoots();
     record.roots.state = 2;
     ret = update_namespace(record);
-    if (ret == OB_SUCCESS && snapshot_ref != 0) {
-      InstanceSnapshotLineageStore lineage(*this);
-      ret = ns::NamespaceSnapshotLineage::release(snapshot_ref, lineage);
-    }
   }
   return ret;
 }

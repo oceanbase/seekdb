@@ -97,62 +97,6 @@ bool bytes(const std::string &data, size_t &pos, std::string &value)
 }
 } // namespace
 
-bool CatalogRoots::valid_snapshot(uint64_t expected_id) const
-{
-  return expected_id != 0 && snapshot > 0
-      && static_cast<uint64_t>(snapshot) == expected_id
-      && snapshot_ref == expected_id && parent_ref < expected_id
-      && ref_count > 0 && catalog.cap > 0 && directory.cap > 0
-      && catalog.cap <= snapshot && directory.cap <= snapshot;
-}
-
-SnapshotForkResult NamespaceSnapshotLineage::fork(uint64_t parent_namespace_id,
-    uint64_t child_id, CatalogRoots &roots, ISnapshotLineageStore &store)
-{
-  if (parent_namespace_id == 0 || child_id == 0 || roots.snapshot <= 0) {
-    return {SnapshotForkError::INVALID, 0};
-  }
-  roots.catalog.cap = NamespaceCatalogCodec::cap_min(roots.catalog.cap, roots.snapshot);
-  roots.directory.cap = NamespaceCatalogCodec::cap_min(roots.directory.cap, roots.snapshot);
-  int ret = 0;
-  if (roots.snapshot_ref != 0) {
-    CatalogRoots parent;
-    ret = store.load_for_update(roots.snapshot_ref, parent);
-    if (ret != 0) { return {SnapshotForkError::STORE, ret}; }
-    if (parent.ref_count == std::numeric_limits<int64_t>::max()) {
-      return {SnapshotForkError::OVERFLOW, 0};
-    }
-    ret = store.increment_ref(roots.snapshot_ref);
-    if (ret != 0) { return {SnapshotForkError::STORE, ret}; }
-  }
-  ret = store.insert_snapshot(roots);
-  if (ret != 0) { return {SnapshotForkError::STORE, ret}; }
-  roots.source = 0;
-  roots.snapshot_ref = static_cast<uint64_t>(roots.snapshot);
-  ret = store.attach_child(child_id, parent_namespace_id, roots);
-  return ret == 0 ? SnapshotForkResult{} : SnapshotForkResult{SnapshotForkError::STORE, ret};
-}
-
-int NamespaceSnapshotLineage::release(uint64_t snapshot_id, ISnapshotLineageStore &store)
-{
-  int ret = 0;
-  // Each child owns one parent reference. Lock from child to parent so the
-  // whole chain can be released in the caller's transaction.
-  while (ret == 0 && snapshot_id != 0) {
-    CatalogRoots roots;
-    ret = store.load_for_update(snapshot_id, roots);
-    if (ret == 0) {
-      if (roots.ref_count > 1) {
-        ret = store.decrement_ref(snapshot_id);
-        break;
-      }
-      ret = store.remove_snapshot(snapshot_id, roots);
-      if (ret == 0) { snapshot_id = roots.parent_ref; }
-    }
-  }
-  return ret;
-}
-
 int64_t NamespaceCatalogCodec::cap_min(int64_t a, int64_t b)
 {
   return a == 0 ? b : b == 0 ? a : std::min(a, b);
