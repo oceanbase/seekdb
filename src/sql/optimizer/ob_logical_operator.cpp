@@ -3055,6 +3055,10 @@ int ObLogicalOperator::project_pruning_pre()
     if (OB_FAIL(check_output_dependance(table_scan->get_access_exprs(), deps))) {
     } else {
       do_project_pruning(table_scan->get_access_exprs(), deps);
+      if (OB_FAIL(append_array_no_dup(table_scan->get_access_exprs(),
+                                      table_scan->get_runtime_access_exprs()))) {
+        LOG_WARN("failed to retain runtime table access expressions", K(ret));
+      }
     }
     if (OB_SUCC(ret) && OB_FAIL(table_scan->index_back_check())) {
     } else { /* Do nothing */ }

@@ -1,0 +1,97 @@
+--disable_query_log
+DROP PROPERTY GRAPH IF EXISTS graph_page;
+--disable_warnings
+DROP TABLE IF EXISTS graph_page_edge,graph_page_vertex,graph_page_digit;
+--enable_warnings
+--enable_query_log
+
+CREATE TABLE graph_page_digit (d INT PRIMARY KEY);
+INSERT INTO graph_page_digit VALUES
+  (0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+CREATE TABLE graph_page_vertex (
+  id BIGINT PRIMARY KEY,
+  name VARCHAR(16) NOT NULL
+);
+CREATE TABLE graph_page_edge (
+  id BIGINT PRIMARY KEY,
+  src BIGINT NOT NULL,
+  dst BIGINT NOT NULL,
+  active INT NOT NULL
+);
+INSERT INTO graph_page_vertex VALUES (1,'seed'),(2,'target');
+INSERT INTO graph_page_edge
+SELECT sequence_no + 1,1,2,1
+FROM (
+  SELECT d0.d + 10*d1.d + 100*d2.d + 1000*d3.d AS sequence_no
+  FROM graph_page_digit d0
+  CROSS JOIN graph_page_digit d1
+  CROSS JOIN graph_page_digit d2
+  CROSS JOIN graph_page_digit d3
+) numbers
+WHERE sequence_no < 4105;
+# Add non-frontier rows after the matching primary-key range. A full scan's
+# terminal page must consume these rows without losing the nine matching
+# edges that follow the first 4096-result page.
+INSERT INTO graph_page_edge
+SELECT id + 10000,2,2,active FROM graph_page_edge;
+
+CREATE PROPERTY GRAPH graph_page
+  VERTEX TABLES (
+    graph_page_vertex KEY (id)
+      LABEL node PROPERTIES (id,name)
+  )
+  EDGE TABLES (
+    graph_page_edge KEY (id)
+      SOURCE KEY (src) REFERENCES graph_page_vertex (id)
+      DESTINATION KEY (dst) REFERENCES graph_page_vertex (id)
+      LABEL link PROPERTIES (id,active)
+  );
+
+--echo full_scan_reads_every_edge_page_and_preserves_parallel_edges
+SELECT COUNT(*) AS paths,COUNT(DISTINCT destination) AS destinations,
+       MIN(hops) AS min_hops,MAX(hops) AS max_hops
+FROM GRAPH_TABLE(graph_page MATCH
+  (a IS node WHERE a.id=1)-[e IS link]->{1}(b IS node)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+SELECT COUNT(*) AS paths,SUM(hops=0) AS zero_hop_paths,
+       SUM(hops=1) AS one_hop_paths
+FROM GRAPH_TABLE(graph_page MATCH
+  (a IS node WHERE a.id=1)-[e IS link]->{0,1}(b IS node)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+
+--source mysql_test/include/create_plan_table.inc
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='page_full_scan'
+SELECT * FROM GRAPH_TABLE(graph_page MATCH
+  (a IS node WHERE a.id=1)-[e IS link]->{1}(b IS node)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+--enable_result_log
+SELECT COUNT(*)=1 AS uses_full_scan
+FROM plan_table
+WHERE statement_id='page_full_scan'
+  AND operator='GRAPH FEEDBACK LOOP'
+  AND special_predicates LIKE '%access=full-scan%';
+
+CREATE INDEX graph_page_out ON graph_page_edge(src,id);
+
+--echo adjacency_index_matches_full_scan_across_page_boundary
+SELECT COUNT(*) AS paths,COUNT(DISTINCT destination) AS destinations,
+       MIN(hops) AS min_hops,MAX(hops) AS max_hops
+FROM GRAPH_TABLE(graph_page MATCH
+  (a IS node WHERE a.id=1)-[e IS link]->{1}(b IS node)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='page_index_scan'
+SELECT * FROM GRAPH_TABLE(graph_page MATCH
+  (a IS node WHERE a.id=1)-[e IS link]->{1}(b IS node)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+--enable_result_log
+SELECT COUNT(*)=1 AS uses_adjacency_index
+FROM plan_table
+WHERE statement_id='page_index_scan'
+  AND operator='GRAPH FEEDBACK LOOP'
+  AND special_predicates LIKE '%access=index-scan%';
+
+DROP TABLE plan_table;
+DROP PROPERTY GRAPH graph_page;
+DROP TABLE graph_page_edge,graph_page_vertex,graph_page_digit;

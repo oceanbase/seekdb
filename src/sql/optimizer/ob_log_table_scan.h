@@ -590,6 +590,13 @@ public:
   inline common::ObIArray<ObRawExpr *> &get_access_exprs()
   { return access_exprs_; }
 
+  // Runtime consumers such as GraphExpand may read a DAS scan directly
+  // without exposing every required column through the relational parent.
+  int add_runtime_access_expr(ObRawExpr *expr)
+  { return common::add_var_to_array_no_dup(runtime_access_exprs_, expr); }
+  const common::ObIArray<ObRawExpr *> &get_runtime_access_exprs() const
+  { return runtime_access_exprs_; }
+
 // removal it in cg layer, up to opt layer.
   inline const common::ObIArray<uint64_t> &get_ddl_output_column_ids() const
   { return ddl_output_column_ids_; }
@@ -1134,6 +1141,9 @@ protected: // memeber variables
   common::ObSEArray<uint64_t, 5, common::ModulePageAllocator, true> idx_columns_;
   // base columns to scan
   common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> access_exprs_;
+  // Access columns required by a runtime side consumer. Project pruning must
+  // retain these even when the relational parent does not consume them.
+  common::ObArray<ObRawExpr *, common::ModulePageAllocator, true> runtime_access_exprs_;
   common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> rowkey_exprs_;
   common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> part_exprs_;
   common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> spatial_exprs_;

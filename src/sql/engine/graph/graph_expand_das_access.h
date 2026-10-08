@@ -168,7 +168,7 @@ private:
   int start_adjacency_edge_scan(
       const common::ObIArray<GraphElementIdentity> &sources,
       bool &empty);
-  int clear_edge_eval_flags();
+  int clear_edge_eval_flags(bool vectorized);
   int get_edge_page(
       const common::ObIArray<GraphElementIdentity> &sources,
       int64_t limit,
@@ -207,6 +207,8 @@ private:
   int64_t vertex_lookup_memory_bytes_{0};
   const GraphElementIdentity *edge_sources_data_{nullptr};
   int64_t edge_source_count_{0};
+  int64_t edge_batch_count_{0};
+  int64_t edge_batch_index_{0};
   bool has_edge_cursor_{false};
   bool edge_scan_active_{false};
   bool initialized_{false};

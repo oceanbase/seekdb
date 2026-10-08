@@ -890,6 +890,8 @@ int ObTscCgService::extract_tsc_access_columns(const ObLogTableScan &op,
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(append_array_no_dup(tsc_exprs, op.get_output_exprs()))) {
+  } else if (OB_FAIL(append_array_no_dup(tsc_exprs, op.get_runtime_access_exprs()))) {
+    LOG_WARN("failed to append runtime table access expressions", K(ret));
   } else if (need_filter_out_match_expr && OB_FAIL(filter_out_match_exprs(tsc_exprs))) {
     // the matching columns of match expr are only used as semantic identifiers and are not actually accessed
   } else if (OB_FAIL(ObRawExprUtils::extract_column_exprs(tsc_exprs, access_exprs, true))) {

@@ -503,6 +503,8 @@ int GraphExpandDasAccess::reset_edge_scan(int ret)
   edge_cursor_.reset();
   edge_sources_data_ = nullptr;
   edge_source_count_ = 0;
+  edge_batch_count_ = 0;
+  edge_batch_index_ = 0;
   has_edge_cursor_ = false;
   edge_scan_active_ = false;
   return ret;
@@ -1470,7 +1472,7 @@ int GraphExpandDasAccess::start_adjacency_edge_scan(
   return ret;
 }
 
-int GraphExpandDasAccess::clear_edge_eval_flags()
+int GraphExpandDasAccess::clear_edge_eval_flags(bool vectorized)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(edge_scan_rtdef_)
@@ -1478,14 +1480,22 @@ int GraphExpandDasAccess::clear_edge_eval_flags()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("graph edge scan pushdown operator is missing", K(ret));
   } else {
-    edge_scan_rtdef_->p_pd_expr_op_->clear_datum_eval_flag();
+    if (vectorized) {
+      edge_scan_rtdef_->p_pd_expr_op_->clear_evaluated_flag();
+    } else {
+      edge_scan_rtdef_->p_pd_expr_op_->clear_datum_eval_flag();
+    }
   }
   if (OB_SUCC(ret) && edge_lookup_rtdef_ != nullptr) {
     if (OB_ISNULL(edge_lookup_rtdef_->p_pd_expr_op_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("graph edge lookup pushdown operator is missing", K(ret));
     } else {
-      edge_lookup_rtdef_->p_pd_expr_op_->clear_datum_eval_flag();
+      if (vectorized) {
+        edge_lookup_rtdef_->p_pd_expr_op_->clear_evaluated_flag();
+      } else {
+        edge_lookup_rtdef_->p_pd_expr_op_->clear_datum_eval_flag();
+      }
     }
   }
   return ret;
@@ -1504,20 +1514,53 @@ int GraphExpandDasAccess::get_edge_page(
   if (OB_UNLIKELY(!edge_scan_active_ || edge_scan_rtdef_ == nullptr
                   || scan_desc == nullptr)) {
     ret = OB_NOT_INIT;
+  } else if (OB_ISNULL(edge_scan_rtdef_->p_pd_expr_op_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("graph edge scan pushdown operator is missing", K(ret));
   }
+  const bool vectorized = OB_SUCC(ret)
+      && edge_scan_rtdef_->p_pd_expr_op_->is_vectorized();
+  const int64_t batch_capacity = vectorized
+      ? edge_scan_rtdef_->p_pd_expr_op_->get_batch_size() : 1;
   while (OB_SUCC(ret) && !finished && edges.count() < limit) {
     if (OB_FAIL(check_status())) {
-    } else if (OB_FAIL(clear_edge_eval_flags())) {
-    }
-    if (OB_SUCC(ret) && OB_FAIL(edge_result_iter_.get_next_row())) {
-      if (ret == OB_ITER_END) {
-        ret = edge_result_iter_.next_result();
-        if (ret == OB_ITER_END) {
+    } else if (vectorized && edge_batch_index_ >= edge_batch_count_) {
+      edge_batch_count_ = 0;
+      edge_batch_index_ = 0;
+      if (OB_FAIL(clear_edge_eval_flags(true))) {
+      } else if (OB_FAIL(edge_result_iter_.get_next_rows(
+                     edge_batch_count_, batch_capacity))) {
+        if (ret == OB_ITER_END && edge_batch_count_ > 0) {
           ret = OB_SUCCESS;
-          finished = true;
+        } else if (ret == OB_ITER_END) {
+          ret = edge_result_iter_.next_result();
+          if (ret == OB_ITER_END) {
+            ret = OB_SUCCESS;
+            finished = true;
+          }
         }
       }
-    } else if (OB_SUCC(ret)) {
+    } else if (!vectorized) {
+      if (OB_FAIL(clear_edge_eval_flags(false))) {
+      } else if (OB_FAIL(edge_result_iter_.get_next_row())) {
+        if (ret == OB_ITER_END) {
+          ret = edge_result_iter_.next_result();
+          if (ret == OB_ITER_END) {
+            ret = OB_SUCCESS;
+            finished = true;
+          }
+        }
+      } else {
+        edge_batch_count_ = 1;
+        edge_batch_index_ = 0;
+      }
+    }
+    if (OB_SUCC(ret) && !finished && edge_batch_index_ < edge_batch_count_) {
+      ObEvalCtx::BatchInfoScopeGuard batch_guard(eval_ctx_);
+      if (vectorized) {
+        batch_guard.set_batch_size(edge_batch_count_);
+        batch_guard.set_batch_idx(edge_batch_index_);
+      }
       // Count every row delivered by DAS before graph SQL filters and the
       // full-scan frontier hash can discard it. This makes the statistic show
       // the actual edge-access work rather than only returned extensions.
@@ -1548,6 +1591,7 @@ int GraphExpandDasAccess::get_edge_page(
         } else if (OB_FAIL(save_edge_cursor(edge.edge_identity_))) {
         }
       }
+      ++edge_batch_index_;
     }
   }
   if (OB_SUCC(ret) && finished) {

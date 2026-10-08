@@ -67,6 +67,69 @@ int enable_graph_vertex_lookup(ObLogTableScan &scan)
   return ret;
 }
 
+int retain_graph_edge_columns(
+    ObLogTableScan &scan,
+    const GraphExpandAccessDesc &access_desc,
+    share::schema::ObSchemaGetterGuard &schema_guard)
+{
+  int ret = OB_SUCCESS;
+  ObLogPlan *plan = scan.get_plan();
+  const share::schema::ObTableSchema *edge_table = nullptr;
+  const uint64_t *column_groups[] = {
+      access_desc.edge_current_columns_,
+      access_desc.edge_key_columns_,
+      access_desc.edge_next_columns_};
+  const int64_t column_counts[] = {
+      access_desc.source_key_count_,
+      access_desc.edge_key_count_,
+      access_desc.target_key_count_};
+  if (OB_ISNULL(plan) || OB_UNLIKELY(!access_desc.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(schema_guard.get_table_schema(
+                 access_desc.edge_table_id_, edge_table))) {
+    LOG_WARN("failed to get graph edge table schema", K(ret),
+             K(access_desc.edge_table_id_));
+  } else if (OB_ISNULL(edge_table)) {
+    ret = OB_SCHEMA_ERROR;
+    LOG_WARN("graph edge table schema is missing", K(ret),
+             K(access_desc.edge_table_id_));
+  }
+  for (int64_t group = 0;
+       OB_SUCC(ret) && group < ARRAYSIZEOF(column_groups);
+       ++group) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < column_counts[group]; ++i) {
+      const uint64_t column_id = column_groups[group][i];
+      ObRawExpr *expr = plan->get_column_expr_by_id(scan.get_table_id(),
+                                                    column_id);
+      const share::schema::ObColumnSchemaV2 *column_schema = nullptr;
+      ColumnItem column_item;
+      if (OB_ISNULL(expr)) {
+        if (OB_ISNULL(column_schema = edge_table->get_column_schema(column_id))) {
+          ret = OB_SCHEMA_ERROR;
+          LOG_WARN("graph edge column schema is missing", K(ret),
+                   K(column_id), K(access_desc.edge_table_id_));
+        } else if (OB_FAIL(plan->generate_column_expr(
+                       plan->get_optimizer_context().get_expr_factory(),
+                       scan.get_table_id(), *column_schema, column_item))) {
+          LOG_WARN("failed to generate graph edge column expression", K(ret),
+                   K(column_id), K(scan.get_table_id()));
+        } else {
+          expr = column_item.expr_;
+        }
+      }
+      if (OB_SUCC(ret)
+          && OB_FAIL(add_var_to_array_no_dup(scan.get_access_exprs(), expr))) {
+        LOG_WARN("failed to add graph edge access expression", K(ret),
+                 K(column_id), K(scan.get_table_id()));
+      } else if (OB_SUCC(ret) && OB_FAIL(scan.add_runtime_access_expr(expr))) {
+        LOG_WARN("failed to retain graph edge access expression", K(ret),
+                 K(column_id), K(scan.get_table_id()));
+      }
+    }
+  }
+  return ret;
+}
+
 double bounded_graph_estimate_add(double left, double right)
 {
   return left >= GRAPH_FEEDBACK_ESTIMATE_LIMIT - right
@@ -187,7 +250,7 @@ int GraphFeedbackLoopLogOp::initialize_expand_access()
   ObLogicalOperator *anchor = get_child(first_child);
   ObLogicalOperator *step = get_child(second_child);
   ObLogTableScan *source_scan = nullptr;
-  const ObLogTableScan *edge_scan = nullptr;
+  ObLogTableScan *edge_scan = nullptr;
   ObLogTableScan *target_scan = nullptr;
   share::schema::ObSchemaGetterGuard *schema_guard = nullptr;
   if (OB_ISNULL(get_plan())
@@ -210,6 +273,10 @@ int GraphFeedbackLoopLogOp::initialize_expand_access()
                  path_desc_, edge_scan->get_index_table_id(), *schema_guard))) {
     LOG_WARN("failed to initialize graph expand access", K(ret), K_(path_desc),
              "edge_access_table_id", edge_scan->get_index_table_id());
+  } else if (OB_FAIL(retain_graph_edge_columns(
+                 *edge_scan, expand_access_desc_, *schema_guard))) {
+    LOG_WARN("failed to retain graph edge access columns", K(ret),
+             K_(expand_access_desc));
   } else if (OB_FAIL(enable_graph_vertex_lookup(*source_scan))) {
   } else if (OB_FAIL(enable_graph_vertex_lookup(*target_scan))) {
   } else {
@@ -348,6 +415,8 @@ int GraphFeedbackLoopLogOp::get_op_exprs(ObIArray<ObRawExpr *> &all_exprs)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(get_feedback_exprs(all_exprs))) {
+  } else if (OB_FAIL(get_native_runtime_exprs(all_exprs))) {
+    LOG_WARN("failed to collect native graph runtime expressions", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::get_op_exprs(all_exprs))) {
   }
   return ret;
