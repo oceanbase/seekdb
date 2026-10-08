@@ -945,14 +945,17 @@ int GraphExpandDasAccess::lookup_vertices(
         if (OB_SUCC(ret)) {
           ObRowkey rowkey(keys, binding.key_count_);
           if (OB_FAIL(range.build_range(binding.table_id_, rowkey))) {
-          } else if (OB_FAIL(das_ref.prepare_das_task(
-                         tablet_loc, scan_op))) {
-          } else if (OB_ISNULL(scan_op)) {
-            ret = OB_ERR_UNEXPECTED;
-          } else {
-            scan_op->set_scan_ctdef(binding.scan_ctdef_);
-            scan_op->set_scan_rtdef(&scan_rtdef);
-            scan_op->set_can_part_retry(false);
+          } else if (!das_ref.has_das_op(tablet_loc, scan_op)) {
+            if (OB_FAIL(das_ref.prepare_das_task(tablet_loc, scan_op))) {
+            } else if (OB_ISNULL(scan_op)) {
+              ret = OB_ERR_UNEXPECTED;
+            } else {
+              scan_op->set_scan_ctdef(binding.scan_ctdef_);
+              scan_op->set_scan_rtdef(&scan_rtdef);
+              scan_op->set_can_part_retry(false);
+            }
+          }
+          if (OB_SUCC(ret)) {
             if (OB_FAIL(scan_op->get_scan_param()
                             .key_ranges_.push_back(range))) {
             } else {
@@ -1180,7 +1183,10 @@ int GraphExpandDasAccess::validate_edge_scan_request(
                          > GRAPH_EXPAND_MAX_INPUT_STATE_COUNT))) {
     ret = OB_INVALID_ARGUMENT;
   }
-  for (int64_t i = 0; OB_SUCC(ret) && i < sources.count(); ++i) {
+  // Validate every source when a scan starts. Continuations use the immutable
+  // array token below, so pagination remains O(1) in frontier width.
+  for (int64_t i = 0;
+       OB_SUCC(ret) && after_edge == nullptr && i < sources.count(); ++i) {
     if (!identity_matches(sources.at(i), path_desc_.graph_id_,
                           path_desc_.source_element_id_,
                           edge_binding_.source_key_count_)) {
