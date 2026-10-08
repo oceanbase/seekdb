@@ -76,7 +76,7 @@ fn parse_number_prefix<'a>(name: &str, input: &'a str) -> Result<(i64, &'a str),
     };
     let digits_len = digits_and_tail
         .bytes()
-        .take_while(|byte| char::from(*byte).to_digit(radix).is_some())
+        .take_while(|byte| char::from(*byte).is_digit(radix))
         .count();
     if digits_len == 0 {
         return Err(invalid_value(name));

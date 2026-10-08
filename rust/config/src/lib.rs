@@ -446,11 +446,13 @@ pub(crate) fn update_with_commit(
     )
 }
 
+type EntryValidator = fn(&Entry) -> Result<(), Error>;
+
 fn update_with_hook_and_commit(
     path: &Path,
     name: &str,
     value: Option<&str>,
-    validator: Option<fn(&Entry) -> Result<(), Error>>,
+    validator: Option<EntryValidator>,
     after_stage: impl FnMut(ReplaceStage) -> Result<(), Error>,
     commit: impl FnOnce(),
 ) -> Result<(), Error> {
@@ -469,7 +471,7 @@ fn update_with_hook_and_commit_checked(
     path: &Path,
     name: &str,
     value: Option<&str>,
-    validator: Option<fn(&Entry) -> Result<(), Error>>,
+    validator: Option<EntryValidator>,
     after_stage: impl FnMut(ReplaceStage) -> Result<(), Error>,
     check: impl FnOnce() -> Result<(), Error>,
     commit: impl FnOnce(),
