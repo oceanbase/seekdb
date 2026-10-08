@@ -180,10 +180,8 @@ public:
   }
   bool can_use_basic_native_runtime() const
   {
-    // Full-scan expansion currently partitions a large frontier and would
-    // rescan the complete edge table once per partition. Keep that access
-    // shape on the recursive fallback until native expansion can scan once
-    // for the whole BFS level.
+    // Keep native full-scan activation separate from the whole-level source
+    // batching contract so its remaining lookup costs can be validated first.
     return expand_access_desc_.uses_adjacency_index()
         && output_row_desc_.supports_basic_native_output(
                path_desc_, expand_access_desc_);

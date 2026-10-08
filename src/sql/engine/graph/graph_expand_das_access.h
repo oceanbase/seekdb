@@ -52,6 +52,8 @@ public:
   void release() override;
   int64_t used_memory() const override;
   int check_status() override;
+  bool can_partition_sources() const override
+  { return access_desc_.uses_adjacency_index(); }
   int lookup_vertices(
       const common::ObIArray<GraphElementIdentity> &requested,
       common::ObIArray<GraphElementIdentity> &existing) override;

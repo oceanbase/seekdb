@@ -982,7 +982,9 @@ int GraphExpandDasAccess::validate_edge_scan_request(
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(direction != path_desc_.direction_ || limit <= 0
-                  || sources.count() > GRAPH_EXPAND_MAX_INPUT_STATE_COUNT)) {
+                  || (can_partition_sources()
+                      && sources.count()
+                         > GRAPH_EXPAND_MAX_INPUT_STATE_COUNT))) {
     ret = OB_INVALID_ARGUMENT;
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < sources.count(); ++i) {

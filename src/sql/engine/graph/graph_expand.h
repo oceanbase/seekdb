@@ -33,8 +33,9 @@ class ObSchemaGetterGuard;
 namespace sql
 {
 
-// GraphExpand validates this protocol limit independently of the caller's
-// query-memory budget. Frontier controllers split larger levels into batches.
+// Adjacency access limits one source partition independently of the caller's
+// query-memory budget. Full scans receive a complete BFS level so the edge
+// table is scanned only once; their size is governed by the work-area limit.
 static const int64_t GRAPH_EXPAND_MAX_INPUT_STATE_COUNT = 4096;
 static const int64_t GRAPH_EXPAND_MAX_EDGE_PAGE_SIZE = 4096;
 
@@ -142,6 +143,10 @@ public:
   virtual void release() {}
   virtual int64_t used_memory() const { return 0; }
   virtual int check_status() = 0;
+  // True when disjoint source batches can be scanned independently without
+  // repeating an unfiltered access. Adjacency ranges have this property;
+  // edge-table fallback scans require the complete BFS-level source set.
+  virtual bool can_partition_sources() const = 0;
 
   virtual int lookup_vertices(
       const common::ObIArray<GraphElementIdentity> &requested,
@@ -183,6 +188,8 @@ public:
   const GraphExpandStats &get_stats() const { return stats_; }
   int64_t used_memory() const;
   bool is_open() const { return is_open_; }
+  bool can_partition_sources() const
+  { return access_.can_partition_sources(); }
 
 private:
   struct SourceInputGroup

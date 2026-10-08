@@ -619,7 +619,12 @@ int GraphFeedbackFrontier::build_input_batch(int64_t start,
              "frontier_count", current_state_ids_->count(),
              K_(input_batch_size));
   } else {
-    const int64_t count = std::min(input_batch_size_,
+    // Adjacency scans can process bounded source partitions independently.
+    // An edge-table fallback scan instead receives the complete remaining
+    // level, otherwise every partition would rescan the whole edge table.
+    const int64_t batch_size = expand_.can_partition_sources()
+        ? input_batch_size_ : current_state_ids_->count();
+    const int64_t count = std::min(batch_size,
                                    current_state_ids_->count() - start);
     next_start = start + count;
     for (int64_t i = start; OB_SUCC(ret) && i < next_start; ++i) {

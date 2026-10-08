@@ -800,7 +800,8 @@ int GraphExpand::validate_and_account(const ObIArray<GraphExpandInput> &inputs)
   if (page_size_ <= 0 || page_size_ > GRAPH_EXPAND_MAX_EDGE_PAGE_SIZE
       || memory_limit_ <= 0) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (inputs.count() > GRAPH_EXPAND_MAX_INPUT_STATE_COUNT) {
+  } else if (access_.can_partition_sources()
+             && inputs.count() > GRAPH_EXPAND_MAX_INPUT_STATE_COUNT) {
     ret = OB_SIZE_OVERFLOW;
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < inputs.count(); ++i) {
