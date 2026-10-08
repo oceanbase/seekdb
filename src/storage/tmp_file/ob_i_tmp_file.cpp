@@ -195,10 +195,8 @@ int ObITmpFileHandle::init(ObITmpFile *tmp_file)
 
   if (is_inited()) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", KR(ret), KP(ptr_));
   } else if (OB_ISNULL(tmp_file)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(tmp_file));
   } else {
     ptr_ = tmp_file;
     ptr_->inc_ref_cnt();
@@ -273,16 +271,12 @@ int ObITmpFile::init(const int64_t dir_id,
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", KR(ret), KPC(this));
   } else if (OB_UNLIKELY(ObTmpFileGlobal::INVALID_TMP_FILE_FD == fd ||
                          ObTmpFileGlobal::INVALID_TMP_FILE_DIR_ID == dir_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(fd), K(dir_id));
   } else if (OB_ISNULL(wbp) || OB_ISNULL(flush_prio_mgr) || OB_ISNULL(callback_allocator) ||
              OB_ISNULL(wbp_index_cache_allocator) || OB_ISNULL(wbp_index_cache_bkt_allocator)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(fd), KP(wbp), KP(flush_prio_mgr), KP(callback_allocator),
-             KP(wbp_index_cache_allocator), KP(wbp_index_cache_bkt_allocator));
   } else if (OB_FAIL(page_idx_cache_.init(fd, wbp, wbp_index_cache_allocator,
                                           wbp_index_cache_bkt_allocator))) {
   } else {
@@ -387,12 +381,10 @@ int ObITmpFile::seal()
   LOG_INFO("tmp file seal start", K(fd_));
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret), KPC(this));
   } else {
     ObSpinLockGuard write_guard(multi_write_lock_);
     if (OB_UNLIKELY(is_sealed_)) {
       ret = OB_ERR_TMP_FILE_ALREADY_SEALED;
-      LOG_WARN("tmp file has been sealed", KR(ret), KPC(this));
     } else if (OB_FAIL(inner_seal_())) {
     }
     LOG_INFO("tmp file seal over", KR(ret), KPC(this));
@@ -407,10 +399,8 @@ int ObITmpFile::aio_pread(ObTmpFileIOCtx &io_ctx)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("tmp file has not been inited", KR(ret), KPC(this));
   } else if (OB_UNLIKELY(is_deleting_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("attempt to read a deleting file", KR(ret), K(fd_));
   } else {
     if (io_ctx.get_read_offset_in_file() < 0) {
       io_ctx.set_read_offset_in_file(read_offset_);
@@ -422,13 +412,10 @@ int ObITmpFile::aio_pread(ObTmpFileIOCtx &io_ctx)
 
     if (OB_UNLIKELY(!io_ctx.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", KR(ret), K(fd_), K(io_ctx), K(read_offset_));
     } else if (OB_UNLIKELY(io_ctx.get_read_offset_in_file() >= file_size_)) {
       ret = OB_ITER_END;
-      LOG_WARN("iter end", KR(ret), K(fd_), K(file_size_), K(io_ctx));
     } else if (io_ctx.get_read_offset_in_file() < truncated_offset_ &&
               OB_FAIL(inner_read_truncated_part_(io_ctx))) {
-      LOG_WARN("fail to read truncated part", KR(ret), K(fd_), K(io_ctx), K(truncated_offset_));
     } else if (OB_UNLIKELY(io_ctx.get_todo_size() == 0)) {
       // do nothing
     } else {
@@ -436,7 +423,6 @@ int ObITmpFile::aio_pread(ObTmpFileIOCtx &io_ctx)
       int64_t wbp_begin_offset = cal_wbp_begin_offset_();
       if (OB_UNLIKELY(wbp_begin_offset < 0)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected wbp begin offset", KR(ret), K(fd_), K(wbp_begin_offset), K(io_ctx), KPC(this));
       } else if (io_ctx.get_read_offset_in_file() < wbp_begin_offset) {
         const int64_t expected_read_disk_size = MIN(io_ctx.get_todo_size(),
                                                     wbp_begin_offset - io_ctx.get_read_offset_in_file());
@@ -460,7 +446,6 @@ int ObITmpFile::aio_pread(ObTmpFileIOCtx &io_ctx)
         const int64_t aligned_begin_offset = get_page_begin_offset_(io_ctx.get_read_offset_in_file());
         if (OB_UNLIKELY(0 == cached_page_nums_)) {
           ret = OB_ITER_END;
-          LOG_WARN("iter end", KR(ret), K(fd_), K(io_ctx));
         } else if (OB_FAIL(inner_read_from_wbp_(io_ctx))) {
         } else {
           const int64_t aligned_end_offset = get_page_end_offset_(io_ctx.get_read_offset_in_file());
@@ -481,10 +466,8 @@ int ObITmpFile::inner_read_truncated_part_(ObTmpFileIOCtx &io_ctx)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(io_ctx.get_read_offset_in_file() >= truncated_offset_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("read offset should be less than truncated offset", KR(ret), K(fd_), K(io_ctx), K(truncated_offset_));
   } else if (OB_UNLIKELY(!io_ctx.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid io_ctx", KR(ret), K(fd_), K(io_ctx));
   } else if (OB_UNLIKELY(io_ctx.get_todo_size() == 0)) {
     // do nothing
   } else {
@@ -495,7 +478,6 @@ int ObITmpFile::inner_read_truncated_part_(ObTmpFileIOCtx &io_ctx)
     char *read_buf = io_ctx.get_todo_buffer();
     if (OB_UNLIKELY(!io_ctx.check_buf_range_valid(read_buf, read_size))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid buf range", KR(ret), K(fd_), K(read_buf), K(read_size), K(io_ctx));
     } else if (FALSE_IT(MEMSET(read_buf, 0, read_size))) {
     } else if (OB_FAIL(io_ctx.update_data_size(read_size))) {
     } else if (FALSE_IT(total_truncated_page_read_cnt = (get_page_end_offset_(io_ctx.get_read_offset_in_file()) -
@@ -505,7 +487,6 @@ int ObITmpFile::inner_read_truncated_part_(ObTmpFileIOCtx &io_ctx)
     } else if (OB_UNLIKELY(io_ctx.get_todo_size() > 0 &&
                            truncated_offset_ == file_size_)) {
       ret = OB_ITER_END;
-      LOG_WARN("iter end", KR(ret), K(fd_), K(file_size_), K(truncated_offset_), K(io_ctx));
     }
   }
 
@@ -522,19 +503,15 @@ int ObITmpFile::inner_read_from_wbp_(ObTmpFileIOCtx &io_ctx)
 
   if (OB_UNLIKELY(wbp_begin_offset < 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected wbp begin offset", KR(ret), K(fd_), K(wbp_begin_offset), K(io_ctx));
   } else if (OB_UNLIKELY(ObTmpFileGlobal::INVALID_VIRTUAL_PAGE_ID == begin_read_page_virtual_id)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected begin read page virtual id", KR(ret), K(fd_), K(begin_read_page_virtual_id), K(io_ctx));
   } else if (io_ctx.get_read_offset_in_file() < wbp_begin_offset + ObTmpFileGlobal::ALLOC_PAGE_SIZE) {
     begin_read_page_id = begin_page_id_;
   } else if (OB_FAIL(page_idx_cache_.binary_search(begin_read_page_virtual_id, begin_read_page_id))) {
   } else if (ObTmpFileGlobal::INVALID_PAGE_ID == begin_read_page_id &&
              OB_FAIL(wbp_->get_page_id_by_virtual_id(fd_, begin_read_page_virtual_id, begin_page_id_, begin_read_page_id))) {
-    LOG_WARN("fail to get page id by virtual id", KR(ret), K(fd_), K(begin_read_page_virtual_id), K(begin_page_id_));
   } else if (OB_UNLIKELY(begin_read_page_id == ObTmpFileGlobal::INVALID_PAGE_ID)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid page index", KR(ret), K(fd_), K(begin_read_page_id), KPC(this));
   }
 
   uint32_t curr_page_id = begin_read_page_id;
@@ -545,7 +522,6 @@ int ObITmpFile::inner_read_from_wbp_(ObTmpFileIOCtx &io_ctx)
     if (OB_FAIL(wbp_->read_page(fd_, curr_page_id, ObTmpFilePageUniqKey(curr_page_virtual_id), data_page, next_page_id))) {
     } else if (OB_ISNULL(data_page)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("data page is null", KR(ret), K(fd_), K(curr_page_id), K(curr_page_virtual_id));
     } else {
       const int64_t read_offset_in_page = get_offset_in_page_(io_ctx.get_read_offset_in_file());
       const int64_t read_size = MIN3(ObTmpFileGlobal::ALLOC_PAGE_SIZE - read_offset_in_page,
@@ -554,7 +530,6 @@ int ObITmpFile::inner_read_from_wbp_(ObTmpFileIOCtx &io_ctx)
       char *read_buf = io_ctx.get_todo_buffer();
       if (OB_UNLIKELY(!io_ctx.check_buf_range_valid(read_buf, read_size))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid buf range", KR(ret), K(fd_), K(read_buf), K(read_size), K(io_ctx));
       } else if (OB_FAIL(io_ctx.update_data_size(read_size))) {
       } else {
         MEMCPY(read_buf, data_page + read_offset_in_page, read_size);
@@ -565,7 +540,6 @@ int ObITmpFile::inner_read_from_wbp_(ObTmpFileIOCtx &io_ctx)
 
     if (OB_SUCC(ret) && io_ctx.get_todo_size() > 0 && io_ctx.get_read_offset_in_file() == file_size_) {
       ret = OB_ITER_END;
-      LOG_WARN("iter end", KR(ret), K(fd_), K(io_ctx));
     }
   }
 
@@ -584,19 +558,15 @@ int ObITmpFile::aio_write(ObTmpFileIOCtx &io_ctx)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("tmp file has not been inited", KR(ret), KPC(this));
   } else if (OB_UNLIKELY(!io_ctx.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(fd_), K(io_ctx));
   } else if (OB_UNLIKELY(is_deleting_)) {
     // this check is just a hint.
     // although is_deleting_ == false, it might be set as true in the processing of inner_write().
     // we will check is_deleting_ again when try to update meta data in the inner_write()
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("attempt to write a deleting file", KR(ret), K(fd_));
   } else if (OB_UNLIKELY(is_sealed_)) {
     ret = OB_ERR_TMP_FILE_ALREADY_SEALED;
-    LOG_WARN("attempt to write a sealed file", KR(ret), K(fd_));
   } else {
     bool is_unaligned_write = 0 != file_size_ % ObTmpFileGlobal::ALLOC_PAGE_SIZE ||
                               0 != io_ctx.get_todo_size() % ObTmpFileGlobal::ALLOC_PAGE_SIZE;
@@ -612,7 +582,6 @@ int ObITmpFile::aio_write(ObTmpFileIOCtx &io_ctx)
           if (OB_FAIL(swap_page_to_disk_(io_ctx))) {
           }
         } else {
-          LOG_WARN("fail to inner write", KR(ret), K(fd_), K(io_ctx), KPC(this));
         }
       }
     } // end while
@@ -661,7 +630,6 @@ int ObITmpFile::inner_fill_tail_page_(ObTmpFileIOCtx &io_ctx)
 
   if (OB_UNLIKELY(!io_ctx.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(fd_), K(io_ctx));
   } else if (is_in_disk) {
     if (OB_FAIL(load_disk_tail_page_and_rewrite_(io_ctx))) {
     } else {
@@ -685,7 +653,6 @@ int ObITmpFile::inner_write_continuous_pages_(ObTmpFileIOCtx &io_ctx)
 
   if (OB_UNLIKELY(!io_ctx.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(fd_), K(io_ctx));
   } else if (OB_FAIL(alloc_and_write_pages_(io_ctx, page_entry_idxs, write_size))) {
     if (OB_ALLOCATE_TMP_FILE_PAGE_FAILED == ret) {
       // this error code will return to caller after modifing meta data of file based on written data pages
@@ -696,7 +663,6 @@ int ObITmpFile::inner_write_continuous_pages_(ObTmpFileIOCtx &io_ctx)
                                          K(page_entry_idxs), K(io_ctx));
       }
     } else {
-      LOG_WARN("fail to batch write pages", KR(ret), K(fd_), K(io_ctx));
     }
   }
 
@@ -705,7 +671,6 @@ int ObITmpFile::inner_write_continuous_pages_(ObTmpFileIOCtx &io_ctx)
   } else if (OB_UNLIKELY(page_entry_idxs.empty() || write_size <= 0)) {
     if (!is_alloc_failed) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("page entry idxs is empty", KR(ret), K(fd_), K(page_entry_idxs), K(write_size), KPC(this));
     } else {
       // do nothing, no need to update meta data
     }
@@ -719,25 +684,18 @@ int ObITmpFile::inner_write_continuous_pages_(ObTmpFileIOCtx &io_ctx)
     const int64_t old_end_page_id = end_page_id_;
     if (OB_UNLIKELY(is_deleting_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("file is deleting", KR(ret), K(fd_));
     } else if (OB_UNLIKELY(ObTmpFileGlobal::INVALID_PAGE_ID != end_page_id_ &&
                            ObTmpFileGlobal::INVALID_VIRTUAL_PAGE_ID == end_page_virtual_id)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("end page virtual id is invalid", KR(ret), K(fd_), K(end_page_virtual_id), K(file_size_));
     } else if (OB_UNLIKELY((ObTmpFileGlobal::INVALID_PAGE_ID == begin_page_id_ &&
                             ObTmpFileGlobal::INVALID_PAGE_ID != end_page_id_) ||
                             (ObTmpFileGlobal::INVALID_PAGE_ID != begin_page_id_ &&
                             ObTmpFileGlobal::INVALID_PAGE_ID == end_page_id_))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("begin or end page id is invalid", KR(ret), K(fd_),
-                                                  K(begin_page_id_),
-                                                  K(end_page_id_));
     } else if (OB_FAIL(io_ctx.update_data_size(write_size))) {
     } else {
       if (ObTmpFileGlobal::INVALID_PAGE_ID != end_page_id_ &&
           OB_FAIL(wbp_->link_page(fd_, page_entry_idxs.at(0), end_page_id_, ObTmpFilePageUniqKey(end_page_virtual_id)))) {
-        LOG_WARN("fail to link page", KR(ret), K(fd_), K(page_entry_idxs.at(0)),
-                 K(end_page_id_), K(end_page_virtual_id));
       } else {
         if (ObTmpFileGlobal::INVALID_PAGE_ID == begin_page_id_) {
           begin_page_id_ = page_entry_idxs.at(0);
@@ -750,7 +708,6 @@ int ObITmpFile::inner_write_continuous_pages_(ObTmpFileIOCtx &io_ctx)
       }
 
       if (FAILEDx(insert_or_update_data_flush_node_())) {
-        LOG_WARN("fail to insert or update data flush list", KR(ret), K(fd_), KPC(this));
       }
     }
 
@@ -798,13 +755,10 @@ int ObITmpFile::alloc_and_write_pages_(const ObTmpFileIOCtx &io_ctx,
 
   if (OB_UNLIKELY(has_unfinished_page_())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the file has unfinished page", KR(ret), K(fd_));
   } else if (OB_UNLIKELY(ObTmpFileGlobal::INVALID_VIRTUAL_PAGE_ID == new_begin_page_virtual_id)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("new page virtual id is invalid", KR(ret), K(fd_), K(file_size_), K(new_begin_page_virtual_id));
   } else if (OB_UNLIKELY(!io_ctx.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(fd_), K(io_ctx));
   } else if (OB_FAIL(alloced_page_id.prepare_allocate_and_keep_count(
                                      ObTmpFileGlobal::TMP_FILE_WRITE_BATCH_PAGE_NUM))) {
   } else {
@@ -817,10 +771,8 @@ int ObITmpFile::alloc_and_write_pages_(const ObTmpFileIOCtx &io_ctx,
       if (OB_FAIL(wbp_->alloc_page(fd_, ObTmpFilePageUniqKey(new_page_virtual_id), new_page_id, page_buf))) {
       } else if (OB_ISNULL(page_buf)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("page_buf is null", KR(ret), K(fd_), KP(page_buf));
       } else if (OB_UNLIKELY(new_page_id == ObTmpFileGlobal::INVALID_PAGE_ID)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid page id", KR(ret), K(fd_), K(new_page_id));
       } else {
         int64_t write_size = common::min(ObTmpFileGlobal::ALLOC_PAGE_SIZE,
                                          expected_write_size - actual_write_size);
@@ -828,15 +780,12 @@ int ObITmpFile::alloc_and_write_pages_(const ObTmpFileIOCtx &io_ctx,
 
         if (OB_UNLIKELY(!io_ctx.check_buf_range_valid(write_buf, write_size))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid buf range", KR(ret), K(fd_), K(write_buf), K(write_size), K(io_ctx));
         } else if (FALSE_IT(MEMCPY(page_buf, write_buf, write_size))) {
         } else if (FALSE_IT(actual_write_size += write_size)) {
         } else if (OB_FAIL(wbp_->notify_dirty(fd_, new_page_id, ObTmpFilePageUniqKey(new_page_virtual_id)))) {
         } else if (previous_page_id != ObTmpFileGlobal::INVALID_PAGE_ID &&
                    OB_FAIL(wbp_->link_page(fd_, new_page_id, previous_page_id,
                            ObTmpFilePageUniqKey(new_page_virtual_id - 1)))) {
-          LOG_WARN("fail to link page", KR(ret), K(fd_), K(new_page_id), K(previous_page_id),
-                   K(new_page_virtual_id));
         } else if (OB_FAIL(alloced_page_id.push_back(new_page_id))) {
         } else {
           previous_page_id = new_page_id;
@@ -883,16 +832,12 @@ int ObITmpFile::truncate(const int64_t truncate_offset)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("tmp file has not been inited", KR(ret), K(fd_), KPC(this));
   } else if (OB_UNLIKELY(is_deleting_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("attempt to truncate a deleting file", KR(ret), K(fd_), KPC(this));
   } else if (OB_UNLIKELY(truncate_offset <= 0 || truncate_offset > file_size_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid truncate_offset", KR(ret), K(fd_), K(truncate_offset), K(file_size_), KPC(this));
   } else if (OB_UNLIKELY(wbp_begin_offset < 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected wbp begin offset", KR(ret), K(fd_), K(wbp_begin_offset), K(truncate_offset), KPC(this));
   } else if (OB_UNLIKELY(truncate_offset <= truncated_offset_)) {
     // do nothing
   } else if (OB_FAIL(truncate_cached_pages_(truncate_offset, wbp_begin_offset))) {
@@ -913,7 +858,6 @@ int ObITmpFile::truncate_cached_pages_(const int64_t truncate_offset, const int6
 
   if (OB_UNLIKELY(wbp_begin_offset < 0 || truncate_offset <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid offset", KR(ret), K(fd_), K(wbp_begin_offset), K(truncate_offset));
   } else if (truncate_offset > wbp_begin_offset) {
     const int64_t truncate_page_virtual_id = get_page_virtual_id_(truncate_offset,
                                                                   true /*is_open_interval*/);
@@ -945,7 +889,6 @@ int ObITmpFile::truncate_cached_pages_(const int64_t truncate_offset, const int6
       if (OB_SUCC(ret)) {
         if (OB_UNLIKELY(truncate_page_virtual_id != begin_page_virtual_id_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected begin page virtual id", KR(ret), K(fd_), K(truncate_page_virtual_id), K(begin_page_virtual_id_));
         } else if (0 == truncate_offset_in_page) {
           if (OB_FAIL(truncate_the_first_wbp_page_())) {
           }
@@ -1011,7 +954,6 @@ int64_t ObITmpFile::cal_wbp_begin_offset_() const
                          get_page_end_offset_(file_size_) -
                          cached_page_nums_ * ObTmpFileGlobal::ALLOC_PAGE_SIZE)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("begin_page_offset_in_file_ is unexpected", KR(ret), KPC(this));
   } else {
     res = begin_page_virtual_id_ * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   }
@@ -1049,7 +991,6 @@ int ObITmpFile::reinsert_data_flush_node_()
 
   if (OB_UNLIKELY(nullptr != data_flush_node_.get_next())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("flush node should not have next", KR(ret), K(fd_));
   } else if (OB_UNLIKELY(is_deleting_)) {
     // do nothing
   } else {

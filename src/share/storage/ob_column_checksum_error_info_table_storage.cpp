@@ -42,7 +42,6 @@ int ObColumnChecksumErrorInfoTableStorage::init(ObSQLiteConnectionPool *pool)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(pool_ = pool)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid pool", K(ret));
   } else if (OB_FAIL(create_table_if_not_exists())) {
   }
   if (OB_FAIL(ret)) {
@@ -56,12 +55,10 @@ int ObColumnChecksumErrorInfoTableStorage::create_table_if_not_exists()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(pool_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("pool not set", K(ret));
   } else {
     ObSQLiteConnectionGuard guard(pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_COLUMN_CHECKSUM_ERROR_INFO, nullptr))) {
     }
   }
@@ -73,7 +70,6 @@ int ObColumnChecksumErrorInfoTableStorage::insert(const ObColumnChecksumErrorInf
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     const char *insert_sql =
       "INSERT INTO __all_column_checksum_error_info "
@@ -97,7 +93,6 @@ int ObColumnChecksumErrorInfoTableStorage::insert(const ObColumnChecksumErrorInf
     ObSQLiteConnectionGuard guard(pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(insert_sql, binder))) {
     }
   }
@@ -109,7 +104,6 @@ int ObColumnChecksumErrorInfoTableStorage::insert_all(const ObIArray<ObColumnChe
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (error_infos.empty()) {
     // do nothing
   } else {
@@ -122,7 +116,6 @@ int ObColumnChecksumErrorInfoTableStorage::insert_all(const ObIArray<ObColumnChe
     ObSQLiteConnectionGuard guard(pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
     } else {
       // Begin transaction for batch insert
       if (OB_FAIL(guard->begin_transaction())) {
@@ -181,7 +174,6 @@ int ObColumnChecksumErrorInfoTableStorage::get(
   error_infos.reset();
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     const char *select_sql =
       "SELECT frozen_scn, index_type, data_table_id, index_table_id, "
@@ -232,10 +224,8 @@ int ObColumnChecksumErrorInfoTableStorage::get(
     ObSQLiteConnectionGuard guard(pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->query(select_sql, binder, row_processor))) {
       if (OB_ENTRY_NOT_EXIST != ret) {
-        LOG_WARN("failed to query", K(ret));
       } else {
         ret = OB_SUCCESS; // No rows is acceptable
       }
@@ -251,7 +241,6 @@ int ObColumnChecksumErrorInfoTableStorage::delete_expired(
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     // SQLite doesn't support DELETE ... LIMIT, use subquery with rowid instead
     ObSqlString sql;
@@ -267,7 +256,6 @@ int ObColumnChecksumErrorInfoTableStorage::delete_expired(
       ObSQLiteConnectionGuard guard(pool_);
       if (!guard) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to acquire connection", K(ret));
       } else if (OB_FAIL(guard->execute(sql.ptr(), nullptr))) {
       }
     }

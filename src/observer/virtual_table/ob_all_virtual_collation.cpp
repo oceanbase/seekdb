@@ -53,11 +53,9 @@ int ObAllVirtualCollation::fill_scanner()
   ObCharset::get_collation_wrap_arr(collation_wrap_arr, collation_wrap_arr_len);
   if (OB_ISNULL(allocator_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("allocator is NULL", K(ret));
   } else if (output_column_ids_.count() > 0 &&
              OB_ISNULL(cells = cur_row_.cells_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cur row cell is NULL", K(ret));
   } else if (OB_ISNULL(collation_wrap_arr) ||
         OB_UNLIKELY(ObCharset::VALID_COLLATION_TYPES != collation_wrap_arr_len)) {
       ret = OB_ERR_UNEXPECTED;
@@ -125,7 +123,6 @@ int ObAllVirtualCollation::fill_scanner()
         }
       }//for
       if (OB_SUCCESS == ret && OB_FAIL(scanner_.add_row(cur_row_))) {
-        LOG_WARN("fail to add row", K(ret), K(cur_row_));
       }
     }//for
   }

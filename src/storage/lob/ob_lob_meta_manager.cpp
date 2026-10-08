@@ -114,7 +114,6 @@ int ObLobMetaManager::getlength(ObLobAccessParam &param, uint64_t &char_len)
   while (OB_SUCC(ret)) {
     if (OB_FAIL(meta_iter.get_next_row(result))) {
       if (ret != OB_ITER_END) {
-        LOG_WARN("failed to get next row.", K(ret));
       }
     } else if (OB_FAIL(param.is_timeout())) {
     } else {

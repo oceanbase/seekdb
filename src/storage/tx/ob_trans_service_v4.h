@@ -151,6 +151,8 @@ int acquire_local_snapshot_(share::SCN &snapshot);
 int acquire_local_snapshot_with_retry_(const int64_t expire_ts,
                                        share::SCN &snapshot);
 int abort_write_ctx_(const ObTxDesc &tx_desc);
+int wait_write_ctx_decided_(const ObTransID &tx_id,
+                            const int64_t expire_ts);
 
 int update_max_read_ts_(const share::SCN ts);
 int do_commit_tx_(ObTxDesc &tx,

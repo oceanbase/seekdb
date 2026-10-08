@@ -45,7 +45,6 @@ int ObDDLCtrlSpeedItem::init()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("inited twice", K(ret));
   } else {
     next_available_write_ts_ = ObTimeUtility::current_time();
     if (OB_FAIL(refresh())) {
@@ -69,7 +68,6 @@ int ObDDLCtrlSpeedItem::refresh()
   logservice::ObLogService *log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
   if (OB_ISNULL(log_service)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("error unexpected, nullptr found", K(ret), KP(log_service));
   }
 
   if (OB_FAIL(ret)) {
@@ -77,7 +75,6 @@ int ObDDLCtrlSpeedItem::refresh()
   } else if (OB_FAIL(log_service->get_palf_disk_usage(total_used_space, total_disk_space))) {
   } else if (OB_ISNULL(GCTX.bandwidth_throttle_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, bandwidth throttle is null", K(ret), KP(GCTX.bandwidth_throttle_));
   } else if (OB_FAIL(GCTX.bandwidth_throttle_->get_rate(refresh_speed))) {
   } else {
     write_speed_ = std::max(refresh_speed, 1 * MIN_WRITE_SPEED);
@@ -96,13 +93,10 @@ int ObDDLCtrlSpeedItem::cal_limit(const int64_t bytes, int64_t &next_available_t
   next_available_ts = 0;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (bytes < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid input bytes.", K(ret), K(bytes));
   } else if (write_speed_ < MIN_WRITE_SPEED) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected write speed", K(ret), K(write_speed_));
   }
   if (OB_SUCC(ret)) {
     const int64_t need_sleep_us = static_cast<int64_t>(1.0 * bytes / (write_speed_ * 1024 * 1024) * 1000 * 1000);
@@ -128,10 +122,8 @@ int ObDDLCtrlSpeedItem::do_sleep(
   bool is_need_stop_write = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (next_available_ts <= 0 || task_id == 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument.", K(ret), K(next_available_ts), K(task_id));
   } else if (OB_FAIL(DDL_SIM(task_id, DDL_REDO_WRITER_SPEED_CONTROL_FAILED))) {
   } else if (OB_TMP_FAIL(check_need_stop_write(checker, is_need_stop_write))) {
   }
@@ -146,7 +138,6 @@ int ObDDLCtrlSpeedItem::do_sleep(
         share::ObDDLTaskStatus task_status = share::ObDDLTaskStatus::PREPARE;
         if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::common::ObMySQLProxy>())) {
           tmp_ret = OB_NOT_INIT;
-          LOG_WARN("sql proxy is not initialized", K(tmp_ret), K(task_id));
         } else if (OB_TMP_FAIL(ObDDLUtil::get_data_information(
                        *::oceanbase::share::server_service<::oceanbase::common::ObMySQLProxy>(), task_id, unused_data_format_version,
                        unused_snapshot_version, task_status))) {
@@ -193,7 +184,6 @@ int ObDDLCtrlSpeedItem::check_need_stop_write(ObDDLNeedStopWriteChecker &checker
   is_need_stop_write = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     is_need_stop_write = checker.check_need_stop_write() || need_stop_write_;
   }
@@ -213,15 +203,12 @@ int ObDDLCtrlSpeedItem::limit_and_sleep(
   int64_t transmit_sleep_us = 0; // network related.
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if ((disk_used_stop_write_threshold_ <= 0
       || disk_used_stop_write_threshold_ > 100) || bytes < 0 || 0 == task_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument.", K(ret), K(disk_used_stop_write_threshold_), K(bytes), K(task_id));
   } else if (OB_FAIL(cal_limit(bytes, next_available_ts))) {
   } else if (OB_ISNULL(GCTX.bandwidth_throttle_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, bandwidth throttle is null", K(ret), KP(GCTX.bandwidth_throttle_));
   } else if (OB_FAIL(GCTX.bandwidth_throttle_->limit_out_and_sleep(bytes,
                                                                    ObTimeUtility::current_time(),
                                                                    INT64_MAX,
@@ -251,7 +238,6 @@ int ObDDLCtrlSpeedHandle::init(common::ObTimer &timer)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("inited twice", K(ret));
   } else if (OB_FAIL(refreshTimerTask_.init(timer))) {
   } else {
     is_inited_ = true;
@@ -268,14 +254,11 @@ int ObDDLCtrlSpeedHandle::limit_and_sleep(const int64_t bytes,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(bytes < 0 || 0 == task_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(task_id), K(bytes));
   }
   if (OB_SUCC(ret) && OB_FAIL(speed_handle_item_.init())) {
     if (OB_INIT_TWICE != ret) {
-      LOG_WARN("fail to init speed handle item", K(ret));
     } else {
       ret = OB_SUCCESS; // already inited, treat as success
     }
@@ -298,7 +281,6 @@ int ObDDLCtrlSpeedHandle::refresh()
     speed_handle_item_.reset_need_stop_write();
     ret = OB_SUCCESS;
   } else {
-    LOG_WARN("enter server module scope failed", K(ret));
   }
   return ret;
 }
@@ -317,7 +299,6 @@ int ObDDLCtrlSpeedHandle::RefreshSpeedHandleTask::init(common::ObTimer &timer)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else {
     is_inited_ = true;
     if (OB_FAIL(timer.schedule(*this, REFRESH_INTERVAL, true /* schedule repeatedly */))) {
@@ -331,7 +312,6 @@ void ObDDLCtrlSpeedHandle::RefreshSpeedHandleTask::runTimerTask()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("RefreshSpeedHandleTask not init", K(ret));
   } else if (OB_FAIL(ObDDLCtrlSpeedHandle::get_instance().refresh())) {
   }
 }
@@ -399,7 +379,6 @@ int ObDDLRedoLogWriter::local_write_ddl_macro_redo(
                   || nullptr == buffer
                   || 0 == task_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(redo_info), KP(log_handler), KP(buffer), K(task_id));
   } else if (OB_FAIL(log.init(redo_info))) {
   } else if (FALSE_IT(buffer_size = base_header.get_serialize_size()
                                     + ddl_header.get_serialize_size()
@@ -416,7 +395,6 @@ int ObDDLRedoLogWriter::local_write_ddl_macro_redo(
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(cb = op_alloc(ObDDLMacroBlockClogCb))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret));
   } else if (OB_FAIL(base_header.serialize(buffer, buffer_size, pos))) {
   } else if (OB_FAIL(ddl_header.serialize(buffer, buffer_size, pos))) {
   } else if (FALSE_IT(log_start_pos = pos)) {
@@ -473,17 +451,13 @@ int ObDDLRedoLogWriter::write_auto_fork_log(
                           ObDDLClogType::DDL_TABLE_FORK_FINISH_LOG != clog_type) ||
       OB_UNLIKELY(!log.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(clog_type), K(log));
   } else if (OB_ISNULL(buffer = static_cast<char *>(tmp_arena.alloc(buffer_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc failed", K(ret), K(buffer_size));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
   } else if (OB_ISNULL(ls)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("local ls is null", K(ret));
   } else if (OB_ISNULL(cb = op_alloc(ObDDLClogCb))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret));
   } else if (OB_FAIL(base_header.serialize(buffer, buffer_size, pos))) {
   } else if (OB_FAIL(ddl_header.serialize(buffer, buffer_size, pos))) {
   } else if (OB_FAIL(log.serialize(buffer, buffer_size, pos))) {
@@ -509,7 +483,6 @@ int ObDDLRedoLogWriter::write_auto_fork_log(
         const int64_t current_time = ObTimeUtility::current_time();
         if (current_time - start_time > ObDDLRedoLogHandle::DDL_REDO_LOG_TIMEOUT) {
           ret = OB_TIMEOUT;
-          LOG_WARN("write auto fork log timeout", K(ret), K(log));
         } else {
           ob_usleep(ObDDLRedoLogHandle::CHECK_DDL_REDO_LOG_FINISH_INTERVAL);
         }
@@ -612,7 +585,6 @@ int ObDDLRedoLogWriter::init(const ObTabletID &tablet_id)
     LOG_WARN("ddl redo log writer has been inited twice", K(ret));
   } else if (OB_UNLIKELY(!tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(tablet_id));
   } else {
     tablet_id_ = tablet_id;
     is_inited_ = true;
@@ -640,11 +612,9 @@ int ObDDLRedoLogWriter::write_macro_block_log(
     LOG_WARN("ddl redo log writer has not been inited", K(ret));
   } else if (OB_UNLIKELY(!redo_info.is_valid() || 0 == task_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(redo_info), K(task_id));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
   } else if (nullptr == buffer_ && OB_ISNULL(buffer_ = static_cast<char *>(ob_malloc(BUF_SIZE, ObMemAttr("DDL_REDO_LOG"))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret), K(BUF_SIZE));
   } else if (OB_FAIL(ddl_redo_handle_array_.push_back(ObDDLRedoLogHandle()))) {
   } else if (OB_FAIL(local_write_ddl_macro_redo(redo_info, task_id,
       ls->get_log_handler(), macro_block_id, buffer_,
@@ -666,7 +636,6 @@ int ObDDLRedoLogWriter::wait_macro_block_log_finish()
       if (OB_ISNULL(ddl_redo_handle_array_.at(i).cb_)) {
       } else if (!ddl_redo_handle_array_.at(i).is_valid()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid handle", K(ret), K(ddl_redo_handle_array_.at(i)));
       } else if (OB_FAIL(ddl_redo_handle_array_.at(i).wait())) {
       } else if (OB_FAIL(ddl_redo_handle_array_.at(i).cb_->get_ret_code())) {
       }
@@ -754,7 +723,6 @@ int ObDDLRedoLogWriterCallback::init(ObDDLRedoLogWriterCallbackInitParam &init_p
     LOG_WARN("ddl redo log writer has been inited twice", K(ret));
   } else if (OB_UNLIKELY(!init_param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid init param", KR(ret), K(init_param));
   } else if (OB_FAIL(ddl_writer_.init(init_param.tablet_id_))) {
   } else {
     // init kv mgr handle for idempotence check
@@ -799,10 +767,8 @@ int ObDDLRedoLogWriterCallback::write(const ObStorageObjectHandle &macro_handle,
   } else if (OB_UNLIKELY((buf_len <= 0 || nullptr == buf ||
                           (ObDDLMacroBlockType::DDL_MB_DATA_TYPE == param_.block_type_ && row_count <= 0)))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(buf_len), KP(buf), K(param_.block_type_), K(row_count));
   } else if ((!logic_id.is_valid() || (!macro_handle.is_valid() && param_.need_submit_io_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid logic id", K(ret), K(logic_id), K(macro_handle), K_(param_.need_submit_io));
   }
 
   if (OB_SUCC(ret)) {
@@ -816,7 +782,6 @@ int ObDDLRedoLogWriterCallback::write(const ObStorageObjectHandle &macro_handle,
     redo_info.data_buffer_.assign(buf, buf_len);
     if (OB_FAIL(ret)) {
     } else if (nullptr != param_.macro_meta_store_ && OB_FAIL(param_.macro_meta_store_->append(buf, buf_len, macro_handle.get_macro_id()))) {
-        LOG_WARN("append macro meta store failed", K(ret), KP(buf), K(buf_len), K(macro_handle.get_macro_id()));
     } else {
     }
 
@@ -829,7 +794,6 @@ int ObDDLRedoLogWriterCallback::write(const ObStorageObjectHandle &macro_handle,
       char *tmp_buf = nullptr;
       if (OB_ISNULL(tmp_buf = (char*)(allocator_.alloc(buf_len)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to alloc buf", K(ret));
       } else if (FALSE_IT(MEMCPY(tmp_buf, buf, buf_len))) {
       } else if (FALSE_IT(redo_info.data_buffer_.assign(tmp_buf, buf_len))) {
       }
@@ -838,7 +802,6 @@ int ObDDLRedoLogWriterCallback::write(const ObStorageObjectHandle &macro_handle,
       } else if (OB_FAIL(redo_info_array_.push_back(redo_info))) {
       } else if (OB_FAIL(macro_block_id_array_.push_back(macro_block_id))) {
         redo_info_array_.pop_back();
-        LOG_WARN("failed to record macro block id", K(ret), K(macro_block_id));
       } else if (redo_info_array_.count() > 10) {
         /* write some warn info, since redo info array should not be too large*/
         LOG_WARN("too much element in redo log callback", K(redo_info_array_.count()), K(lbt()));
@@ -858,7 +821,6 @@ int ObDDLRedoLogWriterCallback::inner_write(
   int ret = OB_SUCCESS;
   if (!redo_info.is_valid() || !macro_block_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(redo_info), K(macro_block_id));
   } else if (OB_FAIL(ddl_writer_.write_macro_block_log(
       redo_info, macro_block_id, param_.task_id_))) {
   }

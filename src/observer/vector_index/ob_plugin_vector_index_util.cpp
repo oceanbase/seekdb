@@ -34,7 +34,6 @@ int ObVectorQueryRowkeyIterator::init(int64_t total, ObIArray<common::ObRowkey> 
 
   if (OB_ISNULL(rowkeys) || total != rowkeys->count()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get rowkeys", K(ret), K(rowkeys), K(total));
   } else {
     rowkeys_ = rowkeys;
     total_ = total;
@@ -51,10 +50,8 @@ int ObVectorQueryRowkeyIterator::init(sql::ObDASIter *rowkey_scan_iter)
 
   if (OB_ISNULL(rowkey_scan_iter)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("null ", K(ret), K(rowkey_scan_iter));
   } else if (!rowkey_scan_iter->is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("res expr idx is invalid", K(ret), K(rowkey_scan_iter));
   } else {
     scan_iter_ = rowkey_scan_iter;
     is_init_ = true;
@@ -68,17 +65,13 @@ int ObVectorQueryRowkeyIterator::get_next_row()
   int ret = OB_SUCCESS;
   if (!is_init_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("iter is not initialized.", K(ret));
   } else if (OB_ISNULL(scan_iter_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("rowkey scan iter is null", K(ret), K(scan_iter_));
   } else if (!scan_iter_->is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("rowkey scan iter is not inited", K(ret), K(scan_iter_));
   } else if (OB_FALSE_IT(scan_iter_->clear_evaluated_flag())) {
   } else if (OB_FAIL(scan_iter_->get_next_row())) {
     if (ret != OB_ITER_END) {
-      LOG_WARN("failed to get next row", K(ret));
     }
   }
 
@@ -90,20 +83,15 @@ int ObVectorQueryRowkeyIterator::get_next_rows(int64_t &count)
   int ret = OB_SUCCESS;
   if (!is_init_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("iter is not initialized.", K(ret));
   } else if (batch_size_ <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("batch_size_ is not init", K(ret), K_(batch_size));
   } else if (OB_ISNULL(scan_iter_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("rowkey scan iter is null", K(ret), K(scan_iter_));
   } else if (!scan_iter_->is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("rowkey scan iter is not inited", K(ret), K(scan_iter_));
   } else if (OB_FALSE_IT(scan_iter_->clear_evaluated_flag())) {
   } else if (OB_FAIL(scan_iter_->get_next_rows(count, batch_size_))) {
     if (ret != OB_ITER_END) {
-      LOG_WARN("failed to get next rows", K(ret), K(count), K(batch_size_));
     }
   }
   return ret;
@@ -114,7 +102,6 @@ int ObVectorQueryRowkeyIterator::get_next_row(ObRowkey &rowkey)
   INIT_SUCC(ret);
   if (!is_init_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("iter is not initialized.", K(ret));
   } else if (cur_pos_ < total_) {
     rowkey = rowkeys_->at(cur_pos_++);
   } else {
@@ -129,7 +116,6 @@ int ObVectorQueryRowkeyIterator::get_next_rows(ObIArray<common::ObRowkey>& rowke
   row_count = 0;
   if (!is_init_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("iter is not initialized.", K(ret));
   } else if (cur_pos_ < total_) {
     ObObj *obj = nullptr;
     if (batch_size_ > 0) {
@@ -163,26 +149,19 @@ int ObVectorQueryVidIterator::init(int64_t need_count, ObIAllocator *allocator)
   INIT_SUCC(ret);
   if (need_count == 0 || OB_ISNULL(allocator)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get vids or allocator", K(ret), K(allocator), K(need_count));
   } else if (OB_ISNULL(row_ = static_cast<ObNewRow *>(allocator->alloc(sizeof(ObNewRow))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocator NewRow.", K(ret));
   } else if (OB_ISNULL(obj_ = static_cast<ObObj *>(allocator->alloc(sizeof(ObObj) * (2 + extra_column_count_ + rel_count_))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocator NewRow.", K(ret));
   } else if (OB_ISNULL(vids_ = static_cast<int64_t *>(allocator->alloc(sizeof(int64_t) * need_count)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocator vids.", K(ret), K(need_count));
   } else if (OB_ISNULL(distance_ = static_cast<float *>(allocator->alloc(sizeof(float) * need_count)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocator vids.", K(ret), K(need_count));
   } else {
     is_init_ = true; // obj is inited
     if (extra_column_count_ > 0 && OB_FAIL(extra_info_ptr_.init(allocator, extra_info_actual_size_, need_count))) {
-      LOG_WARN("failed to init extra info array", K(ret), K(extra_info_ptr_), K(need_count));
     } else if (OB_FAIL(reset_obj())) {
       is_init_ = false;
-      LOG_WARN("failed to reset obj", K(ret));
     } else {
       total_ = 0;
       cur_pos_ = 0;
@@ -199,11 +178,9 @@ int ObVectorQueryVidIterator::add_result(int64_t add_vid, float add_distance, co
   INIT_SUCC(ret);
   if (!is_init_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("iter is not initialized.", K(ret));
   } else if ((extra_info_ptr_.is_null() && OB_NOT_NULL(extra_info)) ||
              (OB_ISNULL(extra_info) && !extra_info_ptr_.is_null())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("extra info is null", K(ret), KP(extra_info), K(extra_info_ptr_), K(extra_column_count_));
   } else if (total_ < alloc_size_) {
     vids_[total_] = add_vid;
     distance_[total_] = add_distance;
@@ -220,19 +197,14 @@ int ObVectorQueryVidIterator::init(int64_t total, int64_t *vids, float *distance
   INIT_SUCC(ret);
   if (extra_column_count_ < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("extra_column_count_ is invalid", K(ret), K(extra_column_count_));
   } else if (total != 0 && ((extra_column_count_ > 0 && extra_info_ptr.is_null()) || (extra_column_count_ == 0 && !extra_info_ptr.is_null()))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("extra_info_ptr is null", K(ret), K(extra_column_count_));
   } else if ((OB_ISNULL(vids) && total != 0) || OB_ISNULL(allocator)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get vids or allocator", K(ret), K(vids), K(allocator));
   } else if (OB_ISNULL(row_ =  OB_NEWx(ObNewRow, allocator))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocator NewRow.", K(ret));
   } else if (OB_ISNULL(obj_ = static_cast<ObObj*>(allocator->alloc(sizeof(ObObj) * (2 + extra_column_count_ + rel_count_))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocator NewRow.", K(ret));
   } else {
     for (int i = 0; i < 2 + extra_column_count_ + rel_count_; i++) {
       obj_[i].reset();
@@ -253,7 +225,6 @@ int ObVectorQueryVidIterator::reset_obj()
   INIT_SUCC(ret);
   if (!is_init_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("iter is not initialized.", K(ret));
   } else {
     for (int i = 0; i < 2 + extra_column_count_ + rel_count_; i++) {
       obj_[i].reset();
@@ -274,7 +245,6 @@ int ObVectorQueryVidIterator::get_next_row(ObNewRow *&row, const sql::ExprFixedA
     if (!extra_info_ptr_.is_null()) {
       if (res_exprs.count() != rel_count_ + extra_column_count_ + 1) {
         ret = OB_ERR_UNDEFINED;
-        LOG_WARN("res_exprs is not vid, extra_column", K(ret), K(res_exprs.count()), K(extra_column_count_));
       }
       if (OB_SUCC(ret)) {
         for (int i = 0; i < extra_column_count_; i++) {
@@ -291,7 +261,6 @@ int ObVectorQueryVidIterator::get_next_row(ObNewRow *&row, const sql::ExprFixedA
       if (OB_FAIL(rel_map_ptr_->get_refactored(vids_[cur_pos_], rel_ptr))) {
       } else if (OB_ISNULL(rel_ptr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("rel_ptr is null", K(ret), K(vids_[cur_pos_]));
       }
       for (int i = 0; i < rel_count_ && OB_SUCC(ret); i++) {
         obj_[2 + extra_column_count_ + i].set_meta_type(res_exprs.at(i + extra_column_count_ + 1)->obj_meta_);
@@ -317,7 +286,6 @@ int ObVectorQueryVidIterator::get_next_rows(ObNewRow *&row, int64_t &size, const
   INIT_SUCC(ret);
   if (!is_init_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("iter is not initialized.", K(ret), K(is_init_), K(alloc_size_), K(total_));
   } else if (cur_pos_ < total_) {
     size = 0;
     row = nullptr;
@@ -328,10 +296,8 @@ int ObVectorQueryVidIterator::get_next_rows(ObNewRow *&row, int64_t &size, const
       int64_t one_size_obj_count = 2 + extra_column_count_ + rel_count_;
       if (OB_ISNULL(row = static_cast<ObNewRow *>(allocator_->alloc(sizeof(ObNewRow))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocator NewRow.", K(ret));
       } else if (OB_ISNULL(obj = static_cast<ObObj *>(allocator_->alloc(sizeof(ObObj) * one_size_obj_count * batch_size_)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocator NewRow.", K(ret));
       } else {
         int64_t index = 0;
         for (; index < batch_size_ && cur_pos_ < total_ && OB_SUCC(ret); ++index) {
@@ -341,7 +307,6 @@ int ObVectorQueryVidIterator::get_next_rows(ObNewRow *&row, int64_t &size, const
           if (!extra_info_ptr_.is_null()) {
             if (res_exprs.count() != extra_column_count_ + 1) {
               ret = OB_ERR_UNDEFINED;
-              LOG_WARN("res_exprs is not vid, extra_column", K(ret), K(res_exprs.count()), K(extra_column_count_));
             }
             if (OB_SUCC(ret)) {
               for (int i = 0; i < extra_column_count_; i++) {
@@ -359,7 +324,6 @@ int ObVectorQueryVidIterator::get_next_rows(ObNewRow *&row, int64_t &size, const
             if (OB_FAIL(rel_map_ptr_->get_refactored(vids_[cur_pos_], rel_ptr))) {
             } else if (OB_ISNULL(rel_ptr)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("rel_ptr is null", K(ret), K(vids_[cur_pos_]));
             }
             for (int i = 0; i < rel_count_ && OB_SUCC(ret); i++) {
               obj[index * one_size_obj_count + 2 + extra_column_count_ + i].set_meta_type(res_exprs.at(i + extra_column_count_ + 1)->obj_meta_);
@@ -447,7 +411,6 @@ int ObPluginVectorIndexHelper::driect_merge_delta_and_snap_vids(const ObVsagQuer
           res_num++;
           i++;
         } else {
-          LOG_WARN("fail to check exist refactored", K(ret));
         }
       }
       actual_cnt = res_num;
@@ -492,7 +455,6 @@ int ObPluginVectorIndexHelper::sort_merge_delta_and_snap_vids(const ObVsagQueryR
     actual_cnt = res_num;
   } else if (OB_ISNULL(first.vids_) || OB_ISNULL(second.vids_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get vids invalid.", K(ret), K(first.vids_), K(second.vids_));
   } else {
     const int64_t hashset_size = total;
     common::hash::ObHashSet<int64_t> vid_hash_set;
@@ -515,7 +477,6 @@ int ObPluginVectorIndexHelper::sort_merge_delta_and_snap_vids(const ObVsagQueryR
               vids_result[res_num++] = first.vids_[i++];
             }
           } else {
-            LOG_WARN("fail to check exist refactored", K(ret));
           }
         } else {
           int tmp_ret = vid_hash_set.exist_refactored(second.vids_[j]);
@@ -532,7 +493,6 @@ int ObPluginVectorIndexHelper::sort_merge_delta_and_snap_vids(const ObVsagQueryR
               vids_result[res_num++] = second.vids_[j++];
             }
           } else {
-            LOG_WARN("fail to check exist refactored", K(ret));
           }
         }
       }
@@ -552,7 +512,6 @@ int ObPluginVectorIndexHelper::sort_merge_delta_and_snap_vids(const ObVsagQueryR
             vids_result[res_num++] = first.vids_[i++];
           }
         } else {
-          LOG_WARN("fail to check exist refactored", K(ret));
         }
       }
 
@@ -571,7 +530,6 @@ int ObPluginVectorIndexHelper::sort_merge_delta_and_snap_vids(const ObVsagQueryR
             vids_result[res_num++] = second.vids_[j++];
           }
         } else {
-          LOG_WARN("fail to check exist refactored", K(ret));
         }
       }
 

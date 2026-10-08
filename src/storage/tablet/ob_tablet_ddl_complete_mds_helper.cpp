@@ -80,11 +80,9 @@ int ObTabletDDLCompleteArg::set_storage_schema(const ObStorageSchema &other)
   char *buf = nullptr;
   if (!other.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(other));
   } else if ( nullptr != storage_schema_) {
   } else if (OB_ISNULL(buf = static_cast<char*>(allocator_.alloc(sizeof(ObStorageSchema))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed alloc buf", K(ret));
   } else {
     storage_schema_ = new (buf) ObStorageSchema();
   }
@@ -105,11 +103,8 @@ int ObTabletDDLCompleteArg::assign(const ObTabletDDLCompleteArg &other)
   int ret = OB_SUCCESS;
   if (!other.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(other));
   } else if (other.has_complete_ && OB_FAIL(set_storage_schema(*other.storage_schema_))) {
-    LOG_WARN("failed to set storage_schema", K(ret));
   } else if (other.has_complete_ && OB_FAIL(write_stat_.assign(other.write_stat_))) {
-    LOG_WARN("failed to set write_stat", K(ret));
   }else {
     has_complete_ = other.has_complete_;
     tablet_id_ = other.tablet_id_;
@@ -148,7 +143,6 @@ int ObTabletDDLCompleteArg::serialize(char *buf, const int64_t buf_len, int64_t 
   } else if (has_complete_) {
     if (nullptr == storage_schema_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("storage schema should not be null", K(ret));
     } else if (OB_FAIL(storage_schema_->serialize(buf, buf_len, pos))) {
     }
   }
@@ -166,7 +160,6 @@ int ObTabletDDLCompleteArg::deserialize(const char *buf, const int64_t data_len,
       char *buf = nullptr;
       if (OB_ISNULL(buf = static_cast<char*>(allocator_.alloc(sizeof(ObStorageSchema))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate memory", K(ret));
       } else {
         storage_schema_ = new (buf) ObStorageSchema();
       }
@@ -184,7 +177,6 @@ int ObTabletDDLCompleteArg::from_mds_user_data(const ObTabletDDLCompleteMdsUserD
   int ret = OB_SUCCESS;
   if (!user_data.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(user_data));
   } else if (OB_FAIL(set_storage_schema(user_data.storage_schema_))) {
   } else if (OB_FAIL(write_stat_.assign(user_data.write_stat_))) {
   } else {
@@ -205,11 +197,9 @@ int ObTabletDDLCompleteMdsHelper::process(const char* buf, const int64_t len, co
   ObTabletDDLCompleteArg arg;
   if (nullptr == buf || len <= 0 || (for_replay && !scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(buf), K(len), K(for_replay), K(scn));
   } else if (OB_FAIL(arg.deserialize(buf,len, pos))) {
   } else if (!arg.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid arg", K(ret), K(arg));
   } else {
     ObLS *tenant_ls = nullptr;
     ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
@@ -218,7 +208,6 @@ int ObTabletDDLCompleteMdsHelper::process(const char* buf, const int64_t len, co
     /* set flag */
     if (OB_ISNULL(ls_service)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ls_service is null", K(ret));
     } else if (OB_FAIL(ls_service->get_ls(tenant_ls))) {
     } else if (OB_FAIL(data.set_with_merge_arg(arg, allocator))) {
     } else {
@@ -244,7 +233,6 @@ int ObTabletDDLCompleteMdsHelper::process_ddl(
   ObTabletHandle tablet_handle;
   if (OB_UNLIKELY(!tablet_id.is_valid() || !data.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected invalid argument", KR(ret), K(tablet_id), K(data));
   } else if (!for_replay) {
     if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(tenant_ls, tablet_id, tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
     } else if (OB_FAIL(ObTabletDDLCompleteReplayExecutor::freeze_ddl_kv(*tablet_handle.get_obj(), data))) {
@@ -294,22 +282,18 @@ int ObTabletDDLCompleteMdsHelper::record_ddl_complete_arg_to_mds(
   ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
   if (OB_UNLIKELY(!complete_arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg for completement arg", KR(ret), K(complete_arg));
   } else if (FALSE_IT(buf_len = complete_arg.get_serialize_size())) {
   } else if (OB_ISNULL(buf = static_cast<char*>(allocator.alloc(buf_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate buf", KR(ret), K(buf_len));
   } else if (OB_FAIL(complete_arg.serialize(buf, buf_len, pos))) {
   } else if (OB_ISNULL(sql_proxy)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null sql proxy", KR(ret), KP(sql_proxy));
   } else {
     ObMySQLTransaction trans;
     common::sqlclient::ObISQLConnection *conn = nullptr;
     if (OB_FAIL(trans.start(sql_proxy))) {
     } else if (OB_ISNULL(conn = trans.get_connection())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null connection", KR(ret), KP(conn));
     } else if (OB_FAIL(query::ObInnerSQLConnectionAccess::register_multi_data_source(
                    conn, ObTxDataSourceType::DDL_COMPLETE_MDS, buf, buf_len))) {
     } else if (OB_FAIL(trans.end(OB_SUCC(ret)))) {

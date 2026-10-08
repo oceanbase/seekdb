@@ -80,12 +80,9 @@ int ObLobMetaRowIterator::init(ObLobMetaWriteIter *iter,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_ISNULL(iter) || OB_UNLIKELY(trans_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(iter), K(trans_version));
   } else if (!tmp_row_.is_valid() && OB_FAIL(tmp_row_.init(ObLobMetaUtil::LOB_META_COLUMN_CNT + ObLobMetaUtil::SKIP_INVALID_COLUMN))) {
-    LOG_WARN("Failed to init datum row", K(ret));
   } else {
     iter_ = iter;
     trans_version_ = trans_version;
@@ -116,13 +113,10 @@ int ObLobMetaRowIterator::get_next_row(const blocksstable::ObDatumRow *&row)
   row = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(iter_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObLobMetaWriteIter is nullptr", K(ret));
   } else if (OB_FAIL(iter_->get_next_row(lob_meta_write_result_))) {
     if (OB_UNLIKELY(ret != OB_ITER_END)) {
-      LOG_WARN("failed to get next row", K(ret));
     }
   } else {
     if (OB_FAIL(ObLobMetaUtil::transform_from_info_to_row(lob_meta_write_result_.info_, &tmp_row_, true))) {
@@ -174,7 +168,6 @@ int ObDDLTableMergeDagParam::assign(const ObDDLTableMergeDagParam &merge_param)
   int ret = OB_SUCCESS;
   if (!merge_param.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(merge_param));
   } else {
     direct_load_type_ = merge_param.direct_load_type_;
     tablet_id_        = merge_param.tablet_id_;
@@ -186,7 +179,6 @@ int ObDDLTableMergeDagParam::assign(const ObDDLTableMergeDagParam &merge_param)
     table_key_           = merge_param.table_key_;
     if (is_commit_ && is_idem_type(direct_load_type_) &&
         OB_FAIL(user_data_.assign(arena_, merge_param.user_data_))) {
-      LOG_WARN("failed to assign user data", K(ret));
     }
   }
   return ret;
@@ -208,19 +200,15 @@ int ObDDLTabletMergeDagParamV2::init(const bool for_major,
                                              && (0 == task_param.ddl_task_id_ || 0 == task_param.execution_id_))
       || (nullptr == tablet_ctx)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("ddl task id and execution id must be valid", K(ret), K(direct_load_type), K(task_param), KPC(tablet_ctx));
   } else if (FALSE_IT(tablet_param  = for_lob ? &tablet_ctx->lob_meta_tablet_param_ :
                                                  &tablet_ctx->tablet_param_)) {
   } else if (OB_ISNULL(tablet_param)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet param should not be null", K(ret), K(for_lob), KPC(tablet_ctx));
   } else if (OB_ISNULL(merge_ctx  = for_lob ? &tablet_ctx->lob_merge_ctx_ :
                                               &tablet_ctx->merge_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("merge ctx should not be bull", K(ret));
   } else if (OB_ISNULL(tablet_param->storage_schema_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet param should not be null", K(ret));
   }
 
   if (OB_FAIL(ret)) {
@@ -264,10 +252,8 @@ int ObDDLTabletMergeDagParamV2::get_merge_helper(ObIDDLMergeHelper *&merge_helpe
   merge_helper = nullptr;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("merge dag param not inited", K(ret), KPC(this));
   } else if (nullptr == tablet_ctx_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet ctx should not be null", K(ret), KPC(this));
   } else if (for_lob_) {
     merge_helper = tablet_ctx_->lob_merge_ctx_.merge_helper_;
   } else {
@@ -277,7 +263,6 @@ int ObDDLTabletMergeDagParamV2::get_merge_helper(ObIDDLMergeHelper *&merge_helpe
   if (OB_FAIL(ret)) {
   } else if (nullptr == merge_helper) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("merge helper should not be null", K(ret), KPC(this));
   }
   return ret;
 }
@@ -290,18 +275,15 @@ int ObDDLTabletMergeDagParamV2::set_slice_sstable(const int64_t slice_idx, const
   const int64_t row_store_sstable_slot_idx = 0;
   if (!is_inited_) {
     ret= OB_NOT_INIT;
-    LOG_WARN("merge param has not been inited", K(ret), KPC(this), K(lbt()));
   } else if (OB_FAIL(get_merge_ctx(merge_ctx))) {
   } else if (OB_ISNULL(merge_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("merge ctx should not be null", K(ret), KPC(this));
   } else if (OB_FAIL(merge_ctx->slice_sstables_.get_refactored(slice_idx, table_array))) {
   }
 
   if (OB_FAIL(ret)) {
   } else if (row_store_sstable_slot_idx >= table_array->size()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected slice sstable array size", K(ret), K(table_array->size()));
   } else {
     table_array->at(row_store_sstable_slot_idx) = sstable_handle;
   }
@@ -313,7 +295,6 @@ int ObDDLTabletMergeDagParamV2::assign(const ObDDLTabletMergeDagParamV2 &merge_d
   int ret = OB_SUCCESS;
   if (!merge_dag_param.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(merge_dag_param));
   } else {
     for_major_        = merge_dag_param.for_major_;
     for_replay_       = merge_dag_param.for_replay_;
@@ -336,14 +317,11 @@ int ObDDLTabletMergeDagParamV2::get_tablet_param(ObTabletID &tablet_id,
   tablet_param =  nullptr;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("merge dag param don't init yet", K(ret), KPC(this));
   } else if (OB_ISNULL(tablet_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet ctx should not be null", K(ret), KPC(this));
   } else if (for_lob_) {
     if (!tablet_ctx_->lob_meta_tablet_id_.is_valid()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("lob tablet id not exist", K(ret), KPC(this));
     } else {
       tablet_id = tablet_ctx_->lob_meta_tablet_id_;
       tablet_param = &tablet_ctx_->lob_meta_tablet_param_;
@@ -361,14 +339,11 @@ int ObDDLTabletMergeDagParamV2::get_merge_ctx(ObDDLTabletContext::MergeCtx *&mer
   merge_ctx = nullptr;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("merge dag param don't init", K(ret), KPC(this));
   } else if (OB_ISNULL(tablet_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet ctx should not be null", K(ret));
   } else if (for_lob_) {
     if (!tablet_ctx_->lob_meta_tablet_id_.is_valid()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("lob tablet id not exist", K(ret));
     } else {
       merge_ctx = &tablet_ctx_->lob_merge_ctx_;
     }
@@ -386,7 +361,6 @@ int ObDDLTabletMergeDagParamV2::init_slice_sstable_array(hash::ObHashSet<int64_t
   if (OB_FAIL(get_merge_ctx(merge_ctx))) {
   } else if (OB_ISNULL(merge_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("merge ctx should not be null", K(ret), KPC(this));
   }
 
   if (OB_FAIL(ret)) {
@@ -399,10 +373,8 @@ int ObDDLTabletMergeDagParamV2::init_slice_sstable_array(hash::ObHashSet<int64_t
     ObArray<ObTableHandleV2> *table_array = nullptr;
     if (OB_ISNULL(buf = static_cast<char*>(merge_ctx->arena_.alloc(sizeof(ObArray<ObTableHandleV2>))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory", K(ret));
     } else if (FALSE_IT(table_array = new (buf) ObArray<ObTableHandleV2>())) {
     } else if (OB_FAIL(merge_ctx->slice_sstables_.set_refactored(iter->first, table_array))) {
-      LOG_WARN("failed to set refactorted", K(ret));
       /* destroy struct when set refactor failed */
       table_array->~ObArray<ObTableHandleV2>();
     } else if (OB_FAIL(table_array->prepare_allocate(row_store_sstable_slot_count))) {

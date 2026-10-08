@@ -96,7 +96,6 @@ int ObMemoryPrinter::print_memory_usage_(
     storage::ObMemstoreFreezer *freezer = ::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>();
     if (OB_ISNULL(freezer)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("freezer is null", K(ret));
     } else if (OB_FAIL(freezer->print_memory_usage(print_buf,
                                                    buf_len,
                                                    pos))) {

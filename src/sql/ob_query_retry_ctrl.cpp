@@ -182,7 +182,6 @@ public:
       v.no_more_test_ = true;
       v.retry_type_ = RETRY_TYPE_NONE;
       v.client_ret_ = ret; // session terminated
-      LOG_WARN("execution was terminated", K(ret), K(v.client_ret_), K(v.err_));
     } else if (THIS_WORKER.is_timeout()) {
       v.no_more_test_ = true;
       v.retry_type_ = RETRY_TYPE_NONE;
@@ -265,20 +264,17 @@ public:
       v.client_ret_ = OB_INVALID_ARGUMENT;
       v.retry_type_ = RETRY_TYPE_NONE;
       v.no_more_test_ = true;
-      LOG_WARN("invalid argument", K(v));
     } else {
       ObSchemaGetterGuard schema_guard;
       int64_t latest_local_version = 0;
       if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
                   schema_guard))) {
         // No need to retry, and let it return the error code from get_schema_guard because it is the cause of not retrying
-        LOG_WARN("get schema guard failed", K(v), K(ret));
         v.client_ret_ = ret;
         v.retry_type_ = RETRY_TYPE_NONE;
         v.no_more_test_ = true;
       } else if (OB_FAIL(schema_guard.get_schema_version(
                   latest_local_version))) {
-        LOG_WARN("fail to get local runtime schema version", K(v), K(ret));
         v.client_ret_ = ret;
         v.retry_type_ = RETRY_TYPE_NONE;
         v.no_more_test_ = true;
@@ -483,7 +479,6 @@ public:
       v.no_more_test_ = true;
       v.retry_type_ = RETRY_TYPE_NONE;
       v.client_ret_ = ret; // session terminated
-      LOG_WARN("execution was terminated", K(ret), K(v.client_ret_), K(v.err_));
     } else if (THIS_WORKER.is_timeout()) {
       v.no_more_test_ = true;
       v.retry_type_ = RETRY_TYPE_NONE;
@@ -981,7 +976,6 @@ void ObQueryRetryCtrl::test_and_save_retry_state(const share::ObGlobalContext &g
   if (OB_ISNULL(session)) {
     // ignore ret
     // this is possible. #issue/43953721
-    LOG_WARN("session is null in exec_context. maybe OOM. don't retry", K(err));
   } else if (OB_FAIL(get_func(err, is_inner_sql, func))) {
   } else if (OB_ISNULL(func)) {
     client_ret = OB_ERR_UNEXPECTED;

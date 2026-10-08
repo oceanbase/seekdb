@@ -28,7 +28,6 @@ int ObDistPlans::init(ObSqlPlanSet *ps)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ps)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else {
     plan_set_ = ps;
   }
@@ -49,7 +48,6 @@ int ObDistPlans::get_plan(ObPlanCacheCtx &pc_ctx,
   DAS_CTX(pc_ctx.exec_ctx_).clear_all_location_info();
   if (OB_ISNULL(plan_set_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid null plan_set_", K(ret));
   } else if ((plan_set_->is_multi_stmt_plan())) {
     // If it is a multi stmt plan, it must be a single-table distributed plan, and the physical partition address can be directly calculated based on table location
     // single table should just return plan, do not match
@@ -58,7 +56,6 @@ int ObDistPlans::get_plan(ObPlanCacheCtx &pc_ctx,
       LOG_DEBUG("dist plan list is empty", K(ret), K(dist_plans_.count()));
     } else if (OB_ISNULL(dist_plans_.at(0))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get an unexpected null plan", K(ret), K(dist_plans_.at(0)));
     } else {
       plan = dist_plans_.at(0);
       is_matched = true;
@@ -69,7 +66,6 @@ int ObDistPlans::get_plan(ObPlanCacheCtx &pc_ctx,
       ObArray<ObCandiTableLoc> candi_table_locs;
       if (OB_ISNULL(plan_set_)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid null plan set", K(ret), K(plan_set_));
       } else if (!plan_set_->enable_inner_part_parallel()) {
         // do nothing
       } else if (OB_FAIL(ObPhyLocationGetter::get_phy_locations(plan->get_table_locations(),
@@ -94,7 +90,6 @@ int ObDistPlans::get_plan(ObPlanCacheCtx &pc_ctx,
     out_tbl_locations.reuse();
     if (OB_ISNULL(tmp_plan)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(tmp_plan));
     } else if (OB_FAIL(helper.match_plan(pc_ctx, tmp_plan, is_matched, phy_tbl_infos, out_tbl_locations))) {
     } else if (is_matched) {
       plan = tmp_plan;
@@ -128,7 +123,6 @@ int ObDistPlans::add_plan(ObPhysicalPlan &plan,
     const ObPhysicalPlan *tmp_plan = dist_plans_.at(i);
     if (OB_ISNULL(tmp_plan)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(tmp_plan));
     } else if (OB_FAIL(helper.match_plan(pc_ctx, tmp_plan, is_matched, phy_tbl_infos, out_tbl_locations))) {
     } else {
       is_matched = is_matched && tmp_plan->has_same_location_constraints(plan);
@@ -158,8 +152,6 @@ int ObDistPlans::remove_all_plan()
   for (int64_t i = 0; i < dist_plans_.count(); i++) {
     if (OB_ISNULL(dist_plans_.at(i))) {
       tmp_ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get un expected null in dist_plans",
-               K(tmp_ret), K(dist_plans_.at(i)));
     } else {
       dist_plans_.at(i) = NULL;
     }

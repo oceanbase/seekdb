@@ -34,10 +34,8 @@ int ObLSSyncTabletSeqHandler::init(ObLS *ls)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObLSSyncTabletSeqHandler init twice", K(ret));
   } else if (OB_ISNULL(ls)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else {
     ls_ = ls;
     is_inited_ = true;
@@ -64,7 +62,6 @@ int ObLSSyncTabletSeqHandler::replay(const void *buffer,
   ObTabletAutoincSeqService &autoinc_seq_service = ObTabletAutoincSeqService::get_instance();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLSSyncTabletSeqHandler not inited", K(ret));
   } else if (OB_FAIL(base_header.deserialize(log_buf, nbytes, tmp_pos))) {
   } else if (OB_FAIL(log.deserialize(log_buf, nbytes, tmp_pos))) {
   } else if (OB_FAIL(autoinc_seq_service.replay_update_tablet_autoinc_seq(

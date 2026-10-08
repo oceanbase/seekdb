@@ -41,12 +41,10 @@ int ObExprPrivSTMakeValid::calc_result_typeN(
 
   if (param_num != 1) {
     ret = OB_ERR_PARAM_SIZE;
-    LOG_WARN("invalid param number, should be four or five", K(ret), K(param_num));
   } else if (!ob_is_geometry(types_stack[0].get_type())
              && !ob_is_string_type(types_stack[0].get_type())
              && types_stack[0].get_type() != ObNullType) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("invalid type", K(ret), K(types_stack[0].get_type()));
     LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_MAKEVALID);
   } else {
     ObCastMode cast_mode = type_ctx.get_cast_mode();
@@ -85,7 +83,6 @@ int ObExprPrivSTMakeValid::eval_priv_st_makevalid(const ObExpr &expr, ObEvalCtx 
   } else if (OB_FAIL(guard.init())) {
   } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("fail to get mem ctx", K(ret));
   } else {
     bool isvalid_res = false;
     int correct_result;
@@ -109,7 +106,6 @@ int ObExprPrivSTMakeValid::eval_priv_st_makevalid(const ObExpr &expr, ObEvalCtx 
       } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::IsValid>::geo_func::eval(gis_context, isvalid_res))) {
       } else if (!isvalid_res) {
         ret = OB_ERR_GIS_INVALID_DATA;
-        LOG_WARN("invalid result geo", K(ret), K(reason.int64_));
       }
     } 
     if (OB_SUCC(ret)) {

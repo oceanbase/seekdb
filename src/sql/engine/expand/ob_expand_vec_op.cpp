@@ -42,7 +42,6 @@ int ObExpandVecOp::init()
   void *holder_buf = allocator_.alloc(sizeof(ObBatchResultHolder));
   if (OB_ISNULL(holder_buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate memory", K(ret));
   } else {
     datum_holder_ = new (holder_buf) ObBatchResultHolder();
     if (OB_FAIL(datum_holder_->init(child_->get_spec().output_, eval_ctx_))) {

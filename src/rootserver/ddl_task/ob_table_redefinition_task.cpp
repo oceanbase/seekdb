@@ -59,18 +59,14 @@ int ObTableRedefinitionTask::init(const ObTableSchema* src_table_schema,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObTableRedefinitionTask has already been inited", K(ret));
   } else if (OB_ISNULL(src_table_schema) || OB_ISNULL(dst_table_schema)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(src_table_schema), KP(dst_table_schema));
   } else if (OB_UNLIKELY( !src_table_schema->is_valid()
                         || !dst_table_schema->is_valid() 
                         || task_id <= 0  || snapshot_version < 0 || data_format_version <= 0
                         || task_status < ObDDLTaskStatus::PREPARE || task_status > ObDDLTaskStatus::SUCCESS 
                         || (snapshot_version > 0 && task_status < ObDDLTaskStatus::WAIT_TRANS_END))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KPC(src_table_schema), KPC(dst_table_schema), K(task_id), 
-                                  K(task_status), K(snapshot_version));
   } else if (OB_FAIL(deep_copy_table_arg(allocator_, alter_table_arg, alter_table_arg_))) {
   } else if (OB_FAIL(set_ddl_stmt_str(alter_table_arg_.ddl_stmt_str_))) {
   } else {
@@ -119,10 +115,8 @@ int ObTableRedefinitionTask::init(const ObDDLTaskRecord &task_record)
   int64_t pos = 0;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObTableRedefinitionTask has already been inited", K(ret));
   } else if (!task_record.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(task_record));
   } else if (OB_FAIL(deserialize_params_from_message(task_record.message_.ptr(), task_record.message_.length(), pos))) {
   } else if (OB_FAIL(set_ddl_stmt_str(task_record.ddl_stmt_str_))) {
   } else if (FALSE_IT(src_schema_version = alter_table_arg_.alter_table_schema_.get_schema_version())) {
@@ -130,10 +124,8 @@ int ObTableRedefinitionTask::init(const ObDDLTaskRecord &task_record)
   } else if (OB_UNLIKELY(src_schema_version <= 0 
                       || dst_schema_version <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected err", K(ret), K(task_record), K(src_schema_version), K(dst_schema_version));
   } else if (OB_UNLIKELY(src_schema_version != dst_schema_version)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected err", K(ret), K(task_record), K(src_schema_version), K(dst_schema_version));
   } else {
     parent_task_id_ = task_record.parent_task_id_;
     task_id_ = task_record.task_id_;
@@ -170,14 +162,12 @@ int ObTableRedefinitionTask::update_complete_sstable_job_status(const common::Ob
   UNUSED(addition_info);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTableRedefinitionTask has not been inited", K(ret));
   } else if (OB_FAIL(DDL_SIM(task_id_, UPDATE_COMPLETE_SSTABLE_FAILED))) {
   } else if (ObDDLTaskStatus::CHECK_TABLE_EMPTY == task_status_) {
     check_table_empty_job_ret_code_ = ret_code;
   } else {
     if (OB_UNLIKELY(snapshot_version_ != snapshot_version)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("error unexpected, snapshot version is not equal", K(ret), K(snapshot_version_), K(snapshot_version));
     } else if (execution_id < execution_id_) {
       ret = OB_TASK_EXPIRED;
       LOG_WARN("receive a mismatch execution result, ignore", K(ret_code), K(execution_id), K(execution_id_));
@@ -211,7 +201,6 @@ int ObTableRedefinitionTask::send_build_replica_request_by_sql()
   int64_t new_execution_id = 0;
   if (OB_ISNULL(local_management_service)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("error unexpected, local management service must not be nullptr", K(ret));
   } else if (OB_FAIL(DDL_SIM(task_id_, DDL_TASK_SEND_LOCAL_BUILD_REQUEST_FAILED))) {
   } else if (OB_FAIL(check_modify_autoinc(modify_autoinc))) {
   } else if (OB_FAIL(ObDDLTask::push_task_execution_id(task_id_, task_type_, is_ddl_retryable_, new_execution_id))) {
@@ -278,7 +267,6 @@ int ObTableRedefinitionTask::check_ddl_can_retry(const bool ddl_need_retry_at_ex
   is_ddl_retryable_ = true;
   if (OB_ISNULL(table_schema)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(table_schema));
   } else if (OB_FAIL(check_use_heap_table_ddl_plan(table_schema))) {
   } else {
     if (ObDDLUtil::use_idempotent_mode()) {
@@ -300,7 +288,6 @@ int ObTableRedefinitionTask::check_use_heap_table_ddl_plan(const ObTableSchema *
   use_heap_table_ddl_plan_ = false;
   if (OB_ISNULL(target_table_schema)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(target_table_schema));
   } else if (OB_FAIL(DDL_SIM(task_id_, TABLE_REDEF_TASK_CHECK_USE_HEAP_PLAN_FAILED))) {
   } else if (target_table_schema->is_table_with_hidden_pk_column() &&
              (DDL_ALTER_PARTITION_BY == task_type_ || DDL_DROP_PRIMARY_KEY == task_type_)) {
@@ -315,11 +302,9 @@ int ObTableRedefinitionTask::table_redefinition(const ObDDLTaskStatus next_task_
   bool is_local_build_end = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTableRedefinitionTask has not been inited", K(ret));
   } else if (OB_UNLIKELY(snapshot_version_ <= 0)) {
     is_local_build_end = true; // switch to fail.
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected snapshot", K(ret), KPC(this));
   }
 
   if (OB_SUCC(ret) && !is_local_build_end && 0 == get_local_build_request_time()) {
@@ -328,7 +313,6 @@ int ObTableRedefinitionTask::table_redefinition(const ObDDLTaskStatus next_task_
       if (OB_EAGAIN == ret) {
         ret = OB_SUCCESS; // retry
       } else {
-        LOG_WARN("failed to reap old task", K(ret));
       }
     } else if (!need_exec_new_inner_sql) {
       is_local_build_end = true;
@@ -336,7 +320,6 @@ int ObTableRedefinitionTask::table_redefinition(const ObDDLTaskStatus next_task_
       if (OB_TASK_EXPIRED == ret) {
         is_local_build_end = true;
       }
-      LOG_WARN("fail to send local build request", K(ret));
     } else {
       TCWLockGuard guard(lock_);
       local_build_request_time_ = ObTimeUtility::current_time();
@@ -380,13 +363,10 @@ int ObTableRedefinitionTask::copy_table_indexes()
   ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTableRedefinitionTask has not been inited", K(ret));
   } else if (OB_ISNULL(local_management_service)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, local management service must not be nullptr", K(ret));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(DDL_SIM(task_id_, REDEF_TASK_COPY_INDEX_FAILED))) {
   } else {
     const int64_t MAX_ACTIVE_TASK_CNT = 1;
@@ -407,7 +387,6 @@ int ObTableRedefinitionTask::copy_table_indexes()
       } else if (OB_FAIL(schema_guard.get_table_schema( target_object_id_, table_schema))) {
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("error unexpected, table schema must not be nullptr", K(ret), K(target_object_id_));
       } else {
         const common::ObIArray<ObAuxTableMetaInfo> &index_infos = table_schema->get_simple_index_infos();
         if (index_infos.count() > 0) {
@@ -425,7 +404,6 @@ int ObTableRedefinitionTask::copy_table_indexes()
           } else if (OB_FAIL(generate_rebuild_index_arg_list(object_id_, orig_schema_guard, alter_table_arg_))) {
           } else if (OB_FAIL(get_orig_all_index_tablet_count(orig_schema_guard, all_tablet_count))) {
           } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(all_tablet_count, ddl_rpc_timeout))) {
-            LOG_WARN("get ddl rpc timeout failed", K(ret));
             ret = OB_INVALID_ARGUMENT;
           } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->                execute_ddl_task(alter_table_arg_, index_ids); }))) {
           }
@@ -439,7 +417,6 @@ int ObTableRedefinitionTask::copy_table_indexes()
         } else if (OB_FAIL(new_schema_guard.get_table_schema( target_object_id_, table_schema))) {
         } else if (OB_ISNULL(table_schema)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("error unexpected, table schema must not be nullptr", K(ret), K(target_object_id_));
         }
         for (int64_t i = 0; OB_SUCC(ret) && i < index_ids.count(); ++i) {
           const uint64_t index_id = index_ids.at(i);	
@@ -453,7 +430,6 @@ int ObTableRedefinitionTask::copy_table_indexes()
             if (OB_FAIL(new_schema_guard.get_table_schema( index_ids.at(i), index_schema))) {
             } else if (OB_ISNULL(index_schema)) {
               ret = OB_ERR_SYS;
-              LOG_WARN("error sys, index schema must not be nullptr", K(ret), K(index_ids.at(i)));
             } else if (is_final_index_status(index_schema->get_index_status())) {
               // index status is final
               need_rebuild_index = false;
@@ -489,7 +465,6 @@ int ObTableRedefinitionTask::copy_table_indexes()
                     ret = OB_SUCCESS;
                     active_task_cnt += 1;
                   } else {
-                    LOG_WARN("submit ddl task failed", K(ret));
                   }
                 } else if (FALSE_IT(active_task_cnt += 1)) {
                 } else if (OB_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record))) {
@@ -498,7 +473,6 @@ int ObTableRedefinitionTask::copy_table_indexes()
             }
             if (OB_FAIL(ret)) {
               add_event_info("create table_redefinition index task fail");
-              LOG_WARN("add build index task failed", K(ret), K(task_record), K(ddl_event_info));
             } else if (need_rebuild_index) {
               TCWLockGuard guard(lock_);
               const uint64_t task_key = index_ids.at(i);
@@ -506,7 +480,6 @@ int ObTableRedefinitionTask::copy_table_indexes()
               status.task_id_ = task_record.task_id_;
               if (OB_FAIL(dependent_task_result_map_.get_refactored(task_key, status))) {
                 if (OB_HASH_NOT_EXIST != ret) {
-                  LOG_WARN("get from dependent task map failed", K(ret));
                 } else if (OB_FAIL(dependent_task_result_map_.set_refactored(task_key, status))) {
                 }
               }
@@ -532,10 +505,8 @@ int ObTableRedefinitionTask::copy_table_constraints()
   ObSchemaGetterGuard schema_guard;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTableRedefinitionTask has not been inited", K(ret));
   } else if (OB_ISNULL(local_management_service)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, local management service must not be nullptr", K(ret));
   } else if (OB_FAIL(DDL_SIM(task_id_, REDEF_TASK_COPY_CONSTRAINT_FAILED))) {
   } else {
     if (has_rebuild_constraint_) {
@@ -548,7 +519,6 @@ int ObTableRedefinitionTask::copy_table_constraints()
       } else if (OB_FAIL(schema_guard.get_table_schema( target_object_id_, table_schema))) {
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("error unexpected, table schema must not be nullptr", K(ret), K(target_object_id_));
       } else if (OB_FAIL(check_need_rebuild_constraint(*table_schema,
                                                        new_constraint_ids,
                                                        need_rebuild_constraint))) {
@@ -559,7 +529,6 @@ int ObTableRedefinitionTask::copy_table_constraints()
         int64_t ddl_rpc_timeout = 0;
         if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
                 *GCTX.schema_service_, target_object_id_, ddl_rpc_timeout))) {
-          LOG_WARN("get ddl rpc timeout fail", K(ret));
           ret = OB_INVALID_ARGUMENT;
         } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->              execute_ddl_task(alter_table_arg_, constraint_ids); }))) {
         }
@@ -595,10 +564,8 @@ int ObTableRedefinitionTask::copy_table_foreign_keys()
   ObSchemaGetterGuard schema_guard;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTableRedefinitionTask has not been inited", K(ret));
   } else if (OB_ISNULL(local_management_service)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, local management service must not be nullptr", K(ret));
   } else if (OB_FAIL(DDL_SIM(task_id_, REDEF_TASK_COPY_FOREIGN_KEY_FAILED))) {
   } else {
     if (has_rebuild_foreign_key_) {
@@ -608,7 +575,6 @@ int ObTableRedefinitionTask::copy_table_foreign_keys()
       } else if (OB_FAIL(schema_guard.get_simple_table_schema( target_object_id_, table_schema))) {
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("error unexpected, table schema must not be nullptr", K(ret), K(target_object_id_));
       } else {
         const ObIArray<ObSimpleForeignKeyInfo> &fk_infos = table_schema->get_simple_foreign_key_info_array();
         ObSArray<uint64_t> fk_ids;
@@ -626,7 +592,6 @@ int ObTableRedefinitionTask::copy_table_foreign_keys()
           int64_t ddl_rpc_timeout = 0;
           if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
                   *GCTX.schema_service_, target_object_id_, ddl_rpc_timeout))) {
-            LOG_WARN("get ddl rpc timeout fail", K(ret));
             ret = OB_INVALID_ARGUMENT;
           } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->                execute_ddl_task(alter_table_arg_, fk_ids); }))) {
           }
@@ -654,17 +619,12 @@ int ObTableRedefinitionTask::copy_table_dependent_objects(const ObDDLTaskStatus 
   bool state_finish = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTableRedefinitionTask has not been inited", K(ret));
   } else if (OB_FAIL(DDL_SIM(task_id_, REDEF_TASK_COPY_DEPENDENT_OBJECTS_FAILED))) {
   } else if (!dependent_task_result_map_.created() && OB_FAIL(dependent_task_result_map_.create(MAX_DEPEND_OBJECT_COUNT, lib::ObLabel("DepTasMap")))) {
-    LOG_WARN("create dependent task map failed", K(ret));
   } else {
     if (get_is_copy_indexes() && OB_FAIL(copy_table_indexes())) {
-      LOG_WARN("copy table indexes failed", K(ret));
     } else if (get_is_copy_constraints() && OB_FAIL(copy_table_constraints())) {
-      LOG_WARN("copy table constraints failed", K(ret));
     } else if (get_is_copy_foreign_keys() && OB_FAIL(copy_table_foreign_keys())) {
-      LOG_WARN("copy table foreign keys failed", K(ret));
     } else {
       // copy triggers(at current, not supported, skip it)
     }
@@ -691,7 +651,6 @@ int ObTableRedefinitionTask::copy_table_dependent_objects(const ObDDLTaskStatus 
               ret = OB_SUCCESS;
               LOG_INFO("ddl task not finish", K(task_key), K(child_task_id), K(target_object_id));
             } else {
-              LOG_WARN("fail to get ddl error message", K(ret), K(task_key), K(child_task_id), K(target_object_id));
             }
           } else {
             finished_task_cnt++;
@@ -748,14 +707,12 @@ int ObTableRedefinitionTask::take_effect(const ObDDLTaskStatus next_task_status)
   ObDDLTaskStatus new_status = next_task_status;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTableRedefinitionTask has not been inited", K(ret));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(DDL_SIM(task_id_, DDL_TASK_TAKE_EFFECT_FAILED))) {
   } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( target_object_id_, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table schema not exist", K(ret), K(target_object_id_));
   } else if (!table_schema->is_user_hidden_table()) {
     LOG_INFO("target schema took effect", K(target_object_id_));
   } else if (table_schema->is_table_with_hidden_pk_column()
@@ -772,13 +729,11 @@ int ObTableRedefinitionTask::take_effect(const ObDDLTaskStatus next_task_status)
       ret = OB_SUCCESS;
       new_status = ObDDLTaskStatus::TAKE_EFFECT;
     } else {
-      LOG_WARN("sync auto increment position failed", K(ret), K(object_id_), K(target_object_id_));
     }
   } else if (OB_FAIL(sync_stats_info())) {
     if (is_stats_sync_lock_conflict(ret)) {
       delay_take_effect_after_stats_sync_lock_conflict(ret);
     } else {
-      LOG_WARN("fail to sync stats info", K(ret), K(object_id_), K(target_object_id_));
     }
   } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
                  *GCTX.schema_service_, target_object_id_, ddl_rpc_timeout))) {
@@ -822,12 +777,10 @@ int ObTableRedefinitionTask::check_take_effect_succ(bool &has_took_effect_succ)
   const ObTableSchema *table_schema = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTableRedefinitionTask has not been inited", K(ret));
   } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( target_object_id_, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table schema not exist", K(ret), K(target_object_id_));
   } else if (!table_schema->is_user_hidden_table()) {
     has_took_effect_succ = true;
     LOG_INFO("target schema took effect", K(target_object_id_));
@@ -840,7 +793,6 @@ int ObTableRedefinitionTask::repending(const share::ObDDLTaskStatus next_task_st
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLRedefinitionTask has not been inited", K(ret));
   } else if (OB_FAIL(DDL_SIM(task_id_, TABLE_REDEF_TASK_REPENDING_FAILED))) {
   } else if (OB_FAIL(switch_status(next_task_status, true, ret))) {
   }
@@ -866,7 +818,6 @@ int ObTableRedefinitionTask::process()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTableRedefinitionTask has not been inited", K(ret));
   } else if (OB_FAIL(check_health())) {
   } else {
     switch(task_status_) {
@@ -934,7 +885,6 @@ int ObTableRedefinitionTask::check_modify_autoinc(bool &modify_autoinc)
   for(; OB_SUCC(ret) && iter != iter_end; iter++) {
     if (OB_ISNULL(alter_column_schema = static_cast<AlterColumnSchema *>(*iter))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("iter is NULL", K(ret));
     } else if (alter_column_schema->is_autoincrement()) {
       modify_autoinc = true;
     }
@@ -971,7 +921,6 @@ int ObTableRedefinitionTask::serialize_params_to_message(char *buf, const int64_
   int8_t do_finish = static_cast<int8_t>(is_do_finish_);
   if (OB_UNLIKELY(nullptr == buf || buf_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_len));
   } else if (OB_FAIL(ObDDLTask::serialize_params_to_message(buf, buf_len, pos))) {
   } else if (OB_FAIL(alter_table_arg_.serialize(buf, buf_len, pos))) {
   } else if (OB_FAIL(serialization::encode_i8(buf, buf_len, pos, copy_indexes))) {
@@ -1002,7 +951,6 @@ int ObTableRedefinitionTask::deserialize_params_from_message(const char *buf, co
   obcall::ObAlterTableArg tmp_arg;
   if (OB_UNLIKELY(nullptr == buf || data_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(data_len));
   } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(buf, data_len, pos))) {
   } else if (OB_FAIL(tmp_arg.deserialize(buf, data_len, pos))) {
   } else if (OB_FAIL(deep_copy_table_arg(allocator_, tmp_arg, alter_table_arg_))) {
@@ -1116,7 +1064,6 @@ int ObTableRedefinitionTask::collect_longops_stat(ObLongopsValue &value)
         if (ret == OB_SIZE_OVERFLOW) {
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("failed to get all child task ids", K(ret));
         }
       } else if (OB_FAIL(databuff_printf(stat_info_.message_,
                                          MAX_LONG_OPS_MESSAGE_LENGTH,
@@ -1126,7 +1073,6 @@ int ObTableRedefinitionTask::collect_longops_stat(ObLongopsValue &value)
         if (ret == OB_SIZE_OVERFLOW) {
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("failed to print", K(ret));
         }
       }
       break;
@@ -1173,7 +1119,6 @@ int ObTableRedefinitionTask::collect_longops_stat(ObLongopsValue &value)
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("not expected status", K(ret), K(status), K(*this));
       break;
     }
   }

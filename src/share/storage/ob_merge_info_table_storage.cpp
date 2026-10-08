@@ -42,7 +42,6 @@ int ObMergeInfoTableStorage::init(ObSQLiteConnectionPool *pool)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(pool_ = pool)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid pool", K(ret));
   } else if (OB_FAIL(create_table_if_not_exists())) {
   }
   if (OB_FAIL(ret)) {
@@ -56,12 +55,10 @@ int ObMergeInfoTableStorage::create_table_if_not_exists()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(pool_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("pool not set", K(ret));
   } else {
     ObSQLiteConnectionGuard guard(pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_MERGE_INFO, nullptr))) {
     }
   }
@@ -73,7 +70,6 @@ int ObMergeInfoTableStorage::insert_or_update(const ObGlobalMergeInfo &global_me
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     const char *upsert_sql =
       "INSERT INTO __all_merge_info "
@@ -108,7 +104,6 @@ int ObMergeInfoTableStorage::insert_or_update(const ObGlobalMergeInfo &global_me
     ObSQLiteConnectionGuard guard(pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(upsert_sql, binder))) {
     }
   }
@@ -121,7 +116,6 @@ int ObMergeInfoTableStorage::get(ObGlobalMergeInfo &global_merge_info)
   global_merge_info.reset();
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     const char *select_sql =
       "SELECT frozen_scn, global_broadcast_scn, is_merge_error, "
@@ -155,10 +149,8 @@ int ObMergeInfoTableStorage::get(ObGlobalMergeInfo &global_merge_info)
     ObSQLiteConnectionGuard guard(pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->query(select_sql, nullptr, row_processor))) {
       if (OB_ENTRY_NOT_EXIST != ret) {
-        LOG_WARN("failed to query", K(ret));
       }
     }
   }

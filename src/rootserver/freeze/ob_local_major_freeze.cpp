@@ -49,7 +49,6 @@ int ObLocalMajorFreeze::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", KR(ret));
   } else if (OB_FAIL(major_merge_info_mgr_.init(sql_proxy))) {
   } else if (OB_FAIL(snapshot_gc_scn_renewer_.init(
              is_primary_service, major_merge_info_mgr_))) {
@@ -76,7 +75,6 @@ int ObLocalMajorFreeze::start(const bool append_mode)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else {
     set_log_mode_(append_mode);
     if (OB_FAIL(major_merge_info_detector_.start())) {
@@ -178,10 +176,8 @@ int ObLocalMajorFreeze::on_become_primary()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (!is_primary_service()) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("local major freeze is not primary service", KR(ret));
   } else if (major_merge_info_detector_.is_replay_mode()) {
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("local major freeze is still in replay mode", KR(ret));
@@ -201,7 +197,6 @@ int ObLocalMajorFreeze::set_freeze_info(const ObMajorFreezeReason freeze_reason)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (OB_FAIL(major_merge_info_mgr_.set_freeze_info(freeze_reason))) {
   }
   return ret;
@@ -213,15 +208,11 @@ int ObLocalMajorFreeze::launch_major_freeze(const ObMajorFreezeReason freeze_rea
   LOG_INFO("launch_major_freeze");
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (OB_FAIL(check_runtime_status())) {
   } else if (!GCONF.enable_major_freeze) {
     ret = OB_MAJOR_FREEZE_NOT_ALLOW;
-    LOG_WARN("enable_major_freeze is off, refuse to to major_freeze",
-             KR(ret));
   } else if (merge_scheduler_.is_paused()) {
     ret = OB_LEADER_NOT_EXIST;
-    LOG_WARN("leader may switch", KR(ret));
   } else if (OB_FAIL(check_freeze_info())) {
     LOG_ERROR("fail to check freeze info", KR(ret));
     if ((OB_MAJOR_FREEZE_NOT_FINISHED == ret) || (OB_FROZEN_INFO_ALREADY_EXIST == ret)) {
@@ -240,10 +231,8 @@ int ObLocalMajorFreeze::suspend_merge()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (merge_scheduler_.is_paused()) {
     ret = OB_LEADER_NOT_EXIST;
-    LOG_WARN("leader may switch", KR(ret));
   } else if (OB_FAIL(major_merge_info_mgr_.get_global_merge_mgr().try_reload())) {
   } else if (OB_FAIL(major_merge_info_mgr_.get_global_merge_mgr().suspend_merge())) {
   }
@@ -255,10 +244,8 @@ int ObLocalMajorFreeze::resume_merge()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (merge_scheduler_.is_paused()) {
     ret = OB_LEADER_NOT_EXIST;
-    LOG_WARN("leader may switch", KR(ret));
   } else if (OB_FAIL(major_merge_info_mgr_.get_global_merge_mgr().try_reload())) {
   } else if (OB_FAIL(major_merge_info_mgr_.get_global_merge_mgr().resume_merge())) {
   }
@@ -271,10 +258,8 @@ int ObLocalMajorFreeze::clear_merge_error()
   const ObGlobalMergeInfo::ObMergeErrorType error_type = ObGlobalMergeInfo::NONE_ERROR;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (merge_scheduler_.is_paused()) {
     ret = OB_LEADER_NOT_EXIST;
-    LOG_WARN("leader may switch", KR(ret));
   } else if (OB_FAIL(major_merge_info_mgr_.get_global_merge_mgr().try_reload())) {
   } else {
     if (OB_FAIL(ObTabletMetaTableCompactionOperator::batch_update_status(
@@ -282,7 +267,6 @@ int ObLocalMajorFreeze::clear_merge_error()
     }
 
     if (FAILEDx(major_merge_info_mgr_.get_global_merge_mgr().set_merge_status(error_type))) {
-      LOG_WARN("fail to set merge error", KR(ret), K(error_type));
     }
   }
   return ret;
@@ -295,7 +279,6 @@ int ObLocalMajorFreeze::get_uncompacted_tablets(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else {
     if (OB_FAIL(merge_scheduler_.get_uncompacted_tablets(uncompacted_tablets, uncompacted_table_ids))) {
     }
@@ -310,12 +293,10 @@ int ObLocalMajorFreeze::check_runtime_status() const
   const share::schema::ObSimpleServerRuntimeSchema *runtime_schema = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (OB_FAIL(schema_service_->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_server_runtime_info(runtime_schema))) {
   } else if ((nullptr == runtime_schema) || !runtime_schema->is_normal()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("database runtime is not normal", KR(ret), KPC(runtime_schema));
   }
   return ret;
 }
@@ -329,7 +310,6 @@ int ObLocalMajorFreeze::check_freeze_info()
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (OB_FAIL(major_merge_info_mgr_.get_local_latest_frozen_scn(latest_frozen_scn))) {
   } else {
     ObGlobalMergeManager &global_merge_mgr = major_merge_info_mgr_.get_global_merge_mgr();
@@ -348,7 +328,6 @@ int ObLocalMajorFreeze::check_freeze_info()
                 K(global_last_merged_scn), K(latest_frozen_scn));
       } else if (merge_scheduler_.is_paused()) {
         ret = OB_LEADER_NOT_EXIST;
-        LOG_WARN("leader may switch", KR(ret));
       }
     }
   }

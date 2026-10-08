@@ -44,19 +44,16 @@ int ObGrantResolver::resolve_grantee_clause(
   if (OB_ISNULL(grantee_clause) || grantee_clause->num_child_ < 1
       || OB_ISNULL(grantee_clause->children_[0])) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("resolve grantee error", K(ret));
   } else {
     // Put every grant_user into grant_user_arry
     if (grantee_clause->type_ != T_USERS && grantee_clause->type_ != T_GRANT) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid type", K(ret), K(grantee_clause->type_));
     } else if (grantee_clause->type_ == T_USERS) {
       const ParseNode *grant_user_list = grantee_clause->children_[0];
       for (int i = 0; OB_SUCC(ret) && i < grant_user_list->num_child_; ++i) {
         grant_user = grant_user_list->children_[i];
         if (OB_ISNULL(grant_user)) {
           ret = OB_ERR_PARSE_SQL;
-          LOG_WARN("grant_user is NULL", K(ret));
         } else {
           ObString user_name;
           ObString host_name(OB_DEFAULT_HOST_NAME);
@@ -71,7 +68,6 @@ int ObGrantResolver::resolve_grantee_clause(
       grant_user = grantee_clause->children_[0];
       if (OB_ISNULL(grant_user)) {
         ret = OB_ERR_PARSE_SQL;
-        LOG_WARN("grant_user is NULL", K(ret));
       } else {
         ObString user_name;
         ObString host_name(OB_DEFAULT_HOST_NAME);
@@ -95,12 +91,10 @@ int ObGrantResolver::resolve_grant_user(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(grant_user) || OB_ISNULL(session_info)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("resolve grant_user error", K(ret));
   } else {
     if (grant_user->type_ == T_CREATE_USER_SPEC) {
       if (OB_UNLIKELY(5 != grant_user->num_child_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Parse node error in grentee ", K(ret));
       } else {
         if (grant_user->children_[0]->type_ == T_FUN_SYS_CURRENT_USER) {
           user_name = session_info->get_user_name();
@@ -163,7 +157,6 @@ int ObGrantResolver::resolve_grant_role_to_ur(
       || OB_ISNULL(params_.schema_checker_)
       || OB_ISNULL(params_.session_info_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("grant_role and grant_stmt should not be NULL", K(grant_role), K(grant_stmt), K(ret));
   } else {
     ObSArray<ObString> user_name_array;
     ObSArray<ObString> host_name_array;
@@ -183,10 +176,6 @@ int ObGrantResolver::resolve_grant_role_to_ur(
     if (OB_SUCC(ret)) {
       if (user_name_array.count() != host_name_array.count()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("user_name count is not equal to host_name count",
-                 K(ret),
-                 K(user_name_array.count()),
-                 K(host_name_array.count()));
       } else {
         for (int i = 0; OB_SUCC(ret) && i < user_name_array.count(); ++i) {
           const ObUserInfo *grantee_info = NULL;
@@ -222,7 +211,6 @@ int ObGrantResolver::resolve_grant_role_to_ur(
       if (OB_ISNULL(params_.session_info_->get_cur_exec_ctx())
           || OB_ISNULL(sql_ctx = params_.session_info_->get_cur_exec_ctx()->get_sql_ctx())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected ctx", K(ret), KP(params_.session_info_->get_cur_exec_ctx()));
       }
 
       for (int i = 0; OB_SUCC(ret) && i < role_list->num_child_; ++i) {
@@ -313,9 +301,6 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
   ObGrantStmt *grant_stmt = NULL;
   if (OB_ISNULL(params_.schema_checker_) || OB_ISNULL(params_.session_info_) || OB_ISNULL(allocator_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("schema_checker or session_info not inited", "schema_checker", params_.schema_checker_,
-                                                          "session_info", params_.session_info_,
-                                                          K(ret));
   } else if (node == NULL 
       || (T_GRANT != node->type_ && T_SYSTEM_GRANT != node->type_ && T_GRANT_ROLE != node->type_)
       || ((1 != node->num_child_) && (4 != node->num_child_) && (3 != node->num_child_))) {
@@ -347,7 +332,6 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
               && OB_FAIL(resolve_priv_level_with_object_type(session_info_,
                                                              priv_object_node,
                                                              grant_level))) {
-            LOG_WARN("failed to resolve priv level with object", K(ret));
           } else if (OB_FAIL(resolve_priv_level(params_.schema_checker_->get_schema_guard(),
                                                 session_info_,
                                                 priv_level_node,
@@ -373,7 +357,6 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
                                                           db,
                                                           table,
                                                           allocator_))) {
-            LOG_WARN("failed to resolve priv object", K(ret));
           }
         }
 
@@ -383,7 +366,6 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
           ObPrivSet priv_set = 0;
           if (OB_ISNULL(allocator_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected error", K(ret));
           } else if (OB_FAIL(resolve_priv_set(privs_node, grant_level, priv_set, grant_stmt, params_.schema_checker_,
                                                                                       params_.session_info_,
                                                                                       *allocator_))) {
@@ -408,7 +390,6 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
                   && !params_.is_restore_
                   && !params_.is_ddl_from_primary_) {
                 ret = OB_TABLE_NOT_EXIST;
-                LOG_WARN("table not exist", K(ret), K(table), K(db));
                 ObCStringHelper helper;
                 LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(db),helper.convert(table));
               }
@@ -441,13 +422,10 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
               ObString need_enc = ObString::make_string("NO");
               if (OB_ISNULL(user_node)) {
                 ret = OB_ERR_PARSE_SQL;
-                LOG_WARN("Parse SQL error, user node should not be NULL", K(user_node), K(ret));
               } else if (OB_UNLIKELY(5 != user_node->num_child_)) {
                 ret = OB_ERR_PARSE_SQL;
-                LOG_WARN("User specification's child node num error", K(ret));
               } else if (OB_ISNULL(user_node->children_[0])) {
                 ret = OB_ERR_PARSE_SQL;
-                LOG_WARN("The child 0 should not be NULL", K(ret));
               } else {
 
                 if (user_node->children_[0]->type_ == T_FUN_SYS_CURRENT_USER) {
@@ -487,7 +465,6 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
                       static_cast<int32_t>(user_node->children_[1]->str_len_));
                   if (OB_ISNULL(user_node->children_[2])) {
                     ret = OB_ERR_PARSE_SQL;
-                    LOG_WARN("The child 2 of user_node should not be NULL", K(ret));
                   } else if (0 == user_node->children_[2]->value_) {
                     if (!ObSetPasswordResolver::is_valid_mysql41_passwd(pwd)) {
                       ret = OB_ERR_PASSWORD_FORMAT;
@@ -531,10 +508,8 @@ int ObGrantResolver::resolve_priv_level_with_object_type(const ObSQLSessionInfo 
   int ret = OB_SUCCESS;
   if (OB_ISNULL(session_info)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("session_info not inited", K(ret));
   } else if (OB_ISNULL(priv_object_node)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected parse node", K(ret));
   }
   if (OB_SUCC(ret)) {
     if (priv_object_node->value_ == 1) {
@@ -543,7 +518,6 @@ int ObGrantResolver::resolve_priv_level_with_object_type(const ObSQLSessionInfo 
       grant_level = OB_PRIV_ROUTINE_LEVEL;
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected obj type", K(ret), K(priv_object_node->value_));
     }
   }
   return ret;
@@ -566,7 +540,6 @@ int ObGrantResolver::resolve_priv_level(
   bool is_grant_routine = (grant_level == OB_PRIV_ROUTINE_LEVEL);
   if (OB_ISNULL(node)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(node), K(ret));
   } else {
     CK (guard != NULL);
     db = ObString::make_string("");
@@ -582,12 +555,10 @@ int ObGrantResolver::resolve_priv_level(
         table.assign_ptr(node->str_value_, static_cast<const int32_t>(node->str_len_));
       } else {
         ret = OB_ERR_PARSE_SQL;
-        LOG_WARN("sql_parser error", K(ret));
       }
       if (OB_SUCC(ret)) {
         if (0 == session_db.length()) {
           ret = OB_ERR_NO_DB_SELECTED;
-          LOG_WARN("No database selected", K(ret));
         } else {
           db = session_db;
         }
@@ -595,8 +566,6 @@ int ObGrantResolver::resolve_priv_level(
     } else if (T_PRIV_LEVEL == node->type_ && 2 == node->num_child_) {
       if (OB_ISNULL(node->children_[0]) || OB_ISNULL(node->children_[1])) {
         ret = OB_ERR_PARSE_SQL;
-        LOG_WARN("Parse priv level error",
-            K(ret), "child 0", node->children_[0], "child 1", node->children_[1]);
       } else if (T_STAR == node->children_[0]->type_ && T_STAR == node->children_[1]->type_) {
         grant_level = OB_PRIV_USER_LEVEL;
       } else if (T_IDENT == node->children_[0]->type_ && T_STAR == node->children_[1]->type_) {
@@ -613,11 +582,9 @@ int ObGrantResolver::resolve_priv_level(
         OZ (ObSQLUtils::cvt_db_name_to_org(*guard, session, db, &allocator));
       } else {
         ret = OB_ERR_PARSE_SQL;
-        LOG_WARN("sql_parser error", K(ret));
       }
     } else {
       ret = OB_ERR_PARSE_SQL;
-      LOG_WARN("sql_parser parse grant_stmt error", K(ret));
     }
     if (OB_SUCC(ret)) {
       if (OB_PRIV_TABLE_LEVEL == grant_level && table.empty()) {
@@ -638,7 +605,6 @@ int ObGrantResolver::resolve_priv_level(
         // or
         // grant priv on [object type] ident1.ident2 to user
         ret = OB_ILLEGAL_GRANT_FOR_TABLE;
-        LOG_WARN("illegal grant", K(ret));
       } else {
         grant_level = OB_PRIV_ROUTINE_LEVEL;
       }

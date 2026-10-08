@@ -45,7 +45,6 @@ int ObDbmsStatsUtils::init_table_stats(ObIAllocator &allocator,
     void *p = NULL;
     if (OB_ISNULL(p = allocator.alloc(sizeof(ObOptTableStat)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory for T", K(ret));
     } else if (OB_FALSE_IT(opt_stat = new (p) ObOptTableStat())) {
     } else if (OB_FAIL(table_stats.push_back(opt_stat))) {
     }
@@ -67,7 +66,6 @@ int ObDbmsStatsUtils::init_col_stats(ObIAllocator &allocator,
       ObOptColumnStat *&col_stat = col_stats.at(i);
       if (OB_ISNULL(col_stat = ObOptColumnStat::malloc_new_column_stat(allocator))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("memory is not enough", K(ret), K(col_stat));
       }
     }
   }
@@ -82,16 +80,12 @@ int ObDbmsStatsUtils::assign_col_param(const ObIArray<ObColumnStatParam> *src_co
   int ret = OB_SUCCESS;
   if (start < 0 || end < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument start or end index must be great than 0", K(start), K(end));
   } else if (OB_ISNULL(src_col_params)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexepected null", K(ret));
   } else if (start > end) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument start larger thran end index", K(start), K(end));
   } else if (start >= src_col_params->count() || end > src_col_params->count()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument start larger thran end index", K(start), K(end), K(src_col_params->count()));
   } else {
     target_col_params.reset();
     target_col_params.reserve(end - start);
@@ -347,8 +341,6 @@ int ObDbmsStatsUtils::parse_granularity(const ObString &granularity, ObGranulari
     granu_type = ObGranularityType::GRANULARITY_SUBPARTITION;
   } else {
     ret = OB_ERR_DBMS_STATS_PL;
-    LOG_WARN("Illegal granularity : must be AUTO | ALL | GLOBAL | PARTITION | SUBPARTITION" \
-             "| GLOBAL AND PARTITION | APPROX_GLOBAL AND PARTITION", K(ret));
     LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "Illegal granularity : must be AUTO | ALL | GLOBAL |" \
              " PARTITION | SUBPARTITION | GLOBAL AND PARTITION | APPROX_GLOBAL AND PARTITION");
   }
@@ -365,7 +357,6 @@ int ObDbmsStatsUtils::split_batch_write(sql::ObExecContext &ctx,
   ObMySQLTransaction trans;
   if (OB_ISNULL(ctx.get_my_session()) || OB_ISNULL(ctx.get_sql_proxy())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(ctx.get_my_session()), K(ctx.get_sql_proxy()));
   } else if (OB_FAIL(trans.start(ctx.get_sql_proxy()))) {
   } else if (OB_FAIL(split_batch_write(trans.get_connection(),
                                        ctx.get_virtual_table_ctx().schema_guard_,
@@ -399,7 +390,6 @@ int ObDbmsStatsUtils::split_batch_write(share::schema::ObSchemaGetterGuard *sche
   ObMySQLTransaction trans;
   if (OB_ISNULL(session_info) || OB_ISNULL(sql_proxy)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(session_info), K(sql_proxy));
   } else if (OB_FAIL(trans.start(sql_proxy))) {
   } else if (OB_FAIL(split_batch_write(trans.get_connection(),
                                        schema_guard,
@@ -463,7 +453,6 @@ int ObDbmsStatsUtils::split_batch_write(sqlclient::ObISQLConnection *conn,
   int64_t current_time = ObTimeUtility::current_time();
   if (OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(session_info));
   }
   while (OB_SUCC(ret) &&
         (idx_tab_stat < table_stats.count() || idx_col_stat < column_stats.count())) {
@@ -471,8 +460,6 @@ int ObDbmsStatsUtils::split_batch_write(sqlclient::ObISQLConnection *conn,
     ObSEArray<ObOptColumnStat*, 4> write_column_stats;
     if (OB_UNLIKELY(idx_tab_stat > table_stats.count() || idx_col_stat > column_stats.count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpectd error", K(ret), K(idx_tab_stat), K(table_stats.count()),
-                                      K(idx_col_stat), K(column_stats.count()));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < MAX_NUM_OF_WRITE_STATS && idx_tab_stat < table_stats.count(); ++i) {
         if (OB_FAIL(write_table_stats.push_back(table_stats.at(idx_tab_stat++)))) {
@@ -487,7 +474,6 @@ int ObDbmsStatsUtils::split_batch_write(sqlclient::ObISQLConnection *conn,
         ObOptColumnStat *cur_opt_col_stat = column_stats.at(idx_col_stat);
         if (OB_ISNULL(cur_opt_col_stat)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret), K(cur_opt_col_stat));
         } else if (OB_FAIL(write_column_stats.push_back(cur_opt_col_stat))) {
         } else {
           ++ col_stat_cnt;
@@ -574,7 +560,6 @@ int ObDbmsStatsUtils::get_no_need_collect_part_ids(const ObTableStatParam &param
     }
 
     if (OB_SUCC(ret) && !found && OB_FAIL(no_collect_subpart_ids.push_back(part_or_subpart_ids.at(i)))) {
-      LOG_WARN("failed to push back", K(ret));
     }
   }
   return ret;
@@ -588,12 +573,10 @@ int ObDbmsStatsUtils::get_valid_duration_time(const int64_t start_time,
   const int64_t current_time = ObTimeUtility::current_time();
   if (OB_UNLIKELY(start_time <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(start_time), K(ret));
   } else if (max_duration_time == -1) {
     //do nothing
   } else if (OB_UNLIKELY(current_time - start_time >= max_duration_time)) {
     ret = OB_TIMEOUT;
-    LOG_WARN("reach the duration time", K(ret), K(current_time), K(start_time), K(max_duration_time));
   } else {
     valid_duration_time = max_duration_time - (current_time - start_time);
   }
@@ -615,7 +598,6 @@ int ObDbmsStatsUtils::get_dst_partition_by_tablet_id(sql::ObExecContext &ctx,
   }
   if (OB_UNLIKELY(partition_id == -1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(tablet_id), K(partition_infos));
   } else {
   }
   return ret;
@@ -632,7 +614,6 @@ int ObDbmsStatsUtils::calssify_opt_stat(const ObIArray<ObOptStat> &opt_stats,
       for (int64_t j = 0; OB_SUCC(ret) && j < opt_stats.at(i).column_stats_.count(); ++j) {
         if (OB_ISNULL(opt_stats.at(i).column_stats_.at(j))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret), K(opt_stats.at(i).column_stats_.at(j)));
         } else if (opt_stats.at(i).column_stats_.at(j)->is_valid()) {
           ret = column_stats.push_back(opt_stats.at(i).column_stats_.at(j));
         }
@@ -658,13 +639,11 @@ int ObDbmsStatsUtils::merge_tab_stats(const ObTableStatParam &param,
   for (int64_t i = 0; OB_SUCC(ret) && i < old_tab_stats.count(); i++) {
     if (OB_ISNULL(old_tab_stats.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected error", K(ret), K(old_tab_stats.at(i)));
     } else {
       ObOptTableStat::Key key(old_tab_stats.at(i)->get_table_id(),
                               old_tab_stats.at(i)->get_partition_id());
       if (OB_FAIL(online_table_stats.get_refactored(key, tmp_tab_stat))) {
         if (OB_HASH_NOT_EXIST != ret) {
-          LOG_WARN("failed to find in hashmap", K(ret));
         } else {
           ret = OB_SUCCESS;
         }
@@ -694,14 +673,12 @@ int ObDbmsStatsUtils::merge_col_stats(const ObTableStatParam &param,
   for (int64_t i = 0; OB_SUCC(ret) && i < old_col_stats.count(); i++) {
     if (OB_ISNULL(old_col_stats.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected error", K(ret), K(old_col_stats.at(i)));
     } else {
       ObOptColumnStat::Key key(old_col_stats.at(i)->get_table_id(),
                               old_col_stats.at(i)->get_partition_id(),
                               old_col_stats.at(i)->get_column_id());
       if (OB_FAIL(online_column_stats.get_refactored(key, tmp_col_stat))) {
         if (OB_UNLIKELY(OB_HASH_NOT_EXIST != ret)) {
-          LOG_WARN("failed to find in hashmap", K(ret));
         } else {
           ret = OB_SUCCESS;
         }
@@ -716,12 +693,10 @@ int ObDbmsStatsUtils::merge_col_stats(const ObTableStatParam &param,
     ObOptColumnStat *col_stat = NULL;
     if (OB_ISNULL(col_stat = it->second)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null pointer", K(ret));
     } else if (is_part_id_valid(param, col_stat->get_partition_id())) {
       col_stat->set_num_distinct(ObGlobalNdvEval::get_ndv_from_llc(col_stat->get_llc_bitmap()));
       if (OB_UNLIKELY(col_stat->get_num_distinct() < 0)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", KPC(col_stat), K(old_col_stats), K(ret));
       } else if (OB_FAIL(dst_col_stats.push_back(col_stat))) {
       }
     }
@@ -772,7 +747,6 @@ int ObDbmsStatsUtils::get_part_infos(const ObTableSchema &table_schema,
     while (OB_SUCC(ret) && OB_SUCC(iter.next(part))) {
       if (OB_ISNULL(part)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null partition", K(ret), K(part));
       } else {
         PartInfo part_info;
         part_info.part_id_ = part->get_part_id();
@@ -791,7 +765,6 @@ int ObDbmsStatsUtils::get_part_infos(const ObTableSchema &table_schema,
         } else if (OB_FAIL(part_ids.push_back(part_info.part_id_))) {
         } else if (is_twopart &&
                    OB_FAIL(get_subpart_infos(table_schema, part, allocator, subpart_infos, subpart_ids, part_map))) {
-          LOG_WARN("failed to get subpart info", K(ret));
         } else {
           part_infos.at(part_infos.count() - 1).subpart_cnt_ = subpart_infos.count() - origin_cnt;
         }
@@ -814,14 +787,12 @@ int ObDbmsStatsUtils::get_subpart_infos(const ObTableSchema &table_schema,
   if (OB_ISNULL(part) ||
       OB_UNLIKELY(table_schema.get_part_level() != share::schema::PARTITION_LEVEL_TWO)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("partition is null", K(ret), K(table_schema.get_part_level()));
   } else {
     const ObSubPartition *subpart = NULL;
     ObSubPartIterator sub_iter(table_schema, *part, check_partition_mode);
     while (OB_SUCC(ret) && OB_SUCC(sub_iter.next(subpart))) {
       if (OB_ISNULL(subpart)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null subpartition", K(ret));
       } else {
         PartInfo subpart_info;
         subpart_info.part_name_ = subpart->get_part_name();
@@ -857,7 +828,6 @@ int ObDbmsStatsUtils::truncate_string_for_opt_stats(const ObObj *old_obj,
   bool is_truncated = false;
   if (OB_ISNULL(old_obj)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null");
   } else if (ObColumnStatParam::is_valid_opt_col_type(old_obj->get_type()) && old_obj->is_string_type()) {
     if(old_obj->is_lob_storage()) {
       ObObj *tmp_obj = NULL;
@@ -869,7 +839,6 @@ int ObDbmsStatsUtils::truncate_string_for_opt_stats(const ObObj *old_obj,
       } else if (OB_ISNULL(datum_access_ctx) ||
                  OB_ISNULL(datum_access_ctx->lob_read_options_)) {
         ret = OB_NOT_INIT;
-        LOG_WARN("LOB datum access context is not initialized", K(ret));
       } else if (OB_FAIL(sql::ObTextStringHelper::read_prefix_string_data(
                      *datum_access_ctx->lob_read_options_,
                      &alloc,
@@ -878,7 +847,6 @@ int ObDbmsStatsUtils::truncate_string_for_opt_stats(const ObObj *old_obj,
                      OPT_STATS_MAX_VALUE_CHAR_LEN))) {
       } else if (OB_ISNULL(tmp_obj = static_cast<ObObj*>(alloc.alloc(sizeof(ObObj))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc buf", K(ret));
       } else if (OB_FAIL(sql::ObTextStringHelper::str_to_lob_storage_obj(alloc, str, *tmp_obj))) {
       } else {
         tmp_obj->set_meta_type(old_obj->get_meta());
@@ -895,10 +863,8 @@ int ObDbmsStatsUtils::truncate_string_for_opt_stats(const ObObj *old_obj,
           //do nothing
         } else if (OB_UNLIKELY(truncated_str_len < 0)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected error", K(ret), K(old_obj), K(str), K(truncated_str_len));
         } else if (OB_ISNULL(tmp_obj = static_cast<ObObj*>(alloc.alloc(sizeof(ObObj))))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to alloc buf", K(ret));
         } else {
           tmp_obj->set_varchar(str.ptr(), static_cast<int32_t>(truncated_str_len));
           tmp_obj->set_meta_type(old_obj->get_meta());
@@ -932,7 +898,6 @@ int ObDbmsStatsUtils::truncate_string_for_opt_stats(
       } else if (OB_ISNULL(datum_access_ctx) ||
                  OB_ISNULL(datum_access_ctx->lob_read_options_)) {
         ret = OB_NOT_INIT;
-        LOG_WARN("LOB datum access context is not initialized", K(ret));
       } else if (OB_FAIL(sql::ObTextStringHelper::read_prefix_string_data(
                      *datum_access_ctx->lob_read_options_,
                      &allocator,
@@ -948,7 +913,6 @@ int ObDbmsStatsUtils::truncate_string_for_opt_stats(
       int64_t truncated_str_len = get_truncated_str_len(str, obj.get_collation_type());
       if (OB_UNLIKELY(truncated_str_len < 0)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(obj), K(str), K(truncated_str_len));
       } else if (truncated_str_len == str.length()) {
         // do nothing
       } else {
@@ -1097,7 +1061,6 @@ int ObDbmsStatsUtils::remove_stat_gather_param_partition_info(int64_t reserved_p
   }
   if (!found_it) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(param), K(reserved_partition_id));
   }
   return ret;
 }
@@ -1169,7 +1132,6 @@ int ObDbmsStatsUtils::get_current_opt_stats(ObIAllocator &allocator,
   ObSEArray<uint64_t, 4> column_ids;
   if (OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret));
   } else if (OB_FAIL(get_part_ids_and_column_ids(param, part_ids, column_ids))) {
   } else if (OB_FAIL(table_stats.prepare_allocate(part_ids.count()))) {
   } else if (OB_FAIL(column_stats.prepare_allocate(part_ids.count() * column_ids.count())))  {
@@ -1180,7 +1142,6 @@ int ObDbmsStatsUtils::get_current_opt_stats(ObIAllocator &allocator,
       void *ptr = NULL;
       if (OB_ISNULL(ptr = allocator.alloc(sizeof(ObOptTableStat)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("memory is not enough", K(ret), K(ptr));
       } else {
         table_stats.at(i) = new (ptr) ObOptTableStat();
         table_stats.at(i)->set_table_id(param.table_id_);
@@ -1190,11 +1151,9 @@ int ObDbmsStatsUtils::get_current_opt_stats(ObIAllocator &allocator,
           int64_t idx = i * column_ids.count() + j;
           if (OB_UNLIKELY(idx >= column_stats.count())) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected error", K(ret), K(idx), K(column_stats.count()));
           } else if (OB_ISNULL(ptr1 = allocator.alloc(sizeof(ObOptColumnStat::Key))) ||
                      OB_ISNULL(column_stats.at(idx) = ObOptColumnStat::malloc_new_column_stat(allocator))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("memory is not enough", K(ret), K(ptr1), K(column_stats.at(idx)));
           } else {
             ObOptColumnStat::Key *col_key = new (ptr1) ObOptColumnStat::Key(param.table_id_,
                                                                             part_ids.at(i),
@@ -1222,7 +1181,6 @@ int ObDbmsStatsUtils::get_current_opt_stats(ObIAllocator &allocator,
             int64_t idx = i * column_ids.count() + j;
             if (OB_UNLIKELY(idx >= column_stats.count())) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("get unexpected error", K(ret), K(idx), K(column_stats.count()));
             } else if (table_stats.at(i) != NULL && column_stats.at(idx) != NULL && column_stats.at(idx)->get_num_distinct() > 0) {
               int64_t num_not_null = table_stats.at(i)->get_row_count() - column_stats.at(idx)->get_num_null();
               if (num_not_null < 0) {
@@ -1251,13 +1209,11 @@ int ObDbmsStatsUtils::merge_split_gather_tab_stats(ObIArray<ObOptTableStat *> &a
     }
   } else if (OB_UNLIKELY(all_tstats.count() != cur_all_tstats.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(all_tstats), K(cur_all_tstats));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < all_tstats.count(); ++i) {
       if (OB_ISNULL(all_tstats.at(i)) ||
           OB_ISNULL(cur_all_tstats.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), KPC(all_tstats.at(i)), K(cur_all_tstats.at(i)));
       } else if (!all_tstats.at(i)->is_valid() && cur_all_tstats.at(i)->is_valid()) {
         *all_tstats.at(i) = *cur_all_tstats.at(i);
         cur_all_tstats.at(i)->~ObOptTableStat();
@@ -1265,7 +1221,6 @@ int ObDbmsStatsUtils::merge_split_gather_tab_stats(ObIArray<ObOptTableStat *> &a
       } else if (OB_UNLIKELY(all_tstats.at(i)->get_table_id() != cur_all_tstats.at(i)->get_table_id() ||
                              all_tstats.at(i)->get_partition_id() != cur_all_tstats.at(i)->get_partition_id())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), KPC(all_tstats.at(i)), K(cur_all_tstats.at(i)));
       } else {
         all_tstats.at(i)->set_row_count(std::max(all_tstats.at(i)->get_row_count(), cur_all_tstats.at(i)->get_row_count()));
         all_tstats.at(i)->set_avg_row_size(all_tstats.at(i)->get_avg_row_size() + cur_all_tstats.at(i)->get_avg_row_size());
@@ -1287,23 +1242,18 @@ int ObDbmsStatsUtils::check_all_cols_range_skew(const ObIArray<ObColumnStatParam
     ObIArray<ObOptColumnStat *> &col_stats = opt_stats.at(i).column_stats_;
     if (OB_UNLIKELY(column_params.count() != col_stats.count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected error", K(column_params.count()),
-                                       K(col_stats.count()), K(ret));
     } else {
       for (int64_t j = 0; OB_SUCC(ret) && j < column_params.count(); ++j) {
         const ObColumnStatParam &col_param = column_params.at(j);
         if (col_param.is_size_skewonly() || col_param.is_size_auto()) {
           if (OB_ISNULL(col_stats.at(j))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected null", K(ret), K(col_stats.at(j)));
           } else {
             ObHistogram &hist = col_stats.at(j)->get_histogram();
             if ((hist.get_type() == ObHistType::FREQUENCY && col_param.is_size_skewonly()) ||
                 hist.get_type() == ObHistType::HYBIRD) {
               if (OB_UNLIKELY(hist.get_bucket_size() < 1 || col_param.bucket_num_ < 1)) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("get unexpected error", K(ret), K(hist.get_bucket_size()),
-                                                 K(col_param.bucket_num_), K(*col_stats.at(j)));
               } else {
                 bool is_even_dist = false;
                 int64_t standard_cnt = hist.get_type() == ObHistType::FREQUENCY ?
@@ -1332,7 +1282,6 @@ int ObDbmsStatsUtils::implicit_commit_before_gather_stats(sql::ObExecContext &ct
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(ctx.get_my_session()));
   } else if (OB_FAIL(ObResultSet::implicit_commit_before_cmd_execute(*ctx.get_my_session(), ctx, stmt::T_ANALYZE))) {
   } else {/*do nothing*/}
   return ret;
@@ -1352,12 +1301,10 @@ int ObDbmsStatsUtils::scale_col_stats(const common::ObIArray<ObOptTableStat*> &t
   for (int64_t i = 0; OB_SUCC(ret) && i < tab_stats.count(); ++i) {
     if (OB_ISNULL(table_stat = tab_stats.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected table stat is null", KR(ret));
     } else {
       ObOptTableStat::Key key(table_stat->get_table_id(),
                               table_stat->get_partition_id());
       if (OB_FAIL(table_stats.set_refactored(key, table_stat))) {
-        LOG_WARN("fail to set table stat", KR(ret), K(key), KPC(table_stat));
         if (OB_HASH_EXIST == ret) {
           ret = OB_ENTRY_EXIST;
         }
@@ -1366,7 +1313,6 @@ int ObDbmsStatsUtils::scale_col_stats(const common::ObIArray<ObOptTableStat*> &t
   }
   if (OB_SUCC(ret) && OB_FAIL(scale_col_stats(table_stats,
                                               col_stats))) {
-    LOG_WARN("failed to scale col stats", K(ret));
   }
   return ret;
 }
@@ -1380,13 +1326,11 @@ int ObDbmsStatsUtils::scale_col_stats(const TabStatIndMap &table_stats,
   for (int64_t i = 0; OB_SUCC(ret) && i < col_stats.count(); ++i) {
     if (OB_ISNULL(col_stat = col_stats.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected error", K(ret), K(col_stat));
     } else {
       ObOptTableStat::Key key(col_stat->get_table_id(),
                               col_stat->get_partition_id());
       if (OB_FAIL(table_stats.get_refactored(key, table_stat))) {
         if (OB_UNLIKELY(OB_HASH_NOT_EXIST != ret)) {
-          LOG_WARN("failed to find in hashmap", K(ret));
         } else {
           ret = OB_SUCCESS;
         }
@@ -1437,7 +1381,6 @@ int ObDbmsStatsUtils::check_can_async_gather_stats(sql::ObExecContext &ctx)
   ObSqlString raw_sql;
   if (OB_ISNULL(ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(ctx.get_my_session()));
   } else if (OB_FAIL(raw_sql.append_fmt("SELECT 1 FROM dual WHERE EXISTS(SELECT 1 FROM %s);",
                                         share::OB_ALL_VIRTUAL_OPT_STAT_GATHER_MONITOR_TNAME))) {
   } else {
@@ -1448,16 +1391,13 @@ int ObDbmsStatsUtils::check_can_async_gather_stats(sql::ObExecContext &ctx)
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to execute sql", K(ret));
       } else if (OB_FAIL(client_result->next())) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("failed to get next", K(ret));
         } else {
           ret = OB_SUCCESS;
         }
       } else {
         ret = OB_ERR_DBMS_STATS_PL;
-        LOG_WARN("async stats gathering needs to wait for other stats gathering tasks to finish", K(ret));
         LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL,"async stats gathering needs to wait for other stats gathering tasks to finish");
       }
       int tmp_ret = OB_SUCCESS;
@@ -1480,7 +1420,6 @@ int ObDbmsStatsUtils::build_index_part_to_table_part_maps(share::schema::ObSchem
   const ObTableSchema *index_schema = nullptr;
   if (OB_ISNULL(schema_guard)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(schema_guard->get_table_schema(
                                              index_table_id,
                                              index_schema))) {
@@ -1489,7 +1428,6 @@ int ObDbmsStatsUtils::build_index_part_to_table_part_maps(share::schema::ObSchem
                                                     table_schema))) {
   } else if (OB_UNLIKELY(index_schema->is_global_index_table())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("global index cannot build part maps", K(ret), K(index_table_id));
   } else if (!table_schema->is_partitioned_table()) {
     // do nothing
   } else {
@@ -1511,7 +1449,6 @@ int ObDbmsStatsUtils::build_index_part_to_table_part_maps(share::schema::ObSchem
                                              table_part,
                                              check_partition_mode,
                                              part_id_map))) {
-        LOG_WARN("failed to build sub part maps", K(ret));
       }
     }
     ret = (ret == OB_ITER_END ? OB_SUCCESS : ret);
@@ -1553,7 +1490,6 @@ int ObDbmsStatsUtils::deduce_index_column_stat_to_table(share::schema::ObSchemaG
     for (int64_t i = 0; OB_SUCC(ret) && i < all_column_stats.count(); ++i) {
       if (OB_ISNULL(all_column_stats.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (all_column_stats.at(i)->get_table_id() == index_table_id) {
         all_column_stats.at(i)->set_table_id(data_table_id);
         all_column_stats.at(i)->set_partition_id(data_table_id);
@@ -1570,7 +1506,6 @@ int ObDbmsStatsUtils::deduce_index_column_stat_to_table(share::schema::ObSchemaG
         ObObjectID part_id;
         if (OB_ISNULL(all_column_stats.at(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret));
         } else if (all_column_stats.at(i)->get_table_id() != index_table_id) {
           // do nothing
         } else if (all_column_stats.at(i)->get_partition_id() == -1) {
@@ -1578,10 +1513,8 @@ int ObDbmsStatsUtils::deduce_index_column_stat_to_table(share::schema::ObSchemaG
         } else if (OB_FAIL(part_ids.get_refactored(all_column_stats.at(i)->get_partition_id(),
                                                    part_id))) {
           if (OB_HASH_NOT_EXIST == ret) {
-            LOG_WARN("cannot trans column part ids", K(ret), K(all_column_stats.at(i)->get_partition_id()));
             ret = OB_SUCCESS;
           } else {
-            LOG_WARN("cannot find part ids", K(ret), K(all_column_stats.at(i)->get_partition_id()));
           }
         } else {
           all_column_stats.at(i)->set_table_id(data_table_id);
@@ -1598,7 +1531,6 @@ int ObDbmsStatsUtils::cancel_async_gather_stats(sql::ObExecContext &ctx)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(ctx.get_my_session()));
   } else {
     ObSEArray<ObString, 1> task_ids;
     
@@ -1608,7 +1540,6 @@ int ObDbmsStatsUtils::cancel_async_gather_stats(sql::ObExecContext &ctx)
       for (int64_t i = 0; OB_SUCC(ret) && i < task_ids.count(); ++i) {
         if (OB_FAIL(ObOptStatGatherStatList::instance().cancel_gather_stats(task_ids.at(i)))) {
           if (ret != OB_ERR_DBMS_STATS_PL) {
-            LOG_WARN("failed to cancel gather stats", K(ret));
           } else {
             ret = OB_SUCCESS;
           }
@@ -1648,7 +1579,6 @@ int ObDbmsStatsUtils::get_prefix_index_text_pairs(share::schema::ObSchemaGetterG
   ObSEArray<PrefixColumnPair, 4> all_text_pairs;
   if (OB_ISNULL(schema_guard)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (func_idxs.empty()) {
     // do nothing
   } else if (OB_FAIL(schema_guard->get_table_schema(
@@ -1656,7 +1586,6 @@ int ObDbmsStatsUtils::get_prefix_index_text_pairs(share::schema::ObSchemaGetterG
                                                     table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(get_all_prefix_index_text_pairs(*table_schema,
                                                      ignore_cols,
                                                      all_text_pairs))) {
@@ -1686,7 +1615,6 @@ int ObDbmsStatsUtils::fetch_need_cancel_async_gather_stats_task(ObIAllocator &al
   ObSqlString raw_sql;
   if (OB_ISNULL(ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(ctx.get_my_session()));
   } else if (OB_FAIL(raw_sql.append_fmt("SELECT task_id FROM %s WHERE type = %d;",
                                         share::OB_ALL_VIRTUAL_OPT_STAT_GATHER_MONITOR_TNAME,
                                         ObOptStatGatherType::AYSNC_GATHER))) {
@@ -1698,7 +1626,6 @@ int ObDbmsStatsUtils::fetch_need_cancel_async_gather_stats_task(ObIAllocator &al
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to execute sql", K(ret));
       } else {
         while (OB_SUCC(ret) && OB_SUCC(client_result->next())) {
           int64_t idx = 0;
@@ -1740,7 +1667,6 @@ int ObDbmsStatsUtils::get_all_prefix_index_text_pairs(const share::schema::ObTab
     int64_t pair_index = 0;
     if (OB_ISNULL(col)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (col->is_prefix_column()) {
       ref_column_ids.reuse();
       if (OB_FAIL(col->get_cascaded_column_ids(ref_column_ids))) {
@@ -1750,7 +1676,6 @@ int ObDbmsStatsUtils::get_all_prefix_index_text_pairs(const share::schema::ObTab
         // do nothing
       } else if (OB_ISNULL(ref_col = table_schema.get_column_schema(ref_column_ids.at(0)))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(ObDbmsStatsUtils::get_prefix_index_substr_length(*col, prefix_length))) {
       } else if (OB_FAIL(prefix_columns.get_refactored(ref_col->get_column_id(), pair_index))) {
         if (OB_HASH_NOT_EXIST == ret) {
@@ -1786,7 +1711,6 @@ int ObDbmsStatsUtils::copy_local_index_prefix_stats_to_text(ObIAllocator &alloca
       const ObOptColumnStat *col_stat = column_stats.at(j);
       if (OB_ISNULL(col_stat)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unpexcted null", K(ret));
       } else if (col_stat->get_column_id() == pair.prefix_column_id_) {
         ObOptColumnStat *text_col_stat = NULL;
         void *ptr = NULL;
@@ -1796,7 +1720,6 @@ int ObDbmsStatsUtils::copy_local_index_prefix_stats_to_text(ObIAllocator &alloca
                                                     text_col_stat))) {
         } else if (OB_ISNULL(text_col_stat)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret));
         } else if (OB_FAIL(copy_stats.push_back(text_col_stat))) {
         } else {
           text_col_stat->set_column_id(pair.related_column_id_);
@@ -1819,13 +1742,11 @@ int ObDbmsStatsUtils::copy_global_index_prefix_stats_to_text(share::schema::ObSc
   ObPartitionLevel part_level = share::schema::ObPartitionLevel::PARTITION_LEVEL_ZERO;
   if (OB_ISNULL(schema_guard)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(schema_guard->get_table_schema(
                                                     data_table_id,
                                                     table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected table schema", K(ret));
   } else {
     part_level = table_schema->get_part_level();
   }
@@ -1835,7 +1756,6 @@ int ObDbmsStatsUtils::copy_global_index_prefix_stats_to_text(share::schema::ObSc
       const ObOptColumnStat *col_stat = column_stats.at(j);
       if (OB_ISNULL(col_stat)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unpexcted null", K(ret));
       } else if (col_stat->get_column_id() == pair.prefix_column_id_ &&
                  (col_stat->get_partition_id() == -1 ||
                   col_stat->get_partition_id() == col_stat->get_table_id())) {
@@ -1847,7 +1767,6 @@ int ObDbmsStatsUtils::copy_global_index_prefix_stats_to_text(share::schema::ObSc
                                                     text_col_stat))) {
         } else if (OB_ISNULL(text_col_stat)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret));
         } else if (OB_FAIL(copy_stats.push_back(text_col_stat))) {
         } else {
           text_col_stat->set_column_id(pair.related_column_id_);
@@ -1872,7 +1791,6 @@ int ObDbmsStatsUtils::copy_prefix_column_stat_to_text(ObIAllocator &allocator,
   ObString max_value;
   if (OB_ISNULL(ptr = allocator.alloc(sizeof(ObOptColumnStat)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc opt column stat", K(ret));
   } else if (OB_FALSE_IT(text_col_stat = new (ptr) ObOptColumnStat(allocator))) {
   } else if (OB_FAIL(text_col_stat->assign(col_stat))) {
   } else if (OB_FAIL(text_col_stat->deep_copy_histogram(col_stat.get_histogram()))) {
@@ -1919,7 +1837,6 @@ int ObDbmsStatsUtils::get_table_index_infos(share::schema::ObSchemaGetterGuard *
   int ret = OB_SUCCESS;
   if (OB_ISNULL(schema_guard)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(schema_guard));
   } else if (OB_FAIL(schema_guard->get_can_read_index_array(table_id,
                                                             index_tid_arr,
                                                             index_count,

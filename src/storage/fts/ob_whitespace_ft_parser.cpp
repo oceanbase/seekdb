@@ -58,13 +58,11 @@ int ObSpaceFTParser::init(ObFTParserParam *param)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), KPC(param), KPC(this));
   } else if (OB_ISNULL(param)
       || OB_ISNULL(param->cs_)
       || OB_ISNULL(param->fulltext_)
       || OB_UNLIKELY(0 >= param->ft_length_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KPC(param));
   } else {
     cs_ = param->cs_;
     start_ = param->fulltext_;
@@ -91,7 +89,6 @@ int ObSpaceFTParser::get_next_token(const char *&word,
   word_freq = 0;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("space ft parser isn't initialized", K(ret), K(is_inited_));
   } else {
     const char *start = start_;
     const char *next = next_;
@@ -152,10 +149,8 @@ int ObWhiteSpaceFTParserDesc::segment(
   ObSpaceFTParser *parser = nullptr;
   if (OB_ISNULL(param) || OB_ISNULL(param->fulltext_) || OB_UNLIKELY(!param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KPC(param));
   } else if (OB_ISNULL(parser = OB_NEWx(ObSpaceFTParser, param->allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate space ft parser", K(ret));
   } else {
     if (OB_FAIL(parser->init(param))) {
     } else {

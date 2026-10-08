@@ -39,11 +39,9 @@ int ObObjPrivMysqlDDLService::grant_object(
   int64_t refreshed_schema_version = 0;
   if (OB_ISNULL(ddl_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
   } else if (!object_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("object_key is invalid", K(object_key), K(ret));
   } else {
     ObDDLSQLTransaction trans(&ddl_service_->get_schema_service());
     if (OB_FAIL(trans.start(&ddl_service_->get_sql_proxy(), refreshed_schema_version))) {
@@ -87,10 +85,8 @@ int ObObjPrivMysqlDDLService::revoke_object(
   ObSchemaGetterGuard schema_guard;
   if (OB_ISNULL(ddl_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (!object_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("object_key is invalid", K(object_key), K(ret));
   } else if (OB_FAIL(ddl_service_->get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
   } else {

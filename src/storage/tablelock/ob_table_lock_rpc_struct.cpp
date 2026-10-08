@@ -105,7 +105,6 @@ OB_DEF_SERIALIZE_SIZE(ObTableLockTaskRequest)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(tx_desc_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tx_desc should not be null", K(ret), KP(tx_desc_));
   } else {
     LST_DO_CODE(OB_UNIS_ADD_LEN,
                 task_type_,
@@ -120,7 +119,6 @@ OB_DEF_SERIALIZE(ObTableLockTaskRequest)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(tx_desc_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tx_desc should not be null", K(ret), KP(tx_desc_));
   } else {
     LST_DO_CODE(OB_UNIS_ENCODE,
                 task_type_,
@@ -152,7 +150,6 @@ OB_DEF_SERIALIZE_SIZE(ObReplaceAllLocksRequest)
   int64_t count = 0;
   if (OB_ISNULL(lock_req_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lock_req should not be null", K(ret), KP(lock_req_));
   } else {
     OB_UNIS_ADD_LEN(*lock_req_);
     count = unlock_req_list_.count();
@@ -160,7 +157,6 @@ OB_DEF_SERIALIZE_SIZE(ObReplaceAllLocksRequest)
     for (int64_t i = 0; i < count && OB_SUCC(ret); i++) {
       if (OB_ISNULL(unlock_req_list_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unlock_req should not be null", K(ret));
       } else {
         OB_UNIS_ADD_LEN(*unlock_req_list_.at(i));
       }
@@ -175,7 +171,6 @@ OB_DEF_SERIALIZE(ObReplaceAllLocksRequest)
   int64_t count = 0;
   if (OB_ISNULL(lock_req_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lock_req should not be null", K(ret), KP(lock_req_));
   } else {
     OB_UNIS_ENCODE(*lock_req_);
     count = unlock_req_list_.count();
@@ -183,7 +178,6 @@ OB_DEF_SERIALIZE(ObReplaceAllLocksRequest)
     for (int64_t i = 0; i < count && OB_SUCC(ret); i++) {
       if (OB_ISNULL(unlock_req_list_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unlock_req should not be null", K(ret));
       } else {
         OB_UNIS_ENCODE(*unlock_req_list_.at(i));
       }
@@ -233,7 +227,6 @@ OB_DEF_DESERIALIZE(ObReplaceAllLocksRequest)
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(lock_req_->deserialize(buf, data_len, pos))) {
-    LOG_WARN("deserialize for lock_req failed", K(ret));
     allocator_.free(lock_req_);
     lock_req_ = nullptr;
   } else {
@@ -273,10 +266,8 @@ OB_DEF_DESERIALIZE(ObReplaceAllLocksRequest)
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(unlock_req_ptr->deserialize(buf, data_len, pos))) {
-        LOG_WARN("deserialize for unlock_req failed", K(ret));
         allocator_.free(unlock_req_ptr);
       } else if (OB_FAIL(unlock_req_list_.push_back(unlock_req_ptr))) {
-        LOG_WARN("push unlock_req into list failed", K(ret));
         allocator_.free(unlock_req_ptr);
       }
     }
@@ -342,8 +333,6 @@ int ObLockParam::set(
       OB_UNLIKELY(!is_lock_mode_valid(lock_mode)) ||
       OB_UNLIKELY(!is_op_type_valid(type))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(lock_id), K(lock_mode), K(owner_id),
-             K(type), K(is_try_lock), K(expired_time));
   } else {
     lock_id_ = lock_id;
     lock_mode_ = lock_mode;
@@ -774,7 +763,6 @@ int ObTableLockTaskRequest::set(
       OB_UNLIKELY(!param.is_valid()) ||
       OB_ISNULL(tx_desc)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(task_type), K(param), KP(tx_desc));
   } else {
     task_type_ = task_type;
     param_ = param;
@@ -835,7 +823,6 @@ int ObAdminRemoveLockOpArg::set(const ObTableLockOp &lock_op)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!lock_op.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(lock_op));
   } else {
     lock_op_ = lock_op;
   }
@@ -856,8 +843,6 @@ int ObAdminUpdateLockOpArg::set(const ObTableLockOp &lock_op,
                   !commit_version.is_valid() ||
                   !commit_scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(lock_op),
-             K(commit_version), K(commit_scn));
   } else {
     lock_op_ = lock_op;
     commit_version_ = commit_version;

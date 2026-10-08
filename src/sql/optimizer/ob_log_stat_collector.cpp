@@ -45,7 +45,6 @@ int ObLogStatCollector::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
   for (int64_t i = 0; OB_SUCC(ret) && i < sort_keys_.count(); i++) {
     if (OB_ISNULL(sort_keys_.at(i).expr_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(all_exprs.push_back(sort_keys_.at(i).expr_))) {
     } else { /*do nothing*/ }
   }
@@ -62,7 +61,6 @@ int ObLogStatCollector::inner_replace_op_exprs(ObRawExprReplacer &replacer)
   for (int64_t i = 0; OB_SUCC(ret) && i < sort_keys_.count(); i++) {
     if (OB_ISNULL(sort_keys_.at(i).expr_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(replace_expr_action(replacer, sort_keys_.at(i).expr_))) {
     }
   }

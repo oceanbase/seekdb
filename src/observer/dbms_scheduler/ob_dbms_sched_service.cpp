@@ -51,7 +51,6 @@ int ObDBMSSchedService::init()
   int ret = OB_SUCCESS;
   if (job_master_.is_inited()) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("has inited", KR(ret));
   } else if (OB_FAIL(job_master_.init(GCTX.sql_proxy_, GCTX.schema_service_))) {
   } else if (OB_FAIL(ObServerThreadHelper::create(
       "DBMSSched",
@@ -67,7 +66,6 @@ int ObDBMSSchedService::start()
   int ret = OB_SUCCESS;
   if (!job_master_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(job_master_.is_inited()));
   } else if (OB_FAIL(job_master_.start())) {
   } else if (OB_FAIL(ObServerThreadHelper::start())) {
   } else {
@@ -81,7 +79,6 @@ void ObDBMSSchedService::do_work()
   int ret = OB_SUCCESS;
   if (!job_master_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(job_master_.is_inited()));
   } else if (OB_FAIL(job_master_.scheduler())) {
   }
 }
@@ -91,7 +88,6 @@ void ObDBMSSchedService::stop()
   int ret = OB_SUCCESS;
   if (!job_master_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(job_master_.is_inited()));
   } else if (OB_FAIL(job_master_.stop())) {
   } else {
     ObServerThreadHelper::stop();
@@ -104,7 +100,6 @@ void ObDBMSSchedService::wait()
   int ret = OB_SUCCESS;
   if (!job_master_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(job_master_.is_inited()));
   } else {
     ObServerThreadHelper::wait();
     LOG_INFO("[DBMS_SCHED_SERVICE] ObDBMSSchedService wait success");

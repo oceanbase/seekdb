@@ -169,38 +169,6 @@ union ObMySQLCapabilityFlags
   } cap_flags_;
 };
 
-enum ObClientCapabilityPos
-{
-  OB_CLIENT_LONG_PASSWORD_POS = 0,
-  OB_CLIENT_FOUND_ROWS_POS,
-  OB_CLIENT_LONG_FLAG_POS,
-  OB_CLIENT_CONNECT_WITH_DB_POS,
-  OB_CLIENT_NO_SCHEMA_POS,
-  OB_CLIENT_COMPRESS_POS,
-  OB_CLIENT_ODBC_POS,
-  OB_CLIENT_LOCAL_FILES_POS,
-  OB_CLIENT_IGNORE_SPACE_POS,
-  OB_CLIENT_PROTOCOL_41_POS,
-  OB_CLIENT_INTERACTIVE_POS,
-  OB_CLIENT_SSL_POS,
-  OB_CLIENT_IGNORE_SIGPIPE_POS,
-  OB_CLIENT_TRANSACTION_POS,
-  OB_CLIENT_RESERVED_POS,
-  OB_CLIENT_SECURE_CONNECTION_POS,
-  OB_CLIENT_MULTI_STATEMENTS_POS,
-  OB_CLIENT_MULTI_RESULTS_POS,
-  OB_CLIENT_PS_MULTI_RESULTS_POS,
-  OB_CLIENT_PLUGIN_AUTH_POS,
-  OB_CLIENT_CONNECT_ATTRS_POS,
-  OB_CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA_POS,
-  OB_CLIENT_CAN_HANDLE_EXPIRED_PASSWORDS_POS,
-  OB_CLIENT_SESSION_TRACK_POS,
-  OB_CLIENT_DEPRECATE_EOF_POS,
-  // positions 25-29 are reserved
-  OB_CLIENT_SSL_VERIFY_SERVER_CERT_POS = 30,
-  OB_CLIENT_REMEMBER_OPTIONS_POS = 31,
-};
-
 enum ObServerStatusFlagsPos
 {
   OB_SERVER_STATUS_IN_TRANS_POS = 0,
@@ -262,7 +230,7 @@ public:
 typedef ObCommonKV<common::ObString, common::ObString> ObStringKV;
 
 // Pointer-free C++ sidecar for the Rust command metadata. The command itself
-// stays in ObMySQLRawPacket::cmd_. The ABI-facing nio_mysql_command_view is
+// stays in ObMySQLRawPacket::cmd_. The ABI-facing NioMysqlCommandView is
 // copied field-by-field at the packet-storage boundary, so this core packet
 // header does not depend on nio.h and never retains a Rust view pointer.
 enum class ObMySQLCommandLayout : uint32_t {

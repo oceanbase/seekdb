@@ -39,14 +39,12 @@ int ObServerSnapshotHandler::create_server_snapshot(const ObServerSnapshotID &sn
 
   if (OB_UNLIKELY(!snapshot_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(snapshot_id));
   } else if (OB_FAIL(last_super_block.check_new_snapshot(snapshot_id))) {
   } else if (OB_UNLIKELY(runtime->is_hidden())) {
     ret = OB_NOT_SUPPORTED;
     LOG_INFO("shouldn't create snapshot for hidden runtime", K(ret));
   } else if (OB_UNLIKELY(!last_super_block.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to get runtime super block", K(ret), K(last_super_block));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>()->add_snapshot(snapshot))) {
   }
 
@@ -103,13 +101,11 @@ int ObServerSnapshotHandler::get_ls_meta_entry(
   const ObServerRuntimeSuperBlock super_block = runtime->get_super_block();
   if (OB_UNLIKELY(!snapshot_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(snapshot_id));
   } else if (OB_UNLIKELY(runtime->is_hidden())) {
     ret = OB_NOT_SUPPORTED;
     LOG_INFO("shouldn't get snapshot from hidden runtime", K(ret));
   } else if (OB_UNLIKELY(!super_block.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to get runtime super block", K(ret), K(super_block));
   } else if (OB_FAIL(super_block.get_snapshot(snapshot_id, snapshot))) {
   } else {
     ls_meta_entry = snapshot.ls_meta_entry_;
@@ -172,13 +168,10 @@ int ObServerSnapshotHandler::delete_server_snapshot(const ObServerSnapshotID &sn
 
   if (OB_UNLIKELY(!snapshot_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(snapshot_id));
   } else if (OB_UNLIKELY(runtime->is_hidden())) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("can't delete snapshot for hidden runtime", K(ret));
   } else if (OB_UNLIKELY(!last_super_block.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("super block is invalid", K(ret), K(last_super_block));
   } else if (OB_FAIL(last_super_block.get_snapshot(snapshot_id, snapshot))) {
   } else if (OB_FAIL(ls_snapshot_reader.read_single_meta_item(
       snapshot.ls_meta_entry_, del_ls_snapshot_op, ls_meta_block_list))) {
@@ -298,13 +291,11 @@ int ObServerSnapshotHandler::get_all_server_snapshots(ObIArray<ObServerSnapshotI
 
   if (OB_UNLIKELY(runtime->is_hidden())) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("can't get snapshot from hidden runtime", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < super_block.snapshot_cnt_; i++) {
       const ObServerSnapshotMeta &snapshot = super_block.snapshots_[i];
       if (OB_UNLIKELY(!snapshot.is_valid())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("snapshot meta is invalid", K(ret), K(snapshot));
       } else if (OB_FAIL(snapshot_ids.push_back(snapshot.snapshot_id_))) {
       }
     }
@@ -319,7 +310,6 @@ int ObServerSnapshotHandler::create_all_tablet(ObStartupAccelTaskHandler* startu
 
   if (OB_UNLIKELY(!tablet_meta_entry.is_valid() || IS_EMPTY_BLOCK_LIST(tablet_meta_entry))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(tablet_meta_entry));
   }
 
   if (OB_SUCC(ret)) {

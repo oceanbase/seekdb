@@ -64,7 +64,6 @@ int ObFreezeExecutor::execute(ObExecContext &ctx, ObFreezeStmt &stmt)
           LOG_USER_WARN(OB_FROZEN_INFO_ALREADY_EXIST, warn_buf);
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("failed to launch major freeze", KR(ret));
         }
       }
       LOG_INFO("major freeze request finished", KR(ret));
@@ -85,7 +84,6 @@ int ObFlushCacheExecutor::execute(ObExecContext &ctx, ObFlushCacheStmt &stmt)
           ObPlanCache *plan_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
           if (OB_ISNULL(plan_cache)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("plan cache is null", K(ret));
           } else if (stmt.flush_cache_arg_.ns_type_ != ObLibCacheNameSpace::NS_INVALID) {
             ret = plan_cache->flush_lib_cache_by_ns(stmt.flush_cache_arg_.ns_type_);
           } else {
@@ -99,7 +97,6 @@ int ObFlushCacheExecutor::execute(ObExecContext &ctx, ObFlushCacheStmt &stmt)
           ObPlanCache *plan_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
           if (OB_ISNULL(plan_cache)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("plan cache is null", K(ret));
           } else if (!stmt.flush_cache_arg_.is_fine_grained_) {
             ret = plan_cache->flush_plan_cache();
           } else if (0 == db_num) {
@@ -120,7 +117,6 @@ int ObFlushCacheExecutor::execute(ObExecContext &ctx, ObFlushCacheStmt &stmt)
               common::OB_INVALID_ID != stmt.flush_cache_arg_.schema_id_;
           if (OB_ISNULL(plan_cache)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("plan cache is null", K(ret));
           } else if (!stmt.flush_cache_arg_.is_fine_grained_) {
             ret = plan_cache->flush_pl_cache();
           } else if (0 == db_num) {
@@ -157,7 +153,6 @@ int ObFlushCacheExecutor::execute(ObExecContext &ctx, ObFlushCacheStmt &stmt)
           ObPsCache *ps_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPsCache>();
           if (OB_ISNULL(ps_cache)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("ps cache is null", K(ret));
           } else if (ps_cache->is_inited()) {
             ret = ps_cache->cache_evict_all_ps();
           }
@@ -229,7 +224,6 @@ int ObAdminMergeExecutor::execute(ObExecContext &ctx, ObAdminMergeStmt &stmt)
         break;
       default:
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid merge type", KR(ret), K(stmt));
         break;
     }
   }
@@ -249,7 +243,6 @@ int ObRefreshMemStatExecutor::execute(ObExecContext &ctx, ObRefreshMemStatStmt &
     LOG_WARN("get task executor context failed");
   } else if (OB_ISNULL(ctx.get_local_command_service())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("local command service is null", K(ret));
   } else if (OB_FAIL(ctx.local_command_service().refresh_memory_stat())) {
   }
   return ret;
@@ -265,7 +258,6 @@ int ObRefreshIOCalibraitonExecutor::execute(ObExecContext &ctx, ObRefreshIOCalib
     LOG_WARN("get task executor context failed");
   } else if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid refresh io calibration parameter", K(ret), K(param));
   } else if (!param.only_refresh_) {
     ObIOAbility io_ability;
     for (int64_t i = 0; OB_SUCC(ret) && i < param.calibration_list_.count(); ++i) {
@@ -275,12 +267,10 @@ int ObRefreshIOCalibraitonExecutor::execute(ObExecContext &ctx, ObRefreshIOCalib
     }
     if (OB_SUCC(ret) && param.calibration_list_.count() > 0 && !io_ability.is_valid()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid calibration list", K(ret), K(param), K(io_ability));
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(ObIOCalibration::get_instance().refresh(
                                  param.only_refresh_, param.calibration_list_))) {
-    LOG_WARN("refresh local io calibration failed", K(ret), K(param));
   }
   return ret;
 }
@@ -333,7 +323,6 @@ int ObSetTPExecutor::execute(ObExecContext &ctx, ObSetTPStmt &stmt)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ctx.get_local_command_service())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("local command service is null", K(ret));
   } else if (OB_FAIL(ctx.local_command_service().set_tracepoint(
                  stmt.get_param()))) {
   } else {
@@ -402,18 +391,14 @@ int ObCancelTaskExecutor::fetch_sys_task_info(
 	    //execute sql
 	  if (OB_ISNULL(sql_proxy) || OB_ISNULL(cur_sess)) {
 	  	ret = OB_ERR_UNEXPECTED;
-	  	LOG_WARN("sql proxy or session from exec context is NULL", K(ret), K(sql_proxy), K(cur_sess));
 	  } else if (OB_FAIL(read_sql.append_fmt(sql_str, task_id.length(), task_id.ptr()))) {
 	  } else if (OB_FAIL(sql_proxy->read(res, read_sql.ptr()))) {
 	  } else if (OB_ISNULL(result_set = res.get_result())) {
 	  	ret = OB_ERR_UNEXPECTED;
-	  	LOG_WARN("result set is NULL", K(ret), K(read_sql));
 	  } else if (OB_FAIL(result_set->next())) {
 	  	if (OB_LIKELY(OB_ITER_END == ret)) {
 	  	  ret = OB_ENTRY_NOT_EXIST;
-	  	  LOG_WARN("task id not exist", K(ret), K(result_set), K(task_id));
       } else {
-	  	  LOG_WARN("fail to get next row", K(ret), K(result_set));
 	  	}
 	  } else {
 	  	EXTRACT_STRBUF_FIELD_MYSQL(*result_set, "task_type", task_type_str, OB_SYS_TASK_TYPE_LENGTH, tmp_real_str_len);
@@ -424,7 +409,6 @@ int ObCancelTaskExecutor::fetch_sys_task_info(
 	  if (OB_SUCC(ret)) {
 	  	if (OB_UNLIKELY(OB_ITER_END != result_set->next())) {
 	  	  ret = OB_ERR_UNEXPECTED;
-	  	  LOG_WARN("more than one sessid record", K(ret), K(read_sql));
 	  	}
 	  }
   }
@@ -443,10 +427,8 @@ int ObCancelTaskExecutor::parse_task_id(
 		  task_id_str.length(), task_id_str.ptr());
 	if (n < 0 || n >= sizeof(task_id_buf)) {
 		ret = common::OB_BUF_NOT_ENOUGH;
-		LOG_WARN("task id buf not enough", K(ret), K(n), K(task_id_str));
 	} else if (OB_FAIL(task_id.parse_from_buf(task_id_buf))) {
 		ret = OB_INVALID_ARGUMENT;
-		LOG_WARN("invalid task id", K(ret), K(n), K(task_id_buf));
 	} else {
 
 	  // double check
@@ -454,7 +436,6 @@ int ObCancelTaskExecutor::parse_task_id(
 	  n = snprintf(task_id_buf, sizeof(task_id_buf), "%s", helper.convert(task_id));
 		if (n < 0 || n >= sizeof(task_id_buf)) {
 		  ret = OB_BUF_NOT_ENOUGH;
-		  LOG_WARN("invalid task id", K(ret), K(n), K(task_id), K(task_id_buf));
 		} else if (0 != task_id_str.case_compare(task_id_buf)) {
 		  ret = OB_INVALID_ARGUMENT;
 		  LOG_WARN("task id is not valid",

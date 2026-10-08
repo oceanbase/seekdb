@@ -81,10 +81,8 @@ int ObDASSpatialScanIter::filter_by_mbr(bool &got_row)
     void *buf = nullptr;
     if (OB_ISNULL(allocator_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("allocator is null", K(ret));
     } else if (OB_ISNULL(buf = allocator_->alloc(sizeof(ObObj) * rowkey_cnt))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate buffer failed", K(ret), K(rowkey_cnt));
     } else {
       obj_ptr_ = new(buf) ObObj[rowkey_cnt];
     }
@@ -110,7 +108,6 @@ int ObDASSpatialScanIter::filter_by_mbr(bool &got_row)
     ObDatum &mbr_datum = mbr_expr->locate_expr_datum(*scan_rtdef_->eval_ctx_);
     if (OB_FAIL(mbr_datum.to_obj(mbr_obj, mbr_expr->obj_meta_, mbr_expr->obj_datum_map_))) {
     } else if (!is_whole_range_ && OB_FAIL(filter_by_mbr(mbr_obj, pass_through))) {
-      LOG_WARN("filter mbr failed", K(ret));
     } else if (!is_whole_range_ && pass_through) {
       // not target
       mbr_filter_cnt_++;

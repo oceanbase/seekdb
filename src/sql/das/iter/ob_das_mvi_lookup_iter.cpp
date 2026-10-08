@@ -77,7 +77,6 @@ int ObDASMVILookupIter::inner_get_next_row()
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected loopup state", K(state_), K(ret));
         break;
       }
     }
@@ -101,13 +100,11 @@ int ObDASMVILookupIter::save_rowkey()
   ObDatum &doc_id_datum = doc_id_expr->locate_expr_datum(*lookup_rtdef_->eval_ctx_);
   if (OB_UNLIKELY(doc_id_datum.is_null())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("docid and rowkey can't both be null", K(ret));
   } else {
     ObObj *obj_ptr = nullptr;
     ObArenaAllocator &allocator = get_arena_allocator();
     if (OB_ISNULL(obj_ptr = static_cast<ObObj*>(allocator.alloc(sizeof(ObObj))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate buffer failed", K(ret));
     } else {
       obj_ptr = new(obj_ptr) ObObj;
 

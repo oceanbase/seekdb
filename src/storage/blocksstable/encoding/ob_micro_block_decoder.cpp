@@ -54,7 +54,6 @@ struct ObDecoderArrayAllocator
   {
     int ret = OB_SUCCESS;
     if (NULL == buf_) {
-      LOG_WARN("not init", K(ret));
     } else {
       t = new (buf_ + offset_) T();
       offset_ += sizeof(T);
@@ -101,16 +100,12 @@ int ObColumnDecoder::batch_decode(
                   || nullptr == datums
                   || 0 >= row_cap)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid null row_iter or datums", K(ret), KP(row_index),
-             KP(row_ids), KP(cell_datas), KP(datums), K(row_cap));
   } else if (OB_UNLIKELY(!decoder_->can_vectorized())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpect column batch_decdoe not supported.", K(ret), K(decoder_->get_type()));
   } else if (OB_FAIL(decoder_->batch_decode(
               *ctx_, row_index, row_ids, cell_datas, row_cap, datums))) {
   } else if (OB_UNLIKELY(ctx_->is_trans_version_col()) &&
              OB_FAIL(storage::reverse_trans_version_val(datums, row_cap))) {
-    LOG_WARN("Failed to reverse trans version val", K(ret));
   }
 
   LOG_DEBUG("[Batch decode] Batch decoded datums: ",
@@ -182,10 +177,8 @@ int new_decoder_with_allocated_buf(char *buf,
   Decoder *d = nullptr;
   if (OB_UNLIKELY(!col_header.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid column header", K(ret), K(header), K(col_header));
   } else if (OB_ISNULL(d = new(buf) Decoder())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null", K(ret), KP(buf));
   } else if (OB_FAIL(d->init(header, col_header, meta_data))) {
   } else {
     decoder = d;
@@ -263,7 +256,6 @@ int ObIEncodeBlockReader::prepare(const int64_t column_cnt)
         == (buf = reinterpret_cast<char*>(decoder_allocator_.alloc(
           store_ids_size + column_types_size + col_decoder_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc memory for store ids fail", K(ret), K(column_cnt));
     } else {
       store_id_array_ = reinterpret_cast<int64_t *>(buf);
       column_type_array_ = reinterpret_cast<ObObjMeta *>(buf + store_ids_size);
@@ -284,7 +276,6 @@ int ObIEncodeBlockReader::do_init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!block_data.is_valid()) || request_cnt <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("argument is invalid", K(ret), K(block_data), K(request_cnt));
   } else {
     request_cnt_ = request_cnt;
     row_data_ = block_data.get_buf() + header_->row_data_offset_;
@@ -328,8 +319,6 @@ int ObIEncodeBlockReader::init_decoders()
   if (OB_UNLIKELY(NULL == store_id_array_ || NULL == column_type_array_
       || nullptr == decoders_ || NULL == header_ || NULL == col_header_)) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("header should be set while init decoders", K(ret), KP_(store_id_array),
-        KP_(column_type_array), KP(decoders_), KP_(header), KP_(col_header));
   } else if (OB_FAIL(alloc_decoders_buf(decoders_buf_pos))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < request_cnt_; ++i) {
@@ -348,7 +337,6 @@ int ObIEncodeBlockReader::get_micro_metas(const ObMicroBlockHeader *&header,
   if (NULL == block || block_size <= 0) {
 
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KP(block), K(block_size));
   } else {
     header = reinterpret_cast<const ObMicroBlockHeader *>(block);
     block += header->header_size_;
@@ -357,8 +345,6 @@ int ObIEncodeBlockReader::get_micro_metas(const ObMicroBlockHeader *&header,
     if (meta_data - block > block_size
         || header->row_data_offset_ > block_size) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("block data buffer not enough",
-          K(ret), KP(block), K(block_size), "meta data offset", meta_data - block, K(*header));
     }
   }
   return ret;
@@ -371,7 +357,6 @@ int ObIEncodeBlockReader::add_decoder(
   int ret = OB_SUCCESS;
   if (store_idx >= 0 && !obj_meta.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(store_idx), K(obj_meta));
   } else {
     if (store_idx < 0 || store_idx >= header_->column_count_) { // non exist column
       dest.decoder_ = &none_exist_column_decoder_;
@@ -467,7 +452,6 @@ int ObIEncodeBlockReader::alloc_decoders_buf(int64_t &decoders_buf_pos)
     }
     if (OB_ISNULL(allocated_decoders_buf_ = (char*)buf_allocator_.alloc(size))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc", K(ret), K(size));
     } else {
       allocated_decoders_buf_size_ = size;
     }
@@ -486,7 +470,6 @@ int ObIEncodeBlockReader::setup_row(const uint64_t row_id, int64_t &row_len, con
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == header_ || row_id >= header_->row_count_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(row_id), KPC_(header));
   } else if (OB_FAIL(row_index_->get(row_id, row_data, row_len))) {
   }
   return ret;
@@ -507,7 +490,6 @@ int ObEncodeBlockGetReader::init_by_read_info(
   if (OB_UNLIKELY(!block_data.is_valid() ||
                   !read_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("argument is invalid", K(ret), K(block_data), K(read_info));
   } else {
     const int64_t request_cnt = read_info.get_request_count();
     if (OB_FAIL(prepare(request_cnt))) {
@@ -587,8 +569,6 @@ int ObEncodeBlockGetReader::get_all_columns(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(row.get_capacity() < request_cnt_)) {
     ret = OB_BUF_NOT_ENOUGH;
-    LOG_WARN("datum buf is not enough", K(ret), "expect_obj_count", request_cnt_,
-             "actual_datum_capacity", row.get_capacity());
   } else {
     ObBitStream bs(reinterpret_cast<unsigned char *>(const_cast<char *>(row_data)), row_len);
     for (int64_t i = 0; OB_SUCC(ret) && i < request_cnt_; ++i) {
@@ -701,7 +681,6 @@ int ObEncodeBlockGetReader::exist_row(
   reuse();
   if (OB_UNLIKELY(!read_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(read_info));
   } else if (OB_FAIL(init_by_columns_desc(
               block_data,
               read_info.get_schema_rowkey_count(),
@@ -753,7 +732,6 @@ int ObEncodeBlockGetReader::get_row_id(
   reuse();
   if (OB_UNLIKELY(!read_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(read_info));
   } else if (OB_FAIL(init_by_read_info(block_data, read_info))) {
   } else if (OB_FAIL(locate_row(rowkey, read_info.get_datum_utils(), row_data, row_len, row_id, found))) {
   } else if (!found) {
@@ -802,7 +780,6 @@ int ObMicroBlockDecoder::acquire(
   decoder = NULL;
   if (OB_UNLIKELY(!col_header.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid column header", K(ret), K(col_header));
   } else {
     switch (col_header.type_)
     {
@@ -902,7 +879,6 @@ int ObMicroBlockDecoder::acquire(
       }
       default:
         ret = OB_INNER_STAT_ERROR;
-        LOG_WARN("unsupported encoding type", K(ret), "type", col_header.type_);
     }
   }
   if (OB_FAIL(ret) && NULL != decoder) {
@@ -946,7 +922,6 @@ int ObMicroBlockDecoder::alloc_decoders_buf(const bool by_read_info, int64_t &de
 
   if (OB_UNLIKELY(by_read_info && read_info_ == nullptr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null read_info", K(ret));
   } else {
     size += request_cnt_ * sizeof(ObColumnDecoder); // for decoders_
 
@@ -985,7 +960,6 @@ int ObMicroBlockDecoder::alloc_decoders_buf(const bool by_read_info, int64_t &de
       }
       if (OB_ISNULL(allocated_decoders_buf_ = (char*)buf_allocator_.alloc(size))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc", K(ret), K(size));
       } else {
         allocated_decoders_buf_size_ = size;
       }
@@ -1030,8 +1004,6 @@ int ObMicroBlockDecoder::init_decoders()
   if (OB_UNLIKELY(NULL == header_ || NULL == col_header_ ||
      (NULL != read_info_ && !read_info_->is_valid()))) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("header should be set while init decoders",
-             K(ret), KPC_(read_info), KP_(header), KP_(col_header));
   } else {
     // perfetch meta data
     /*
@@ -1046,7 +1018,6 @@ int ObMicroBlockDecoder::init_decoders()
       if (OB_UNLIKELY((header_->column_count_ < request_cnt_ && nullptr == read_info_) ||
                       (header_->column_count_ > request_cnt_))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("for empty read info, request cnt is invalid", KR(ret), KP(read_info_), KPC(header_), K(request_cnt_));
       } else if (OB_FAIL(alloc_decoders_buf(false/*by_read_info*/, decoders_buf_pos))) {
       } else {
         int64_t i = 0;
@@ -1086,7 +1057,6 @@ int ObMicroBlockDecoder::add_decoder(
   int ret = OB_SUCCESS;
   if (store_idx < header_->column_count_ && !obj_meta.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(store_idx), K(obj_meta));
   } else {
     if (store_idx < 0) {
       dest.decoder_ = &none_exist_column_decoder_;
@@ -1135,7 +1105,6 @@ int ObMicroBlockDecoder::get_micro_metas(
   int ret = OB_SUCCESS;
   if (nullptr == block || block_size <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(block), K(block_size));
   } else {
     header = reinterpret_cast<const ObMicroBlockHeader *>(block);
     block += header->header_size_;
@@ -1143,8 +1112,6 @@ int ObMicroBlockDecoder::get_micro_metas(
     meta_data = block + sizeof(*col_header) * header->column_count_;
     if (meta_data - block > block_size || header->row_data_offset_ > block_size) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("block data buffer not enough",
-               K(ret), KP(block), K(block_size), "meta data offset", meta_data - block, K(*header));
     }
   }
   return ret;
@@ -1158,7 +1125,6 @@ int ObMicroBlockDecoder::init(
   // can be init twice
   if (OB_UNLIKELY(block_data.get_buf_size() <= 0 || !read_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(block_data), K(read_info));
   } else {
     if (is_inited_) {
       inner_reset();
@@ -1180,7 +1146,6 @@ int ObMicroBlockDecoder::init(
   // can be init twice
   if (OB_UNLIKELY(block_data.get_buf_size() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(block_data));
   } else {
     if (is_inited_) {
       inner_reset();
@@ -1254,10 +1219,8 @@ int ObMicroBlockDecoder::decode_cells(const uint64_t row_id,
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(col_begin < 0 || col_begin > col_end || col_end > request_cnt_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(col_begin), K(col_end), K_(request_cnt));
   } else {
     ObBitStream bs(reinterpret_cast<unsigned char *>(const_cast<char *>(row_data)), row_len);
     for (int64_t i = col_begin; OB_SUCC(ret) && i < col_end; ++i) {
@@ -1283,17 +1246,14 @@ OB_INLINE int ObMicroBlockDecoder::get_row_impl(int64_t index, ObDatumRow &row)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(index >= row_count_ || !row.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument to get row", K(ret), K(index), K_(row_count), K(row));
   } else {
     int64_t row_len = 0;
     const char *row_data = NULL;
     if (OB_FAIL(row_index_->get(index, row_data, row_len))) {
     } else if (row.get_capacity() < request_cnt_) {
       ret = OB_BUF_NOT_ENOUGH;
-      LOG_WARN("obj buf is not enough", K(ret), "expect_obj_count", request_cnt_, K(row));
     } else if (OB_FAIL(decode_cells(index, row_len, row_data, 0, request_cnt_, row.storage_datums_))) {
     } else {
       row.row_flag_.reset();
@@ -1321,7 +1281,6 @@ int ObMicroBlockDecoder::compare_rowkey(const ObDatumRowkey &rowkey, const int64
   const char *row_data = nullptr;
   if (OB_UNLIKELY(index  >= row_count_ || nullptr == datum_utils_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(index), K_(row_count), KPC_(datum_utils));
   } else if (OB_FAIL(row_index_->get(index, row_data, row_len))) {
   } else {
     const ObStorageDatumUtils &datum_utils = *datum_utils_;
@@ -1358,7 +1317,6 @@ int ObMicroBlockDecoder::compare_rowkey(const ObDatumRange &range,
   const ObDatumRowkey &end_rowkey = range.get_end_key();
   if (OB_UNLIKELY(index >= row_count_ || nullptr == datum_utils_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(index), K_(row_count), KPC_(datum_utils));
   } else if (OB_FAIL(row_index_->get(index, row_data, row_len))) {
   } else {
     const ObStorageDatumUtils &datum_utils = *datum_utils_;
@@ -1396,7 +1354,6 @@ int ObMicroBlockDecoder::get_decoder_cache_size(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == block || block_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(block), K(block_size));
   } else {
     size = sizeof(ObBlockCachedDecoderHeader);
     const ObMicroBlockHeader *header = nullptr;
@@ -1427,7 +1384,6 @@ int ObMicroBlockDecoder::cache_decoders(
   if (OB_UNLIKELY(nullptr == buf || size <= sizeof(ObBlockCachedDecoderHeader) ||
                   nullptr == block || block_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(buf), K(size), KP(block), K(block_size));
   } else {
     const ObMicroBlockHeader *header = nullptr;
     const ObColumnHeader *col_header = nullptr;
@@ -1470,8 +1426,6 @@ int ObMicroBlockDecoder::update_cached_decoders(char *cache, const int64_t cache
   ObBlockCachedDecoderHeader *h = NULL;
   if (NULL == cache || cache_size < sizeof(*h) || NULL == old_block || NULL == cur_block) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(cache), K(cache_size),
-        KP(old_block), KP(cur_block), K(block_size));
   } else {
     h = reinterpret_cast<ObBlockCachedDecoderHeader *>(cache);
     char *base = reinterpret_cast<char *>(&h->col_[h->count_]);
@@ -1491,7 +1445,6 @@ int ObMicroBlockDecoder::get_row_header(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     row_header = &get_major_store_row_header();
   }
@@ -1503,7 +1456,6 @@ int ObMicroBlockDecoder::get_row_count(int64_t &row_count)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     row_count = header_->row_count_;
   }
@@ -1537,9 +1489,6 @@ int ObMicroBlockDecoder::filter_pushdown_filter(
                   pd_filter_info.start_ + pd_filter_info.count_ > row_count_ ||
                   (has_lob_out_row && nullptr == context->lob_locator_helper_))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument",
-             K(ret), K(row_count_), K(pd_filter_info.start_), K(pd_filter_info.count_),
-             K(has_lob_out_row), KP(context->lob_locator_helper_));
   } else if (OB_FAIL(validate_filter_info(pd_filter_info, filter, datum_buf, col_capacity, header_))) {
   } else {
     const int64_t col_count = filter.get_col_count();
@@ -1613,18 +1562,14 @@ int ObMicroBlockDecoder::filter_pushdown_filter(
   const sql::ColumnParamFixedArray &col_params =filter.get_col_params();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Micro block decoder not inited", K(ret));
   } else if (OB_UNLIKELY(1 != filter.get_col_count() ||
                          pd_filter_info.start_ < 0 ||
                          pd_filter_info.start_ + pd_filter_info.count_ > row_count_ ||
                          nullptr == datum_buf)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(filter.get_col_count()),
-             K(row_count_), K(pd_filter_info.start_), K(pd_filter_info.count_), K(datum_buf));
   } else if (FALSE_IT(col_offset = col_offsets.at(0))) {
   } else if (OB_UNLIKELY(0 > col_offset)) {
     ret = OB_INDEX_OUT_OF_RANGE;
-    LOG_WARN("Filter column offset out of range", K(ret), K(header_->column_count_), K(col_offset));
   } else {
     ObColumnDecoder* column_decoder = decoders_ + col_offset;
     const sql::ObWhiteFilterOperatorType op_type = filter.get_op_type();
@@ -1686,15 +1631,11 @@ int ObMicroBlockDecoder::filter_pushdown_retro(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Micro Block decoder not inited", K(ret));
   } else if (OB_UNLIKELY(0 > col_offset)) {
     ret = OB_INDEX_OUT_OF_RANGE;
-    LOG_WARN("Filter column id out of range", K(ret), K(col_offset), K(header_->column_count_));
   } else if (OB_UNLIKELY(sql::WHITE_OP_MAX <= filter.get_op_type()
                          || !result_bitmap.is_inited())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid operator type of Filter node",
-             K(ret), K(filter), K(result_bitmap.is_inited()));
   } else {
     const sql::ObWhiteFilterOperatorType op_type = filter.get_op_type();
     decoder_allocator_.reuse();
@@ -1714,14 +1655,12 @@ int ObMicroBlockDecoder::filter_pushdown_retro(
         if (OB_FAIL(decoders_[col_offset].decode(decoded_datum, row_id, bs, row_data, row_len))) {
         } else if (need_padding(filter.is_padding_mode(), obj_meta) && OB_FAIL(
                 storage::pad_column(obj_meta, col_param->get_accuracy(), decoder_allocator_.get_inner_allocator(), decoded_datum))) {
-          LOG_WARN("Failed to pad column", K(ret), K(col_offset), K(row_id));
         }
 
         bool filtered = false;
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(filter.filter_datum(decoded_datum, filtered))) {
         } else if (!filtered && OB_FAIL(result_bitmap.set(offset))) {
-          LOG_WARN("Failed to set result bitmap", K(ret), K(row_id));
         }
       }
     }
@@ -1743,7 +1682,6 @@ int ObMicroBlockDecoder::filter_black_filter_batch(
   if (OB_UNLIKELY(pd_filter_info.start_ < 0 ||
                   pd_filter_info.start_ + pd_filter_info.count_ > row_count_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K_(row_count), K(pd_filter_info.start_), K(pd_filter_info.count_));
   } else {
     const common::ObIArray<int32_t> &col_offsets = filter.get_col_offsets();
     const sql::ColumnParamFixedArray &col_params = filter.get_col_params();
@@ -1780,10 +1718,8 @@ int ObMicroBlockDecoder::filter_truncate_evaluator(
   if (OB_UNLIKELY(start < 0 || count <= 0 || start + count > row_count_ ||
                   !evaluator.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid truncate evaluator input", K(ret), K(row_count_), K(start), K(count));
   } else if (OB_UNLIKELY(nullptr == header_ || nullptr == row_index_ || nullptr == decoders_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("decoder is not initialized", K(ret), KP_(header), KP_(row_index), KP_(decoders));
   } else {
     const int64_t column_count = evaluator.referenced_column_count();
     ObArenaAllocator &allocator = decoder_allocator_.get_inner_allocator();
@@ -1805,7 +1741,6 @@ int ObMicroBlockDecoder::filter_truncate_evaluator(
         OB_ISNULL(projected_row = static_cast<ObStorageDatum *>(
             allocator.alloc(sizeof(ObStorageDatum) * column_count)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate truncate batch", K(ret), K(column_count), K(count));
     } else {
       MEMSET(cell_datas, 0, sizeof(char *) * count);
       for (int64_t i = 0; i < column_count * count; ++i) {
@@ -1832,13 +1767,11 @@ int ObMicroBlockDecoder::filter_truncate_evaluator(
       ObDatum *datums = column_datums + column * count;
       if (OB_UNLIKELY(column_index < 0 || column_index >= header_->column_count_)) {
         ret = OB_INDEX_OUT_OF_RANGE;
-        LOG_WARN("truncate column is out of range", K(ret), K(column_index), K(header_->column_count_));
       } else if (OB_FAIL(get_col_datums(
                      column_index, row_ids, cell_datas, active_count, datums))) {
       } else if (!decoders_[column_index].decoder_->can_vectorized() &&
                  header_->is_trans_version_column_idx(column_index) &&
                  OB_FAIL(storage::reverse_trans_version_val(datums, active_count))) {
-        LOG_WARN("failed to reverse non-vectorized transaction version batch", K(ret), K(column_index));
       }
     }
     for (int64_t row = 0; OB_SUCC(ret) && row < active_count; ++row) {
@@ -1875,12 +1808,9 @@ int ObMicroBlockDecoder::get_rows(
   decoder_allocator_.reuse();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(nullptr == row_ids || nullptr == cell_datas ||
                          cols.count() != datum_infos.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(row_ids), KP(cell_datas), 
-             K(cols.count()), K(datum_infos.count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < cols.count(); i++) {
       int32_t col_id = cols.at(i);
@@ -1914,7 +1844,6 @@ int ObMicroBlockDecoder::get_row_count(
   decoder_allocator_.reuse();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(decoders_[col_id].get_row_count(
               row_index_,
               row_ids,
@@ -1946,10 +1875,8 @@ int ObMicroBlockDecoder::get_aggregate_result(
                                           decoder_allocator_.get_inner_allocator(),
                                           row_cap,
                                           datum_buf))) {
-    LOG_WARN("fail to pad on datums", K(ret), K(row_cap));
   } else if (col_param.get_meta_type().is_lob_storage() && header_->has_lob_out_row() &&
         OB_FAIL(fill_datums_lob_locator(iter_param, context, col_param, row_cap, datum_buf))) {
-    LOG_WARN("Fail to fill lob locator", K(ret));
   } else if (OB_FAIL(agg_cell.eval_batch(datum_buf, row_cap))) {
   }
   return ret;
@@ -2000,10 +1927,8 @@ int ObMicroBlockDecoder::get_column_datum(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObMicroBlockDecoder is not init", K(ret));
   } else if (OB_UNLIKELY(col_offset >= header_->column_count_ || row_index >= row_count_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument to get row", K(ret), K(col_offset), K(row_index));
   } else {
     int64_t row_len = 0;
     const char *row_data = NULL;
@@ -2027,7 +1952,6 @@ int ObMicroBlockDecoder::get_distinct_count(const int32_t group_by_col, int64_t&
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObMicroBlockDecoder is not init", K(ret));
   } else {
      ret = decoders_[group_by_col].get_distinct_count(distinct_cnt);
   }
@@ -2044,7 +1968,6 @@ int ObMicroBlockDecoder::read_distinct(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObMicroBlockDecoder is not init", K(ret));
   } else {
     if (OB_FAIL(decoders_[group_by_col].read_distinct(cell_datas, group_by_cell))) {
     }
@@ -2061,7 +1984,6 @@ int ObMicroBlockDecoder::read_reference(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObMicroBlockDecoder is not init", K(ret));
   } else if (OB_FAIL(decoders_[group_by_col].read_reference(row_ids, row_cap, group_by_cell))) {
   } else {
     group_by_cell.set_ref_cnt(row_cap);
@@ -2080,7 +2002,6 @@ int ObMicroBlockDecoder::get_group_by_aggregate_result(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObMicroBlockDecoder is not init", K(ret));
   } else {
     const int32_t group_by_col = group_by_cell.get_group_by_col_offset();
     int32_t last_agg_col_offset = INT32_MIN;
@@ -2100,7 +2021,6 @@ int ObMicroBlockDecoder::get_group_by_aggregate_result(
           } else if (iter_param.has_lob_column_out() && has_lob_out_row()
                     && nullptr != col_param && col_param->get_meta_type().is_lob_storage()
                     && OB_FAIL(fill_datums_lob_locator(iter_param, context, *col_param, row_cap, col_datums, false))) {
-            LOG_WARN("Failed to fill lob locator", K(ret), K(i), K(row_cap), K(has_lob_out_row()), KPC(col_param), K(iter_param), KPC(col_datums));
           }
         }
         if (OB_FAIL(ret)) {

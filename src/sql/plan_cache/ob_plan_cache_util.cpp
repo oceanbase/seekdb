@@ -59,7 +59,6 @@ int ObPhyLocationGetter::get_phy_locations(const common::ObIArray<ObTablePartiti
   for (int64_t i = 0; OB_SUCC(ret) && i < N; i++) {
     if (OB_ISNULL(partition_infos.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid partition info", K(ret));
     } else if (OB_FAIL(candi_table_locs.push_back(
                    partition_infos.at(i)->get_phy_tbl_location_info()))) {
     } else { /* do nothing */ }
@@ -77,7 +76,6 @@ int ObPhyLocationGetter::get_phy_locations(const ObIArray<ObTableLocation> &tabl
   int64_t N = table_locations.count();
   if (OB_ISNULL(plan_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid executor ctx!", K(ret), K(plan_ctx));
   } else {
     ObSEArray<const ObTableLocation *, 2> table_location_ptrs;
     ObSEArray<ObCandiTableLoc *, 2> phy_location_info_ptrs;

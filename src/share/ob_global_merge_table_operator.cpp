@@ -49,11 +49,9 @@ int ObGlobalMergeTableOperator::load_global_merge_info(
   int ret = OB_SUCCESS;
   if (!storage_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("storage not initialized", K(ret));
   } else {
     ret = storage_.get(info);
     if (OB_FAIL(ret) && OB_ENTRY_NOT_EXIST != ret) {
-      LOG_WARN("failed to get global merge info from storage", K(ret));
     } else if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_SUCCESS; // Return empty info
     }
@@ -68,10 +66,8 @@ int ObGlobalMergeTableOperator::insert_global_merge_info(
   int ret = OB_SUCCESS;
   if (!storage_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("storage not initialized", K(ret));
   } else if (!info.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(info));
   } else {
     ret = storage_.insert_or_update(info);
     if (OB_FAIL(ret)) {
@@ -87,7 +83,6 @@ int ObGlobalMergeTableOperator::update_partial_global_merge_info(
   int ret = OB_SUCCESS;
   if (!storage_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("storage not initialized", K(ret));
   } else {
     // Use SQLite storage - partial update is same as full update for SQLite
     ret = storage_.insert_or_update(info);
@@ -104,7 +99,6 @@ int ObGlobalMergeTableOperator::check_scn_revert(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(info));
   } else {
     HEAP_VAR(ObGlobalMergeInfo, global_merge_info) {
       if (OB_FAIL(ObGlobalMergeTableOperator::load_global_merge_info(sql_client,
@@ -114,7 +108,6 @@ int ObGlobalMergeTableOperator::check_scn_revert(
         while (OB_SUCC(ret) && (it != info.list_.get_header())) {
           if (NULL == it) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("null item", KR(ret), KP(it), K(info));
           } else {
             if (it->need_update_ && it->is_scn_) {
               if (0 == STRCMP(it->name_, "frozen_scn")) {

@@ -117,7 +117,6 @@ void ObStartupAccelTaskHandler::handle(void *task)
   int ret = OB_SUCCESS;
   if (NULL == task) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("task is null", K(ret));
   } else {
     ObStartupAccelTask *startup_task = static_cast<ObStartupAccelTask *>(task);
     if (OB_FAIL(startup_task->execute())) {

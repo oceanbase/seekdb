@@ -17,6 +17,8 @@
 #ifndef OCEANBASE_LIB_CONTAINER_IARRAY_
 #define OCEANBASE_LIB_CONTAINER_IARRAY_
 #include <stdint.h>
+#include <type_traits>
+#include <utility>
 #include "lib/ob_errno.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/container/ob_array_wrap.h"
@@ -25,6 +27,16 @@ namespace oceanbase
 {
 namespace common
 {
+template <typename T, typename = void>
+struct has_to_string : std::false_type
+{};
+template <typename T>
+struct has_to_string<T,
+                     std::void_t<decltype(std::declval<const T &>().to_string(
+                         std::declval<char *>(), std::declval<int64_t>()))>>
+    : std::true_type
+{};
+
 // this interface has three derived classes: ObArray, ObSEArray and Ob2DArray.
 template <typename T>
 class ObIArray : public ObIArrayWrap<T>
@@ -59,13 +71,15 @@ public:
     J_ARRAY_START();
     int64_t N = count();
     J_KV("cnt", N);
-    for (int64_t index = 0; index < N - 1; ++index) {
-      J_COMMA();
-      BUF_PRINTO(at(index));
-    }
-    if (0 < N) {
-      J_COMMA();
-      BUF_PRINTO(at(N - 1));
+    if constexpr (has_to_string<T>::value) {
+      for (int64_t index = 0; index < N - 1; ++index) {
+        J_COMMA();
+        BUF_PRINTO(at(index));
+      }
+      if (0 < N) {
+        J_COMMA();
+        BUF_PRINTO(at(N - 1));
+      }
     }
     J_ARRAY_END();
     return pos;

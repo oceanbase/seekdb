@@ -62,12 +62,10 @@ int ObSSTableRowMultiGetter::inner_open(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_opened_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("The ObStoreRowIterator has been opened", K(ret));
   } else if (OB_UNLIKELY(nullptr == query_range ||
                          nullptr == table ||
                          !table->is_sstable())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument to init ObSSTableRowMultiGetter", K(ret), KP(query_range), KP(table));
   } else {
     sstable_ = static_cast<ObSSTable *>(table);
     iter_param_ = &iter_param;
@@ -98,7 +96,6 @@ int ObSSTableRowMultiGetter::inner_get_next_row(const blocksstable::ObDatumRow *
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_opened_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("The ObSSTableRowMultiGetter has not been opened", K(ret), KP(this));
   } else {
     while (OB_SUCC(ret)) {
       if (OB_FAIL(prefetcher_.multi_prefetch())) {
@@ -107,7 +104,6 @@ int ObSSTableRowMultiGetter::inner_get_next_row(const blocksstable::ObDatumRow *
           ret = OB_ITER_END;
         } else {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Current fetch handle idx exceed prefetching idx", K(ret), K_(prefetcher));
         }
       } else if (!prefetcher_.current_read_handle().cur_prefetch_end_) {
         continue;
@@ -116,7 +112,6 @@ int ObSSTableRowMultiGetter::inner_get_next_row(const blocksstable::ObDatumRow *
           prefetcher_.mark_cur_rowkey_fetched(prefetcher_.current_read_handle());
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("Fail to fetch row", K(ret));
         }
       } else {
         prefetcher_.mark_cur_rowkey_fetched(prefetcher_.current_read_handle());
@@ -129,7 +124,6 @@ int ObSSTableRowMultiGetter::inner_get_next_row(const blocksstable::ObDatumRow *
       if (!store_row->row_flag_.is_not_exist() &&
           iter_param_->need_scn_ &&
           OB_FAIL(set_row_scn(access_ctx_->use_fuse_row_cache_, *iter_param_, store_row))) {
-        LOG_WARN("failed to set row scn", K(ret));
       }
     }
   }
@@ -142,7 +136,6 @@ int ObSSTableRowMultiGetter::fetch_row(ObSSTableReadHandle &read_handle, const b
   if (nullptr == micro_getter_) {
     if (nullptr == (micro_getter_ = OB_NEWx(ObMicroBlockRowGetter, long_life_allocator_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Fail to allocate micro block getter", K(ret));
     } else if (OB_FAIL(micro_getter_->init(*iter_param_, *access_ctx_, sstable_))) {
     }
     //switch context each row due to the cache will be disabled if too many rows getted
@@ -152,7 +145,6 @@ int ObSSTableRowMultiGetter::fetch_row(ObSSTableReadHandle &read_handle, const b
   } else if (read_handle.need_read_block() && nullptr == macro_block_reader_) {
     if (OB_ISNULL(macro_block_reader_ = OB_NEWx(ObMacroBlockReader, long_life_allocator_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Fail to allocate macro block reader", K(ret));
     }
   }
 

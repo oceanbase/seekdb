@@ -75,13 +75,10 @@ int ObWindowFunctionOpInput::sync_wait(
       reinterpret_cast<ObWFParticipatorSharedInfo *>(wf_participator_shared_info_);
   if (OB_ISNULL(shared_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: shared info is null", K(ret));
   } else if (OB_ISNULL(whole_msg_provider)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: whole_msg_provider is null", K(ret));
   } else if (!whole_msg_provider->whole_msg_set()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: whole_msg_provider has not been set msg", K(ret));
   } else {
     const int64_t exit_cnt = shared_info->sqc_thread_count_;
     int64_t &sync_cnt = shared_info->process_cnt_;
@@ -105,9 +102,7 @@ int ObWindowFunctionOpInput::sync_wait(
       } else if (0 == loop % 8 && OB_UNLIKELY(IS_INTERRUPTED())) {
         ObInterruptCode code = GET_INTERRUPT_CODE();
         ret = code.code_; // overwrite ret
-        LOG_WARN("received a interrupt", K(code), K(ret));
       } else if (0 == loop % 16 && OB_FAIL(ctx.fast_check_status())) {
-        LOG_WARN("failed to check status", K(ret));
       } else if (0 == ATOMIC_LOAD(&sync_cnt) % exit_cnt) { // timeout, and signal has done
         LOG_DEBUG("debug sync_cnt", K(ret), K(sync_cnt), K(loop), K(exit_cnt), K(lbt()));
         break;
@@ -238,7 +233,6 @@ int ObWindowFunctionSpec::rd_generate_patch(ObRDWFPieceMsgCtx &ctx) const
               if (NULL != partial_info->first_row_
                   && OB_FAIL(rd_pby_oby_cmp(
                       cur->first_row_, partial_info->first_row_, cmp_ret, access_ctx))) {
-                LOG_WARN("compare failed", K(ret));
               } else if (cmp_ret == 0) {
                 OZ(OP::merge_aggregated_result(prev_last, info, ctx.arena_alloc_,
                                                prev_last, res_datum(partial_info->first_row_),
@@ -320,11 +314,9 @@ int ObWindowFunctionOp::AggrCell::trans_self(const ObRADatumStore::StoredRow &ro
   int ret = OB_SUCCESS;
   ObAggregateProcessor::GroupRow *group_row = NULL;
   if (!finish_prepared_ && OB_FAIL(aggr_processor_.init_one_group())) {
-    LOG_WARN("fail to prepare the aggr func", K(ret), K(row));
   } else if (OB_FAIL(aggr_processor_.get_group_row(0, group_row))) {
   } else if (OB_ISNULL(group_row)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("group_row is null", K(ret));
   } else if (!finish_prepared_) {
     if ((OB_FAIL(aggr_processor_.prepare(*group_row)))) {
     } else {
@@ -350,14 +342,12 @@ int ObWindowFunctionOp::AggrCell::inv_trans_self(const ObRADatumStore::StoredRow
     // only support sum count and avg now.
     if (!finish_prepared_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("not finish prepare before inv_trans", K(ret));
     } else {
       aggr_processor_.get_removal_info().is_inv_aggr_ = true;
       ObAggregateProcessor::GroupRow *group_row = NULL;
       if (OB_FAIL(aggr_processor_.get_group_row(0, group_row))) {
       } else if (OB_ISNULL(group_row)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("group_row is null", K(ret));
       } else {
         // TODO: shanting, batch process
         if (OB_FAIL(aggr_processor_.process(*group_row))) {
@@ -373,7 +363,6 @@ int ObWindowFunctionOp::AggrCell::inv_trans_self(const ObRADatumStore::StoredRow
     // inv_trans for max and min, do nothing
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("aggr not support inv_trans", K(ret));
   }
   return ret;
 }
@@ -465,7 +454,6 @@ int ObWindowFunctionOp::get_param_int_value(ObExpr &expr,
                   trunc_res_val.get_int_bytes(), is_in_val_valid, value))) {
       } else if (!is_in_val_valid) {
         ret = OB_DATA_OUT_OF_RANGE;
-        LOG_WARN("res_val is not a valid int64", K(ret), K(result->get_int_bytes()), K(in_scale));
       }
     }
   } else {
@@ -480,7 +468,6 @@ int ObWindowFunctionOp::get_param_int_value(ObExpr &expr,
         is_valid_param = !need_check_valid || static_cast<int64_t>(tmp_value) >= 0;
         if (tmp_value > INT64_MAX && is_valid_param) {
           ret = OB_DATA_OUT_OF_RANGE;
-          LOG_WARN("int64 out of range", K(ret), K(tmp_value), K(INT64_MAX));
         } else {
           value = static_cast<int64_t>(tmp_value);
         }
@@ -491,7 +478,6 @@ int ObWindowFunctionOp::get_param_int_value(ObExpr &expr,
         is_valid_param = !need_check_valid || tmp_value >= 0;
         if (tmp_value > INT64_MAX) {
           ret = OB_DATA_OUT_OF_RANGE;
-          LOG_WARN("int64 out of range", K(ret), K(tmp_value), K(INT64_MAX));
         } else {
           value = static_cast<int64_t>(tmp_value);
         }
@@ -502,7 +488,6 @@ int ObWindowFunctionOp::get_param_int_value(ObExpr &expr,
         is_valid_param = !need_check_valid || tmp_value >= 0;
         if (tmp_value > INT64_MAX) {
           ret = OB_DATA_OUT_OF_RANGE;
-          LOG_WARN("int64 out of range", K(ret), K(tmp_value), K(INT64_MAX));
         } else {
           value = static_cast<int64_t>(tmp_value);
         }
@@ -513,7 +498,6 @@ int ObWindowFunctionOp::get_param_int_value(ObExpr &expr,
         is_valid_param = !need_check_valid || static_cast<int64_t>(tmp_value) >= 0;
         if (tmp_value > INT64_MAX && is_valid_param) {
           ret = OB_DATA_OUT_OF_RANGE;
-          LOG_WARN("int64 out of range", K(ret), K(tmp_value), K(INT64_MAX));
         } else {
           value = static_cast<int64_t>(tmp_value);
         }
@@ -521,13 +505,11 @@ int ObWindowFunctionOp::get_param_int_value(ObExpr &expr,
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("not support type", K(expr), K(ret));
       }
     }
   }
   if (OB_SUCC(ret) && !is_valid_param) {
     ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
-    LOG_WARN("frame start or end is negative, NULL or of non-integral type", K(ret), K(value), KPC(result));
   }
   return ret;
 }
@@ -566,7 +548,6 @@ int ObWindowFunctionOp::NonAggrCellNthValue::eval(RowsReader &row_reader,
   bool is_null = false;
   if (OB_UNLIKELY(params.count() != 2)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid number of params", K(params.count()), K(ret));
   } else if (OB_FAIL(ObWindowFunctionOp::get_param_int_value(*params.at(1),
       op_.eval_ctx_, is_null, nth_val, false, true))) {
     if (ret == OB_ERR_WINDOW_FRAME_ILLEGAL) {
@@ -575,15 +556,12 @@ int ObWindowFunctionOp::NonAggrCellNthValue::eval(RowsReader &row_reader,
         val.set_null();
       } else {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("Incorrect arguments to nth_value", K(ret));
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, "nth_value");
       }
     } else {
-      LOG_WARN("get_param_int_value failed", K(ret));
     }
   } else if (OB_UNLIKELY(!params.at(1)->obj_meta_.is_integer_type() || nth_val == 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments to nth_value", K(ret), K(nth_val), K(params.at(1)->obj_meta_));
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "nth_value");
   } else {
     const bool is_ignore_null = wf_info_.is_ignore_null_;
@@ -652,13 +630,11 @@ int ObWindowFunctionOp::NonAggrCellLeadOrLag::eval(RowsReader &row_reader,
 
   if (OB_UNLIKELY(params.count() > NUM_LEAD_LAG_PARAMS || params.count() <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid number of params", K(ret));
   } else {
     for (int64_t j = 0; OB_SUCC(ret) && j < params.count(); ++j) {
       ObDatum *result = NULL;
       if (OB_ISNULL(params.at(j))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid param", K(ret));
       } else if (OB_FAIL(params.at(j)->eval(op_.eval_ctx_, result))) {
       } else if (j == DEFAULT_VALUE && !result->is_null()) {
         char *buf = NULL;
@@ -666,7 +642,6 @@ int ObWindowFunctionOp::NonAggrCellLeadOrLag::eval(RowsReader &row_reader,
         int64_t pos = 0;
         if (OB_ISNULL(buf = wf_info_.expr_->get_str_res_mem(op_.eval_ctx_, buf_size))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to alloc", K(buf), K(ret));
         } else if (OB_FAIL(lead_lag_params[j].deep_copy(*result, buf, buf_size, pos))) {
         }
       } else {
@@ -685,7 +660,6 @@ int ObWindowFunctionOp::NonAggrCellLeadOrLag::eval(RowsReader &row_reader,
           if (!is_null) {
             LOG_USER_ERROR(OB_ERR_ARGUMENT_OUT_OF_RANGE, offset);
           }
-          LOG_WARN("lead/lag argument is out of range", K(ret), K(is_null), K(offset));
         }
       } else {
         offset = 1;
@@ -766,28 +740,22 @@ int ObWindowFunctionOp::NonAggrCellNtile::eval(RowsReader &row_reader,
   bool is_null = false;
   if (OB_UNLIKELY(params.count() != 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("The number of arguments of NTILE should be 1", K(params.count()), K(ret));
   } else if (OB_ISNULL(param = params.at(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("argument is NULL", K(ret));
   } else if (OB_FAIL(ObWindowFunctionOp::get_param_int_value(*param,
       op_.eval_ctx_, is_null, bucket_num, false, true))) {
     if (ret == OB_ERR_WINDOW_FRAME_ILLEGAL) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Incorrect arguments to ntile", K(ret));
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ntile");
     } else {
-      LOG_WARN("get_param_int_value failed", K(ret));
     }
   } else if (is_null) {
     // return NULL when bucket_num is NULL
     val.set_null();
   } else if (!param->obj_meta_.is_numeric_type()) {
     ret = OB_DATA_OUT_OF_RANGE;
-    LOG_WARN("invalid argument", K(ret), K(param->obj_meta_));
   } else if (OB_UNLIKELY(bucket_num <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("bucket_num is invalid", K(ret), K(bucket_num));
   } else {
     const int64_t total = frame.tail_ - frame.head_ + 1;
     const int64_t x = total / bucket_num;
@@ -901,7 +869,6 @@ int ObWindowFunctionOp::NonAggrCellRankLike::eval(RowsReader &row_reader,
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("the result type of window function is unexpected", K(ret), K(wf_info_.expr_->datum_meta_));
       }
     } else {
       expr_datum.set_int(rank);
@@ -1003,7 +970,6 @@ int ObWindowFunctionOp::NonAggrCellCumeDist::eval(RowsReader &row_reader,
       val = static_cast<ObDatum &>(expr_datum);
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("the result type of window function is unexpected", K(ret), K(wf_info_.expr_->datum_meta_));
     }
   }
 
@@ -1022,8 +988,6 @@ int ObWindowFunctionOp::check_same_partition(WinFuncCell &cell, bool &same)
     if (NULL == cell.part_values_.store_row_
         || cell.part_values_.store_row_->cnt_ != exprs.count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("current partition value not saved or cell count mismatch",
-               K(ret), K(cell.part_values_));
     } else {
       ObDatum *val = NULL;
       for (int64_t i = 0; OB_SUCC(ret) && same && i < exprs.count(); i++) {
@@ -1120,10 +1084,8 @@ int ObWindowFunctionOp::init()
   ObWindowFunctionOpInput *op_input = static_cast<ObWindowFunctionOpInput*>(input_);
   if (OB_UNLIKELY(!wf_list_.is_empty())) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("wf_list_ is inited", K(ret));
   } else if (OB_ISNULL(ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL ptr", K(ret));
   } else if (OB_FAIL(init_mem_context())) {
   } else {
     int64_t est_rows = MY_SPEC.rows_;
@@ -1165,7 +1127,6 @@ int ObWindowFunctionOp::init()
         ObDatum *expr_datum = all_exprs.at(i)->locate_batch_datums(eval_ctx_);
         if (OB_ISNULL(datums_buf = static_cast<ObDatum *>(local_allocator_.alloc(datums_size)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("allocate memory failed", K(ret), K(datums_size), K(i));
         } else if (OB_FAIL(all_expr_datums_copy_.push_back(datums_buf))) {
         } else if (OB_FAIL(all_expr_datums_.push_back(expr_datum))) {
         } else {
@@ -1215,7 +1176,6 @@ int ObWindowFunctionOp::init()
             ObIArray<ObAggrInfo> *aggr_infos = NULL;
             if (OB_ISNULL(tmp_ptr) || OB_ISNULL(tmp_array)) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
-              LOG_WARN("failed to alloc", KP(tmp_ptr), KP(tmp_array), K(ret));
             } else if (FALSE_IT(aggr_infos = new (tmp_array) AggrInfoFixedArray(local_allocator_,
                                                                                 1))) {
             } else if (OB_FAIL(aggr_infos->push_back(wf_info.aggr_info_))) {
@@ -1223,13 +1183,11 @@ int ObWindowFunctionOp::init()
               AggrCell *aggr_func = new (tmp_ptr) AggrCell(wf_info, *this, *aggr_infos);
               aggr_func->aggr_processor_.set_in_window_func();
               if (OB_FAIL(aggr_func->aggr_processor_.init())) {
-                LOG_WARN("failed to initialize init_group_rows", K(ret));
                 aggr_func->~AggrCell();
                 aggr_func = NULL;
               } else if (MY_SPEC.enable_hash_base_distinct_
                 && aggr_func->aggr_processor_.has_distinct()
                 && OB_FAIL(init_distinct_set(aggr_func->aggr_processor_))) {
-                LOG_WARN("failed to init distinct set", K(ret));
               } else {
                 aggr_func->aggr_processor_.set_dir_id(dir_id_);
                 aggr_func->aggr_processor_.set_io_event_observer(&io_event_observer_);
@@ -1271,7 +1229,6 @@ int ObWindowFunctionOp::init()
           default: {
             ret = OB_NOT_SUPPORTED;
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "this window function");
-            LOG_WARN("unsupported function", K(wf_info.func_type_), K(ret));
             break;
           }
         }
@@ -1280,12 +1237,10 @@ int ObWindowFunctionOp::init()
       if (OB_SUCC(ret)) {
         if (OB_ISNULL(wf_cell)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("wf_cell is null", K(wf_info), K(ret));
         } else {
           wf_cell->wf_idx_ = i + 1;
           if (OB_UNLIKELY(!wf_list_.add_last(wf_cell))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("add func failed", K(ret));
           } else {
             wf_cell = NULL;
           }
@@ -1330,7 +1285,6 @@ int ObWindowFunctionOp::init()
                 ReportingWFHashSet *hash_set = OB_NEWx(ReportingWFHashSet, (&local_allocator_));
                 if (OB_ISNULL(hash_set)) {
                   ret = OB_ALLOCATE_MEMORY_FAILED;
-                  LOG_WARN("hash_set is null, allocate memory failed", K(ret));
                 } else if (OB_FAIL(static_cast<ReportingWFHashSet *>(hash_set)->create( // dop * dop
                          op_input->get_total_task_count() * op_input->get_total_task_count()))) {
                 } else if (OB_FAIL(pby_hash_values_sets_.push_back(hash_set))) {
@@ -1357,7 +1311,6 @@ int ObWindowFunctionOp::build_pby_hash_values_for_transmit()
     PbyHashValueArray *hash_value_array = OB_NEWx(PbyHashValueArray, (&local_allocator_));
     if (OB_ISNULL(hash_value_array)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc", K(ret));
     } else if (OB_FAIL(pby_hash_values_.push_back(hash_value_array))) {
     }
   }
@@ -1373,7 +1326,6 @@ int ObWindowFunctionOp::build_participator_whole_msg_array()
     ObReportingWFWholeMsg *whole_msg = OB_NEWx(ObReportingWFWholeMsg, (&local_allocator_));
     if (OB_ISNULL(whole_msg)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate whole_msg mem failed", K(ret));
     } else if (OB_FAIL(participator_whole_msg_array_.push_back(whole_msg))) {
     }
   }
@@ -1392,7 +1344,6 @@ int ObWindowFunctionOp::init_mem_context()
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
     } else if (OB_ISNULL(mem_context_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null memory entity returned", K(ret));
     }
   }
   return ret;
@@ -1404,13 +1355,11 @@ int ObWindowFunctionOp::inner_open()
   if (OB_FAIL(ObOperator::inner_open())) {
   } else if (OB_ISNULL(ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL ptr", K(ret));
   } else if (OB_FAIL(next_row_.init(local_allocator_, child_->get_spec().output_.count()))) {
   } else if (OB_FAIL(init())) {
   } else if (MY_SPEC.enable_hash_base_distinct_
     && distinct_aggr_count_ > 0
     && OB_FAIL(hp_infras_mgr_.reserve_hp_infras(distinct_aggr_count_))) {
-    LOG_WARN("failed to init hp infras group", K(ret), K(distinct_aggr_count_));
   } else if (OB_FAIL(reset_for_scan())) {
   }
   return ret;
@@ -1422,7 +1371,6 @@ int ObWindowFunctionOp::inner_rescan()
   if (OB_FAIL(ObOperator::inner_rescan())) {
   } else if (OB_ISNULL(ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL ptr", K(ret));
   } else if (OB_FAIL(reset_for_scan())) {
   }
   stat_ = ProcessStatus::PARTIAL;
@@ -1449,7 +1397,6 @@ int ObWindowFunctionOp::inner_rescan()
   for (int64_t i = 0; OB_SUCC(ret) && i < pby_hash_values_.count(); ++i) {
     if (OB_ISNULL(pby_hash_values_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL ptr", K(ret), K(pby_hash_values_.count()), K(i));
     } else {
       pby_hash_values_.at(i)->reuse();
     }
@@ -1457,7 +1404,6 @@ int ObWindowFunctionOp::inner_rescan()
   for (int64_t i = 0; OB_SUCC(ret) && i < participator_whole_msg_array_.count(); ++i) {
     if (OB_ISNULL(participator_whole_msg_array_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL ptr", K(ret), K(participator_whole_msg_array_.count()), K(i));
     } else {
       participator_whole_msg_array_.at(i)->reset();
     }
@@ -1465,7 +1411,6 @@ int ObWindowFunctionOp::inner_rescan()
   for (int64_t i = 0; OB_SUCC(ret) && i < pby_hash_values_sets_.count(); ++i) {
     if (OB_ISNULL(pby_hash_values_sets_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL ptr", K(ret), K(pby_hash_values_sets_.count()), K(i));
     } else {
       pby_hash_values_sets_.at(i)->reuse();
     }
@@ -1547,7 +1492,6 @@ int ObWindowFunctionOp::input_one_row(WinFuncCell &wf_cell, bool &part_end)
   bool is_same_part = false;
   if (OB_FAIL(fetch_child_row())) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("child_op failed to get next row", K(ret));
     } else {
       part_end = true;
       ret = OB_SUCCESS;
@@ -1570,7 +1514,6 @@ int ObWindowFunctionOp::create_row_store(RowsStore *&s)
     s = OB_NEWx(RowsStore, (&local_allocator_), (*this));
     if (NULL == s) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret));
     } else if (OB_FAIL(s->prior_dumping_rows_stores_.init(
                        MY_SPEC.is_vectorized() + MY_SPEC.range_dist_parallel_))) {
     }
@@ -1598,7 +1541,6 @@ int ObWindowFunctionOp::set_it_age(Stores &s)
   if (MY_SPEC.is_vectorized()) {
     if (OB_ISNULL(s.cur_) || OB_ISNULL(s.processed_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("row store is null", K(ret));
     } else {
       s.cur_->ra_rs_.set_iteration_age(&output_rows_it_age_);
       s.processed_->ra_rs_.set_iteration_age(&output_rows_it_age_);
@@ -1613,7 +1555,6 @@ int ObWindowFunctionOp::unset_it_age(Stores &s)
   if (MY_SPEC.is_vectorized()) {
     if (OB_ISNULL(s.cur_) || OB_ISNULL(s.processed_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("row store is null", K(ret));
     } else {
       s.cur_->ra_rs_.set_iteration_age(NULL);
       s.processed_->ra_rs_.set_iteration_age(NULL);
@@ -1645,7 +1586,6 @@ int ObWindowFunctionOp::compute_push_down_by_pass(WinFuncCell &wf_cell, common::
   int ret = OB_SUCCESS;
   if (!wf_cell.is_aggr()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("wf_cell is not aggr", K(ret));
   } else {
     AggrCell *aggr_func = static_cast<AggrCell *>(&wf_cell);
     if (OB_UNLIKELY(1 != aggr_func->aggr_processor_.get_aggr_infos().count())) {
@@ -1872,7 +1812,6 @@ int ObWindowFunctionOp::inner_get_next_row()
               stat_ = ProcessStatus::COORINDATE;
             }
           } else {
-            LOG_WARN("partial next row failed", K(ret));
           }
         } else if (MY_SPEC.is_consolidator() && !input_rows_.cur_->need_output_) {
           got_row = false;
@@ -1891,7 +1830,6 @@ int ObWindowFunctionOp::inner_get_next_row()
       case ProcessStatus::FINAL: {
         if (OB_FAIL(final_next_row())) {
           if (OB_ITER_END != ret) {
-            LOG_WARN("get next row failed", K(ret));
           }
         } else {
           got_row = true;
@@ -1928,7 +1866,6 @@ int ObWindowFunctionOp::detect_aggr_status() // for participator
         uint64_t hash_value;
         if (OB_ISNULL(pushdown_pby_hash_values_set)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("pushdown_pby_row_stores_set is null", K(ret));
         } else if (OB_FAIL(calc_part_exprs_hash(
             &wf->wf_info_.partition_exprs_, wf->part_values_.store_row_, hash_value))) {
         } else if (OB_FAIL(pushdown_pby_hash_values_set->exist_refactored(hash_value))) {
@@ -1939,7 +1876,6 @@ int ObWindowFunctionOp::detect_aggr_status() // for participator
             is_pushdown_bypass = false;
             ret = OB_SUCCESS;
           } else{
-            LOG_WARN("Failed to find in hashmap", K(ret));
           }
         }
       }
@@ -2000,15 +1936,12 @@ int ObWindowFunctionOp::found_part_end(const WinFuncCell *end, bool add_row_cnt 
           MY_SPEC.wf_aggr_status_expr_->locate_datum_for_write(eval_ctx_).set_int(-wf->wf_idx_);
           if (rows_store->stored_row_cnt_ <= 0) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("rows_store->stored_row_cnt_ <= 0",
-                     K(ret), K(rows_store->count()), K(rows_store->stored_row_cnt_));
           } else {
             const int64_t row_idx = rows_store->stored_row_cnt_ - 1; // the last row
             const ObRADatumStore::StoredRow *sr = NULL; // the last row of last part
             if (OB_FAIL(rows_store->get_row(row_idx, sr))) {
             } else if (OB_ISNULL(sr)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("sr is null", K(ret), K(row_idx));
             } else {
               int64_t i = 0;
               ObArray<common::ObDatum> datums;
@@ -2019,8 +1952,6 @@ int ObWindowFunctionOp::found_part_end(const WinFuncCell *end, bool add_row_cnt 
               if (OB_FAIL(ret)) {
               } else if (MY_SPEC.all_expr_.count() != i + 1) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("the count of all_expr_ is unexpected",
-                         K(ret), K(MY_SPEC.all_expr_.count()), K(i + 1));
               } else if (OB_FAIL(datums.push_back(
                          MY_SPEC.wf_aggr_status_expr_->locate_expr_datum(eval_ctx_)))) {
               } else if (OB_FAIL(rows_store->add_row(datums, NULL, add_row_cnt))) {
@@ -2069,12 +2000,10 @@ int ObWindowFunctionOp::partial_next_row()
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(fetch_child_row())) {
           if (OB_ITER_END != ret) {
-            LOG_WARN("get part first row from child failed", K(ret));
           }
         }
         // <2> save partition by value
         if (OB_SUCC(ret) && OB_FAIL(found_new_part(true))) { // save partition by value of first row
-          LOG_WARN("store partition exprs datum failed", K(ret));
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(input_rows_.cur_->add_row(get_all_expr(), &eval_ctx_))) {
@@ -2183,10 +2112,8 @@ int ObWindowFunctionOp::output_row(int64_t idx,
   if (OB_SUCC(ret) && (input_rows_.*store_member)->need_output_) {
     if (MY_SPEC.single_part_parallel_ &&
                OB_FAIL((wf_cell.res_.*store_member)->get_row(0, result_row))) {
-      LOG_WARN("get row failed", K(ret), K(idx));
     } else if (!MY_SPEC.single_part_parallel_ &&
                OB_FAIL((wf_cell.res_.*store_member)->get_row(idx, result_row))) {
-      LOG_WARN("get row failed", K(ret), K(idx));
     } else {
       if (NULL != all_expr_row) {
         *all_expr_row = child_row;
@@ -2349,7 +2276,6 @@ int ObWindowFunctionOp::rd_fetch_patch()
   ObPxSqcHandler *handler = ctx_.get_sqc_handler();
   if (NULL == handler) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null sqc handler", K(ret));
   } else {
     const int64_t row_ext_size = 8;
     ObRDWFPieceMsg piece_msg;
@@ -2405,7 +2331,6 @@ int ObWindowFunctionOp::rd_fetch_patch()
                 ctx_.get_physical_plan_ctx()->get_timeout_timestamp()))) {
     } else if (OB_ISNULL(whole_msg)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL msg", K(ret));
     } else {
       // find patch of my worker,
       // `ObRDWFWholeMsg::infos_` already sorted by thread_id in QC
@@ -2416,10 +2341,8 @@ int ObWindowFunctionOp::rd_fetch_patch()
                                    { return it->thread_id_ < id; });
       if (info == m->infos_.end() || (*info)->thread_id_ != tid) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("worker's response message not found in whole message", K(ret), K(tid));
       } else if (OB_ISNULL(rd_patch_ = (*info)->dup(rescan_alloc_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("duplicate patch failed", K(ret));
       }
     }
   }
@@ -2501,7 +2424,6 @@ int ObWindowFunctionOp::get_whole_msg(bool is_end,
       piece.is_end_ = true;
     } else if (OB_ISNULL(res_row)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("row ptr is null", K(ret));
     } else {
       piece.row_size_ = res_row->row_size_;
       piece.is_end_ = false;
@@ -2510,7 +2432,6 @@ int ObWindowFunctionOp::get_whole_msg(bool is_end,
       char *buf = NULL;
       if (OB_ISNULL(buf = (char *)ctx_.get_allocator().alloc(len))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc row buf", K(ret));
       } else if (OB_FAIL(copy_datum_row(*res_row, piece, len, buf))) {
       }
     }
@@ -2523,7 +2444,6 @@ int ObWindowFunctionOp::get_whole_msg(bool is_end,
           ctx_.get_physical_plan_ctx()->get_timeout_timestamp()))) {
       } else if (OB_ISNULL(temp_whole_msg)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("whole msg is unexpected", K(ret));
       } else if (OB_FAIL(whole.assign(*temp_whole_msg))) {
       }
     }
@@ -2556,7 +2476,6 @@ int ObWindowFunctionOp::parallel_winbuf_process()
       while (OB_SUCC(ret)) {
         if (OB_FAIL(row_store_it.get_next_row(row))) {
           if (OB_ITER_END != ret) {
-            LOG_WARN("fail to get next row", K(ret));
           }
         } else if (is_first) {
           is_first = false;
@@ -2630,7 +2549,6 @@ int ObWindowFunctionOp::merge_aggregated_result(ObDatum &res,
     default : {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "this window function");
-      LOG_WARN("func is not supported", K(ret));
       break;
     }
   }
@@ -2649,7 +2567,6 @@ int ObWindowFunctionOp::rank_add(ObDatum &res,
     res.ptr_ = static_cast<char *>(alloc.alloc(sizeof(uint64_t)));
     if (NULL == res.ptr_) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret));
     } else {
       res.set_uint(static_cast<uint64_t>(v));
     }
@@ -2668,14 +2585,12 @@ int ObWindowFunctionOp::rank_add(ObDatum &res,
       res.ptr_ = static_cast<char *>(alloc.alloc(len));
       if (NULL == res.ptr_) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory failed", K(ret));
       } else {
         res.set_number(res_nmb);
       }
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected rank() result type", K(ret), K(info));
   }
   return ret;
 }
@@ -2772,10 +2687,8 @@ int ObWindowFunctionOp::get_pos(RowsReader &row_reader,
     if (is_nmb_literal) {
       if (OB_ISNULL(between_value_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("between_value_expr is unexpected", KPC(between_value_expr), K(ret));
       } else if (OB_UNLIKELY(is_rows && !between_value_expr->obj_meta_.is_integer_type())) {
         ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
-        LOG_WARN("frame start or end is negative, NULL or of non-integral type", K(ret), K(between_value_expr->obj_meta_));
       } else if (OB_FAIL(get_param_int_value(*between_value_expr, eval_ctx_, is_null, interval, false, true))) {
       }
       if (OB_FAIL(ret)) {
@@ -2783,7 +2696,6 @@ int ObWindowFunctionOp::get_pos(RowsReader &row_reader,
         got_null_val = true;
       } else if (interval < 0) {
         ret = OB_DATA_OUT_OF_RANGE;
-        LOG_WARN("invalid argument", K(ret), K(interval));
       }
     }
 
@@ -2792,7 +2704,6 @@ int ObWindowFunctionOp::get_pos(RowsReader &row_reader,
     // range or rows with expr
       if (OB_UNLIKELY(!is_preceding && static_cast<uint64>(row_idx + interval) > INT64_MAX)) {
         ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
-        LOG_WARN("frame start or end is negative, NULL or of non-integral type", K(ret), K(row_idx + interval));
       } else {
         pos = is_preceding ? row_idx - interval : row_idx + interval;
       }
@@ -2803,7 +2714,6 @@ int ObWindowFunctionOp::get_pos(RowsReader &row_reader,
                                      : wf_cell.wf_info_.lower_.range_bound_expr_);
       if (OB_ISNULL(bound_expr) || !ob_is_integer_type(bound_expr->datum_meta_.get_type())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL ptr", K(ret), K(bound_expr));
       } else if (OB_FAIL(bound_expr->eval(eval_ctx_, cmp_result))) {
       } else {
         bool match = cmp_result->is_null() || cmp_result->get_bool();
@@ -2815,7 +2725,6 @@ int ObWindowFunctionOp::get_pos(RowsReader &row_reader,
       }
     } else if (wf_cell.wf_info_.sort_exprs_.count() != 1) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("only need one sort_exprs", K(ret));
     } else {
       // range
       /* This place is a bit tricky, for example, for order by v range between x preceding and y following
@@ -2847,7 +2756,6 @@ int ObWindowFunctionOp::get_pos(RowsReader &row_reader,
                                      : wf_cell.wf_info_.lower_.range_bound_expr_);
       if (OB_ISNULL(bound_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL ptr", K(ret), K(bound_expr));
       } else if (OB_FAIL(bound_expr->eval(eval_ctx_, cmp_val))) {
       } else if (!is_nmb_literal &&
                  ob_is_temporal_type(bound_expr->datum_meta_.get_type())) {
@@ -2924,8 +2832,6 @@ int ObWindowFunctionOp::collect_result(const int64_t idx, ObDatum &in_datum, Win
   int64_t result_datum_cnt = 0;
   if (OB_UNLIKELY(curr_row_collect_values_.count() != wf_list_.get_size())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("size is not equal", K(curr_row_collect_values_.count()), K(wf_list_.get_size()),
-                                  K(ret));
   } else {
     if (wf_cell.get_prev() != wf_list_.get_header()) {
       WinFuncCell *prev_wf_cell = wf_cell.get_prev();
@@ -2934,7 +2840,6 @@ int ObWindowFunctionOp::collect_result(const int64_t idx, ObDatum &in_datum, Win
                                                    prev_stored_row))) {
       } else if (OB_ISNULL(prev_stored_row)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("prev_stored_row is null", K(idx), K(ret));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < prev_stored_row->cnt_; ++i) {
           ObDatum &last_value = curr_row_collect_values_.at(i);
@@ -2962,7 +2867,6 @@ int ObWindowFunctionSpec::register_to_datahub(ObExecContext &ctx) const
   if (single_part_parallel_) {
     if (OB_ISNULL(ctx.get_sqc_handler())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null unexpected", K(ret));
     } else {
       void *buf = ctx.get_allocator().alloc(sizeof(ObWinbufWholeMsg::WholeMsgProvider));
       if (OB_ISNULL(buf)) {
@@ -3156,7 +3060,6 @@ int ObWindowFunctionOp::calc_part_exprs_hash(
   hash_value = 99194853094755497L;
   if (OB_ISNULL(exprs_) || OB_ISNULL(row_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exprs_ or row_ is null", K(ret), K(exprs_), K(row_));
   } else if (OB_FAIL(eval_ctx_.get_datum_access_ctx(access_ctx))) {
   } else {
     ObExpr *expr = NULL;
@@ -3205,7 +3108,6 @@ int ObWindowFunctionOp::get_participator_whole_msg(
                   piece, temp_whole_msg, ctx_.get_physical_plan_ctx()->get_timeout_timestamp()))) {
       } else if (OB_ISNULL(temp_whole_msg)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("whole msg is unexpected", K(ret));
       } else if (OB_FAIL(whole.assign(*temp_whole_msg))) {
       }
       if (OB_SUCC(ret)) {
@@ -3234,12 +3136,9 @@ int ObWindowFunctionOp::participator_coordinate(
   ReportingWFHashSet *pushdown_pby_hash_set = pby_hash_values_sets_.at(pushdown_wf_idx);
   if (OB_ISNULL(whole_msg) || OB_ISNULL(pby_hash_value_array) || OB_ISNULL(pushdown_pby_hash_set)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ptr is null", K(ret),
-        K(pushdown_wf_idx), K(whole_msg), K(pby_hash_value_array), K(pushdown_pby_hash_set));
   } else if (OB_FAIL(get_participator_whole_msg(*pby_hash_value_array, *whole_msg))) {
   } else if (0 == pby_hash_value_array->count()) {
     // no more new row, do nothing
-    LOG_WARN("not fetch any row, do nothing", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < whole_msg->pby_hash_value_array_.count(); ++i) {
       if (OB_FAIL(pushdown_pby_hash_set->set_refactored_1(whole_msg->pby_hash_value_array_.at(i), 1))) {
@@ -3256,7 +3155,6 @@ int ObWindowFunctionOp::store_all_expr_datums(int64_t store_begin_idx, int64_t s
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(store_begin_idx > restore_row_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("backup interval not continuous", K(ret), K(store_begin_idx), K(restore_row_cnt_));
   } else if (restore_row_cnt_ < store_begin_idx + store_num) {
     const ObIArray<ObExpr *> &all_expr = get_all_expr();
     int64_t memcpy_length = (store_begin_idx + store_num - restore_row_cnt_) * sizeof(ObDatum);
@@ -3330,7 +3228,6 @@ int ObWindowFunctionOp::get_next_batch_from_child(int64_t batch_size, const ObBa
   }
   if (OB_SUCC(ret) && OB_FAIL(store_all_expr_datums(0, 1))) {
   // only backup the first row, because NonAggrCellNthValue::eval will change datum ptr of this row
-    LOG_WARN("store all expr datums failed", K(ret));
   }
   return ret;
 }
@@ -3475,7 +3372,6 @@ int ObWindowFunctionOp::process_child_batch(
               std::swap(s.cur_, s.processed_);
               if (NULL != s.first_ && !s.first_->is_empty()
                   && OB_FAIL(s.cur_->prior_dumping_rows_stores_.push_back(s.first_))) {
-                LOG_WARN("push_back s.first_ to prior_dumping_rows_stores_ failed", K(ret));
               } else if (OB_FAIL(s.cur_->prior_dumping_rows_stores_.push_back(s.processed_))) {
               } else {
                 s.processed_->ra_rs_.finish_add_row();
@@ -3494,7 +3390,6 @@ int ObWindowFunctionOp::process_child_batch(
             ++row_idx;
             ++remain.row_cnt_;
             if (need_split_store && OB_FAIL(save_part_first_row_idx())) {
-              LOG_WARN("save partition by exprs failed", K(ret));
             } else { // need to deal with remain rows in this child_brs after found new part
               need_loop_until_child_brs_end = true;
             }
@@ -3571,15 +3466,10 @@ int ObWindowFunctionOp::output_batch_rows(const int64_t output_row_cnt)
 
   if (OB_UNLIKELY(processed.stored_row_cnt_ != processed.row_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("rows in processed rows store should be all computed", K(ret), K(processed));
   } else if (processed.row_cnt_ != processed_res.row_cnt_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("count of rows in rows store and part row store should be same",
-             K(ret), K(processed), K(processed_res));
   } else if (current.row_cnt_ != current_res.row_cnt_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("count of rows in rows store and part row store should be same",
-             K(ret), K(current), K(current_res));
   } else {
     int64_t rows_cnt_processed = MIN(processed.to_output_rows(), output_row_cnt);
     int64_t rows_cnt_current = MIN(current.to_output_rows(), output_row_cnt - rows_cnt_processed);
@@ -3865,7 +3755,6 @@ int ObWindowFunctionOp::check_interval_valid(ObExpr &expr)
         if (OB_UNLIKELY(OB_INVALID_DATE_VALUE == ret)) {
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("failed to convert string to ob interval", K(ret));
         }
       } else {
         is_valid = !(DT_MODE_NEG & interval_time.mode_);
@@ -3873,7 +3762,6 @@ int ObWindowFunctionOp::check_interval_valid(ObExpr &expr)
     }
     if (OB_SUCC(ret) && !is_valid) {
       ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
-      LOG_WARN("frame start or end is negative, NULL or of non-integral type", K(ret), KPC(interval), KPC(unit));
     }
   }
   return ret;
@@ -3911,8 +3799,6 @@ int ObWindowFunctionOp::RowsStore::process_dump(const bool found_part_end /*fals
       const static int64_t MAX_PRIOR_ELEMENT_COUNT = 2;
       if (prior_dumping_rows_stores_.count() > MAX_PRIOR_ELEMENT_COUNT) { // defense check
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("the cnt of elements is unexpected", K(ret),
-          K(prior_dumping_rows_stores_.count()));
       } else {
         int64_t pop_count = 0;
         for (int64_t i = 0; OB_SUCC(ret) && target_dump_size > 0

@@ -30,10 +30,8 @@ int ObLogMaterial::est_cost()
   if (OB_ISNULL(get_plan()) ||
       OB_ISNULL(child)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_UNLIKELY((parallel = get_parallel()) < 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected parallel degree", K(parallel), K(ret));
   } else {
     double op_cost = 0.0;
     ObOptimizerContext &opt_ctx = get_plan()->get_optimizer_context();
@@ -57,10 +55,8 @@ int ObLogMaterial::do_re_est_cost(EstimateCostInfo &param, double &card, double 
   if (OB_ISNULL(get_plan()) ||
       OB_ISNULL(child)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_UNLIKELY(parallel < 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected parallel degree", K(parallel), K(ret));
   } else if (OB_FALSE_IT(param.need_row_count_ = -1)) {
   } else if (OB_FAIL(SMART_CALL(child->re_est_cost(param, child_card, child_cost)))) {
   } else {

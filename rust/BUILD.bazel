@@ -16,6 +16,11 @@ load("//bazel:defs.bzl", cc_library = "seekdb_cc_library")
 
 package(default_visibility = ["//visibility:private"])
 
+exports_files(
+    ["rust-toolchain.toml"],
+    visibility = ["//deps/external:__pkg__"],
+)
+
 config_setting(
     name = "windows",
     constraint_values = ["@platforms//os:windows"],

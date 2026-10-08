@@ -43,15 +43,12 @@ void ObVectorIndexHistoryTask::do_work()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("vector index history task is not init", KR(ret));
   } else if (is_paused_) {
     // timer paused or not leader, do nothing
   } else if (!ObVecIndexAsyncTaskUtil::check_can_do_work()) { // skip
   } else if (!ObVecIndexAsyncTaskUtil::check_can_process_tasks()) { // skip
   } else if (OB_FAIL(move_task_to_history_table())) {
-    LOG_WARN("fail to move task to history table", K(ret));
   } else if (OB_FAIL(clear_history_task())) {
-    LOG_WARN("fail to clear history task", K(ret));
   }
 }
 
@@ -67,14 +64,11 @@ int ObVectorIndexHistoryTask::clear_history_task()
   ObMySQLTransaction trans;
   if (OB_ISNULL(sql_proxy_) || false) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(sql_proxy_));
   } else if (is_paused_) {
     ret = OB_EAGAIN;
     FLOG_INFO("exit timer task once cuz leader switch", KR(ret));
   } else if (OB_FAIL(trans.start(sql_proxy_))) {
-    LOG_WARN("fail start transaction", KR(ret));
   } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::clear_history_expire_task_record(batch_size, trans, affect_rows))) {
-    LOG_WARN("fail to execute sql", KR(ret), K(sql));
   } else {
     LOG_DEBUG("success to clear_history_task", K(ret), K(sql), K(affect_rows));
   }
@@ -97,7 +91,6 @@ int ObVectorIndexHistoryTask::move_task_to_history_table()
   int64_t move_rows = batch_size;
   if (OB_ISNULL(sql_proxy_) || false) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(sql_proxy_));
   } else {
     while (OB_SUCC(ret) && move_rows != 0) {
       ObMySQLTransaction trans;
@@ -105,9 +98,7 @@ int ObVectorIndexHistoryTask::move_task_to_history_table()
         ret = OB_EAGAIN;
         FLOG_INFO("exit timer task once cuz leader switch", K(ret));
       } else if (OB_FAIL(trans.start(sql_proxy_))) {
-        LOG_WARN("fail start transaction", KR(ret));
       } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::move_task_to_history_table(batch_size, trans, move_rows))) {
-        LOG_WARN("fail to move task to history table", KR(ret));
       }
       if (trans.is_started()) {
         int tmp_ret = OB_SUCCESS;
@@ -127,7 +118,6 @@ int ObVectorIndexHistoryTask::init(common::ObMySQLProxy &sql_proxy)
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("vector index history task init twice", KR(ret));
   } else {
     sql_proxy_ = &sql_proxy;
     disable_timeout_check();
@@ -153,10 +143,8 @@ int ObVectorIndexAsyncTaskScheduler::init(ObMySQLProxy &sql_proxy)
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("vector index scheduler init twice", KR(ret));
   } else if (OB_FAIL(timer_.init(
       "VecIdxMgr", common::ObMemAttr("VecIdxMgr")))) {
-    LOG_WARN("fail to init timer", KR(ret));
   } else if (OB_FAIL(vec_history_task_.init(sql_proxy))) { // History table cleanup
     LOG_WARN("fail to init clear history task");
   } else {
@@ -173,9 +161,7 @@ int ObVectorIndexAsyncTaskScheduler::start()
   FLOG_INFO("vector manager begin to start");
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (OB_FAIL(timer_.schedule(vec_history_task_, VEC_INDEX_CLEAR_TASK_PERIOD, true))) {
-    LOG_WARN("fail to start vector index clear history task", KR(ret));
   }
   FLOG_INFO("start vector index manager", KR(ret));
 

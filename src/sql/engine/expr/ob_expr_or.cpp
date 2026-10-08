@@ -118,8 +118,6 @@ int ObExprOr::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   if (OB_ISNULL(rt_expr.args_) || OB_UNLIKELY(2 > rt_expr.arg_cnt_) ||
       OB_UNLIKELY(rt_expr.arg_cnt_ != raw_expr.get_param_count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("args_ is NULL or arg_cnt_ is invalid or raw_expr is invalid",
-              K(ret), K(rt_expr), K(raw_expr));
   } else {
     rt_expr.eval_func_ = calc_or_exprN;
     rt_expr.eval_batch_func_ = eval_or_batch_exprN;
@@ -134,7 +132,6 @@ int ObExprOr::eval_or_batch_exprN(const ObExpr &expr, ObEvalCtx &ctx,
   ObDatum *results = expr.locate_batch_datums(ctx);
   if (OB_ISNULL(results)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr results frame is not init", K(ret));
   } else {
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     ObBitVector &my_skip = expr.get_pvt_skip(ctx);

@@ -71,7 +71,6 @@ int ObDDLVectorUtils::new_vector_fixed(VecValueTypeClass value_tc,
 #undef FIXED_VECTOR_INIT_SWITCH
   default:
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected fixed vector value type class", KR(ret), K(value_tc));
     break;
   }
   return ret;

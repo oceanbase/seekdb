@@ -201,7 +201,6 @@ int ObSqlParameterization::transform_syntax_tree(ObIAllocator &allocator,
           ParseNode *tmp_root = static_cast<ParseNode *>(ctx.project_list_.at(i));
           if (OB_ISNULL(tmp_root)) {
             ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("invalid null child", K(ret), K(i), K(ctx.project_list_.at(i)));
           } else if (0 == tmp_root->is_val_paramed_item_idx_
                      && OB_FAIL(get_select_item_param_info(*raw_params,
                                                            tmp_root,
@@ -479,7 +478,6 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
     if (OB_FAIL(ret)) {
     } else if (T_PROJECT_STRING == ctx.tree_->type_
         && OB_FAIL(ctx.project_list_.push_back(ctx.tree_))) {
-      LOG_WARN("failed to push back element", K(ret));
     } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(&session_info, enable_decimal_int))) {
     } else {
       // do nothing
@@ -516,7 +514,6 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
           if (OB_FAIL(add_param_flag(ctx.tree_, *ctx.sql_info_))) {
           } else if (fmt_int_or_ch_decint
                      && OB_FAIL(ctx.sql_info_->fmt_int_or_ch_decint_idx_.add_member(ctx.sql_info_->total_))) {
-            LOG_WARN("add bitset member failed", K(ret));
           } else if (OB_FAIL(ObResolverUtils::resolve_const(node,
                               static_cast<stmt::StmtType>(ctx.sql_info_->sql_traits_.stmt_type_),
                               *(ctx.allocator_),
@@ -591,7 +588,6 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
             ctx.sql_info_->total_++;
             if (1 == ctx.tree_->is_num_must_be_pos_ && OB_SUCC(ret)
                 && OB_FAIL(ctx.sql_info_->must_be_positive_index_.add_member(ctx.tree_->raw_param_idx_))) {
-              LOG_WARN("failed to add bitset member", K(ret));
             }
             if (OB_NOT_NULL(ctx.tree_) &&
                 OB_NOT_NULL(ctx.raw_params_) &&
@@ -668,15 +664,12 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
 
     // transform `operand - const_num_val` to `operand + (-const_num_val)`
     if (OB_SUCC(ret) && OB_FAIL(transform_minus_op(*(ctx.allocator_), ctx.tree_, ctx.is_from_pl_))) {
-      LOG_WARN("failed to transform minus operation", K(ret));
     }
     if (T_LIMIT_CLAUSE == ctx.tree_->type_) {
       // limit a offset b, a and b must be positive
       // 0 is counted as positive, -0 is counted as negative
       if (OB_ISNULL(ctx.tree_->children_) || 2 != ctx.tree_->num_child_) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid syntax tree", K(ret),
-                 K(ctx.tree_->children_), K(ctx.tree_->num_child_));
       } else if (OB_NOT_NULL(ctx.tree_->children_[0])
                  && ob_is_numeric_type(ITEM_TO_OBJ_TYPE(ctx.tree_->children_[0]->type_))
                  && FALSE_IT(ctx.tree_->children_[0]->is_num_must_be_pos_ = 1)) {
@@ -691,7 +684,6 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
           || OB_ISNULL(ctx.tree_->children_[0])
           || OB_ISNULL(ctx.tree_->children_[1])) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid syntax tree", K(ret));
       } else if (ob_is_numeric_type(ITEM_TO_OBJ_TYPE(ctx.tree_->children_[0]->type_))
                  && FALSE_IT(ctx.tree_->children_[0]->is_num_must_be_pos_ = 1)) {
       } else if (ob_is_numeric_type(ITEM_TO_OBJ_TYPE(ctx.tree_->children_[1]->type_))
@@ -771,7 +763,6 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
           if (T_PROJECT_STRING == root->type_) {
             if (OB_ISNULL(ctx.tree_)) {
               ret = OB_INVALID_ARGUMENT;
-              LOG_WARN("invalid child for T_PROJECT_STRING", K(ret), K(ctx.tree_));
             } else if (T_VARCHAR == ctx.tree_->type_) {
               // Mark this projection column as a constant string for subsequent string escaping
               ctx.tree_->is_column_varchar_ = 1;
@@ -993,7 +984,6 @@ int ObSqlParameterization::parameterize_syntax_tree(common::ObIAllocator &alloca
              && (OB_FAIL(params.reserve(reserved_cnt)) // Reserve array to avoid extending
              || OB_FAIL(sql_info.param_charset_type_.reserve(reserved_cnt))
              || OB_FAIL(sql_info.fixed_param_idx_.reserve(reserved_cnt)))) {
-    LOG_WARN("failed to reserve array", K(ret));
   } else if (OB_FAIL(transform_syntax_tree(allocator,
                                            *session,
                                            is_execute_mode(mode) ? NULL : &pc_ctx.fp_result_.raw_params_,
@@ -1110,7 +1100,6 @@ int ObSqlParameterization::gen_ps_not_param_var(const ObIArray<int64_t> &offsets
     ps_not_param_var.idx_ = offset;
     if (offset >= params.count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("offset should not oversize param size", K(ret), K(offset), K(params.count()));
     } else {
       ps_not_param_var.ps_param_ = params.at(offset);
       if (OB_FAIL(pc_ctx.not_param_var_.push_back(ps_not_param_var))) {
@@ -1130,7 +1119,6 @@ int ObSqlParameterization::construct_no_check_type_params(const ObIArray<int64_t
     const int64_t offset = no_check_type_offsets.at(i);
     if (offset < 0 || offset >= params.count()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Invalid offset", K(ret), K(offset), K(params.count()));
     } else if (need_check_type_offsets.has_member(offset)) {
       // do nothing
     } else if (!params.at(offset).is_ext() && !ob_is_enumset_inner_tc(params.at(offset).get_meta().get_type())) { // extend type and enum or set inner type need to be checked
@@ -1158,7 +1146,6 @@ int ObSqlParameterization::transform_neg_param(ObIArray<ObPCParam *> &pc_params)
       for (; tmp_pos < pc_param->node_->str_len_ && isspace(pc_param->node_->str_value_[tmp_pos]); tmp_pos++);
       if (OB_UNLIKELY(tmp_pos >= pc_param->node_->str_len_)) {
         int ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(tmp_pos), K(pc_param->node_->str_len_), K(ret));
       } else {
         if ('-' != pc_param->node_->str_value_[tmp_pos]) {
           ret = OB_ERR_UNEXPECTED;
@@ -1266,7 +1253,6 @@ int ObSqlParameterization::construct_trans_neg_param(const ObString &no_param_sq
       for (; tmp_pos < pc_param->node_->str_len_ && isspace(pc_param->node_->str_value_[tmp_pos]); tmp_pos++);
       if (OB_UNLIKELY(tmp_pos >= pc_param->node_->str_len_)) {
         int ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(tmp_pos), K(pc_param->node_->str_len_), K(ret));
       } else {
         if ('-' != pc_param->node_->str_value_[tmp_pos]) {
           ret = OB_ERR_UNEXPECTED;
@@ -2170,7 +2156,6 @@ int ObSqlParameterization::get_related_user_vars(const ParseNode *tree, common::
     if (T_USER_VARIABLE_IDENTIFIER == tree -> type_) {
       if (OB_ISNULL(tree -> str_value_) || tree -> str_len_ < 0) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid argument", K(ret), K(tree -> str_value_), K(tree -> str_len_));
       } else {
         var_str.assign_ptr(tree -> str_value_, static_cast<int32_t>(tree -> str_len_));
         if (OB_FAIL(user_vars.push_back(var_str))) {
@@ -2180,7 +2165,6 @@ int ObSqlParameterization::get_related_user_vars(const ParseNode *tree, common::
       for (int64_t i = 0; OB_SUCC(ret) && i < tree -> num_child_; i++) {
         if (OB_ISNULL(tree -> children_)) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid argument", K(tree -> children_), K(ret));
         } else if (OB_FAIL(SMART_CALL(get_related_user_vars(tree -> children_[i], user_vars)))) {
         }
       }
@@ -2209,7 +2193,6 @@ int ObSqlParameterization::get_select_item_param_info(const common::ObIArray<ObP
 
   if (T_PROJECT_STRING != tree->type_ || OB_ISNULL(tree->children_) || tree->num_child_ <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(tree->type_), K(tree->children_), K(tree->num_child_));
   } else if (T_ALIAS == tree->children_[0]->type_
              || T_STAR == tree->children_[0]->type_) { // have alias name, or is a '*', do not need parameterized
     // do nothing
@@ -2238,7 +2221,6 @@ int ObSqlParameterization::get_select_item_param_info(const common::ObIArray<ObP
       ctx.tree_ = stack_frames.at(frame_idx).cur_node_;
       if (NULL == ctx.tree_) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid null node", K(ret), K(ctx.tree_));
       } else if (1 == ctx.tree_->is_val_paramed_item_idx_
                  || T_QUESTIONMARK == ctx.tree_->type_
                  || stack_frames.at(frame_idx).next_child_idx_ >= ctx.tree_->num_child_) {
@@ -2316,7 +2298,6 @@ int ObSqlParameterization::get_select_item_param_info(const common::ObIArray<ObP
       LOG_WARN("invalid index", K(idx), K(raw_params.count()));
     } else if (OB_ISNULL(raw_params.at(idx)) || OB_ISNULL(raw_params.at(idx)->node_)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(raw_params.at(idx)), K(raw_params.at(idx)->node_));
     } else if (T_NULL == raw_params.at(idx)->node_->type_) {
       tree->str_value_ = "NULL";
       tree->str_len_ = strlen("NULL");
@@ -2376,7 +2357,6 @@ int ObSqlParameterization::transform_minus_op(ObIAllocator &alloc, ParseNode *tr
              || OB_ISNULL(tree->children_)
              || OB_ISNULL(tree->children_[1])) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid minus tree", K(ret));
   } else if (1 == tree->children_[1]->is_assigned_from_child_) {
     // select 1 - (2) from dual;
     // select 1 - (2/3/4) from dual;
@@ -2397,7 +2377,6 @@ int ObSqlParameterization::transform_minus_op(ObIAllocator &alloc, ParseNode *tr
       char *new_raw_text = static_cast<char *>(parse_malloc(child->text_len_ + 2, &alloc));
       if (OB_ISNULL(new_str) || OB_ISNULL(new_raw_text)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate memory", K(ret), K(new_raw_text), K(new_str));
       } else {
         new_str[0] = '-';
         new_raw_text[0] = '-';
@@ -2461,7 +2440,6 @@ int ObSqlParameterization::transform_minus_op(ObIAllocator &alloc, ParseNode *tr
 
         if (OB_ISNULL(new_str) || OB_ISNULL(new_raw_text)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to alloc memory", K(ret), K(new_str), K(new_raw_text));
         } else {
           new_str[0] = '-';
           new_raw_text[0] = '-';
@@ -2520,7 +2498,6 @@ int ObSqlParameterization::find_leftest_const_node(ParseNode &cur_node, ParseNod
     if (OB_ISNULL(cur_node.children_) || 2 != cur_node.num_child_
         || OB_ISNULL(cur_node.children_[0]) || OB_ISNULL(cur_node.children_[1])) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument");
     } else if (OB_FAIL(find_leftest_const_node(*cur_node.children_[0], const_node))) {
     } else {
       // do nothing

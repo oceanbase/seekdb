@@ -223,7 +223,6 @@ int ObINodeWithChild::erase_node(const ObINodeWithChild *node, const bool node_i
   int ret = OB_SUCCESS;
   if (OB_ISNULL(node)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("erase children get invalid argument", K(ret), KP(node));
   } else {
     ObMutexGuard guard(lock_);
     ObIArray<ObINodeWithChild*> &node_array = node_is_parent ? parent_ : children_;
@@ -405,7 +404,6 @@ int ObITask::generate_next_task()
   } else {
     if (dag_->has_set_stop()) {
       ret = OB_CANCELED;
-      LOG_WARN("dag is stopped", K(ret));
     } else if (OB_TMP_FAIL(generate_next_task(next_task))) {
       if (OB_ITER_END != tmp_ret) {
         ret = tmp_ret;
@@ -436,7 +434,6 @@ int ObITask::post_generate_next_task()
   } else {
     if (dag_->has_set_stop()) {
       ret = OB_CANCELED;
-      LOG_WARN("dag is stopped", K(ret));
     } else if (OB_TMP_FAIL(post_generate_next_task(next_task))) {
       if (OB_ITER_END != tmp_ret) {
         ret = tmp_ret;
@@ -659,7 +656,6 @@ int ObIDag::check_task_status()
   int ret = OB_SUCCESS;
   if (is_inactive_status()) {
     ret = OB_CANCELED;
-    LOG_WARN("dag is inactive", K(ret), K_(is_stop), K_(dag_status));
   } else if (OB_FAIL(check_cycle())) {
     COMMON_LOG(WARN, "check_cycle failed, set dag stop", K(ret), K_(id), K_(is_stop));
     int tmp_ret = OB_SUCCESS;
@@ -696,13 +692,11 @@ int ObIDag::batch_add_task(const ObIArray<ObITask *> &task_array)
     lib::ObMutexGuard guard(lock_);
     if (is_inactive_status()) {
       ret = OB_CANCELED;
-      LOG_WARN("dag is inactive", K(ret), K_(is_stop), K_(dag_status));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < task_array.count(); ++i) {
       ObITask *cur_task = task_array.at(i);
       if (OB_ISNULL(cur_task)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("current task is null", K(ret), K(i), KP(cur_task));
       } else {
         cur_task->set_status(ObITask::TASK_STATUS_WAITING);
       }
@@ -919,7 +913,6 @@ int ObIDag::inner_finish_task(ObITask *&task, int64_t *ready_task_cnt)
   } else {
     if (OB_UNLIKELY(task->get_list_idx() != ObITask::READY_TASK_LIST)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("task is not in ready task list", K(ret), K(task));
     } else if (OB_ISNULL(task_list_.remove(task))) {
       ret = OB_ERR_UNEXPECTED;
       COMMON_LOG(ERROR, "failed to remove finished task from task_list", K(ret));
@@ -1189,7 +1182,6 @@ int ObIDag::inner_add_child_without_inheritance(ObIDag &child)
     COMMON_LOG(WARN, "dag status is not valid", K(ret), K(child));
   } else if (OB_UNLIKELY(dag_net_ != child_dag_net)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("dag and child dag net not same", K(ret), KPC(dag_net_), KPC(child_dag_net));
   } else if (OB_FAIL(add_child_without_lock(child))) {
   }
   return ret;
@@ -1290,10 +1282,8 @@ int ObIDagNet::add_dag_into_dag_net(ObIDag &dag)
     COMMON_LOG(WARN, "dag already belongs to a dag_net", K(ret), K(dag));
   } else if (is_stop) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("dag_net is in stop state, not allowed to add dag", K(ret), K(is_stop));
   } else if (is_cancel_) {
     ret = OB_CANCELED;
-    LOG_WARN("dag net is cancel, do not allow to add new dag", K(ret), K(is_cancel_));
   } else {
     if (!dag_record_map_.created() && OB_FAIL(dag_record_map_.create(DEFAULT_DAG_BUCKET, "DagRecordMap", "DagRecordNode"))) {
       COMMON_LOG(WARN, "failed to create dag record map", K(ret), K(dag));
@@ -1384,7 +1374,6 @@ int ObIDagNet::update_dag_status(ObIDag &dag, bool &dag_net_finished)
     COMMON_LOG(WARN, "dag net not basic init", K(ret), K(this));
   } else if (OB_UNLIKELY(is_stopped_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("dag net is in stop state", K(ret), K(dag), KP(this));
   } else if (OB_FAIL(dag_record_map_.get_refactored(&dag, dag_record))) {
   } else if (OB_ISNULL(dag_record)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1426,7 +1415,6 @@ int ObIDagNet::erase_dag_from_dag_net(ObIDag &dag)
   WEAK_BARRIER();
   if (OB_UNLIKELY(is_stopped_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("dag net is in stop state", K(ret), K(dag), KP(this));
   } else if (OB_FAIL(dag_record_map_.get_refactored(&dag, dag_record))) {
   } else if (OB_ISNULL(dag_record)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1765,7 +1753,6 @@ int ObDagWorker::start()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDagWorker not init", K(ret));
   } else if (OB_FAIL(lib::ThreadPool::start())) {
   }
   return ret;
@@ -2132,7 +2119,6 @@ int ObDagPrioScheduler::inner_add_dag_(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(dag) || OB_UNLIKELY(!dag->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("inner dag dag get invalid argument", K(ret), KPC(dag));
   } else if (OB_UNLIKELY(dag->get_priority() != priority_ || OB_ISNULL(scheduler_))) {
     ret = OB_ERR_UNEXPECTED;
     COMMON_LOG(WARN, "unexpected value", K(ret), K(dag->get_priority()), K_(priority), KP_(scheduler));
@@ -2358,7 +2344,6 @@ int ObDagPrioScheduler::generate_next_dag_(ObIDag &dag)
       ObCurTraceId::set(next_dag->get_dag_id());
       if (FALSE_IT(dag_net = dag.get_dag_net())) {
       } else if (OB_NOT_NULL(dag_net) && OB_FAIL(dag_net->add_dag_into_dag_net(*next_dag))) {
-        LOG_WARN("failed to add dag into dag net", K(ret), KPC(next_dag));
       } else if (OB_FAIL(next_dag->create_first_task())) {
       } else {
         COMMON_LOG(INFO, "succeed generate next dag", K(dag), KP(next_dag));
@@ -2413,7 +2398,6 @@ int ObDagPrioScheduler::finish_dag_(
   }
   if (OB_FAIL(ret)) {
   } else if (try_move_child && OB_FAIL(try_move_child_to_ready_list_(*dag))) {
-    LOG_WARN("failed to try move child to ready list", K(ret), K(&dag));
   } else if (OB_FAIL(erase_dag_(*dag))) {
   } else {
     LOG_INFO("dag finished", "dag_ret", dag->get_dag_ret(),
@@ -2484,7 +2468,6 @@ int ObDagPrioScheduler::try_move_child_to_ready_list_(ObIDag &dag)
       ObIDag *child_dag = static_cast<ObIDag *>(child_array.at(i));
       if (OB_ISNULL(child_dag)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("child dag should not be NULL", K(ret), KP(child_dag));
       } else if (dag.get_priority() == child_dag->get_priority() // for same priority dag, could move list under curr lock
           && WAITING_DAG_LIST == child_dag->get_list_idx()
           && 0 == child_dag->get_indegree()
@@ -2762,13 +2745,11 @@ int ObDagPrioScheduler::get_minor_exe_dag_info(
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(dag_map_.get_refactored(&dag, stored_dag))) {
     if (OB_HASH_NOT_EXIST != ret) {
-      LOG_WARN("failed to get from dag map", K(ret));
     } else {
       ret = OB_SUCCESS;
     }
   } else if (OB_ISNULL(other_dag = static_cast<compaction::ObTabletMergeExecuteDag *>(stored_dag))) {
     ret = OB_ERR_SYS;
-    LOG_WARN("dag is null", K(ret));
   } else if (OB_FAIL(merge_range_array.push_back(other_dag->get_merge_range()))) {
   }
   return ret;
@@ -2944,11 +2925,9 @@ int ObDagPrioScheduler::diagnose_dag(
     ObIDag *stored_dag = nullptr;
     if (OB_FAIL(dag_map_.get_refactored(&dag, stored_dag))) {
       if (OB_HASH_NOT_EXIST != ret) {
-        LOG_WARN("failed to get from dag map", K(ret));
       }
     } else if (OB_ISNULL(stored_dag)) {
       ret = OB_ERR_SYS;
-      LOG_WARN("dag is null", K(ret));
     } else if (OB_UNLIKELY(stored_dag->get_priority() != dag.get_priority())) {
       ret = OB_ERR_UNEXPECTED;
       COMMON_LOG(WARN, "unexpected priority value", K(ret), K(stored_dag->get_priority()), K(dag.get_priority()));
@@ -3097,13 +3076,11 @@ int ObDagPrioScheduler::cancel_dag(const ObIDag &dag, const bool force_cancel)
     if (OB_SUCCESS != (hash_ret = dag_map_.get_refactored(&dag, cur_dag))) {
       if (OB_HASH_NOT_EXIST != hash_ret) {
         ret = hash_ret;
-        LOG_WARN("failed to get from dag map", K(ret));
       } else {
         LOG_INFO("dag is not in dag_map", K(ret));
       }
     } else if (OB_ISNULL(cur_dag)) {
       ret = OB_ERR_SYS;
-      LOG_WARN("dag should not be null", K(ret));
     } else if (cur_dag->get_priority() != dag.get_priority()) {
       ret = OB_ERR_UNEXPECTED;
       COMMON_LOG(WARN, "unexpected priority value", K(ret), K(cur_dag->get_priority()), K(dag.get_priority()));
@@ -3445,11 +3422,9 @@ int ObDagNetScheduler::diagnose_dag_net(
   ObIDagNet *stored_dag_net = nullptr;
   if (OB_FAIL(dag_net_map_.get_refactored(&dag_net, stored_dag_net))) {
     if (OB_HASH_NOT_EXIST != ret) {
-      LOG_WARN("failed to get from dag map", K(ret));
     }
   } else if (OB_ISNULL(stored_dag_net)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("dag is null", K(ret));
   } else {
     stored_dag_net->diagnose_dag(progress_list);
     start_time = stored_dag_net->get_start_time();
@@ -3596,11 +3571,9 @@ int ObDagNetScheduler::check_dag_net_exist(
       exist = false;
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("failed to get dag id from dag net", K(ret), K(dag_id));
     }
   } else if (OB_ISNULL(dag_net)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("dag net should not be NULL", K(ret), KP(dag_net));
   } else {
     exist = true;
   }
@@ -3614,18 +3587,15 @@ int ObDagNetScheduler::cancel_dag_net(const ObDagId &dag_id)
   ObIDagNet *dag_net = nullptr;
   if (dag_id.is_invalid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("cancel dag net get invalid argument", K(ret), K(dag_id));
   } else {
     ObMutexGuard dag_net_guard(dag_net_map_lock_);
     if (OB_FAIL(dag_net_id_map_.get_refactored(dag_id, dag_net_key))) {
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("failed to get dag id from dag net", K(ret), K(dag_id));
       }
     } else if(OB_ISNULL(dag_net_key)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("dag net key should not be NULL", K(ret), K(dag_id), KP(dag_net));
     } else if (OB_FAIL(dag_net_map_.get_refactored(dag_net_key, dag_net))) {
     } else if (OB_FAIL(dag_net->set_cancel())) {
     }
@@ -3782,7 +3752,6 @@ int ObDagScheduler::init(
   }
 
   if (FAILEDx(lib::ThreadPool::start())) {
-    COMMON_LOG(WARN, "failed to start dag scheduler", K(ret));
   } else {
     is_inited_ = true;
     dump_dag_status();
@@ -3868,7 +3837,6 @@ void ObDagScheduler::free_dag(ObIDag &dag)
   if (OB_FAIL(ret)) {
   } else if (OB_NOT_NULL(dag_net = dag.get_dag_net())) {
     if (OB_FAIL(dag_net->erase_dag_from_dag_net(dag))) {
-      LOG_WARN("failed to erase dag from dag_net", K(ret), KP(dag_net), K(dag));
       ob_abort();
     }
   }
@@ -3943,7 +3911,6 @@ int ObDagScheduler::add_dag(
   } else if (FALSE_IT(dag->set_dag_emergency(emergency))) {
   } else if (OB_FAIL(prio_sche_[dag->get_priority()].inner_add_dag(check_size_overflow, dag))) {
     if (OB_EAGAIN != ret) {
-      LOG_WARN("failed to inner add dag", K(ret), KPC(dag));
     }
   } else {
     ObThreadCondGuard guard(scheduler_sync_);

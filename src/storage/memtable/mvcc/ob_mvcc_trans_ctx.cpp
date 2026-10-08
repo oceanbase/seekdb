@@ -788,7 +788,6 @@ int ObTransCallbackMgr::prep_and_fill_from_list_(ObTxFillRedoCtx &ctx,
     } else {
       callback_scope_idx = ctx.helper_->callbacks_.count() - 1;
     }
-    FILL_LOG_TRACE("choose callback scope idx", K(index), K(callback_scope_idx));
   }
   // prepare fill ctx and do fill
   if (OB_SUCC(ret)) {
@@ -809,7 +808,6 @@ int ObTransCallbackMgr::prep_and_fill_from_list_(ObTxFillRedoCtx &ctx,
     if (ctx.callback_scope_->is_empty()) {
       ctx.helper_->callbacks_.pop_back();
       callback_scope_idx = -1;
-      FILL_LOG_TRACE("fill from list result is empty, revert");
     }
     ctx.callback_scope_ = NULL;
   }
@@ -936,7 +934,6 @@ int ObTransCallbackMgr::fill_from_one_list(ObTxFillRedoCtx &ctx,
                                            ObITxFillRedoFunctor &func)
 {
   int ret = OB_SUCCESS;
-  FILL_LOG_TRACE("from one list", K(ctx));
   RDLockGuard guard(rwlock_);
   int64_t epoch_from = 0, epoch_to = 0;
   if (OB_LIKELY(callback_lists_ == NULL)) {
@@ -945,7 +942,6 @@ int ObTransCallbackMgr::fill_from_one_list(ObTxFillRedoCtx &ctx,
   } else {
     calc_list_fill_log_epoch_(list_idx, epoch_from, epoch_to);
   }
-  FILL_LOG_TRACE("start fill list", K(list_idx), K(epoch_from), K(epoch_to), K(ctx));
   if (epoch_from == 0) {
     ret = OB_ITER_END; // can not fill any callback, because of other list has min write epoch
   } else if (epoch_from == INT64_MAX) {
@@ -957,7 +953,6 @@ int ObTransCallbackMgr::fill_from_one_list(ObTxFillRedoCtx &ctx,
   if (OB_SUCC(ret)) {
     ctx.is_all_filled_ = true;
   }
-  FILL_LOG_TRACE("fill from one done", K(ctx));
   return ret;
 }
 
@@ -977,7 +972,6 @@ int ObTransCallbackMgr::fill_from_one_list(ObTxFillRedoCtx &ctx,
 int ObTransCallbackMgr::fill_from_all_list(ObTxFillRedoCtx &ctx, ObITxFillRedoFunctor &func)
 {
   int ret = OB_SUCCESS;
-  FILL_LOG_TRACE("from all list entry", K(ctx));
   RDLockGuard guard(rwlock_);
   int list_cnt = get_logging_list_count();
   // record each list's next to fill write_epoch
@@ -996,7 +990,6 @@ int ObTransCallbackMgr::fill_from_all_list(ObTxFillRedoCtx &ctx, ObITxFillRedoFu
     callback_scope_idx_arr[i] = -1;
   }
 
-  FILL_LOG_TRACE("start from all list", K(list_cnt), K(ctx));
 
   int cur_index = -1;
   bool do_return = false;
@@ -1006,7 +999,6 @@ int ObTransCallbackMgr::fill_from_all_list(ObTxFillRedoCtx &ctx, ObITxFillRedoFu
     calc_next_to_fill_log_info_(next_log_epoch_arr, index, epoch_from, epoch_to);
     if (index == -1) {
       ctx.is_all_filled_ = true;
-      FILL_LOG_TRACE("all list fill done", K(ctx));
       do_return = true; // all list is totally filled
     } else {
       int fill_ret = prep_and_fill_from_list_(ctx,
@@ -1015,7 +1007,6 @@ int ObTransCallbackMgr::fill_from_all_list(ObTxFillRedoCtx &ctx, ObITxFillRedoFu
                                               index,
                                               epoch_from,
                                               epoch_to);
-      FILL_LOG_TRACE("one fill round 1/2", K(fill_ret), K(index), K(epoch_from), K(epoch_to), K(ctx));
       bool try_other_lists = false;
       if (OB_SUCCESS == fill_ret) {
         // cur list is all filled
@@ -1063,7 +1054,6 @@ int ObTransCallbackMgr::fill_from_all_list(ObTxFillRedoCtx &ctx, ObITxFillRedoFu
       // fill from other lists, this can be in two situations:
       // 1. parallel logging, but the first list can not fill any data
       // 2. serial logging, and buf is not full, need fill from others
-      FILL_LOG_TRACE("one fill round 2/2", K(fill_ret), K(try_other_lists), K(ctx));
       if (try_other_lists && (list_cnt == 1 || ctx.cur_epoch_ != epoch_to)) {
         ret = fill_ret;
         ctx.is_all_filled_ = (list_cnt == 1) && (OB_SUCCESS == fill_ret);
@@ -1079,14 +1069,12 @@ int ObTransCallbackMgr::fill_from_all_list(ObTxFillRedoCtx &ctx, ObITxFillRedoFu
           } else if (next_log_epoch_arr.at(i) == INT64_MAX) {
             // nothing to fill, skip it
           } else if (next_log_epoch_arr.at(i) == fill_epoch) {
-            FILL_LOG_TRACE("start fill others >>", K(i), K(fill_epoch), K(ctx));
             fill_ret = prep_and_fill_from_list_(ctx,
                                                 func,
                                                 callback_scope_idx_arr[i],
                                                 i,
                                                 fill_epoch,
                                                 fill_epoch);
-            FILL_LOG_TRACE("fill others done <<", K(fill_ret), K(ctx));
             if (OB_SUCCESS == fill_ret) {
               // this list is fully filled, continue to fill from others
               next_log_epoch_arr.at(i) = INT64_MAX;
@@ -1129,7 +1117,6 @@ int ObTransCallbackMgr::fill_from_all_list(ObTxFillRedoCtx &ctx, ObITxFillRedoFu
             // all list reach tail, no need next round
             ctx.is_all_filled_ = true;
             do_return = true;
-            FILL_LOG_TRACE("all list filled, remians 0, return now", K(ctx));
           } else if (ctx.fill_count_ - save_fill_count == 0) {
             // no extra filled from other list, no need next round
             ob_assert(last_fail != OB_SUCCESS);
@@ -1145,13 +1132,11 @@ int ObTransCallbackMgr::fill_from_all_list(ObTxFillRedoCtx &ctx, ObITxFillRedoFu
           }
         }
       }
-      FILL_LOG_TRACE("one round is done", K(do_return), K(ctx));
     }
   }
   if (!ctx.is_all_filled_) {
     ob_assert(ret != OB_SUCCESS);
   }
-  FILL_LOG_TRACE("done fill from all list", K(list_cnt), K(ctx));
   return ret;
 }
 

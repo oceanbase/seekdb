@@ -126,7 +126,6 @@ int ObScanner::init(int64_t mem_size_limit /*= DEFAULT_MAX_SERIALIZE_SIZE*/)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("user var map has been inited already", K(ret));
   } else if (OB_FAIL(datum_store_.init(UINT64_MAX,
                                        ObCtxIds::DEFAULT_CTX_ID, label_, false/*enable_dump*/))) {
   } else {
@@ -172,7 +171,6 @@ int ObScanner::add_row(const ObNewRow &row)
   int ret = OB_SUCCESS;
   if (OB_FAIL(row_store_.add_row(row))) {
   } else if (row_store_.get_data_size() > mem_size_limit_) {
-    LOG_WARN("row store data size", "rowstore_data_size", row_store_.get_data_size(), K_(mem_size_limit), K(ret));
     if (row_store_.get_row_count() == 1 && row_store_.get_data_size() <= DEFAULT_MAX_SERIALIZE_SIZE) {
       /**
        * The default size of ObScanner is 64MB.
@@ -262,7 +260,6 @@ int ObScanner::set_session_var_map(const sql::ObSQLSessionInfo *p_session_info)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(p_session_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session pointer is null", K(ret));
   } else {
     const sql::ObSessionValMap &current_map = p_session_info->get_user_var_val_map();
     if (current_map.size() > 0) {
@@ -285,7 +282,6 @@ int ObScanner::set_row_matched_count(int64_t row_count)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(row_count < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(row_count));
   } else {
     row_matched_count_ = row_count;
   }
@@ -297,7 +293,6 @@ int ObScanner::set_row_duplicated_count(int64_t row_count)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(row_count < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(row_count));
   } else {
     row_duplicated_count_ = row_count;
   }

@@ -74,7 +74,6 @@ int ObExprFuncPartHashBase::calc_value_for_mysql(const T &input, T &output,
       }
       output.set_int(num);
     } else {
-      LOG_WARN("Failed to get value", K(ret));
     }
   }
   return ret;
@@ -98,7 +97,6 @@ int ObExprFuncPartHash::calc_result_typeN(ObExprResType &type,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(types_stack)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("objs_stack is null", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < param_num; ++i) {
       ObObjTypeClass tc = types_stack[i].get_type_class();
@@ -132,7 +130,6 @@ int ObExprFuncPartHash::calc_hash_value_with_seed(const ObObj &obj, int64_t seed
                                                    ObCharset::charset_type_by_coll(obj.get_collation_type())))){
     } else if (OB_ISNULL(real_end)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null ptr", K(ret));
     } else {
       val_len = real_end - obj1_str;
       if (val_len < 0) {
@@ -166,7 +163,6 @@ int ObExprFuncPartHash::calc_value(
   // mysql mode only allows one parameter, syntax already restricts
   if (OB_ISNULL(objs_stack) || 1 != param_num) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("objs_stack is null or number incorrect", K(objs_stack), K(param_num), K(ret));
   } else {
     ret = calc_value_for_mysql(objs_stack[0], result, objs_stack[0].get_type());
   }
@@ -178,7 +174,6 @@ int ObExprFuncPartHash::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_exp
   int ret = OB_SUCCESS;
   if (1 != rt_expr.arg_cnt_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("expect one parameter in mysql", K(ret));
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "part hash");
   }
 

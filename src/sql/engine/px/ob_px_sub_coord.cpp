@@ -61,13 +61,11 @@ int ObPxSubCoord::pre_process()
       || OB_ISNULL(sqc_arg_.des_phy_plan_)
       || OB_ISNULL(phy_plan_ctx = GET_PHY_PLAN_CTX(*sqc_arg_.exec_ctx_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sqc args should not be NULL", K(ret));
   } else if (OB_FAIL(try_prealloc_data_channel(sqc_ctx_, sqc_arg_.sqc_))) {
   } else {
     // ObOperator *op = NULL;
     if (OB_ISNULL(sqc_arg_.op_spec_root_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected status: op root is null", K(ret));
     } else if (OB_FAIL(rebuild_sqc_access_table_locations())) {
     } else if (OB_FAIL(setup_op_input(*sqc_arg_.exec_ctx_,
                                       *sqc_arg_.op_spec_root_,
@@ -143,10 +141,8 @@ int ObPxSubCoord::init_exec_env(ObExecContext &exec_ctx)
   ObSQLSessionInfo *session = NULL;
   if (OB_ISNULL(session = GET_MY_SESSION(exec_ctx))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("deserialized exec ctx without phy plan session set. Unexpected", K(ret));
   } else if (OB_ISNULL(plan_ctx = GET_PHY_PLAN_CTX(exec_ctx))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("deserialized exec ctx without phy plan ctx set. Unexpected", K(ret));
   } else {
     session->set_cur_phy_plan(sqc_arg_.des_phy_plan_);
     exec_ctx.reference_my_plan(sqc_arg_.des_phy_plan_);
@@ -170,7 +166,6 @@ int ObPxSubCoord::get_tsc_or_dml_op_tablets(
     /*do nothing*/
   } else if (!dml_ops.empty() && 1 != dml_ops.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected dml ops count", K(dml_ops.count()), K(ret));
   } else if (OB_FAIL(ObPxPartitionLocationUtil::get_all_tables_tablets(
         scan_ops,
         tsc_locations,
@@ -206,7 +201,6 @@ int ObPxSubCoord::setup_gi_op_input(ObExecContext &ctx,
         ObOperatorKit *kit = ctx.get_operator_kit(gi_op->id_);
         if (OB_ISNULL(kit) || OB_ISNULL(kit->input_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("operator is NULL", K(ret), KP(kit));
         } else {
           ObGIOpInput *gi_input = static_cast<ObGIOpInput*>(kit->input_);
           int64_t parallelism = sqc.get_task_count();
@@ -256,7 +250,6 @@ int ObPxSubCoord::pre_setup_op_input(ObExecContext &ctx,
     if (is_single_tsc_leaf_dfo_ &&
         OB_FAIL(setup_gi_op_input(ctx, root, sqc_ctx,
         tsc_locations, tsc_location_keys))) {
-      LOG_WARN("fail to setup gi op input", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -286,7 +279,6 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
     ObOperatorKit *kit = ctx.get_operator_kit(receive_op->id_);
     if (OB_ISNULL(kit) || OB_ISNULL(kit->input_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("operator is NULL", K(ret), KP(kit));
     } else {
       ObPxReceiveOpInput *receive_input = static_cast<ObPxReceiveOpInput*>(kit->input_);
       receive_input->set_ignore_vtable_error(sqc_arg_.sqc_.is_ignore_vtable_error());
@@ -301,7 +293,6 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
     ObOperatorKit *kit = ctx.get_operator_kit(transmit_op->id_);
     if (OB_ISNULL(kit) || OB_ISNULL(kit->input_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("operator is NULL", K(ret), KP(kit));
     } else {
       ObPxTransmitOpInput *transmit_input = static_cast<ObPxTransmitOpInput*>(kit->input_);
       transmit_input->set_sqc_proxy(sqc_ctx.sqc_proxy_);
@@ -330,7 +321,6 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
     if (!is_single_tsc_leaf_dfo_ &&
         OB_FAIL(setup_gi_op_input(ctx, root, sqc_ctx,
         tsc_locations, tsc_location_keys))) {
-      LOG_WARN("fail to setup gi op input", K(ret));
     } else {
       // dop may changed after dop auto scaling, we should modify the dop in gi
       gi_input->set_parallelism(sqc.get_task_count());
@@ -348,7 +338,6 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
     ObOperatorKit *kit = ctx.get_operator_kit(root.id_);
     if (OB_ISNULL(kit) || OB_ISNULL(kit->input_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("operator is NULL", K(ret), KP(kit));
     } else if (FALSE_IT(filter_input = static_cast<ObJoinFilterOpInput*>(kit->input_))) {
     } else if (FALSE_IT(filter_input->set_px_sequence_id(
           sqc.get_interrupt_id().px_interrupt_id_.first_))) {
@@ -384,10 +373,8 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
     ObOperatorKit *kit = ctx.get_operator_kit(root.id_);
     if (OB_ISNULL(kit) || OB_ISNULL(kit->input_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("operator is NULL", K(ret), KP(kit));
     } else if (OB_ISNULL(access_count_ptr = (uint64_t *)ctx.get_allocator().alloc(sizeof(uint64_t)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc count_ptr", K(ret));
     } else {
       access_input = static_cast<ObTempTableAccessOpInput*>(kit->input_);
       ObTempTableAccessOpSpec &access_op = static_cast<ObTempTableAccessOpSpec&>(root);
@@ -415,7 +402,6 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
         //do nothing
       } else if (!find) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("temp table not found", K(access_op.temp_table_id_), K(ret));
       } else {
         *access_count_ptr = access_input->interm_result_ids_.count();
         access_input->unfinished_count_ptr_ = reinterpret_cast<uint64_t>(access_count_ptr);
@@ -428,10 +414,8 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
     ObHashJoinSpec *hj_spec = reinterpret_cast<ObHashJoinSpec *>(&root);
     if (OB_ISNULL(kit) || OB_ISNULL(kit->input_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("operator is NULL", K(ret), KP(kit));
     } else if (FALSE_IT(hj_input = static_cast<ObHashJoinInput*>(kit->input_))) {
     } else if (hj_spec->is_shared_ht_ && OB_FAIL(hj_input->init_shared_hj_info(ctx.get_allocator(), sqc.get_task_count()))) {
-      LOG_WARN("failed to init shared hash join info", K(ret));
     } else {
     }
   } else if (root.get_type() == PHY_WINDOW_FUNCTION) {
@@ -442,7 +426,6 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
     ObWindowFunctionSpec *wf_spec = reinterpret_cast<ObWindowFunctionSpec *>(&root);
     if (OB_ISNULL(kit) || OB_ISNULL(kit->input_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("operator is NULL", K(ret), KP(kit));
     } else if (FALSE_IT(wf_input = static_cast<ObWindowFunctionOpInput*>(kit->input_))) {
     } else if (wf_spec->is_participator()) {
       wf_input->set_local_task_count(sqc.get_task_count());
@@ -466,7 +449,6 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
       ObOpSpec *child = root.get_child(i);
       if (OB_ISNULL(child)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL child op unexpected", K(ret));
       } else {
         ret = SMART_CALL(setup_op_input(ctx, *child, sqc_ctx, tsc_locations,
             tsc_location_keys));
@@ -485,11 +467,9 @@ int ObPxSubCoord::create_tasks(ObPxInitSqcArgs &sqc_arg, ObSqcCtx &sqc_ctx, bool
       || OB_ISNULL(sqc_arg.op_spec_root_)
       || OB_ISNULL(sqc_arg.des_phy_plan_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sqc args should not be NULL", K(ret));
   } else if (OB_FAIL(sqc_ctx.reserve_task_mem(sqc.get_task_count()))) {
   } else if (OB_UNLIKELY(NULL == (session = sqc_arg.exec_ctx_->get_my_session()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL ptr session", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < sqc.get_task_count(); ++i) {
     ObPxTask task;
@@ -509,7 +489,6 @@ int ObPxSubCoord::create_tasks(ObPxInitSqcArgs &sqc_arg, ObSqcCtx &sqc_ctx, bool
       if (OB_FAIL(sqc_ctx.add_task(task, task_ptr))) {
       } else if (OB_ISNULL(task_ptr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("task ptr should not be null", KP(task_ptr), K(ret));
       }
     }
   }
@@ -526,7 +505,6 @@ int ObPxSubCoord::dispatch_tasks(ObPxInitSqcArgs &sqc_arg, ObSqcCtx &sqc_ctx, in
       || OB_ISNULL(sqc_arg.op_spec_root_)
       || OB_ISNULL(sqc_arg.des_phy_plan_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Invalid sqc args", K(ret), K(sqc));
   } else if (is_fast_sqc) {
     dispatch_worker_count = 0;
     ret = dispatch_task_to_local_thread(sqc_arg, sqc_ctx, sqc);
@@ -557,7 +535,6 @@ int ObPxSubCoord::dispatch_task_to_local_thread(ObPxInitSqcArgs &sqc_arg,
   if (OB_FAIL(sqc_ctx.get_task(task_idx, task_ptr))) {
   } else if (OB_ISNULL(task_ptr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("task ptr should not be null", KP(task_ptr), K(ret));
   } else {
     args.exec_ctx_ = sqc_arg.exec_ctx_;
     args.op_spec_root_ = sqc_arg.op_spec_root_;
@@ -574,7 +551,6 @@ int ObPxSubCoord::dispatch_task_to_local_thread(ObPxInitSqcArgs &sqc_arg,
     // fail
   } else if (OB_ISNULL(worker = local_worker_factory_.create_worker())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail create new worker", K(sqc), K(ret));
   } else if (OB_FAIL(worker->run(args))) {
   } else {
   }
@@ -594,7 +570,6 @@ int ObPxSubCoord::dispatch_task_to_thread_pool(ObPxInitSqcArgs &sqc_arg,
   if (OB_FAIL(sqc_ctx.get_task(task_idx, task_ptr))) {
   } else if (OB_ISNULL(task_ptr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("task ptr should not be null", KP(task_ptr), K(ret));
   } else {
     if (nullptr != sqc_arg.op_spec_root_) {
       args.set_serialize_param(*sqc_arg.exec_ctx_,
@@ -602,7 +577,6 @@ int ObPxSubCoord::dispatch_task_to_thread_pool(ObPxInitSqcArgs &sqc_arg,
                              *sqc_arg.des_phy_plan_);
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected status: op root is null", K(ret));
     }
     args.task_ = *task_ptr;
     args.sqc_task_ptr_ = task_ptr; // pass memory address to task execution thread for directly updating task state
@@ -615,7 +589,6 @@ int ObPxSubCoord::dispatch_task_to_thread_pool(ObPxInitSqcArgs &sqc_arg,
   } else if (OB_ISNULL(worker =
       static_cast<ObPxWorkerRunnable *>(thread_worker_factory_.create_worker()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail create new worker", K(ret));
   } else if (OB_FAIL(worker->run(args))) {
     // DOP could not be met, no longer continue allocation
     task_ptr->set_result(ret);
@@ -695,7 +668,6 @@ int ObPxSubCoord::end_process()
         || OB_ISNULL(sqc_arg_.des_phy_plan_)
         || OB_ISNULL(phy_plan_ctx = GET_PHY_PLAN_CTX(*sqc_arg_.exec_ctx_))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("sqc args should not be NULL", K(ret));
     } else if (OB_FAIL(sqc_ctx_.sqc_proxy_.check_task_finish_status(phy_plan_ctx->get_timeout_timestamp()))) {
     }
   }
@@ -714,10 +686,8 @@ int ObPxSubCoord::check_need_start_ddl(bool &need_start_ddl)
   need_start_ddl = false;
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("error unexpected, exec ctx must not be nullptr", K(ret));
   } else if (OB_ISNULL(my_session = GET_MY_SESSION(*exec_ctx))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("error unexpected, session must not be nullptr", K(ret));
   } else if (my_session->get_ddl_info().is_ddl()) {
     need_start_ddl = true;
   }
@@ -733,14 +703,11 @@ int ObPxSubCoord::start_ddl()
   ObIArray<ObSqcTableLocationKey> &location_keys = sqc_arg_.sqc_.get_access_table_location_keys();
   if (OB_UNLIKELY(nullptr != ddl_session_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("direct insert session has already been initialized", K(ret),
-        KP(ddl_session_));
   } else if (OB_ISNULL(exec_ctx)
       || OB_ISNULL(plan_ctx = GET_PHY_PLAN_CTX(*exec_ctx))
       || OB_ISNULL(phy_plan = plan_ctx->get_phy_plan())
       || location_keys.empty()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid argument", K(ret), KP(exec_ctx), KP(plan_ctx), KP(phy_plan), K(location_keys.count()));
   } else {
     const int64_t ddl_task_id = phy_plan->get_ddl_task_id();
     const int64_t ddl_execution_id = phy_plan->get_ddl_execution_id();
@@ -803,7 +770,6 @@ int ObPxSubCoord::get_participants(ObPxSqcMeta &sqc,
     ObDASTabletLoc *tablet_loc = ObDASUtils::get_related_tablet_loc(*locations.at(i), table_id);
     if (OB_ISNULL(tablet_loc)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tablet location is null", K(ret), K(table_id), K(i));
     } else if (OB_FAIL(add_var_to_array_no_dup(tablet_ids, tablet_loc->tablet_id_))) {
     }
   }
@@ -848,7 +814,6 @@ int ObPxSubCoord::rebuild_sqc_access_table_locations()
       if (OB_FAIL(ret)) {
       } else if (OB_ISNULL(table_loc)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected table loc", K(ret));
       } else {
         for (DASTabletLocListIter tmp_node = table_loc->tablet_locs_begin();
              tmp_node != table_loc->tablet_locs_end(); ++tmp_node) {
@@ -863,9 +828,6 @@ int ObPxSubCoord::rebuild_sqc_access_table_locations()
   }
   if (OB_SUCC(ret) && location_keys.count() != access_locations.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid location key count", K(ret),
-        K(location_keys.count()),
-        K(access_locations.count()));
   }
   return ret;
 }

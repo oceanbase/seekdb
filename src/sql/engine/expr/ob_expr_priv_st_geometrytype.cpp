@@ -43,7 +43,6 @@ int ObExprPrivSTGeometryType::calc_result_type1(
   if (!ob_is_string_type(obj_type1) && !ob_is_geometry(obj_type1) && !ob_is_null(obj_type1)) {
     ret = OB_ERR_GIS_INVALID_DATA;
     LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_GEOMETRYTYPE);
-    LOG_WARN("invalid type", K(ret), K(obj_type1));
   } else {
     ObCastMode cast_mode = type_ctx.get_cast_mode();
     cast_mode &= ~CM_WARN_ON_FAIL;      // make cast return error when fail

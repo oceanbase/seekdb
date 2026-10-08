@@ -55,47 +55,47 @@ namespace observer
 namespace
 {
 
-static_assert(sizeof(nio_byte_view) == 16, "nio_byte_view ABI mismatch");
-static_assert(sizeof(nio_mysql_kv_view) == 32, "nio_mysql_kv_view ABI mismatch");
-static_assert(std::is_standard_layout<nio_mysql_kv_view>::value,
-              "nio_mysql_kv_view must have standard layout");
-static_assert(std::is_trivially_copyable<nio_mysql_kv_view>::value,
-              "nio_mysql_kv_view must be trivially copyable");
-static_assert(offsetof(nio_mysql_kv_view, key) == 0,
-              "nio_mysql_kv_view.key ABI mismatch");
-static_assert(offsetof(nio_mysql_kv_view, value) == 16,
-              "nio_mysql_kv_view.value ABI mismatch");
-static_assert(sizeof(nio_mysql_ok_view) == 96, "nio_mysql_ok_view ABI mismatch");
-static_assert(offsetof(nio_mysql_ok_view, message) == 32,
-              "nio_mysql_ok_view.message ABI mismatch");
-static_assert(offsetof(nio_mysql_ok_view, system_vars) == 64,
-              "nio_mysql_ok_view.system_vars ABI mismatch");
-static_assert(sizeof(nio_mysql_field_view) == 136,
-              "nio_mysql_field_view ABI mismatch");
-static_assert(std::is_standard_layout<nio_mysql_field_view>::value,
-              "nio_mysql_field_view must have standard layout");
-static_assert(std::is_trivially_copyable<nio_mysql_field_view>::value,
-              "nio_mysql_field_view must be trivially copyable");
-static_assert(offsetof(nio_mysql_field_view, column_length) == 112,
-              "nio_mysql_field_view.column_length ABI mismatch");
-static_assert(offsetof(nio_mysql_field_view, field_type) == 120,
-              "nio_mysql_field_view.field_type ABI mismatch");
-static_assert(offsetof(nio_mysql_field_view, decimals) == 128,
-              "nio_mysql_field_view.decimals ABI mismatch");
+static_assert(sizeof(NioByteView) == 16, "NioByteView ABI mismatch");
+static_assert(sizeof(NioMysqlKvView) == 32, "NioMysqlKvView ABI mismatch");
+static_assert(std::is_standard_layout<NioMysqlKvView>::value,
+              "NioMysqlKvView must have standard layout");
+static_assert(std::is_trivially_copyable<NioMysqlKvView>::value,
+              "NioMysqlKvView must be trivially copyable");
+static_assert(offsetof(NioMysqlKvView, key) == 0,
+              "NioMysqlKvView.key ABI mismatch");
+static_assert(offsetof(NioMysqlKvView, value) == 16,
+              "NioMysqlKvView.value ABI mismatch");
+static_assert(sizeof(NioMysqlOkView) == 96, "NioMysqlOkView ABI mismatch");
+static_assert(offsetof(NioMysqlOkView, message) == 32,
+              "NioMysqlOkView.message ABI mismatch");
+static_assert(offsetof(NioMysqlOkView, system_vars) == 64,
+              "NioMysqlOkView.system_vars ABI mismatch");
+static_assert(sizeof(NioMysqlFieldView) == 136,
+              "NioMysqlFieldView ABI mismatch");
+static_assert(std::is_standard_layout<NioMysqlFieldView>::value,
+              "NioMysqlFieldView must have standard layout");
+static_assert(std::is_trivially_copyable<NioMysqlFieldView>::value,
+              "NioMysqlFieldView must be trivially copyable");
+static_assert(offsetof(NioMysqlFieldView, column_length) == 112,
+              "NioMysqlFieldView.column_length ABI mismatch");
+static_assert(offsetof(NioMysqlFieldView, field_type) == 120,
+              "NioMysqlFieldView.field_type ABI mismatch");
+static_assert(offsetof(NioMysqlFieldView, decimals) == 128,
+              "NioMysqlFieldView.decimals ABI mismatch");
 static_assert(static_cast<uint32_t>(MYSQL_TYPE_COMPLEX) == 160,
               "Rust Field encoder assumes the MySQL complex-type sentinel");
 static_assert(static_cast<uint32_t>(MYSQL_TYPE_NOT_DEFINED) == 65535,
               "Rust Field encoder assumes the undefined default-type sentinel");
 
-nio_byte_view make_byte_view(const ObString &value) {
-  nio_byte_view view = {};
+NioByteView make_byte_view(const ObString &value) {
+  NioByteView view = {};
   view.data = value.ptr();
   view.len = value.length();
   return view;
 }
 
-nio_mysql_field_view make_field_view(const ObMySQLField &field) {
-  nio_mysql_field_view view = {};
+NioMysqlFieldView make_field_view(const ObMySQLField &field) {
+  NioMysqlFieldView view = {};
   view.schema = make_byte_view(field.dname_);
   view.table = make_byte_view(field.tname_);
   view.org_table = make_byte_view(field.org_tname_);
@@ -113,16 +113,16 @@ nio_mysql_field_view make_field_view(const ObMySQLField &field) {
 }
 
 OB_NOINLINE int encode_field_packet(const OMPKField &field_packet,
-                                    nio_connection_handle *connection_handle,
+                                    NioConnectionHandle *connection_handle,
                                     const uint64_t generation,
                                     int64_t *framed_len) {
-  const nio_mysql_field_view view = make_field_view(field_packet.get_field());
+  const NioMysqlFieldView view = make_field_view(field_packet.get_field());
   return nio_response_append_field(connection_handle, generation, &view,
                                    framed_len);
 }
 
 OB_NOINLINE int encode_row_packet(const OMPKRow &row_packet,
-                                  nio_connection_handle *connection_handle,
+                                  NioConnectionHandle *connection_handle,
                                   const uint64_t generation,
                                   int64_t *framed_len, int &encode_ret) {
   int ret = OB_SUCCESS;
@@ -133,7 +133,6 @@ OB_NOINLINE int encode_row_packet(const OMPKRow &row_packet,
     int64_t blob_len = 0;
     if (OB_FAIL(row.get_packed_row_blob(blob, blob_len))) {
       encode_ret = ret;
-      LOG_WARN("failed to get Rust packed-row blob", K(ret));
     } else {
       frame_ret = nio_response_append_packed_row_blob(
           connection_handle, generation, blob, blob_len, framed_len);
@@ -146,15 +145,11 @@ OB_NOINLINE int encode_row_packet(const OMPKRow &row_packet,
     } else {
       ObArenaAllocator scratch_allocator(ObMemAttr("MySQLRowEncode"));
       ObSEArray<ObMySQLCellValue, 16> values;
-      ObSEArray<nio_mysql_cell_view, 16> views;
+      ObSEArray<NioMysqlCellView, 16> views;
       if (OB_FAIL(values.prepare_allocate(cell_count))) {
         encode_ret = ret;
-        LOG_WARN("failed to allocate MySQL Row semantic values", K(ret),
-                 K(cell_count));
       } else if (OB_FAIL(views.prepare_allocate(cell_count))) {
         encode_ret = ret;
-        LOG_WARN("failed to allocate Rust MySQL Row views", K(ret),
-                 K(cell_count));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < cell_count; ++i) {
           if (OB_FAIL(
@@ -166,14 +161,12 @@ OB_NOINLINE int encode_row_packet(const OMPKRow &row_packet,
         if (OB_FAIL(ret)) {
           encode_ret = ret;
         } else {
-          nio_mysql_row_view view = {};
+          NioMysqlRowView view = {};
           view.cells = &views.at(0);
           view.cell_count = views.count();
           if (OB_FAIL(query::get_nio_mysql_row_protocol(row.get_protocol_type(),
                                                         view.protocol))) {
             encode_ret = ret;
-            LOG_WARN("invalid MySQL Row protocol", K(ret), "protocol",
-                     row.get_protocol_type());
           } else {
             frame_ret = nio_response_append_row(connection_handle, generation,
                                                 &view, framed_len);
@@ -186,11 +179,11 @@ OB_NOINLINE int encode_row_packet(const OMPKRow &row_packet,
 }
 
 int append_ok_kv_views(const ObIArray<ObStringKV> &source,
-                       ObIArray<nio_mysql_kv_view> &views) {
+                       ObIArray<NioMysqlKvView> &views) {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < source.count(); ++i) {
     const ObStringKV &kv = source.at(i);
-    nio_mysql_kv_view view = {};
+    NioMysqlKvView view = {};
     view.key = make_byte_view(kv.key_);
     view.value = make_byte_view(kv.value_);
     if (OB_FAIL(views.push_back(view))) {
@@ -199,7 +192,7 @@ int append_ok_kv_views(const ObIArray<ObStringKV> &source,
   return ret;
 }
 
-void fill_ok_view(const OMPKOK &ok, nio_mysql_ok_view &view) {
+void fill_ok_view(const OMPKOK &ok, NioMysqlOkView &view) {
   view.affected_rows = ok.get_affected_rows();
   view.last_insert_id = ok.get_last_insert_id();
   view.capability_flags = ok.get_capability().capability_;
@@ -219,22 +212,19 @@ void fill_ok_view(const OMPKOK &ok, nio_mysql_ok_view &view) {
 }
 
 OB_NOINLINE int
-encode_ok_packet_with_vars(const OMPKOK &ok, nio_mysql_ok_view &view,
-                           nio_connection_handle *connection_handle,
+encode_ok_packet_with_vars(const OMPKOK &ok, NioMysqlOkView &view,
+                           NioConnectionHandle *connection_handle,
                            const uint64_t generation,
                            int64_t *framed_len, int &encode_ret) {
   int ret = OB_SUCCESS;
   int frame_ret = NIO_FRAME_ERROR;
   const int64_t system_var_count = ok.get_system_vars().count();
-  ObSEArray<nio_mysql_kv_view, 24> variable_views;
+  ObSEArray<NioMysqlKvView, 24> variable_views;
   if (OB_FAIL(variable_views.reserve(system_var_count))) {
     encode_ret = ret;
-    LOG_WARN("failed to reserve MySQL OK variable views", K(ret),
-             K(system_var_count));
   } else if (OB_FAIL(
                  append_ok_kv_views(ok.get_system_vars(), variable_views))) {
     encode_ret = ret;
-    LOG_WARN("failed to build system variable views for MySQL OK", K(ret));
   } else {
     view.system_vars = 0 == system_var_count ? NULL : &variable_views.at(0);
     view.system_var_count = system_var_count;
@@ -245,10 +235,10 @@ encode_ok_packet_with_vars(const OMPKOK &ok, nio_mysql_ok_view &view,
 }
 
 OB_NOINLINE int encode_ok_packet(const OMPKOK &ok,
-                                 nio_connection_handle *connection_handle,
+                                 NioConnectionHandle *connection_handle,
                                  const uint64_t generation, int64_t *framed_len,
                                  int &encode_ret) {
-  nio_mysql_ok_view view = {};
+  NioMysqlOkView view = {};
   fill_ok_view(ok, view);
   const bool has_system_vars = !ok.get_system_vars().empty();
   return has_system_vars
@@ -385,7 +375,7 @@ int ObMPPacketSender::do_init(rpc::ObRequest *req, bool owns_request,
                               int64_t query_receive_ts) {
   int ret = OB_SUCCESS;
   ObSMConnection *conn = NULL;
-  nio_connection_handle *connection_handle = NULL;
+  NioConnectionHandle *connection_handle = NULL;
   if (RequestOwnership::RELEASED != request_ownership_ &&
       RequestOwnership::DETACHED_FOR_RETRY != request_ownership_) {
     ret = OB_STATE_NOT_MATCH;
@@ -485,7 +475,6 @@ int ObMPPacketSender::response_packet(obmysql::ObMySQLPacket &pkt) {
   int ret = OB_SUCCESS;
   if (!is_conn_valid()) {
     ret = OB_CONNECT_ERROR;
-    LOG_WARN("connection already disconnected", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -505,10 +494,9 @@ int ObMPPacketSender::response_resultset_metadata(
   int ret = OB_SUCCESS;
   int64_t packet_count = 0;
   int64_t framed_len = 0;
-  ObSEArray<nio_mysql_field_view, 16> views;
+  ObSEArray<NioMysqlFieldView, 16> views;
   if (!is_conn_valid()) {
     ret = OB_CONNECT_ERROR;
-    LOG_WARN("connection already disconnected", K(ret));
   } else if (OB_UNLIKELY(RequestOwnership::OWNED != request_ownership_) ||
              OB_ISNULL(req_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -520,7 +508,7 @@ int ObMPPacketSender::response_resultset_metadata(
       for (int64_t i = 0; i < fields.count(); ++i) {
         views.at(i) = make_field_view(fields.at(i));
       }
-      const nio_mysql_field_view *view_data =
+      const NioMysqlFieldView *view_data =
           views.count() == 0 ? NULL : &views.at(0);
       const int append_ret = nio_response_append_resultset_metadata(
           nio_connection_handle_, request_generation_,
@@ -528,9 +516,6 @@ int ObMPPacketSender::response_resultset_metadata(
           eof_field_count, warnings, status_flags, &packet_count, &framed_len);
       if (0 != append_ret) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Rust result-set metadata append failed", K(ret),
-                 K(append_ret), K(include_result_header), K(eof_field_count),
-                 K(warnings), K(status_flags), "field_count", fields.count());
       } else {
       }
     }
@@ -562,7 +547,6 @@ int ObMPPacketSender::send_error_packet(int err,
     LOG_ERROR("error code is incorrect", K(err));
   } else if (!is_conn_valid()) {
     ret = OB_CONNECT_ERROR;
-    LOG_WARN("connection already disconnected", K(ret), KP(conn_));
   } else {
     // error message
     ObString message;
@@ -673,10 +657,8 @@ int ObMPPacketSender::send_error_packet(int err,
       if (OB_FAIL(fin_msg.append(message))) {
       } else if (has_pl()) {
         if (NULL == session && OB_FAIL(get_session(session))) {
-          LOG_WARN("fail to get session", K(ret));
         } else if (OB_ISNULL(session)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("sql session info is null", K(ret));
         } else {
           ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
         }
@@ -700,7 +682,6 @@ int ObMPPacketSender::send_error_packet(int err,
       && !conn_->is_sess_free_.load(std::memory_order_acquire)) {
     transaction::ObTransID trans_id;
     if (OB_ISNULL(session) && OB_FAIL(get_session(session))) {
-      LOG_WARN("get session failed", K(ret));
     } else {
       ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
       if (session->has_active_autocommit_trans(trans_id)) {
@@ -754,7 +735,6 @@ int ObMPPacketSender::get_session(ObSQLSessionInfo *&sess_info)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(conn_) || OB_ISNULL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("conn or session mgr is NULL", K(ret), KP(conn_), K(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->get_session(conn_->sessid_, sess_info))) {
   } else {
     NG_TRACE_EXT(session, OB_ID(sid), sess_info->get_server_sid());
@@ -770,7 +750,6 @@ int ObMPPacketSender::send_ok_packet(ObSQLSessionInfo &session, ObOKPParam &ok_p
   OMPKOK okp;
   if (!is_conn_valid()) {
     ret = OB_CONNECT_ERROR;
-    LOG_WARN("connection already disconnected", K(ret), KP(conn_));
   } else {
     okp.set_affected_rows(ok_param.affected_rows_);
     if (OB_UNLIKELY(NULL != ok_param.message_)) {
@@ -957,7 +936,7 @@ int ObMPPacketSender::append_response(ObMySQLPacket &pkt, int64_t &seri_size) {
     // safe: a failed encoder may already have flushed an earlier batch, moved
     // a sequence cursor, or marked the Rust connection unusable.
     response_started_ = true;
-    nio_connection_handle *connection_handle = nio_connection_handle_;
+    NioConnectionHandle *connection_handle = nio_connection_handle_;
     int encode_ret = OB_SUCCESS;
     int append_ret = -1;
     switch (pkt.get_mysql_packet_type()) {
@@ -1051,8 +1030,6 @@ int ObMPPacketSender::append_response(ObMySQLPacket &pkt, int64_t &seri_size) {
       ret = encode_ret;
     } else if (0 != append_ret) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Rust MySQL response append failed", K(ret), K(append_ret),
-               K(pkt.get_mysql_packet_type()));
     }
   }
   return ret;
@@ -1060,10 +1037,9 @@ int ObMPPacketSender::append_response(ObMySQLPacket &pkt, int64_t &seri_size) {
 
 int ObMPPacketSender::flush_buffer(const bool is_last) {
   int ret = OB_SUCCESS;
-  nio_connection_handle *connection_handle = nio_connection_handle_;
+  NioConnectionHandle *connection_handle = nio_connection_handle_;
   if (OB_UNLIKELY(!is_conn_valid())) {
     ret = OB_CONNECT_ERROR;
-    LOG_WARN("connection in error, maybe has disconnected", K(ret));
   } else if (RequestOwnership::OWNED != request_ownership_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("request ownership has been released", K(ret));
@@ -1073,8 +1049,6 @@ int ObMPPacketSender::flush_buffer(const bool is_last) {
   } else if (0 != nio_response_flush(connection_handle, request_generation_,
                                      is_last ? 1 : 0)) {
     ret = OB_IO_ERROR;
-    LOG_WARN("flush Rust-owned MySQL response failed", K(ret), K(is_last),
-             K(request_generation_));
   }
   if (is_last) {
     const int finish_ret = finish_sql_request();

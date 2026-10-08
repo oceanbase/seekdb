@@ -95,7 +95,6 @@ int ObUpdateResolver::resolve(const ParseNode &parse_tree)
       if (NULL != *it && ((*it)->is_generated_table() || (*it)->is_temp_table())) {
         if (NULL != (*it)->view_base_item_ &&
             OB_FAIL(add_all_column_to_updatable_view(*update_stmt, *(*it)))) {
-          LOG_WARN("add all column for updatable view failed", K(ret));
         }
       }
     }
@@ -136,12 +135,10 @@ int ObUpdateResolver::resolve(const ParseNode &parse_tree)
     } else if (OB_FAIL(resolve_hints(parse_tree.children_[HINT]))) {
     } else if (OB_FAIL(resolve_where_clause(parse_tree.children_[WHERE]))) {
     } else if (params_.is_batch_stmt_ && OB_FAIL(generate_batched_stmt_info())) {
-      LOG_WARN("failed to generate batched stmt info", K(ret));
     } else if (OB_FAIL(resolve_order_clause(parse_tree.children_[ORDER_BY]))) {
     } else if (OB_FAIL(resolve_limit_clause(parse_tree.children_[LIMIT], true))) {
     } else if (!update_stmt->is_ignore() &&
                OB_FAIL(check_join_update_conflict())) {
-      LOG_WARN("failed to check join update conflict", K(ret));
     } else if (OB_FAIL(update_stmt->formalize_stmt(session_info_))) {
     } else { /*do nothing*/ }
   }
@@ -163,21 +160,17 @@ int ObUpdateResolver::try_add_remove_const_expr_for_assignments()
   if (OB_ISNULL(stmt = get_update_stmt()) ||OB_ISNULL(session_info_) ||
       OB_ISNULL(schema_checker_) || OB_ISNULL(params_.expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(stmt), K(session_info_), K(schema_checker_),
-        K(params_.expr_factory_), K(ret));
   } else {
     ObIArray<ObUpdateTableInfo*> &tables_info = stmt->get_update_table_info();
     for (int64_t i = 0; OB_SUCC(ret) && i < tables_info.count(); i++) {
       const ObTableSchema *table_schema = NULL;
       if (OB_ISNULL(tables_info.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                            tables_info.at(i)->ref_table_id_,
                                                            table_schema))) {
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(tables_info.at(i)->ref_table_id_));
       } else if (!table_schema->is_user_table()) {
         /*do nothing*/
       } else {
@@ -187,7 +180,6 @@ int ObUpdateResolver::try_add_remove_const_expr_for_assignments()
           ObAssignment &assign = assignments.at(i);
           if (OB_ISNULL(assign.expr_) || OB_ISNULL(assign.column_expr_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected null", K(assign.expr_), K(assign.column_expr_), K(ret));
           } else if (assign.expr_->is_const_expr() &&
                      is_parent_col_self_ref_fk(assign.column_expr_->get_column_id(), fk_infos)) {
             ObRawExpr *new_expr = NULL;
@@ -197,7 +189,6 @@ int ObUpdateResolver::try_add_remove_const_expr_for_assignments()
                                                                  new_expr))) {
             } else if (OB_ISNULL(new_expr)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("get unexpected null", K(ret));
             } else {
               assign.expr_ = new_expr;
             }
@@ -232,7 +223,6 @@ int ObUpdateResolver::check_safe_update_mode(ObUpdateStmt *update_stmt)
   bool is_sql_safe_updates = false;
   if (OB_ISNULL(params_.session_info_) || OB_ISNULL(update_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected", K(ret), K(params_.session_info_), K(update_stmt));
   } else if (OB_FAIL(params_.session_info_->get_sql_safe_updates(is_sql_safe_updates))) {
   } else if (is_sql_safe_updates) {
     /*Update table values in mysql safe mode, needs to meet one of the following two conditions:
@@ -242,7 +232,6 @@ int ObUpdateResolver::check_safe_update_mode(ObUpdateStmt *update_stmt)
     */
     if (!update_stmt->has_limit() && update_stmt->get_condition_exprs().empty()) {
       ret = OB_ERR_SAFE_UPDATE_MODE_NEED_WHERE_OR_LIMIT;
-      LOG_WARN("using safe update mode need WHERE or LIMIT", K(ret));
     }
   } else {/*do nothing*/}
   return ret;
@@ -254,7 +243,6 @@ int ObUpdateResolver::check_multi_update_table_conflict()
   const ObUpdateStmt *update_stmt = get_update_stmt();
   if (OB_ISNULL(update_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (update_stmt->get_update_table_info().count() <= 1) {
     /*do nothing*/
   } else {
@@ -262,12 +250,10 @@ int ObUpdateResolver::check_multi_update_table_conflict()
     for (int64_t i = 0; OB_SUCC(ret) && i < tables_info.count() - 1; ++i) {
       if (OB_ISNULL(tables_info.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else {
         for (int64_t j = i + 1; OB_SUCC(ret) && j < tables_info.count(); ++j) {
           if (OB_ISNULL(tables_info.at(j))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected null", K(ret));
           } else if (tables_info.at(i)->table_id_ != tables_info.at(j)->table_id_ &&
                      tables_info.at(i)->ref_table_id_ == tables_info.at(j)->ref_table_id_) {
             ret = OB_NOT_SUPPORTED;
@@ -287,7 +273,6 @@ int ObUpdateResolver::check_join_update_conflict()
   ObUpdateStmt *update_stmt = NULL;
   if (OB_ISNULL(update_stmt = get_update_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(is_join_table_update(update_stmt, is_join_update))) {
   } else if (is_join_update && update_stmt->has_order_by()) {
     // Incorrect usage of UPDATE and ORDER BY
@@ -308,7 +293,6 @@ int ObUpdateResolver::resolve_table_list(const ParseNode &parse_tree)
   if (OB_UNLIKELY(T_TABLE_REFERENCES != parse_tree.type_)
       || OB_UNLIKELY(parse_tree.num_child_ < 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(parse_tree.type_), K(parse_tree.num_child_));
   } else if (OB_ISNULL(update_stmt)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid update stmt", K(update_stmt));
@@ -317,7 +301,6 @@ int ObUpdateResolver::resolve_table_list(const ParseNode &parse_tree)
     const ParseNode *table_node = parse_tree.children_[i];
     if (OB_ISNULL(table_node)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table node is null");
     } else if (OB_FAIL(ObDMLResolver::resolve_table(*table_node, table_item))) {
     } else {/*do nothing*/}
     if (OB_SUCC(ret)) {
@@ -336,7 +319,6 @@ int ObUpdateResolver::resolve_table_list(const ParseNode &parse_tree)
     const TableItem *table_item = update_stmt->get_table_item(update_stmt->get_from_item(0));
     if (OB_ISNULL(table_item)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null", K(ret));
     } else if (table_item->cte_type_ != TableItem::NOT_CTE) {
       ret = OB_ERR_NON_UPDATABLE_TABLE;
       const ObString &table_name = table_item->alias_name_.empty() ? table_item->table_name_ : table_item->alias_name_;
@@ -344,7 +326,6 @@ int ObUpdateResolver::resolve_table_list(const ParseNode &parse_tree)
       LOG_USER_ERROR(OB_ERR_NON_UPDATABLE_TABLE,
                       table_name.length(), table_name.ptr(),
                       scope_name.length(), scope_name.ptr());
-      LOG_WARN("table is not updatable", K(ret));
     }
   }
   return ret;
@@ -364,23 +345,18 @@ int ObUpdateResolver::generate_update_table_info(ObTableAssignment &table_assign
   if (OB_ISNULL(schema_checker_) || OB_ISNULL(params_.session_info_) ||
       OB_ISNULL(allocator_) || OB_ISNULL(update_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(schema_checker_), K(params_.session_info_),
-        K(allocator_), K(update_stmt), K(ret));
   } else if (OB_ISNULL(table_item = update_stmt->get_table_item_by_id(table_assign.table_id_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(table_item), K(ret));
   } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                        table_item->get_base_table_item().ref_id_,
                                                        table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(schema_checker_->get_can_write_index_array(table_item->get_base_table_item().ref_id_,
                                                                 index_tid, gindex_cnt, true))) {
   } else if (OB_FAIL(params_.session_info_->get_binlog_row_image(binlog_row_image))) {
   } else if (NULL == (ptr = allocator_->alloc(sizeof(ObUpdateTableInfo)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate table info", K(ret));
   } else {
     table_info = new(ptr) ObUpdateTableInfo();
     if (OB_FAIL(table_info->assignments_.assign(table_assign.assignments_))) {
@@ -422,7 +398,6 @@ int ObUpdateResolver::check_view_updatable()
   ObUpdateStmt *update_stmt = get_update_stmt();
   if (NULL == update_stmt) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("update stmt is NULL", K(ret));
   } else {
     ObIArray<ObUpdateTableInfo*> &tables_info = update_stmt->get_update_table_info();
     for (int64_t i = 0; OB_SUCC(ret) && i < tables_info.count(); i++) {
@@ -430,7 +405,6 @@ int ObUpdateResolver::check_view_updatable()
       if (OB_ISNULL(tables_info.at(i)) ||
           OB_ISNULL(table_item = update_stmt->get_table_item_by_id(tables_info.at(i)->table_id_))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(table_item), K(ret));
       } else if (!table_item->is_generated_table() && !table_item->is_temp_table()) {
         continue;
       } else {
@@ -479,19 +453,16 @@ int ObUpdateResolver::is_join_table_update(const ObDMLStmt *stmt, bool &is_multi
   is_multi_table = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null stmt", K(ret));
   } else if (stmt->get_from_item_size() > 1) {
     is_multi_table = true;
   } else {
     const TableItem *table_item = stmt->get_table_item(stmt->get_from_item(0));
     if (OB_ISNULL(table_item)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null table item", K(ret));
     } else if (table_item->is_joined_table()) {
       is_multi_table = true;
     } else if ((table_item->is_generated_table() || table_item->is_temp_table()) &&
                OB_FAIL(is_join_table_update(table_item->ref_query_, is_multi_table))) {
-      LOG_WARN("failed to check is multi table update", K(ret));
     }
   }
   return ret;
@@ -506,7 +477,6 @@ int ObUpdateResolver::generate_batched_stmt_info()
   ObUpdateStmt *update_stmt = get_update_stmt();
   if (OB_ISNULL(update_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(ObRawExprUtils::extract_column_exprs(update_stmt->get_condition_exprs(),
                                                           predicate_columns))) {
   } else {
@@ -514,7 +484,6 @@ int ObUpdateResolver::generate_batched_stmt_info()
     for (int64_t i = 0; OB_SUCC(ret) && i < tables_info.count(); ++i) {
       if (OB_ISNULL(tables_info.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else {
         ObIArray<ObAssignment> &assignments = tables_info.at(i)->assignments_;
         for (int64_t j = 0; OB_SUCC(ret) && j < assignments.count(); ++j) {
@@ -542,7 +511,6 @@ int ObUpdateResolver::resolve_update_constraints()
   ObUpdateStmt *update_stmt = get_update_stmt();
   if (OB_ISNULL(update_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else {
     ObIArray<ObUpdateTableInfo*> &tables_info = update_stmt->get_update_table_info();
     // resolve view-check exprs
@@ -552,7 +520,6 @@ int ObUpdateResolver::resolve_update_constraints()
       if (OB_ISNULL(table_info) ||
           OB_ISNULL(table_item = update_stmt->get_table_item_by_id(table_info->table_id_))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(table_item), K(ret));
       } else if (OB_FAIL(resolve_view_check_exprs(table_item->table_id_, table_item, false, table_info->view_check_exprs_))) {
       } else if (OB_FAIL(resolve_check_constraints(table_item, table_info->check_constraint_exprs_))) {
       } else if (OB_FAIL(ObResolverUtils::prune_check_constraints(table_info->assignments_,

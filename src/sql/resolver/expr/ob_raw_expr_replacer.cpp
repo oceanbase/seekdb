@@ -48,7 +48,6 @@ int ObRawExprReplacer::replace(ObRawExpr *&expr)
   bool need_replace = false;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null expr", K(ret));
   } else if (OB_FAIL(check_need_replace(expr, new_expr, need_replace))) {
   } else if (need_replace) {
     expr = new_expr;
@@ -329,7 +328,6 @@ int ObRawExprReplacer::add_replace_expr(ObRawExpr *from_expr,
   bool is_existed = false;
   if (OB_ISNULL(from_expr) || OB_ISNULL(to_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null expr", KP(from_expr), KP(to_expr), K(ret));
   } else if (OB_FAIL(try_init_expr_map(DEFAULT_BUCKET_SIZE))) {
   } else if (OB_FAIL(check_from_expr_existed(from_expr, to_expr, overwrite, is_existed))) {
   } else if (is_existed) {
@@ -416,7 +414,6 @@ int ObRawExprReplacer::add_skip_expr(const ObRawExpr *target)
   bool is_existed = false;
   if (OB_ISNULL(target)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null expr", KP(target), K(ret));
   } else if (OB_FAIL(try_init_expr_map(DEFAULT_BUCKET_SIZE))) {
   } else if (OB_FAIL(check_skip_expr(*target, is_existed))) {
   } else if (is_existed) {
@@ -456,7 +453,6 @@ int ObRawExprReplacer::check_skip_expr(const ObRawExpr &expr, bool &skip_expr)
     skip_expr = true;
   } else if (OB_UNLIKELY(OB_HASH_NOT_EXIST != tmp_ret)) {
     ret = tmp_ret;
-    LOG_WARN("failed to get expr from set", K(ret));
   }
   return ret;
 }
@@ -475,7 +471,6 @@ int ObRawExprReplacer::check_need_replace(const ObRawExpr *old_expr,
     if (OB_HASH_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("failed to get expr from hash map", K(ret));
     }
   } else {
     need_replace = true;

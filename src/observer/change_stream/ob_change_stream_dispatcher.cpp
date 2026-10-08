@@ -79,7 +79,6 @@ int ObCSDispatcher::start()
   int ret = common::OB_SUCCESS;
   if (!is_inited_) {
     ret = common::OB_NOT_INIT;
-    LOG_WARN("ObCSDispatcher: not inited", K(ret));
   } else {
     if (OB_FAIL(ObThreadPool::start())) {
     } else {
@@ -95,17 +94,14 @@ int ObCSDispatcher::init_applied_scn_()
   int64_t schema_version = 0;
   if (!is_inited_) {
     ret = common::OB_NOT_INIT;
-    LOG_WARN("ObCSDispatcher: not inited", K(ret));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("CSDispatcher: GCTX.sql_proxy_ is null", K(ret));
   } else if (GCTX.in_bootstrap_ || GCTX.start_service_time_ <= 0) {
     ret = common::OB_NOT_INIT;
     LOG_WARN("ObCSDispatcher: wait bootstrap", K(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_refreshed_schema_version(schema_version))) {
   } else if (schema_version <= 0 || !ObSchemaService::is_formal_version(schema_version)) {
     ret = OB_SCHEMA_EAGAIN;
-    LOG_WARN("schema is not formal", KR(ret));
   } else {
     SCN current_applied_scn;
     if (OB_FAIL(ObGlobalStatProxy::get_change_stream_applied_scn(
@@ -166,7 +162,6 @@ int ObCSDispatcher::update_applied_scn(const int64_t applied_scn)
   int ret = OB_SUCCESS;
   if (applied_scn < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid applied_scn", KR(ret), K(applied_scn));
   } else {
     int64_t old_applied_scn = ATOMIC_LOAD(&applied_scn_);
     while (old_applied_scn < applied_scn
@@ -211,7 +206,6 @@ int ObCSDispatcher::push(ObCSTxInfo *tx)
   int ret = common::OB_SUCCESS;
   if (!is_inited_ || OB_ISNULL(tx)) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("tx info is invalid", K(ret), K(is_inited_), KP(tx));
   } else {
     // Back-pressure: if in-flight entries (not yet committed) exceed the
     // threshold, spin-wait so Fetcher does not grow the ring buffer
@@ -462,7 +456,6 @@ void ObCSDispatcher::run1()
                  K(get_next_commit_sn()), K(ATOMIC_LOAD(&active_batch_count_)));
       }
     } else if (OB_FAIL(do_dispatch_())) {
-      LOG_WARN("do dispatch failed", KR(ret));
       usleep(100 * 1000);  // Deliberate backoff on error.
     }
   }
@@ -489,10 +482,8 @@ int ObCSDispatcher::do_dispatch_()
   // ── Phase 1: create context, aggregate txs, init plugins ──
   if (executor_count <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("executor_count unexpected", KR(ret), K(executor_count));
   } else if (OB_ISNULL(exec_ctx = OB_NEW(ObCSExecCtx, common::ObMemAttr("CSExecCtx")))) {
     ret = common::OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc mem failed", KR(ret));
   } else {
     exec_ctx->create_time_ = ObTimeUtil::current_time();
     exec_ctx->batch_sn_ = dispatch_sn_;
@@ -513,7 +504,6 @@ int ObCSDispatcher::do_dispatch_()
     int64_t added = 0;
     if (OB_FAIL(tx_ring_.get(dispatch_sn_, tx))) {
       if (ret != OB_ERR_OUT_OF_UPPER_BOUND) {
-        LOG_WARN("get ring unexpected", KR(ret));
       } else {
         ret = OB_SUCCESS;
         if (ObTimeUtil::current_time() - exec_ctx->create_time_ < 2 * 1000 * 1000
@@ -583,7 +573,6 @@ int ObCSDispatcher::do_dispatch_()
   } else if (OB_FAIL(exec_ctx->init_plugins())) {
   } else if (OB_ISNULL(schema_service = ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null", KR(ret));
   } else if (OB_FAIL(exec_ctx->trans_.start(GCTX.sql_proxy_))) {
   } else {
     trans_started = true;
@@ -609,7 +598,6 @@ int ObCSDispatcher::do_dispatch_()
     int64_t pushed = 0;
     for (int64_t i = 0; i < total_subtask_cnt; ++i) {
       if (OB_FAIL(mgr->get_worker().push_subtask(i, &exec_ctx->sub_tasks_.at(i)))) {
-        LOG_WARN("push_subtask failed", KR(ret), K(i));
         break;
       }
       pushed++;
@@ -689,7 +677,6 @@ int ObCSExecCtx::init_plugins()
       plugins_[i] = factory();
       if (OB_ISNULL(plugins_[i])) {
         ret = common::OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("ObCSExecCtx: plugin factory returned null", K(ret), K(i));
       } else if (OB_FAIL(plugins_[i]->init())) {
       } else {
         plugins_[i]->set_plugin_type(static_cast<CS_PLUGIN_TYPE>(i));

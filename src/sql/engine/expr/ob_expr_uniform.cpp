@@ -131,7 +131,6 @@ int ObExprUniform::eval_next_int_value(const ObExpr &expr,
     if (OB_FAIL(exec_ctx.create_expr_op_ctx(op_id, uniform_ctx))) {
     } else if (OB_ISNULL(uniform_ctx)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("uniform ctx is NULL", K(ret));
     } else if (OB_FAIL(uniform_ctx->initialize(ctx, expr))) {
     }
   }
@@ -167,7 +166,6 @@ int ObExprUniform::eval_next_real_value(const ObExpr &expr,
     if (OB_FAIL(exec_ctx.create_expr_op_ctx(op_id, uniform_ctx))) {
     } else if (OB_ISNULL(uniform_ctx)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("uniform ctx is NULL", K(ret));
     } else if (OB_FAIL(uniform_ctx->initialize(ctx, expr))) {
     }
   }
@@ -205,7 +203,6 @@ int ObExprUniform::eval_next_number_value(const ObExpr &expr,
     if (OB_FAIL(exec_ctx.create_expr_op_ctx(op_id, uniform_ctx))) {
     } else if (OB_ISNULL(uniform_ctx)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("uniform ctx is NULL", K(ret));
     } else if (OB_FAIL(uniform_ctx->initialize(ctx, expr))) {
     }
   }
@@ -239,11 +236,9 @@ int ObExprUniform::cg_expr(ObExprCGCtx &expr_cg_ctx,
   UNUSED(expr_cg_ctx);
   if (OB_UNLIKELY(3 != raw_expr.get_param_count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid param count for in expr", K(ret));
   } else if (OB_ISNULL(raw_expr.get_param_expr(0)) ||
              OB_ISNULL(raw_expr.get_param_expr(1))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid null param expr", K(ret));
   } else if (!raw_expr.get_param_expr(0)->is_const_expr()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "uniform function's first argument. must be a constant expression.");

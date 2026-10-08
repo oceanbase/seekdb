@@ -67,16 +67,12 @@ int ObDropFTSIndexTask::init(
                || OB_INVALID_ID == data_table_id
                || schema_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(task_id), K(data_table_id),
-        K(domain_index), K(schema_version));
   } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, local management service is null", K(ret));
   } else if (OB_FAIL(rowkey_doc_.deep_copy_from_other(rowkey_doc, allocator_))) {
   } else if (OB_FAIL(doc_rowkey_.deep_copy_from_other(doc_rowkey, allocator_))) {
   } else if (OB_FAIL(domain_index_.deep_copy_from_other(domain_index, allocator_))) {
   } else if (is_fts_task && OB_FAIL(fts_doc_word_.deep_copy_from_other(fts_doc_word, allocator_))) {
-    LOG_WARN("fail to deep copy from other", K(ret), K(fts_doc_word));
   } else if (OB_FAIL(set_ddl_stmt_str(ddl_stmt_str))) {
   } else {
     task_type_ = ddl_type;
@@ -101,10 +97,8 @@ int ObDropFTSIndexTask::init(const ObDDLTaskRecord &task_record)
   int64_t pos = 0;
   if (OB_UNLIKELY(!task_record.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(task_record));
   } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, local management service is nullptr", K(ret));
   } else {
     task_type_ = task_record.ddl_type_;
     
@@ -120,7 +114,6 @@ int ObDropFTSIndexTask::init(const ObDDLTaskRecord &task_record)
     pos = 0;
     if (OB_ISNULL(task_record.message_.ptr())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error, task record message is nullptr", K(ret), K(task_record));
     } else if (OB_FAIL(deserialize_params_from_message(task_record.message_.ptr(),
             task_record.message_.length(), pos))) {
     } else {
@@ -135,7 +128,6 @@ int ObDropFTSIndexTask::process()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDropIndexTask has not been inited", K(ret));
   } else if (!need_retry()) {
     // task is done
   } else if (OB_FAIL(check_switch_succ())) {
@@ -160,7 +152,6 @@ int ObDropFTSIndexTask::process()
         break;
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("error unexpected, task status is not valid", K(ret), K(task_status_));
     }
   }
   return ret;
@@ -175,7 +166,6 @@ int ObDropFTSIndexTask::serialize_params_to_message(char *buf, const int64_t buf
   int8_t drop_rowkey_doc_index_finish = static_cast<int8_t>(drop_rowkey_doc_index_finish_);
   if (OB_UNLIKELY(nullptr == buf || buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_size));
   } else if (OB_FAIL(ObDDLTask::serialize_params_to_message(buf, buf_size, pos))) {
   } else if (OB_FAIL(rowkey_doc_.serialize(buf, buf_size, pos))) {
   } else if (OB_FAIL(doc_rowkey_.serialize(buf, buf_size, pos))) {
@@ -216,7 +206,6 @@ int ObDropFTSIndexTask::deserialize_params_from_message(
   int8_t drop_rowkey_doc_index_finish = 0;
   if (OB_UNLIKELY(nullptr == buf || buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_size));
   } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(buf, buf_size, pos))) {
   } else if (OB_FAIL(tmp_info.deserialize(buf, buf_size, pos))) {
   } else if (OB_FAIL(rowkey_doc_.deep_copy_from_other(tmp_info, allocator_))) {
@@ -246,7 +235,6 @@ int ObDropFTSIndexTask::deserialize_params_from_message(
                                               &drop_rowkey_doc_index_finish))) {
   } else if (OB_UNLIKELY(pos != buf_size)) {
     ret = OB_VERSION_NOT_MATCH;
-    LOG_WARN("drop fts index task message format mismatch", K(ret), K(buf_size), K(pos));
   } else {
     drop_domain_index_finish_ = static_cast<bool>(drop_domain_index_finish);
     drop_doc_word_index_finish_ = static_cast<bool>(drop_doc_word_index_finish);
@@ -285,7 +273,6 @@ int ObDropFTSIndexTask::update_task_message(common::ObISQLClient &proxy)
 
   if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(serialize_param_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory", KR(ret), K(serialize_param_size));
   } else if (OB_FAIL(serialize_params_to_message(buf, serialize_param_size, pos))) {
   } else {
     msg.assign(buf, serialize_param_size);
@@ -305,24 +292,18 @@ int ObDropFTSIndexTask::check_switch_succ()
   bool is_doc_rowkey_exist = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("hasn't initialized", K(ret));
   } else if (OB_ISNULL(GCTX.schema_service_) || OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("there are invalid arguments", KR(ret), KP(GCTX.schema_service_), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(refresh_schema_version())) {
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
   } else if (domain_index_.is_valid()
           && OB_FAIL(schema_guard.check_table_exist(domain_index_.table_id_, is_domain_index_exist))) {
-    LOG_WARN("fail to check table exist", K(ret), K(domain_index_));
   } else if (fts_doc_word_.is_valid()
           && OB_FAIL(is_fts_task() && schema_guard.check_table_exist(fts_doc_word_.table_id_, is_doc_word_exist))) {
-    LOG_WARN("fail to check table exist", K(ret), K(fts_doc_word_));
   } else if (doc_rowkey_.is_valid()
           && OB_FAIL(schema_guard.check_table_exist(doc_rowkey_.table_id_, is_doc_rowkey_exist))) {
-    LOG_WARN("fail to check table exist", K(ret), K(doc_rowkey_));
   } else if (rowkey_doc_.is_valid()
           && OB_FAIL(schema_guard.check_table_exist(rowkey_doc_.table_id_, is_rowkey_doc_exist))) {
-    LOG_WARN("fail to check table exist", K(ret), K(rowkey_doc_));
   } else if (!is_domain_index_exist && !is_doc_word_exist && !is_rowkey_doc_exist && !is_doc_rowkey_exist) {
     uint64_t doc_id_col_id = OB_INVALID_ID;
     uint64_t ft_col_id = OB_INVALID_ID;
@@ -357,10 +338,8 @@ int ObDropFTSIndexTask::prepare(const share::ObDDLTaskStatus &new_status)
   bool state_finished = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (ObDDLTaskStatus::PREPARE != task_status_) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("task status not match", K(ret), K(task_status_));
   } else {
     state_finished = true;
   }
@@ -384,10 +363,8 @@ int ObDropFTSIndexTask::check_and_wait_finish(const share::ObDDLTaskStatus &new_
   ObSchemaGetterGuard schema_guard;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (ObDDLTaskStatus::WAIT_CHILD_TASK_FINISH != task_status_) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("task status not match", K(ret), K(task_status_));
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
   }
   if (OB_SUCC(ret)) {
@@ -428,7 +405,6 @@ int ObDropFTSIndexTask::check_drop_index_finish(const int64_t task_id,
   has_finished = false;
   if (OB_UNLIKELY(task_id <= 0 || OB_INVALID_ID == table_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("there are invalid arguments", K(ret), K(task_id), K(table_id));
   } else if (OB_FAIL(share::ObDDLErrorMessageTableOperator::get_ddl_error_message(task_id,
                                                                                   -1/*target_object_id*/,
                                                                                   table_id,
@@ -440,13 +416,11 @@ int ObDropFTSIndexTask::check_drop_index_finish(const int64_t task_id,
       ret = OB_SUCCESS;
       LOG_INFO("the drop index task not completed", K(ret), K(task_id), K(table_id), K(has_finished));
     } else {
-      LOG_WARN("fail to get ddl error message", K(ret), K(task_id), K(table_id));
     }
   } else {
     ret = error_message.ret_code_;
     has_finished = true;
     if (OB_SUCCESS == ret && OB_FAIL(update_task_message(*GCTX.sql_proxy_))) {
-      LOG_WARN("fail to update drop fulltext index task message", K(ret));
     }
     LOG_INFO("wait drop index finish", K(ret), K(task_id), K(table_id), K(has_finished));
   }
@@ -480,7 +454,6 @@ int ObDropFTSIndexTask::send_and_wait_drop_index_task(
                                      child_task_info.table_id_,
                                      child_task_info.index_name_,
                                      child_task_info.task_id_))) {
-      LOG_WARN("fail to create drop index task", K(ret), K(child_task_info));
   } else if (0 == child_task_info.task_id_) {
     // by pass
     has_finished = true;
@@ -508,7 +481,6 @@ int ObDropFTSIndexTask::create_drop_index_task(
     task_id = -1;
   } else if (OB_UNLIKELY(index_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(index_name));
   } else if (OB_FAIL(guard.check_table_exist(index_tid, is_index_exist))) {
   } else if (!is_index_exist) {
     // nothing to do, just by pass.
@@ -516,14 +488,11 @@ int ObDropFTSIndexTask::create_drop_index_task(
   } else if (OB_FAIL(guard.get_table_schema( index_tid, index_schema))) {
   } else if (OB_ISNULL(index_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, index schema is nullptr", K(ret), KP(index_schema));
   } else if (OB_FAIL(guard.get_database_schema( index_schema->get_database_id(), database_schema))) {
   } else if (OB_FAIL(guard.get_table_schema( index_schema->get_data_table_id(), data_table_schema))) {
   } else if (OB_UNLIKELY(nullptr == database_schema || nullptr == data_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, schema is nullptr", K(ret), KP(database_schema), KP(data_table_schema));
   } else if (index_schema->is_fts_index_aux() && OB_FAIL(drop_index_sql.assign(ddl_stmt_str_))) {
-    LOG_WARN("fail to assign drop index sql", K(ret));
   } else {
     int64_t ddl_rpc_timeout_us = 0;
     obcall::ObDropIndexArg arg;
@@ -583,11 +552,9 @@ int ObDropFTSIndexTask::cleanup_impl()
   ObString unused_str;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(report_error_code(unused_str))) {
   } else if (OB_ISNULL(GCTX.sql_proxy_) || OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_), KP(GCTX.schema_service_));
   } else {
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *data_table_schema = nullptr;
@@ -599,7 +566,6 @@ int ObDropFTSIndexTask::cleanup_impl()
                                                      data_table_schema))) {
     } else if (OB_UNLIKELY(nullptr == data_table_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("data table schema is nullptr", K(ret), KP(data_table_schema));
     } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
     } else if (OB_FAIL(owner_id.convert_from_value(ObLockOwnerType::DEFAULT_OWNER_TYPE, task_id_))) {
     } else if (OB_FAIL(ObDDLLock::unlock_for_add_drop_index(*data_table_schema,
@@ -617,7 +583,6 @@ int ObDropFTSIndexTask::cleanup_impl()
     }
   }
   if (FAILEDx(ObDDLTaskRecordOperator::delete_record(*GCTX.sql_proxy_, task_id_))) {
-    LOG_WARN("delete task record failed", K(ret), K(task_id_), K(schema_version_));
   } else {
     need_retry_ = false;      // clean succ, stop the task
   }

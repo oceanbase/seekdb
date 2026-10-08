@@ -35,7 +35,6 @@ int ObServerRuntimeMeta::build(const share::ObServerRuntimeConfig &runtime_confi
 
   if (OB_UNLIKELY(!runtime_config.is_valid() || !super_block.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(runtime_config), K(super_block));
   } else {
     runtime_config_ = runtime_config;
     super_block_ = super_block;

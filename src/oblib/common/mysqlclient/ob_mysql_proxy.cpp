@@ -58,7 +58,6 @@ int ObCommonSqlProxy::init(const bool is_ddl)
   int ret = OB_SUCCESS;
   if (is_inited()) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else {
     inited_ = true;
     is_ddl_ = is_ddl;
@@ -116,10 +115,8 @@ int ObCommonSqlProxy::read(ObISQLConnection *conn, ReadResult &result, const cha
   result.reset();
   if (OB_ISNULL(sql) || OB_ISNULL(conn)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("empty sql or null conn", K(ret), KP(sql), KP(conn));
   } else if (stopped_) { // check stop state again after connection acquired
     ret = OB_INACTIVE_SQL_CLIENT;
-    LOG_WARN("sql proxy stopped", K(ret), KCSTRING(sql));
   } else {
     if (OB_FAIL(conn->execute_read(sql, result))) {
     }
@@ -138,10 +135,8 @@ int ObCommonSqlProxy::write(const char *sql, const int32_t group_id, int64_t &af
   } else if (OB_FAIL(acquire(conn, group_id))) {
   } else if (!conn.is_valid()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("connection can not be NULL");
   } else if (stopped_) { // check stop state again after connection acquired
     ret = OB_INACTIVE_SQL_CLIENT;
-    LOG_WARN("sql proxy stopped", K(ret), KCSTRING(sql));
   } else {
     if (OB_FAIL(conn->execute_write(sql, affected_rows))) {
     }
@@ -163,10 +158,8 @@ int ObCommonSqlProxy::write(const ObString sql,
   } else if (OB_FAIL(acquire(conn, 0/*group_id*/))) {
   } else if (!conn.is_valid()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("connection can not be NULL");
   } else if (stopped_) { // check stop state again after connection acquired
     ret = OB_INACTIVE_SQL_CLIENT;
-    LOG_WARN("sql proxy stopped", K(ret), K(sql));
   }
   if (OB_SUCC(ret) && nullptr != param) {
     conn->set_is_load_data_exec(param->is_load_data_exec_);
@@ -205,14 +198,11 @@ int ObCommonSqlProxy::escape(const char *from, const int64_t from_size,
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("mysql proxy not inited");
   } else if (NULL != from && from_size > 0) {
     if (to_size < from_size * 2) {
       ret = OB_BUF_NOT_ENOUGH;
-      LOG_WARN("string buffer not enough", K(ret), K(from_size), K(to_size));
     } else if (OB_ISNULL(to)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("to buffer is NULL", K(ret), KP(to), KP(from), K(from_size));
     } else {
       MEMCPY(to, from, from_size);
       out_size = from_size;
@@ -231,10 +221,8 @@ int ObCommonSqlProxy::acquire_connection(
   conn.reset();
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("mysql proxy not inited", K(ret));
   } else if (stopped_) {
     ret = OB_INACTIVE_SQL_CLIENT;
-    LOG_WARN("sql proxy stopped", K(ret));
   } else {
     ret = create_inner_sql_connection_for_proxy(is_ddl_, group_id, conn);
   }
@@ -246,7 +234,6 @@ int ObCommonSqlProxy::acquire(sqlclient::ObISQLConnectionGuard &conn, const int3
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("mysql proxy not inited", K(ret));
   } else if (OB_FAIL(acquire_connection(conn, group_id))) {
   } else if (!conn.is_valid()) {
     ret = OB_ERR_UNEXPECTED;

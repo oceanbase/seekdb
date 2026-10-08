@@ -45,7 +45,6 @@ int ObConstEncoder::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(ObIColumnEncoder::init(ctx, column_index, rows))) {
   } else if (OB_FAIL(dict_encoder_.init(ctx, column_index, rows))) {
   } else {
@@ -65,7 +64,6 @@ int ObConstEncoder::traverse(bool &suitable)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (ht_->get_nope_list().size_ - 1 > MAX_EXCEPTION_SIZE + 1) {
     suitable = false;
   } else if (OB_FAIL(dict_encoder_.traverse(suitable))) {
@@ -106,7 +104,6 @@ int ObConstEncoder::traverse(bool &suitable)
 
     if (OB_UNLIKELY(0 > count_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected count", K(ret), K_(count));
     } else if (count_ > MAX_EXCEPTION_SIZE
         || count_ > MAX(rows_->count() * MAX_EXCEPTION_PCT / 100, 1L)) {
       suitable = false;
@@ -120,8 +117,6 @@ int ObConstEncoder::traverse(bool &suitable)
       }
       if (OB_UNLIKELY(max_row_id > UINT32_MAX || max_ref > UINT8_MAX)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("row_id_byte and ref_byte should be less than or equal to 2",
-            K(ret), K(max_row_id), K(max_ref));
       } else {
         row_id_byte_ = get_byte_packed_int_size(max_row_id);
       }
@@ -156,7 +151,6 @@ int ObConstEncoder::store_meta_without_dict(ObBufferWriter &buf_writer)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     char *buf = buf_writer.current();
     const_meta_header_ = reinterpret_cast<ObConstMetaHeader *>(buf);
@@ -195,7 +189,6 @@ int ObConstEncoder::get_cell_len(const ObDatum &datum, int64_t &length) const
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     switch (sc_) {
       case ObIntSC:
@@ -216,8 +209,6 @@ int ObConstEncoder::get_cell_len(const ObDatum &datum, int64_t &length) const
       }
       default: {
         ret = OB_INNER_STAT_ERROR;
-        LOG_WARN("not supported store class",
-            K(ret), K_(sc), K_(column_type), K(datum));
       }
     }
   }
@@ -229,7 +220,6 @@ int ObConstEncoder::store_value(const ObDatum &datum, char *buf)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     switch (sc_) {
       case ObIntSC:
@@ -251,8 +241,6 @@ int ObConstEncoder::store_value(const ObDatum &datum, char *buf)
       }
       default: {
         ret = OB_INNER_STAT_ERROR;
-        LOG_WARN("not supported store class",
-            K(ret), K_(sc), K_(column_type), K(datum));
       }
     }
   }
@@ -289,7 +277,6 @@ int ObConstEncoder::store_meta(ObBufferWriter &buf_writer)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (0 == count_) {
     if (OB_FAIL(store_meta_without_dict(buf_writer))) {
     }
@@ -325,7 +312,6 @@ int ObConstEncoder::store_meta(ObBufferWriter &buf_writer)
             if (const_ref != node.dict_ref_) {
               if (OB_UNLIKELY(idx >= count_)) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("unexpected idx", K(ret), K(idx), K_(count));
                 int *p = 0;
                 *p = 0;
               } else {
@@ -348,7 +334,6 @@ int ObConstEncoder::store_data(const int64_t row_id, ObBitStream &bs,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     UNUSED(row_id);
     UNUSED(bs);
@@ -363,7 +348,6 @@ int ObConstEncoder::get_row_checksum(int64_t &checksum) const
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     checksum = 0;
     FOREACH(l, *ht_) {

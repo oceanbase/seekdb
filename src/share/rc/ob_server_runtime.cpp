@@ -81,7 +81,6 @@ int ObServerRuntimeState::init()
 
   if (inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice error", K(ret));
   } else {
     inited_ = true;
   }

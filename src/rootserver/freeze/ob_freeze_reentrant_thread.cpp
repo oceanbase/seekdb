@@ -36,7 +36,6 @@ int ObFreezeReentrantThread::set_epoch(const int64_t epoch)
   int ret = OB_SUCCESS;
   if (epoch < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(epoch));
   } else {
     epoch_ = epoch;
   }
@@ -60,7 +59,6 @@ int ObFreezeReentrantThread::try_idle(
   int ret = exe_ret;
   if (idle_time_us <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(idle_time_us));
   } else if (!stop_) {
     if (is_paused()) {
       LOG_INFO("this thread is paused", KR(ret), K(idle_time_us), "epoch", get_epoch());

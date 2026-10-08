@@ -99,7 +99,6 @@ int ObExprFormatBytes::eval_format_bytes_util(const ObExpr &expr, ObDatum &res_d
     char *res_buf = NULL;
     if (OB_ISNULL(res_buf = expr.get_str_res_mem(ctx, VALUE_BUF_LEN, index))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret));
     } else {
       if (bytes_abs >= eib) {
         divisor = eib;

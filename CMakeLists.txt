@@ -12,6 +12,20 @@ project("OceanBase"
   HOMEPAGE_URL "https://www.oceanbase.ai"
   LANGUAGES CXX C ASM)
 
+if(OB_MACOS27)
+  include(CheckCXXSourceCompiles)
+  # An empty main misses LLVM/SDK libc++ incompatibilities.
+  unset(OB_MACOS27_CXX_WORKS CACHE)
+  check_cxx_source_compiles("#include <vector>
+    #include <iostream>
+    int main() { std::vector<int> v{27}; std::cout << v.at(0); }"
+    OB_MACOS27_CXX_WORKS)
+  if(NOT OB_MACOS27_CXX_WORKS)
+    message(FATAL_ERROR "The selected LLVM cannot compile/link against the macOS 27 C++ library. "
+      "Use matching Xcode/Command Line Tools or a newer Homebrew LLVM via OB_MACOS_LLVM_ROOT.")
+  endif()
+endif()
+
 option(OB_ENABLE_STANDBY "Build physical standby support" ON)
 option(ENABLE_SANITY "Build with seekdb memory Sanity instrumentation" OFF)
 
@@ -209,12 +223,8 @@ elseif(UNIX)
   set(STDC_SHARED_LIB_SYMLINK "${DEVTOOLS_DIR}/lib64/libstdc++.so")
 endif()
 
-if((CMAKE_SYSTEM_NAME STREQUAL "Linux" OR APPLE) AND NOT OB_USE_ASAN)
-  set(JEMALLOC_STATIC_LIBRARY "${DEP_DIR}/lib/libjemalloc_pic.a")
-  if(NOT EXISTS "${JEMALLOC_STATIC_LIBRARY}")
-    message(FATAL_ERROR "Packaged jemalloc not found: ${JEMALLOC_STATIC_LIBRARY}")
-  endif()
-
+add_subdirectory(deps/external)
+if(TARGET seekdb_jemalloc)
   set(OB_HAVE_BUNDLED_JEMALLOC TRUE)
 endif()
 

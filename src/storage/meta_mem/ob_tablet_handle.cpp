@@ -187,7 +187,6 @@ int ObTabletTableIterator::set_tablet_handle(const ObTabletHandle &tablet_handle
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(tablet_handle_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet table iterator already has a valid tablet handle", K(ret));
   } else {
     tablet_handle_ = tablet_handle;
   }
@@ -213,7 +212,6 @@ int ObTabletTableIterator::refresh_read_tables_from_tablet(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!tablet_handle_.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("try to refresh tables in tablet table iter with invalid tablet handle", K(ret));
   } else if (major_sstable_only) {
     if (OB_FAIL(tablet_handle_.get_obj()->get_read_major_sstable(
         snapshot_version, *this))) {
@@ -233,7 +231,6 @@ int ObTabletTableIterator::get_mds_sstables_from_tablet(const int64_t snapshot_v
 
   if (OB_UNLIKELY(!tablet_handle_.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("try to refresh tables in tablet table iter with invalid tablet handle", K(ret));
   } else if (OB_FAIL(tablet_handle_.get_obj()->inner_get_mds_sstables(table_store_iter_))) {
   }
 
@@ -260,7 +257,6 @@ int ObTabletTableIterator::get_read_tables_from_tablet(
         }
       } else if (OB_ISNULL(table)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get nullptr table", K(ret), KP(table), KPC(this));
       } else if (OB_FAIL(tables.push_back(table))) {
       }
     }

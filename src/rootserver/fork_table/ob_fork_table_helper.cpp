@@ -67,8 +67,6 @@ static int check_table_index_features(const ObTableSchema &table_schema,
                                                 index_schema))) {
       } else if (OB_ISNULL(index_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("index table schema should not be null", K(ret),
-                 K(index_table_id));
       } else {
         if (index_schema->is_hybrid_vec_index()) {
           has_semantic_index = true;
@@ -124,8 +122,6 @@ int check_fork_table_supported(const ObTableSchema &src_table_schema,
   bool has_async_vec_index = false;
   if (src_table_schema.is_tmp_table() || src_table_schema.is_ctas_tmp_table()) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("fork table on temporary table is not supported", KR(ret),
-             K(src_table_schema));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "fork table on temporary table is");
   } else if (!src_table_schema.is_user_table()) {
     if (OB_NOT_NULL(fork_table_arg)) {
@@ -140,29 +136,20 @@ int check_fork_table_supported(const ObTableSchema &src_table_schema,
     }
   } else if (src_table_schema.is_in_recyclebin()) {
     ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
-    LOG_WARN("can fork table from table in recyclebin", K(ret),
-             K(src_table_schema));
   } else if (OB_FAIL(check_table_index_features(
                  src_table_schema, schema_guard, has_semantic_index,
                  has_ivf_index, has_spatial_index, has_global_index,
                  has_async_vec_index))) {
   } else if (has_semantic_index) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("fork table on table with semantic index is not supported",
-             KR(ret), K(src_table_schema));
     LOG_USER_ERROR(OB_NOT_SUPPORTED,
                    "fork table on table with semantic index is");
   } else if (has_spatial_index) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("fork table on table with spatial index is not supported", KR(ret),
-             K(src_table_schema));
     LOG_USER_ERROR(OB_NOT_SUPPORTED,
                    "fork table on table with spatial index is");
   } else if (src_table_schema.is_partitioned_table() && has_global_index) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN(
-        "fork table on partitioned table with global index is not supported",
-        KR(ret), K(src_table_schema));
     LOG_USER_ERROR(OB_NOT_SUPPORTED,
                    "fork table on partitioned table with global index is");
   }
@@ -176,23 +163,17 @@ int ObForkTableHelper::init(const common::ObIArray<share::schema::ObTableSchema>
 
   if (inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("fork table helper init twice", KR(ret), K(fork_table_info_));
   } else if (!fork_table_info_.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("fork table info is invalid", KR(ret), K(fork_table_info_));
   } else if (table_schemas.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("table schemas is empty", KR(ret));
   } else if (FALSE_IT(src_table_id_ = fork_table_info_.get_fork_src_table_id())) {
   } else if (OB_FAIL(schema_guard_.get_table_schema( src_table_id_,
 src_table_schema_))) {
   } else if (OB_ISNULL(src_table_schema_)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("source table not exist", KR(ret),
-K(fork_table_info_.get_fork_src_table_id()));
   } else if (OB_ISNULL(dst_table_schema_ = &table_schemas.at(0))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("dst table schema is null", KR(ret));
   } else if (FALSE_IT(dst_table_id_ = dst_table_schema_->get_table_id())) {
   } else if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(
                  schema_guard_, *src_table_schema_,
@@ -240,7 +221,6 @@ int ObForkTableHelper::execute()
 
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("fork table helper not init", KR(ret));
   } else {
     SERVER_MODULE_SCOPE {
       if (OB_FAIL(copy_tablet_autoinc_seq_info_())) {
@@ -264,7 +244,6 @@ int ObForkTableHelper::copy_tablet_autoinc_seq_info_()
 
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("fork table helper not init", KR(ret));
   } else {
     ObArenaAllocator allocator("ForkAutoinc");
     obcall::ObBatchSetTabletAutoincSeqArg arg;
@@ -286,7 +265,6 @@ int ObForkTableHelper::copy_tablet_autoinc_seq_info_()
       if (OB_FAIL(get_tablet_handle_(src_tablet_id, tablet_handle))) {
       } else if (OB_ISNULL(tablet_handle.get_obj())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("tablet handle is null", K(ret), K(src_tablet_id));
       } else if (OB_FAIL(tablet_handle.get_obj()->get_autoinc_seq(autoinc_seq,
                                                                   allocator))) {
       } else if (OB_FAIL(
@@ -317,7 +295,6 @@ int ObForkTableHelper::copy_tablet_truncate_info_()
 
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("fork table helper not init", KR(ret));
   } else {
     ObArenaAllocator allocator("ForkTruncate");
     ObTruncateInfoArray truncate_info_array;
@@ -340,7 +317,6 @@ int ObForkTableHelper::copy_tablet_truncate_info_()
       if (OB_FAIL(get_tablet_handle_(src_tablet_id, src_tablet_handle))) {
       } else if (OB_ISNULL(src_tablet_handle.get_obj())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("tablet handle is null", K(ret), K(src_tablet_id));
       } else if (OB_FAIL(src_tablet_handle.get_obj()->read_truncate_info_array(
                          allocator,
                          common::ObVersionRange(
@@ -352,8 +328,6 @@ int ObForkTableHelper::copy_tablet_truncate_info_()
       } else if (OB_ISNULL(latest_truncate_info = truncate_info_array.at(
                                truncate_info_array.count() - 1))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to get latest truncate info", K(ret),
-                 K(src_tablet_id));
       } else {
         storage::ObTabletForkMdsArg fork_mds_arg;
         
@@ -363,7 +337,6 @@ int ObForkTableHelper::copy_tablet_truncate_info_()
                 allocator, *latest_truncate_info))) {
         } else if (OB_UNLIKELY(!truncate_arg.is_valid())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("truncate arg is invalid", K(ret), K(truncate_arg));
         } else if (OB_FAIL(fork_mds_arg.set_truncate_arg(truncate_arg))) {
         } else if (OB_FAIL(storage::ObTabletForkMdsHelper::register_mds(
                        fork_mds_arg, false /*need_flush_redo*/, trans_))) {
@@ -400,8 +373,6 @@ int ObForkTableHelper::copy_table_autoinc_seq_info_()
              K(dst_table_schema_->get_table_id()));
   } else if (src_autoinc_column_id != dst_autoinc_column_id) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("autoinc column id mismatch", KR(ret), K(src_autoinc_column_id),
-             K(dst_autoinc_column_id));
   } else {
     const int64_t autoinc_version = src_table_schema_->get_truncate_version();
     uint64_t src_sequence_value = 0;
@@ -416,9 +387,6 @@ int ObForkTableHelper::copy_table_autoinc_seq_info_()
         LOG_INFO("fork table: source table has no auto increment record",
                  K(src_table_id_));
       } else {
-        LOG_WARN("failed to get auto increment sequence value from "
-                 "ObAutoincrementService",
-                 K(ret), K(src_table_id_), K(src_autoinc_column_id));
       }
     } else {
       LOG_INFO("fork table: got sequence value from ObAutoincrementService "
@@ -450,7 +418,6 @@ int ObForkTableHelper::copy_table_statistics_()
 
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("fork table helper not init", KR(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < src_tablet_ids_.count(); ++i) {
       const ObTabletID &src_tablet_id = src_tablet_ids_.at(i);
@@ -474,8 +441,6 @@ int ObForkTableHelper::copy_table_statistics_()
       if (OB_SUCC(ret)) {
         if (OB_INVALID_ID == src_part_id || OB_INVALID_ID == dst_part_id) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid partition id", K(ret), K(src_part_id),
-                   K(dst_part_id), K(src_table_id_), K(dst_table_id_));
         } else if (OB_FAIL(copy_stat_info_(OB_ALL_TABLE_STAT_TNAME,
                                            src_table_id_, src_part_id,
                                            dst_table_id_, dst_part_id))) {
@@ -512,7 +477,6 @@ int ObForkTableHelper::copy_stat_info_(const char *table_name,
 
   if (OB_ISNULL(table_name) || OB_ISNULL(table_schema)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("parameter invalid", K(ret), KP(table_name), KP(table_schema));
   } else if (
       OB_FAIL(sql_string.assign_fmt(
           "REPLACE INTO %s (table_id, partition_id, %s) "
@@ -524,7 +488,6 @@ int ObForkTableHelper::copy_stat_info_(const char *table_name,
                  trans_.write(sql_string.ptr(), affected_rows))) {
   } else if (OB_UNLIKELY(affected_rows < 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected affected_rows", K(ret), K(affected_rows));
   }
 
   return ret;
@@ -577,11 +540,9 @@ int ObForkTableHelper::get_tablet_handle_(
   SERVER_MODULE_SCOPE {
     if (OB_ISNULL(ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ls service is null", K(ret));
     } else if (OB_FAIL(ls_service->get_ls(ls))) {
     } else if (OB_ISNULL(ls)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ls is null", K(ret), K(SYS_LS));
     } else if (OB_FAIL(ls->get_tablet(tablet_id, tablet_handle))) {
     }
   }

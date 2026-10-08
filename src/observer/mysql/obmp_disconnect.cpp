@@ -66,7 +66,6 @@ int ObMPDisconnect::run()
   if (ctx_.sessid_ != 0) {
     if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid session mgr", K(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()), K(ret));
     } else {
       // bugfix:
       (void) kill_unfinished_session(ctx_.sessid_); // ignore ret

@@ -38,7 +38,6 @@ int ObSrsUtils::check_authority(const ObRsAuthority& auth, const char *target_au
     int code = ObCharset::strntoll(auth.org_code.ptr(), auth.org_code.length(), 10, &ret);
     if (OB_FAIL(ret)) {
       res = false;
-      LOG_WARN("failed to convert string to int", K(ret));
     } else if (auth.org_name.case_compare(target_auth_name) || code != target_auth_code) {
       res = false;
     }
@@ -101,7 +100,6 @@ int ObSrsUtils::get_simple_proj_params(const ObProjectionPrams &parsed_params,
     if (std::isnan(param->value_)) {
       int epsg_code = param->epsg_code_;
       ret = OB_ERR_UNEXPECTED; // todo@dazhi: ER_SRS_PROJ_PARAMETER_MISSING
-      LOG_WARN("invalid nan projection parameter", K(ret), K(epsg_code));
     }
   }
   return ret;
@@ -114,7 +112,6 @@ int ObSpatialReferenceSystemBase::create_project_srs(ObIAllocator* allocator, ui
   int epsg_code = 0;
   if (OB_ISNULL(rs) || OB_ISNULL(allocator)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("rs or allocator is null", K(allocator), KP(rs));
   } else {
     ObString epsg_code_str = rs->projection.authority.org_code;
     epsg_code = ObCharset::strntoll(epsg_code_str.ptr(), epsg_code_str.length(), 10, &ret);
@@ -300,7 +297,6 @@ int ObSpatialReferenceSystemBase::create_srs_internal(ObIAllocator* allocator, u
   void *buf = allocator->alloc(sizeof(SRS_T));
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc projected srs failed", K(ret), K(srs_id));
   } else {
     tmp_srs_info = new(buf)SRS_T(static_cast<common::ObIAllocator*>(allocator));
     if (OB_FAIL(tmp_srs_info->init(srs_id, rs))) {
@@ -365,7 +361,6 @@ int ObGeographicSrs::init(uint32_t srs_id, const ObGeographicRs *rs)
   }
 
   if (OB_SUCC(ret) && OB_FAIL(ObSrsUtils::check_is_wgs84(rs, is_wgs84_))) {
-    LOG_WARN("failed to check srs is wgs84 based or not", K(ret));
   }
 
   return ret;
@@ -450,7 +445,6 @@ int ObGeographicSrs::get_proj4_param(ObIAllocator *allocator, ObString &proj4_pa
           length = ob_fcvt(wgs84_[i], std::numeric_limits<double>::max_digits10, FLOATING_POINT_BUFFER - 1, tmp_buf, NULL);
           if (OB_FAIL(string_buf.append(tmp_buf))) {
           } else if (i != WGS84_PARA_NUM - 1 && OB_FAIL(string_buf.append(","))) {
-            LOG_WARN("failed to append string to proj param", K(ret), K(length));
           }
         }
       } else {
@@ -482,7 +476,6 @@ int ObProjectedSrs::init(uint64_t srs_id,  const ObProjectionRs *rs)
   if (OB_FAIL(geographic_srs_.init(srs_id, &(rs->projected_rs)))) {
   } else if (std::isnan(rs->unit.conversion_factor)){
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid conversion factor", K(ret));
   } else {
     id_ = srs_id;
     linear_unit_ = rs->unit.conversion_factor;
@@ -491,11 +484,9 @@ int ObProjectedSrs::init(uint64_t srs_id,  const ObProjectionRs *rs)
     if ((axis_dir_[0] == ObAxisDirection::INIT) ^
         (axis_dir_[1] == ObAxisDirection::INIT)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid axis direction, either all or none is init", K(ret));
     } else if (FALSE_IT(register_proj_params())) {
     } else if (simple_proj_prams_.size() > 0 &&
                OB_FAIL(ObSrsUtils::get_simple_proj_params(rs->proj_params, simple_proj_prams_))) {
-      LOG_WARN("failed to get simple prams", K(ret), K(srs_id));
     }
   }
   return ret;
@@ -528,7 +519,6 @@ int ObSrsItem::latitude_convert_to_radians(double value, double &latitude) const
   double radians = 0.0;
   if (OB_FAIL(from_srs_unit_to_radians(value, radians))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed convert to radians", K(ret), K(value));
   } else {
     latitude = is_latitude_north() ? radians : (radians * (-1.0));
   }

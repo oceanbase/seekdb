@@ -167,7 +167,6 @@ int ObMicroBlockDataHandle::get_micro_block_data(
                     macro_reader,
                     loaded_block_data_,
                     allocator_))) {
-          LOG_WARN("Fail to load micro block", K(ret), K_(macro_block_id), K_(micro_info));
           try_release_loaded_block();
         } else {
           io_handle_.reset();
@@ -185,12 +184,10 @@ int ObMicroBlockDataHandle::get_cached_index_block_data(ObMicroBlockData &index_
   int ret = OB_SUCCESS;
   if (ObSSTableMicroBlockState::IN_BLOCK_CACHE != block_state_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Fail to get block data, unexpected block state", K(ret), K(block_state_));
   } else {
     const ObMicroBlockData *pblock = NULL;
     if (NULL == (pblock = cache_handle_.get_block_data())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Fail to get cache block", K(ret));
     } else {
       index_block = *pblock;
     }
@@ -219,7 +216,6 @@ int ObMicroBlockDataHandle::get_loaded_block_data(ObMicroBlockData &block_data)
   if (ObSSTableMicroBlockState::IN_BLOCK_CACHE == block_state_) {
     if (NULL == (pblock = cache_handle_.get_block_data())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Fail to get cache block", K(ret));
     } else {
       block_data = *pblock;
     }
@@ -233,7 +229,6 @@ int ObMicroBlockDataHandle::get_loaded_block_data(ObMicroBlockData &block_data)
     if (OB_FAIL(ret)) {
     } else if (NULL == (io_buf = io_handle_.get_buffer())) {
       ret = OB_INVALID_IO_BUFFER;
-      LOG_WARN("Fail to get block data, io may be failed", K(ret));
     } else {
       if (-1 == block_index_) {
         //single block io
@@ -248,7 +243,6 @@ int ObMicroBlockDataHandle::get_loaded_block_data(ObMicroBlockData &block_data)
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected block state", K(ret), K_(block_state));
   }
   return ret;
 }
@@ -406,7 +400,6 @@ int ObMicroBlockHandleMgr::init(const bool enable_prefetch_limiting, ObTableScan
   lib::ObMemAttr mem_attr("MicroBlockIO");
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("The micro block handle mgr has been inited", K(ret));
   } else if (OB_FAIL(block_io_allocator_.init(nullptr, OB_MALLOC_MIDDLE_BLOCK_SIZE, mem_attr))) {
   } else {
     data_block_cache_ = &(OB_STORE_CACHE.get_block_cache());
@@ -441,10 +434,8 @@ int ObMicroBlockHandleMgr::get_micro_block_handle(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Block handle manager is not inited", K(ret));
   } else if (OB_ISNULL(idx_header)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpect null index header", K(ret), KP(idx_header));
   } else if (OB_FAIL(idx_header->fill_micro_des_meta(micro_block_handle.des_meta_))) {
   } else if (FALSE_IT(micro_block_handle.init(macro_id, offset, size, index_block_info.get_logic_micro_id(),
                                               index_block_info.get_data_checksum(), this))) {
@@ -493,7 +484,6 @@ int ObMicroBlockHandleMgr::prefetch_multi_data_block(
   ObStorageObjectHandle macro_handle;
   if (OB_UNLIKELY(!multi_io_params.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected io params", K(ret), K(multi_io_params));
   } else {
     const MacroBlockId &macro_id = micro_data_infos[multi_io_params.prefetch_idx_[0] % max_micro_handle_cnt].get_macro_id();
     if (1 == multi_io_params.count()) {
@@ -519,7 +509,6 @@ int ObMicroBlockHandleMgr::prefetch_multi_data_block(
       for (int64_t i = 0; OB_SUCC(ret) && i < multi_io_params.count(); i++) {
         if (multi_io_params.prefetch_idx_[i] >= max_prefetch_idx) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Unexpected prefetch idx", K(ret), K(i), K(multi_io_params.prefetch_idx_[i]), K(max_prefetch_idx));
         } else {
           ObMicroBlockDataHandle &micro_handle = micro_data_handles[multi_io_params.prefetch_idx_[i] % max_micro_handle_cnt];
           micro_handle.block_state_ = ObSSTableMicroBlockState::IN_BLOCK_IO;

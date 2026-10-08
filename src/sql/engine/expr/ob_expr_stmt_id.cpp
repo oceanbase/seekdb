@@ -45,7 +45,6 @@ int ObExprStmtId::eval_stmt_id(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 
   if (OB_ISNULL(plan_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("plan_ctx is null", K(ret));
   } else {
     res.set_int(plan_ctx->get_cur_stmt_id());
   }

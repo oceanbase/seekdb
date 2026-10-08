@@ -129,7 +129,6 @@ public:
     int ret = common::OB_SUCCESS;
     if (OB_UNLIKELY(!row.is_valid())) {
       ret = common::OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid direct insert row view", K(ret));
     } else {
       BorrowedIArray<common::ObDatum *> datums(row.datums_, row.datum_count_);
       if (OB_FAIL(writer_->append_current_row(datums))) {
@@ -143,7 +142,6 @@ public:
     int ret = common::OB_SUCCESS;
     if (OB_UNLIKELY(!batch.is_valid())) {
       ret = common::OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid direct insert batch view", K(ret));
     } else {
       share::ObBatchSelector selector;
       if (ObDirectInsertBatchView::CONTIGUOUS_SELECTION == batch.selection_type_) {
@@ -223,12 +221,8 @@ public:
     int ret = common::OB_SUCCESS;
     if (OB_UNLIKELY(CREATED != state_)) {
       ret = common::OB_INIT_TWICE;
-      LOG_WARN("direct insert session initialized twice", K(ret), K(state_));
     } else if (OB_UNLIKELY(!param.is_valid())) {
       ret = common::OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid direct insert start parameter", K(ret),
-          K(param.ddl_task_id_), K(param.execution_id_), K(param.table_id_),
-          K(param.worker_count_), K(param.participants_.count()));
     } else {
       uint64_t tenant_data_version = 0;
       share::ObDDLTaskDataInfo task_data_info;
@@ -239,8 +233,6 @@ public:
       } else if (FALSE_IT(tenant_data_version = task_data_info.data_format_version_)) {
       } else if (tenant_data_version < storage::DDL_IDEM_DATA_FORMAT_VERSION) {
         ret = common::OB_NOT_SUPPORTED;
-        LOG_WARN("direct insert data format is not supported", K(ret),
-            K(tenant_data_version));
       } else {
         dag_param.direct_load_type_ =
             storage::ObDDLDirectLoadUtil::ddl_get_direct_load_type();
@@ -269,7 +261,6 @@ public:
             || share::schema::is_hybrid_vec_index_log_type(index_type)
             || share::schema::is_vec_index_id_type(index_type)) {
           ret = common::OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected vector index type for direct insert", K(ret), K(index_type));
         } else if (OB_FAIL(thread_pool_.init(param.worker_count_, dag_, worker_context))) {
         } else if (OB_FAIL(thread_pool_.start())) {
         } else {
@@ -316,7 +307,6 @@ public:
   {
     int ret = check_running();
     if (OB_SUCC(ret) && OB_FAIL(dag_->update_tablet_range_count())) {
-      LOG_WARN("prepare ordered direct insert input failed", K(ret));
     }
     return ret;
   }
@@ -334,8 +324,6 @@ public:
     } else if (nullptr != dag_ && dag_->is_dag_failed()) {
       const int worker_ret = ret;
       ret = dag_->get_dag_ret();
-      LOG_WARN("direct insert dag failed; returning first dag error",
-          K(ret), K(worker_ret));
     }
     return ret;
   }
@@ -373,8 +361,6 @@ public:
                || (DIRECT_INSERT_TABLE_AUTOINC != scope
                    && DIRECT_INSERT_TABLET_AUTOINC != scope))) {
       ret = common::OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid direct insert autoinc request", K(ret), K(tablet_id),
-          K(slice_index), K(scope));
     } else if (OB_FAIL(dag_->get_tablet_context(tablet_id, tablet_context))) {
     } else {
       staged.enabled_ = true;
@@ -388,8 +374,6 @@ public:
       }
       if (OB_UNLIKELY(!staged.is_valid())) {
         ret = common::OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid direct insert autoinc result", K(ret),
-            K(staged.slice_count_), K(staged.slice_index_));
       } else {
         param = staged;
       }
@@ -408,8 +392,6 @@ public:
     } else if (OB_UNLIKELY(!tablet_id.is_valid() || !target_tablet_id.is_valid()
                || slice_index < 0 || row_count < 0)) {
       ret = common::OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid direct insert tablet autoinc sync request", K(ret),
-          K(tablet_id), K(target_tablet_id), K(slice_index), K(row_count));
     } else if (OB_FAIL(dag_->get_tablet_context(tablet_id, tablet_context))) {
     } else {
       const int64_t last_value = share::ObDDLUtil::generate_idempotent_value(
@@ -444,9 +426,6 @@ public:
     if (OB_FAIL(ret)) {
     } else if (OB_UNLIKELY(!request.is_valid())) {
       ret = common::OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid direct insert writer request", K(ret),
-          K(request.tablet_id_), K(request.slice_index_), K(request.layout_),
-          K(request.input_format_));
     } else if (OB_FAIL(ObDDLStorageUtil::fill_writer_param(
                    request.tablet_id_, request.slice_index_, dag_,
                    0 /* max_batch_size */, write_param))) {
@@ -479,7 +458,6 @@ public:
       impl_type = ORDERED_BATCH_WRITER_IMPL;
       if (OB_ISNULL(request.spool_factory_)) {
         ret = common::OB_INVALID_ARGUMENT;
-        LOG_WARN("spill factory is required by vector direct insert writer", K(ret));
       } else if (OB_ISNULL(typed_writer = OB_NEWx(storage::ObBatchSliceWriter, &allocator))) {
         ret = common::OB_ALLOCATE_MEMORY_FAILED;
       } else if (FALSE_IT(impl = typed_writer)) {
@@ -520,7 +498,6 @@ private:
     int ret = common::OB_SUCCESS;
     if (OB_UNLIKELY(RUNNING != state_ || nullptr == dag_)) {
       ret = common::OB_NOT_INIT;
-      LOG_WARN("direct insert session is not running", K(ret), K(state_), KP(dag_));
     }
     return ret;
   }
@@ -555,11 +532,9 @@ int ObDirectInsertOrchestrator::start(
   ObDirectInsertSessionImpl *impl = nullptr;
   if (OB_UNLIKELY(!param.is_valid())) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid direct insert start parameter", K(ret));
   } else if (OB_ISNULL(impl = OB_NEWx(ObDirectInsertSessionImpl, &allocator,
                                      allocator))) {
     ret = common::OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate direct insert session failed", K(ret));
   } else if (OB_FAIL(impl->start(param, worker_context))) {
   } else {
     session = impl;

@@ -52,10 +52,8 @@ int ObExprArrayExtreme::calc_result_type1(ObExprResType &type,
 
   if (OB_ISNULL(session = const_cast<ObSQLSessionInfo *>(type_ctx.get_session()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObSQLSessionInfo is null", K(ret));
   } else if (OB_ISNULL(exec_ctx = session->get_cur_exec_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObExecContext is null", K(ret));
   } else if (ob_is_null(type1.get_type())) {
     type.set_utinyint(); // default type
   } else if (!ob_is_collection_sql_type(type1.get_type())) {
@@ -64,14 +62,11 @@ int ObExprArrayExtreme::calc_result_type1(ObExprResType &type,
   } else if (OB_FAIL(exec_ctx->get_sqludt_meta_by_subschema_id(type1.get_subschema_id(), arr_meta))) {
   } else if (OB_ISNULL(coll_info = reinterpret_cast<const ObSqlCollectionInfo *>(arr_meta.value_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObSqlCollectionInfo is null", K(ret));
   } else if (coll_info->collection_meta_->type_id_ != ObNestedType::OB_ARRAY_TYPE
              && coll_info->collection_meta_->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid collection type", K(ret), K(coll_info->collection_meta_->type_id_ ));
   } else if (OB_ISNULL(arr_type = static_cast<ObCollectionArrayType *>(coll_info->collection_meta_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObCollectionArrayType is null", K(ret));
   } else if (arr_type->element_type_->type_id_ == ObNestedType::OB_BASIC_TYPE) {
     ObCollectionBasicType *elem_type = static_cast<ObCollectionBasicType *>(arr_type->element_type_);
     type.set_meta(elem_type->basic_meta_.get_meta_type());
@@ -83,7 +78,6 @@ int ObExprArrayExtreme::calc_result_type1(ObExprResType &type,
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "nested array");
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected ObNestedType type", K(ret), K(arr_type->element_type_->type_id_));
   }
   return ret;
 }
@@ -96,7 +90,6 @@ int ObExprArrayExtreme::calc_extreme(ObIArrayType* src_arr, ObObj &res_obj, bool
 
   if (OB_ISNULL(elem_type = dynamic_cast<ObCollectionBasicType *>(dynamic_cast<const ObCollectionArrayType*>(src_arr->get_array_type())->element_type_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("source array collection element type is null", K(ret));
   } else if (src_arr->get_format() == Nested_Array) {
     // TODO: support array of array
     ret = OB_NOT_SUPPORTED;
@@ -147,7 +140,6 @@ int ObExprArrayExtreme::eval_array_extreme(const ObExpr &expr, ObEvalCtx &ctx, O
   } else {
     res.from_obj(res_obj);
     if (res_obj.is_string_type() && OB_FAIL(res.deep_copy(res, res_alloc))) {
-      LOG_WARN("fail to deep copy for res datum", K(ret), K(res_obj), K(res));
     }
   }
   return ret;
@@ -183,7 +175,6 @@ int ObExprArrayExtreme::eval_array_extreme_batch(const ObExpr &expr, ObEvalCtx &
       } else {
         res_datum.at(j)->from_obj(res_obj);
         if (res_obj.is_string_type() && OB_FAIL(res_datum.at(j)->deep_copy(*res_datum.at(j), res_alloc))) {
-          LOG_WARN("fail to deep copy for res datum", K(ret), K(res_obj), KPC(res_datum.at(j)));
         }
       }
     } // end for

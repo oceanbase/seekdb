@@ -35,13 +35,14 @@ using namespace common;
 namespace obmysql
 {
 
-// ---- Bridge: the Rust seekdb_nio reactor's callbacks -> ObSqlSockHandler ----
-namespace {
-int nio_on_connect(void* ctx, void* sess, int fd, int is_unix,
-                   nio_greeting_info* greeting) {
-  int ret = static_cast<ObSqlSockHandler*>(ctx)->on_connect(sess, fd, is_unix != 0);
+// ---- Event shims: the Rust reactor calls these by name, handler first ----
+extern "C" int ob_sql_sock_handler_on_connect(void* handler, void* sess, int fd,
+                                              int is_unix,
+                                              NioGreetingInfo* greeting) {
+  int ret =
+      static_cast<ObSqlSockHandler*>(handler)->on_connect(sess, fd, is_unix != 0);
   if (0 == ret && NULL != greeting) {
-    // Greeting inputs travel forward through the vtable (this replaced the
+    // Greeting inputs travel forward through the shim (this replaced the
     // out-of-header reverse-FFI symbol sm_conn_greeting_info at ABI 22). The
     // session's sessid + scramble exist as soon as on_connect constructed it.
     observer::ObSMConnection &conn = static_cast<ObSqlSockSession*>(sess)->conn_;
@@ -59,21 +60,20 @@ int nio_on_connect(void* ctx, void* sess, int fd, int is_unix,
   }
   return ret;
 }
-int nio_on_readable(void *ctx, void *sess, char *body, int64_t body_len,
-                    uint64_t wire_bytes, int packet_kind,
-                    const nio_mysql_command_view *command_view,
-                    uint64_t generation) {
-  return static_cast<ObSqlSockHandler *>(ctx)->on_readable(
+extern "C" int ob_sql_sock_handler_on_readable(
+    void *handler, void *sess, char *body, int64_t body_len,
+    uint64_t wire_bytes, int packet_kind,
+    const NioMysqlCommandView *command_view, uint64_t generation) {
+  return static_cast<ObSqlSockHandler *>(handler)->on_readable(
       sess, body, body_len, wire_bytes, packet_kind, command_view, generation);
 }
-void nio_on_disconnect(void* ctx, void* sess) {
-  UNUSED(ctx);
+extern "C" void ob_sql_sock_handler_on_disconnect(void* handler, void* sess) {
+  UNUSED(handler);
   static_cast<ObSqlSockSession*>(sess)->on_disconnect();
 }
-void nio_on_close(void* ctx, void* sess, int err) {
-  static_cast<ObSqlSockHandler*>(ctx)->on_close(sess, err);
+extern "C" void ob_sql_sock_handler_on_close(void* handler, void* sess, int err) {
+  static_cast<ObSqlSockHandler*>(handler)->on_close(sess, err);
 }
-} // anonymous namespace
 
 static uint8_t nio_tls_min_version(const char *value)
 {
@@ -107,12 +107,6 @@ int ObSqlNioServer::start(int port, rpc::frame::ObReqDeliver* deliver,
   lib::ObMutexGuard guard(reactor_lock_);
   if (OB_FAIL(io_handler_.init(deliver))) {
   } else {
-    nio_callbacks cb = {};
-    cb.ctx = &io_handler_;
-    cb.on_connect = nio_on_connect;
-    cb.on_readable = nio_on_readable;
-    cb.on_disconnect = nio_on_disconnect;
-    cb.on_close = nio_on_close;
     char addr[64];
     const bool disable_tcp = port < 0;
     if (port <= 0) {
@@ -132,22 +126,22 @@ int ObSqlNioServer::start(int port, rpc::frame::ObReqDeliver* deliver,
     // TLS is startup-only, like the thread count (set_thread_count already
     // returns OB_NOT_SUPPORTED): toggling ssl_client_authentication at
     // runtime requires an observer restart to take effect.
-    nio_tls_config tls_cfg = {};
+    NioTlsConfig tls_cfg = {};
     tls_cfg.ca_file = OB_SSL_CA_FILE;
     tls_cfg.cert_file = OB_SSL_CERT_FILE;
     tls_cfg.key_file = OB_SSL_KEY_FILE;
     tls_cfg.min_tls_version = nio_tls_min_version(min_tls_version);
-    const nio_tls_config *tls = use_tls ? &tls_cfg : NULL;
+    const NioTlsConfig *tls = use_tls ? &tls_cfg : NULL;
     int32_t start_err = NIO_START_OK;
-    reactor_ = nio_start(addr, NIO_ABI_VERSION, &cb, sizeof(cb),
+    reactor_ = nio_start(addr, &io_handler_,
                          sizeof(ObSqlSockSession), thread_count,
                          tls, use_tls ? sizeof(tls_cfg) : 0, &start_err,
                          disable_tcp ? 1 : 0);
     if (NULL == reactor_) {
       ret = OB_ERR_UNEXPECTED;
-      // start_err makes an ABI drift distinguishable from a busy port; ETLS
-      // means the wallet cert/key/ca failed to load — startup fails rather
-      // than serving cleartext on a port configured for TLS.
+      // start_err distinguishes the failure cause; ETLS means the wallet
+      // cert/key/ca failed to load — startup fails rather than serving
+      // cleartext on a port configured for TLS.
       LOG_WARN("nio_start failed", K(ret), K(port), K(start_err),
                K(disable_tcp), K(use_tls));
     } else {
@@ -176,8 +170,6 @@ int ObSqlNioServer::set_thread_count(const int thread_num)
   int ret = OB_SUCCESS;
   if (thread_num != n_thread_) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("changing Rust SQL-NIO thread count requires observer restart",
-             K(ret), K(thread_num), K(n_thread_));
   }
   return ret;
 }
@@ -197,7 +189,7 @@ void ObSqlNioServer::wait()
 
 void ObSqlNioServer::destroy()
 {
-  nio_reactor *reactor = NULL;
+  NioReactor *reactor = NULL;
   {
     lib::ObMutexGuard guard(reactor_lock_);
     reactor = reactor_;

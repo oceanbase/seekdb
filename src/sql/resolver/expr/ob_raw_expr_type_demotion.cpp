@@ -180,7 +180,6 @@ int ObRawExprTypeDemotion::init_query_ctx_flags(bool &disabled)
   ObExecContext *exec_ctx = NULL;
   if (OB_ISNULL(session_) || OB_ISNULL(expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session or expr factory is null", K(ret), KP(session_), KP(expr_factory_));
   } else if (OB_ISNULL(exec_ctx = const_cast<ObExecContext *>(session_->get_cur_exec_ctx()))
           || OB_ISNULL(exec_ctx->get_sql_ctx())
           || OB_ISNULL(exec_ctx->get_physical_plan_ctx())
@@ -277,11 +276,9 @@ int ObRawExprTypeDemotion::demote_type_common_comparison(ObOpRawExpr &expr)
   const bool is_range_cmp = IS_RANGE_CMP_OP(expr.get_expr_type());
   if (OB_UNLIKELY(2 != expr.get_param_count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr child count mismatch", K(ret), K(expr));
   } else if (OB_ISNULL(left = expr.get_param_expr(0)) ||
              OB_ISNULL(right = expr.get_param_expr(1))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param expr is null", K(ret), KP(left), KP(right));
   } else if (T_OP_ROW != left->get_expr_type() && T_OP_ROW != right->get_expr_type()) {
     // scalar comparison
     const ObColumnRefRawExpr *column_ref = NULL;
@@ -325,7 +322,6 @@ int ObRawExprTypeDemotion::extract_cmp_expr_pair(const ObRawExpr *left,
   // that satisfy these conditions.
   if (OB_ISNULL(left) || OB_ISNULL(right)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected expr input", K(ret), KP(left), KP(right));
   } else {
     constant_expr_idx = 0;
     column_ref = NULL;
@@ -360,7 +356,6 @@ int ObRawExprTypeDemotion::try_demote_constant_type(const ObColumnRefRawExpr &co
     // skip to process the exprs
   } else if (OB_ISNULL(exec_ctx = const_cast<ObExecContext *>(session_->get_cur_exec_ctx()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null argument", K(ret));
   } else if (OB_FAIL(ObRawExprUtils::build_demote_cast_expr(*expr_factory_,
                                                             session_,
                                                             T_FUN_SYS_DEMOTE_CAST,
@@ -376,7 +371,6 @@ int ObRawExprTypeDemotion::try_demote_constant_type(const ObColumnRefRawExpr &co
     if (OB_ISNULL(plan_ctx = exec_ctx->get_physical_plan_ctx()) ||
         OB_ISNULL(exec_ctx->get_sql_ctx())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("plan ctx is NULL", K(ret));
     } else if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(exec_ctx,
                                                                  demote_cast_expr,
                                                                  val,
@@ -414,11 +408,9 @@ int ObRawExprTypeDemotion::demote_type_in_or_not_in(ObOpRawExpr &expr)
   const ObRawExpr *right = NULL;
   if (OB_UNLIKELY(2 != expr.get_param_count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr child count mismatch", K(ret), K(expr));
   } else if (OB_ISNULL(left = expr.get_param_expr(0)) ||
              OB_ISNULL(right = expr.get_param_expr(1))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param expr is null", K(ret), KP(left), KP(right));
   } else if (T_OP_ROW != right->get_expr_type()) {
     // if in list is not op_row, skip type demotion
   } else if (T_REF_COLUMN == left->get_expr_type()) {
@@ -430,7 +422,6 @@ int ObRawExprTypeDemotion::demote_type_in_or_not_in(ObOpRawExpr &expr)
       const ObConstRawExpr* const_value = NULL;
       if (OB_ISNULL(in_item = in_list->get_param_expr(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null expr", K(ret), K(i));
       } else if (!in_item->is_static_const_expr()) {
         // expr does not satisfy the constant condition, do nothing
       } else if (FALSE_IT(const_value = static_cast<const ObConstRawExpr*>(in_item))) {
@@ -445,7 +436,6 @@ int ObRawExprTypeDemotion::demote_type_in_or_not_in(ObOpRawExpr &expr)
     for (int64_t l_idx = 0; OB_SUCC(ret) && l_idx < left_op_row->get_param_count(); ++l_idx) {
       if (OB_ISNULL(left_op_row->get_param_expr(l_idx))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("expr is null", K(ret));
       } else if (T_REF_COLUMN == left_op_row->get_param_expr(l_idx)->get_expr_type()) {
         // Type demotion occurs only when the expression on the left side is column_ref.
         const ObColumnRefRawExpr *column_ref =
@@ -456,12 +446,10 @@ int ObRawExprTypeDemotion::demote_type_in_or_not_in(ObOpRawExpr &expr)
           ObRawExpr *right_raw_expr = in_list->get_param_expr(r_idx);
           if (OB_ISNULL(right_raw_expr)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("expr is null", K(ret));
           } else if (T_OP_ROW == right_raw_expr->get_expr_type()) {
             ObOpRawExpr *right_op_row = static_cast<ObOpRawExpr *>(right_raw_expr);
             if (OB_ISNULL(right_op_row->get_param_expr(l_idx))) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("expr is null", K(ret));
             } else if (right_op_row->get_param_expr(l_idx)->is_static_const_expr()) {
               ObConstRawExpr* const_value =
                 static_cast<ObConstRawExpr*>(right_op_row->get_param_expr(l_idx));
@@ -513,7 +501,6 @@ int ObRawExprTypeDemotion::add_range_placement_constraint(
   } else if (OB_FAIL(equal_expr->formalize(session_))) {
   } else if (OB_UNLIKELY(!equal_expr->is_static_const_expr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pre calculable expr is expected here", K(ret));
   } else {
     ObExprConstraint cons(equal_expr, PreCalcExprExpectResult::PRE_CALC_RESULT_TRUE);
     cons.ignore_const_check_ = false;

@@ -49,7 +49,6 @@ int ObExprLowerUpper::calc_result_type1(ObExprResType &type, ObExprResType &text
   const ObSQLSessionInfo *session = type_ctx.get_session();
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is NULL", K(ret));
   } else {
     if (ObTinyTextType == text.get_type()) {
       type.set_type(ObVarcharType);
@@ -81,16 +80,12 @@ int ObExprLowerUpper::calc_result_typeN(ObExprResType &type,
   const ObSQLSessionInfo *session = type_ctx.get_session();
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is NULL", K(ret));
   } else if (param_num <= 0) {
     ret = OB_ERR_NOT_ENOUGH_ARGS_FOR_FUN;
-    LOG_WARN("nls_lower/nls_upper require at least one parameter", K(ret), K(param_num));
   } else if (param_num > 2) {
     ret = OB_ERR_TOO_MANY_ARGS_FOR_FUN;
-    LOG_WARN("nls_lower/nls_upper require at most two parameters", K(ret), K(param_num));
   } else if (OB_ISNULL(texts)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(param_num), K(texts));
   } else {
     // Calculate based on the first parameter
     ObSEArray<ObExprResType*, 1, ObNullAllocator> param;
@@ -110,7 +105,6 @@ int ObExprLower::calc(const ObCollationType cs_type, char *src, int32_t src_len,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(src) || OB_ISNULL(dst)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("src or dst is null", K(ret));
   } else {
     out_len = static_cast<int32_t>(ObCharset::casedn(cs_type, src, src_len, dst, dst_len));
   }
@@ -135,7 +129,6 @@ int ObExprUpper::calc(const ObCollationType cs_type, char *src, int32_t src_len,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(src) || OB_ISNULL(dst)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("src or dst is null", K(ret));
   } else {
     out_len = static_cast<int32_t>(ObCharset::caseup(cs_type, src, src_len, dst, dst_len));
   }
@@ -164,14 +157,11 @@ int ObExprLowerUpper::cg_expr_common(ObExprCGCtx &op_cg_ctx,
   ObObjType text_type = ObMaxType;
   if (rt_expr.arg_cnt_ != 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("lower/upper expr should have one param", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of lower/upper expr is null", K(ret), K(rt_expr.args_));
   } else if (FALSE_IT(text_type = rt_expr.args_[0]->datum_meta_.type_)) {
   } else if (ObVarcharType != text_type && ObLongTextType != text_type) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(text_type), K(ret));
   }
   return ret;
 }
@@ -236,7 +226,6 @@ int ObExprLowerUpper::calc_common(const ObExpr &expr, ObEvalCtx &ctx,
       str_result.reset();
     } else if (OB_UNLIKELY(!ObCharset::is_valid_collation(cs_type))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("charset is null", K(ret), K(cs_type));
     } else if (FALSE_IT(multiply = (lower ? ObCharset::get_charset(cs_type)->casedn_multiply
                                           : ObCharset::get_charset(cs_type)->caseup_multiply))) {
     } else if (!ob_is_text_tc(text_meta.type_)) {
@@ -262,7 +251,6 @@ int ObExprLowerUpper::calc_common(const ObExpr &expr, ObEvalCtx &ctx,
       int32_t buf_len = 0;
       if (OB_UNLIKELY(!ObCharset::is_valid_collation(cs_type))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("charset is null", K(ret), K(cs_type));
       } else if (OB_FAIL(ObTextStringHelper::build_text_iter(
                      src_iter, ctx.exec_ctx_, &calc_alloc))) {
       } else if (OB_FAIL(src_iter.get_byte_len(src_byte_len))) {
@@ -297,7 +285,6 @@ int ObExprLowerUpper::calc_common(const ObExpr &expr, ObEvalCtx &ctx,
         } else if (state != TEXTSTRING_ITER_NEXT && state != TEXTSTRING_ITER_END) {
           ret = (src_iter.get_inner_ret() != OB_SUCCESS) ? 
                 src_iter.get_inner_ret() : OB_INVALID_DATA;
-          LOG_WARN("iter state invalid", K(ret), K(state), K(src_iter)); 
         } else {
           output_result.get_result_buffer(str_result);
         }

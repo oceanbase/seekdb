@@ -28,10 +28,8 @@ int ObLSStorageClogHandler::init(ObLS *ls)
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObLSReservedSnapshotMgr is inited", K(ret), KP(ls));
   } else if (OB_ISNULL(ls)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(ls));
   } else {
     ls_ = ls;
     is_inited_ = true;
@@ -58,13 +56,11 @@ int ObLSStorageClogHandler::replay(
   int64_t pos = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret), K_(is_inited));
   } else if (OB_UNLIKELY(nullptr == buffer
       || nbytes <= 0
       || !lsn.is_valid()
       || !scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(buffer), K(nbytes), K(lsn), K(scn));
   } else if (FALSE_IT(buf = static_cast<const char *>(buffer))) {
   } else if (OB_FAIL(base_header.deserialize(buf, nbytes, pos))) {
   } else if (OB_FAIL(inner_replay(base_header, scn, buf, nbytes, pos))) {
@@ -82,10 +78,8 @@ int ObLSResvSnapClogHandler::inner_replay(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(pos < 0 || buffer_size <= 0 || pos > buffer_size)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(pos), K(buffer_size));
   } else if (ObLogBaseType::RESERVED_SNAPSHOT_LOG_BASE_TYPE != base_header.get_log_type()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("log header is not valid", K(ret), K(base_header));
   } else if (OB_FAIL(ls_->replay_reserved_snapshot_log(scn, buffer, buffer_size, pos))) {
   }
   return ret;
@@ -106,10 +100,8 @@ int ObMediumCompactionClogHandler::inner_replay(
 
   if (OB_UNLIKELY(pos < 0 || buffer_size <= 0 || pos > buffer_size)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(pos), K(buffer_size));
   } else if (ObLogBaseType::MEDIUM_COMPACTION_LOG_BASE_TYPE != base_header.get_log_type()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("log header is not valid", K(ret), K(base_header));
   } else if (OB_FAIL(tablet_id.deserialize(buffer, buffer_size, new_pos))) {
   } else if (OB_FAIL(ls_->replay_get_tablet(tablet_id, scn, is_update_mds_table, handle))) {
     if (OB_OBSOLETE_CLOG_NEED_SKIP == ret) {
@@ -119,7 +111,6 @@ int ObMediumCompactionClogHandler::inner_replay(
       ret = OB_EAGAIN;
       LOG_INFO("retry get tablet for timeout error", K(ret), K(tablet_id), K(scn));
     } else {
-      LOG_WARN("failed to get tablet", K(ret), K(tablet_id), K(scn));
     }
   } else if (OB_FAIL(handle.get_obj()->replay_medium_compaction_clog(scn, buffer, buffer_size, new_pos))) {
   }

@@ -58,20 +58,17 @@ int ObEqualAnalysis::get_expr_idx(ObRawExpr *expr, int64_t &expr_idx)
   if (OB_SUCC(expr_idx_map_.get_refactored(key, expr_idx))) {
     /*do nothing*/
   } else if (OB_HASH_NOT_EXIST != ret) {
-    LOG_WARN("failed to get from hash map", K(ret), K(expr_idx));
   } else {
     ret = OB_SUCCESS;
     expr_idx = expr_idx_map_.size();
     if (OB_FAIL(expr_idx_map_.set_refactored(key, expr_idx))) {
       expr_idx = -1;
-      LOG_WARN("set expr index to column set failed", K(ret), K(expr_idx));
     } else if (OB_FAIL(parent_idx_.push_back(expr_idx))) {
     } else if (OB_FAIL(exprs_.push_back(expr))) {
     }
   }
   if (OB_SUCC(ret) && expr_idx < 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected idx", K(ret));
   }
   return ret;
 }
@@ -83,13 +80,11 @@ int ObEqualAnalysis::find_root_idx(const int64_t expr_idx, int64_t &root_idx)
   root_idx = expr_idx;
   if (OB_UNLIKELY(root_idx < 0 || root_idx >= parent_idx_.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid expr idx", K(ret), K(root_idx));
   }
   while (OB_SUCC(ret) && parent_idx_.at(root_idx) != root_idx) {
     parent_idx = parent_idx_.at(root_idx);
     if (OB_UNLIKELY(parent_idx < 0 || parent_idx >= parent_idx_.count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid expr idx", K(ret), K(parent_idx));
     } else {
       parent_idx_.at(root_idx) = parent_idx_.at(parent_idx);
       root_idx = parent_idx;
@@ -123,7 +118,6 @@ int ObEqualAnalysis::feed_where_expr(ObRawExpr *expr)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret));
   } else if (T_OP_EQ == expr->get_expr_type()) {
     /// only add pred like `c1 = c2`
     ObOpRawExpr *eq_expr = static_cast<ObOpRawExpr *>(expr);
@@ -149,7 +143,6 @@ int ObEqualAnalysis::feed_equal_sets(const EqualSets &input_equal_sets)
       ObRawExpr *expr;
       if (OB_ISNULL(expr = eset->at(j))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null expr", K(ret));
       } else if (OB_FAIL(get_expr_idx(expr, expr_idx))) {
       } else if (OB_FAIL(expr_idx_array.push_back(expr_idx))) {
       } else {
@@ -190,7 +183,6 @@ int ObEqualAnalysis::add_equal_cond(ObOpRawExpr &expr)
   } else if (OB_FAIL(get_expr_idx(expr.get_param_expr(1), r_expr_idx))) {
   } else if (OB_UNLIKELY(l_expr_idx == r_expr_idx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr idx should not be same", K(ret), K(l_expr_idx), K(r_expr_idx), K(expr));
   } else if (OB_FAIL(union_expr(l_expr_idx, r_expr_idx))) {
   }
   return ret;
@@ -203,16 +195,13 @@ int ObEqualAnalysis::get_equal_sets(ObIAllocator *alloc, EqualSets &equal_sets) 
   ObSEArray<int64_t, 4> set_count_list;
   if (OB_ISNULL(alloc)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   } else if (OB_UNLIKELY(exprs_.count() != parent_idx_.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected count", K(ret), K(exprs_.count()), K(parent_idx_.count()));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < parent_idx_.count(); ++i) {
     int64_t root_idx = parent_idx_.at(i);
     if (OB_UNLIKELY(root_idx < 0)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected root_idx", K(ret), K(root_idx));
     } else if (root_idx >= union_set_map.count()) {
       int64_t old_count = union_set_map.count();
       if (OB_FAIL(union_set_map.prepare_allocate(root_idx + 1))) {
@@ -241,7 +230,6 @@ int ObEqualAnalysis::get_equal_sets(ObIAllocator *alloc, EqualSets &equal_sets) 
       LOG_WARN("unexpected set count", K(set_count_list), K(parent_idx_));
     } else if (OB_ISNULL(ptr = alloc->alloc(sizeof(ObRawExprSet)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("no memory to create ObRawExprSet", K(ret));
     } else {
       expr_set = new(ptr) ObRawExprSet();
       expr_set->set_allocator(alloc);
@@ -255,10 +243,8 @@ int ObEqualAnalysis::get_equal_sets(ObIAllocator *alloc, EqualSets &equal_sets) 
     int64_t set_idx = union_set_map.at(root_idx);
     if (OB_UNLIKELY(set_idx < 0 || set_idx >= equal_sets.count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected set_idx", K(ret), K(root_idx));
     } else if (OB_ISNULL(equal_sets.at(set_idx))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null equal set", K(ret));
     } else if (OB_FAIL(equal_sets.at(set_idx)->push_back(exprs_.at(i)))) {
     }
   }
@@ -283,7 +269,6 @@ int ObEqualAnalysis::compute_equal_set(ObIAllocator *allocator,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("allocator is null", K(ret));
   } else if (eset_conditions.count() > 0) {
     ObEqualAnalysis ana;
     if (OB_FAIL(ana.init())) {
@@ -309,7 +294,6 @@ int ObEqualAnalysis::compute_equal_set(ObIAllocator *allocator,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("allocator is null", K(ret));
   } else if (eset_conditions.count() > 0) {
     ObEqualAnalysis ana;
     if (OB_FAIL(ana.init())) {
@@ -337,7 +321,6 @@ int ObEqualAnalysis::compute_equal_set(ObIAllocator *allocator,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("allocator is null", K(ret));
   } else {
     ObEqualAnalysis ana;
     if (OB_FAIL(ana.init())) {
@@ -358,7 +341,6 @@ int ObEqualAnalysis::merge_equal_set(ObIAllocator *allocator,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("allocator is null", K(ret));
   } else {
     ObEqualAnalysis ana;
     if (OB_FAIL(ana.init())) {

@@ -136,10 +136,8 @@ int ObPxDistTransmitOp::do_transmit()
   if (OB_ISNULL(ctx_.get_physical_plan_ctx())
       || OB_ISNULL(ctx_.get_physical_plan_ctx()->get_phy_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("phy plan is not inited", K(ret), KP(ctx_.get_physical_plan_ctx()));
   } else if (ObPQDistributeMethod::LOCAL == MY_SPEC.dist_method_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid PX distribution method",  K(ret), K(MY_SPEC.dist_method_));
   } else if (ObPQDistributeMethod::BROADCAST == MY_SPEC.dist_method_) {
     if (OB_FAIL(chs_agent_.init(
         dfc_,
@@ -201,7 +199,6 @@ int ObPxDistTransmitOp::do_transmit()
       default: {
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "this transmit distribution method");
-        LOG_WARN("distribution method not supported right now", K(ret), K(MY_SPEC.dist_method_));
       }
     }
   }
@@ -219,8 +216,6 @@ int ObPxDistTransmitOp::do_hash_dist()
                                              true);
     if (MY_SPEC.is_wf_hybrid_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected status: MY_SPEC.is_wf_hybrid_ is true",
-               K(ret), K(MY_SPEC.is_wf_hybrid_));
     } else if (OB_FAIL(send_rows<ObSliceIdxCalc::NULL_AWARE_HASH>(slice_id_calc))) {
     }
   } else if (MY_SPEC.is_wf_hybrid_) {
@@ -360,14 +355,11 @@ int ObPxDistTransmitOp::do_sm_broadcast_dist()
   
   if (OB_ISNULL(trans_input = static_cast<ObPxDistTransmitOpInput *>(get_input()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("input is null", K(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
       schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( repart_ref_table_id, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_SCHEMA_ERROR;
-    LOG_WARN("table schema is null. repart sharding requires a table in dfo",
-             K(repart_ref_table_id), K(ret));
   } else if (OB_FAIL(trans_input->get_part_ch_map(part_ch_info_,
                                           ctx_.get_physical_plan_ctx()->get_timeout_timestamp()))) {
   } else {
@@ -396,15 +388,12 @@ int ObPxDistTransmitOp::do_sm_pkey_hash_dist()
   uint64_t repart_ref_table_id = MY_SPEC.repartition_ref_table_id_;
   if (OB_ISNULL(trans_input = static_cast<ObPxDistTransmitOpInput *>(get_input()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("input is null", K(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
       schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema(
     repart_ref_table_id, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_SCHEMA_ERROR;
-    LOG_WARN("table schema is null. repart sharding requires a table in dfo",
-             K(repart_ref_table_id), K(ret));
   } else if (OB_FAIL(trans_input->get_part_ch_map(part_ch_info_,
                                           ctx_.get_physical_plan_ctx()->get_timeout_timestamp()))) {
   } else {
@@ -463,7 +452,6 @@ int ObPxDistTransmitOp::build_ds_piece_msg(int64_t expected_range_count,
     OZ(build_object_sample_piece_msg(expected_range_count, piece_msg));
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected sample type", K(ret));
   }
   return ret;
 }
@@ -524,7 +512,6 @@ int ObPxDistTransmitSpec::register_to_datahub(ObExecContext &ctx) const
   } else if (ObPQDistributeMethod::RANGE == dist_method_) {
     if (OB_ISNULL(ctx.get_sqc_handler())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null unexpected", K(ret));
     } else {
       void *buf = ctx.get_allocator().alloc(sizeof(ObDynamicSampleWholeMsg::WholeMsgProvider));
       if (OB_ISNULL(buf)) {
@@ -538,7 +525,6 @@ int ObPxDistTransmitSpec::register_to_datahub(ObExecContext &ctx) const
           char *chunk_buf = (char *)ctx.get_allocator().alloc(sizeof(ObChunkDatumStore));
           if (OB_ISNULL(chunk_buf)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("allocate memory failed", K(ret));
           } else {
             ObChunkDatumStore *sample_store = new (chunk_buf) ObChunkDatumStore("DYN_SAMPLE_CTX");
             if (OB_FAIL(sample_store->init(0,
@@ -768,7 +754,6 @@ int ObPxDistTransmitOp::setup_sampled_rows_output()
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected sample type", K(ret), K(MY_SPEC.sample_type_));
   }
 
   if (OB_SUCC(ret) && !sampled_rows2transmit_.empty()) {

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX TRANS
 
 #include "ob_tx_ctx.h"
+#include "share/ob_debug_sync.h"
 #include "share/rc/ob_server_runtime.h"
 #include "ob_tx_redo_submitter.h"
 #include "storage/tx/ob_trans_service.h"
@@ -1393,10 +1394,18 @@ int ObTxCtx::compensate_abort_log_()
   } else if(OB_FALSE_IT(runtime_state_.set_force_abort())) {
 
   } else if (OB_FAIL(submit_log_impl_(ObTxLogType::TX_ABORT_LOG))) {
+    const int submit_ret = ret;
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(restart_commit_retry_timer_())) {
+      TRANS_LOG(WARN, "restart abort log retry timer failed", KR(ret), KR(tmp_ret), K(*this));
+    } else if (OB_TX_NOLOGCB == ret) {
+      // Callback exhaustion is temporary. The abort has been accepted and
+      // handle_timeout will resubmit its log once a callback becomes available.
+      // Let explicit rollback wait for that decision instead of returning the
+      // internal flow-control error to the client.
+      ret = OB_SUCCESS;
     }
-    TRANS_LOG(WARN, "submit abort log failed", KR(ret), K(*this));
+    TRANS_LOG(WARN, "submit abort log failed", KR(submit_ret), KR(ret), K(*this));
   } else {
   }
   TRANS_LOG(INFO, "compensate abort log", K(ret), KPC(this));
@@ -1586,6 +1595,9 @@ int ObTxCtx::on_success(ObTxLogCb *log_cb)
         } else {
           invoke_on_succ_cnt++;
           const int64_t before_invoke_ts = ObTimeUtility::fast_current_time();
+          if (ObTxLogType::TX_ABORT_LOG == cur_cb->get_last_log_type()) {
+            DEBUG_SYNC(BEFORE_TX_ABORT_DECISION);
+          }
           if (OB_FAIL(on_success_ops_(cur_cb))) {
             TRANS_LOG(ERROR, "invoke on_success_ops failed", K(ret), K(*this), K(*cur_cb));
             if (OB_SUCCESS == save_ret) {
@@ -2645,6 +2657,7 @@ int ObTxCtx::submit_commit_log_()
   return ret;
 }
 
+ERRSIM_POINT_DEF(ERRSIM_TX_ABORT_LOG_CALLBACK_ERROR)
 int ObTxCtx::submit_abort_log_()
 {
   int ret = OB_SUCCESS;
@@ -2687,7 +2700,7 @@ int ObTxCtx::submit_abort_log_()
     TRANS_LOG(ERROR, "cb arg array is empty", K(ret), K(log_block));
     return_log_cb_(log_cb);
     log_cb = NULL;
-  } else if (OB_FAIL(prepare_log_cb_(log_cb))) {
+  } else if (OB_FAIL(OB_E(ERRSIM_TX_ABORT_LOG_CALLBACK_ERROR) prepare_log_cb_(log_cb))) {
     if (OB_UNLIKELY(OB_TX_NOLOGCB != ret)) {
       TRANS_LOG(WARN, "get log cb failed", KR(ret), K(*this));
     }
@@ -6072,7 +6085,6 @@ int ObTxCtx::recover_tx_ctx_from_tx_op_(ObTxOpVector &tx_op_list, const SCN repl
   }
   ObTxBufferNodeArray _unused_;
   if (FAILEDx(deep_copy_mds_array_(mds_array, _unused_))) {
-    TRANS_LOG(WARN, "deep copy mds array failed", KR(ret), KPC(this));
   }
   int64_t mds_max_register_no = 0;
   if (mds_array.count() > 0) {

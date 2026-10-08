@@ -132,15 +132,12 @@ int ObSyncCmdDriver::response_result(ObMySQLResultSet &result)
     }
     // open failed, decide whether to retry
     retry_ctrl_.test_and_save_retry_state(gctx_, ctx_, result, ret, cli_ret);
-    LOG_WARN("result set open failed, check if need retry",
-             K(ret), K(cli_ret), K(retry_ctrl_.need_retry()));
     ret = cli_ret;
   } else if (result.is_with_rows()) {
     if (!result.is_pl_stmt(result.get_stmt_type())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("Not SELECT, should not have any row!!!", K(ret));
     } else if (OB_FAIL(response_query_result(result))) {
-      LOG_WARN("response query result fail", K(ret));
       free_output_row(result);
       int cret = result.close();
       if (cret != OB_SUCCESS) {
@@ -183,7 +180,6 @@ int ObSyncCmdDriver::response_result(ObMySQLResultSet &result)
       }
     } else {
       if (need_send_eof && OB_FAIL(sender_.response_packet(eofp))) {
-        LOG_WARN("response packet fail", K(ret));
       }
     }
   } else { /*do nothing*/ }
@@ -224,7 +220,6 @@ int ObSyncCmdDriver::response_query_result(ObMySQLResultSet &result)
   } else if (OB_FAIL(response_query_header(result, result.has_more_result(), true))) {
   } else if (OB_ISNULL(ctx_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session info is null", K(ret));
   } else {
     ObCharsetType charset_type = CHARSET_INVALID;
     
@@ -241,15 +236,12 @@ int ObSyncCmdDriver::response_query_result(ObMySQLResultSet &result)
         OZ(convert_string_value_charset(value, result, charset_type));
       } else if (ob_is_text_tc(value.get_type())
                 && OB_FAIL(convert_text_value_charset(value, result, charset_type))) {
-        LOG_WARN("convert text value charset failed", K(ret));
       }
       if (OB_FAIL(ret)) {
       } else if ((value.is_lob() || value.is_json() || value.is_geometry())
                   && OB_FAIL(process_lob_locator_results(value, result))) {
-        LOG_WARN("convert lob locator to longtext failed", K(ret));
       } else if ((value.is_collection_sql_type() || value.is_geometry()) &&
                  OB_FAIL(ObSqlUdtUtils::convert_result_for_client(value, result))) {
-        LOG_WARN("convert udt to client format failed", K(ret), K(value.get_udt_subschema_id()));
       }
     }
 

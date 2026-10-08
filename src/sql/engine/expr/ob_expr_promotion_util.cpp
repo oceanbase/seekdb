@@ -66,7 +66,6 @@ int ObExprPromotionUtil::get_calc_type(ObExprResType &type,
   if (OB_UNLIKELY(l_tc < ObNullTC || l_tc >= ObMaxTC || r_tc < ObNullTC || r_tc >= ObMaxTC
                   || OB_ISNULL(map))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("left / right tc out of range, or map array is null", K(ret), K(l_tc), K(r_tc));
   } else {
     type.set_type(map[l_tc][r_tc]);
   }

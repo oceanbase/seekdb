@@ -50,10 +50,8 @@ int ObExprArraySum::calc_result_type1(ObExprResType &type, ObExprResType &type1,
 
   if (OB_ISNULL(session = const_cast<ObSQLSessionInfo *>(type_ctx.get_session()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObSQLSessionInfo is null", K(ret));
   } else if (OB_ISNULL(exec_ctx = session->get_cur_exec_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObExecContext is null", K(ret));
   } else if (ob_is_null(type1.get_type())) {
     type.set_int();
   } else if (!ob_is_collection_sql_type(type1.get_type())) {
@@ -62,17 +60,14 @@ int ObExprArraySum::calc_result_type1(ObExprResType &type, ObExprResType &type1,
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type1.get_subschema_id(), coll_type))) {
   } else if (coll_type->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid collection type", K(ret), K(coll_type->type_id_));
   } else if (OB_FAIL(ObArrayExprUtils::get_array_element_type(exec_ctx, type1.get_subschema_id(),
                                                               src_elem_type, depth, is_vec))) {
   } else if (depth != 1) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "array_sum with multi-dimension array");
-    LOG_WARN("not supported array dimension", K(ret), K(depth));
   } else if (!ob_is_numeric_type(src_elem_type.get_obj_type())) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "array_sum with non-numeric element type");
-    LOG_WARN("not supported array data type", K(ret), K(src_elem_type.get_obj_type()));
   } else if (ob_is_integer_type(src_elem_type.get_obj_type())) {
     if (ob_is_unsigned_type(src_elem_type.get_obj_type())) {
       type.set_uint64();

@@ -70,7 +70,6 @@ int ObCacheObjectFactory::destroy_cache_obj(const bool is_leaked,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(lib_cache)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid null plan cache", K(ret));
   } else if (OB_FAIL(lib_cache->destroy_cache_obj(is_leaked, obj_id))) {
   }
   return ret;
@@ -83,7 +82,6 @@ int ObCacheObjGuard::force_early_release(ObPlanCache *plan_cache)
     // do nothing
   } else if (OB_ISNULL(plan_cache)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("is null", K(ret));
   } else {
     ObCacheObjectFactory::free(plan_cache, cache_obj_);
     cache_obj_ = NULL;

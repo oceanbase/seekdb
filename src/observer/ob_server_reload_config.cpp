@@ -50,7 +50,6 @@ int ObServerReloadConfig::operator()()
 
   if (!gctx_.is_inited()) {
     ret = tmp_ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("gctx not init", "gctx inited", gctx_.is_inited(), K(tmp_ret));
   } else {
     if (OB_TMP_FAIL(ObReloadConfig::operator()())) {
     }

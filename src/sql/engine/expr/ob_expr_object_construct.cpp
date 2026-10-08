@@ -63,7 +63,6 @@ int ObExprObjectConstruct::cg_expr(ObExprCGCtx &op_cg_ctx,
               = OB_NEWx(ObExprObjectConstructInfo, (&alloc), alloc, T_FUN_PL_OBJECT_CONSTRUCT);
   if (NULL == info) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret));
   } else {
     OZ(info->from_raw_expr(fun_sys));
     rt_expr.extra_info_ = info;
@@ -148,18 +147,14 @@ int ObExprObjectConstruct::eval_object_construct(const ObExpr &expr, ObEvalCtx &
      && OB_ISNULL(objs = static_cast<ObObj *>
         (ctx.exec_ctx_.get_allocator().alloc(expr.arg_cnt_ * sizeof(ObObj))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc mem for objs", K(ret));
   } else if (OB_FAIL(fill_obj_stack(expr, ctx, objs))) {
   } else if (expr.arg_cnt_ > 0 && OB_FAIL(check_types(ctx, objs, info->elem_types_, expr.arg_cnt_))) {
-    LOG_WARN("failed to check types", K(ret));
   } else if (info->rowsize_ != pl::ObRecordType::get_init_size(expr.arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("rowsize_ is not equel to input", K(ret), K(info->rowsize_), K(expr.arg_cnt_));
   } else if (OB_ISNULL(record
            = static_cast<pl::ObPLRecord*>
              (ctx.exec_ctx_.get_allocator().alloc(pl::ObRecordType::get_init_size(expr.arg_cnt_))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc memory", K(ret));
   } else {
     new(record)pl::ObPLRecord(info->udt_id_, expr.arg_cnt_);
     OZ (record->init_data(ctx.exec_ctx_.get_allocator(), false));

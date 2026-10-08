@@ -286,7 +286,6 @@ int ObAllVirtualDtlChannel::inner_get_next_row(ObNewRow *&row)
   ObVirtualChannelInfo ch_info;
   if (OB_FAIL(iter_.get_next_channel(ch_info))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("failed to get next channel", K(ret));
     } else {
       arena_allocator_.reuse();
     }

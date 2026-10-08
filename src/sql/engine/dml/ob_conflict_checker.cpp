@@ -51,7 +51,6 @@ OB_DEF_SERIALIZE(ObConflictCheckerCtdef)
     ObRowkeyCstCtdef *cst_ctdef = cst_ctdefs_.at(i);
     if (OB_ISNULL(cst_ctdef)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("constraint_info is nullptr", K(ret));
     }
     OB_UNIS_ENCODE(*cst_ctdef);
   }
@@ -80,7 +79,6 @@ OB_DEF_DESERIALIZE(ObConflictCheckerCtdef)
     ObRowkeyCstCtdef *cst_ctdef = cons_info_allocator.alloc();
     if (OB_ISNULL(cst_ctdef)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc constraint_info failed", K(ret));
     }
     OB_UNIS_DECODE(*cst_ctdef);
     OZ(cst_ctdefs_.push_back(cst_ctdef));
@@ -156,7 +154,6 @@ int ObConflictRowMapCtx::init_conflict_map(int64_t replace_row_cnt, int64_t rowk
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Allocator used to init conflict map is null", K(ret));
   } else {
     allocator_ = allocator;
   }
@@ -168,10 +165,8 @@ int ObConflictRowMapCtx::init_conflict_map(int64_t replace_row_cnt, int64_t rowk
     // map not created scenario requires creation, here it may be called repeatedly
     if (NULL == (rowkey_ = static_cast<ObRowkey*>(allocator_->alloc(sizeof(ObRowkey))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc memory", K(ret));
     } else if (NULL == (objs = static_cast<ObObj*>(allocator_->alloc(sizeof(ObObj)* rowkey_cnt)))){
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc memory", K(ret));
     } else if (OB_FAIL(conflict_map_.create(bucket_num, ObModIds::OB_HASH_BUCKET))) {
     } else {
       rowkey_->assign(objs, rowkey_cnt);
@@ -205,7 +200,6 @@ int ObConflictChecker::create_rowkey_check_hashset(int64_t replace_row_cnt)
     void *buf = allocator_.alloc(sizeof(ConflictRangeDistCtx));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret), "size", sizeof(SeRowkeyDistCtx));
     } else {
       conflict_range_dist_ctx = new (buf) ConflictRangeDistCtx();
       int64_t real_row_buckets = replace_row_cnt * 10;
@@ -287,7 +281,6 @@ int ObConflictChecker::build_rowkey(ObRowkey *&rowkey,
 
   if (OB_ISNULL(rowkey_info)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("rowkey info is null", K(ret));
   } else if (FALSE_IT(rowkey_cnt = rowkey_info->rowkey_expr_.count())) {
   } else if (OB_UNLIKELY(rowkey_info->rowkey_accuracys_.count() != rowkey_cnt)) {
     ret = OB_ERR_UNEXPECTED;
@@ -295,11 +288,9 @@ int ObConflictChecker::build_rowkey(ObRowkey *&rowkey,
              "accuracy_count", rowkey_info->rowkey_accuracys_.count());
   } else if (NULL == (rowkey = static_cast<ObRowkey*>(alloc.alloc(sizeof(ObRowkey))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret));
   } else if (NULL ==
       (objs = static_cast<ObObj*>(das_ref_.get_das_alloc().alloc(sizeof(ObObj)* rowkey_cnt)))){
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret));
   } else if (OB_FAIL(ObSQLUtils::clear_evaluated_flag(rowkey_info->calc_exprs_, eval_ctx_))) {
   } else if (OB_FAIL(get_tmp_string_buffer(tmp_string_buffer))) {
   }
@@ -313,7 +304,6 @@ int ObConflictChecker::build_rowkey(ObRowkey *&rowkey,
 
     if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("expr is null", K(ret), K(i));
     } else if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
     }
     // Here a shallow copy of datum is made, because at this point the datum comes from the data scanned out of the storage layer table_scan,
@@ -339,10 +329,8 @@ int ObConflictChecker::build_tmp_rowkey(ObRowkey *rowkey, ObRowkeyCstCtdef *rowk
   int ret = OB_SUCCESS;
   if (OB_ISNULL(rowkey)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("rowkey is null", K(ret));
   } else if (OB_ISNULL(rowkey_info)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("rowkey_info is null", K(ret));
   } else if (OB_UNLIKELY(rowkey_info->rowkey_accuracys_.count() != rowkey_info->rowkey_expr_.count())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("rowkey accuracy count does not match rowkey expression count", K(ret),
@@ -356,7 +344,6 @@ int ObConflictChecker::build_tmp_rowkey(ObRowkey *rowkey, ObRowkeyCstCtdef *rowk
 
     if (OB_ISNULL(obj_ptr)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("obj_ptr is null", K(ret));
     } else if (OB_FAIL(ObSQLUtils::clear_evaluated_flag(rowkey_info->calc_exprs_, eval_ctx_))) {
     } else if (OB_FAIL(get_tmp_string_buffer(tmp_string_buffer))) {
     }
@@ -367,7 +354,6 @@ int ObConflictChecker::build_tmp_rowkey(ObRowkey *rowkey, ObRowkeyCstCtdef *rowk
       const ObAccuracy &col_accuracy = rowkey_info->rowkey_accuracys_.at(i);
       if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("expr is null", K(ret), K(i));
       } else if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
       } else if (OB_FAIL(datum->to_obj(obj_ptr[i], col_obj_meta))) {
       } else if (OB_FAIL(ObDASUtils::reshape_storage_value(col_obj_meta,
@@ -390,10 +376,8 @@ int ObConflictChecker::build_base_conflict_map(
   bool is_duplicated = false;
   if (replace_row_cnt <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("replace_row_cnt is unexpected", K(ret), K(replace_row_cnt));
   } else if (OB_ISNULL(conflict_row)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("conflict_row is unexpected", K(ret));
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && !is_duplicated && i < checker_ctdef_.cst_ctdefs_.count(); ++i) {
@@ -401,7 +385,6 @@ int ObConflictChecker::build_base_conflict_map(
     if (OB_FAIL(build_rowkey(rowkey, checker_ctdef_.cst_ctdefs_.at(i)))) {
     } else if (OB_ISNULL(rowkey)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("rowkey is null", K(ret));
     } else {
       ObConflictValue constraint_value;
       constraint_value.baseline_datum_row_ = conflict_row;
@@ -419,7 +402,6 @@ int ObConflictChecker::build_base_conflict_map(
           ret = OB_SUCCESS;
         } else {
           // If the primary key is different, but there is a unique index that is the same, it is absolutely not as expected
-          LOG_WARN("set constraint key failed", K(ret), K(i));
         }
       }
       LOG_DEBUG("build base line conflict infos", K(ret), K(i),
@@ -452,7 +434,6 @@ int ObConflictChecker::check_duplicate_rowkey(const ObChunkDatumStore::StoredRow
     } else if (OB_FAIL(build_tmp_rowkey(constraint_key, rowkey_cst_ctdef))) {
     } else if (OB_FAIL(map_ctx.conflict_map_.get_refactored(*constraint_key, constraint_value))) {
       if (OB_HASH_NOT_EXIST != ret) {
-        LOG_WARN("get duplicated row from constraint contexts failed", K(ret), KPC(constraint_key));
       } else {
         ret = OB_SUCCESS;
       }
@@ -500,7 +481,6 @@ int ObConflictChecker::delete_old_row(const ObChunkDatumStore::StoredRow *replac
       constraint_value = const_cast<ObConflictValue*>(map_ctx.conflict_map_.get(*constraint_key));
       if (OB_ISNULL(constraint_value)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("constraint_value is unexpected", K(ret));
       } else {
         constraint_value->current_datum_row_ = NULL;
         constraint_value->new_row_source_ = from;
@@ -557,7 +537,6 @@ int ObConflictChecker::insert_new_row(const ObChunkDatumStore::StoredRow *new_ro
       if (OB_FAIL(build_rowkey(insert_rowkey, rowkey_cst_ctdef))) {
       } else if (OB_ISNULL(insert_rowkey)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("insert rowkey is null", K(ret), K(i), KPC(rowkey_cst_ctdef));
       } else if (OB_FAIL(map_ctx.conflict_map_.set_refactored(*insert_rowkey, new_constraint_value))) {
       } else {
       }
@@ -599,14 +578,11 @@ int ObConflictChecker::lock_row(const ObChunkDatumStore::StoredRow *lock_row)
       constraint_value = const_cast<ObConflictValue*>(map_ctx.conflict_map_.get(*constraint_key));
       if (OB_ISNULL(constraint_value)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("constraint_value is unexpected", K(ret));
       } else if (constraint_value->new_row_source_ == ObNewRowSource::FROM_SCAN) {
         if (constraint_value->current_datum_row_ != constraint_value->baseline_datum_row_) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("curr_datum_row is not equal with baseline_datum_row", K(ret), K(constraint_value));
         } else if (OB_ISNULL(constraint_value->baseline_datum_row_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("baseline_datum_row is null", K(ret), K(constraint_value));
         } else {
           constraint_value->new_row_source_ = ObNewRowSource::NEED_DO_LOCK;
         }
@@ -706,7 +682,6 @@ int ObConflictChecker::add_lookup_range_no_dup(storage::ObTableScanParam &scan_p
       } else {
       }
     } else {
-      LOG_WARN("check if rowkey item exists failed", K(ret));
     }
   } else if (OB_FAIL(add_var_to_array_no_dup(scan_param.key_ranges_, lookup_range))) {
   }
@@ -724,7 +699,6 @@ int ObConflictChecker::build_primary_table_lookup_das_task()
   } else if (OB_FAIL(get_das_scan_op(tablet_loc, das_scan_op))) {
   } else if (OB_ISNULL(das_scan_op)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("das_scan_op should be not null", K(ret));
   } else {
     storage::ObTableScanParam &scan_param = das_scan_op->get_scan_param();
     ObRowkey table_rowkey;
@@ -743,7 +717,6 @@ int ObConflictChecker::to_expr(const ObChunkDatumStore::StoredRow *replace_row)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(replace_row)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("replace_row is null", K(ret));
   } else if (OB_FAIL(replace_row->to_expr(checker_ctdef_.table_column_exprs_,
                                           eval_ctx_,
                                           checker_ctdef_.table_column_exprs_.count()))) {
@@ -762,7 +735,6 @@ int ObConflictChecker::calc_lookup_tablet_loc(ObDASTabletLoc *&tablet_loc)
     // data_table_rowkey_expr_ is column_ref expr
     if (OB_ISNULL(part_id_expr = checker_ctdef_.calc_part_id_expr_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("calc_part_id_expr_ is null", K(ret));
     } // Clear the eval flag used for partition calculation expression in back-table lookup
       else if (OB_FAIL(ObSQLUtils::clear_evaluated_flag(checker_ctdef_.part_id_dep_exprs_, eval_ctx_))) {
     } else if (OB_FAIL(ObExprCalcPartitionBase::calc_part_and_tablet_id(part_id_expr, eval_ctx_, partition_id, tablet_id))) {
@@ -804,7 +776,6 @@ int ObConflictChecker::build_data_table_range(ObNewRange &lookup_range, ObRowkey
   int64_t rowkey_cnt = checker_ctdef_.rowkey_count_;
   if (OB_ISNULL(buf = das_ref_.get_das_alloc().alloc(sizeof(ObObj) * rowkey_cnt))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate buffer failed", K(ret), K(rowkey_cnt));
   } else {
     obj_ptr = new(buf) ObObj[rowkey_cnt];
   }
@@ -815,11 +786,9 @@ int ObConflictChecker::build_data_table_range(ObNewRange &lookup_range, ObRowkey
     ObDatum *col_datum = nullptr;
     if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("expr in rowkey is nullptr", K(ret), K(i));
     } else if (OB_FAIL(expr->eval(eval_ctx_, col_datum))) {
     } else if (OB_ISNULL(col_datum)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("evaluated column datum in rowkey is nullptr", K(ret), K(i));
     } else if (OB_FAIL(col_datum->to_obj(tmp_obj, expr->obj_meta_, expr->obj_datum_map_))) {
     }
     // Here a deep copy needs to be done
@@ -869,11 +838,9 @@ int ObConflictChecker::get_next_row_from_data_table(DASOpResultIter &result_iter
       if (OB_ITER_END == ret) {
         if (OB_FAIL(result_iter.next_result())) {
           if (OB_ITER_END != ret) {
-            LOG_WARN("fetch next task failed", K(ret));
           }
         }
       } else {
-        LOG_WARN("get next row from das result failed", K(ret));
       }
     } else if (OB_FAIL(convert_exprs_to_stored_row(storage_output, conflict_row))) {
     } else {
@@ -912,17 +879,14 @@ int ObConflictChecker::extract_rowkey_info(const ObRowkeyCstCtdef *constraint_in
     LOG_WARN("unique_key_cnt is unexpected", K(unique_key_cnt), K(primary_rowkey_cnt), K(constraint_info));
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < unique_key_cnt; i++) {
     ObExpr *expr =  constraint_info->rowkey_expr_.at(i);
     if (OB_ISNULL(expr)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("expr is null", K(ret));
     } else if (OB_FAIL(expr->eval(eval_ctx_, r_datum))) {
     } else if (OB_ISNULL(r_datum)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("after eval r_datum is null", K(ret), K(expr));
     } else if (OB_FAIL(r_datum->to_obj(r_obj, expr->obj_meta_))) {
     } else if (OB_FAIL(r_obj.print_plain_str_literal(buf, buf_len - 1, pos, session->get_timezone_info()))) {
     } else if (i == unique_key_cnt - 1) {
@@ -944,7 +908,6 @@ int ObConflictChecker::get_primary_table_map(ObConflictRowMap *&primary_map)
   CK(conflict_map_array_.count() > 0)
   if (conflict_map_array_.count() <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("conflict map count must greater than 0", K(ret));
   } else {
     primary_map = &conflict_map_array_.at(0).conflict_map_;
   }
@@ -980,7 +943,6 @@ int ObConflictChecker::init_das_scan_rtdef()
   } else if (nullptr != checker_ctdef_.attach_spec_.attach_ctdef_) {
     if (OB_ISNULL(attach_rtinfo_ = OB_NEWx(ObDASAttachRtInfo, &allocator_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate das attach info", K(ret));
     } else if (OB_FAIL(init_attach_scan_rtdef(checker_ctdef_.attach_spec_.attach_ctdef_, attach_rtinfo_->attach_rtdef_))) {
     }
   }
@@ -995,7 +957,6 @@ int ObConflictChecker::init_attach_scan_rtdef(const ObDASBaseCtDef *attach_ctdef
   ObDASTaskFactory &das_factory = DAS_CTX(ctx).get_das_factory();
   if (OB_ISNULL(attach_ctdef)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("attach ctdef is nullptr", K(ret));
   } else if (OB_FAIL(das_factory.create_das_rtdef(attach_ctdef->op_type_, attach_rtdef))) {
   } else if (ObDASTaskFactory::is_attached(attach_ctdef->op_type_)) {
     attach_rtdef->ctdef_ = attach_ctdef;
@@ -1006,7 +967,6 @@ int ObConflictChecker::init_attach_scan_rtdef(const ObDASBaseCtDef *attach_ctdef
                                                            &ctx.get_allocator(),
                                                            attach_ctdef->children_cnt_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate child buf failed", K(ret), K(attach_ctdef->children_cnt_));
       }
       for (int i = 0; OB_SUCC(ret) && i < attach_ctdef->children_cnt_; ++i) {
         if (OB_FAIL(init_attach_scan_rtdef(attach_ctdef->children_[i], attach_rtdef->children_[i]))) {
@@ -1019,7 +979,6 @@ int ObConflictChecker::init_attach_scan_rtdef(const ObDASBaseCtDef *attach_ctdef
       attach_rtdef = &das_scan_rtdef_;
     } else if (attach_ctdef->op_type_ != DAS_OP_TABLE_SCAN) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("attach ctdef type is invalid", K(ret), K(attach_ctdef->op_type_));
     } else {
       ObPhysicalPlanCtx *plan_ctx = eval_ctx_.exec_ctx_.get_physical_plan_ctx();
       ObSQLSessionInfo *my_session = eval_ctx_.exec_ctx_.get_my_session();
@@ -1066,7 +1025,6 @@ int ObConflictChecker::attach_related_taskinfo(ObDASScanOp &target_op, ObDASBase
   int ret = OB_SUCCESS;
   if (OB_ISNULL(attach_rtdef) || OB_ISNULL(attach_rtdef->ctdef_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("attach rtdef is invalid", K(ret), KP(attach_rtdef), KP(attach_rtdef->ctdef_));
   } else if (attach_rtdef->op_type_ == DAS_OP_TABLE_SCAN) {
     const ObDASScanCtDef *scan_ctdef = static_cast<const ObDASScanCtDef*>(attach_rtdef->ctdef_);
     ObDASScanRtDef *scan_rtdef = static_cast<ObDASScanRtDef*>(attach_rtdef);
@@ -1075,9 +1033,6 @@ int ObConflictChecker::attach_related_taskinfo(ObDASScanOp &target_op, ObDASBase
         *target_op.get_tablet_loc(), table_loc->loc_meta_->ref_table_id_);
     if (OB_ISNULL(tablet_loc)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("related tablet loc is not found", K(ret),
-               KPC(target_op.get_tablet_loc()),
-               KPC(table_loc->loc_meta_));
     } else if (OB_FAIL(target_op.set_related_task_info(scan_ctdef,
                                                        scan_rtdef,
                                                        tablet_loc->tablet_id_))) {
@@ -1100,13 +1055,11 @@ int ObConflictChecker::collect_all_snapshot(transaction::ObTxReadSnapshot &snaps
   tablet_snapshot_maping.tablet_id_ = tablet_loc->tablet_id_;
   if (OB_ISNULL(tablet_loc)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   } else if (FALSE_IT(tablet_snapshot_maping.tablet_id_ = tablet_loc->tablet_id_)) {
     // do nothing
   } else if (OB_FAIL(tablet_snapshot_maping.snapshot_.assign(snapshot))) {
   } else if (OB_FAIL(has_exist_in_array(snapshot_maping_, tablet_snapshot_maping))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected duplicate snapshot_version", K(ret), K(tablet_snapshot_maping), K(snapshot_maping_));
   } else if (OB_FAIL(snapshot_maping_.push_back(tablet_snapshot_maping))) {
   } else {
   }
@@ -1152,17 +1105,13 @@ int ObConflictChecker::set_partition_snapshot_for_das_task(ObDASRef &das_ref)
       ObIDASTaskOp *das_op = *task_iter;
       if (OB_ISNULL(das_op)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null", K(ret));
       } else if (OB_ISNULL(snapshot = das_op->get_das_snapshot_opt_info().get_specify_snapshot())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null", K(ret), KPC(snapshot));
       } else if (OB_FAIL(get_snapshot_by_tablet(das_op->get_tablet_id(), founded, *snapshot))) {
       } else if (!founded) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to found snapshot", K(ret), K(das_op->get_tablet_id()), K(das_op->get_type()));
       } else if (!snapshot->is_valid()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("snapshot is invalid", K(ret), K(das_op->get_tablet_id()), K(das_op->get_type()));
       } else {
         LOG_TRACE("set specify snapshot for current das_task", KPC(snapshot),
             K(das_op->get_tablet_id()), K(das_op->get_type()));
@@ -1178,7 +1127,6 @@ int ObConflictRange::assign(const ObConflictRange &conflict_range)
   int ret = OB_SUCCESS;
   if (!conflict_range.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(conflict_range));
   } else {
     tablet_id_ = conflict_range.tablet_id_;
     rowkey_ = conflict_range.rowkey_;

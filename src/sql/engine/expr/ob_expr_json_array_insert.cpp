@@ -90,7 +90,6 @@ int ObExprJsonArrayInsert::eval_json_array_insert(const ObExpr &expr, ObEvalCtx 
 
   if (expr.datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_BIN) {
     ret = OB_ERR_INVALID_JSON_CHARSET;
-    LOG_WARN("invalid out put charset", K(ret), K(expr.datum_meta_.cs_type_));
   } else if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 0, j_base, is_null))) {
   }
 
@@ -117,7 +116,6 @@ int ObExprJsonArrayInsert::eval_json_array_insert(const ObExpr &expr, ObEvalCtx 
       } else if (j_path->path_node_cnt() == 0
           || j_path->last_path_node()->get_node_type() != JPN_ARRAY_CELL) {
         ret = OB_ERR_INVALID_JSON_PATH_ARRAY_CELL;
-        LOG_WARN("error, path illegal, last path isn't array member", K(ret), K(j_path_text));
       } else if (OB_FAIL(j_base->seek(*j_path, j_path->path_node_cnt() - 1, false, true, hit))) {
       } else if (hit.size() == 0) {
         // do nothing
@@ -128,7 +126,6 @@ int ObExprJsonArrayInsert::eval_json_array_insert(const ObExpr &expr, ObEvalCtx 
           ObIJsonBase *j_val = NULL;
           if (OB_FAIL(ObJsonExprHelper::get_json_val(expr, ctx, &temp_allocator, i+1, j_val))) {
             ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
-            LOG_WARN("failed: get_json_val", K(ret));
           } else {
             ObJsonArrayIndex array_index;
             if (OB_FAIL(path_node->get_first_array_index(j_pos_node->element_count(), array_index))) {

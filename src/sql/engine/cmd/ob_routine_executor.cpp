@@ -46,7 +46,6 @@ int ObCreateRoutineExecutor::execute(ObExecContext &ctx, ObCreateRoutineStmt &st
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
-    LOG_WARN("get task executor context failed", K(ret));
   } else if (OB_FAIL(query::serialize_root_service_call(
                  [&]{ return ctx.root_command_service().create_routine(crt_routine_arg); }))) {
   }
@@ -66,26 +65,20 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
   ObCallProcedureInfo *call_proc_info = NULL;
   if (OB_ISNULL(ctx.get_pl_engine()) || OB_ISNULL(ctx.get_output_row())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pl engine is NULL", K(ctx.get_pl_engine()), K(ret));
   } else if (OB_ISNULL(ctx.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("physical plan ctx is null", K(ret));
   } else if (OB_ISNULL(ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
   } else if (OB_ISNULL(ctx.get_sql_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql context is null", K(ret));
   } else if (OB_ISNULL(ctx.get_stmt_factory()) ||
              OB_ISNULL(ctx.get_stmt_factory()->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("query ctx is null", K(ret));
   } else if (OB_FAIL(ob_write_string(ctx.get_allocator(),
                                      ctx.get_my_session()->get_current_query_string(),
                                      ctx.get_stmt_factory()->get_query_ctx()->get_sql_stmt()))) {
   } else if (OB_ISNULL(call_proc_info = stmt.get_call_proc_info())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("call procedure info is null", K(ret));
   } else {
     ParamStore params( (ObWrapperAllocator(ctx.get_allocator())) );
     const share::schema::ObRoutineInfo *routine_info = NULL;
@@ -112,7 +105,6 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
         const ObSqlExpression *expr = call_proc_info->get_expressions().at(i);
         if (OB_ISNULL(expr)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("param expr NULL", K(i), K(ret));
         } else {
           param.reset();
           param.ObObj::reset();
@@ -125,7 +117,6 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
               const ObExprOperator *op = expr->get_expr_items().at(0).get_expr_operator();
               if (OB_ISNULL(op)) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("unexpected expr operator", K(ret));
               } else {
                 param.set_udt_id(op->get_result_type().get_expr_udt_id());
               }
@@ -152,7 +143,6 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
       int64_t param_cnt = ctx.get_physical_plan_ctx()->get_param_store().count();
       if (call_proc_info->get_param_cnt() != param_cnt) {
         ret = OB_ERR_SP_WRONG_ARG_NUM;
-        LOG_WARN("argument number not equal", K(call_proc_info->get_param_cnt()), K(param_cnt), K(ret));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < param_cnt; ++i) {
         LOG_DEBUG("params", "param", ctx.get_physical_plan_ctx()->get_param_store().at(i), K(i));
@@ -188,7 +178,6 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
             && OB_ISNULL(ctx.get_output_row()->cells_ = static_cast<ObObj *>(
                              ctx.get_allocator().alloc(sizeof(ObObj) * client_output_cnt)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to alloc obj array", K(client_output_cnt), K(ret));
         } else {
           int64_t out_idx = -1;    // index for out params
           int64_t c_out_idx = -1;  // index for out params which would be returned to client
@@ -225,17 +214,14 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
                   ObExprCtx expr_ctx;
                   if (expr->get_expr_items().count() < 2 || T_VARCHAR != expr->get_expr_items().at(1).get_item_type()) {
                     ret = OB_ERR_UNEXPECTED;
-                    LOG_WARN("Unexpected result expr", K(*expr), K(ret));
                   } else if (OB_FAIL(ObSQLUtils::wrap_expr_ctx(stmt.get_stmt_type(), ctx, ctx.get_allocator(), expr_ctx))) {
                   } else {
                     const ObString var_name = expr->get_expr_items().at(1).get_obj().get_string();
                     if (FAILEDx(ObVariableSetExecutor::set_user_variable(out_value, var_name, expr_ctx))) {
-                      LOG_WARN("set user variable failed", K(ret));
                     }
                   }
                 } else {
                   ret = OB_ERR_OUT_PARAM_NOT_BIND_VAR;
-                  LOG_WARN("output parameter not a bind variable", K(ret));
                 }
               } else {
                 ctx.get_physical_plan_ctx()->get_param_store_for_update().at(i) = out_value;
@@ -273,7 +259,6 @@ int ObDropRoutineExecutor::execute(ObExecContext &ctx, ObDropRoutineStmt &stmt)
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
-    LOG_WARN("get task executor context failed", K(ret));
   } else if (OB_FAIL(query::serialize_root_service_call(
                  [&]{ return ctx.root_command_service().drop_routine(drop_routine_arg); }))) {
   }
@@ -296,7 +281,6 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
-      LOG_WARN("get task executor context failed", K(ret));
     } else if (OB_FAIL(query::serialize_root_service_call(
                    [&]{ return ctx.root_command_service().alter_routine(alter_routine_arg); }))) {
     }
@@ -369,7 +353,6 @@ int ObAnonymousBlockExecutor::execute(ObExecContext &ctx, ObAnonymousBlockStmt &
       if (OB_ISNULL(ctx.get_output_row()->cells_ =
         static_cast<ObObj *>(ctx.get_allocator().alloc(sizeof(ObObj) * out_args.num_members())))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc obj array", K(ret), K(stmt.get_params()->count()));
       }
       CK (OB_NOT_NULL(ctx.get_field_columns()));
 
@@ -411,7 +394,6 @@ int ObAnonymousBlockExecutor::execute(ObExecContext &ctx, ObAnonymousBlockStmt &
           } else { // complex data type
             field.length_ = field.accuracy_.get_length();
             ret = OB_NOT_SUPPORTED;
-            LOG_WARN("anonymous out parameter type is not supported", K(ret), K(value));
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "anonymous complex out parameter");
           }
           if (need_push) {

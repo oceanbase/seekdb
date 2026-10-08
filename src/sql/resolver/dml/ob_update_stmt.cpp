@@ -41,7 +41,6 @@ int ObUpdateStmt::deep_copy_stmt_struct(ObIAllocator &allocator,
   const ObUpdateStmt &other = static_cast<const ObUpdateStmt &>(input);
   if (OB_UNLIKELY(get_stmt_type() != input.get_stmt_type())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt type does not match", K(ret));
   } else if (OB_FAIL(ObDelUpdStmt::deep_copy_stmt_struct(allocator,
                                                          expr_copier,
                                                          input))) {
@@ -81,13 +80,11 @@ int ObUpdateStmt::get_assign_values(ObIArray<ObRawExpr *> &exprs,
   for (int64_t i = 0; OB_SUCC(ret) && i < table_info_.count(); ++i) {
     if (OB_ISNULL(table_info_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else {
       for (int64_t j = 0; OB_SUCC(ret) && j < table_info_.at(i)->assignments_.count(); ++j) {
         const ObAssignment &assign = table_info_.at(i)->assignments_.at(j);
         if (OB_ISNULL(assign.expr_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("assgin expr is null", K(ret));
         } else if (assign.expr_->has_flag(CNT_ALIAS) && !with_vector_assgin) {
           /* do nothing */
         } else if (OB_FAIL(exprs.push_back(assign.expr_))) {
@@ -105,13 +102,11 @@ int ObUpdateStmt::get_vector_assign_values(ObQueryRefRawExpr *query_ref,
   int64_t vector_size = 0;
   if (OB_ISNULL(query_ref) || OB_ISNULL(query_ref->get_ref_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("query ref expr is null", K(ret), K(query_ref));
   } else {
     vector_size = query_ref->get_ref_stmt()->get_select_item_size();
     for (int64_t i = 0; OB_SUCC(ret) && i < table_info_.count(); ++i) {
       if (OB_ISNULL(table_info_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else {
         for (int64_t j = 0; OB_SUCC(ret) && j < table_info_.at(i)->assignments_.count(); ++j) {
           const ObAssignment &assign = table_info_.at(i)->assignments_.at(j);
@@ -123,10 +118,8 @@ int ObUpdateStmt::get_vector_assign_values(ObQueryRefRawExpr *query_ref,
             int64_t project_index = alias->get_project_index();
             if (project_index < 0 || project_index >= vector_size) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("project index is invalid", K(ret));
             } else if (assign_values.empty() &&
                        OB_FAIL(assign_values.prepare_allocate(vector_size))) {
-              LOG_WARN("failed to prepare allocate vector array", K(ret));
             } else {
               assign_values.at(project_index) = alias;
             }
@@ -145,7 +138,6 @@ int ObUpdateStmt::part_key_is_updated(bool &is_updated) const
   for (int64_t i = 0; OB_SUCC(ret) && i < table_info_.count(); i++) {
     if (OB_ISNULL(table_info_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(check_part_key_is_updated(table_info_.at(i)->assignments_,
                                                  is_updated))) {
     } else { /*do nothing*/ }
@@ -160,7 +152,6 @@ int ObUpdateStmt::get_assignments_exprs(ObIArray<ObRawExpr*> &exprs) const
     ObUpdateTableInfo* table_info = table_info_.at(i);
     if (OB_ISNULL(table_info))  {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null table info", K(ret));
     }
     for (int64_t j = 0; OB_SUCC(ret) && j < table_info->assignments_.count(); ++j) {
       if (OB_FAIL(exprs.push_back(table_info->assignments_.at(j).expr_))) {
@@ -193,7 +184,6 @@ int ObUpdateStmt::get_view_check_exprs(ObIArray<ObRawExpr*>& view_check_exprs) c
     ObUpdateTableInfo* table_info = table_info_.at(i);
     if (OB_ISNULL(table_info))  {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null table info", K(ret));
     } else if (OB_FAIL(append(view_check_exprs, table_info->view_check_exprs_))) {
     }
   }
@@ -206,12 +196,10 @@ int ObUpdateStmt::remove_table_item_dml_info(const TableItem* table)
   int64_t idx = 0;
   if (OB_ISNULL(table)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else {
     for (; idx < table_info_.count(); ++idx) {
       if (OB_ISNULL(table_info_.at(idx))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (table_info_.at(idx)->table_id_ == table->table_id_) {
         break;
       }
@@ -220,7 +208,6 @@ int ObUpdateStmt::remove_table_item_dml_info(const TableItem* table)
       // not find, do nothing
     } else if (table_info_.count() == 1) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("can not remove all dml table", K(ret));
     } else if (OB_FAIL(table_info_.remove(idx))) {
     }
   }
@@ -234,13 +221,11 @@ int ObUpdateStmt::remove_invalid_assignment()
     ObUpdateTableInfo* table_info = table_info_.at(i);
     if (OB_ISNULL(table_info)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else {
       for (int64_t j = table_info->assignments_.count() - 1; OB_SUCC(ret) && j >= 0; --j) {
         ObAssignment& assign = table_info->assignments_.at(j);
         if (OB_ISNULL(assign.column_expr_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret));
         } else if (!assign.column_expr_->is_const_expr()) {
           // do nothing
         } else if (OB_FAIL(table_info->assignments_.remove(j))) {

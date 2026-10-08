@@ -51,16 +51,12 @@ int ObSetPasswordExecutor::execute(ObExecContext &ctx, ObSetPasswordStmt &stmt)
   const int64_t FIX_MEMBER_CNT = 7;
   if (OB_ISNULL(session = ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is NULL", K(ret));
   } else if (OB_ISNULL(user_passwd = stmt.get_user_password())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("user_passwd is null", K(ret));
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
-    LOG_WARN("task_exec_ctx is null", K(ret));
   } else if (OB_UNLIKELY(FIX_MEMBER_CNT != user_passwd->count())) {
     ret = OB_ERR_UNEXPECTED;;
-    LOG_WARN("invalid set pwd stmt, wrong user passwd count", K(ret));
   } else {
     ObString user_name;
     ObString host_name;
@@ -80,7 +76,6 @@ int ObSetPasswordExecutor::execute(ObExecContext &ctx, ObSetPasswordStmt &stmt)
     } else if (OB_FAIL(user_passwd->get_string(6, x509_subject))) {
     } else if (OB_UNLIKELY(ObSSLType::SSL_TYPE_MAX == (ssl_type_enum = get_ssl_type_from_string(ssl_type)))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("known ssl_type", K(ssl_type), K(ret));
     } else {
       char enc_buf[ENC_BUF_LEN] = {0};
       ObSetPasswdArg arg;

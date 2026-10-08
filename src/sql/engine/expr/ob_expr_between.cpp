@@ -88,8 +88,6 @@ int ObExprBetween::cg_expr(ObExprCGCtx &expr_cg_ctx,
       OB_ISNULL(rt_expr.args_[0]) || OB_ISNULL(rt_expr.args_[1]) ||
       OB_ISNULL(rt_expr.args_[2]) || OB_ISNULL(expr_cg_ctx.allocator_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("rt_expr is invalid", K(ret), K(rt_expr.arg_cnt_), KP(rt_expr.args_),
-              KP(rt_expr.args_[0]), KP(rt_expr.args_[1]), KP(rt_expr.args_[2]));
   } else {
     DatumCmpFunc cmp_func_1 = NULL;  // left <= val
     DatumCmpFunc cmp_func_2 = NULL;  // val <= right
@@ -108,7 +106,6 @@ int ObExprBetween::cg_expr(ObExprCGCtx &expr_cg_ctx,
                                                         cmp_cs_type,
                                                         has_lob_header1))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get_datum_expr_cmp_func failed", K(ret), K(left_meta), K(val_meta), K(rt_expr));
     } else if (OB_ISNULL(cmp_func_2 = ObExprCmpFuncsHelper::get_datum_expr_cmp_func(
                                                         val_meta.type_, right_meta.type_,
                                                         val_meta.scale_, right_meta.scale_,
@@ -116,7 +113,6 @@ int ObExprBetween::cg_expr(ObExprCGCtx &expr_cg_ctx,
                                                         cmp_cs_type,
                                                         has_lob_header2))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get_datum_expr_cmp_func failed", K(ret), K(val_meta), K(right_meta), K(rt_expr));
     } else {
       rt_expr.eval_func_ = calc_between_expr;
     }
@@ -124,7 +120,6 @@ int ObExprBetween::cg_expr(ObExprCGCtx &expr_cg_ctx,
       if (OB_ISNULL(rt_expr.inner_functions_ = reinterpret_cast<void **>(
               expr_cg_ctx.allocator_->alloc(sizeof(DatumCmpFunc) * 2)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc memory for inner_functions_ failed", K(ret));
       } else {
         rt_expr.inner_func_cnt_ = 2;
         rt_expr.inner_functions_[0] = reinterpret_cast<void *>(cmp_func_1);

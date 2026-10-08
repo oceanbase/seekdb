@@ -127,6 +127,10 @@ function do_init
     echo_err "dependency initialization failed with status ${status}"
     return "${status}"
   fi
+  (
+    cd "${TOPDIR}/rust" &&
+      rustup toolchain install --no-self-update
+  ) || return $?
 
   end_time="$(date +%s)"
   elapsed=$((end_time - start_time))
@@ -194,6 +198,7 @@ function configure_cmake
       "-DCMAKE_TOOLCHAIN_FILE=${ndk_home}/build/cmake/android.toolchain.cmake"
       -DANDROID_ABI=arm64-v8a
       -DANDROID_PLATFORM=android-28
+      -DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON
     )
   fi
 

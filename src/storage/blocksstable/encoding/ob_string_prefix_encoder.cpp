@@ -46,14 +46,12 @@ int ObStringPrefixEncoder::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(ObIColumnEncoder::init(ctx, column_index, rows))) {
   } else {
     const ObObjTypeStoreClass sc = get_store_class_map()[
         ob_obj_type_class(column_type_.get_type())];
     if (OB_UNLIKELY(!is_string_encoding_valid(sc))) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not support type for string prefix", K(ret), K(sc), K_(column_index));
     }
     column_header_.type_ = type_;
     prefix_tree_ = ctx.prefix_tree_;
@@ -80,7 +78,6 @@ int ObStringPrefixEncoder::traverse(bool &suitable)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     suitable = true;
     prefix_tree_->reuse();
@@ -157,13 +154,10 @@ int ObStringPrefixEncoder::set_data_pos(const int64_t offset, const int64_t leng
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(meta_header_)) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("set data pos is called before store meta", K(ret));
   } else if (OB_UNLIKELY(offset < 0 || length < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(offset), K(length));
   } else {
     meta_header_->offset_ = static_cast<uint32_t>(offset);
     meta_header_->length_ = static_cast<uint32_t>(length);
@@ -176,10 +170,8 @@ int ObStringPrefixEncoder::get_var_length(const int64_t row_id, int64_t &length)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(0 > row_id || rows_->count() <= row_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(row_id));
   } else {
     ObMultiPrefixTree::CellNode &cnode = prefix_tree_->get_cell_nodes()[row_id];
     if (0 > cnode.len_) { // null or nope
@@ -211,7 +203,6 @@ int ObStringPrefixEncoder::store_meta(ObBufferWriter &buf_writer)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     bool hex_packing = hex_string_map_.can_packing();
     char *buf = buf_writer.current();
@@ -267,10 +258,8 @@ int ObStringPrefixEncoder::store_data(const int64_t row_id, ObBitStream &bs,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(0 > row_id || rows_->count() <= row_id || 0 > len)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(row_id), K(len));
   } else {
     const ObMultiPrefixTree::CellNode &cnode = prefix_tree_->get_cell_nodes()[row_id];
     const ObDatum &datum = *cnode.datum_;

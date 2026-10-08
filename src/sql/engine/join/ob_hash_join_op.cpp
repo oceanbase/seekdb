@@ -37,10 +37,8 @@ int ObHashJoinInput::sync_wait(ObExecContext &ctx, int64_t &sync_event, EventPre
   ObHashTableSharedTableInfo *shared_hj_info = reinterpret_cast<ObHashTableSharedTableInfo *>(shared_hj_info_);
   if (OB_ISNULL(shared_hj_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: shared hash join info is null", K(ret));
   } else if (OB_ISNULL(pred)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: pred is null", K(ret));
   } else {
     bool has_process = false;
     int64_t loop = 0;
@@ -73,9 +71,7 @@ int ObHashJoinInput::sync_wait(ObExecContext &ctx, int64_t &sync_event, EventPre
         // overwrite ret
         ObInterruptCode code = GET_INTERRUPT_CODE();
         ret = code.code_;
-        LOG_WARN("received a interrupt", K(code), K(ret));
       } else if (!ignore_interrupt && 0 == loop % 16 && OB_FAIL(ctx.fast_check_status())) {
-        LOG_WARN("failed to check status", K(ret));
       } else if (ATOMIC_LOAD(&sync_event) >= exit_cnt) {
         // timeout, and signal has done
         LOG_DEBUG("debug sync event", K(ret), K(lbt()), K(sync_event),
@@ -142,7 +138,6 @@ int ObHashJoinOp::PartHashJoinTable::init(ObIAllocator &alloc)
       if (OB_NOT_NULL(alloc_buf)) {
         alloc.free(alloc_buf);
       }
-      LOG_WARN("failed to alloc memory", K(ret));
     } else {
       ht_alloc_ = new (alloc_buf) ModulePageAllocator(alloc);
       ht_alloc_->set_label("HtOpAlloc");
@@ -362,7 +357,6 @@ int alloc_ptrs(ObIAllocator &alloc, const TS &...args)
   void *ptr = alloc.alloc(size);
   if (NULL == ptr) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret), K(size));
   } else {
     MEMSET(ptr, 0, size);
     assign_alloc_ptr(ptr, args...);
@@ -377,16 +371,13 @@ int ObHashJoinOp::inner_open()
   if (OB_FAIL(set_shared_info())) {
   } else if (is_shared_ && OB_FAIL(sync_wait_open())) {
     is_shared_ = false;
-    LOG_WARN("failed to sync open for shared hj", K(ret));
   } else if ((OB_UNLIKELY(MY_SPEC.all_join_keys_.count() <= 0
       || MY_SPEC.all_join_keys_.count() != MY_SPEC.all_hash_funcs_.count()
       || OB_ISNULL(left_)))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("no equal join conds or left op is null", K(ret));
   } else if (OB_FAIL(ObJoinOp::inner_open())) {
   } else if (OB_ISNULL(session = ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to get my session", K(ret));
   } else if (OB_FAIL(init_mem_context())) {
   } else if (OB_FAIL(hash_table_.init(*alloc_))) {
   } else {
@@ -397,7 +388,6 @@ int ObHashJoinOp::inner_open()
     hash_join_processor_ = GCONF._enable_hash_join_processor;
     if (0 == (hash_join_processor_ & HJ_PROCESSOR_MASK)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect hash join processor", K(ret), K(hash_join_processor_));
     } else if (OB_FAIL(set_hash_function())) {
     }
     if (is_vectorized()) {
@@ -448,7 +438,6 @@ int ObHashJoinOp::inner_open()
         K(left_join_keys_.count()), K(right_join_keys_.count()));
     } else if (MY_SPEC.is_naaj_ && 1 != left_join_keys_.count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null aware anti join only support 1 join key", K(ret));
     }
     LOG_DEBUG("trace join keys", K(left_join_keys_), K(right_join_keys_),
       K(left_join_keys_.count()), K(right_join_keys_.count()));
@@ -502,21 +491,16 @@ int ObHashJoinOp::set_shared_info()
     // none shared, nothing to do
   } else if (OB_ISNULL(hj_input)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: hash join input is null", K(ret));
   } else if (0 == hj_input->shared_hj_info_ || OB_ISNULL(hj_input->get_shared_hj_info())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: hash join shared info is null", K(ret));
   } else {
     // only more thant one thread, use shared hash join
     is_shared_ = 1 < hj_input->get_sqc_thread_count();
     if (is_shared_) {
       if (IS_LEFT_STYLE_JOIN(MY_SPEC.join_type_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed shared hash join not support", K(ret), K(MY_SPEC.join_type_));
       } else if (hj_input->task_id_ >= hj_input->get_sqc_thread_count()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("task_id is more than thread count", K(ret),
-          K(hj_input->task_id_), K(hj_input->get_sqc_thread_count()));
       } else {
       }
     }
@@ -639,7 +623,6 @@ int ObHashJoinOp::part_rescan(bool reset_all)
   ObSQLSessionInfo *session = NULL;
   if (OB_ISNULL(session = ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to get my session", K(ret));
   } else {
     if (reset_all) {
       reset();
@@ -699,7 +682,6 @@ int ObHashJoinOp::do_sync_wait_all()
         while (OB_SUCC(ret)) {
           if (OB_FAIL(get_next_row())) {
             if (OB_ITER_END == ret) {
-              LOG_WARN("failed to inner get next row", K(ret));
             }
           }
         } // end while
@@ -709,7 +691,6 @@ int ObHashJoinOp::do_sync_wait_all()
         while (OB_SUCC(ret)) {
           if (OB_FAIL(get_next_batch(MY_SPEC.max_batch_size_, child_brs))) {
             if (OB_ITER_END == ret) {
-              LOG_WARN("failed to inner get next row", K(ret));
             }
           } else if (brs_.end_) {
             break;
@@ -741,7 +722,6 @@ int ObHashJoinOp::next()
     state_operation = this->ObHashJoinOp::state_operation_func_[state];
     if (OB_ISNULL(state_operation)) {
       ret = OB_BAD_NULL_ERROR;
-      LOG_WARN("state_operation is null", K(ret), K(state));
     } else if (OB_ITER_END == (ret = (this->*state_operation)())) {
       func = FT_ITER_END;
       ret = OB_SUCCESS;
@@ -800,14 +780,12 @@ int ObHashJoinOp::inner_get_next_row()
       } else if (OB_SUCCESS == ret) {
         exit_while = true;
       } else {
-        LOG_WARN("fail to get next row", K(ret));
       }
       break;
     }
     case ObHashJoinOp::HJState::NEXT_BATCH: {
       // It must firstly sync wait, and then remove undumped batch
       if (is_shared_ && OB_FAIL(sync_wait_fetch_next_batch())) {
-        LOG_WARN("failed to sync wait fetch next batch", K(ret));
       } else {
         batch_mgr_->remove_undumped_batch(is_shared_ ? cur_dumped_partition_ : INT64_MAX, batch_round_);
         if (left_batch_ != NULL) {
@@ -863,14 +841,12 @@ int ObHashJoinOp::inner_get_next_row()
           // hash join dumped too many times, the part level is greater than 32 bit
           // we report 4013 instead of 4016, and remind user to increase memory
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("too deep part level", K(ret), K(part_level_), K(part_shift_));
         } else {
           hj_state_ = ObHashJoinOp::HJState::NORMAL;
         }
         LOG_DEBUG("trace batch", K(batch_pair.left_->get_batchno()),
           K(batch_pair.right_->get_batchno()), K(part_level_), K(batch_round_));
       } else {
-        LOG_WARN("fail get next batch", K(ret));
       }
       break;
     }
@@ -954,7 +930,6 @@ int ObHashJoinOp::get_next_left_row()
   if (left_batch_ == NULL) {
     if (OB_FAIL(OB_I(t1) left_->get_next_row())) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("get left row from child failed", K(ret));
       }
     }
   } else {
@@ -962,7 +937,6 @@ int ObHashJoinOp::get_next_left_row()
     } else if (OB_FAIL(OB_I(t1) left_batch_->get_next_row(
         left_->get_spec().output_, eval_ctx_, left_read_row_))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("get left row from partition failed", K(ret));
       }
     }
   }
@@ -980,13 +954,11 @@ int ObHashJoinOp::get_next_left_row_na()
       bool is_null = false;
       if (OB_FAIL(OB_I(t1) left_->get_next_row())) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("get left row from child failed", K(ret));
         }
       } else if (FALSE_IT(non_preserved_side_is_not_empty_
                           |= (RIGHT_ANTI_JOIN == MY_SPEC.join_type_))) {
         // mark this to forbid null value output in get_next_right_row_na
       } else if (is_right_naaj() && OB_FAIL(check_join_key_for_naaj(is_left, is_null))) {
-        LOG_WARN("failed to check null for right naaj", K(ret));
       } else if (is_null) {
         //right_anti_join_na : return iter_end
         //right_anti_join_sna : impossible to get null
@@ -1015,7 +987,6 @@ int ObHashJoinOp::get_next_left_row_na()
     } else if (OB_FAIL(OB_I(t1) left_batch_->get_next_row(
         left_->get_spec().output_, eval_ctx_, left_read_row_))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("get left row from partition failed", K(ret));
       }
     }
   }
@@ -1051,7 +1022,6 @@ int ObHashJoinOp::get_next_left_row_batch(bool is_from_row_store,
         const_cast<ObBatchRows *>(child_brs)->end_ = true;
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("fail to get next batch", K(ret));
       }
     } else {
       const_cast<ObBatchRows *>(child_brs)->size_ = read_size;
@@ -1085,7 +1055,6 @@ int ObHashJoinOp::get_next_left_row_batch_na(bool is_from_row_store, const ObBat
     } else if (is_right_naaj()
               && OB_FAIL(check_join_key_for_naaj_batch(is_left, child_brs->size_,
                                                        has_null, child_brs))) {
-      LOG_WARN("failed to check null for right naaj", K(ret));
     } else if (has_null) {
       read_null_in_naaj_ = true;
       ret = OB_ITER_END;
@@ -1109,7 +1078,6 @@ int ObHashJoinOp::get_next_left_row_batch_na(bool is_from_row_store, const ObBat
         const_cast<ObBatchRows *>(child_brs)->end_ = true;
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("fail to get next batch", K(ret));
       }
     } else {
       const_cast<ObBatchRows *>(child_brs)->size_ = read_size;
@@ -1128,7 +1096,6 @@ int ObHashJoinOp::reuse_for_next_chunk()
   if (top_part_level() || 0 == hash_table_.nbuckets_
     || NEST_LOOP != hj_processor_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected hash buckets number is 0", K(ret), K(part_level_));
   } else if (OB_FAIL(calc_basic_info())) {
   } else {
     // reuse buckets
@@ -1165,11 +1132,8 @@ int ObHashJoinOp::load_next()
   ++nth_nest_loop_;
   // Currently reading content through a fixed size read method, this will be changed later
   if (1 == nth_nest_loop_ && OB_FAIL(left_batch_->set_iterator())) {
-    LOG_WARN("failed to set iterator", K(ret), K(nth_nest_loop_));
   } else if (1 == nth_nest_loop_ && OB_FAIL(prepare_hash_table())) {
-    LOG_WARN("failed to prepare hash table", K(ret), K(nth_nest_loop_));
   } else if (1 < nth_nest_loop_ && OB_FAIL(reuse_for_next_chunk())) {
-    LOG_WARN("failed to reset info for block", K(ret), K(nth_nest_loop_));
   }
   return ret;
 }
@@ -1203,11 +1167,9 @@ int ObHashJoinOp::build_hash_table_for_nest_loop(int64_t &num_left_rows)
                                                     row_bound - curr_ht_row_cnt),
                                            read_size))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("get next batch failed", K(ret), K(row_bound), K(curr_ht_row_cnt), K(hash_table.nbuckets_));
         }
       } else if (OB_ISNULL(left_stored_rows)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("returned left_stored_rows is NULL", K(ret));
       } else {
         if (enable_bloom_filter_) {
           for (int64_t i = 0; OB_SUCC(ret) && i < read_size; ++i) {
@@ -1249,8 +1211,6 @@ int ObHashJoinOp::build_hash_table_for_nest_loop(int64_t &num_left_rows)
       nest_loop_state_ = HJLoopState::LOOP_END;
       if (cur_nth_row_ != hj_batch->get_row_count_on_disk()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("expect row count is match", K(ret), K(cur_nth_row_),
-          K(hj_batch->get_row_count_on_disk()));
       }
     }
   }
@@ -1337,8 +1297,6 @@ int ObHashJoinOp::get_max_memory_size(int64_t input_size)
     if (!top_part_level()) {
       if (OB_ISNULL(left_batch_) || OB_ISNULL(right_batch_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect status: left op or right op is null", K(left_batch_),
-          K(right_batch_));
       } else {
         // switch callback for count memory size
         left_batch_->set_callback(&sql_mem_processor_);
@@ -1363,7 +1321,6 @@ int ObHashJoinOp::get_max_memory_size(int64_t input_size)
     char *buf = NULL;
     if (part_count_ <= 0) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(part_count_));
     } else if (NULL == (buf = (char *)mem_context_->get_malloc_allocator().alloc(
                sizeof(uint16_t) * (MY_SPEC.max_batch_size_ * part_count_ + part_count_)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1414,7 +1371,6 @@ int ObHashJoinOp::calc_basic_info(bool global_info)
     } else {
       if (OB_ISNULL(left_batch_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("left op is null", K(ret));
       } else {
         // use actual value
         // it need to be considered swapping left and right
@@ -1427,7 +1383,6 @@ int ObHashJoinOp::calc_basic_info(bool global_info)
       if (global_info) {
         if (!is_shared_) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected status: global info must be shared hash join", K(ret));
         } else {
           ObHashJoinInput *hj_input = static_cast<ObHashJoinInput*>(input_);
           row_count = hj_input->get_total_memory_row_count();
@@ -1444,13 +1399,11 @@ int ObHashJoinOp::calc_basic_info(bool global_info)
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect path for calculate bucket number", K(ret));
     }
   } else if (IN_MEMORY == hj_processor_) {
     if (global_info) {
       if (!is_shared_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected status: global info must be shared hash join", K(ret));
       } else {
         ObHashJoinInput *hj_input = static_cast<ObHashJoinInput*>(input_);
         row_count = hj_input->get_total_memory_row_count();
@@ -1523,7 +1476,6 @@ int ObHashJoinOp::get_processor_type()
       if (OB_NOT_NULL(right_batch_)) {
         LOG_WARN("unexpect: partition has memory row", K(right_batch_->get_size_in_memory()));
       }
-      LOG_WARN("unexpect: partition is null or partition has memory row", K(ret));
     } else if (enable_in_memory && all_in_memory(left_batch_->get_size_on_disk())
               /*|| all_in_memory(right_batch_->get_size_on_disk())*/) {
       // TODO: swap
@@ -1650,11 +1602,9 @@ int ObHashJoinOp::build_hash_table_in_memory(int64_t &num_left_rows)
                                            PREFETCH_BATCH_SIZE,
                                            read_size))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("get next batch failed", K(ret));
         }
       } else if (OB_ISNULL(left_stored_rows)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("returned left_stored_rows is NULL", K(ret));
       } else {
         if (enable_bloom_filter_) {
           for (int64_t i = 0; OB_SUCC(ret) && i < read_size; ++i) {
@@ -1733,7 +1683,6 @@ int ObHashJoinOp::init_join_partition()
   int ret = OB_SUCCESS;
   if (0 >= part_count_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("partition count is less then 0", K(part_count_), K(ret));
   } else {
     int64_t part_shift = part_shift_;
     int64_t used = sizeof(ObHashJoinPartition) * part_count_;
@@ -1744,7 +1693,6 @@ int ObHashJoinOp::init_join_partition()
     } else {
       if (part_count_ == 0) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("part_count is 0", K(ret), K(part_count_), K(part_level_));
       } else {
         part_shift += min(__builtin_ctz(part_count_), 8);
       }
@@ -2052,9 +2000,6 @@ int ObHashJoinOp::update_dumped_partition_statistics(bool is_left)
         }
         if (0 != dumped_part.get_size_in_memory()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("expected memory size is 0", K(ret), K(i), K(dumped_part.get_size_in_memory()),
-            K(part_count_), K(cur_dumped_partition_), K(dumped_part.get_row_count_in_memory()),
-            K(is_left));
           if (!is_left) {
             LOG_WARN("left size", K(hj_part_array_[i].get_size_in_memory()),
               K(hj_part_array_[i].get_row_count_in_memory()),
@@ -2068,8 +2013,6 @@ int ObHashJoinOp::update_dumped_partition_statistics(bool is_left)
         }
       } else if (0 != dumped_part.get_size_in_memory()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("expected memory size is 0", K(ret), K(i), K(dumped_part.get_size_in_memory()),
-          K(part_count_), K(cur_dumped_partition_), K(dumped_part.get_row_count_in_memory()));
         if (!is_left) {
           LOG_WARN("left size", K(hj_part_array_[i].get_size_in_memory()),
             K(hj_part_array_[i].get_row_count_in_memory()),
@@ -2082,8 +2025,6 @@ int ObHashJoinOp::update_dumped_partition_statistics(bool is_left)
       part_count_,
       cur_hash_table_->nbuckets_,
       total_size))) {
-      LOG_WARN("failed to record pre-batch info", K(ret), K(part_count_),
-        K(cur_hash_table_->nbuckets_), K(total_size));
     }
   }
   return ret;
@@ -2095,7 +2036,6 @@ int ObHashJoinOp::sync_wait_processor_type()
   ObHashJoinInput *hj_input = static_cast<ObHashJoinInput*>(input_);
   if (OB_ISNULL(hj_input)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: shared hash join info is null", K(ret));
   } else if (is_shared_) {
       if (OB_FAIL(hj_input->sync_wait(
           ctx_, hj_input->get_process_cnt(),
@@ -2119,7 +2059,6 @@ int ObHashJoinOp::sync_wait_part_count()
   ObHashJoinInput *hj_input = static_cast<ObHashJoinInput*>(input_);
   if (OB_ISNULL(hj_input)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: shared hash join info is null", K(ret));
   } else if (is_shared_) {
       if (OB_FAIL(hj_input->sync_wait(
           ctx_, hj_input->get_process_cnt(),
@@ -2142,7 +2081,6 @@ int ObHashJoinOp::sync_wait_cur_dumped_partition_idx()
   ObHashJoinInput *hj_input = static_cast<ObHashJoinInput*>(input_);
   if (OB_ISNULL(hj_input)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: shared hash join info is null", K(ret));
   } else if (OB_FAIL(hj_input->sync_wait(
       ctx_, hj_input->get_process_cnt(),
       [&](int64_t n_times) {
@@ -2162,7 +2100,6 @@ int ObHashJoinOp::sync_wait_basic_info(uint64_t &build_ht_thread_ptr)
   ObHashJoinInput *hj_input = static_cast<ObHashJoinInput*>(input_);
   if (OB_ISNULL(hj_input)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: shared hash join info is null", K(ret));
   } else if (OB_FAIL(hj_input->sync_wait(
       ctx_, hj_input->get_process_cnt(),
       [&](int64_t n_times) {
@@ -2185,7 +2122,6 @@ int ObHashJoinOp::sync_wait_init_build_hash(const uint64_t build_ht_thread_ptr)
   ObHashJoinInput *hj_input = static_cast<ObHashJoinInput*>(input_);
   if (OB_ISNULL(hj_input)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: shared hash join info is null", K(ret));
   } else if (OB_FAIL(hj_input->sync_wait(
       ctx_, hj_input->get_process_cnt(),
       [&](int64_t n_times) {
@@ -2197,7 +2133,6 @@ int ObHashJoinOp::sync_wait_init_build_hash(const uint64_t build_ht_thread_ptr)
     cur_hash_table_ = batch_round_ <= 1 ? &(build_hj_op->get_hash_table()) : cur_hash_table_;
     if (PartHashJoinTable::MAGIC_CODE != cur_hash_table_->magic_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected status: magic code is wrong", K(ret), K(spec_.id_));
     }
   }
   return ret;
@@ -2209,7 +2144,6 @@ int ObHashJoinOp::sync_wait_finish_build_hash()
   ObHashJoinInput *hj_input = static_cast<ObHashJoinInput*>(input_);
   if (OB_ISNULL(hj_input)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: shared hash join info is null", K(ret));
   } else if (OB_FAIL(hj_input->sync_wait(
       ctx_, hj_input->get_process_cnt(),
       [&](int64_t n_times) {
@@ -2226,7 +2160,6 @@ int ObHashJoinOp::sync_wait_fetch_next_batch()
   ObHashJoinInput *hj_input = static_cast<ObHashJoinInput*>(input_);
   if (OB_ISNULL(hj_input)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: shared hash join info is null", K(ret));
   } else if (OB_FAIL(hj_input->sync_wait(
       ctx_, hj_input->get_process_cnt(),
       [&](int64_t n_times) {
@@ -2246,7 +2179,6 @@ int ObHashJoinOp::sync_wait_close()
   ObHashJoinInput *hj_input = static_cast<ObHashJoinInput*>(input_);
   if (OB_ISNULL(hj_input)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: shared hash join info is null", K(ret));
   } else if (OB_FAIL(hj_input->sync_wait(
       ctx_, hj_input->get_close_cnt(),
       [&](int64_t n_times) {
@@ -2263,7 +2195,6 @@ int ObHashJoinOp::sync_wait_open()
   ObHashJoinInput *hj_input = static_cast<ObHashJoinInput*>(input_);
   if (OB_ISNULL(hj_input)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: shared hash join info is null", K(ret));
   } else if (OB_FAIL(hj_input->sync_wait(
       ctx_, hj_input->get_open_cnt(),
       [&](int64_t n_times) {
@@ -2280,7 +2211,6 @@ int ObHashJoinOp::dump_remain_partition()
   int ret = OB_SUCCESS;
   // dump last batch rows and only remain all in-memory data
   if (is_shared_ && OB_FAIL(sync_wait_cur_dumped_partition_idx())) {
-    LOG_WARN("failed to sync cur dumped partition idx", K(ret));
   } else if (max_partition_count_per_level_ > cur_dumped_partition_) {
     if (OB_FAIL(asyn_dump_partition(INT64_MAX, true, true, cur_dumped_partition_ + 1, nullptr))) {
     } else if (OB_FAIL(update_dumped_partition_statistics(true))) {
@@ -2302,7 +2232,6 @@ int ObHashJoinOp::fill_partition(int64_t &num_left_rows)
     clear_evaluated_flag();
     if (OB_FAIL((this->*get_next_left_row_func_)())) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("get next left row failed", K(ret));
       }
     } else {
       if (NULL == left_read_row_) {
@@ -2433,7 +2362,6 @@ int ObHashJoinOp::split_partition(int64_t &num_left_rows)
     // read all data， use default iterator
     if (OB_FAIL(left_batch_->set_iterator())) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("failed to init iterator", K(ret));
       }
     } else {
       row_count_on_disk = left_batch_->get_row_count_on_disk();
@@ -2469,7 +2397,6 @@ int ObHashJoinOp::split_partition(int64_t &num_left_rows)
           int64_t row_count_in_memory = hj_part_array_[i].get_row_count_in_memory();
           if (0 != row_count_in_memory) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpect no data in memory", K(ret), K(row_count_in_memory), K(i));
           }
         }
       }
@@ -2477,7 +2404,6 @@ int ObHashJoinOp::split_partition(int64_t &num_left_rows)
     if (OB_FAIL(ret)) {
     } else if (nullptr != left_batch_ && num_left_rows != row_count_on_disk) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("expect read all data", K(ret), K(num_left_rows), K(row_count_on_disk));
     }
   }
   return ret;
@@ -2645,14 +2571,12 @@ int ObHashJoinOp::prepare_hash_table()
     if (OB_FAIL(calc_basic_info())) {
     } else if (GCONF.is_sql_operator_dump_enabled() &&
         OB_FAIL(dump_build_table(profile_.get_row_count(), true))) {
-      LOG_WARN("fail to dump", K(ret));
     } else if (OB_FAIL(dump_remain_partition())) {
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(calc_basic_info())) {
   } else if (is_shared_ && OB_FAIL(sync_wait_basic_info(build_ht_thread_ptr))) {
-    LOG_WARN("failed to sync cur dumped partition idx", K(ret));
   } else {
     hash_table.nbuckets_ = profile_.get_bucket_size();
     hash_table.row_count_ = profile_.get_row_count();
@@ -2682,8 +2606,6 @@ int ObHashJoinOp::prepare_hash_table()
           // revert to recursive process
           // only for TEST_NEST_LOOP_TO_RECURSIVE
           nest_loop_state_ = HJLoopState::LOOP_RECURSIVE;
-          LOG_WARN("failed to reserve right bitset", K(ret), K(hash_table.nbuckets_),
-            K(right_batch_->get_row_count_on_disk()));
         }
       }
       LOG_TRACE("trace prepare hash table", K(ret), K(hash_table.nbuckets_), K(hash_table.row_count_),
@@ -2702,7 +2624,6 @@ int ObHashJoinOp::prepare_hash_table()
       K(profile_.get_expect_size()), K(collision_cnts_mem_size));
   }
   if (OB_SUCC(ret) && is_shared_ && OB_FAIL(sync_wait_init_build_hash(build_ht_thread_ptr))) {
-    LOG_WARN("failed to sync wait init hash table", K(ret));
   }
   return ret;
 }
@@ -2758,15 +2679,11 @@ int ObHashJoinOp::build_hash_table_for_recursive()
           int64_t read_size = 0;
           if (OB_FAIL(hj_part.get_next_batch(part_stored_rows, PREFETCH_BATCH_SIZE, read_size))) {
             if (OB_ITER_END != ret) {
-              LOG_WARN("get next batch failed", K(ret));
             }
           } else if (OB_ISNULL(part_stored_rows)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("returned hj_part_stored_rows_ is NULL", K(ret));
           } else if (total_row_count + nth_row >= hash_table.row_count_) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("row count exceed total row count", K(ret), K(nth_row), K(total_row_count),
-              K(hash_table.row_count_));
           } else if (read_null_in_naaj_) {
             // don't insert any value
             nth_row += read_size;
@@ -2866,7 +2783,6 @@ int ObHashJoinOp::HashJoinHistogram::init(
       if (OB_NOT_NULL(bf)) {
         alloc->free(bf);
       }
-      LOG_WARN("failed to alloc memory", K(ret));
     } else {
       enable_bloom_filter_ = enable_bloom_filter;
       row_count_ = row_count;
@@ -2882,7 +2798,6 @@ int ObHashJoinOp::HashJoinHistogram::init(
       } else if (OB_FAIL(h2_->init(row_count))) {
       } else if (OB_FAIL(prefix_hist_count_->init(bucket_cnt_))) {
       } else if (enable_bloom_filter && OB_FAIL(bloom_filter_->init(bucket_cnt_, 2))) {
-        LOG_WARN("bloom filter init failed", K(ret));
       } else {
       }
     }
@@ -2897,7 +2812,6 @@ int ObHashJoinOp::HashJoinHistogram::calc_prefix_histogram()
   int32_t prefix = 0;
   if (OB_ISNULL(prefix_hist_count_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("prefix hist count is null", K(ret));
   } else {
     for (int64_t i = 0; i < prefix_hist_count_->count(); ++i) {
       int32_t tmp = prefix_hist_count_->at(i);
@@ -2918,7 +2832,6 @@ int ObHashJoinOp::HashJoinHistogram::reorder_histogram(BucketFunc bucket_func)
   // calc prefix histogram
   if (OB_ISNULL(h1_) || OB_ISNULL(h2_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("histogram is null", K(ret), K(h1_), K(h2_));
   } else if (OB_FAIL(calc_prefix_histogram())) {
   } else {
     for (int64_t i = 0; i < h1_->count() ; ++i) {
@@ -3033,11 +2946,9 @@ int ObHashJoinOp::PartitionSplitter::repartition_by_part_array(const int64_t par
         while (OB_SUCC(ret)) {
           if (OB_FAIL(hj_part.get_next_row(stored_row))) {
             if (OB_ITER_END != ret) {
-              LOG_WARN("get next row failed", K(ret));
             }
           } else if (OB_ISNULL(stored_row)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("returned stored row is NULL", K(ret));
           } else {
             HistItem &hist_item = dst_hist_array->at(total_nth_row);
             hist_item.store_row_ = const_cast<ObHashJoinStoredJoinRow*>(stored_row);
@@ -3054,8 +2965,6 @@ int ObHashJoinOp::PartitionSplitter::repartition_by_part_array(const int64_t par
         ret = OB_SUCCESS;
         if (nth_row != row_count_in_memory) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("expect row count is match", K(nth_row), K(row_count_in_memory),
-            K(hj_part.get_row_count_on_disk()), K(ret));
         }
       }
     }
@@ -3144,7 +3053,6 @@ int ObHashJoinOp::PartitionSplitter::build_hash_table_by_part_hist(
           int64_t hash_value = org_hist_item.hash_value_;
           if (OB_ISNULL(org_hist_item.store_row_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("store row is null", K(ret), K(i), K(j));
           } else {
             hist_item = org_hist_item;
             int64_t bucket_id = hist->get_bucket_idx(hash_value);
@@ -3158,7 +3066,6 @@ int ObHashJoinOp::PartitionSplitter::build_hash_table_by_part_hist(
       if (OB_FAIL(ret)) {
       } else if (row_count != nth_row) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("row count is not match", K(ret), K(row_count), K(nth_row));
       } else if (OB_FAIL(hist->reorder_histogram(nullptr))) {
       }
     }
@@ -3193,11 +3100,9 @@ int ObHashJoinOp::PartitionSplitter::build_hash_table_by_part_array(
         while (OB_SUCC(ret)) {
           if (OB_FAIL(hj_part.get_next_row(stored_row))) {
             if (OB_ITER_END != ret) {
-              LOG_WARN("get next row failed", K(ret));
             }
           } else if (OB_ISNULL(stored_row)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("returned stored row is NULL", K(ret));
           } else {
             HistItem &hist_item = hist->h1_->at(nth_row);
             hist_item.store_row_ = const_cast<ObHashJoinStoredJoinRow*>(stored_row);
@@ -3232,7 +3137,6 @@ int ObHashJoinOp::init_histograms(HashJoinHistogram *&part_histograms, int64_t p
   void *all_part_hists = alloc_->alloc(sizeof(HashJoinHistogram) * part_count);
   if (OB_ISNULL(all_part_hists)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory", K(ret));
   } else {
     part_histograms = reinterpret_cast<HashJoinHistogram*>(all_part_hists);
     MEMSET(part_histograms, 0, sizeof(HashJoinHistogram) * part_count);
@@ -3257,7 +3161,6 @@ int ObHashJoinOp::repartition(
       0 < level2_part_count_ ? PART_SPLIT_LEVEL_TWO : PART_SPLIT_LEVEL_ONE,
       part_shift_, level1_part_count_, level2_part_count_))) {
   } else if (is_build_side && OB_FAIL(init_histograms(part_histograms, part_count))) {
-    LOG_WARN("failed to initialize histograms", K(ret));
   } else if (0 >= part_splitter.get_total_row_count()) {
   } else if (0 < level2_part_count_) {
     // level2
@@ -3365,7 +3268,6 @@ int ObHashJoinOp::split_partition_and_build_hash_table(int64_t &num_left_rows)
         brs_.end_ = true;
       }
     } else {
-      LOG_WARN("failed split partition", K(ret), K(part_level_));
     }
   } else {
     if (is_vectorized()) {
@@ -3374,7 +3276,6 @@ int ObHashJoinOp::split_partition_and_build_hash_table(int64_t &num_left_rows)
       can_use_cache_aware_opt();
     }
     if ((0 == num_left_rows || is_shared_) && OB_FAIL(recursive_postprocess())) {
-      LOG_WARN("failed to post process left", K(ret));
     }
   }
   return ret;
@@ -3409,14 +3310,11 @@ int ObHashJoinOp::adaptive_process(bool &need_not_read_right)
     switch (hj_processor_) {
       case IN_MEMORY: {
         if (OB_FAIL(in_memory_process(need_not_read_right)) && OB_ITER_END != ret) {
-          LOG_WARN("failed to process in memory", K(ret));
         }
         break;
       }
       case RECURSIVE: {
         if (OB_FAIL(recursive_process(need_not_read_right)) && OB_ITER_END != ret) {
-          LOG_WARN("failed to recursive process", K(ret),
-            K(part_level_), K(part_count_), K(hash_table_.nbuckets_));
         }
         break;
       }
@@ -3428,19 +3326,14 @@ int ObHashJoinOp::adaptive_process(bool &need_not_read_right)
             set_processor(RECURSIVE);
             postprocessed_left_ = false;
             if (OB_FAIL(recursive_process(need_not_read_right)) && OB_ITER_END != ret) {
-              LOG_WARN("failed to process in memory", K(ret),
-                K(part_level_), K(part_count_), K(hash_table_.nbuckets_));
             }
           } else {
-            LOG_WARN("failed to process in memory", K(ret),
-              K(part_level_), K(part_count_), K(hash_table_.nbuckets_));
           }
         }
         break;
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect processor", K(ret), K(hj_processor_));
         break;
       }
     }
@@ -3487,7 +3380,6 @@ int ObHashJoinOp::get_next_right_batch_na()
       // mark this to forbid null value output in fill result batch
     } else if (is_left_naaj() && OB_FAIL(check_join_key_for_naaj_batch(is_left, right_brs_->size_,
                                                                         has_null, right_brs_))) {
-      LOG_WARN("failed to check null value for naaj", K(ret));
     } else if (has_null) {
       brs_.size_ = 0;
       brs_.end_ = true;
@@ -3500,7 +3392,6 @@ int ObHashJoinOp::get_next_right_batch_na()
     if (OB_FAIL(try_check_status())) {
     } else if (HashJoinDrainMode::BUILD_HT == drain_mode_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected status: drain mode is build_hash_table", K(ret), K(spec_.id_));
     } else if (HashJoinDrainMode::RIGHT_DRAIN == drain_mode_ ||
         (read_null_in_naaj_ && is_shared_)) {
       const_cast<ObBatchRows *>(right_brs_)->size_ = 0;
@@ -3510,7 +3401,6 @@ int ObHashJoinOp::get_next_right_batch_na()
                                                              max_output_cnt_,
                                                              read_size))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("get right row from partition failed", K(ret));
       } else {
         const_cast<ObBatchRows *>(right_brs_)->size_ = 0;
         const_cast<ObBatchRows *>(right_brs_)->end_ = true;
@@ -3574,7 +3464,6 @@ int ObHashJoinOp::get_next_right_batch()
     if (OB_FAIL(try_check_status())) {
     } else if (HashJoinDrainMode::BUILD_HT == drain_mode_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected status: drain mode is build_hash_table", K(ret), K(spec_.id_));
     } else if (HashJoinDrainMode::RIGHT_DRAIN == drain_mode_) {
       const_cast<ObBatchRows *>(right_brs_)->size_ = 0;
       const_cast<ObBatchRows *>(right_brs_)->end_ = true;
@@ -3583,7 +3472,6 @@ int ObHashJoinOp::get_next_right_batch()
                                                              max_output_cnt_,
                                                              read_size))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("get right row from partition failed", K(ret));
       } else {
         const_cast<ObBatchRows *>(right_brs_)->size_ = 0;
         const_cast<ObBatchRows *>(right_brs_)->end_ = true;
@@ -3626,7 +3514,6 @@ int ObHashJoinOp::get_next_right_row()
       ret = OB_ITER_END;
     } else if (OB_FAIL(OB_I(t1) right_->get_next_row())) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("get right row from child failed", K(ret));
       }
     }
   } else {
@@ -3636,14 +3523,12 @@ int ObHashJoinOp::get_next_right_row()
     if (OB_FAIL(try_check_status())) {
     } else if (HashJoinDrainMode::BUILD_HT == drain_mode_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected status: drain mode is build_hash_table", K(ret), K(spec_.id_));
     } else if (HashJoinDrainMode::RIGHT_DRAIN == drain_mode_) {
       ret = OB_ITER_END;
     } else if (OB_FAIL(OB_I(t1) right_batch_->get_next_row(
         right_read_row_))) {
       right_read_row_ = NULL;
       if (OB_ITER_END != ret) {
-        LOG_WARN("get right row from partition failed", K(ret));
       }
     } else {
       ++nth_right_row_;
@@ -3681,7 +3566,6 @@ int ObHashJoinOp::get_next_right_row_na()
         ret = OB_ITER_END;
       } else if (OB_FAIL(OB_I(t1) right_->get_next_row())) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("get right row from child failed", K(ret));
         }
       } else if (FALSE_IT(non_preserved_side_is_not_empty_
                           |= (LEFT_ANTI_JOIN == MY_SPEC.join_type_))) {
@@ -3715,7 +3599,6 @@ int ObHashJoinOp::get_next_right_row_na()
     if (OB_FAIL(try_check_status())) {
     } else if (HashJoinDrainMode::BUILD_HT == drain_mode_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected status: drain mode is build_hash_table", K(ret), K(spec_.id_));
     } else if (HashJoinDrainMode::RIGHT_DRAIN == drain_mode_ ||
         (read_null_in_naaj_ && is_shared_)) {
       ret = OB_ITER_END;
@@ -3723,7 +3606,6 @@ int ObHashJoinOp::get_next_right_row_na()
         right_read_row_))) {
       right_read_row_ = NULL;
       if (OB_ITER_END != ret) {
-        LOG_WARN("get right row from partition failed", K(ret));
       }
     } else {
       ++nth_right_row_;
@@ -3872,7 +3754,6 @@ int ObHashJoinOp::get_next_batch_right_rows()
       if (OB_ITER_END == ret) {
         right_iter_end_ = true;
       } else {
-        LOG_WARN("failed to get next right row", K(ret));
       }
     } else {
       bool skipped = false;
@@ -3924,7 +3805,6 @@ int ObHashJoinOp::get_next_batch_right_rows()
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(get_next_probe_partition())) {
       if (ret != OB_ITER_END) {
-        LOG_WARN("failed to get next probe partition", K(ret));
       }
     }
   }
@@ -3951,12 +3831,9 @@ int ObHashJoinOp::get_next_probe_partition()
           ret = OB_ITER_END;
         } else if (OB_ISNULL(right_splitter_.part_histogram_.h2_) || OB_ISNULL(prefix_hist_count)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("h2 is null", K(ret), K(level1_part_count_), K(level2_part_count_), K(part_count));
         } else {
           if (cur_full_right_partition_ >= prefix_hist_count->count()) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("invalid prefix histogram", K(ret), K(cur_full_right_partition_),
-              K(prefix_hist_count->count()));
           }
           cur_left_hist_ = &part_histograms_[cur_full_right_partition_];
           cur_right_hist_ = &right_splitter_.part_histogram_;
@@ -3997,7 +3874,6 @@ int ObHashJoinOp::get_next_right_row_for_batch(NextFunc next_func)
   int ret = OB_SUCCESS;
   if (INT64_MAX == cur_full_right_partition_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: cur right partition", K(ret));
   } else {
     bool is_matched = false;
     right_read_row_ = nullptr;
@@ -4013,25 +3889,19 @@ int ObHashJoinOp::get_next_right_row_for_batch(NextFunc next_func)
             // return iter end after last partition
             if (OB_FAIL(get_next_probe_partition())) {
               if (ret != OB_ITER_END) {
-                LOG_WARN("failed to get next probe partition", K(ret));
               }
             }
           } else if (OB_FAIL(get_next_batch_right_rows())) {
             if (OB_ITER_END != ret) {
-              LOG_WARN("failed to get next batch right rows", K(ret));
             }
           }
         } else {
-          LOG_WARN("failed to get next row", K(ret));
         }
       } else if (OB_ISNULL(right_read_row_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("right read row is null", K(cur_full_right_partition_), K(cur_probe_row_idx_));
       } else if (cur_left_hist_->empty()) {
         // left partition is empty
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("left partition is empty", K(ret), K(cur_full_right_partition_),
-          K(cur_dumped_partition_), K(enable_batch_));
       } else {
         // cur_right_hash_value_ is set when next_func
         const int64_t bucket_id = cur_left_hist_->get_bucket_idx(cur_right_hash_value_);
@@ -4058,13 +3928,11 @@ int ObHashJoinOp::read_right_operate()
     if (HJProcessor::NEST_LOOP == hj_processor_) {
       if (OB_SUCCESS != (tmp_ret = nest_loop_process(need_not_read_right))) {
         ret = tmp_ret;
-        LOG_WARN("build hash table failed", K(ret));
       } else {
         first_get_row_ = false;
       }
     } else if (OB_SUCCESS != (tmp_ret = adaptive_process(need_not_read_right))) {
       ret = tmp_ret;
-      LOG_WARN("build hash table failed", K(ret));
     } else {
       first_get_row_ = false;
     }
@@ -4085,7 +3953,6 @@ int ObHashJoinOp::read_right_operate()
                 LOG_WARN("failed to post process left", K(ret), K(tmp_ret));
               }
             } else {
-              LOG_WARN("failed to set iterator", K(ret));
             }
           }
         }
@@ -4106,13 +3973,11 @@ int ObHashJoinOp::read_right_operate()
           ret = OB_ITER_END;
         } else {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected status: right must be iter end", K(ret));
         }
       } else {
         // firstly get next batch right rows
         if (OB_FAIL(get_next_batch_right_rows())) {
           if (OB_ITER_END != ret) {
-            LOG_WARN("failed to get next batch right rows", K(ret));
           }
         } else {
           has_right_material_data_ = true;
@@ -4123,7 +3988,6 @@ int ObHashJoinOp::read_right_operate()
         }
       }
     } else if (OB_FAIL((this->*get_next_right_row_func_)()) && OB_ITER_END != ret) {
-      LOG_WARN("failed to get next right row", K(ret));
     }
   }
   // for right semi join, if match, then return, so for nest loop process, it only return once
@@ -4374,7 +4238,6 @@ int ObHashJoinOp::get_match_row(bool &is_matched)
       } else if (OB_FAIL(only_join_right_row())) {
       } else if (OB_FAIL(calc_equal_conds(is_matched))) {
       } else if (is_matched && OB_FAIL(calc_other_conds(is_matched))) {
-        LOG_WARN("calc other conds failed", K(ret));
       } else if (is_matched) {
         has_fill_left_row_ = true;
         right_has_matched_ = true;
@@ -4398,14 +4261,11 @@ int ObHashJoinOp::read_hashrow_for_cache_aware(NextFunc next_func)
   int ret = OB_SUCCESS;
   if (INT64_MAX == cur_full_right_partition_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: ", K(ret));
   } else {
     bool is_matched = false;
     if (cur_bucket_idx_ < max_bucket_idx_ && OB_FAIL(get_match_row(is_matched))) {
-      LOG_WARN("failed to get result", K(ret));
     } else if (!is_matched && OB_FAIL(get_next_right_row_for_batch(next_func))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("failed to get next right row", K(ret));
       }
     }
   }
@@ -4591,7 +4451,6 @@ int ObHashJoinOp::read_hashrow_batch()
         if (OB_FAIL(convert_exprs_batch_one(tuple, left_->get_spec().output_))) {
         } else if (OB_FAIL(calc_equal_conds(matched))) {
         } else if (matched && OB_FAIL(calc_other_conds(matched))) {
-          LOG_WARN("calc other conditions failed", K(ret));
         } else {
           LOG_DEBUG("trace match", K(ret), K(matched), K(batch_idx),
                     K(ROWEXPR2STR(eval_ctx_, MY_SPEC.all_join_keys_)));
@@ -4632,9 +4491,6 @@ int ObHashJoinOp::read_hashrow_normal()
       // part index is greater than cur_dumped_partition_, than the partition has no memory data
       if (0 < hj_part_array_[part_idx].get_size_in_memory()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("expect no memory data in the partition", K(ret), K(part_idx),
-          K(hj_part_array_[part_idx].get_size_in_memory()), K(cur_dumped_partition_),
-          K(part_level_), K(part_count_));
       } else {
         cur_tuple_ = NULL;
         has_fill_left_row_ = false;
@@ -4659,7 +4515,6 @@ int ObHashJoinOp::read_hashrow_normal()
       } else if (OB_FAIL(only_join_right_row())) {
       } else if (OB_FAIL(calc_equal_conds(is_matched))){
       } else if (is_matched && OB_FAIL(calc_other_conds(is_matched))) {
-        LOG_WARN("calc other conds failed", K(ret));
       } else {
         // do nothing
         LOG_DEBUG("trace match", K(ret), K(is_matched), K(cur_right_hash_value_),
@@ -5394,7 +5249,6 @@ int ObHashJoinOp::convert_exprs(
   has_fill = true;
   if (OB_ISNULL(store_row)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("store row is null", K(ret));
   } else if (OB_FAIL(store_row->to_expr(exprs, eval_ctx_))) {
   }
   return ret;
@@ -5406,7 +5260,6 @@ int ObHashJoinOp::convert_exprs_batch_one(const ObHashJoinStoredJoinRow *store_r
   int ret = OB_SUCCESS;
   if (OB_ISNULL(store_row)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("store row is null", K(ret));
   } else if (OB_FAIL(store_row->to_expr(exprs, eval_ctx_))) {
   }
   return ret;
@@ -5519,7 +5372,6 @@ int ObHashJoinOp::read_hashrow_batch_for_left_semi_anti()
         if (OB_FAIL(convert_exprs_batch_one(tuple, left_->get_spec().output_))) {
         } else if (OB_FAIL(calc_equal_conds(matched))) {
         } else if (matched && OB_FAIL(calc_other_conds(matched))) {
-          LOG_WARN("calc other conditions failed", K(ret));
         }
         if (!matched) {
           pre = tuple;
@@ -5577,7 +5429,6 @@ int ObHashJoinOp::check_join_key_for_naaj(const bool is_left, bool &is_null)
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(hj_input)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: shared hash join info is null", K(ret));
   } else if (is_shared_ && FALSE_IT(is_null = hj_input->get_null_in_naaj())) {
   } else if (is_null) {
   } else if (OB_FAIL(curr_join_keys.at(0)->eval(eval_ctx_, key_datum))) {
@@ -5602,7 +5453,6 @@ int ObHashJoinOp::check_join_key_for_naaj_batch(const bool is_left,
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(hj_input)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: shared hash join info is null", K(ret));
   } else if (is_shared_ && FALSE_IT(has_null = hj_input->get_null_in_naaj())) {
   } else if (has_null) {
   } else if (OB_FAIL(curr_join_keys.at(0)->eval_batch(eval_ctx_, *child_brs->skip_, batch_size))) {

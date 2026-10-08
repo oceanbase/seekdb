@@ -80,7 +80,6 @@ int ObExprGetUserVar::calc_result_type1(ObExprResType &type,
     type.set_collation_type(CS_TYPE_BINARY);
     ret = OB_SUCCESS;//always return success no matter found or not
   } else {
-    LOG_WARN("Unexpected ret code", K(ret), K(key), K(session_var));
   }
   if (OB_SUCC(ret) && ob_is_string_type(type.get_type())) {
     //set length
@@ -101,7 +100,6 @@ int ObExprGetUserVar::eval_get_user_var(const ObExpr &expr, ObEvalCtx &ctx, ObDa
   if (OB_FAIL(expr.eval_param_value(ctx, key))) {
   } else if (key->is_null()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("user var name is NULL", K(ret));
   } else {
     ObSQLSessionInfo *my_session = ctx.exec_ctx_.get_my_session();
     CK(OB_NOT_NULL(my_session));
@@ -151,7 +149,6 @@ int ObExprGetUserVar::eval_get_user_var(const ObExpr &expr, ObEvalCtx &ctx, ObDa
         res.set_null();
         ret = OB_SUCCESS;//always return success no matter found or not
       } else {
-        LOG_WARN("Unexpected ret code", K(ret), K(key_str), K(osv));
       }
     }
   }

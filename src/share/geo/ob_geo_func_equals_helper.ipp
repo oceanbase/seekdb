@@ -45,7 +45,6 @@ int eval_equals_without_strategy(const ObGeometry *g1, const ObGeometry *g2, boo
   }
   if (OB_ISNULL(geo1) || OB_ISNULL(geo2)) {
     ret = OB_ERR_INVALID_NULL_SDO_GEOMETRY;
-    LOG_WARN("input geomery is null", K(ret), K(geo1), K(geo2), K(g1->is_tree()));
   } else {
     result = bg::equals(*geo1, *geo2);
   }
@@ -60,7 +59,6 @@ int eval_equals_with_nonpoint_strategy(
   const ObSrsItem *srs = context.get_srs();
   if (OB_ISNULL(srs)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("srs is null", K(ret), K(g1->get_srid()), K(g1), K(g2));
   } else {
     const GeoType1 *geo1 = nullptr;
     const GeoType2 *geo2 = nullptr;
@@ -73,7 +71,6 @@ int eval_equals_with_nonpoint_strategy(
     }
     if (OB_ISNULL(geo1) || OB_ISNULL(geo2)) {
       ret = OB_ERR_INVALID_NULL_SDO_GEOMETRY;
-      LOG_WARN("input geomery is null", K(ret), K(geo1), K(geo2), K(g1->is_tree()));
     } else {
       bg::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
       bg::strategy::intersection::geographic_segments<> nonpoint_strategy(geog_sphere);
@@ -161,9 +158,7 @@ private:
       bool is_g1_empty = false;
       bool is_g2_empty = false;
       if (OB_FAIL(ObGeoTypeUtil::check_empty(const_cast<ObGeometry *>(g1), is_g1_empty))) {
-        LOG_WARN("fail to check is geometry empty", K(ret));
       } else if (OB_FAIL(ObGeoTypeUtil::check_empty(const_cast<ObGeometry *>(g2), is_g2_empty))) {
-        LOG_WARN("fail to check is geometry empty", K(ret));
       } else if (is_g1_empty || is_g2_empty) {
         result = is_g1_empty && is_g2_empty;
       } else {
@@ -172,10 +167,8 @@ private:
         typename GcTreeType::sub_mp_type *mpy1 = NULL;
         ObGeometry *geo1 = const_cast<ObGeometry *>(reinterpret_cast<const ObGeometry *>(g1));
         if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<GcTreeType>(context, geo1, mpt1, mls1, mpy1))) {
-          LOG_WARN("failed to prepare gc", K(ret));
         } else if (OB_ISNULL(mpt1) || OB_ISNULL(mls1) || OB_ISNULL(mpy1)) {
           ret = OB_ERR_GIS_INVALID_DATA;
-          LOG_WARN("unexpected null geometry collection split", K(ret));
         } else if (g2->type() == ObGeoType::GEOMETRYCOLLECTION) {
           // both collection
           typename GcTreeType::sub_mpt_type *mpt2 = NULL;
@@ -183,24 +176,20 @@ private:
           typename GcTreeType::sub_mp_type *mpy2 = NULL;
           ObGeometry *geo2 = const_cast<ObGeometry *>(reinterpret_cast<const ObGeometry *>(g2));
           if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<GcTreeType>(context, geo2, mpt2, mls2, mpy2))) {
-            LOG_WARN("failed to prepare gc", K(ret));
           } else if (OB_ISNULL(mpt2) || OB_ISNULL(mls2) || OB_ISNULL(mpt2)) {
             ret = OB_ERR_GIS_INVALID_DATA;
-            LOG_WARN("unexpected null geometry collection split", K(ret));
           } else if ((mpt1->is_empty() != mpt2->is_empty()) || (mls1->is_empty() != mls2->is_empty())
                     || (mpy1->is_empty() != mpy2->is_empty())) {
             result = false;
           } else {
             bool mpt_result = mpt1->is_empty() && mpt2->is_empty();
             if (!mpt_result && OB_FAIL(tree_fn(mpt1, mpt2, context, mpt_result))) {
-              LOG_WARN("fail to do eval", K(ret), K(result));
             } else {
               result = mpt_result;
             }
             if (OB_SUCC(ret) && result) {
               bool mls_result = mls1->is_empty() && mls2->is_empty();
               if (!mls_result && OB_FAIL(tree_fn(mls1, mls2, context, mls_result))) {
-                LOG_WARN("fail to do eval", K(ret), K(result));
               } else {
                 result = result && mls_result;
               }
@@ -208,7 +197,6 @@ private:
             if (OB_SUCC(ret) && result) {
               bool mpy_result = mpy1->is_empty() && mpy2->is_empty();
               if (!mpy_result && OB_FAIL(tree_fn(mpy1, mpy2, context, mpy_result))) {
-                LOG_WARN("fail to do eval", K(ret), K(result));
               } else {
                 result = result && mpy_result;
               }
@@ -224,7 +212,6 @@ private:
                 ObGeometry *mpt_bin = NULL;
                 if (OB_FAIL(ObGeoTypeUtil::tree_to_bin(
                         *context.get_allocator(), mpt1, mpt_bin, context.get_srs()))) {
-                  LOG_WARN("failed to convert geo tree to binary", K(ret));
                 } else {
                   ret = wkb_fn(mpt_bin, g2, context, result);
                 }
@@ -239,7 +226,6 @@ private:
                 ObGeometry *mls_bin = NULL;
                 if (OB_FAIL(ObGeoTypeUtil::tree_to_bin(
                         *context.get_allocator(), mls1, mls_bin, context.get_srs()))) {
-                  LOG_WARN("failed to convert geo tree to binary", K(ret));
                 } else {
                   ret = wkb_fn(mls_bin, g2, context, result);
                 }
@@ -254,7 +240,6 @@ private:
                 ObGeometry *mpy_bin = NULL;
                 if (OB_FAIL(ObGeoTypeUtil::tree_to_bin(
                         *context.get_allocator(), mpy1, mpy_bin, context.get_srs()))) {
-                  LOG_WARN("failed to convert geo tree to binary", K(ret));
                 } else {
                   ret = wkb_fn(mpy_bin, g2, context, result);
                 }
@@ -263,7 +248,6 @@ private:
             }
             default: {
               ret = OB_ERR_GIS_INVALID_DATA;
-              LOG_WARN("invalid geometry type", K(ret), K(g2->type()));
             }
           }
         }

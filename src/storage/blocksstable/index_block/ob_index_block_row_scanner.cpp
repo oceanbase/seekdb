@@ -32,13 +32,11 @@ int ObIndexBlockDataHeader::get_index_data(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_valid() || row_idx >= row_cnt_ || row_idx < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid row count", K(ret), K(row_idx), K_(row_cnt), KPC(this));
   } else {
     const ObStorageDatum &datum = index_datum_array_[row_idx];
     ObString index_data_buf = datum.get_string();
     if (OB_UNLIKELY(index_data_buf.empty())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected null index data buf", K(ret), K(datum), K(row_idx));
     } else {
       index_ptr = index_data_buf.ptr();
       index_len = index_data_buf.length();
@@ -59,8 +57,6 @@ int ObIndexBlockDataHeader::deep_copy_transformed_index_block(
   if (OB_UNLIKELY(!header.is_valid() || buf_size < 0 || pos >= buf_size || header.data_buf_size_ > buf_size)
       || OB_ISNULL(buf)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument for copy transformed index block", K(ret), KP(buf),
-        K(header), K(buf_size), K(pos));
   } else {
     char *data_buf = buf + pos;
     ObStorageDatum *index_datum_array = new (buf + pos) ObStorageDatum [header.row_cnt_];
@@ -121,21 +117,17 @@ int ObIndexBlockDataTransformer::transform(
   int64_t mem_limit = 0;
   if (OB_UNLIKELY(nullptr != table_read_info && col_cnt - 1 > table_read_info->get_rowkey_count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected rowkey count", K(ret), K(col_cnt), KPC(table_read_info));
   } else if (OB_UNLIKELY(!block_data.is_valid() || !micro_block_header->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(block_data), KPC(micro_block_header));
   } else if (OB_FAIL(get_reader(block_data.get_store_type(), micro_reader))) {
   } else if (OB_FAIL(micro_reader->init(block_data, nullptr))) {
   } else if (OB_FAIL(row.init(allocator, col_cnt))) {
   } else if (OB_FAIL(get_transformed_upper_mem_size(table_read_info, block_data.get_buf(), mem_limit))) {
     } else if (OB_ISNULL(block_buf = static_cast<char *>(allocator.alloc(mem_limit)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Failed to allocate memory for transformed block buf", K(ret), K(mem_limit));
   } else if (OB_FAIL(micro_block_header->deep_copy(block_buf, mem_limit, pos, new_micro_header))) {
   } else if (OB_UNLIKELY(!new_micro_header->is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid copied micro block header", K(ret), KPC(new_micro_header));
   } else {
     const int64_t micro_header_size = pos;
     ObIndexBlockDataHeader *idx_header = new (block_buf + pos) ObIndexBlockDataHeader();
@@ -170,12 +162,10 @@ int ObIndexBlockDataTransformer::transform(
             }
           }
           if (FAILEDx(index_datum_array[row_idx].deep_copy(row.storage_datums_[col_cnt - 1], block_buf, mem_limit, pos))) {
-            LOG_WARN("Failed to deep copy storage datum to buf", K(ret), K(row_idx), K(col_cnt));
           }
         }
       }
       if (FAILEDx(rowkey_vector->set_construct_finished())) {
-        LOG_WARN("Failed to set construct finished", K(ret));
       }
     }
 
@@ -198,8 +188,6 @@ int ObIndexBlockDataTransformer::transform(
   }
 
   if (OB_FAIL(ret)) {
-    LOG_WARN("fail to transform index block to in_memory format", K(ret),
-        KPC(micro_block_header), KPC(new_micro_header), K(block_data));
     if (nullptr != block_buf) {
       allocator.free(block_buf);
     }
@@ -218,7 +206,6 @@ int ObIndexBlockDataTransformer::get_transformed_upper_mem_size(
       reinterpret_cast<const ObMicroBlockHeader *>(raw_block_data);
   if (OB_ISNULL(raw_block_data) || OB_UNLIKELY(!micro_header->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), KP(raw_block_data), KPC(micro_header));
   } else {
     int64_t rowkey_vector_size = 0;
     mem_limit += micro_header->get_serialize_size();
@@ -244,7 +231,6 @@ int ObIndexBlockDataTransformer::get_reader(
 {
   int ret = OB_SUCCESS;
   if (!micro_reader_helper_.is_inited() && OB_FAIL(micro_reader_helper_.init(allocator_))) {
-    LOG_WARN("Fail to init micro reader helper", K(ret));
   } else if (OB_FAIL(micro_reader_helper_.get_reader(store_type, micro_reader))) {
   }
   return ret;
@@ -376,9 +362,7 @@ int ObRAWIndexBlockRowIterator::init(const ObMicroBlockData &idx_block_data,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator) || OB_ISNULL(datum_utils) || !datum_utils->is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguement", K(ret), KP(allocator), KPC(datum_utils));
   } else if (!micro_reader_helper_.is_inited() && OB_FAIL(micro_reader_helper_.init(*allocator))) {
-    LOG_WARN("Fail to init micro reader helper", K(ret), KP(allocator));
   } else if (OB_FAIL(micro_reader_helper_.get_reader(idx_block_data.get_store_type(), micro_reader_))) {
   } else if (OB_FAIL(micro_reader_->init(idx_block_data, datum_utils))) {
   } else if (OB_FAIL(init_datum_row(*datum_utils, allocator))) {
@@ -401,10 +385,8 @@ int ObRAWIndexBlockRowIterator::locate_key(const ObDatumRowkey &rowkey)
   ObDatumRange range;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_UNLIKELY(!rowkey.is_valid() || OB_ISNULL(micro_reader_))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid rowkey", K(ret), K(rowkey), KP(micro_reader_));
   } else {
     range.set_start_key(rowkey);
     range.end_key_.set_max_rowkey();
@@ -412,7 +394,6 @@ int ObRAWIndexBlockRowIterator::locate_key(const ObDatumRowkey &rowkey)
     range.set_right_open();
     if (OB_FAIL(micro_reader_->locate_range(range, true, false, begin_idx, end_idx, true))) {
       if (OB_UNLIKELY(OB_BEYOND_THE_RANGE != ret)) {
-        LOG_WARN("Fail to locate range in micro data", K(ret));
       } else {
         current_ = ObIMicroBlockReaderInfo::INVALID_ROW_INDEX;
       }
@@ -436,14 +417,11 @@ int ObRAWIndexBlockRowIterator::locate_range(const ObDatumRange &range,
   current_ = ObIMicroBlockReaderInfo::INVALID_ROW_INDEX;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_UNLIKELY(!range.is_valid() || OB_ISNULL(micro_reader_))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid range", K(ret), K(range), KP(micro_reader_));
   } else if (OB_FAIL(micro_reader_->locate_range(
           range, is_left_border, is_right_border, begin_idx, end_idx, true))) {
     if (OB_UNLIKELY(OB_BEYOND_THE_RANGE != ret)) {
-      LOG_WARN("Fail to locate range with micro reader", K(ret));
     }
   } else {
   }
@@ -462,7 +440,6 @@ int ObRAWIndexBlockRowIterator::locate_range()
   int64_t row_count = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_FAIL(micro_reader_->get_row_count(row_count))) {
   } else {
     start_ = 0;
@@ -478,7 +455,6 @@ int ObRAWIndexBlockRowIterator::skip_to_next_valid_position(const ObDatumRowkey 
   bool equal = false;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_FAIL(micro_reader_->find_bound(rowkey, true, current_, current_, equal))) {
   } else if (current_ == (end_ + 1)) {
     ret = OB_ITER_END;
@@ -491,10 +467,8 @@ int ObRAWIndexBlockRowIterator::find_rowkeys_belong_to_same_idx_row(ObMicroIndex
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_ISNULL(rows_info)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid rows info", K(ret));
   } else {
     bool is_decided = false;
     for (; OB_SUCC(ret) && rowkey_begin_idx < rowkey_end_idx; ++rowkey_begin_idx) {
@@ -533,7 +507,6 @@ int ObRAWIndexBlockRowIterator::compare_rowkey(const ObDatumRowkey &rowkey, int3
   cmp_ret = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_FAIL(micro_reader_->compare_rowkey(rowkey, current_, cmp_ret))) {
   }
   return ret;
@@ -548,10 +521,8 @@ int ObRAWIndexBlockRowIterator::check_blockscan(const ObDatumRowkey &rowkey, boo
   const int64_t request_cnt = datum_utils_->get_rowkey_count() + 1;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_UNLIKELY(!rowkey.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid rowkey", K(ret), K(rowkey));
   } else if (OB_FAIL(tmp_datum_row.init(request_cnt))) {
   } else if (OB_FAIL(micro_reader_->get_row(end_, tmp_datum_row))) {
   } else if (OB_FAIL(last_endkey.assign(tmp_datum_row.storage_datums_, datum_utils_->get_rowkey_count()))) {
@@ -580,10 +551,8 @@ int ObRAWIndexBlockRowIterator::get_current(const ObIndexBlockRowHeader *&idx_ro
   endkey_.reset();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_ISNULL(datum_row_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null pointer to index row", K(ret));
   } else if (OB_FAIL(micro_reader_->get_row(current_, *datum_row_))) {
   } else if (OB_FAIL(idx_row_parser_.init(rowkey_column_count, *datum_row_))) {
   } else if (OB_FAIL(idx_row_parser_.get_header(idx_row_header))) {
@@ -612,11 +581,9 @@ int ObRAWIndexBlockRowIterator::get_next(const ObIndexBlockRowHeader *&idx_row_h
   row_offset = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_FAIL(get_current(idx_row_header, endkey))) {
   } else if (OB_UNLIKELY(nullptr == idx_row_header || !endkey.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null index block row header/endkey", K(ret), KP(idx_row_header), K(endkey));
   } else if (OB_FAIL(idx_row_parser_.parse_minor_meta_and_agg_row(idx_minor_info, agg_row_buf, agg_buf_size))) {
   } else {
     row_offset = idx_row_parser_.get_row_offset();
@@ -635,7 +602,6 @@ int ObRAWIndexBlockRowIterator::init_datum_row(const ObStorageDatumUtils &datum_
   } else if (nullptr != datum_row_) {
     if (OB_ISNULL(allocator)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("allocator is null", K(ret), KP(allocator));
     } else {
       datum_row_->~ObDatumRow();
       allocator->free(datum_row_);
@@ -649,10 +615,8 @@ int ObRAWIndexBlockRowIterator::init_datum_row(const ObStorageDatumUtils &datum_
       void *buf = nullptr;
       if (OB_ISNULL(allocator)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("allocator is null", K(ret), KP(allocator));
       } else if (OB_ISNULL(buf = allocator->alloc(sizeof(ObDatumRow)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("Fail to allocate memory for datum row", K(ret));
       } else if (FALSE_IT(datum_row_ = new (buf) ObDatumRow())) {
       } else if (OB_FAIL(datum_row_->init(*allocator, request_cnt))) {
       }
@@ -680,7 +644,6 @@ int ObRAWIndexBlockRowIterator::get_index_row_count(const ObDatumRange &range,
   index_row_count = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else {
     if (start_ < 0 || end_ < 0) {
       index_row_count = 0;
@@ -727,12 +690,9 @@ int ObTFMIndexBlockRowIterator::init(const ObMicroBlockData &idx_block_data,
   idx_data_header_ = reinterpret_cast<const ObIndexBlockDataHeader *>(idx_block_data.get_extra_buf());
   if (OB_ISNULL(allocator) || OB_ISNULL(datum_utils) || !datum_utils->is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguement", K(ret), KP(allocator), KPC(datum_utils));
   } else if (!micro_reader_helper_.is_inited() && OB_FAIL(micro_reader_helper_.init(*allocator_))) {
-    LOG_WARN("Fail to init micro reader helper", K(ret));
   } else if (OB_UNLIKELY(!idx_data_header_->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid index block data header", K(ret), KPC(idx_data_header_));
   } else {
     is_reverse_scan_ = is_reverse_scan;
     iter_step_ = is_reverse_scan_ ? -1 : 1;
@@ -749,10 +709,8 @@ int ObTFMIndexBlockRowIterator::locate_key(const ObDatumRowkey &rowkey)
   int64_t end_idx = -1;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_UNLIKELY(!rowkey.is_valid() || OB_ISNULL(idx_data_header_) || !idx_data_header_->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid rowkey", K(ret), K(rowkey), KPC(idx_data_header_));
   } else if (OB_FAIL(idx_data_header_->rowkey_vector_->locate_key(0,
                                                                   idx_data_header_->row_cnt_,
                                                                   rowkey,
@@ -779,13 +737,10 @@ int ObTFMIndexBlockRowIterator::locate_range(const ObDatumRange &range,
   current_ = ObIMicroBlockReaderInfo::INVALID_ROW_INDEX;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_UNLIKELY(!range.is_valid() || OB_ISNULL(idx_data_header_) || !idx_data_header_->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid range", K(ret), K(range), KPC(idx_data_header_));
   } else if (OB_FAIL(locate_range_by_rowkey_vector(range, is_left_border, is_right_border, begin_idx, end_idx))) {
     if (OB_UNLIKELY(OB_BEYOND_THE_RANGE != ret)) {
-      LOG_WARN("Failed to locate range by rowkey vector", K(ret));
     }
   } else {
     start_ = begin_idx;
@@ -800,7 +755,6 @@ int ObTFMIndexBlockRowIterator::locate_range()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else {
     start_ = 0;
     end_ = idx_data_header_->row_cnt_ - 1;
@@ -815,13 +769,10 @@ int ObTFMIndexBlockRowIterator::check_blockscan(const ObDatumRowkey &rowkey, boo
   int cmp_ret = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_UNLIKELY(!rowkey.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid rowkey", K(ret), K(rowkey));
   } else if (OB_UNLIKELY(!idx_data_header_->is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected index data header", K(ret), KPC(idx_data_header_));
   } else if (OB_FAIL(idx_data_header_->rowkey_vector_->compare_rowkey(rowkey, end_, *datum_utils_, cmp_ret, false))) {
   } else {
     can_blockscan = cmp_ret < 0;
@@ -841,13 +792,11 @@ int ObTFMIndexBlockRowIterator::get_current(const ObIndexBlockRowHeader *&idx_ro
   int64_t idx_data_len = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_FAIL(idx_data_header_->get_index_data(current_, idx_data_buf, idx_data_len))) {
   } else if (OB_FAIL(idx_row_parser_.init(idx_data_buf, idx_data_len))) {
   } else if (OB_FAIL(idx_row_parser_.get_header(idx_row_header))) {
   } else if (OB_UNLIKELY(!idx_data_header_->is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Invalid idx data header", K(ret), KPC(idx_data_header_));
   } else if (OB_FAIL(idx_data_header_->rowkey_vector_->get_rowkey(current_, endkey))) {
   } else {
     cur_node_index_ = current_;
@@ -872,11 +821,9 @@ int ObTFMIndexBlockRowIterator::get_next(const ObIndexBlockRowHeader *&idx_row_h
   agg_buf_size = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_FAIL(get_current(idx_row_header, endkey))) {
   } else if (OB_UNLIKELY(nullptr == idx_row_header || !endkey.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null index block row header/endkey", K(ret), KP(idx_row_header), K(endkey));
   } else if (OB_FAIL(idx_row_parser_.parse_minor_meta_and_agg_row(idx_minor_info, agg_row_buf, agg_buf_size))) {
   } else {
     row_offset = idx_row_parser_.get_row_offset();
@@ -896,16 +843,13 @@ int ObTFMIndexBlockRowIterator::advance_to_border(const ObDatumRowkey &rowkey,
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_UNLIKELY(end_of_block())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected error", K(ret), K(end_of_block()));
   } else if (OB_UNLIKELY(!rowkey.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid rowkey", K(ret), K(rowkey));
   } else if (OB_UNLIKELY(!idx_data_header_->is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected index data header", K(ret), KPC(idx_data_header_));
   } else if (OB_FAIL(advance_to_border_by_rowkey_vector(rowkey, is_left_border, is_right_border, parent_row_range, row_id_range))) {
   }
   return ret;
@@ -958,10 +902,8 @@ int ObTFMIndexBlockRowIterator::get_end_key(ObCommonDatumRowkey &endkey)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_UNLIKELY(!idx_data_header_->is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected index data header", K(ret), KPC(idx_data_header_));
   } else {
     endkey.set_compact_rowkey(idx_data_header_->rowkey_vector_->get_last_rowkey());
   }
@@ -978,14 +920,12 @@ int ObTFMIndexBlockRowIterator::get_cur_row_id_range(const ObMicroBlockRowIdRang
   bool is_scan_right_border = false;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (end_of_block()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected end of index block scanner", KPC(this));
   } else if (OB_FAIL(get_current(idx_row_header, endkey))) {
   } else if (OB_ISNULL(idx_row_header)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null index block row header", K(ret));
   } else {
     row_id_range.start_row_id_ = idx_row_parser_.get_row_offset() - idx_row_header->get_row_count() + 1;
     row_id_range.end_row_id_ = idx_row_parser_.get_row_offset();
@@ -1002,10 +942,8 @@ int ObTFMIndexBlockRowIterator::skip_to_next_valid_position(const ObDatumRowkey 
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_UNLIKELY(!idx_data_header_->is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Invalid idx data header", K(ret), KPC(idx_data_header_));
   } else {
     int64_t found_idx = ObIMicroBlockReaderInfo::INVALID_ROW_INDEX;
     if (OB_FAIL(idx_data_header_->rowkey_vector_->locate_key(current_,
@@ -1027,10 +965,8 @@ int ObTFMIndexBlockRowIterator::find_rowkeys_belong_to_same_idx_row(ObMicroIndex
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_UNLIKELY(nullptr == rows_info || !idx_data_header_->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid rows info or header", K(ret), KP(rows_info), KPC(idx_data_header_));
   } else {
     bool is_decided = false;
     for (; OB_SUCC(ret) && rowkey_begin_idx < rowkey_end_idx; ++rowkey_begin_idx) {
@@ -1063,11 +999,9 @@ int ObTFMIndexBlockRowIterator::find_rowkeys_belong_to_curr_idx_row(ObMicroIndex
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_UNLIKELY(!idx_block_row.endkey_.is_valid() ||
                          nullptr == rowkeys_info)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid rowkeys info", K(ret), K(idx_block_row.endkey_), KP(rowkeys_info));
   } else {
     for (; OB_SUCC(ret) && idx_block_row.rowkey_end_idx_ < rowkey_end_idx; ++idx_block_row.rowkey_end_idx_) {
       if (rowkeys_info->is_rowkey_not_exist(idx_block_row.rowkey_end_idx_)) {
@@ -1099,7 +1033,6 @@ int ObTFMIndexBlockRowIterator::locate_range_by_rowkey_vector(
                                                              begin_idx,
                                                              end_idx))) {
     if (OB_UNLIKELY(OB_BEYOND_THE_RANGE != ret)) {
-      LOG_WARN("Failed to locate range by rowkey vector", K(ret));
     }
   }
   return ret;
@@ -1190,10 +1123,8 @@ int ObIndexBlockRowScanner::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("Already inited", K(ret));
   } else if (OB_UNLIKELY(!datum_utils.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid datum utils", K(ret), K(datum_utils));
   } else {
     allocator_ = &allocator;
     is_reverse_scan_ = query_flag.is_reverse_scan();
@@ -1215,19 +1146,14 @@ int ObIndexBlockRowScanner::open(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not inited", K(ret));
   } else if (OB_UNLIKELY(!macro_id.is_valid() || !idx_block_data.is_valid() || !rowkey.is_valid()
       || !idx_block_data.is_index_block())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument to open an index micro block", K(ret),
-        K(macro_id), K(idx_block_data), K(rowkey), KP(idx_info));
   } else if (OB_FAIL(init_by_micro_data(idx_block_data))) {
   } else if (OB_ISNULL(iter_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("iter is null", K(index_format_), K(ret));
   } else if (OB_FAIL(iter_->locate_key(rowkey))) {
     if (OB_UNLIKELY(OB_BEYOND_THE_RANGE != ret)) {
-      LOG_WARN("Fail to locate rowkey", K(ret), K(idx_block_data), K(rowkey), KPC(iter_));
     } else {
       ret = OB_SUCCESS; // return OB_ITER_END on get_next() for get
     }
@@ -1256,15 +1182,11 @@ int ObIndexBlockRowScanner::open(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not inited", K(ret));
   } else if (OB_UNLIKELY(!macro_id.is_valid() || !idx_block_data.is_valid() || nullptr == rows_info)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument to open an index micro block", K(ret), K(macro_id), K(idx_block_data),
-              KP(rows_info));
   } else if (OB_FAIL(init_by_micro_data(idx_block_data))) {
   } else if (OB_ISNULL(iter_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("iter is null", K(index_format_), K(ret), KPC(iter_));
   } else if (OB_FAIL(iter_->locate_range())) {
   } else {
     macro_id_ = macro_id;
@@ -1286,10 +1208,8 @@ int ObIndexBlockRowScanner::open(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not inited", K(ret));
   } else if (OB_UNLIKELY(nullptr == row_keys_info || rowkey_begin_idx >= rowkey_end_idx)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument to open an index micro block", K(ret), KP(row_keys_info), K(rowkey_begin_idx), K(rowkey_end_idx));
   } else {
     const ObDatumRowkey &first_rowkey = row_keys_info->get_rowkey(rowkey_begin_idx);
     if (OB_FAIL(open(macro_id, idx_block_data, first_rowkey, rowkey_begin_idx))) {
@@ -1314,18 +1234,14 @@ int ObIndexBlockRowScanner::open(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not inited", K(ret));
   } else if (OB_UNLIKELY(!macro_id.is_valid() || !idx_block_data.is_valid() || !range.is_valid()
       || !idx_block_data.is_index_block())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument to open an index micro block", K(ret), K(idx_block_data), K(range), KP(idx_info));
   } else if (OB_FAIL(init_by_micro_data(idx_block_data))) {
   } else if (OB_ISNULL(iter_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("iter is null", K(index_format_), K(ret));
   } else if (OB_FAIL(locate_range(range, is_left_border, is_right_border))) {
     if (OB_UNLIKELY(OB_BEYOND_THE_RANGE != ret)) {
-      LOG_WARN("Fail to locate range", K(ret), K(range), K(is_left_border), K(is_right_border));
     }
   } else {
     macro_id_ = macro_id;
@@ -1349,19 +1265,15 @@ int ObIndexBlockRowScanner::open(const MacroBlockId &macro_id,
   ObDatumRange range;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not inited", K(ret));
   } else if (OB_UNLIKELY(!macro_id.is_valid() || !idx_block_data.is_valid()
       || !idx_block_data.is_index_block())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument to open an index micro block", K(ret), K(idx_block_data), K(macro_id));
   } else if (OB_FAIL(init_by_micro_data(idx_block_data))) {
   } else if (OB_ISNULL(iter_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("iter is null", K(index_format_), K(ret));
   } else if (FALSE_IT(range.set_whole_range())) {
   } else if (OB_FAIL(locate_range(range, true /* is_left_border */, true /* is_right_border */))) {
     if (OB_UNLIKELY(OB_BEYOND_THE_RANGE != ret)) {
-      LOG_WARN("Fail to locate range", K(ret));
     }
   } else {
     macro_id_ = macro_id;
@@ -1385,7 +1297,6 @@ int ObIndexBlockRowScanner::get_next(
   idx_block_row.reset();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not inited", K(ret));
   } else {
     const bool has_advance_scan_helper = nullptr != advance_scan_helper;
     do {
@@ -1393,10 +1304,8 @@ int ObIndexBlockRowScanner::get_next(
         ret = OB_ITER_END;
       } else if (is_multi_check && OB_FAIL(skip_to_next_valid_position(idx_block_row))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("Failed to skip to next valid position", K(ret), K(curr_rowkey_begin_idx_), K(rowkey_end_idx_), KPC(rows_info_));
         } else if (OB_ISNULL(iter_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("iter is null", K(index_format_), K(ret));
         } else {
           iter_->set_iter_end();
         }
@@ -1407,7 +1316,6 @@ int ObIndexBlockRowScanner::get_next(
         idx_block_row.rowkey_end_idx_ = curr_rowkey_begin_idx_ + 1;
         if (OB_ISNULL(iter_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("iter is null", K(index_format_), K(ret));
         } else if (OB_FAIL(iter_->find_rowkeys_belong_to_curr_idx_row(idx_block_row, rowkey_end_idx_, rowkeys_info_))) {
         }
       }
@@ -1435,10 +1343,8 @@ bool ObIndexBlockRowScanner::end_of_block() const
   bool bret = true;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not inited", K(ret));
   } else if (OB_ISNULL(iter_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("iter is null", K(index_format_), K(ret));
   } else {
     bret = iter_->end_of_block();
   }
@@ -1452,10 +1358,8 @@ int ObIndexBlockRowScanner::get_index_row_count(int64_t &index_row_count) const
   int64_t data_row_count = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not inited", K(ret));
   } else if (OB_ISNULL(iter_) || OB_ISNULL(range_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("iter is null", K(index_format_), K(ret), KP(iter_), KP(range_));
   } else if (OB_FAIL(iter_->get_index_row_count(*range_, is_left_border_, is_right_border_, index_row_count, data_row_count))) {
   }
  return ret;
@@ -1468,7 +1372,6 @@ int ObIndexBlockRowScanner::check_blockscan(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not init", K(ret));
   } else if (is_reverse_scan_) {
     if (rowkey.is_min_rowkey()) {
       can_blockscan = true;
@@ -1481,7 +1384,6 @@ int ObIndexBlockRowScanner::check_blockscan(
   } else {
     if (OB_ISNULL(iter_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("iter is null", K(index_format_), K(ret));
     } else if (OB_FAIL(iter_->check_blockscan(rowkey, can_blockscan))) {
     }
   }
@@ -1500,7 +1402,6 @@ int ObIndexBlockRowScanner::init_by_micro_data(const ObMicroBlockData &idx_block
         } else {
           if (OB_ISNULL(iter_buf = allocator_->alloc(sizeof(ObRAWIndexBlockRowIterator)))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("allocate memory failed", K(ret), K(sizeof(ObRAWIndexBlockRowIterator)));
           } else if (FALSE_IT(raw_iter_ = new (iter_buf) ObRAWIndexBlockRowIterator)) {
           } else {
             iter_ = raw_iter_;
@@ -1514,7 +1415,6 @@ int ObIndexBlockRowScanner::init_by_micro_data(const ObMicroBlockData &idx_block
         } else {
           if (OB_ISNULL(iter_buf = allocator_->alloc(sizeof(ObTFMIndexBlockRowIterator)))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("allocate memory failed", K(ret), K(sizeof(ObTFMIndexBlockRowIterator)));
           } else if (FALSE_IT(transformed_iter_ = new (iter_buf) ObTFMIndexBlockRowIterator)) {
           } else {
             iter_ = transformed_iter_;
@@ -1529,7 +1429,6 @@ int ObIndexBlockRowScanner::init_by_micro_data(const ObMicroBlockData &idx_block
     } else {
       if (OB_ISNULL(iter_buf = allocator_->alloc(sizeof(ObDDLIndexBlockRowIterator)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory failed", K(ret), K(sizeof(ObDDLIndexBlockRowIterator)));
       } else if (FALSE_IT(ddl_iter_ = new (iter_buf) ObDDLIndexBlockRowIterator)) {
       } else {
         iter_ = ddl_iter_;
@@ -1540,7 +1439,6 @@ int ObIndexBlockRowScanner::init_by_micro_data(const ObMicroBlockData &idx_block
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(iter_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("iter is null", K(index_format_), K(ret));
     } else if (OB_FAIL(iter_->init(idx_block_data, datum_utils_, allocator_, is_reverse_scan_, iter_param_))) {
     }
   }
@@ -1555,10 +1453,8 @@ int ObIndexBlockRowScanner::locate_range(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(iter_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("iter is null", K(index_format_), K(ret), KPC(iter_));
   } else if (OB_FAIL(iter_->locate_range(range, is_left_border, is_right_border))) {
     if (OB_UNLIKELY(OB_BEYOND_THE_RANGE != ret)) {
-      LOG_WARN("Fail to locate range", K(ret), K(range), K(is_left_border), K(is_right_border), KPC(iter_));
     }
   } else {
     range_ = &range;
@@ -1574,7 +1470,6 @@ int ObIndexBlockRowScanner::advance_to_border(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(index_format_ != ObIndexFormat::TRANSFORMED) || OB_ISNULL(iter_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected error", K(ret), K(index_format_), KP(iter_));
   } else if (OB_UNLIKELY(end_of_block())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected error", K(ret), K(end_of_block()));
@@ -1591,10 +1486,8 @@ int ObIndexBlockRowScanner::get_end_key(ObCommonDatumRowkey &endkey) const
   endkey.reset();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not inited", K_(is_inited));
   } else if (OB_ISNULL(iter_) || OB_UNLIKELY(index_format_ != ObIndexFormat::TRANSFORMED)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("iter is null or wrong format", KP(iter_), K(index_format_), K(ret));
   } else if (OB_FAIL(iter_->get_end_key(endkey))) {
   }
   return ret;
@@ -1632,13 +1525,10 @@ int ObIndexBlockRowScanner::get_next_idx_row(ObMicroIndexInfo &idx_block_row)
   bool is_scan_right_border = false;
   if (OB_ISNULL(iter_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("iter is null", K(ret), K(index_format_), KP(iter_));
   } else {
     if (OB_FAIL(iter_->get_next(idx_row_header, idx_block_row.endkey_, is_scan_left_border, is_scan_right_border, idx_minor_info, agg_row_buf, agg_buf_size, row_offset))) {
     } else if (OB_UNLIKELY(nullptr == idx_row_header || !idx_block_row.endkey_.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected null index block row header/endkey", K(ret), KPC(iter_),
-              K(index_format_), KP(idx_row_header), K(idx_block_row.endkey_));
     }
   }
 
@@ -1678,15 +1568,12 @@ int ObIndexBlockRowScanner::skip_to_next_valid_position(ObMicroIndexInfo &idx_bl
   }
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not inited", K(ret));
   } else if (curr_rowkey_begin_idx_ == rowkey_end_idx_) {
     ret = OB_ITER_END;
   } else if (OB_ISNULL(iter_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("iter is null", K(index_format_), K(ret));
   } else if (OB_FAIL(iter_->skip_to_next_valid_position(rows_info_->get_rowkey(curr_rowkey_begin_idx_)))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("fail to skip to next valid position", K(ret), K(curr_rowkey_begin_idx_), K(rowkey_end_idx_), KPC(rows_info_), KPC(iter_));
     }
   } else {
     idx_block_row.rows_info_ = rows_info_;

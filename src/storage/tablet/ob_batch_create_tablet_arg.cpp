@@ -76,7 +76,6 @@ int ObBatchCreateTabletArg::assign(const ObBatchCreateTabletArg &arg)
   const common::ObSArray<storage::ObCreateTabletSchema*> &create_tablet_schemas = arg.create_tablet_schemas_;
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("arg is invalid", KR(ret), K(arg));
   } else if (OB_FAIL(tablets_.assign(arg.tablets_))) {
   } else if (OB_FAIL(table_schemas_.assign(arg.table_schemas_))) {
   } else if (OB_FAIL(tablet_extra_infos_.assign(arg.tablet_extra_infos_))) {
@@ -85,13 +84,11 @@ int ObBatchCreateTabletArg::assign(const ObBatchCreateTabletArg &arg)
     for (int64_t i = 0; OB_SUCC(ret) && i < create_tablet_schemas.count(); ++i) {
       if (OB_ISNULL(create_tablet_schemas[i])) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid argument", KR(ret), K(i), KPC(this));
       } else {
         ObCreateTabletSchema *create_tablet_schema = NULL;
         void *create_tablet_schema_ptr = allocator_.alloc(sizeof(ObCreateTabletSchema));
         if (OB_ISNULL(create_tablet_schema_ptr)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to allocate storage schema", KR(ret));
         } else if (FALSE_IT(create_tablet_schema = new (create_tablet_schema_ptr)ObCreateTabletSchema())) {
         } else if (OB_FAIL(create_tablet_schema->init(allocator_, *create_tablet_schemas[i]))) {
           create_tablet_schema->~ObCreateTabletSchema();
@@ -136,7 +133,6 @@ int ObBatchCreateTabletArg::init_create_tablet(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!major_frozen_scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(major_frozen_scn));
   } else {
     /*
       To fix issue 2025022400107312907
@@ -173,7 +169,6 @@ int ObBatchCreateTabletArg::serialize_for_create_tablet_schemas(char *buf,
   for (int64_t i = 0; OB_SUCC(ret) && i < create_tablet_schemas_.count(); ++i) {
     if (OB_ISNULL(create_tablet_schemas_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null tx service ptr", KR(ret), K(i), KPC(this));
     } else if (OB_FAIL(create_tablet_schemas_.at(i)->serialize(buf, data_len, pos))) {
     }
   }
@@ -220,7 +215,6 @@ int ObBatchCreateTabletArg::deserialize_create_tablet_schemas(const char *buf,
       void *create_tablet_schema_ptr = allocator_.alloc(sizeof(ObCreateTabletSchema));
       if (OB_ISNULL(create_tablet_schema_ptr)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate storage schema", KR(ret));
       } else if (FALSE_IT(create_tablet_schema = new (create_tablet_schema_ptr)ObCreateTabletSchema())) {
       } else if (OB_FAIL(create_tablet_schema->deserialize(allocator_, buf, data_len, pos))) {
         create_tablet_schema->~ObCreateTabletSchema();
@@ -278,7 +272,6 @@ OB_DEF_DESERIALIZE(ObBatchCreateTabletArg)
     OB_UNIS_DECODE(tablet_extra_infos_count);
     if (tablet_extra_infos_count <= 0) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("tablet extra infos are required", K(ret), K(tablet_extra_infos_count));
     } else if (OB_FAIL(tablet_extra_infos_.prepare_allocate(tablet_extra_infos_count))) {
     } else {
       OB_UNIS_DECODE_ARRAY(tablet_extra_infos_, tablet_extra_infos_count);

@@ -32,7 +32,6 @@ int ObPartIterator::next(const ObPartition *&part)
   part = NULL;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("iter not init", KR(ret));
   } else {
     // The partition_array of the system table is empty and needs to be processed by part_num
     int64_t part_num = check_normal_partition(check_partition_mode_) ?
@@ -60,13 +59,11 @@ int ObPartIterator::next(const ObPartition *&part)
                  PARTITION_LEVEL_TWO == part_level) {
         if (OB_ISNULL(part_array)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("part_array is null", KR(ret), KPC_(partition_schema));
         } else {
           part = part_array[idx];
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected part level", KR(ret), K(part_level));
       }
     } else if (part_num <= idx_ && total_part_num > idx_) {
       // deal with hidden partition
@@ -74,17 +71,13 @@ int ObPartIterator::next(const ObPartition *&part)
       ObPartition **hidden_part_array = partition_schema_->get_hidden_part_array();
       if (OB_ISNULL(hidden_part_array)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("hidden_part_array is null", KR(ret), K_(idx), K(part_num));
       } else if (idx < 0 || idx >= partition_schema_->get_hidden_partition_num()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid idx", KR(ret), K(idx), KPC_(partition_schema));
       } else {
         part = hidden_part_array[idx];
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("shouldn't be here", KR(ret), K_(idx), K_(check_partition_mode),
-               K(part_num), K(hidden_part_num));
     }
   }
   return ret;
@@ -96,7 +89,6 @@ int ObSubPartIterator::next(const ObSubPartition *&subpart)
   subpart = NULL;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("iter not init", KR(ret));
   } else {
     int64_t sub_part_num = check_normal_partition(check_partition_mode_) ?
                            part_->get_subpartition_num() : 0;
@@ -116,17 +108,12 @@ int ObSubPartIterator::next(const ObSubPartition *&subpart)
         subpart_array = part_->get_hidden_subpart_array();
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("shouldn't be here", KR(ret), K_(idx), K_(check_partition_mode),
-                 K(sub_part_num), K(hidden_sub_part_num));
       }
       if (OB_FAIL(ret)) {
       } else if (OB_ISNULL(subpart_array)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("subpartition array in partition is NULL", KR(ret));
       } else if (OB_ISNULL(subpart_array[idx])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("subpartition in partition is NULL", KR(ret), K(idx), K(idx_),
-                 K(total_sub_part_num), K(sub_part_num), K(hidden_sub_part_num));
       } else {
         subpart = subpart_array[idx];
       }
@@ -155,7 +142,6 @@ int ObPartitionSchemaIter::next_tablet_id(
   ObPartitionSchemaIter::Info info;
   if (OB_FAIL(next_partition_info(info))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("fail to get next partition info", KR(ret));
     }
   } else {
     tablet_id = info.tablet_id_;
@@ -173,7 +159,6 @@ int ObPartitionSchemaIter::next_partition_info(
   const uint64_t schema_id = partition_schema_.get_table_id();
   if (is_virtual_table(schema_id)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("iterate virtual table not supported", KR(ret), K_(partition_schema));
   } else if (OB_ISNULL(part_)) {
     if (PARTITION_LEVEL_TWO == part_level) {
       // Normal partition of nontemplate secondary partitioned table may contains
@@ -190,11 +175,9 @@ int ObPartitionSchemaIter::next_partition_info(
   } else if (OB_ISNULL(part_) || PARTITION_LEVEL_TWO != part_level) {
     if (OB_FAIL(part_iter_.next(part_))) {
       if (ret != OB_ITER_END) {
-        LOG_WARN("get next partition failed", KR(ret));
       }
     } else if (OB_ISNULL(part_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL ptr", KR(ret), KP(part_));
     } else if (PARTITION_LEVEL_TWO == part_level) {
       subpart_iter_.init(partition_schema_, *part_, check_partition_mode_);
     }
@@ -216,14 +199,11 @@ int ObPartitionSchemaIter::next_partition_info(
       const ObSubPartition *subpart = NULL;
       if (OB_FAIL(subpart_iter_.next(subpart))) {
         if (ret != OB_ITER_END) {
-          LOG_WARN("get next subpart failed", KR(ret));
         } else if (OB_FAIL(part_iter_.next(part_))) {
           if (ret != OB_ITER_END) {
-            LOG_WARN("get next part failed", KR(ret));
           }
         } else if (OB_ISNULL(part_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("NULL ptr", KR(ret), KP(part_));
         } else {
           part_idx_++;
           subpart_idx_ = OB_INVALID_INDEX;
@@ -233,7 +213,6 @@ int ObPartitionSchemaIter::next_partition_info(
             // will never be here
           } else if (OB_FAIL(subpart_iter_.next(subpart))) {
             if (ret != OB_ITER_END) {
-              LOG_WARN("get next subpart failed", KR(ret));
             }
           }
         }
@@ -242,7 +221,6 @@ int ObPartitionSchemaIter::next_partition_info(
         subpart_idx_++;
         if (OB_ISNULL(subpart)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("NULL ptr", KR(ret), K(subpart));
         } else {
           info.tablet_id_ = subpart->get_tablet_id();
           info.object_id_ = subpart->get_sub_part_id();

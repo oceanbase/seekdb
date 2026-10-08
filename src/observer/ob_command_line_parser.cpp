@@ -126,7 +126,6 @@ static int get_executable_name(ObSqlString &exe_name)
   DWORD len = GetModuleFileNameA(nullptr, buf, sizeof(buf) - 1);
   if (len == 0 || len >= sizeof(buf)) {
     ret = OB_ERROR;
-    LOG_WARN("fail to get self exe path", K(ret));
   } else {
     const char *last_slash = strrchr(buf, '\\');
     if (nullptr == last_slash) {
@@ -138,7 +137,6 @@ static int get_executable_name(ObSqlString &exe_name)
       last_slash++;
     }
     if (OB_FAIL(exe_name.assign(last_slash))) {
-      LOG_WARN("fail to assign exe name to `sql string`", K(ret));
     }
   }
 #else
@@ -155,7 +153,6 @@ static int get_executable_name(ObSqlString &exe_name)
       last_slash++;
     }
     if (OB_FAIL(exe_name.assign(last_slash))) {
-      LOG_WARN("fail to assign exe name to `sql string`", K(ret));
     }
   }
 #endif

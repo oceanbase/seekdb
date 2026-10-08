@@ -49,7 +49,6 @@ pub(crate) fn conn_of(sess: *mut c_void) -> Option<Arc<Conn>> {
     conn_of_live_or_retired(sess).filter(|conn| !conn.close_notified.load(Ordering::Acquire))
 }
 
-#[repr(C)]
 pub struct NioConnectionHandle {
     pub(crate) conn: Arc<Conn>,
 }

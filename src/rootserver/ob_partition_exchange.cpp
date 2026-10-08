@@ -58,31 +58,23 @@ int ObPartitionExchange::check_and_exchange_partition(const obcall::ObExchangePa
   ObArray<ObTabletID> inc_tablet_ids;
   if (OB_UNLIKELY(!ddl_service_.is_inited())) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("ddl_service not init", K(ret));
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(arg));
   } else if (OB_FAIL(schema_guard.get_table_schema( arg.base_table_id_, base_table_schema))) {
   } else if (OB_ISNULL(base_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table not found", K(ret), K(arg));
   } else if (OB_FAIL(schema_guard.get_table_schema( arg.inc_table_id_, inc_table_schema))) {
   } else if (OB_ISNULL(inc_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table not found", K(ret), K(arg));
   } else if (OB_FAIL(base_table_schema->has_add_column_instant(base_has_add_column_instant))) {
   } else if (OB_FAIL(inc_table_schema->has_add_column_instant(inc_has_add_column_instant))) {
   } else if (base_has_add_column_instant || inc_has_add_column_instant) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("base or inc table has add column instant, not supported to exchange partition", KR(ret),
-              K(base_has_add_column_instant), K(inc_has_add_column_instant));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "Non matching attribute 'INSTANT COLUMN(s)' between partition and table");
   } else if (OB_FAIL(base_table_schema->has_unused_column(base_has_drop_column_instant))) {
   } else if (OB_FAIL(inc_table_schema->has_unused_column(inc_has_drop_column_instant))) {
   } else if (base_has_drop_column_instant || inc_has_drop_column_instant) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("base or inc table has drop column instant, not supported to exchange partition", KR(ret),
-              K(base_has_drop_column_instant), K(inc_has_drop_column_instant));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "Table has drop column instant, exchange partition");
   } else if (OB_FAIL(check_partition_exchange_conditions_(arg, *base_table_schema, *inc_table_schema, schema_guard, part_exchange_type, base_tablet_ids, inc_tablet_ids))) {
   } else if (OB_FAIL(inner_init(*base_table_schema, *inc_table_schema, schema_guard))) {
@@ -103,23 +95,19 @@ int ObPartitionExchange::check_partition_exchange_schema_for_user(
   if (OB_UNLIKELY(!base_table_schema.is_user_table() || !inc_table_schema.is_user_table())) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "alter table type");
-    LOG_WARN("unsupported behavior on non-user table", KR(ret), K(base_table_schema), K(inc_table_schema));
   } else if (!inc_table_schema.is_partitioned_table()) {
     if (OB_UNLIKELY((exchange_part_level != base_table_schema.get_part_level())
                     || ((ObPartitionLevel::PARTITION_LEVEL_ONE != exchange_part_level)
                         && (ObPartitionLevel::PARTITION_LEVEL_TWO != exchange_part_level)))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("partition level is invalid", K(ret), K(base_table_schema.get_part_level()), K(exchange_part_level));
     } else if (ObPartitionLevel::PARTITION_LEVEL_ONE == exchange_part_level) {
       if (OB_FAIL(base_table_schema.get_partition_by_name(partition_name, part))) {
       } else if (OB_ISNULL(part)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("partition not found", K(ret), K(base_table_schema), K(partition_name));
       } else {
         share::schema::ObPartitionFuncType part_type = base_table_schema.get_part_option().get_part_func_type();
         if (OB_UNLIKELY(PARTITION_FUNC_TYPE_RANGE != part_type && PARTITION_FUNC_TYPE_RANGE_COLUMNS != part_type)) {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("Only support exchanging range/range columns partitions currently", K(ret), K(part_type));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "Exchange partition except range/range columns");
         }
       }
@@ -135,16 +123,13 @@ int ObPartitionExchange::check_partition_exchange_schema_for_user(
             share::schema::ObPartitionFuncType subpart_type = base_table_schema.get_sub_part_option().get_part_func_type();
             if (OB_UNLIKELY(PARTITION_FUNC_TYPE_RANGE != subpart_type && PARTITION_FUNC_TYPE_RANGE_COLUMNS != subpart_type)) {
               ret = OB_NOT_SUPPORTED;
-              LOG_WARN("Only support exchanging range/range columns partitions currently", K(ret), K(subpart_type));
               LOG_USER_ERROR(OB_NOT_SUPPORTED, "Exchange partition except range/range columns");
             }
           }
         } else {
-          LOG_WARN("fail to get partition by name", K(ret), K(base_table_schema), K(partition_name));
         }
       } else {
         ret = OB_ERR_EXCHANGE_COMPOSITE_PARTITION;
-        LOG_WARN("cannot EXCHANGE a composite partition with a non-partitioned table", K(ret), K(base_table_schema), K(partition_name));
       }
     }
   } else { // inc_table_schema.is_partition_table()
@@ -159,29 +144,21 @@ int ObPartitionExchange::check_partition_exchange_schema_for_user(
                      || (PARTITION_FUNC_TYPE_LIST == orig_part_type)
                      || (PARTITION_FUNC_TYPE_LIST_COLUMNS == orig_part_type)))) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("only support exchanging range(columns) and list(columns) partitions currently", KR(ret), K(orig_part_type));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "Exchange partition except range(columns) and list(columns) is");
       } else if (OB_UNLIKELY(orig_subpart_type != exchange_part_type)) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("exchange partition between different partition type is not supported",
-            KR(ret), K(orig_subpart_type), K(exchange_part_type));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "Exchange partition between different partition type is");
       } else if (OB_FAIL(base_table_schema.get_partition_by_name(partition_name, part))) {
       } else if (OB_ISNULL(part)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("partition not found", K(ret), K(base_table_schema), K(partition_name));
       } else if (OB_UNLIKELY(part->get_subpartition_num() != inc_table_schema.get_partition_num())) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("exchange partition between different number of partitions is not supported", KR(ret),
-            K(part->get_subpartition_num()), K(inc_table_schema.get_partition_num()));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "Exchange partition between different number of partitions is");
       } else {
         const ObPartitionKeyInfo &subpart_key_info = base_table_schema.get_subpartition_key_info();
         const ObPartitionKeyInfo &part_key_info = inc_table_schema.get_partition_key_info();
         if (OB_UNLIKELY(!subpart_key_info.equals(part_key_info))) {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("exchange partition between tables with different partition keys is not supported",
-              KR(ret), K(subpart_key_info), K(part_key_info));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "Exchange partition between tables with different partition keys is");
         }
       }
@@ -191,14 +168,12 @@ int ObPartitionExchange::check_partition_exchange_schema_for_user(
         ObPartition **inc_part_array = inc_table_schema.get_part_array();
         if (OB_ISNULL(base_sub_part_array) || OB_ISNULL(inc_part_array)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null part array", KR(ret), KP(base_sub_part_array), KP(inc_part_array));
         }
         for (int64_t i = 0; OB_SUCC(ret) && (i < inc_table_schema.get_partition_num()); ++i) {
           ObSubPartition *base_sub_part = base_sub_part_array[i];
           ObPartition *inc_part = inc_part_array[i];
           if (OB_ISNULL(base_sub_part) || OB_ISNULL(inc_part)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected null partition", KR(ret), KP(base_sub_part), KP(inc_part));
           } else {
             const ObListRowValues &base_list_row_values = base_sub_part->get_list_row_values_struct();
             const ObListRowValues &inc_list_row_values = inc_part->get_list_row_values_struct();
@@ -228,8 +203,6 @@ int ObPartitionExchange::check_partition_exchange_schema_for_user(
       }
     } else {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("only support exchanging composite-partitioned table with partitioned table", K(ret),
-          K(base_table_schema.get_part_level()), K(inc_table_schema.get_part_level()), K(exchange_part_level));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "Exchange partition except composite-partitioned and partitioned table is");
     }
   }
@@ -245,7 +218,6 @@ int ObPartitionExchange::inner_init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObPartitionExchange init twice", KR(ret), KP(this));
   } else if (OB_FAIL(used_pt_nt_id_map_.create(MAX_INDEXES, lib::ObLabel("ExchangePart")))) {
   } else if (OB_FAIL(used_table_to_tablet_ids_map_.create(MAX_INDEXES, lib::ObLabel("ExchangePart")))) {
   } else if (OB_FAIL(generate_auxiliary_table_mapping_(base_table_schema,
@@ -269,15 +241,12 @@ int ObPartitionExchange::check_partition_exchange_conditions_(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!base_table_schema.is_partitioned_table())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table type of exchanging partition tables don't match the conditions", K(ret), K(base_table_schema.is_partitioned_table()));
     LOG_USER_ERROR(OB_OP_NOT_ALLOW, "exchange partition table type");
   } else if (OB_UNLIKELY(!in_supported_table_type_white_list_(base_table_schema) || !in_supported_table_type_white_list_(inc_table_schema))) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("exchange partition table is not user table", K(ret), K(base_table_schema.is_user_table()), K(base_table_schema.is_ctas_tmp_table()), K(inc_table_schema.is_user_table()), K(inc_table_schema.is_ctas_tmp_table()));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "Partition exchange operations for non-user tables are");
   } else if (OB_UNLIKELY(arg.base_table_part_name_.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("base table part name should not be empty", K(ret), K(arg.base_table_part_name_));
   } else if (OB_FAIL(check_partition_exchange_schema_for_user(
       base_table_schema, inc_table_schema, arg.base_table_part_name_, arg.exchange_partition_level_))) {
   }
@@ -343,8 +312,6 @@ int ObPartitionExchange::do_exchange_partitions_(
   ObDDLOperator ddl_operator(ddl_service_.get_schema_service(), ddl_service_.get_sql_proxy());
   if (OB_UNLIKELY(!is_valid_partition_exchange_type(part_exchange_type))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid partition exchange type", KR(ret), K(part_exchange_type),
-        K(arg.exchange_partition_level_), K(base_table_schema), K(inc_table_schema));
   } else if (OB_FAIL(schema_guard.get_schema_version(schema_version))) {
   } else if (OB_FAIL(trans.start(&ddl_service_.get_sql_proxy(), schema_version))) {
   } else {
@@ -386,7 +353,6 @@ int ObPartitionExchange::lock_exchange_data_table_and_partitions_(const ObTableS
   ObTabletIDArray tablet_id_array;
   if (OB_UNLIKELY(!partitioned_table_schema.is_valid() || !non_partitioned_table_schema.is_valid() || tablet_ids.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(partitioned_table_schema), K(non_partitioned_table_schema), K(tablet_ids));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && (i < tablet_ids.count()); ++i) {
       if (OB_FAIL(tablet_id_array.push_back(tablet_ids.at(i)))) {
@@ -410,12 +376,9 @@ int ObPartitionExchange::check_data_table_partition_exchange_conditions_(const O
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(base_tablet_ids.count() != inc_tablet_ids.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(base_tablet_ids.count()), K(inc_tablet_ids.count()));
   } else if (OB_FAIL(check_data_table_partitions_and_tablespace_(base_table_schema, base_tablet_ids))) {
   } else if (inc_table_schema.is_partitioned_table()
       && OB_FAIL(check_data_table_partitions_and_tablespace_(inc_table_schema, inc_tablet_ids))) {
-    LOG_WARN("failed to check data table partitions and tablespace",
-        KR(ret), K(inc_table_schema), K(inc_tablet_ids));
   } else if (OB_FAIL(check_table_conditions_in_common_(base_table_schema, inc_table_schema))) {
   } else if (OB_FAIL(check_table_conditions_in_mysql_mode_(base_table_schema, inc_table_schema))) {
   }
@@ -438,7 +401,6 @@ int ObPartitionExchange::check_table_conditions_in_common_(
     LOG_WARN("offline ddl is being executed, other ddl operations are not allowed", K(ret), K(base_table_schema.check_can_do_ddl()), K(inc_table_schema.check_can_do_ddl()), K(base_table_schema), K(inc_table_schema));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "execute ddl while other ddl operations are executing long running ddl");
   } else if (OB_UNLIKELY(base_table_schema.is_aux_table() != inc_table_schema.is_aux_table())) {
-    LOG_WARN("aux table attribute of exchanging partition tables are not equal", K(ret), K(base_table_schema.is_aux_table()), K(inc_table_schema.is_aux_table()));
   } else if (OB_FAIL(check_tablespace_(base_table_schema, inc_table_schema))) {
   } else if (OB_FAIL(check_table_rowkey_infos_(base_table_schema, inc_table_schema))) {
   } else if (OB_FAIL(check_table_index_infos_(base_table_schema, inc_table_schema))) {
@@ -446,49 +408,31 @@ int ObPartitionExchange::check_table_conditions_in_common_(
   } else {
     is_equal = false;
     if (OB_UNLIKELY(base_table_schema.get_load_type() != inc_table_schema.get_load_type())) {
-      LOG_WARN("the load type of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_load_type()), K(inc_table_schema.get_load_type()));
     } else if (OB_UNLIKELY(share::schema::TABLE_DEF_TYPE_USER != base_table_schema.get_def_type() || share::schema::TABLE_DEF_TYPE_USER != inc_table_schema.get_def_type())) {
-      LOG_WARN("not support to exchange partition in internal table", K(ret), K(base_table_schema.get_def_type()), K(inc_table_schema.get_def_type()));
     } else if (OB_UNLIKELY(base_table_schema.is_read_only() != inc_table_schema.is_read_only())) {
-      LOG_WARN("read only attribute of exchanging partition tables are not equal", K(ret), K(base_table_schema.is_read_only()), K(inc_table_schema.is_read_only()));
     } else if (OB_UNLIKELY(0 != strcmp(base_table_schema.get_compress_func_name(), inc_table_schema.get_compress_func_name()))) {
       ret = OB_ERR_PARTITION_EXCHANGE_DIFFERENT_OPTION;
-      LOG_WARN("compress func name of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_compress_func_name()), K(inc_table_schema.get_compress_func_name()));
       LOG_USER_ERROR(OB_ERR_PARTITION_EXCHANGE_DIFFERENT_OPTION, "ROW_FORMAT");
     } else if (OB_UNLIKELY(base_table_schema.get_store_format() != inc_table_schema.get_store_format())) {
       ret = OB_ERR_PARTITION_EXCHANGE_DIFFERENT_OPTION;
-      LOG_WARN("store format of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_store_format()), K(inc_table_schema.get_store_format()));
       LOG_USER_ERROR(OB_ERR_PARTITION_EXCHANGE_DIFFERENT_OPTION, "ROW_FORMAT");
     } else if (OB_UNLIKELY(base_table_schema.get_block_size() != inc_table_schema.get_block_size())) {
-      LOG_WARN("block size of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_block_size()), K(inc_table_schema.get_block_size()));
     } else if (OB_UNLIKELY(base_table_schema.get_collation_type() != inc_table_schema.get_collation_type())) {
-      LOG_WARN("collation type of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_collation_type()), K(inc_table_schema.get_collation_type()));
     } else if (OB_UNLIKELY(base_table_schema.get_tablet_size() != inc_table_schema.get_tablet_size())) {
-      LOG_WARN("tablet size of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_tablet_size()), K(inc_table_schema.get_tablet_size()));
     } else if (OB_UNLIKELY(base_table_schema.get_pctfree() != inc_table_schema.get_pctfree())) {
-      LOG_WARN("pctfree value of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_pctfree()), K(inc_table_schema.get_pctfree()));
     } else if (OB_UNLIKELY(ObPartitionStatus::PARTITION_STATUS_ACTIVE != base_table_schema.get_partition_status() || ObPartitionStatus::PARTITION_STATUS_ACTIVE != inc_table_schema.get_partition_status())) {
-      LOG_WARN("partition status of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_partition_status()), K(inc_table_schema.get_partition_status()));
     } else if (OB_UNLIKELY(base_table_schema.get_partition_schema_version() != inc_table_schema.get_partition_schema_version())) {
-      LOG_WARN("partition schema version of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_partition_schema_version()), K(inc_table_schema.get_partition_schema_version()));
     } else if (OB_UNLIKELY(base_table_schema.get_table_mode() != inc_table_schema.get_table_mode())) {
-      LOG_WARN("table mode of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_table_mode()), K(inc_table_schema.get_table_mode()));
     } else if (OB_UNLIKELY(base_table_schema.get_table_flags() != inc_table_schema.get_table_flags())) {
-      LOG_WARN("table flags of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_table_flags()), K(inc_table_schema.get_table_flags()));
     } else if (OB_UNLIKELY(base_table_schema.get_index_using_type() != inc_table_schema.get_index_using_type())) {
-      LOG_WARN("index using type of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_index_using_type()), K(inc_table_schema.get_index_using_type()));
     } else if (OB_UNLIKELY(base_table_schema.get_row_store_type() != inc_table_schema.get_row_store_type())) {
       ret = OB_ERR_PARTITION_EXCHANGE_DIFFERENT_OPTION;
-      LOG_WARN("row store type of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_row_store_type()), K(inc_table_schema.get_row_store_type()));
       LOG_USER_ERROR(OB_ERR_PARTITION_EXCHANGE_DIFFERENT_OPTION, "ROW_FORMAT");
     } else if (OB_UNLIKELY(base_table_schema.get_charset_type() != inc_table_schema.get_charset_type())) {
-      LOG_WARN("charset type of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_charset_type()), K(inc_table_schema.get_charset_type()));
     } else if (OB_UNLIKELY(base_table_schema.get_compressor_type() != inc_table_schema.get_compressor_type())) {
-      LOG_WARN("compressor type of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_compressor_type()), K(inc_table_schema.get_compressor_type()));
     } else if (OB_UNLIKELY(base_table_schema.get_foreign_key_infos().count() != 0 || inc_table_schema.get_foreign_key_infos().count() != 0)) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "exchanging partition tables have foreign key are");
-      LOG_WARN("including foreign key of exchanging partition tables", K(ret), K(base_table_schema.get_foreign_key_infos().count()), K(inc_table_schema.get_foreign_key_infos().count()));
     } else {
       is_equal = true;
       LOG_INFO("pass table level conditions check in common", K(ret), K(base_table_schema.get_table_id()), K(inc_table_schema.get_table_id()));
@@ -496,7 +440,6 @@ int ObPartitionExchange::check_table_conditions_in_common_(
   }
   if (OB_SUCC(ret) && !is_equal) {
     ret = OB_TABLES_DIFFERENT_DEFINITIONS;
-    LOG_WARN("table conditions in common of exchange tables are not equal", K(ret), K(base_table_schema), K(inc_table_schema));
   }
   return ret;
 }
@@ -508,13 +451,11 @@ int ObPartitionExchange::check_table_conditions_in_mysql_mode_(const ObTableSche
   if (OB_UNLIKELY((0 != base_table_schema.get_autoinc_column_id() || 0 != inc_table_schema.get_autoinc_column_id()))) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "exchanging partition tables have autoincrement column");
-    LOG_WARN("exchanging partition tables have autoincrement column is not supported", K(ret), K(base_table_schema.get_autoinc_column_id()), K(base_table_schema.get_autoinc_column_id()));
   } else {
     is_equal = true;
   }
   if (OB_SUCC(ret) && !is_equal) {
     ret = OB_TABLES_DIFFERENT_DEFINITIONS;
-    LOG_WARN("table conditions in mysql mode are not equal", K(ret), K(base_table_schema), K(inc_table_schema));
   }
   return ret;
 }
@@ -531,14 +472,12 @@ int ObPartitionExchange::check_table_all_column_conditions_(const ObTableSchema 
   while (OB_SUCC(ret) && OB_SUCC(get_next_pair_column_schema_(base_iter_begin, base_iter_end, inc_iter_begin, inc_iter_end, base_table_col_schema, inc_table_col_schema))) {
     if (OB_ISNULL(base_table_col_schema) || OB_ISNULL(inc_table_col_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to column schema", K(ret), KPC(base_table_col_schema), KPC(inc_table_col_schema));
     } else if (OB_FAIL(check_column_level_conditions_(base_table_col_schema, inc_table_col_schema, base_table_schema.is_aux_table()))) {
     }
   }
   if (OB_ITER_END == ret) {
     ret = OB_SUCCESS;
   } else {
-    LOG_WARN("fail to check table all column conditions", K(ret), K(base_table_schema), K(inc_table_schema));
   }
   return ret;
 }
@@ -550,7 +489,6 @@ int ObPartitionExchange::check_table_constraints_(const ObTableSchema &base_tabl
   ObArray<bool> used_flag;
   if (OB_UNLIKELY(base_table_schema.get_constraint_count() != inc_table_schema.get_constraint_count())) {
     is_equal = false;
-    LOG_WARN("constraints num of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_constraint_count()), K(inc_table_schema.get_constraint_count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < base_table_schema.get_constraint_count(); i++) {
       if (OB_FAIL(used_flag.push_back(false))) {
@@ -562,14 +500,12 @@ int ObPartitionExchange::check_table_constraints_(const ObTableSchema &base_tabl
       for (ObTableSchema::const_constraint_iterator base_iter = base_table_schema.constraint_begin(); OB_SUCC(ret) && is_equal && base_iter != base_table_schema.constraint_end(); ++base_iter) {
         if (OB_ISNULL(base_iter) || OB_ISNULL(*base_iter)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("constraint is null", K(ret));
         } else {
           int64_t loc = 0;
           bool found_same_constraint = false;
           for (ObTableSchema::const_constraint_iterator inc_iter = inc_table_schema.constraint_begin(); OB_SUCC(ret) && !found_same_constraint && inc_iter != inc_table_schema.constraint_end(); ++inc_iter, loc++) {
             if (OB_ISNULL(inc_iter) || OB_ISNULL(*inc_iter)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("constraint is null", K(ret));
             } else if (used_flag[loc]) {
             } else if ((*base_iter)->is_match_partition_exchange_constraint_conditions(*(*inc_iter))) {
               found_same_constraint = true;
@@ -578,7 +514,6 @@ int ObPartitionExchange::check_table_constraints_(const ObTableSchema &base_tabl
           }
           if (OB_SUCC(ret) && !found_same_constraint) {
             is_equal = false;
-            LOG_WARN("check constraints of exchanging partition tables are not equal", K(ret));
           }
         }
       }
@@ -586,7 +521,6 @@ int ObPartitionExchange::check_table_constraints_(const ObTableSchema &base_tabl
   }
   if (OB_SUCC(ret) && !is_equal) {
     ret = OB_TABLES_DIFFERENT_DEFINITIONS;
-    LOG_WARN("check constraints of exchanging partition tables are not equal", K(ret));
   }
   return ret;
 }
@@ -596,7 +530,6 @@ int ObPartitionExchange::check_column_level_conditions_(const ObColumnSchemaV2 *
   int ret = OB_SUCCESS;
   if (OB_ISNULL(base_table_col_schema) || OB_ISNULL(inc_table_col_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column schema is null", K(ret), KPC(base_table_col_schema), KPC(inc_table_col_schema));
   } else if (OB_FAIL(check_column_conditions_in_mysql_mode_(base_table_col_schema, inc_table_col_schema, is_aux_table_column))) {
   }
   if (OB_SUCC(ret)) {
@@ -612,66 +545,39 @@ int ObPartitionExchange::check_column_conditions_in_common_(const ObColumnSchema
   bool is_equal = false;
   if (OB_ISNULL(base_table_col_schema) || OB_ISNULL(inc_table_col_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column schema is null", K(ret), KPC(base_table_col_schema), KPC(inc_table_col_schema));
   } else if (OB_UNLIKELY(base_table_col_schema->get_rowkey_position() != inc_table_col_schema->get_rowkey_position())) {
-    LOG_WARN("column rowkey position of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->get_rowkey_position()), K(inc_table_col_schema->get_rowkey_position()));
   } else if (OB_UNLIKELY(base_table_col_schema->get_index_position() != inc_table_col_schema->get_index_position())) {
-    LOG_WARN("column index position of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->get_index_position()), K(inc_table_col_schema->get_index_position()));
   } else if (OB_UNLIKELY(base_table_col_schema->get_order_in_rowkey() != inc_table_col_schema->get_order_in_rowkey())) {
-    LOG_WARN("column order in rowkey of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->get_order_in_rowkey()), K(inc_table_col_schema->get_order_in_rowkey()));
   } else if (OB_UNLIKELY(base_table_col_schema->get_data_length() != inc_table_col_schema->get_data_length())) {
-    LOG_WARN("column data length of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->get_data_length()), K(inc_table_col_schema->get_data_length()));
   } else if (OB_UNLIKELY(base_table_col_schema->get_data_precision() != inc_table_col_schema->get_data_precision())) {
-    LOG_WARN("column data precision of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->get_data_precision()), K(inc_table_col_schema->get_data_precision()));
   } else if (OB_UNLIKELY(base_table_col_schema->get_data_scale() != inc_table_col_schema->get_data_scale())) {
-    LOG_WARN("column data scale of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->get_data_scale()), K(inc_table_col_schema->get_data_scale()));
   } else if (OB_UNLIKELY(base_table_col_schema->is_zero_fill() != inc_table_col_schema->is_zero_fill())) {
-    LOG_WARN("column is zero fill option of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->is_zero_fill()), K(inc_table_col_schema->is_zero_fill()));
   } else if (OB_UNLIKELY(base_table_col_schema->is_autoincrement() != inc_table_col_schema->is_autoincrement())) {
-    LOG_WARN("column is autoincrement option of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->is_autoincrement()), K(inc_table_col_schema->is_autoincrement()));
   } else if (OB_UNLIKELY(base_table_col_schema->is_hidden() != inc_table_col_schema->is_hidden())) {
-    LOG_WARN("column is hidden option of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->is_hidden()), K(inc_table_col_schema->is_hidden()));
   } else if (OB_UNLIKELY(base_table_col_schema->get_collation_type() != inc_table_col_schema->get_collation_type())) {
-    LOG_WARN("column collation type of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->get_collation_type()), K(inc_table_col_schema->get_collation_type()));
   } else if (OB_UNLIKELY(base_table_col_schema->get_srs_id() != inc_table_col_schema->get_srs_id())) {
-    LOG_WARN("column srs id of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->get_srs_id()), K(inc_table_col_schema->get_srs_id()));
   } else if (OB_UNLIKELY(base_table_col_schema->get_sub_data_type() != inc_table_col_schema->get_sub_data_type())) {
-    LOG_WARN("column sub data type of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->get_sub_data_type()), K(inc_table_col_schema->get_sub_data_type()));
   } else if (OB_UNLIKELY(base_table_col_schema->is_rowkey_column() != inc_table_col_schema->is_rowkey_column())) {
-    LOG_WARN("is rowkey column attribute of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->is_rowkey_column()), K(inc_table_col_schema->is_rowkey_column()));
   } else if (OB_UNLIKELY(base_table_col_schema->get_data_type() != inc_table_col_schema->get_data_type())) {
-    LOG_WARN("column data type of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->get_data_type()), K(inc_table_col_schema->get_data_type()));
   } else if (OB_UNLIKELY(base_table_col_schema->get_lob_chunk_size() != inc_table_col_schema->get_lob_chunk_size())) {
-    LOG_WARN("lob chunk size of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->get_lob_chunk_size()), K(inc_table_col_schema->get_lob_chunk_size()));
   } else if (OB_UNLIKELY(!(base_table_col_schema->get_local_session_var() == inc_table_col_schema->get_local_session_var()))) {
-    LOG_WARN("local session var of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->get_local_session_var()), K(inc_table_col_schema->get_local_session_var()));
   } else if (OB_UNLIKELY(base_table_col_schema->get_skip_index_attr().get_packed_value() != inc_table_col_schema->get_skip_index_attr().get_packed_value())) {
-    LOG_WARN("column skip index attr of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->get_skip_index_attr()), K(inc_table_col_schema->get_skip_index_attr()));
   } else if (OB_UNLIKELY(base_table_col_schema->get_udt_set_id() != inc_table_col_schema->get_udt_set_id())) {
-    LOG_WARN("column udt set id of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->get_udt_set_id()), K(inc_table_col_schema->get_udt_set_id()));
   } else if (OB_UNLIKELY(base_table_col_schema->is_not_null_rely_column() != inc_table_col_schema->is_not_null_rely_column())) {
-    LOG_WARN("is not null rely column attribute of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->is_not_null_rely_column()), K(inc_table_col_schema->is_not_null_rely_column()));
   } else if (OB_UNLIKELY(base_table_col_schema->is_not_null_enable_column() != inc_table_col_schema->is_not_null_enable_column())) {
-    LOG_WARN("is not null enable column attribute of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->is_not_null_enable_column()), K(inc_table_col_schema->is_not_null_enable_column()));
   } else if (OB_UNLIKELY(base_table_col_schema->is_not_null_validate_column() != inc_table_col_schema->is_not_null_validate_column())) {
-    LOG_WARN("is not null validate column attribute of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->is_not_null_validate_column()), K(inc_table_col_schema->is_not_null_validate_column()));
   } else if (OB_UNLIKELY(base_table_col_schema->is_invisible_column() != inc_table_col_schema->is_invisible_column())) {
-    LOG_WARN("is visible column attribute of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->is_invisible_column()), K(inc_table_col_schema->is_invisible_column()));
   } else if (OB_FAIL(check_column_flags_(base_table_col_schema, inc_table_col_schema, is_equal))) {
   } else if (!is_equal) {
-    LOG_WARN("column flags of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->get_column_flags()), K(inc_table_col_schema->get_column_flags()), K(is_equal));
   } else if (OB_FAIL(compare_column_extended_type_info_(base_table_col_schema->get_extended_type_info(), inc_table_col_schema->get_extended_type_info(), is_equal))) {
   } else if (!is_equal) {
-    LOG_WARN("column extended type info count of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->get_extended_type_info()), K(inc_table_col_schema->get_extended_type_info()), K(is_equal));
   } else if (OB_FAIL(check_generate_column_conditions_(base_table_col_schema, inc_table_col_schema, is_equal))) {
   } else if (!is_equal) {
-    LOG_WARN("generate column conditions of exchanging partition tables are not equal", K(ret), KPC(base_table_col_schema), KPC(inc_table_col_schema), K(is_equal));
   } else {
     is_equal = true;
   }
   if (OB_SUCC(ret) && !is_equal) {
     ret = OB_TABLES_DIFFERENT_DEFINITIONS;
-    LOG_WARN("all column conditions of exchange tables are not equal in common", K(ret), KPC(base_table_col_schema), KPC(inc_table_col_schema));
   }
   return ret;
 }
@@ -682,27 +588,21 @@ int ObPartitionExchange::check_column_conditions_in_mysql_mode_(const ObColumnSc
   bool is_equal = false;
   if (OB_ISNULL(base_table_col_schema) || OB_ISNULL(inc_table_col_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column schema is null", K(ret), KPC(base_table_col_schema), KPC(inc_table_col_schema));
   } else {
     ObColumnNameHashWrapper base_column_key(base_table_col_schema->get_column_name_str());
     ObColumnNameHashWrapper inc_column_key(inc_table_col_schema->get_column_name_str());
     //In the auxiliary table, the column names of redundant generated columns produced by function indexes are not required to be the same, as other columns of the indexed table from the data table, which has already been compared.
     if (OB_UNLIKELY(!is_aux_table_column && !(base_column_key == inc_column_key))) {
-      LOG_WARN("column name of exchanging partition tables are not equal", K(ret), K(is_aux_table_column), K(base_table_col_schema->get_column_name_str()), K(inc_table_col_schema->get_column_name_str()));
     } else if (OB_UNLIKELY(base_table_col_schema->is_on_update_current_timestamp() != inc_table_col_schema->is_on_update_current_timestamp())) {
-      LOG_WARN("column is on update_current_timestamp attribute of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->is_on_update_current_timestamp()), K(inc_table_col_schema->is_on_update_current_timestamp()));
     } else if (OB_UNLIKELY(base_table_col_schema->is_nullable() != inc_table_col_schema->is_nullable())) {
-      LOG_WARN("column is nullable attribute of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->is_nullable()), K(inc_table_col_schema->is_nullable()));
     } else if (OB_FAIL(check_column_default_value_(base_table_col_schema, inc_table_col_schema, is_equal))) {
     } else if (!is_equal) {
-      LOG_WARN("default value of exchanging partition tables are not equal", K(ret));
     } else {
       is_equal = true;
     }
   }
   if (OB_SUCC(ret) && !is_equal) {
     ret = OB_TABLES_DIFFERENT_DEFINITIONS;
-    LOG_WARN("all column conditions of exchange tables are not equal in mysql mode", K(ret), KPC(base_table_col_schema), KPC(inc_table_col_schema));
   }
   return ret;
 }
@@ -715,21 +615,17 @@ int ObPartitionExchange::check_generate_column_conditions_(const ObColumnSchemaV
   ObString inc_col_expr_str;
   if (OB_ISNULL(base_table_col_schema) || OB_ISNULL(inc_table_col_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column schema is null", K(ret), KPC(base_table_col_schema), KPC(inc_table_col_schema));
   } else if (OB_UNLIKELY(base_table_col_schema->is_virtual_generated_column() != inc_table_col_schema->is_virtual_generated_column())) {
     ret = OB_ERR_UNSUPPORTED_ACTION_ON_GENERATED_COLUMN;
-    LOG_WARN("virtual generated column of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->is_virtual_generated_column()), K(inc_table_col_schema->is_virtual_generated_column()));
     LOG_USER_ERROR(OB_ERR_UNSUPPORTED_ACTION_ON_GENERATED_COLUMN, "Exchanging partitions for non-generated columns");
   } else if (OB_UNLIKELY(base_table_col_schema->is_stored_generated_column() != inc_table_col_schema->is_stored_generated_column())) {
     ret = OB_ERR_UNSUPPORTED_ACTION_ON_GENERATED_COLUMN;
-    LOG_WARN("stored generated column of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->is_stored_generated_column()), K(inc_table_col_schema->is_stored_generated_column()));
     LOG_USER_ERROR(OB_ERR_UNSUPPORTED_ACTION_ON_GENERATED_COLUMN, "Exchanging partitions for non-generated columns");
   } else if (base_table_col_schema->is_stored_generated_column() && inc_table_col_schema->is_stored_generated_column()) {
     if (OB_FAIL(base_table_col_schema->get_cur_default_value().get_string(base_col_expr_str))) {
     } else if (OB_FAIL(inc_table_col_schema->get_cur_default_value().get_string(inc_col_expr_str))) {
     } else if (OB_UNLIKELY(0 != base_col_expr_str.compare(inc_col_expr_str))) {
       is_equal = false;
-      LOG_WARN("stored generated column expr strs are not equal", K(ret), K(base_col_expr_str), K(inc_col_expr_str));
     }
   }
   return ret;
@@ -740,11 +636,8 @@ int ObPartitionExchange::check_column_flags_(const ObColumnSchemaV2 *base_table_
   is_equal = false;
   if (OB_ISNULL(base_table_col_schema) || OB_ISNULL(inc_table_col_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column schema is null", K(ret), KPC(base_table_col_schema), KPC(inc_table_col_schema));
   } else if (OB_UNLIKELY(base_table_col_schema->has_not_null_constraint() != inc_table_col_schema->has_not_null_constraint())) {
-    LOG_WARN("has not null column attribute of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->has_not_null_constraint()), K(inc_table_col_schema->has_not_null_constraint()));
   } else if (OB_UNLIKELY(base_table_col_schema->is_fulltext_column() != inc_table_col_schema->is_fulltext_column())) {
-    LOG_WARN("is full text column attribute of exchanging partition tables are not equal", K(ret), K(base_table_col_schema->is_fulltext_column()), K(inc_table_col_schema->is_fulltext_column()));
   } else {
     is_equal = true;
   }
@@ -757,7 +650,6 @@ int ObPartitionExchange::check_column_default_value_(const ObColumnSchemaV2 *bas
   is_equal = true;
   if (OB_ISNULL(base_table_col_schema) || OB_ISNULL(inc_table_col_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column schema is null", K(ret), KPC(base_table_col_schema), KPC(inc_table_col_schema));
   } else if (base_table_col_schema->is_virtual_generated_column() && inc_table_col_schema->is_virtual_generated_column()) {
   } else {
     ObString base_col_expr_str;
@@ -770,10 +662,8 @@ int ObPartitionExchange::check_column_default_value_(const ObColumnSchemaV2 *bas
     } else if (!is_equal) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "exchanging partition tables define different default values in alter table add column ddl operation");
-      LOG_WARN("orig default value are not equal", K(ret), K(base_orig_default_value), K(inc_orig_default_value), K(is_equal));
     } else if (OB_FAIL(compare_default_value_(base_cur_default_value, inc_cur_default_value, is_equal))) {
     } else if (!is_equal) {
-      LOG_WARN("cur default value are not equal", K(ret), K(base_cur_default_value), K(inc_cur_default_value), K(is_equal));
     }
   }
   return ret;
@@ -785,18 +675,14 @@ int ObPartitionExchange::compare_default_value_(ObObj &l_value, ObObj &r_value, 
   is_equal = false;
   int cmp = 0;
   if (OB_UNLIKELY(l_value.is_null() != r_value.is_null())) {
-    LOG_WARN("default value is_null are not equal", K(ret), K(l_value), K(r_value));
   } else if (l_value.is_null() && r_value.is_null()) {
     is_equal = true;
   } else if (OB_UNLIKELY(l_value.get_type() != r_value.get_type())) {
-    LOG_WARN("default value type are not equal", K(ret), K(l_value), K(r_value));
   } else if (OB_UNLIKELY(l_value.get_collation_type() != r_value.get_collation_type())) {
-    LOG_WARN("default value collation type are not equal", K(ret), K(l_value), K(r_value));
   } else if (CS_TYPE_INVALID == l_value.get_collation_type()) {
     is_equal = true;
   } else if (OB_FAIL(l_value.compare(r_value, cmp))) {
   } else if (OB_UNLIKELY(0 != cmp)) {
-    LOG_WARN("default value are not equal", K(ret), K(l_value), K(r_value), K(cmp));
   } else {
     is_equal = true;
   }
@@ -811,8 +697,6 @@ int ObPartitionExchange::check_tablespace_(
   if (OB_UNLIKELY(base_table_schema.get_tablespace_id() != inc_table_schema.get_tablespace_id())) {
     ret = OB_ERR_PARTITION_EXCHANGE_DIFFERENT_OPTION;
     LOG_USER_ERROR(OB_ERR_PARTITION_EXCHANGE_DIFFERENT_OPTION, "TABLESPACE");
-    LOG_WARN("tablespace id of exchanging tables are not equal",
-        KR(ret), K(base_table_schema.get_tablespace_id()), K(inc_table_schema.get_tablespace_id()));
   }
   return ret;
 }
@@ -835,8 +719,6 @@ int ObPartitionExchange::check_data_table_partitions_and_tablespace_(
       } else if (OB_UNLIKELY(OB_INVALID_INDEX != part->get_tablespace_id())) {
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "When the partition contains a tablespace, partition exchange is not");
-        LOG_WARN("when the partition contains a tablespace, partition exchange is not supported",
-            KR(ret), K(part_tablespace_id));
       }
     }
   }
@@ -848,14 +730,11 @@ int ObPartitionExchange::check_table_index_infos_(const ObTableSchema &base_tabl
   int ret = OB_SUCCESS;
   bool is_equal = false;
   if (OB_UNLIKELY(base_table_schema.get_index_column_num() != inc_table_schema.get_index_column_num())) {
-    LOG_WARN("index column num of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_index_column_num()), K(inc_table_schema.get_index_column_num()));
   } else if (OB_FAIL(compare_two_rowkey_info_(base_table_schema.get_index_info(), inc_table_schema.get_index_info(), is_equal))) {
   } else if (!is_equal) {
-    LOG_WARN("index info of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_index_info()), K(inc_table_schema.get_index_info()));
   }
   if (OB_SUCC(ret) && !is_equal) {
     ret = OB_TABLES_DIFFERENT_DEFINITIONS;
-    LOG_WARN("table index infos of exchanging partition tables are not equal", K(ret), K(base_table_schema), K(inc_table_schema));
   }
   return ret;
 }
@@ -866,18 +745,13 @@ int ObPartitionExchange::check_table_lob_infos_(const ObTableSchema &base_table_
   bool is_equal = false;
   // prev instant check has been done in check_and_exchange_partition
   if (OB_UNLIKELY(base_table_schema.has_lob_column(true/*ignore_unused_column*/) != inc_table_schema.has_lob_column(true/*ignore_unused_column*/))) {
-    LOG_WARN("has lob column type of exchanging partition tables are not equal", KR(ret),
-             K(base_table_schema.has_lob_column(true/*ignore_unused_column*/)), K(inc_table_schema.has_lob_column(true/*ignore_unused_column*/)));
   } else if (OB_UNLIKELY(base_table_schema.has_lob_aux_table() != inc_table_schema.has_lob_aux_table())) {
-    LOG_WARN("has lob aux table type of exchanging partition tables are not equal", K(ret), K(base_table_schema.has_lob_aux_table()), K(inc_table_schema.has_lob_aux_table()));
   } else if (OB_UNLIKELY(base_table_schema.get_lob_inrow_threshold() != inc_table_schema.get_lob_inrow_threshold())) {
-    LOG_WARN("lob inrow threshold of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_lob_inrow_threshold()), K(inc_table_schema.get_lob_inrow_threshold()));
   } else {
     is_equal = true;
   }
   if (OB_SUCC(ret) && !is_equal) {
     ret = OB_TABLES_DIFFERENT_DEFINITIONS;
-    LOG_WARN("table lob infos of exchanging partition tables are not equal", K(ret), K(base_table_schema), K(inc_table_schema));
   }
   return ret;
 }
@@ -887,21 +761,15 @@ int ObPartitionExchange::check_table_rowkey_infos_(const ObTableSchema &base_tab
   int ret = OB_SUCCESS;
   bool is_equal = false;
   if (OB_UNLIKELY(base_table_schema.get_rowkey_column_num() != inc_table_schema.get_rowkey_column_num())) {
-    LOG_WARN("rowkey column num of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_rowkey_column_num()), K(inc_table_schema.get_rowkey_column_num()));
   } else if (OB_UNLIKELY(base_table_schema.get_shadow_rowkey_column_num() != inc_table_schema.get_shadow_rowkey_column_num())) {
-    LOG_WARN("shadow rowkey column num of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_shadow_rowkey_column_num()), K(inc_table_schema.get_shadow_rowkey_column_num()));
   } else if (OB_UNLIKELY(base_table_schema.get_rowkey_split_pos() != inc_table_schema.get_rowkey_split_pos())) {
-    LOG_WARN("rowkey split pos of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_rowkey_split_pos()), K(inc_table_schema.get_rowkey_split_pos()));
   } else if (OB_FAIL(compare_two_rowkey_info_(base_table_schema.get_rowkey_info(), inc_table_schema.get_rowkey_info(), is_equal))) {
   } else if (!is_equal) {
-    LOG_WARN("rowkey info of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_rowkey_info()), K(inc_table_schema.get_rowkey_info()));
   } else if (OB_FAIL(compare_two_rowkey_info_(base_table_schema.get_shadow_rowkey_info(), inc_table_schema.get_shadow_rowkey_info(), is_equal))) {
   } else if (!is_equal) {
-    LOG_WARN("shadow rowkey info of exchanging partition tables are not equal", K(ret), K(base_table_schema.get_shadow_rowkey_info()), K(inc_table_schema.get_shadow_rowkey_info()));
   }
   if (OB_SUCC(ret) && !is_equal) {
     ret = OB_TABLES_DIFFERENT_DEFINITIONS;
-    LOG_WARN("table rowkey infos of exchanging partition tables are not equal", K(ret), K(base_table_schema), K(inc_table_schema));
   }
   return ret;
 }
@@ -912,7 +780,6 @@ int ObPartitionExchange::compare_two_rowkey_info_(const common::ObRowkeyInfo &l_
   is_equal = true;
   if (OB_UNLIKELY(l_rowkey_info.get_size() != r_rowkey_info.get_size())) {
     is_equal = false;
-    LOG_WARN("rowkey info size are not equal", K(ret), K(l_rowkey_info.get_size()), K(r_rowkey_info.get_size()));
   } else if (0 == l_rowkey_info.get_size()) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && is_equal && i < l_rowkey_info.get_size(); i++) {
@@ -922,9 +789,7 @@ int ObPartitionExchange::compare_two_rowkey_info_(const common::ObRowkeyInfo &l_
       // Since the rowkey info array is already sorted, there is no need to validate the column id again.
       if (OB_ISNULL(l_rowkey_column) || OB_ISNULL(r_rowkey_column)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("rowkey column is null", K(ret), KPC(l_rowkey_column), KPC(r_rowkey_column));
       } else if (OB_UNLIKELY(!l_rowkey_column->is_equal_except_column_id(*r_rowkey_column))) {
-        LOG_WARN("rowkey column infos are not equal", K(ret), KPC(l_rowkey_column), KPC(r_rowkey_column));
       } else {
         is_equal = true;
       }
@@ -948,25 +813,19 @@ int ObPartitionExchange::get_next_pair_column_schema_(ObTableSchema::const_colum
       ret = OB_SUCCESS;
       if (OB_FAIL(get_next_need_check_column_(inc_iter_begin, inc_iter_end, inc_table_col_schema))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("error unexpected happened when iter next column schema", K(ret));
         }
       } else {
         ret = OB_TABLES_DIFFERENT_DEFINITIONS;
-        LOG_WARN("base table schema's columns format don't match the inc_table_schema", K(ret));
       }
     } else {
-      LOG_WARN("error unexpected happened when iter next column schema", K(ret));
     }
   } else if (OB_FAIL(get_next_need_check_column_(inc_iter_begin, inc_iter_end, inc_table_col_schema))) {
     if (OB_ITER_END == ret) {
       ret = OB_TABLES_DIFFERENT_DEFINITIONS;
-      LOG_WARN("base table schema's columns format don't match the inc_table_schema", K(ret));
     } else {
-      LOG_WARN("error unexpected happened when iter next column schema", K(ret));
     }
   } else if (OB_UNLIKELY(base_table_col_schema->is_hidden() != inc_table_col_schema->is_hidden())) {
     ret = OB_TABLES_DIFFERENT_DEFINITIONS;
-    LOG_WARN("base table schema's columns format don't match the inc_table_schema", K(ret));
   }
   return ret;
 }
@@ -979,7 +838,6 @@ int ObPartitionExchange::get_next_need_check_column_(ObTableSchema::const_column
     table_col_schema = *iter_begin;
     if (OB_ISNULL(table_col_schema)) {
       ret = OB_SCHEMA_ERROR;
-      LOG_WARN("fail to get column schema", K(ret));
     } else if (table_col_schema->is_prefix_column() || table_col_schema->is_func_idx_column()) {
     } else {
       found_col_schema = true;
@@ -1028,14 +886,11 @@ int ObPartitionExchange::get_and_check_data_partition_by_name(const ObTableSchem
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!partitioned_data_table_schema.is_valid() || data_part_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(partitioned_data_table_schema.is_valid()), K(data_part_name));
   } else if (OB_FAIL(partitioned_data_table_schema.get_partition_by_name(data_part_name, data_part))) {
   } else if (OB_ISNULL(data_part)) {
     ret = OB_PARTITION_NOT_EXIST;
-    LOG_WARN("partition not found", K(ret), K(data_part_name), K(partitioned_data_table_schema));
   } else if (OB_INVALID_INDEX == data_part->get_part_idx()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid partition index", K(ret), KPC(data_part));
   }
   return ret;
 }
@@ -1048,14 +903,11 @@ int ObPartitionExchange::get_and_check_data_subpartition_by_name(const ObTableSc
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!partitioned_data_table_schema.is_valid() || data_subpart_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(partitioned_data_table_schema.is_valid()), K(data_subpart_name));
   } else if (OB_FAIL(partitioned_data_table_schema.get_subpartition_by_name(data_subpart_name, data_part, data_subpart))) {
   } else if (OB_ISNULL(data_part) || OB_ISNULL(data_subpart)) {
     ret = OB_PARTITION_NOT_EXIST;
-    LOG_WARN("partition not found", K(ret), K(partitioned_data_table_schema), K(data_subpart_name));
   } else if ((OB_INVALID_INDEX == data_part->get_part_idx()) || (OB_INVALID_INDEX == data_subpart->get_sub_part_idx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid subpartition index", K(ret), KPC(data_part), KPC(data_subpart));
   }
   return ret;
 }
@@ -1069,14 +921,11 @@ int ObPartitionExchange::get_subpart_tablet_ids_by_part_name(
   const ObPartition *data_part = nullptr;
   if (OB_UNLIKELY(!part_table_schema.is_valid() || data_part_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(part_table_schema.is_valid()), K(data_part_name));
   } else if (OB_FAIL(part_table_schema.get_partition_by_name(data_part_name, data_part))) {
   } else if (OB_ISNULL(data_part)) {
     ret = OB_PARTITION_NOT_EXIST;
-    LOG_WARN("partition not found", K(ret), K(data_part_name), K(part_table_schema));
   } else if (OB_INVALID_INDEX == data_part->get_part_idx()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid partition index", K(ret), KPC(data_part));
   } else if (OB_FAIL(part_table_schema.get_tablet_ids_by_part_object_id(data_part->get_part_id(), tablet_ids))) {
   }
   return ret;
@@ -1094,10 +943,8 @@ int ObPartitionExchange::exchange_data_table_partitions(const ObTableSchema &bas
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObPartitionExchange not init", KR(ret), KP(this));
   } else if (OB_UNLIKELY(!base_table_schema.is_valid() || !inc_table_schema.is_valid() || base_tablet_ids.count() != inc_tablet_ids.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(base_table_schema.is_valid()), K(inc_table_schema.is_valid()), K(base_tablet_ids.count()), K(inc_tablet_ids.count()));
   } else if (OB_FAIL(add_table_to_tablet_ids_map(base_table_schema.get_table_id(), base_tablet_ids))) {
   } else if (OB_FAIL(add_table_to_tablet_ids_map(inc_table_schema.get_table_id(), inc_tablet_ids))) {
   } else if (OB_FAIL(exchange_partition_map_relationship_(base_table_schema,
@@ -1125,10 +972,8 @@ int ObPartitionExchange::exchange_auxiliary_table_partitions(const ObTableSchema
   bool is_inc_table_partitioned = inc_data_table_schema.is_partitioned_table();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObPartitionExchange not init", KR(ret), KP(this));
   } else if (OB_UNLIKELY(data_tablet_ids.count() != inc_data_tablet_ids.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(data_tablet_ids.count()), K(inc_data_tablet_ids.count()));
   } else {
     common::hash::ObHashMap<uint64_t, uint64_t>::iterator iter;
     for (iter = used_pt_nt_id_map_.begin(); OB_SUCC(ret) && iter != used_pt_nt_id_map_.end(); ++iter) {
@@ -1139,11 +984,9 @@ int ObPartitionExchange::exchange_auxiliary_table_partitions(const ObTableSchema
       if (OB_FAIL(schema_guard.get_table_schema( base_table_id, base_table_schema))) {
       } else if (OB_ISNULL(base_table_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("table schema should not be null", K(ret), K(base_table_id));
       } else if (OB_FAIL(schema_guard.get_table_schema( inc_table_id, inc_table_schema))) {
       } else if (OB_ISNULL(inc_table_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("table schema should not be null", K(ret), K(inc_table_id));
       } else {
         ObArray<ObTabletID> base_tablet_ids;
         ObArray<ObTabletID> inc_tablet_ids;
@@ -1197,7 +1040,6 @@ int ObPartitionExchange::exchange_partition_map_relationship_(const ObTableSchem
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(base_tablet_ids.count() != inc_tablet_ids.count() || !base_table_schema.is_valid() || !inc_table_schema.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(base_tablet_ids.count()), K(inc_tablet_ids.count()), K(base_table_schema.is_valid()), K(inc_table_schema.is_valid()));
   } else {
     const bool is_inc_table_partitioned = inc_table_schema.is_partitioned_table();
     // drop exchange partition in partitioned table, and add new exchange partition in partitioned table
@@ -1307,7 +1149,6 @@ int ObPartitionExchange::exchange_partition_map_relationship_(const ObTableSchem
                                                        ddl_operator,
                                                        trans,
                                                        ObPartitionLevel::PARTITION_LEVEL_TWO == inc_table_schema.get_part_level()/*is_subpartition*/))) {
-            LOG_WARN("failed to exchange partitions", K(ret), K(inc_table_schema), K(alter_inc_add_new_part_schema), K(alter_inc_drop_part_schema));
           } else if (OB_FAIL(update_exchange_table_level_attributes_(
                                                                      base_tablet_ids,
                                                                      inc_tablet_ids,
@@ -1341,7 +1182,6 @@ int ObPartitionExchange::generate_alter_table_part_schema_for_pt(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!base_table_schema.is_valid() || !inc_table_schema.is_valid() || !base_table_schema.is_partitioned_table() || !inc_table_schema.is_partitioned_table() || base_tablet_ids.count() != inc_tablet_ids.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(base_table_schema), K(inc_table_schema), K(base_tablet_ids.count()), K(inc_tablet_ids.count()));
   } else {
     HEAP_VARS_4((ObPartition, new_part),
                 (ObPartition, new_inc_part),
@@ -1444,7 +1284,6 @@ int ObPartitionExchange::generate_alter_table_part_schema_for_npt(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!base_table_schema.is_valid() || !inc_table_schema.is_valid() || !base_table_schema.is_partitioned_table() || inc_table_schema.is_partitioned_table() || !base_tablet_id.is_valid() || !inc_tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(base_table_schema), K(inc_table_schema), K(base_tablet_id), K(inc_tablet_id));
   } else {
     HEAP_VARS_2((ObPartition, new_part),
                 (ObSubPartition, new_subpart)) {
@@ -1511,7 +1350,6 @@ int ObPartitionExchange::generate_alter_table_part_schema_for_sub_pt(
       || (ObPartitionLevel::PARTITION_LEVEL_ONE != inc_table_schema.get_part_level())
       || (base_tablet_ids.count() != inc_tablet_ids.count()))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(base_table_schema), K(inc_table_schema), K(base_tablet_ids.count()), K(inc_tablet_ids.count()));
   } else {
     HEAP_VARS_2((ObPartition, new_inc_part),
                 (ObSubPartition, new_subpart)) {
@@ -1567,7 +1405,6 @@ int ObPartitionExchange::update_exchange_table_non_schema_attributes_(const ObTa
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(old_partition_ids.count() != new_partition_ids.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(old_partition_ids), K(new_partition_ids), K(old_table_schema), K(new_table_id), K(old_tablet_ids));
   } else {
     // modify inner table __all_tablet_to_ls, __all_table_stat, __all_column_stat, __all_histogram_stat, __all_monitor_modified
     if (OB_FAIL(update_table_to_tablet_ids_mapping_( new_table_id, old_tablet_ids, trans))) {
@@ -1611,7 +1448,6 @@ int ObPartitionExchange::update_exchange_table_level_attributes_(const ObIArray<
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(base_tablet_ids.count() != inc_tablet_ids.count() || !partitioned_table_schema.is_valid() || !non_partitioned_table_schema.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(base_tablet_ids.count()), K(inc_tablet_ids.count()), K(partitioned_table_schema.is_valid()), K(non_partitioned_table_schema.is_valid()));
   } else {
     const uint64_t base_table_id = partitioned_table_schema.get_table_id();
     const uint64_t inc_table_id = non_partitioned_table_schema.get_table_id();
@@ -1653,7 +1489,6 @@ int ObPartitionExchange::update_table_to_tablet_ids_mapping_(const uint64_t tabl
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(tablet_ids.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(table_id), K(tablet_ids.count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); i++) {
       if (OB_FAIL(ObTabletMappingTableOperator::update_table_to_tablet_id_mapping(trans, table_id, tablet_ids.at(i)))) {
@@ -1684,7 +1519,6 @@ int ObPartitionExchange::update_table_attribute_(const ObTableSchema &table_sche
   ObMultiVersionSchemaService &multi_schema_service = ddl_service_.get_schema_service();
   if (OB_ISNULL(schema_service = multi_schema_service.get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get schema_service is null", K(ret));
   } else if (OB_FAIL(schema_service->get_table_sql_service().update_table_attribute(trans,
                                                                                     table_schema,
                                                                                     operation_type,
@@ -1708,14 +1542,11 @@ int ObPartitionExchange::push_data_table_schema_version_(const ObTableSchema &ta
   new_schema_version = OB_INVALID_VERSION;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObPartitionExchange not init", KR(ret), KP(this));
   } else if (OB_UNLIKELY(OB_INVALID_ID == exchange_data_table_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(exchange_data_table_id));
   } else if (OB_FAIL(used_table_to_tablet_ids_map_.get_refactored(exchange_data_table_id, tablet_ids))) {
   } else if (OB_ISNULL(schema_service = multi_schema_service.get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get schema_service is null", K(ret));
   } else {
     ObRefreshSchemaStatus schema_status;
     
@@ -1747,7 +1578,6 @@ int ObPartitionExchange::get_local_storage_index_and_lob_table_schemas_(const Ob
   table_schemas.reset();
   if (OB_FAIL(!table_schema.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(table_schema), K(table_schema.is_valid()));
   } else if (OB_FAIL(table_schema.get_simple_index_infos(simple_index_infos))) {
   } else {
     
@@ -1760,18 +1590,14 @@ int ObPartitionExchange::get_local_storage_index_and_lob_table_schemas_(const Ob
       uint64_t ptid = table_schema.get_aux_lob_piece_tid();
       if (!((mtid != OB_INVALID_ID && ptid != OB_INVALID_ID) || (mtid == OB_INVALID_ID && ptid == OB_INVALID_ID))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Expect meta tid and piece tid both valid or both invalid", K(ret), K(mtid), K(ptid));
       } else if (OB_INVALID_ID != mtid && OB_FAIL(aux_table_ids.push_back(mtid))) {
-        LOG_WARN("fail to push back lob meta tid", K(ret), K(mtid));
       } else if (OB_INVALID_ID != ptid && OB_FAIL(aux_table_ids.push_back(ptid))) {
-        LOG_WARN("fail to push back lob piece tid", K(ret), K(ptid));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < aux_table_ids.count(); i++) {
           const ObTableSchema *aux_table_schema = NULL;
           if (OB_FAIL(schema_guard.get_table_schema( aux_table_ids.at(i), aux_table_schema))) {
           } else if (OB_ISNULL(aux_table_schema)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("table schema should not be null", K(ret));
           } else if (OB_FAIL(check_auxiliary_schema_conditions_(aux_table_schema))) {
           } else if (aux_table_schema->is_index_table() && aux_table_schema->is_global_index_table()) {
             if (OB_FAIL(unused_index_ids.push_back(aux_table_schema->get_table_id()))) {
@@ -1790,10 +1616,8 @@ int ObPartitionExchange::check_auxiliary_schema_conditions_(const ObTableSchema 
   int ret = OB_SUCCESS;
   if (!table_schema->is_index_table() && !table_schema->is_aux_lob_table()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table is not index table or lob table", K(ret), K(table_schema->is_index_table()), K(table_schema->is_aux_lob_table()));
   } else if (OB_UNLIKELY(table_schema->is_index_table() && table_schema->is_index_local_storage() && INDEX_STATUS_AVAILABLE != table_schema->get_index_status())) {
     ret = OB_TABLES_DIFFERENT_DEFINITIONS;
-    LOG_WARN("there are unavailable index table", K(ret), K(table_schema->is_index_table()), K(table_schema->get_table_id()), K(table_schema->get_index_status()));
   }
   return ret;
 }
@@ -1804,12 +1628,10 @@ int ObPartitionExchange::compare_column_extended_type_info_(const common::ObIArr
   is_equal = true;
   if (OB_UNLIKELY(l_extended_type_info.count() != r_extended_type_info.count())) {
     is_equal = false;
-    LOG_WARN("column extended type info count of exchanging partition tables are not equal", K(ret), K(l_extended_type_info.count()), K(r_extended_type_info.count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && is_equal && i < l_extended_type_info.count(); i++) {
       if (0 != l_extended_type_info.at(i).compare(r_extended_type_info.at(i))) {
         is_equal = false;
-        LOG_WARN("column extended type info count of exchanging partition tables are not equal", K(ret), K(l_extended_type_info.at(i)), K(r_extended_type_info.at(i)));
       }
     }
   }
@@ -1842,12 +1664,10 @@ int ObPartitionExchange::generate_auxiliary_table_mapping_(const ObTableSchema &
   bool is_equal = false;
   if (OB_UNLIKELY(!used_pt_nt_id_map_.created())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(used_pt_nt_id_map_.created()));
   } else if (OB_FAIL(get_local_storage_index_and_lob_table_schemas_(base_data_table_schema, base_table_schemas, unused_pt_index_id_, schema_guard))) {
   } else if (OB_FAIL(get_local_storage_index_and_lob_table_schemas_(inc_data_table_schema, inc_table_schemas, unused_nt_index_id_, schema_guard))) {
   } else if (OB_UNLIKELY(base_table_schemas.count() != inc_table_schemas.count())) {
     ret = OB_TABLES_DIFFERENT_DEFINITIONS;
-    LOG_WARN("pt schemas count and nt schemas count are not equal", K(ret), K(base_table_schemas.count()), K(inc_table_schemas.count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < inc_table_schemas.count(); i++) {
       if (OB_FAIL(used_nt_schema_flag.push_back(false))) {
@@ -1870,17 +1690,14 @@ int ObPartitionExchange::generate_local_storage_index_and_lob_table_mapping_(con
   bool find_related_nt_schema = false;
   if (OB_UNLIKELY((!base_table_schema.is_index_local_storage() && !base_table_schema.is_aux_lob_table()) || inc_table_schemas.count() != used_nt_schema_flag.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(base_table_schema), K(inc_table_schemas.count()), K(used_nt_schema_flag.count()));
   } else if (base_table_schema.is_index_local_storage()) {
     if (OB_FAIL(generate_local_storage_index_table_mapping_in_mysql_mode_(base_table_schema, inc_table_schemas, used_nt_schema_flag, find_related_nt_schema))) {
     } else if (!find_related_nt_schema) {
       ret = OB_TABLES_DIFFERENT_DEFINITIONS;
-      LOG_WARN("can't find related nt schema in mysql mode", K(ret), K(base_table_schema), K(inc_table_schemas.count()), K(used_nt_schema_flag.count()), K(find_related_nt_schema));
     }
   } else if (OB_FAIL(generate_lob_table_mapping_(base_table_schema, inc_table_schemas, used_nt_schema_flag, find_related_nt_schema))){
   } else if (!find_related_nt_schema) {
     ret = OB_TABLES_DIFFERENT_DEFINITIONS;
-    LOG_WARN("can't find related nt_schema", K(ret), K(base_table_schema), K(inc_table_schemas.count()), K(used_nt_schema_flag));
   }
   return ret;
 }
@@ -1894,14 +1711,12 @@ int ObPartitionExchange::generate_local_storage_index_table_mapping_in_mysql_mod
   find_related_nt_schema = false;
   if (OB_UNLIKELY(!base_table_schema.is_index_local_storage() || inc_table_schemas.count() != used_nt_schema_flag.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(base_table_schema), K(base_table_schema.is_index_local_storage()), K(inc_table_schemas.count()), K(used_nt_schema_flag.count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && !find_related_nt_schema && i < inc_table_schemas.count(); i++) {
       ObString pt_index_name;
       ObString nt_index_name;
       if (OB_ISNULL(inc_table_schemas.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("table schema is null", K(ret));
       } else if (!inc_table_schemas.at(i)->is_index_local_storage() || used_nt_schema_flag.at(i)) {
       } else if (OB_FAIL(base_table_schema.get_index_name(pt_index_name))) {
       } else if (OB_FAIL(inc_table_schemas.at(i)->get_index_name(nt_index_name))) {
@@ -1915,7 +1730,6 @@ int ObPartitionExchange::generate_local_storage_index_table_mapping_in_mysql_mod
           }
         }
       } else {
-        LOG_WARN("index table name are different", K(ret), K(pt_index_name), K(nt_index_name));
       }
     }
   }
@@ -1932,12 +1746,10 @@ int ObPartitionExchange::generate_lob_table_mapping_(const ObTableSchema &base_t
   find_related_nt_schema = false;
   if (OB_UNLIKELY(!base_table_schema.is_aux_lob_table() || inc_table_schemas.count() != used_nt_schema_flag.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(base_table_schema), K(base_table_schema.is_aux_lob_table()), K(inc_table_schemas.count()), K(used_nt_schema_flag.count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && !find_related_nt_schema && i < inc_table_schemas.count(); i++) {
       if (OB_ISNULL(inc_table_schemas.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("table schema is null", K(ret));
       } else if (!inc_table_schemas.at(i)->is_aux_lob_table() || used_nt_schema_flag.at(i)) {
       } else if ((base_table_schema.is_aux_lob_meta_table() && inc_table_schemas.at(i)->is_aux_lob_meta_table()) || (base_table_schema.is_aux_lob_piece_table() && inc_table_schemas.at(i)->is_aux_lob_piece_table())) {
         find_related_nt_schema = true;
@@ -1961,14 +1773,11 @@ int ObPartitionExchange::update_index_status_(const uint64_t table_id,
   const ObTableSchema *index_schema = NULL;
   if (OB_UNLIKELY(OB_INVALID_ID == table_id || status <= INDEX_STATUS_NOT_FOUND || status >= INDEX_STATUS_MAX)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(table_id), K(status), K(in_offline_ddl_white_list));
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, index_schema))) {
   } else if (OB_ISNULL(index_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table not exist", K(ret), K(table_id));
   } else if (OB_UNLIKELY(!index_schema->is_index_table())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the state that needs to be modified is not the index table", K(ret), K(table_id), K(index_schema->is_index_table()));
   } else if (OB_FAIL(ddl_operator.update_index_status(
     index_schema->get_data_table_id(),
     index_schema->get_table_id(),
@@ -1987,10 +1796,8 @@ int ObPartitionExchange::build_single_table_rw_defensive_(const ObIArray<common:
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(tablet_ids.empty() || schema_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(tablet_ids), K(schema_version));
   } else if (OB_UNLIKELY(!ddl_service_.is_inited())) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("ddl_service not init", K(ret));
   } else {
     const int64_t abs_timeout_us = THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_ts()
                                                                      : ObTimeUtility::current_time() + GCONF.rpc_timeout;
@@ -2015,7 +1822,6 @@ int ObPartitionExchange::sync_exchange_partition_stats_info_(const uint64_t new_
   if (OB_UNLIKELY(OB_INVALID_ID == new_table_id || StatLevel::INVALID_LEVEL == new_stat_level || OB_INVALID_ID == old_partition_id ||
                   OB_INVALID_ID == new_partition_id || !tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(new_table_id), K(new_stat_level), K(old_partition_id), K(new_partition_id), K(tablet_id));
   } else if (OB_FAIL(sql_string.assign_fmt("UPDATE %s SET table_id = %ld, partition_id = %ld, object_type = %ld"
         " WHERE table_id = %ld and partition_id = %ld",
         OB_ALL_TABLE_STAT_TNAME, new_table_id, new_partition_id, new_stat_level,
@@ -2031,7 +1837,6 @@ int ObPartitionExchange::sync_exchange_partition_stats_info_(const uint64_t new_
       ObSqlString histogram_sql_string;
       if (OB_ISNULL(col)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("col is NULL", K(ret));
       } else if (col->get_column_id() < OB_APP_MIN_COLUMN_ID) {
         // bypass hidden column
       } else if (OB_FAIL(column_sql_string.assign_fmt("UPDATE %s SET table_id = %ld, partition_id = %ld, column_id = %ld, object_type = %ld"
@@ -2060,7 +1865,6 @@ int ObPartitionExchange::update_table_all_monitor_modified_(const uint64_t new_t
   
   if (OB_UNLIKELY(OB_INVALID_ID == new_table_id || !tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(new_table_id), K(tablet_id));
   } else if (OB_FAIL(monitor_modified_read_sql_string.assign_fmt("SELECT last_inserts, last_updates, last_deletes, inserts, updates, deletes FROM %s WHERE table_id = %ld and tablet_id = %ld", 
              OB_ALL_MONITOR_MODIFIED_TNAME, orig_table_schema.get_table_id(), tablet_id.id()))) {
   } else {
@@ -2077,12 +1881,10 @@ int ObPartitionExchange::update_table_all_monitor_modified_(const uint64_t new_t
       if (OB_FAIL(sql_client_retry_weak.read(res, monitor_modified_read_sql_string.ptr()))) {
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail query sql", K(ret));
       } else if (OB_FAIL(result->next())) {
         if (common::OB_ITER_END == ret) {
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("fail to get next result", K(ret));
         }
       } else {
         need_update = true;
@@ -2116,25 +1918,20 @@ int ObPartitionExchange::get_object_id_from_partition_schema_(ObPartitionSchema 
   ObPartition** part_array = partition_schema.get_part_array();
   if (OB_UNLIKELY(1 != partition_num)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("partition num is not equal 1", K(ret), K(partition_num));
   } else if (OB_ISNULL(part_array)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("part_array is empty", K(ret));
   } else {
     ObPartition* part = part_array[0];
     if (OB_ISNULL(part)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("part is null", K(ret));
     } else if (!get_subpart_only) {
       object_id = part->get_part_id();
     } else if (OB_ISNULL(part->get_subpart_array()) || 1 != part->get_subpartition_num()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("sub_part_array is null or invalid subpartition num", K(ret));
     } else {
       ObSubPartition *subpart = part->get_subpart_array()[0];
       if (OB_ISNULL(subpart)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("subpart is null", K(ret));
       } else {
         object_id = subpart->get_sub_part_id();
       }
@@ -2159,30 +1956,23 @@ int ObPartitionExchange::get_part_by_tablet_id(
   const ObSubPartition *tmp_subpart = nullptr;
   if (OB_UNLIKELY(!tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tablet id", KR(ret), K(tablet_id));
   } else if (OB_FAIL(table_schema.get_part_id_by_tablet(tablet_id, part_id, subpart_id))) {
   } else if (OB_INVALID_INDEX == part_id) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected part id", KR(ret), K(part_id));
   } else if (OB_FAIL(table_schema.get_partition_by_part_id(part_id, CHECK_PARTITION_MODE_NORMAL, tmp_part))) {
   } else if (OB_ISNULL(tmp_part)) {
     ret = OB_PARTITION_NOT_EXIST;
-    LOG_WARN("partition not exist", KR(ret), KP(tmp_part));
   } else if (OB_FALSE_IT(part = tmp_part)) {
   } else if (get_subpart) {
     if (OB_INVALID_INDEX == subpart_id) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected subpart id", KR(ret), K(subpart_id));
     } else if (OB_ISNULL(tmp_part->get_subpart_array())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null subpart array", KR(ret), KP(tmp_part->get_subpart_array()));
     } else if (OB_FAIL(table_schema.get_part_idx_by_tablet(tablet_id, part_idx, subpart_idx))) {
     } else if ((OB_INVALID_INDEX == part_idx) || (OB_INVALID_INDEX == subpart_idx)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected part idx", KR(ret), K(part_idx), K(subpart_idx));
     } else if (OB_ISNULL(tmp_subpart = tmp_part->get_subpart_array()[subpart_idx])) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null subpart", KR(ret), KPC(tmp_part), K(subpart_idx), KP(tmp_subpart));
     } else {
       subpart = tmp_subpart;
     }
@@ -2214,10 +2004,8 @@ int ObPartitionExchange::generate_alter_table_part_schema(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(part)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("part cannot be null", KR(ret), KP(part));
   } else if (is_subpart && OB_ISNULL(subpart)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("subpart cannot be null", KR(ret), KP(subpart), K(is_subpart));
   } else {
     const ObPartition *target_part = nullptr;
     HEAP_VAR(ObPartition, dummy_part) {
@@ -2251,12 +2039,10 @@ int ObPartitionExchange::add_table_to_tablet_ids_map(
   ObArray<ObTabletID> orig_tablet_ids;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObPartitionExchange not init", KR(ret), KP(this));
   } else if (OB_FAIL(used_table_to_tablet_ids_map_.get_refactored(table_id, orig_tablet_ids))) {
     if (OB_HASH_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("failed to get refactored from used_table_to_tablet_ids_map", KR(ret), K(table_id));
     }
   }
 
@@ -2287,10 +2073,8 @@ int ObPartitionExchange::get_and_check_aux_tablet_id(
   const ObSubPartition *subpart = nullptr;
   if (OB_UNLIKELY(!aux_table_schema.is_aux_table())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid table type", KR(ret), K(aux_table_schema.is_aux_table()));
   } else if (OB_UNLIKELY(!data_tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid data tablet id", KR(ret), K(data_tablet_id));
   } else if (OB_FAIL(get_part_by_tablet_id(data_table_schema, data_tablet_id, data_part, data_subpart, is_subpart))) {
   } else {
     bool is_matched = false;
@@ -2302,11 +2086,9 @@ int ObPartitionExchange::get_and_check_aux_tablet_id(
     } else if (OB_FAIL(aux_table_schema.get_partition_by_partition_index(data_part_idx, CHECK_PARTITION_MODE_NORMAL, part))) {
     } else if (OB_ISNULL(part)) {
       ret = OB_PARTITION_NOT_EXIST;
-      LOG_WARN("partition not found", KR(ret), K(data_part_idx), K(aux_table_schema));
     } else if (OB_FAIL(ddl_service_.check_same_partition(*data_part, *part, pt_part_func_type, is_matched))) {
     } else if (OB_UNLIKELY(!is_matched)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("part with the same offset not equal, maybe not the right index", KR(ret), KPC(data_part), KPC(part));
     } else if (is_subpart) {
       const schema::ObSubPartitionOption &pt_subpart_option = aux_table_schema.get_sub_part_option();
       schema::ObPartitionFuncType pt_subpart_func_type = pt_subpart_option.get_sub_part_func_type();
@@ -2314,11 +2096,9 @@ int ObPartitionExchange::get_and_check_aux_tablet_id(
       if (OB_FAIL(part->get_normal_subpartition_by_subpartition_index(data_subpart_idx, subpart))) {
       } else if (OB_ISNULL(subpart)) {
         ret = OB_PARTITION_NOT_EXIST;
-        LOG_WARN("partition not found", K(ret), K(part), K(data_subpart_idx), K(aux_table_schema));
       } else if (OB_FAIL(ddl_service_.check_same_subpartition(*data_subpart, *subpart, pt_subpart_func_type, is_matched))) {
       } else if (!is_matched) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("part with the same offset not equal, maybe not the right index", K(ret), KPC(data_subpart), KPC(subpart));
       } else {
         aux_tablet_id = subpart->get_tablet_id();
       }

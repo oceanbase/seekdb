@@ -46,7 +46,6 @@ int ObTabletMediumInfoReader::init(
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), K_(is_inited));
   } else if (OB_FAIL((tablet.mds_range_query<ObMediumCompactionInfoKey, ObMediumCompactionInfo>(
       scan_param,
       iter_)))) {
@@ -69,11 +68,9 @@ int ObTabletMediumInfoReader::get_next_medium_info(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K_(is_inited));
   } else if (OB_FAIL(iter_.get_next_mds_kv(allocator_, kv))) {
     if (OB_ITER_END == ret) {
     } else {
-      LOG_WARN("fail to get next mds kv", K(ret));
     }
   } else {
     const ObString &key_str = kv->k_.key_;
@@ -109,7 +106,6 @@ int ObTabletMediumInfoReader::get_specified_medium_info(
     if (OB_FAIL(iter_.get_next_mds_kv(allocator_, kv))) {
       if (OB_ITER_END == ret) {
       } else {
-        LOG_WARN("fail to get next mds kv", K(ret));
       }
     } else {
       const ObString &key_str = kv->k_.key_;
@@ -120,7 +116,6 @@ int ObTabletMediumInfoReader::get_specified_medium_info(
         // do nothing
       } else if (compare_result > 0) {
         ret = OB_ENTRY_NOT_EXIST;
-        LOG_WARN("medium info doest not exist", K(ret), K(tmp_key), K(key));
       } else if (compare_result == 0) {
         const ObString &node_str = kv->v_.user_data_;
         pos = 0;
@@ -163,7 +158,6 @@ int ObTabletMediumInfoReader::get_medium_info_with_merge_version(
       } else if (OB_FAIL(medium_info_reader.get_specified_medium_info(allocator, medium_info_key, *medium_info))) {
       } else if (OB_ISNULL(medium_info) || OB_UNLIKELY(!medium_info->is_valid())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("medium info is invalid", K(ret), K(medium_info));
       }
     }
   }
@@ -186,7 +180,6 @@ int ObTabletMediumInfoReader::get_min_medium_snapshot(
         ret = OB_SUCCESS;
         break;
       } else {
-        LOG_WARN("fail to get next mds kv", K(ret));
       }
     } else {
       const ObString &key_str = kv->k_.key_;
@@ -215,7 +208,6 @@ int ObTabletMediumInfoReader::get_next_mds_kv(
   if (OB_FAIL(iter_.get_next_mds_kv(allocator, kv))) {
     if (OB_ITER_END == ret) {
     } else {
-      LOG_WARN("fail to get next mds kv", K(ret));
     }
   }
   return ret;

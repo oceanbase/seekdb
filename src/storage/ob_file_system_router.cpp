@@ -78,10 +78,8 @@ int ObFileSystemRouter::init(const char *data_dir, const char *redo_dir)
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_ISNULL(data_dir)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(init_local_dirs(data_dir, redo_dir))) {
   } else {
     clog_file_spec_.retry_write_policy_ = "normal";

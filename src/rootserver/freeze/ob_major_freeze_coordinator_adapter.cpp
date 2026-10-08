@@ -46,8 +46,6 @@ int ObMajorFreezeCoordinatorAdapter::init(
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(primary_service_) || OB_NOT_NULL(restore_service_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("major freeze coordinator adapter is already initialized",
-             KR(ret));
   } else {
     primary_service_ = &primary_service;
     restore_service_ = &restore_service;
@@ -90,7 +88,6 @@ int ObMajorFreezeCoordinatorAdapter::collect_major_merge_diagnostics(
   uncompacted_table_ids.reset();
   if (OB_ISNULL(primary_service_) || OB_ISNULL(restore_service_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("major freeze coordinator adapter is not initialized", KR(ret));
   } else {
     ObMajorFreezeService *service = nullptr;
     bool is_primary_service = true;
@@ -101,11 +98,9 @@ int ObMajorFreezeCoordinatorAdapter::collect_major_merge_diagnostics(
         ret = OB_SUCCESS;
         LOG_INFO("skip major merge diagnostics while freeze leader switches");
       } else {
-        LOG_WARN("failed to select major freeze service", KR(ret));
       }
     } else if (OB_ISNULL(service)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("selected major freeze service is null", KR(ret));
     } else {
       need_diagnose = true;
       is_paused = service->is_paused();
@@ -119,7 +114,6 @@ int ObMajorFreezeCoordinatorAdapter::collect_major_merge_diagnostics(
             is_paused = true;
             LOG_INFO("skip major merge diagnostics after freeze leader changed");
           } else {
-            LOG_WARN("failed to collect uncompacted tablets", KR(ret));
           }
         }
         for (int64_t i = 0; OB_SUCC(ret) && i < tablets.count(); ++i) {

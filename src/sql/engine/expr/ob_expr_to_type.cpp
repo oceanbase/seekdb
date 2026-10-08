@@ -51,7 +51,6 @@ int ObExprToType::calc_result_type1(ObExprResType &type,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObMaxType == expect_type_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("expect type is not inited.", K(ret));
   } else if (OB_UNLIKELY(type1.is_null())) {
     type.set_null();
   } else if (type1.is_literal()) {
@@ -89,7 +88,6 @@ int ObExprToType::calc_result_type_for_literal(ObExprResType &type, ObExprResTyp
   int ret = OB_SUCCESS;
   if (OB_ISNULL(type_ctx.get_session())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument.", K(ret), K(type_ctx.get_session()));
   } else {
     ObArenaAllocator oballocator(ObModIds::OB_SQL_RES_TYPE);
     const ObObj &in = type1.get_param();
@@ -97,7 +95,6 @@ int ObExprToType::calc_result_type_for_literal(ObExprResType &type, ObExprResTyp
     bool nonstring_to_string = false;
     ObCastMode cast_mode = CM_NONE;
     if (FALSE_IT(ObSQLUtils::get_default_cast_mode(type_ctx.get_sql_mode(), cast_mode))) {
-      LOG_WARN("failed to get default cast mode", K(ret));
     } else if ((!ob_is_string_type(type1.get_type())) && ob_is_string_or_lob_type(expect_type_)) {
       nonstring_to_string = true;
       if (CS_TYPE_INVALID == type_ctx.get_coll_type()) {
@@ -150,7 +147,6 @@ int ObExprToType::calc_result_type_for_column(ObExprResType &type,
   type.set_type(expect_type_);
   if (OB_ISNULL(type_ctx.get_session())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument.", K(ret), K(type_ctx.get_session()));
   } else {
     if ((!ob_is_string_or_lob_type(type1.get_type())) && ob_is_string_or_lob_type(expect_type_)) {
       ObCollationType collation_connection = type_ctx.get_coll_type();
@@ -194,7 +190,6 @@ int ObExprToType::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   // Pre-calculation, if the expression parameter type is inconsistent with calc_type, it will add a to_type expression
   // But in the new framework, cast expressions will be added, so type inconsistency should not occur
   int ret = OB_ERR_UNEXPECTED;
-  LOG_WARN("unexpected, new engine should not use to_type expr", K(ret));
   return  ret;
 }
 

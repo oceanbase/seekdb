@@ -31,7 +31,6 @@ int ObPsSqlUtils::deep_copy_str(common::ObIAllocator &allocator,
   char* buf = static_cast<char *>(allocator.alloc(size));
   if (OB_ISNULL(buf)) {
     ret = common::OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc memory failed", K(ret), K(size), K(src));
   } else {
     MEMCPY(buf, src.ptr(), src.length());
     buf[size-1] = '\0';

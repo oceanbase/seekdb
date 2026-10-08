@@ -76,23 +76,16 @@ int ObLSCkptMember::serialize(char *buf, const int64_t buf_len, int64_t &pos) co
 
   if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len <= 0) || OB_UNLIKELY(pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), KP(buf), K(buf_len), K(pos));
   } else if (LS_CKPT_MEM_VERSION != version_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid version", K(ret), K_(version));
   } else if (OB_UNLIKELY(length_ > buf_len - pos)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("buffer's length is not enough", K(ret), K_(length), K(buf_len), K(pos));
   } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, new_pos, version_))) {
   } else if (new_pos - pos < length && OB_FAIL(serialization::encode_i32(buf, buf_len, new_pos, length))) {
-    LOG_WARN("fail to serialize ObLSCkptMember's length", K(ret), K(buf_len), K(new_pos), K(length));
   } else if (new_pos - pos < length && OB_FAIL(ls_meta_.serialize(buf, buf_len, new_pos))) {
-    LOG_WARN("fail to serialize ls meta", K(ret), K(buf_len), K(new_pos), K(ls_meta_));
   } else if (new_pos - pos < length && OB_FAIL(tablet_meta_entry_.serialize(buf, buf_len, new_pos))) {
-    LOG_WARN("fail to serialize tablet meta entry", K(ret), K(buf_len), K(new_pos), K(tablet_meta_entry_));
   } else if (OB_UNLIKELY(length != new_pos - pos)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("length doesn't match", K(ret), K(length), K(new_pos), K(pos));
   } else {
     pos = new_pos;
   }
@@ -107,22 +100,16 @@ int ObLSCkptMember::deserialize(const char *buf, const int64_t buf_len, int64_t 
 
   if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len <= 0) || OB_UNLIKELY(pos < 0) || OB_UNLIKELY(buf_len <= pos)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), KP(buf), K(buf_len), K(pos));
   } else if (OB_FAIL(serialization::decode_i32(buf, buf_len, new_pos, (int32_t *)&version_))) {
   } else if (OB_FAIL(serialization::decode_i32(buf, buf_len, new_pos, (int32_t *)&length_))) {
   } else if (OB_UNLIKELY(length_ > buf_len - pos)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("buffer's length is not enough", K(ret), K(length_), K(buf_len), K(pos));
   } else if (OB_UNLIKELY(LS_CKPT_MEM_VERSION != version_)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("ObLSCkptMember's version is invalid", K(ret), K(version_));
   } else if (new_pos - pos < length_ && OB_FAIL(ls_meta_.deserialize(buf, buf_len, new_pos))) {
-    LOG_WARN("fail to deserialize ls meta", K(ret), K(buf_len), K(new_pos));
   } else if (new_pos - pos < length_ && OB_FAIL(tablet_meta_entry_.deserialize(buf, buf_len, new_pos))) {
-    LOG_WARN("fail to deserialize tablet meta entry", K(ret), K(buf_len), K(new_pos));
   } else if (OB_UNLIKELY(length_ != new_pos - pos)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("length doesn't match", K(ret), K(buf_len), K(new_pos));
   } else {
     pos = new_pos;
   }
@@ -195,7 +182,6 @@ int ObLocalStorageCheckpointSlogHandler::start()
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(write_ckpt_timer_.schedule(write_ckpt_task_,
                ObWriteCheckpointTask::WRITE_CHECKPOINT_INTERVAL_US, true))) {
   }
@@ -239,10 +225,8 @@ int ObLocalStorageCheckpointSlogHandler::start_replay(const ObServerRuntimeSuper
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!super_block.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("runtime super block invalid", K(ret), K(super_block));
   } else if (OB_FAIL(replay_checkpoint_and_slog(super_block))) {
   }
   LOG_INFO("finish ObLocalStorageCheckpointSlogHandler replay", K(ret), K(super_block));
@@ -460,7 +444,6 @@ int ObLocalStorageCheckpointSlogHandler::clone_ls(ObStartupAccelTaskHandler* sta
 
     if (OB_UNLIKELY(!tablet_meta_entry.is_valid() || IS_EMPTY_BLOCK_LIST(tablet_meta_entry))) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid arg", K(ret), K(tablet_meta_entry));
     } else if (OB_FAIL(tablet_snapshot_reader.iter_read_meta_item(
         tablet_meta_entry, clone_tablet_op, meta_block_list))) {
     } else {
@@ -532,7 +515,6 @@ int ObLocalStorageCheckpointSlogHandler::check_slog(const ObTabletMapKey &tablet
     LOG_WARN("ObLocalStorageCheckpointSlogHandler hasn't been inited", K(ret));
   } else if (OB_UNLIKELY(!tablet_key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tablet key is invalid", K(ret), K(tablet_key));
   } else {
     int tmp_ret = tablet_key_set_.exist_refactored(tablet_key);
     if (OB_HASH_EXIST == tmp_ret) {
@@ -590,11 +572,9 @@ int ObLocalStorageCheckpointSlogHandler::write_checkpoint(bool is_force)
       LOG_INFO("bootstrap runtime is not checkpointed");
     } else if (OB_UNLIKELY(!last_super_block.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to get runtime super block", K(ret), K(last_super_block));
     } else if (OB_FAIL(get_cur_cursor())) {
     } else if (OB_UNLIKELY(!ckpt_cursor_.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ckpt_cursor_ is invalid", K(ret));
     } else if (is_force // alter system command triggered
                || (!is_major_doing && (ckpt_cursor_.file_id_ > last_super_block.replay_start_point_.file_id_))
                || ((start_time > last_ckpt_time_ + min_interval) // slog is long
@@ -661,7 +641,6 @@ int ObLocalStorageCheckpointSlogHandler::add_snapshot(const ObServerSnapshotMeta
     LOG_WARN("ObLocalStorageCheckpointSlogHandler hasn't been inited", K(ret));
   } else if (OB_UNLIKELY(!snapshot.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(snapshot));
   } else if (OB_FAIL(super_block.add_snapshot(snapshot))) {
   } else if (OB_FAIL(SERVER_STORAGE_META_PERSISTER.update_runtime_super_block(super_block))) {
   } else {
@@ -681,7 +660,6 @@ int ObLocalStorageCheckpointSlogHandler::delete_snapshot(const ObServerSnapshotI
     LOG_WARN("ObLocalStorageCheckpointSlogHandler hasn't been inited", K(ret));
   } else if (OB_UNLIKELY(!snapshot_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(snapshot_id));
   } else if (OB_FAIL(super_block.delete_snapshot(snapshot_id))) {
   } else if (OB_FAIL(SERVER_STORAGE_META_PERSISTER.update_runtime_super_block(super_block))) {
   } else {
@@ -701,7 +679,6 @@ int ObLocalStorageCheckpointSlogHandler::swap_snapshot(const ObServerSnapshotMet
     LOG_WARN("ObLocalStorageCheckpointSlogHandler hasn't been inited", K(ret));
   } else if (OB_UNLIKELY(!snapshot.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(snapshot));
   } else if (OB_FAIL(super_block.delete_snapshot(snapshot.snapshot_id_))) {
   } else if (OB_FAIL(super_block.add_snapshot(snapshot))) {
   } else if (OB_FAIL(SERVER_STORAGE_META_PERSISTER.update_runtime_super_block(super_block))) {
@@ -806,7 +783,6 @@ int ObLocalStorageCheckpointSlogHandler::replay(const ObRedoModuleReplayParam &p
 
   if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(param));
   } else if (ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE != main_type) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("wrong redo log main type.", K(ret), K(main_type), K(sub_type));
@@ -902,7 +878,6 @@ int ObLocalStorageCheckpointSlogHandler::inner_replay_delete_tablet(const ObRedo
   } else {
     const ObTabletMapKey map_key(slog_entry.tablet_id_);
     if (OB_FAIL(replay_tablet_disk_addr_map_.erase_refactored(map_key)) && OB_HASH_NOT_EXIST != ret) {
-      LOG_WARN("fail to erase tablet", K(ret), K(map_key), K(slog_entry));
     } else {
       ret = OB_SUCCESS;
       LOG_INFO("Successfully remove tablet for replay", K(param), K(slog_entry));
@@ -940,7 +915,6 @@ int ObLocalStorageCheckpointSlogHandler::parse(
   ObIRedoModule::parse_cmd(cmd, main_type, sub_type);
   if (OB_ISNULL(buf) || OB_ISNULL(stream) || OB_UNLIKELY(len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), KP(stream), K(len));
   } else if (OB_UNLIKELY(ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE != main_type)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("slog type does not match", K(ret), K(main_type), K(sub_type));

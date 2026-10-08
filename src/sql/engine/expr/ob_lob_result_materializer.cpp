@@ -39,7 +39,6 @@ int materialize_lob_result(common::ObObj &value,
     // No external payload to materialize.
   } else if (OB_ISNULL(allocator)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("LOB result allocator is null", K(ret), K(value));
   } else {
     common::ObTextStringIter text_iter(value);
     common::ObArenaAllocator tmp_allocator(

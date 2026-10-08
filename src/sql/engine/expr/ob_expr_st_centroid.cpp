@@ -92,19 +92,15 @@ int ObExprSTCentroid::eval_st_centroid(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     } else if (OB_FAIL(guard.init())) {
     } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
       ret = OB_ERR_NULL_VALUE;
-      LOG_WARN("fail to get mem ctx", K(ret));
     } else {
       bool is_valid = true;
       if (geo->crs() == ObGeoCRS::Cartesian
         && OB_FAIL((ObGeoTypeUtil::is_polygon_valid_simple<ObCartesianPolygon, ObCartesianMultipolygon, ObCartesianGeometrycollection>(geo, is_valid)))) {
-        LOG_WARN("fail to check if geometry contain polygon", K(ret));
       } else if (geo->crs() == ObGeoCRS::Geographic
         && OB_FAIL((ObGeoTypeUtil::is_polygon_valid_simple<ObGeographPolygon, ObGeographMultipolygon, ObGeographGeometrycollection>(geo, is_valid)))) {
-        LOG_WARN("fail to check if geometry contain polygon", K(ret));
       } else if (!is_valid) {
         ret = OB_ERR_GIS_INVALID_DATA;
         LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_ST_CENTROID);
-        LOG_WARN("input geometry is invalid", K(ret));
       }
       ObGeoEvalCtx gis_context(*mem_ctx, srs);
       if (OB_FAIL(ret)) {
@@ -112,7 +108,6 @@ int ObExprSTCentroid::eval_st_centroid(const ObExpr &expr, ObEvalCtx &ctx, ObDat
       } else if (OB_FAIL(ObGeoTypeUtil::correct_polygon(tmp_allocator, srs, true, *geo))) {
       } else if (OB_FAIL(gis_context.append_geo_arg(geo))) {
       } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Centroid>::geo_func::eval(gis_context, res_geo))) {
-        LOG_WARN("eval geo func centroid failed", K(ret), K(geo->type()));
         if (ret == OB_ERR_BOOST_GEOMETRY_CENTROID_EXCEPTION) {
           ret = OB_SUCCESS;
           is_null_result = true;

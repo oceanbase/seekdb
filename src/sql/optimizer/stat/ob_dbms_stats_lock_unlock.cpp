@@ -74,7 +74,6 @@ int ObDbmsStatsLockUnlock::set_table_stats_lock(ObExecContext &ctx,
   uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(param.table_id_);
   if (OB_ISNULL(mysql_proxy = ctx.get_sql_proxy())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(mysql_proxy));
   } else if (OB_FAIL(trans.start(mysql_proxy))) {
   } else if (OB_FAIL(get_stats_history_sql(ctx, trans, param, set_locked,
                                            need_update_lock, no_stats_partition_ids,
@@ -92,7 +91,6 @@ int ObDbmsStatsLockUnlock::set_table_stats_lock(ObExecContext &ctx,
   } else if (OB_FAIL(trans.write(raw_sql.ptr(), affected_rows))) {
   } else if (!insert_sql.empty() &&
              OB_FAIL(trans.write(insert_sql.ptr(), affected_rows))) {
-    LOG_WARN("fail to exec sql", K(insert_sql), K(ret));
   } else {
   }
   if (OB_SUCC(ret)) {
@@ -184,13 +182,11 @@ int ObDbmsStatsLockUnlock::check_stat_locked(ObExecContext &ctx,
       OB_FAIL(raw_sql.append_fmt(GET_LOCKED_PARTITION_STAT,
                                  "stattype_locked > 0",
                                  pure_table_id))) {
-    LOG_WARN("failed to append sql stmt", K(ret), K(raw_sql));
   } else if (param.is_index_param() &&
              OB_FAIL(raw_sql.append_fmt(GET_INDEX_LOCKED_PARTITION_STAT,
                                         "stattype_locked > 0",
                                         pure_table_id,
                                         share::schema::ObSchemaUtils::get_extract_schema_id(param.data_table_id_)))) {
-    LOG_WARN("failed to append sql stmt", K(ret));
   } else if (OB_FAIL(get_stat_locked_partition_ids(ctx,
                                                    raw_sql,
                                                    locked_partition_ids,
@@ -200,7 +196,6 @@ int ObDbmsStatsLockUnlock::check_stat_locked(ObExecContext &ctx,
                : is_partition_id_locked(param.global_data_part_id_, locked_partition_ids, dummy_idx)) {
     //check the data table is locked for gather_index_stats
     ret = OB_ERR_DBMS_STATS_PL;
-    LOG_WARN("object statistics are locked", K(ret), K(locked_partition_ids));
     LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL,"object statistics are locked");
   } else if (OB_FAIL(adjust_table_stat_param(locked_partition_ids, param))) {
   } else {/*do nothing*/}
@@ -243,7 +238,6 @@ int ObDbmsStatsLockUnlock::get_stat_locked_partition_ids(ObExecContext &ctx,
   ObMySQLProxy *mysql_proxy = ctx.get_sql_proxy();
   if (OB_ISNULL(mysql_proxy) || OB_UNLIKELY(raw_sql.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(mysql_proxy), K(raw_sql));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
@@ -251,7 +245,6 @@ int ObDbmsStatsLockUnlock::get_stat_locked_partition_ids(ObExecContext &ctx,
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to execute sql", K(ret));
       } else {
         while (OB_SUCC(ret) && OB_SUCC(client_result->next())) {
           ObObj tmp;
@@ -267,7 +260,6 @@ int ObDbmsStatsLockUnlock::get_stat_locked_partition_ids(ObExecContext &ctx,
           } else {/*do nothing*/}
         }
         if (OB_ITER_END != ret) {
-          LOG_WARN("failed to get result", K(ret));
         } else {
           ret = OB_SUCCESS;
         }
@@ -307,14 +299,12 @@ int ObDbmsStatsLockUnlock::gen_partition_list(const ObTableStatParam &param,
   } else if (param.is_subpart_name_) {//specify subpart name
     if (OB_UNLIKELY(param.subpart_infos_.count() != 1)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected error", K(ret), K(param.subpart_infos_.count()));
     } else if (OB_FAIL(partition_ids.push_back(param.subpart_infos_.at(0).part_id_))) {
     } else if (OB_FAIL(all_partition_ids.push_back(param.subpart_infos_.at(0).part_id_))) {
     } else {/*do nothing*/}
   } else {//specify part name
     if (OB_UNLIKELY(param.part_infos_.count() != 1)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected error", K(ret), K(param.part_infos_.count()));
     } else if (OB_FAIL(partition_ids.push_back(param.part_infos_.at(0).part_id_))) {
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < param.subpart_infos_.count(); ++i) {
@@ -407,7 +397,6 @@ int ObDbmsStatsLockUnlock::adjust_table_stat_param(const ObIArray<int64_t> &lock
         (!param.part_name_.empty() && !param.is_subpart_name_ &&
           param.part_infos_.empty() && param.approx_part_infos_.empty())) {
       ret = OB_ERR_DBMS_STATS_PL;
-      LOG_WARN("object statistics are locked", K(ret), K(locked_partition_ids), K(param));
       LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL,"object statistics are locked");
     } else if (param.part_stat_param_.can_use_approx_ &&
                param.subpart_stat_param_.need_modify_ &&
@@ -415,7 +404,6 @@ int ObDbmsStatsLockUnlock::adjust_table_stat_param(const ObIArray<int64_t> &lock
                !param.part_name_.empty()) {
       if (OB_UNLIKELY(param.approx_part_infos_.count() != 1 || param.subpart_infos_.empty())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(param));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < param.all_subpart_infos_.count(); ++i) {
           if (param.all_subpart_infos_.at(i).first_part_id_ == param.approx_part_infos_.at(0).part_id_) {
@@ -447,7 +435,6 @@ int ObDbmsStatsLockUnlock::adjust_table_stat_locked(const ObIArray<int64_t> &loc
       if (OB_UNLIKELY(idx < 0 || idx >= stattype_locked_array.count() ||
                       stattype_locked_array.at(idx) <= 0)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(idx), K(stattype_locked_array));
       } else {
         param.stattype_ = static_cast<StatTypeLocked>(stattype_locked_array.at(idx));
       }
@@ -459,7 +446,6 @@ int ObDbmsStatsLockUnlock::adjust_table_stat_locked(const ObIArray<int64_t> &loc
         if (OB_UNLIKELY(idx < 0 || idx >= stattype_locked_array.count() ||
                         stattype_locked_array.at(idx) <= 0)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected error", K(ret), K(idx), K(stattype_locked_array));
         } else {
           param.subpart_infos_.at(i).part_stattype_ = stattype_locked_array.at(idx);
         }
@@ -472,7 +458,6 @@ int ObDbmsStatsLockUnlock::adjust_table_stat_locked(const ObIArray<int64_t> &loc
         if (OB_UNLIKELY(idx < 0 || idx >= stattype_locked_array.count() ||
                         stattype_locked_array.at(idx) <= 0)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected error", K(ret), K(idx), K(stattype_locked_array));
         } else {
           param.part_infos_.at(i).part_stattype_ = stattype_locked_array.at(idx);
         }
@@ -509,8 +494,6 @@ int ObDbmsStatsLockUnlock::get_no_stats_partition_ids(const StatTypeLocked statt
   need_update_lock = false;
   if (OB_UNLIKELY(stat_partition_ids.count() != stattype_locked.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(stat_partition_ids.count()),
-                                     K(stattype_locked.count()));
   } else {
     bool need_reset_array = false;
     for (int64_t i = 0; OB_SUCC(ret) && i < all_partition_ids.count(); ++i) {
@@ -545,8 +528,6 @@ int ObDbmsStatsLockUnlock::get_insert_locked_type_sql(const ObTableStatParam &pa
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(no_stats_partition_ids.count() != part_stattypes.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(no_stats_partition_ids.count()),
-                                     K(part_stattypes.count()));
   } else if (no_stats_partition_ids.empty()) {
     /*do nothing*/
   } else if (OB_FAIL(insert_sql.append(INSERT_TABLE_STAT_SQL))) {

@@ -96,7 +96,6 @@ int ObLogExprValues::add_values_expr(const common::ObIArray<ObRawExpr *> &value_
     ObRawExpr *stmt_id_expr = NULL;
     if (OB_ISNULL(stmt_id_expr = insert_stmt->get_ab_stmt_id_expr())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("stmt_id_expr is null", K(ret));
     } else if (OB_FAIL(append(value_exprs_, get_stmt()->get_query_ctx()->ab_param_exprs_))) {
     } else if (OB_FAIL(value_exprs_.push_back(stmt_id_expr))) {
     } else {
@@ -171,7 +170,6 @@ int ObLogExprValues::compute_op_ordering()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (!get_stmt()->is_select_stmt()) {
     /*do nothing*/
   } else {
@@ -206,7 +204,6 @@ int ObLogExprValues::do_re_est_cost(EstimateCostInfo &param, double &card, doubl
   int ret = OB_SUCCESS;
   if (OB_ISNULL(get_plan()) || OB_ISNULL(get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (get_stmt()->is_insert_stmt()) {
     ObOptimizerContext &opt_ctx = get_plan()->get_optimizer_context();
     card = static_cast<const ObInsertStmt*>(get_stmt())->get_insert_row_count();
@@ -215,7 +212,6 @@ int ObLogExprValues::do_re_est_cost(EstimateCostInfo &param, double &card, doubl
   } else if (is_values_table_) {
     if (OB_ISNULL(table_def_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else {
       ObOptimizerContext &opt_ctx = get_plan()->get_optimizer_context();
       card = get_card();
@@ -236,7 +232,6 @@ int ObLogExprValues::compute_sharding_info()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else {
     strong_sharding_ = get_plan()->get_optimizer_context().get_match_all_sharding();
   }
@@ -248,13 +243,11 @@ int ObLogExprValues::compute_one_row_info()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (get_stmt()->is_insert_stmt()) {
     /* do nothing */
   } else if (is_values_table_) {
     if (OB_ISNULL(table_def_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else {
       is_at_most_one_row_ = table_def_->row_cnt_ <= 1;
     }
@@ -270,7 +263,6 @@ int ObLogExprValues::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::get_op_exprs(all_exprs))) {
   } else if (OB_FAIL(append(all_exprs, value_exprs_))) {
   } else if (get_stmt()->is_insert_stmt()) {
@@ -289,7 +281,6 @@ int ObLogExprValues::append_batch_insert_used_exprs(ObAllocExprContext &ctx)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(get_stmt()), K(ret));
   } else if (get_stmt()->is_insert_stmt()) {
     const ObInsertStmt *insert_stmt = static_cast<const ObInsertStmt*>(get_stmt());
     const common::ObIArray<ObRawExpr*> &group_param_exprs = insert_stmt->get_group_param_exprs();
@@ -297,7 +288,6 @@ int ObLogExprValues::append_batch_insert_used_exprs(ObAllocExprContext &ctx)
       ObRawExpr *group_param_expr = group_param_exprs.at(i);
       if (OB_FAIL(mark_expr_produced(group_param_expr, branch_id_, id_, ctx))) {
       } else if (!is_plan_root() && OB_FAIL(output_exprs_.push_back(group_param_expr))) {
-        LOG_WARN("failed to push back exprs", K(ret));
       } else { /*do nothing*/ }
     }
     ObRawExpr *stmt_id_expr = NULL;
@@ -318,7 +308,6 @@ int ObLogExprValues::allocate_expr_post(ObAllocExprContext &ctx)
   if (OB_ISNULL(get_stmt()) || OB_ISNULL(get_plan()) ||
       OB_ISNULL(query_ctx = get_plan()->get_optimizer_context().get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(get_stmt()), K(ret));
   } else if (get_stmt()->is_insert_stmt() || is_values_table_) {
     const ObIArray<ObColumnRefRawExpr*> &values_desc = get_stmt()->is_insert_stmt() ?
                                   static_cast<const ObInsertStmt*>(get_stmt())->get_values_desc() : value_desc_;
@@ -326,7 +315,6 @@ int ObLogExprValues::allocate_expr_post(ObAllocExprContext &ctx)
       ObColumnRefRawExpr *value_col = values_desc.at(i);
       if (OB_FAIL(mark_expr_produced(value_col, branch_id_, id_, ctx))) {
       } else if (!is_plan_root() && OB_FAIL(output_exprs_.push_back(value_col))) {
-        LOG_WARN("failed to push back exprs", K(ret));
       } else { /*do nothing*/ }
     }
 
@@ -339,33 +327,26 @@ int ObLogExprValues::allocate_expr_post(ObAllocExprContext &ctx)
     /*do nothing*/
   } else if (OB_FAIL(ObLogicalOperator::allocate_expr_post(ctx))) {
   } else if (contain_array_binding_param() && OB_FAIL(construct_array_binding_values())) {
-    LOG_WARN("construct array binding values failed", K(ret));
   } else if (value_exprs_.empty() && OB_FAIL(append(value_exprs_, get_output_exprs()))) {
-    LOG_WARN("failed to append exprs", K(ret));
   } else if (value_exprs_.empty() && OB_FAIL(allocate_dummy_output())) {
-    LOG_WARN("failed to allocate dummy output", K(ret));
   } else if (!query_ctx->var_init_exprs_.empty() && 
              OB_FAIL(get_plan()->get_optimizer_context().get_all_exprs().append(query_ctx->var_init_exprs_))) {
     // make sure var_init_exprs in CG context
-    LOG_WARN("failed to append var init exprs", K(ret));
   } else if (OB_FAIL(mark_probably_local_exprs())) {
   } else if (is_values_table_) {
     // defence code for 4_2_1 values table
     if (OB_UNLIKELY(output_exprs_.count() != value_desc_.count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("values table should output is same as value_desc", K(ret), K(output_exprs_), K(value_desc_));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < output_exprs_.count(); i++) {
         ObSEArray<ObRawExpr *, 2> column_exprs;
         if (OB_FAIL(ObRawExprUtils::extract_column_exprs(output_exprs_.at(i), column_exprs))) {
         } else if (OB_UNLIKELY(column_exprs.count() >= 2)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("values table should output is same as value_desc", K(ret));
         } else if (column_exprs.empty()) {
           /* do nothing */
         } else if (OB_UNLIKELY(value_desc_.at(i) != column_exprs.at(0))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("values table should output is same as value_desc", K(ret));
         }
       }
     }
@@ -381,7 +362,6 @@ int ObLogExprValues::construct_array_binding_values()
       OB_ISNULL(get_plan()) ||
       OB_UNLIKELY(!get_stmt()->is_select_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("array binding param only in select stmt", K(ret), KPC(get_stmt()));
   } else {
     const ObSelectStmt *select_stmt = static_cast<const ObSelectStmt*>(get_stmt());
     if (OB_FAIL(value_exprs_.assign(select_stmt->get_query_ctx()->ab_param_exprs_))) {
@@ -391,7 +371,6 @@ int ObLogExprValues::construct_array_binding_values()
       ObRawExpr *raw_expr = NULL;
       if (OB_ISNULL(raw_expr = output_exprs_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (raw_expr->get_expr_type() == T_PSEUDO_STMT_ID) {
         if (OB_FAIL(value_exprs_.push_back(raw_expr))) {
         }
@@ -440,7 +419,6 @@ int ObLogExprValues::allocate_dummy_output()
   ObConstRawExpr *dummy_expr = NULL;
   if (OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(ObRawExprUtils::build_const_int_expr(
                                   get_plan()->get_optimizer_context().get_expr_factory(),
                                   ObIntType,
@@ -448,7 +426,6 @@ int ObLogExprValues::allocate_dummy_output()
                                   dummy_expr))) {
   } else if (OB_ISNULL(dummy_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(dummy_expr->extract_info())) {
   } else if (OB_FAIL(value_exprs_.push_back(dummy_expr))) {
   } else if (OB_FAIL(output_exprs_.push_back(dummy_expr))) {
@@ -475,12 +452,10 @@ int ObLogExprValues::get_array_param_group_id(int64_t &group_id, bool &find)
   if (OB_ISNULL(my_plan_) ||
       OB_ISNULL(exec_ctx = my_plan_->get_optimizer_context().get_exec_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid argument", K(ret), KP(my_plan_), KP(exec_ctx));
   } else if (exec_ctx->has_dynamic_values_table()) {
     for (int64_t i = 0; OB_SUCC(ret) && !find && i < value_exprs_.count(); i++) {
       if (OB_ISNULL(value_exprs_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("raw_expr is null", K(ret));
       } else if (value_exprs_.at(i)->is_const_raw_expr()) {
         const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr *>(value_exprs_.at(i));
         if (const_expr->get_array_param_group_id() >= 0) {

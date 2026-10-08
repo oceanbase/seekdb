@@ -49,7 +49,6 @@ int ObGeoWkbVisitor::write_geograph_point(double x, double y)
   if (OB_FAIL(need_convert_ && srs_->longtitude_convert_from_radians(x, val_x))) {
   } else if (OB_FAIL(write_to_buffer(val_x, sizeof(double)))) {
   } else if (need_convert_ && OB_FAIL(srs_->latitude_convert_from_radians(y, val_y))) {
-    LOG_WARN("failed to convert from latitude value", K(ret), K(y));
   } else if (OB_FAIL(write_to_buffer(val_y, sizeof(double)))) {
   }
   return ret;
@@ -86,7 +85,6 @@ int ObGeoWkbVisitor::visit(ObGeographLineString *geo)
   int ret = OB_SUCCESS;
   if (srs_ == NULL || srs_->srs_type() == ObSrsType::PROJECTED_SRS) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid srs info", K(ret), K(srs_));
   } else if (OB_FAIL(write_head_info(geo))) {
   } else {
     for (uint32_t i = 0; i < geo->size() && OB_SUCC(ret); i++) {
@@ -102,7 +100,6 @@ int ObGeoWkbVisitor::visit(ObGeographPolygon *geo)
   int ret = OB_SUCCESS;
   if (srs_ == NULL || srs_->srs_type() == ObSrsType::PROJECTED_SRS) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid srs info", K(ret), K(srs_));
   } else if (OB_FAIL(write_head_info(geo))) {
   } else {
     const ObGeographLinearring& ring = geo->exterior_ring();
@@ -165,7 +162,6 @@ int ObGeoWkbVisitor::visit(ObIWkbGeometry *geo)
   uint32_t wkb_no_srid_len = geo->length();
   if (buffer_->write(wkb_no_srid, wkb_no_srid_len) != wkb_no_srid_len) {
     ret = OB_BUF_NOT_ENOUGH;
-    LOG_WARN("failed to write buffer", K(ret));
   }
   return ret;
 

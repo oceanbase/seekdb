@@ -38,8 +38,6 @@ int ObHashPartCols::equal_distinct(
   if (OB_ISNULL(sort_collations) || OB_ISNULL(cmp_funcs)
       || OB_ISNULL(eval_ctx) || OB_ISNULL(exprs)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: compare info is null",
-      K(sort_collations), K(cmp_funcs), K(eval_ctx), K(exprs), K(ret));
   } else if (OB_FAIL(eval_ctx->get_datum_access_ctx(datum_access_ctx))) {
   } else if (use_expr_) {
     //for this situation, must be crash in a batch, need to get datum from expr

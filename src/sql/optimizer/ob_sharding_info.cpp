@@ -50,7 +50,6 @@ int ObShardingInfo::init_partition_info(ObOptimizerContext &ctx,
       //no partition expr
     } else if (PARTITION_LEVEL_ONE != part_level_ && PARTITION_LEVEL_TWO != part_level_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Expected part level be one or two", K(ret), K(part_num_), K(part_level_));
     } else {
       ObRawExpr *part_expr = NULL;
       ObRawExpr *subpart_expr = NULL;
@@ -58,14 +57,12 @@ int ObShardingInfo::init_partition_info(ObOptimizerContext &ctx,
       partition_array_ = table_schema->get_part_array();
       if (OB_ISNULL(part_expr = stmt.get_part_expr(table_id, ref_table_id))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("There is no part expr in stmt", K(table_id), K(ret));
       } else if (OB_FAIL(part_func_exprs_.push_back(part_expr))) {
     	} else if (OB_FAIL(get_partition_key(part_expr, part_func_type_, partition_keys_))) {
       } else if (PARTITION_LEVEL_TWO == part_level_) {
         subpart_func_type_ = table_schema->get_sub_part_option().get_part_func_type();
         if (OB_ISNULL(subpart_expr = stmt.get_subpart_expr(table_id, ref_table_id))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("There is no subpart expr in stmt", K(ret));
         } else if (OB_FAIL(get_partition_key(subpart_expr, subpart_func_type_, sub_partition_keys_))) {
         } else if (OB_FAIL(part_func_exprs_.push_back(subpart_expr))) {
         } else { }
@@ -118,7 +115,6 @@ int ObShardingInfo::get_all_partition_key(ObOptimizerContext &ctx,
     /* do nohitng */
   } else if (OB_ISNULL(part_expr = stmt.get_part_expr(table_id, ref_table_id))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("There is no part expr in stmt", K(table_id), K(ret));
   } else if (OB_FAIL(get_partition_key(part_expr,
                                        table_schema->get_part_option().get_part_func_type(),
                                        all_partition_keys))) {
@@ -126,7 +122,6 @@ int ObShardingInfo::get_all_partition_key(ObOptimizerContext &ctx,
     /* do nohitng */
   } else if (OB_ISNULL(part_expr = stmt.get_subpart_expr(table_id, ref_table_id))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("There is no subpart expr in stmt", K(ret));
   } else if (OB_FAIL(get_partition_key(part_expr,
                                        table_schema->get_sub_part_option().get_part_func_type(),
                                        all_partition_keys))) {
@@ -142,7 +137,6 @@ int ObShardingInfo::get_partition_key(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(part_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Part expr should not be NULL", K(ret));
   } else {
     if ((PARTITION_FUNC_TYPE_KEY == part_func_type
         || PARTITION_FUNC_TYPE_KEY_IMPLICIT == part_func_type)
@@ -185,7 +179,6 @@ int ObShardingInfo::is_compatible_partition_key(const ObShardingInfo *first_shar
           || OB_ISNULL(l_part_key = first_part_keys_list.at(i).at(0))
           || OB_ISNULL(r_part_key = second_part_keys_list.at(i).at(0))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(l_part_key), K(r_part_key), K(ret));
       } else if (l_part_key->get_data_type() == ObDecimalIntType
                  && r_part_key->get_data_type() == ObDecimalIntType
                  && first_sharding != NULL) {
@@ -227,7 +220,6 @@ int ObShardingInfo::is_compatible_partition_key(const ObShardingInfo &first_shar
     for (int64_t i = 0; OB_SUCC(ret) && is_compatible && i < first_part_keys.count(); i++) {
       if (OB_ISNULL(first_part_keys.at(i)) || OB_ISNULL(second_part_keys.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(first_part_keys.at(i)), K(second_part_keys.at(i)), K(ret));
       } else if (first_part_keys.at(i)->get_data_type() != second_part_keys.at(i)->get_data_type() ||
                  first_part_keys.at(i)->get_collation_type() != second_part_keys.at(i)->get_collation_type()) {
         is_compatible = false;
@@ -252,14 +244,12 @@ int ObShardingInfo::is_join_key_cover_partition_key(const EqualSets &equal_sets,
   ObShardingInfo *first_left_sharding = NULL;
   if (OB_UNLIKELY(first_keys.count() != second_keys.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected array count", K(first_keys.count()), K(second_keys.count()), K(ret));
   } else if (OB_FAIL(extract_partition_key(first_shardings,
                                            first_part_keys))) {
   } else if (OB_FAIL(extract_partition_key(second_shardings,
                                            second_part_keys))) {
   } else if (!first_shardings.empty() && OB_ISNULL(first_left_sharding = first_shardings.at(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(first_shardings), K(ret));
   } else if (OB_FAIL(is_compatible_partition_key(first_left_sharding,
                                                  first_part_keys,
                                                  second_part_keys,
@@ -297,7 +287,6 @@ int ObShardingInfo::remove_lossless_cast_for_sharding_key(ObRawExpr *&expr,
     is_lossless = false;
     if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null raw expr", K(ret));
     } else if (OB_FAIL(ObOptimizerUtil::is_lossless_column_cast(expr, is_lossless))) {
     } else if (!is_lossless) {
       // do nothing
@@ -325,7 +314,6 @@ int ObShardingInfo::is_expr_equivalent(const EqualSets &equal_sets,
   is_equal = false;
   if (OB_ISNULL(first_key) || OB_ISNULL(second_key)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(first_key), K(second_key), K(ret));
   } else if (OB_FAIL(remove_lossless_cast_for_sharding_key(first_key, first_sharding))) {
   } else if (OB_FAIL(remove_lossless_cast_for_sharding_key(second_key, first_sharding))) {
   } else {
@@ -334,7 +322,6 @@ int ObShardingInfo::is_expr_equivalent(const EqualSets &equal_sets,
     for (int64_t i = 0; OB_SUCC(ret) && !left_is_equal && i < first_part_keys.count(); i++) {
       if (OB_ISNULL(first_part_keys.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (ObOptimizerUtil::is_expr_equivalent(first_part_keys.at(i), first_key, equal_sets)) {
         left_is_equal = true;
       } else { /*do nothing*/ }
@@ -342,7 +329,6 @@ int ObShardingInfo::is_expr_equivalent(const EqualSets &equal_sets,
     for (int64_t i = 0; OB_SUCC(ret) && !right_is_equal && i < second_part_keys.count(); i++) {
       if (OB_ISNULL(second_part_keys.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (ObOptimizerUtil::is_expr_equivalent(second_part_keys.at(i), second_key, equal_sets)) {
         right_is_equal = true;
       } else { /*do nothing*/ }
@@ -392,7 +378,6 @@ int ObShardingInfo::extract_partition_key(const ObIArray<ObShardingInfo *> &inpu
     partition_keys.reuse();
     if (OB_ISNULL(input_shardings.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(input_shardings.at(i)->get_all_partition_keys(partition_keys, true))) {
     } else if (partition_keys.empty()) {
       /* do nothing */
@@ -407,7 +392,6 @@ int ObShardingInfo::extract_partition_key(const ObIArray<ObShardingInfo *> &inpu
       }
     } else if (OB_UNLIKELY(partition_cnt != partition_keys.count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected array cnt", K(partition_cnt), K(partition_keys.count()), K(ret));
     } else {
       for (int64_t j = 0; OB_SUCC(ret) && j < partition_cnt; j++) {
         if (OB_FAIL(partition_key_list.at(j).push_back(partition_keys.at(j)))) {
@@ -493,8 +477,6 @@ int ObShardingInfo::check_if_match_partition_wise(const EqualSets &equal_sets,
   if (OB_UNLIKELY(left_keys.count() != null_safe_info.count()) ||
       OB_UNLIKELY(right_keys.count() != null_safe_info.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected array count", K(left_keys.count()), K(right_keys.count()),
-        K(null_safe_info.count()), K(ret));
   } else {
     bool has_null_safe = false;
     ObSEArray<ObShardingInfo*, 8> left_sharding;
@@ -504,23 +486,19 @@ int ObShardingInfo::check_if_match_partition_wise(const EqualSets &equal_sets,
     for (int64_t i = 0; OB_SUCC(ret) && i < null_safe_info.count(); i++) {
       if (OB_ISNULL(left_keys.at(i)) || OB_ISNULL(right_keys.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(left_keys.at(i)), K(right_keys.at(i)), K(ret));
       } else if (null_safe_info.at(i)) {
         has_null_safe = true;
       } else if (OB_FAIL(strong_left_keys.push_back(left_keys.at(i))) ||
                  OB_FAIL(strong_right_keys.push_back(right_keys.at(i)))) {
-        LOG_WARN("failed to push back keys", K(ret));
       } else { /*do nothing*/ }
     }
     if (OB_SUCC(ret)) {
       if (NULL != left_strong_sharding &&
           NULL != left_strong_sharding->get_phy_table_location_info() &&
           OB_FAIL(left_sharding.push_back(left_strong_sharding))) {
-        LOG_WARN("failed to push back sharding info", K(ret));
       } else if (NULL != right_strong_sharding &&
                  NULL != right_strong_sharding->get_phy_table_location_info() &&
                  OB_FAIL(right_sharding.push_back(right_strong_sharding))) {
-        LOG_WARN("failed to push back sharding info", K(ret));
       } else if (has_null_safe &&
                  OB_FAIL(check_if_match_partition_wise(equal_sets,
                                                        left_keys,
@@ -528,11 +506,9 @@ int ObShardingInfo::check_if_match_partition_wise(const EqualSets &equal_sets,
                                                        left_sharding,
                                                        right_sharding,
                                                        is_partition_wise))) {
-        LOG_WARN("failed to check if match partition wise join", K(ret));
       } else if (is_partition_wise) {
       } else if (OB_FAIL(append(left_sharding, left_weak_sharding)) ||
                  OB_FAIL(append(right_sharding, right_weak_sharding))) {
-        LOG_WARN("failed to append sharding info", K(ret));
       } else if (OB_FAIL(check_if_match_partition_wise(equal_sets,
                                                        strong_left_keys,
                                                        strong_right_keys,
@@ -561,8 +537,6 @@ int ObShardingInfo::check_if_match_extended_partition_wise(const EqualSets &equa
   if (OB_UNLIKELY(left_keys.count() != null_safe_info.count()) ||
       OB_UNLIKELY(right_keys.count() != null_safe_info.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected array count", K(left_keys.count()), K(right_keys.count()),
-        K(null_safe_info.count()), K(ret));
   } else {
     bool has_null_safe = false;
     ObSEArray<ObShardingInfo*, 8> left_sharding;
@@ -572,23 +546,19 @@ int ObShardingInfo::check_if_match_extended_partition_wise(const EqualSets &equa
     for (int64_t i = 0; OB_SUCC(ret) && i < null_safe_info.count(); i++) {
       if (OB_ISNULL(left_keys.at(i)) || OB_ISNULL(right_keys.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(left_keys.at(i)), K(right_keys.at(i)), K(ret));
       } else if (null_safe_info.at(i)) {
         has_null_safe = true;
       } else if (OB_FAIL(strong_left_keys.push_back(left_keys.at(i))) ||
                  OB_FAIL(strong_right_keys.push_back(right_keys.at(i)))) {
-        LOG_WARN("failed to push back keys", K(ret));
       } else { /*do nothing*/ }
     }
     if (OB_SUCC(ret)) {
       if (NULL != left_strong_sharding &&
           left_strong_sharding->is_distributed_without_table_location_with_partitioning() &&
           OB_FAIL(left_sharding.push_back(left_strong_sharding))) {
-        LOG_WARN("failed to push back sharding info", K(ret));
       } else if (NULL != right_strong_sharding &&
                  right_strong_sharding->is_distributed_without_table_location_with_partitioning() &&
                  OB_FAIL(right_sharding.push_back(right_strong_sharding))) {
-        LOG_WARN("failed to push back sharding info", K(ret));
       } else if (has_null_safe &&
                  OB_FAIL(check_if_match_extended_partition_wise(equal_sets,
                                                                 left_keys,
@@ -596,11 +566,9 @@ int ObShardingInfo::check_if_match_extended_partition_wise(const EqualSets &equa
                                                                 left_sharding,
                                                                 right_sharding,
                                                                 is_ext_partition_wise))) {
-        LOG_WARN("failed to check if match extended partition wise join", K(ret));
       } else if (is_ext_partition_wise) {
       } else if (OB_FAIL(append(left_sharding, left_weak_sharding)) ||
                  OB_FAIL(append(right_sharding, right_weak_sharding))) {
-        LOG_WARN("failed to append sharding info", K(ret));
       } else if (OB_FAIL(check_if_match_extended_partition_wise(equal_sets,
                                                                 strong_left_keys,
                                                                 strong_right_keys,
@@ -631,7 +599,6 @@ int ObShardingInfo::check_if_match_partition_wise(const EqualSets &equal_sets,
   } else if (OB_ISNULL(first_left_sharding = left_sharding.at(0)) ||
              OB_ISNULL(first_right_sharding = right_sharding.at(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(first_left_sharding), K(first_right_sharding), K(ret));
   } else if (!first_left_sharding->is_distributed() || !first_right_sharding->is_distributed()) {
     is_partition_wise = false;
   } else if (first_left_sharding->part_level_ != first_right_sharding->part_level_ ||
@@ -682,7 +649,6 @@ int ObShardingInfo::check_if_match_extended_partition_wise(const EqualSets &equa
   } else if (OB_ISNULL(first_left_sharding = left_sharding.at(0)) ||
              OB_ISNULL(first_right_sharding = right_sharding.at(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(first_left_sharding), K(first_right_sharding), K(ret));
   } else if (!first_left_sharding->is_distributed() || !first_right_sharding->is_distributed()) {
     is_ext_partition_wise = false;
   } else if (!first_left_sharding->is_distributed_without_table_location_with_partitioning() ||
@@ -714,8 +680,6 @@ int ObShardingInfo::check_if_match_repart_or_rehash(const EqualSets &equal_sets,
   is_match_join_keys = false;
   if (OB_UNLIKELY(src_keys.count() != target_keys.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected array count", K(src_keys.count()),
-        K(target_keys.count()), K(ret));
   } else if (0 == target_part_keys.count()) {
     is_match_join_keys = false;
   } else {
@@ -724,7 +688,6 @@ int ObShardingInfo::check_if_match_repart_or_rehash(const EqualSets &equal_sets,
       ObRawExpr* right_part_key = NULL;
       if (OB_ISNULL(right_part_key = target_part_keys.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(right_part_key), K(ret));
       } else {
         bool is_found = false;
         for (int64_t j = 0; OB_SUCC(ret) && !is_found && j < target_keys.count(); ++j) {
@@ -733,7 +696,6 @@ int ObShardingInfo::check_if_match_repart_or_rehash(const EqualSets &equal_sets,
           if (OB_ISNULL(left_key = src_keys.at(j)) ||
               OB_ISNULL(right_key = target_keys.at(j))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected null", K(left_key), K(right_key), K(ret));
           } else if (ObOptimizerUtil::is_expr_equivalent(right_part_key, right_key, equal_sets)
               && right_part_key->get_result_type().get_type_class()
                   == left_key->get_result_type().get_type_class()
@@ -790,10 +752,8 @@ int ObShardingInfo::get_all_partition_keys(common::ObIArray<ObRawExpr*> &out_par
   int ret = OB_SUCCESS;
   if (!(ignore_single_partition && is_partition_single()) &&
       OB_FAIL(out_part_keys.assign(partition_keys_))) {
-    LOG_WARN("failed to assign array", K(ret));
   } else if (!(ignore_single_partition && is_subpartition_single()) &&
              append(out_part_keys, sub_partition_keys_)) {
-    LOG_WARN("failed to append array", K(ret));
   } else {/*do nothing*/}
   return ret;
 }
@@ -810,7 +770,6 @@ int ObShardingInfo::get_total_part_cnt(int64_t &total_part_cnt) const
     for (int64_t i = 0; OB_SUCC(ret) && i < part_num_; ++i) {
       if (OB_ISNULL(cur_part = partition_array_[i])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else {
         total_part_cnt += cur_part->get_sub_part_num();
       }

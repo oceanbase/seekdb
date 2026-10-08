@@ -133,7 +133,6 @@ int ObSchemaMgrCache::init(int64_t init_cached_num)
 
   if (init_cached_num <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(init_cached_num));
   } else {
     max_cached_num_ = init_cached_num;
     const lib::ObMemAttr attr("SchemaMgrCache", ObCtxIds::SCHEMA_SERVICE);
@@ -162,9 +161,6 @@ inline bool ObSchemaMgrCache::check_inner_stat() const
   if (OB_ISNULL(schema_mgr_items_)
       || max_cached_num_ <= 0) {
     ret = false;
-    LOG_WARN("inner stat error",
-             K(schema_mgr_items_),
-             K(max_cached_num_));
   }
   return ret;
 }
@@ -177,20 +173,16 @@ int ObSchemaMgrCache::check_schema_mgr_exist(const int64_t schema_version, bool 
   is_exist = false;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
   } else if (schema_version < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguement", K(ret), K(schema_version));
   } else if (OB_FAIL(get(schema_version, schema_mgr, handle))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       is_exist = false;
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("fail to get schema_mgr", K(ret), K(schema_version));
     }
   } else if (OB_ISNULL(schema_mgr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_mgr is null", K(ret), K(schema_version));
   } else {
     is_exist = true;
   }
@@ -207,10 +199,8 @@ int ObSchemaMgrCache::get(const int64_t schema_version,
 
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
   } else if (schema_version < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguement", K(ret), K(schema_version));
   } else {
     ObSchemaMgrItem *dst_item = NULL;
     bool is_stop = false;
@@ -262,10 +252,8 @@ int ObSchemaMgrCache::get_nearest(const int64_t schema_version,
 
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
   } else if (schema_version < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguement", K(ret), K(schema_version));
   } else {
     ObSchemaMgrItem *dst_item = NULL;
     int64_t nearest_pos = -1;
@@ -325,7 +313,6 @@ int ObSchemaMgrCache::get_ref_info_type_str_(const int64_t &index, const char *&
   int type_str_len = ARRAYSIZEOF(ref_info_type_strs);
   if (index >= type_str_len) {
     ret = OB_ERROR_OUT_OF_RANGE;
-    LOG_WARN("index is out of range", KR(ret), K(type_str_len));
   } else {
     type_str = ref_info_type_strs[index];
   }
@@ -342,7 +329,6 @@ int ObSchemaMgrCache::build_ref_mod_infos_(const int64_t *mod_ref,
 
   if (OB_ISNULL(mod_ref)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("mod ref is NULL", KR(ret));
   }
   int64_t pos = 0;
   const char *type_str = NULL;
@@ -368,7 +354,6 @@ int ObSchemaMgrCache::get_slot_info(common::ObIAllocator &allocator, common::ObI
   int ret = OB_SUCCESS;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
   } else {
     int64_t *mod_ref = NULL;
     ObSchemaMgr *schema_mgr = NULL;
@@ -387,7 +372,6 @@ int ObSchemaMgrCache::get_slot_info(common::ObIAllocator &allocator, common::ObI
     char *tmp_buff = static_cast<char*>(allocator.alloc(buf_len));
     if (OB_ISNULL(tmp_buff)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc tmp_buff faild", KR(ret));
     } else {
       TCRLockGuard guard(lock_);
       cached_slot_num = max_cached_num_;
@@ -406,8 +390,6 @@ int ObSchemaMgrCache::get_slot_info(common::ObIAllocator &allocator, common::ObI
             //do nothing
           } else if (OB_ISNULL(mod_ref)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("schema slot ref_cnt size > 0 but mod ref array is NULL", KR(ret),
-                    K(slot_id), K(schema_version));
           } else if (OB_FAIL(build_ref_mod_infos_(mod_ref, tmp_buff, buf_len, tmp_str))) {
           } else if (OB_FAIL(ob_write_string(allocator, tmp_str, ref_infos))) {
           }
@@ -447,10 +429,8 @@ int ObSchemaMgrCache::put(ObSchemaMgr *schema_mgr,
            schema_mgr->get_schema_version() : OB_INVALID_VERSION);
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
   } else if (OB_ISNULL(schema_mgr)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(schema_mgr));
   } else {
     ObSchemaMgrItem *dst_item = NULL;
     bool is_stop = false;
@@ -485,7 +465,6 @@ int ObSchemaMgrCache::put(ObSchemaMgr *schema_mgr,
     }
     if (NULL == dst_item) {
       ret = OB_EAGAIN;
-      LOG_WARN("need retry", K(ret));
       for (int64_t i = 0; i < max_cached_num_; ++i) {
         const ObSchemaMgrItem &schema_mgr_item = schema_mgr_items_[i];
         const ObSchemaMgr *schema_mgr = schema_mgr_item.schema_mgr_;
@@ -538,10 +517,8 @@ int ObSchemaMgrCache::try_eliminate_schema_mgr(ObSchemaMgr *&eli_schema_mgr)
   eli_schema_mgr = NULL;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
   } else if (OB_ISNULL(target_schema_mgr)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("eli_schema_mgr is null", K(ret));
   } else {
     TCWLockGuard guard(lock_);
     bool found = false;
@@ -560,8 +537,6 @@ int ObSchemaMgrCache::try_eliminate_schema_mgr(ObSchemaMgr *&eli_schema_mgr)
         int64_t ref_cnt = ATOMIC_LOAD(&schema_mgr_item.ref_cnt_);
         int64_t timestamp = tmp_schema_mgr->get_timestamp_in_slot();
         int64_t schema_version = tmp_schema_mgr->get_schema_version();
-        LOG_WARN("schema mgr is in use, try eliminate later", KR(ret),
-                 K(ref_cnt), K(schema_version), K(timestamp));
       } else {
         eli_schema_mgr = tmp_schema_mgr;
         schema_mgr_item.schema_mgr_ = NULL;
@@ -589,7 +564,6 @@ void ObSchemaMgrCache::dump() const
   int ret = OB_SUCCESS;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
   } else {
     TCRLockGuard guard(lock_);
     int64_t total_count = 0;
@@ -630,7 +604,6 @@ int ObSchemaMgrCache::try_update_latest_schema_idx()
   int ret = OB_SUCCESS;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
   } else {
     int64_t idx = OB_INVALID_INDEX;
     for (int64_t i = 0; i < max_cached_num_; ++i) {

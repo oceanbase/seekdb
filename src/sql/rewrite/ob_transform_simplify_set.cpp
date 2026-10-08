@@ -37,7 +37,6 @@ int ObTransformSimplifySet::transform_one_stmt(common::ObIArray<ObParentDMLStmt>
   bool is_happened = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("stmt is NULL", K(ret));
   } else if (!(stmt->is_select_stmt() && static_cast<ObSelectStmt*>(stmt)->is_set_stmt())) {
     // do nothing
   } else {
@@ -52,7 +51,6 @@ int ObTransformSimplifySet::transform_one_stmt(common::ObIArray<ObParentDMLStmt>
     if (OB_SUCC(ret)) {
       if (stmt->is_set_stmt() &&
           OB_FAIL(add_limit_order_distinct_for_union(parent_stmts, stmt, is_happened))) {
-        LOG_WARN("failed to add limit for union", K(ret));
       } else {
         trans_happened |= is_happened;
         OPT_TRACE("add limit order distinct for union:", is_happened);
@@ -60,7 +58,6 @@ int ObTransformSimplifySet::transform_one_stmt(common::ObIArray<ObParentDMLStmt>
     }
   }
   if (OB_SUCC(ret) && trans_happened && OB_FAIL(add_transform_hint(*stmt, NULL))) {
-    LOG_WARN("failed to add transform hint", K(ret));
   }
   return ret;
 }
@@ -70,7 +67,6 @@ int ObTransformSimplifySet::add_distinct(ObSelectStmt *stmt, ObSelectStmt *upper
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt) || OB_ISNULL(upper_stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("null pointer passed to add_distinct", K(stmt), K(upper_stmt));
   } else if (upper_stmt->is_set_distinct()) {
     if (stmt->is_set_stmt()) {
       stmt->assign_set_distinct();
@@ -91,13 +87,10 @@ int ObTransformSimplifySet::add_limit(ObSelectStmt *stmt, ObSelectStmt *upper_st
   ObRawExpr *limit_count_offset_expr = NULL;
   if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_) || OB_ISNULL(ctx_->session_info_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("class data member is not inited", KP_(ctx));
   } else if (OB_ISNULL(stmt) || OB_ISNULL(upper_stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("null pointer passed to add_distinct", K(stmt), K(upper_stmt));
   } else if (OB_ISNULL(upper_stmt->get_limit_expr()) || stmt->has_limit()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("stmt should have limit", K(ret));
   } else if (NULL == upper_stmt->get_offset_expr()) {
     limit_count_offset_expr = upper_stmt->get_limit_expr();
   } else if (OB_FAIL(ObTransformUtils::make_pushdown_limit_count(*ctx_->expr_factory_,
@@ -112,7 +105,6 @@ int ObTransformSimplifySet::add_limit(ObSelectStmt *stmt, ObSelectStmt *upper_st
     if (OB_FAIL(copier.copy(limit_count_offset_expr, limit_count_expr))) {
     } else if (OB_ISNULL(limit_count_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("left_limit_count_expr is NULL", K(ret));
     } else {
       stmt->set_limit_offset(limit_count_expr, limit_offset_expr);
       stmt->set_fetch_with_ties(upper_stmt->is_fetch_with_ties());
@@ -129,22 +121,18 @@ int ObTransformSimplifySet::add_order_by(ObSelectStmt *stmt, ObSelectStmt *upper
   //add order by
   if (OB_ISNULL(stmt) || OB_ISNULL(upper_stmt) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("null pointer passed to add_distinct", K(stmt), K(upper_stmt));
   } else if (stmt->get_order_item_size() > 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("stmt should not have order by", K(ret), K(stmt->get_order_item_size()));
   } else if (OB_FAIL(upper_stmt->get_pure_set_exprs(set_exprs))) {
   } else {
     ObRawExprCopier copier(*ctx_->expr_factory_);
     for (int64_t i = 0; OB_SUCC(ret) && i < set_exprs.count(); ++i) {
       if (OB_ISNULL(set_exprs.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("the set expr is invalid", K(ret), K(set_exprs.at(i)));
       } else if (set_exprs.at(i)->is_set_op_expr()) {
         int64_t idx = static_cast<ObSetOpRawExpr*>(set_exprs.at(i))->get_idx();
         if (OB_UNLIKELY(idx < 0 || idx >= stmt->get_select_item_size())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid select item index", K(ret), K(idx), K(stmt->get_select_item_size()));
         } else if (OB_FAIL(copier.add_replaced_expr(set_exprs.at(i),
                                                     stmt->get_select_item(idx).expr_))) {
         }
@@ -178,10 +166,8 @@ int ObTransformSimplifySet::check_can_push(ObSelectStmt *stmt, ObSelectStmt *upp
   need_push_orderby = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(upper_stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("null pointer passed to add_distinct", K(ret), K(stmt), K(upper_stmt));
   } else if (!upper_stmt->has_limit()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("upper_stmt should have limit ", K(ret), K(upper_stmt->has_limit()));
   } else if (NULL == upper_stmt->get_limit_expr() || 
              NULL != upper_stmt->get_limit_percent_expr() || 
              upper_stmt->is_fetch_with_ties()) {
@@ -198,7 +184,6 @@ int ObTransformSimplifySet::check_can_push(ObSelectStmt *stmt, ObSelectStmt *upp
         ObRawExpr *order_expr = upper_stmt->get_order_item(i).expr_;
         if (OB_ISNULL(order_expr)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(order_expr));
         } else if (order_expr->has_flag(CNT_SUB_QUERY)) {
           can_push = false;
         } else if (!order_expr->has_flag(CNT_SET_OP)) {
@@ -226,7 +211,6 @@ int ObTransformSimplifySet::add_limit_order_distinct_for_union(const common::ObI
   trans_happened = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("null pointer passed to transform", K(stmt), K(ret));
   } else if (stmt->is_select_stmt()
              && static_cast<ObSelectStmt*>(stmt)->is_set_stmt()
              && ObSelectStmt::UNION == static_cast<ObSelectStmt*>(stmt)->get_set_op()) {
@@ -243,15 +227,12 @@ int ObTransformSimplifySet::add_limit_order_distinct_for_union(const common::ObI
       for (int64_t i = 0; OB_SUCC(ret) && i < child_stmts.count(); ++i) {
         if (OB_ISNULL(child_stmt = child_stmts.at(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null", K(ret));
         } else if (OB_FAIL(check_can_push(child_stmt, select_stmt, need_push_distinct, 
                                           need_push_orderby, can_push))) {
         } else if (!can_push) {
           /*do nothing*/
         } else if (need_push_distinct && OB_FAIL(add_distinct(child_stmt, select_stmt))) {
-          LOG_WARN("Failed to add distinct to left stmt", K(ret));
         } else if (need_push_orderby && OB_FAIL(add_order_by(child_stmt, select_stmt))) {
-          LOG_WARN("Failed to add order by to left stmt", K(ret));
         } else if (OB_FAIL(add_limit(child_stmt, select_stmt))) {
         } else {
           trans_happened = true;
@@ -269,7 +250,6 @@ int ObTransformSimplifySet::is_calc_found_rows_for_union(const common::ObIArray<
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument, stmt is NULL", K(stmt), K(ret));
   } else {
     ObSelectStmt *top_union_stmt = NULL;
     if (stmt->is_select_stmt() && stmt->is_set_stmt() &&
@@ -280,7 +260,6 @@ int ObTransformSimplifySet::is_calc_found_rows_for_union(const common::ObIArray<
       ObDMLStmt *stmt = NULL;
       if (OB_ISNULL(stmt = parent_stmts.at(i).stmt_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("stmt is null", K(ret));
       } else if (stmt->is_select_stmt() && stmt->is_set_stmt() &&
                  ObSelectStmt::UNION == static_cast<ObSelectStmt*>(stmt)->get_set_op()) {
         top_union_stmt = static_cast<ObSelectStmt*>(stmt);
@@ -329,7 +308,6 @@ int ObTransformSimplifySet::check_exprs_constant_false(common::ObIArray<ObRawExp
         for (int64_t i = 0; OB_SUCC(ret) && i < ob_params.count(); i++) {
           if (OB_ISNULL(tmp_expr = ob_params.at(i))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get null pointer", K(ret));
           } else if (OB_FAIL(helper.precalc_constraint_exprs_.push_back(
                                     std::pair<ObRawExpr*, int64_t>(tmp_expr, stmt_idx)))) {
           }
@@ -431,7 +409,6 @@ int ObTransformSimplifySet::check_set_stmt_removable(ObSelectStmt *stmt,
   need_remove = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null pointer", K(ret));
   } else if (!stmt->is_scala_group_by() &&
              OB_FAIL(check_exprs_constant_false(stmt->get_condition_exprs(),
                                                 need_remove,
@@ -439,19 +416,16 @@ int ObTransformSimplifySet::check_set_stmt_removable(ObSelectStmt *stmt,
                                                 helper))) {
     // since select count(*) from dual where 1=0, will still output a row, we should check
     // scalar group by here.
-    LOG_WARN("fail to check exprs constant false", K(ret), K(stmt->get_condition_exprs()));
   } else if (!need_remove && OB_FAIL(check_exprs_constant_false(stmt->get_having_exprs(),
                                                                 need_remove,
                                                                 stmt_idx,
                                                                 helper))) {
-    LOG_WARN("fail to check exprs constant false", K(ret), K(stmt->get_having_exprs()));
   } else if (!need_remove && OB_FAIL(check_limit_zero_in_stmt(stmt->get_limit_expr(),
                                                               stmt->get_offset_expr(),
                                                               stmt->get_limit_percent_expr(),
                                                               need_remove,
                                                               stmt_idx,
                                                               helper))) {
-    LOG_WARN("fail to check limit", K(ret));
   }
   return ret;
 }
@@ -466,7 +440,6 @@ int ObTransformSimplifySet::pruning_set_query(common::ObIArray<ObParentDMLStmt> 
   bool first_can_remove = true;
   if (OB_ISNULL(select_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null pointer", K(ret));
   } else if (select_stmt->get_set_op() == ObSelectStmt::UNION ||
               select_stmt->get_set_op() == ObSelectStmt::EXCEPT ||
               select_stmt->get_set_op() == ObSelectStmt::INTERSECT) {
@@ -477,7 +450,6 @@ int ObTransformSimplifySet::pruning_set_query(common::ObIArray<ObParentDMLStmt> 
       bool need_remove = false;
       if (OB_FAIL(check_set_stmt_removable(child_stmt, need_remove, i, helper))) {
       } else if (need_remove && OB_FAIL(remove_list.push_back(i))) {
-        LOG_WARN("fail to push back", K(ret));
       }
     }
     if (OB_SUCC(ret) && remove_list.count() > 0 && 
@@ -488,7 +460,6 @@ int ObTransformSimplifySet::pruning_set_query(common::ObIArray<ObParentDMLStmt> 
                                              first_can_remove))) {
       } else if(!first_can_remove &&
                 OB_FAIL(remove_list.remove(0))) {
-        LOG_WARN("fail to remove item", K(ret));
       }
     }
     // do the remove.
@@ -497,7 +468,6 @@ int ObTransformSimplifySet::pruning_set_query(common::ObIArray<ObParentDMLStmt> 
       if (OB_FAIL(remove_set_query_in_stmt(select_stmt, remove_list,
                                            constraints_idxs, trans_happened))) {
       } else if (trans_happened && OB_FAIL(add_constraints_by_idx(constraints_idxs, helper))) {
-        LOG_WARN("fail to add constraints by idx", K(ret));
       }
     }
   }
@@ -513,10 +483,8 @@ int ObTransformSimplifySet::remove_set_query_in_stmt(ObSelectStmt *&select_stmt,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(select_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null stmt", K(ret));
   } else if (OB_UNLIKELY(remove_list.count() <= 0 || select_stmt->get_set_query().count() <= 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("incorrent remove_list coutn or set queries number", K(ret));
   } else {
     trans_happened = true;
     ObSelectStmt *child_stmt = NULL;
@@ -567,7 +535,6 @@ int ObTransformSimplifySet::remove_set_query_in_stmt(ObSelectStmt *&select_stmt,
       case ObSelectStmt::INTERSECT: {
         if (OB_UNLIKELY(select_stmt->get_set_query().count() != 2)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("branches num of intersect should be 2", K(ret));
         } else if (remove_list.count() == 2 || (remove_list.count() == 1 &&
                                                 remove_list.at(0) == 1)) {
          
@@ -589,7 +556,6 @@ int ObTransformSimplifySet::remove_set_query_in_stmt(ObSelectStmt *&select_stmt,
       case ObSelectStmt::EXCEPT: {
         if (OB_UNLIKELY(select_stmt->get_set_query().count() != 2)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("branches num of except should be 2", K(ret));
         } else if (remove_list.count() == 2 || (remove_list.count() == 1 &&
                                                 remove_list.at(0) == 0)) {
           // keep the first branch.
@@ -643,7 +609,6 @@ int ObTransformSimplifySet::add_constraints_by_idx(common::ObIArray<int64_t> &co
                                                       op_expr))) {
     } else if (OB_ISNULL(op_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null pointer", K(ret));
     } else if (OB_FAIL(op_expr->formalize(ctx_->session_info_))) {
     } else if (OB_FAIL(ctx_->expr_constraints_.push_back(
                 ObExprConstraint(op_expr, PreCalcExprExpectResult::PRE_CALC_RESULT_FALSE)))) {
@@ -678,7 +643,6 @@ int ObTransformSimplifySet::replace_set_stmt_with_child_stmt(ObSelectStmt *&pare
   int ret = OB_SUCCESS;
   if (OB_ISNULL(parent_stmt) || OB_ISNULL(child_stmt) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null pointer", K(ret));
   } else {
     /* 1. for limit clause
       * if both parent_stmt and child_stmt has limit, we should create a view to hold parent's limit.
@@ -698,7 +662,6 @@ int ObTransformSimplifySet::replace_set_stmt_with_child_stmt(ObSelectStmt *&pare
     if (OB_FAIL(ObTransformUtils::create_stmt_with_generated_table(ctx_, child_stmt, view_stmt))) {
     } else if (OB_ISNULL(view_stmt)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("view table is null", K(ret));
     } else if (OB_FAIL(add_order_by(view_stmt, parent_stmt))) {
     } else {
       // set child's limit to view. and reset child's order by items.
@@ -715,14 +678,12 @@ int ObTransformSimplifySet::replace_set_stmt_with_child_stmt(ObSelectStmt *&pare
       // cast expr need to be added to view's select items
       if (OB_SUCC(ret) && OB_UNLIKELY(view_stmt->get_select_item_size() != parent_stmt->get_select_item_size())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("select item size missmatch", K(ret));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < view_stmt->get_select_item_size(); i++) {
           ObRawExpr *expr1 = parent_stmt->get_select_item(i).expr_;
           ObRawExpr *expr2 = view_stmt->get_select_item(i).expr_;
           if (OB_ISNULL(expr1) || OB_ISNULL(expr2)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected null pointer", K(ret), KP(expr1), KP(expr2));
           } else {
             if (OB_FAIL(ObTransformUtils::add_cast_for_replace_if_need(*(ctx_->expr_factory_), 
                                                                expr1,
@@ -762,7 +723,6 @@ int ObTransformSimplifySet::check_first_stmt_removable(common::ObIArray<ObParent
     // do nothing
   } else if (OB_ISNULL(parent_stmt = parent_stmts.at(parent_stmts.count() - 1).stmt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (!ObStmt::is_dml_write_stmt(parent_stmt->get_stmt_type())) {
     // do nothing
   } else if (OB_FAIL(ObTransformUtils::get_generated_table_item(*parent_stmt, stmt, table_item))) {

@@ -35,7 +35,6 @@ int ObTransformLeftJoinToAnti::transform_one_stmt(common::ObIArray<ObParentDMLSt
   trans_happened = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null stmt", K(ret));
   } else if (stmt->is_set_stmt()) {
     // do nothing
   } else {
@@ -47,7 +46,6 @@ int ObTransformLeftJoinToAnti::transform_one_stmt(common::ObIArray<ObParentDMLSt
       TableItem *table = NULL;
       if (OB_ISNULL(table = joined_tables.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null table", K(ret));
       } else if (OB_FAIL(SMART_CALL(transform_left_join_to_anti_join_rec(stmt,
                                                                          table,
                                                                          trans_tables,
@@ -56,7 +54,6 @@ int ObTransformLeftJoinToAnti::transform_one_stmt(common::ObIArray<ObParentDMLSt
       }
     }
     if (OB_SUCC(ret) && trans_happened && OB_FAIL(add_transform_hint(*stmt, &trans_tables))) {
-      LOG_WARN("failed to add transform hint", K(ret));
     }
   }
   return ret;
@@ -72,7 +69,6 @@ int ObTransformLeftJoinToAnti::construct_transform_hint(ObDMLStmt &stmt, void *t
       OB_FALSE_IT(trans_tables = static_cast<ObIArray<single_or_joined_table>*>(trans_params)) ||
       OB_UNLIKELY(trans_tables->empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(ctx_), K(trans_tables));
   } else if (OB_FAIL(ObQueryHint::create_hint(ctx_->allocator_, T_LEFT_TO_ANTI, hint))) {
   } else if (OB_FAIL(ctx_->outline_trans_hints_.push_back(hint))) {
   } else if (OB_FAIL(ctx_->add_used_trans_hint(get_hint(stmt.get_stmt_hint())))) {
@@ -101,7 +97,6 @@ int ObTransformLeftJoinToAnti::transform_left_join_to_anti_join_rec(ObDMLStmt *s
   JoinedTable *joined_table = static_cast<JoinedTable *>(table);
   if (OB_ISNULL(stmt) || OB_ISNULL(table) || OB_UNLIKELY(!table->is_joined_table())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null stmt or table item", K(ret), K(stmt), K(table));
   } else if (joined_table->is_left_join()) {
     if (joined_table->left_table_->is_joined_table()) {
       if (OB_FAIL(SMART_CALL(transform_left_join_to_anti_join_rec(stmt,
@@ -117,7 +112,6 @@ int ObTransformLeftJoinToAnti::transform_left_join_to_anti_join_rec(ObDMLStmt *s
                                                                  trans_tables,
                                                                  is_root_table,
                                                                  cur_trans))) {
-      LOG_WARN("failed to do transform left join to anti-join", K(ret));
     } else {
       trans_happened |= (left_trans || cur_trans);
     }
@@ -140,7 +134,6 @@ int ObTransformLeftJoinToAnti::transform_left_join_to_anti_join(ObDMLStmt *&stmt
   ObArray<ObRawExpr *> constraints;
   if (OB_ISNULL(stmt) || OB_UNLIKELY(!table->is_joined_table())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null stmt or table item", K(ret), K(stmt), K(table));
   } else if (OB_FAIL(check_hint_valid(*stmt, *joined_table->right_table_, is_valid))) {
   } else if (!is_valid) {
     // do nothing
@@ -179,10 +172,8 @@ int ObTransformLeftJoinToAnti::transform_left_join_to_anti_join(ObDMLStmt *&stmt
               !view_table->is_generated_table() ||
               OB_ISNULL(ref_query = view_table->ref_query_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret), K(view_table), K(ref_query));
     } else if (OB_UNLIKELY(ref_query->get_joined_tables().empty())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("joined tables should not be empty", K(ret));
     } else if (OB_FAIL(trans_stmt_to_anti(ref_query,
                                           ref_query->get_joined_tables().at(0)))) {
     } else if (OB_FAIL(stmt->formalize_stmt(ctx_->session_info_, false))) {
@@ -204,15 +195,12 @@ int ObTransformLeftJoinToAnti::trans_stmt_to_anti(ObDMLStmt *stmt, JoinedTable *
   if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->allocator_) ||
       OB_ISNULL(ctx_->session_info_) || OB_ISNULL(ctx_->expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(ctx_));
   } else if (OB_ISNULL(joined_table) || 
              OB_ISNULL(left_table = joined_table->left_table_) ||
              OB_ISNULL(right_table = joined_table->right_table_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null table", K(ret), K(joined_table));
   } else if (OB_ISNULL(semi_info = static_cast<SemiInfo *>(ctx_->allocator_->alloc(sizeof(SemiInfo))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate semi info", K(ret));
   } else if (OB_FALSE_IT(semi_info = new(semi_info)SemiInfo())) {
   } else if (!right_table->has_for_update() && !right_table->is_joined_table()) {
     // do nothing
@@ -236,7 +224,6 @@ int ObTransformLeftJoinToAnti::trans_stmt_to_anti(ObDMLStmt *stmt, JoinedTable *
     if (OB_FAIL(semi_info->semi_conditions_.assign(joined_table->get_join_conditions()))) {
     } else if (OB_UNLIKELY(idx < 0 || idx >= stmt->get_from_item_size())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid index", K(ret), K(idx));
     } else {
       stmt->get_from_item(idx).table_id_ = left_table->table_id_;
       stmt->get_from_item(idx).is_joined_ = left_table->is_joined_table();
@@ -265,7 +252,6 @@ int ObTransformLeftJoinToAnti::trans_stmt_to_anti(ObDMLStmt *stmt, JoinedTable *
       if (OB_ISNULL(col_item = stmt->get_column_item(i)) ||
           OB_ISNULL(from_expr = col_item->expr_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null column", K(ret));
       } else if (right_table->table_id_ != col_item->table_id_) {
         // do nothing
       } else if (OB_FAIL(ObRawExprUtils::build_null_expr(*ctx_->expr_factory_,
@@ -275,7 +261,6 @@ int ObTransformLeftJoinToAnti::trans_stmt_to_anti(ObDMLStmt *stmt, JoinedTable *
                                                                 ctx_->session_info_))) {
       } else if (OB_ISNULL(to_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null cast expr", K(ret));
       } else if (OB_FAIL(from_exprs.push_back(from_expr))) {
       } else if (OB_FAIL(to_exprs.push_back(to_expr))) {
       }
@@ -306,7 +291,6 @@ int ObTransformLeftJoinToAnti::clear_for_update(TableItem *table) {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(table)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null pointer", K(ret));
   } else {
     if (table->is_basic_table()) {
       table->for_update_ = false;
@@ -328,7 +312,6 @@ int ObTransformLeftJoinToAnti::get_column_ref_in_is_null_condition(const ObRawEx
   const ObConstRawExpr *second_param = NULL;
   if (OB_ISNULL(expr) || OB_ISNULL(expr->get_param_expr(0)) || OB_ISNULL(expr->get_param_expr(1))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null expr", K(ret));
   } else if (!(second_param = static_cast<const ObConstRawExpr *>(expr->get_param_expr(1)))
                                     ->get_value().is_null()) {
     // skip exprs other than (IS NULL)
@@ -351,17 +334,14 @@ int ObTransformLeftJoinToAnti::fill_not_null_context(ObIArray<JoinedTable*> &joi
       || OB_ISNULL(target_joined_table->left_table_) 
       ||OB_ISNULL(target_joined_table->right_table_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_UNLIKELY(!target_joined_table->is_left_join())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected join type", K(ret), K(target_joined_table->joined_type_));
   }
   // add all null-side tables into not-null-context, but skip target_joined_table and its child
   for (int64_t i = 0; OB_SUCC(ret) && i < joined_tables.count(); ++i) {
     JoinedTable *other_joined_table = joined_tables.at(i);
     if (OB_ISNULL(other_joined_table)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(not_null_context.add_joined_table(other_joined_table, target_joined_table))) {
     }
   }
@@ -377,7 +357,6 @@ int ObTransformLeftJoinToAnti::fill_not_null_context(ObIArray<JoinedTable*> &joi
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(not_null_context.add_filter(target_joined_table->get_join_conditions()))) {
-    LOG_WARN("failed to add null reject conditions", K(ret));
   }
   return ret;
 }
@@ -394,7 +373,6 @@ int ObTransformLeftJoinToAnti::check_condition_expr_validity(const ObRawExpr *ex
   if (OB_ISNULL(expr) || OB_ISNULL(stmt) || OB_ISNULL(joined_table) ||
       OB_ISNULL(right_table = joined_table->right_table_) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null expr", K(ret));
   } else if (expr->get_expr_type() == T_OP_IS) {
     bool first_expr_not_null = false;
     ObSEArray<const ObRawExpr *, 1> targets;
@@ -440,7 +418,6 @@ int ObTransformLeftJoinToAnti::check_condition_expr_validity(const ObRawExpr *ex
                                                              targets_in_right,
                                                              is_valid))) {
         } else if (is_valid && OB_FAIL(append(constraints, tmp_constraints))) {
-          LOG_WARN("failed to append constraints", K(ret));
         }
       }
     }
@@ -490,12 +467,10 @@ int ObTransformLeftJoinToAnti::check_can_be_trans(ObDMLStmt *stmt,
   if (OB_ISNULL(stmt) ||
       OB_ISNULL(ctx_) || OB_ISNULL(ctx_->schema_checker_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(stmt), K(ctx_));
   } else if (OB_ISNULL(joined_table) ||
              OB_ISNULL(joined_table->left_table_) ||
              OB_ISNULL(right_table = joined_table->right_table_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid joined table", K(ret), K(joined_table));
   } else if (OB_FAIL(ObTransformUtils::check_contain_correlated_lateral_table(
                                        joined_table, is_contain_lateral))) {
   } else if (is_contain_lateral) {
@@ -512,7 +487,6 @@ int ObTransformLeftJoinToAnti::check_can_be_trans(ObDMLStmt *stmt,
       const ObDmlTableInfo *table_info = table_infos.at(i);
       if (OB_ISNULL(table_info)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null table info", K(ret));
       } else if (right_table->is_joined_table()) {
         JoinedTable *right_joined_table = static_cast<JoinedTable *>(right_table);
         if (is_contain(right_joined_table->single_table_ids_, table_info->table_id_)) {
@@ -537,7 +511,6 @@ int ObTransformLeftJoinToAnti::check_can_be_trans(ObDMLStmt *stmt,
                       i < joined_table->get_join_conditions().count(); ++i) {
     if (OB_ISNULL(joined_table->get_join_conditions().at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (joined_table->get_join_conditions().at(i)->has_flag(CNT_SUB_QUERY)) {
       is_table_valid = false;
     }
@@ -575,7 +548,6 @@ int ObTransformLeftJoinToAnti::check_hint_valid(const ObDMLStmt &stmt,
     is_valid = true;
   } else if (OB_ISNULL(query_hint = stmt.get_stmt_hint().query_hint_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(query_hint));
   } else {
     is_valid = hint->enable_left_to_anti(query_hint->cs_type_, table);
   }
@@ -590,7 +562,6 @@ int ObTransformLeftJoinToAnti::construct_trans_table_list(const ObDMLStmt *stmt,
   ObSEArray<TableItem *, 4> trans_table;
   if (OB_ISNULL(stmt) || OB_ISNULL(table)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (table->is_joined_table()) {
     const JoinedTable *joined_table = static_cast<const JoinedTable *>(table);
     for (int64_t i = 0; OB_SUCC(ret) && i <
@@ -598,14 +569,12 @@ int ObTransformLeftJoinToAnti::construct_trans_table_list(const ObDMLStmt *stmt,
       TableItem *table = stmt->get_table_item_by_id(joined_table->single_table_ids_.at(i));
       if (OB_ISNULL(table)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(trans_table.push_back(table))) {
       }
     }
   } else if (OB_FAIL(trans_table.push_back(const_cast<TableItem *>(table)))) {
   }
   if (OB_SUCC(ret) && OB_FAIL(trans_tables.push_back(trans_table))) {
-    LOG_WARN("failed to push back trans tables", K(ret));
   }
   return ret;
 }

@@ -59,10 +59,8 @@ int ObPxReceiveRowP::process(const ObDtlLinkedBuffer &buffer, bool &transferred)
   int ret = OB_SUCCESS;
   if (NULL == reader_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("reader not set while receive data message", K(ret));
   } else if (OB_FAIL(reader_->add_buffer(const_cast<ObDtlLinkedBuffer &>(buffer), transferred))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("add buffer failed", K(ret));
     }
   }
   return ret;

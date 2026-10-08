@@ -2051,7 +2051,6 @@ int ObMemtable::multi_set_(
     if (OB_SUCCESS != ret
         && (OB_ERR_PRIMARY_KEY_DUPLICATE != ret
             || !rows_info.need_find_all_duplicate_key())) {
-      LOG_WARN("the error code is unexpected", K(ret), K(rows_info));
       ret = OB_ERR_UNEXPECTED;
     }
   } else if (OB_FAIL(check_rows_locked_on_frozen_stores_(param,
@@ -2494,7 +2493,6 @@ int ObMemtable::batch_mvcc_write_(const storage::ObTableIterParam &param,
                                 row_writer,          /*stack allocated memory pool*/
                                 old_row_data,        /*heap allocated old row*/
                                 mtd))) {             /*stack allocated new row*/
-      TRANS_LOG(WARN, "build row data failed", K(ret), K(i), K(row_count));
     } else if (FALSE_IT(tx_node_args[i].set(ctx.mvcc_acc_ctx_.tx_id_,  /*trans id*/
                                             &mtd,                      /*memtable_data*/
                                             old_row_data,              /*heap allocated old row*/

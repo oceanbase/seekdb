@@ -48,7 +48,6 @@ int ObExprTruncate::calc_result_type2(ObExprResType &type,
     dynamic_cast<const ObSQLSessionInfo*>(type_ctx.get_session());
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cast basic session to sql session failed", K(ret));
   } else if (type1.is_null() || type2.is_null()) {
     type.set_null();
   } else {
@@ -234,7 +233,6 @@ int ObExprTruncate::set_trunc_val(common::ObObj &result,
   }
   default: {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected result type", K(ret), K(res_type));
     break;
   }
   }
@@ -304,12 +302,10 @@ int calc_truncate_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
   ObDatum *d_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, x_datum)) ||
       OB_FAIL(expr.args_[1]->eval(ctx, d_datum))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else if (x_datum->is_null() || d_datum->is_null()) {
     res_datum.set_null();
   } else if (OB_UNLIKELY(res_type != arg_type)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected res_type or arg_type", K(ret), K(res_type), K(arg_type), K(expr));
   } else {
     const int64_t scale = d_datum->get_int();
     switch (arg_type) {
@@ -352,7 +348,6 @@ int calc_truncate_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected arg_type for trunc expr", K(ret), K(arg_type));
         break;
       }
     }

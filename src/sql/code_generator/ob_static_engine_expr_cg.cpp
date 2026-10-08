@@ -181,7 +181,6 @@ int ObStaticEngineExprCG::generate_rt_expr(const ObRawExpr &raw_expr,
   rt_expr = get_rt_expr(raw_expr);
   if (OB_ISNULL(rt_expr)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("rt expr is null", K(ret), K(raw_expr));
   } else if (OB_FAIL(exprs.push_back(const_cast<ObRawExpr *>(&raw_expr)))) {
   }
 
@@ -218,7 +217,6 @@ int ObStaticEngineExprCG::cg_exprs(const ObIArray<ObRawExpr *> &raw_exprs,
     if (OB_ISNULL(raw_exprs.at(i))
         || OB_ISNULL(rt_expr = get_rt_expr(*raw_exprs.at(i)))) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), K(raw_exprs.at(i)), K(rt_expr));
     }
   }
   if (OB_SUCC(ret)) {
@@ -298,10 +296,8 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
         if (precision < 0 || precision > OB_MAX_DECIMAL_POSSIBLE_PRECISION
             || scale < 0 || scale > precision) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Unexpected ps meta for decimal int type", K(ret), K(precision), K(scale));
-        } else if (rt_expr->obj_datum_map_ != OBJ_DATUM_DECIMALINT) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Unexpected obj datum map", K(ret), K(rt_expr->obj_datum_map_));
+        } else {
+          OB_ASSERT(rt_expr->obj_datum_map_ == OBJ_DATUM_DECIMALINT);
         }
       }
     }
@@ -322,7 +318,6 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
         ObExpr **buf = static_cast<ObExpr **>(allocator_.alloc(alloc_size));
         if (OB_ISNULL(buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to alloc memory", K(ret));
         } else {
           memset(buf, 0, alloc_size);
           rt_expr->args_ = buf;
@@ -331,10 +326,8 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
             ObRawExpr *child_expr = NULL;
             if (OB_ISNULL(child_expr = raw_expr->get_param_expr(i))) {
               ret = OB_INVALID_ARGUMENT;
-              LOG_WARN("invalid argument", K(ret));
             } else if (OB_ISNULL(get_rt_expr(*child_expr))) {
               ret = OB_INVALID_ARGUMENT;
-              LOG_WARN("expr is null", K(ret));
             } else {
               rt_expr->args_[i] = get_rt_expr(*child_expr);
             }
@@ -346,7 +339,6 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
             if (OB_FAIL(ret)) {
             } else if (OB_ISNULL(gen_questionmarks_.at(param_idx))) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("unexpected null questionmark", K(ret), K(param_idx));
             } else {
               rt_expr->args_[0] = get_rt_expr(*gen_questionmarks_.at(param_idx));
             }
@@ -371,14 +363,12 @@ int ObStaticEngineExprCG::cg_expr_parents(const ObIArray<ObRawExpr *> &raw_exprs
     ObExpr *rt_expr = get_rt_expr(*raw_exprs.at(i));
     if (rt_expr->arg_cnt_ > 0 && OB_ISNULL(rt_expr->args_)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), K(rt_expr->arg_cnt_), KP(rt_expr->args_));
     }
     for (int64_t child_idx = 0;
          OB_SUCC(ret) && child_idx < rt_expr->arg_cnt_;
          child_idx++) {
       if (OB_ISNULL(rt_expr->args_[child_idx])) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid argument", K(ret), K(rt_expr->args_[child_idx]));
       } else {
         rt_expr->args_[child_idx]->parent_cnt_ += 1;
       }
@@ -393,7 +383,6 @@ int ObStaticEngineExprCG::cg_expr_parents(const ObIArray<ObRawExpr *> &raw_exprs
       if (OB_ISNULL(rt_expr->parents_ =
                     static_cast<ObExpr **>(allocator_.alloc(alloc_size)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc memory", K(ret), K(alloc_size));
       }
     }
   }
@@ -410,7 +399,6 @@ int ObStaticEngineExprCG::cg_expr_parents(const ObIArray<ObRawExpr *> &raw_exprs
          arg_idx++) {
       if (OB_ISNULL(rt_expr->args_[arg_idx])) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("child expr is null", K(ret), K(arg_idx));
       } else {
         uint32_t &parent_cnt = rt_expr->args_[arg_idx]->parent_cnt_;
         rt_expr->args_[arg_idx]->parents_[parent_cnt] = rt_expr;
@@ -444,7 +432,6 @@ int ObStaticEngineExprCG::cg_expr_by_operator(const ObIArray<ObRawExpr *> &raw_e
     if (OB_ISNULL(raw_expr = raw_exprs.at(i))
         || OB_ISNULL(rt_expr = get_rt_expr(*raw_expr))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("arg is null", K(raw_expr), K(rt_expr), K(ret));
     } else if (T_QUESTIONMARK == rt_expr->type_ &&
               (raw_expr->has_flag(IS_TABLE_ASSIGN) ||
                (rt_question_mark_eval_ && (!is_dynamic_eval_qm(*raw_expr) || !contain_dynamic_eval_rt_qm_)))) {
@@ -467,7 +454,6 @@ int ObStaticEngineExprCG::cg_expr_by_operator(const ObIArray<ObRawExpr *> &raw_e
         rt_expr->extra_ = param_idx;
         if (OB_UNLIKELY(!ob_is_decimal_int(rt_expr->datum_meta_.type_))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unpexected dynamic eval qm", K(ret), KPC(c_expr));
         } else {
           rt_expr->eval_func_ = eval_questionmark_nmb2decint_eqcast;
         }
@@ -483,18 +469,18 @@ int ObStaticEngineExprCG::cg_expr_by_operator(const ObIArray<ObRawExpr *> &raw_e
         rt_expr->expr_ctx_id_ = total_ctx_cnt;
         total_ctx_cnt += 1;
       }
+      // Built-in arity constraints declared by the operator are checked by
+      // ObSysFunRawExpr::check_param_num before codegen. cg_expr_basic has also
+      // prepared the runtime arguments; stricter, undeclared checks still return errors.
       if (OB_FAIL(op->cg_expr(op_cg_ctx_, *raw_expr, *rt_expr))) {
       } else if (OB_NOT_NULL(rt_expr->extra_info_)
                 && !ObExprExtraInfoFactory::is_registered(rt_expr->type_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unregistered type, extra_info_ is not null", K(ret));
       } else if (OB_ISNULL(rt_expr->eval_func_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("null evaluate function returned", K(ret));
       } else if (rt_expr->inner_func_cnt_ > 0) {
         if (OB_ISNULL(rt_expr->inner_functions_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("NULL inner functions", K(ret), K(*raw_expr), K(rt_expr->inner_func_cnt_));
         }
       }
     }
@@ -621,7 +607,6 @@ int ObStaticEngineExprCG::cg_param_frame_layout(const ObIArray<ObRawExpr *> &par
   int ret = OB_SUCCESS;
   if (!param_exprs.empty() && param_cnt_ + flying_param_cnt_ == 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   }
   int64_t frame_idx = 0;
   int64_t datum_idx = 0;
@@ -630,15 +615,12 @@ int ObStaticEngineExprCG::cg_param_frame_layout(const ObIArray<ObRawExpr *> &par
     ObExpr *rt_expr = get_rt_expr(*param_exprs.at(i));
     if (T_QUESTIONMARK != rt_expr->type_) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), K(rt_expr));
     } else {
       ObConstRawExpr *c_expr = static_cast<ObConstRawExpr*>(param_exprs.at(i));
       int64_t param_idx = 0;
       if (OB_FAIL(c_expr->get_value().get_unknown(param_idx))) {
       } else if (param_idx < 0 || param_idx >= param_cnt_ + flying_param_cnt_) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid param idx",
-                 K(ret), K(param_idx), K(param_cnt_), K(flying_param_cnt_));
       } else {
         get_param_frame_idx(param_idx, frame_idx, datum_idx);
         rt_expr->frame_idx_ = frame_index_pos + frame_idx;
@@ -874,10 +856,11 @@ int ObStaticEngineExprCG::arrange_datum_data(ObIArray<ObRawExpr *> &exprs,
         e->res_buf_off_ = 0;
       }
     }
-    CK(data_off == frame.frame_size_);
+    if (OB_SUCC(ret)) {
+      OB_ASSERT(data_off == frame.frame_size_);
+    }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("not support non-continuous datum", K(ret));
     // // FIXME bin.lb: ALIGN_SIZE may affect the performance, set to 1 if no affect
     // // make sure all ObDatum is aligned with %ALIGN_SIZE
     // const static int64_t ALIGN_SIZE = 8;
@@ -1020,10 +1003,11 @@ int ObStaticEngineExprCG::arrange_datums_data(ObIArray<ObRawExpr *> &exprs,
       LOG_TRACE("expression details during CG", K(e->is_batch_result()), KPC(e),
                 K(expr_data_offset));
     }
-    CK((cur_total_size + expr_data_offset) == frame.frame_size_);
+    if (OB_SUCC(ret)) {
+      OB_ASSERT((cur_total_size + expr_data_offset) == frame.frame_size_);
+    }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("not support non-continuous datum", K(ret));
     // Layout2: Frame is separated by exprs
     // All data(metas + reserved data/buf) within one expr are allocated continuously
     // Frame layouts:
@@ -1088,7 +1072,6 @@ int ObStaticEngineExprCG::alloc_const_frame(const ObIArray<ObRawExpr *> &exprs,
     char *frame_mem = static_cast<char *>(allocator_.alloc(const_frames.at(i).frame_size_));
     if (OB_ISNULL(frame_mem)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc memory failed", K(ret), K(const_frames.at(i).frame_size_));
     } else {
       memset(frame_mem, 0, const_frames.at(i).frame_size_);
     }
@@ -1098,7 +1081,6 @@ int ObStaticEngineExprCG::alloc_const_frame(const ObIArray<ObRawExpr *> &exprs,
       ObObj tmp_obj;
       if (!IS_CONST_LITERAL(raw_expr->get_expr_type())) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("not const expr", K(ret));
       } else if (OB_FAIL(ob_write_obj(allocator_,
                                       static_cast<ObConstRawExpr *>(raw_expr)->get_value(),
                                       tmp_obj))) {
@@ -1119,7 +1101,6 @@ int ObStaticEngineExprCG::alloc_const_frame(const ObIArray<ObRawExpr *> &exprs,
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(frame_ptrs.push_back(frame_mem))) {
-      LOG_WARN("fail to push const frame", K(ret));
     }
   } // for end
 
@@ -1133,7 +1114,6 @@ int ObStaticEngineExprCG::cg_expr_basic_funcs(const ObIArray<ObRawExpr *> &raw_e
     ObExpr *rt_expr = get_rt_expr(*raw_exprs.at(i));
     if (OB_ISNULL(rt_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("rt expr is null", K(ret), K(*raw_exprs.at(i)));
     } else {
       rt_expr->basic_funcs_ = ObDatumFuncs::get_basic_func(rt_expr->datum_meta_.type_,
                                                         rt_expr->datum_meta_.cs_type_,
@@ -1161,7 +1141,6 @@ int ObStaticEngineExprCG::generate_calculable_exprs(
       ObExpr *rt_expr = get_rt_expr(*calculable_exprs.at(i).expr_);
       if (OB_ISNULL(rt_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null rt expr", K(ret));
       } else {
         pre_calc_frame.pre_calc_rt_exprs_.at(i) = rt_expr;
       }
@@ -1175,8 +1154,8 @@ int ObStaticEngineExprCG::generate_calculable_exprs(
       // %extra_ is the array index of param store
       if (T_QUESTIONMARK == e->type_ && e->extra_ >= param_cnt_) {
         int64_t idx = e->extra_ - param_cnt_;
-        CK(idx < flying_param_cnt_);
         if (OB_SUCC(ret)) {
+          OB_ASSERT(idx < flying_param_cnt_);
           ObExpr **parents = e->parents_;
           uint32_t parent_cnt = e->parent_cnt_;
           *e = *pre_calc_frame.pre_calc_rt_exprs_.at(idx);
@@ -1197,7 +1176,6 @@ int ObStaticEngineExprCG::generate_calculable_expr(ObRawExpr *raw_expr,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(raw_expr)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid null raw expr", K(ret), K(raw_expr));
   } else {
     ObSEArray<ObHiddenColumnItem, 1> calculable_exprs;
     if (OB_FAIL(calculable_exprs.prepare_allocate(1))) {
@@ -1227,7 +1205,6 @@ int ObStaticEngineExprCG::inner_generate_calculable_exprs(
       const ObHiddenColumnItem &hidden_item = calculable_exprs.at(i);
       if (OB_ISNULL(hidden_item.expr_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null raw expr", K(ret));
       } else if (OB_FAIL(raw_exprs.append(hidden_item.expr_))) {
       }
     }
@@ -1307,7 +1284,6 @@ int ObStaticEngineExprCG::alloc_so_check_exprs(const ObIArray<ObRawExpr *> &raw_
               e = e->parents_[0];
               if (T_OP_ROW == e->type_) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("T_OP_ROW can not be nested twice", K(ret));
               }
             }
           }
@@ -1529,7 +1505,6 @@ int ObStaticEngineExprCG::gen_expr_with_row_desc(const ObRawExpr *expr,
   }
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory for temp expr", K(ret));
   }
 
   CK(OB_NOT_NULL(expr));
@@ -1563,7 +1538,9 @@ int ObStaticEngineExprCG::gen_expr_with_row_desc(const ObRawExpr *expr,
     } // for end
     OZ(temp_expr->idx_col_arr_.assign(idx_col_arr));
     OX(temp_expr->expr_idx_ = get_rt_expr(*expr) - &(temp_expr->rt_exprs_.at(0)));
-    CK(temp_expr->expr_idx_ >=0 && temp_expr->expr_idx_ <= temp_expr->rt_exprs_.count());
+    if (OB_SUCC(ret)) {
+      OB_ASSERT(temp_expr->expr_idx_ >= 0 && temp_expr->expr_idx_ <= temp_expr->rt_exprs_.count());
+    }
   }
 
   return ret;
@@ -1823,7 +1800,6 @@ int ObStaticEngineExprCG::generate_extra_questionmarks(ObRawExprUniqueSet &flatt
     for (int i = 0; OB_SUCC(ret) && i < all_exprs.count(); i++) {
       if (OB_ISNULL(all_exprs.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null raw expr", K(ret), K(i));
       } else if (is_dynamic_eval_qm(*all_exprs.at(i))) {
         ObRawExpr *gen_questionmark = all_exprs.at(i);
         int64_t param_idx = 0;
@@ -1832,7 +1808,6 @@ int ObStaticEngineExprCG::generate_extra_questionmarks(ObRawExprUniqueSet &flatt
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(ObRawExprUtils::create_param_expr(expr_factory, param_idx, gen_questionmark))) {
         } else if (OB_UNLIKELY(param_idx >= param_cnt_)) {
-          LOG_WARN("unexpected param idx", K(ret), K(param_idx), K(param_cnt_));
         } else {
           gen_questionmark->set_result_type(orig_qm_type);
           gen_questionmarks_.at(param_idx) = gen_questionmark;

@@ -46,7 +46,6 @@ int ObLobCursor::init(ObIAllocator *allocator, ObLobAccessParam* param, ObLobPar
   update_buffer_.set_allocator(allocator_);
   if (OB_ISNULL(partial_data)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("partial_data is null", KR(ret));
   } else if (OB_FAIL(partial_data->get_ori_data_length(ori_data_length_))) {
   } else if (partial_data->is_full_mode()) {
     if (OB_FAIL(init_full(allocator, partial_data))){
@@ -76,11 +75,9 @@ int ObLobCursor::get_ptr(int64_t offset, int64_t len, const char *&ptr)
   int start_chunk_pos = get_chunk_pos(start_offset);
   int end_chunk_pos = get_chunk_pos(end_offset - 1);
   if (start_chunk_pos != end_chunk_pos && OB_FAIL(merge_chunk_data(start_chunk_pos, end_chunk_pos))) {
-    LOG_WARN("merge_chunk_data fail", KR(ret), K(start_chunk_pos), K(end_chunk_pos), K(offset), K(len));
   } else if (OB_FAIL(get_chunk_data(start_chunk_pos, data))) {
   } else if (data.empty() || data.length() < start_offset - get_chunk_offset(start_chunk_pos) + len) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("data not enough", KR(ret), K(offset), K(len), K(start_offset), "data_len", data.length());
   } else {
     ptr = data.ptr() + offset - get_chunk_offset(start_chunk_pos);
   }
@@ -96,7 +93,6 @@ int ObLobCursor::get_ptr_for_write(int64_t offset, int64_t len, char *&ptr)
   int start_chunk_pos = get_chunk_pos(start_offset);
   int end_chunk_pos = get_chunk_pos(end_offset - 1);
   if (start_chunk_pos != end_chunk_pos && OB_FAIL(merge_chunk_data(start_chunk_pos, end_chunk_pos))) {
-    LOG_WARN("merge_chunk_data fail", KR(ret), K(start_chunk_pos), K(end_chunk_pos), K(offset), K(len));
   } else {
     for (int i = start_chunk_pos; OB_SUCC(ret) && i <= end_chunk_pos; ++i) {
       int chunk_idx = -1;
@@ -108,7 +104,6 @@ int ObLobCursor::get_ptr_for_write(int64_t offset, int64_t len, char *&ptr)
     } else if (OB_FAIL(get_chunk_data(start_chunk_pos, data))) {
     } else if (data.empty() || data.length() < start_offset - get_chunk_offset(start_chunk_pos) + len) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("data not enough", KR(ret), K(offset), K(len), K(start_offset), "data_len", data.length());
     } else {
       ptr = data.ptr() + offset - get_chunk_offset(start_chunk_pos);
     } 
@@ -171,7 +166,6 @@ int ObLobCursor::merge_chunk_data(int start_chunk_pos, int end_chunk_pos)
         // if update_buffer_ is uesed, last chunk should have some pointer with update_buffer_
         if (i != chunk_idx_array.count() - 1) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid chunk data", KR(ret), K(i), K(chunk_idx_array), K(start_chunk_pos), K(end_chunk_pos));
         } else {
           use_update_buffer = true;
           LOG_DEBUG("set use update buffer", K(i), K(chunk_idx_array.count()));
@@ -195,7 +189,6 @@ int ObLobCursor::merge_chunk_data(int start_chunk_pos, int end_chunk_pos)
     }
   } else if (OB_ISNULL(buf = reinterpret_cast<char*>(allocator_->alloc(merge_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc fail", KR(ret), K(merge_len), K(start_chunk_pos), K(end_chunk_pos), K(chunk_idx_array));
   }
   
   // do merge if need
@@ -213,7 +206,6 @@ int ObLobCursor::merge_chunk_data(int start_chunk_pos, int end_chunk_pos)
     }
     if (OB_SUCC(ret) && pos != merge_len) { 
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("data merge len incorrect", KR(ret), K(pos), K(merge_len));
     }
     // update chunk index offset info
     pos = 0;
@@ -235,7 +227,6 @@ int ObLobCursor::merge_chunk_data(int start_chunk_pos, int end_chunk_pos)
     }
     // defensive check 
     if (OB_SUCC(ret) && OB_FAIL(check_data_length())) {
-      LOG_WARN("check len fail", KR(ret));
     }
   }
   return ret;
@@ -254,7 +245,6 @@ int ObLobCursor::check_data_length()
   }
   if (check_data_len != check_index_len) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("check len fail", KR(ret), K(check_data_len), K(check_index_len));
   }
   return ret;
 }
@@ -268,7 +258,6 @@ int ObLobCursor::get_chunk_data(int chunk_pos, ObString &data)
   if (OB_FAIL(get_chunk_data(chunk_pos, chunk_index, chunk_data))) {
   } else if (0 > (pos = chunk_index->pos_ + get_chunk_offset(chunk_pos) - chunk_index->offset_)) {
     ret  = OB_ERR_UNEXPECTED;
-    LOG_WARN("pos is invalid", KR(ret), K(pos), K(chunk_index->pos_), K(get_chunk_offset(chunk_pos)), K(chunk_pos), K(chunk_index->offset_));
   } else {
     data.assign_ptr(chunk_data->data_.ptr() + pos, chunk_data->data_.length() - pos);
   }
@@ -306,11 +295,9 @@ int ObLobCursor::get_chunk_idx(int chunk_pos, int &chunk_idx)
   } else if (OB_SUCC(partial_data_->search_map_.get_refactored(chunk_pos, real_idx))) {
     chunk_idx = real_idx;
   } else if (OB_HASH_NOT_EXIST != ret) {
-    LOG_WARN("get from search map fail", K(ret), K(chunk_pos));
   } else if (OB_FAIL(fetch_meta(chunk_pos, meta_info))) {
   } else if (meta_info.lob_data_.length() <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lob meta info is invalid", K(ret), K(chunk_pos), K(meta_info));
   // data return by storage points origin data memory
   // should copy if the data may be modified, or old data may be corrupted
   } else if (OB_FAIL(ob_write_string(*allocator_, meta_info.lob_data_, chunk_data.data_))) {
@@ -399,7 +386,6 @@ int ObLobCursor::move_data_to_update_buffer(ObLobChunkData *chunk_data)
     }
   } else if (update_buffer_.ptr() != chunk_data->data_.ptr() || update_buffer_.length() != chunk_data->data_.length()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("update buffer state incorrect", KR(ret), K(update_buffer_), KPC(chunk_data));
   }
   return ret;
 }
@@ -437,16 +423,11 @@ int ObLobCursor::set(int64_t offset, const char *buf, int64_t buf_len, bool use_
   int64_t append_len = end_offset > partial_data_->data_length_ ? end_offset - partial_data_->data_length_ : 0;
   int start_chunk_idx = -1;
   if (start_chunk_pos < old_end_chunk_pos && OB_FAIL(merge_chunk_data(start_chunk_pos, old_end_chunk_pos))) {
-    LOG_WARN("merge_chunk_data fail", KR(ret), K(start_chunk_pos), K(old_end_chunk_pos), K(offset), K(buf_len), K(end_chunk_pos));
   } else if (append_len > 0 && OB_FAIL(push_append_chunk(append_len))) {
-    LOG_WARN("push_append_chunk fail", KR(ret), K(append_len));
   } else if (OB_FAIL(get_chunk_idx(start_chunk_pos, start_chunk_idx))) {
   } else if (append_len > 0 && OB_FAIL(move_data_to_update_buffer(&chunk_data(start_chunk_idx)))) {
-    LOG_WARN("move_data_to_update_buffer fail", KR(ret), K(start_chunk_pos), K(append_len), K(start_chunk_idx));
   } else if (append_len > 0 && OB_FAIL(update_buffer_.reserve(append_len))) {
-    LOG_WARN("reserve fail", KR(ret), K(start_chunk_pos), K(append_len), K(start_chunk_idx));
   } else if (append_len > 0 && OB_FAIL(update_buffer_.set_length(update_buffer_.length() + append_len))) {
-    LOG_WARN("set_length fail", KR(ret), K(start_chunk_pos), K(append_len), K(start_chunk_idx));
   } else if (append_len > 0 && OB_FALSE_IT(chunk_data(start_chunk_idx).data_ = update_buffer_.string())) {
   } else {
     for (int i = start_chunk_pos, chunk_idx = -1; OB_SUCC(ret) && i <= end_chunk_pos; ++i) {
@@ -466,7 +447,6 @@ int ObLobCursor::set(int64_t offset, const char *buf, int64_t buf_len, bool use_
     }
     // defensive check 
     if (OB_SUCC(ret) && OB_FAIL(check_data_length())) {
-      LOG_WARN("check len fail", KR(ret));
     }
   }
   return ret;
@@ -489,7 +469,6 @@ int ObLobCursor::set_old_data(ObLobChunkIndex &chunk_index)
   } else if (chunk_index.is_add_) { // add no old
   } else if (OB_ISNULL(buf = static_cast<char*>(allocator_->alloc(chunk_index.byte_len_)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc fail", KR(ret), K(chunk_index));
   } else {
     const ObLobChunkData &chunk_data = partial_data_->data_[chunk_index.data_idx_];
     MEMCPY(buf, chunk_data.data_.ptr() + chunk_index.pos_, chunk_index.byte_len_);
@@ -509,7 +488,6 @@ int ObLobCursor::get(int64_t offset, int64_t len, ObString &data) const
   if (OB_FAIL(get_ptr(offset, len, ptr))) {
   } else if (OB_ISNULL(ptr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get_ptr fail", KR(ret), K(offset), K(len), K(data.length()));
   } else {
     data.assign_ptr(ptr, len);
   }
@@ -533,10 +511,8 @@ int ObLobCursor::get_one_chunk_with_all_data(ObString &data)
   INIT_SUCC(ret);
   if (OB_ISNULL(partial_data_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("partial_data_ is null", KR(ret), KPC(this));
   } else if (1 != partial_data_->index_.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("partial_data_ has not only one chunk", KR(ret), K(partial_data_->index_.count()));
   } else if (ori_data_length_ != chunk_data(0).data_.length()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("partial_data_ data length incorrect", KR(ret), K(ori_data_length_), K(chunk_data(0)));

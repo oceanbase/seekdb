@@ -42,7 +42,6 @@ int ObDumpTaskGenerator::read_cmd(char *buf, int64_t len, int64_t &real_size)
     rewind(fp);
     if (size > len) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("cmd too long", K(ret), K(size), K(len));
     } else {
       fread(buf, 1, size, fp);
       real_size = size;
@@ -69,22 +68,18 @@ int ObDumpTaskGenerator::generate_task_from_file()
   ObString cmd;
   if (!mem_dump.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else if (OB_FAIL(read_cmd(buf, len, real_size))) {
   } else if(FALSE_IT(cmd.assign_ptr(buf, static_cast<int32_t>(real_size)))) {
   } else if (OB_FAIL(parser.parse(cmd, parse_result))) {
   } else if(nullptr == parse_result.result_tree_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("nullptr", K(cmd), K(ret));
   } else if (OB_ISNULL(stmt_node = parse_result.result_tree_->children_[0])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("nullptr", K(cmd), K(ret));
   } else if (stmt_node->type_ != T_DUMP_MEMORY) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not support", K(cmd), K(stmt_node->type_));
   } else if (OB_ISNULL(node = stmt_node->children_[0])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("nullptr", K(cmd), K(ret));
   } else {
     LOG_INFO("read command", K(cmd));
     {

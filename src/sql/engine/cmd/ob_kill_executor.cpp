@@ -32,13 +32,11 @@ int ObKillExecutor::execute(ObExecContext &ctx, ObKillStmt &stmt)
   ObSQLSessionMgr *session_mgr = ctx.get_session_mgr();
   if (OB_ISNULL(session_mgr)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("session manager is not installed", K(ret));
   } else if (OB_FAIL(arg.init(ctx, stmt))) {
   } else if (OB_FAIL(kill_session(arg, *session_mgr))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_UNKNOWN_CONNECTION;
     } else {
-      LOG_WARN("fail to kill local session", K(ret), K(arg));
     }
   }
 
@@ -62,13 +60,10 @@ int ObKillSession::kill_session(const ObKillSessionArg &arg, ObSQLSessionMgr &se
   if (OB_FAIL(guard.get_session(sess_info))) {
   } else if (OB_ISNULL(sess_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session info is NULL", K(ret), K(arg));
   } else if (sess_info->is_real_inner_session()) {
     ret = OB_ERR_KILL_DENIED;
-    LOG_WARN("It is not allowed to close the inner session", K(ret), K(arg));
   } else if (OB_FAIL(arg.check_auth_for_kill(1UL, sess_info->get_user_id()))) {
     ret = OB_ERR_KILL_DENIED;
-    LOG_WARN("no permissions for kill", K(ret), K(arg.sess_id_));
   } else if (arg.is_query_) {
     if (OB_FAIL(sess_mgr.kill_query(*sess_info))) {
     }

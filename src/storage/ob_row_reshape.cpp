@@ -48,7 +48,6 @@ int ObRowReshapeUtil::need_reshape_table_row(
   need_reshape = false;
   if (!row.is_valid() || row_reshape_cells_count != row.get_count()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(row), K(row.count_), K(row_reshape_cells_count), K(ret));
   } else {
     if (NULL == row_reshape_ins) {
       // do not need reshape
@@ -72,7 +71,6 @@ int ObRowReshapeUtil::need_reshape_table_row(
   need_reshape = false;
   if (!row.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(row), K(row.count_));
   } else {
     ObString space_pattern;
     for (int64_t i = 0; !need_reshape && i < column_cnt; ++i) {
@@ -104,15 +102,12 @@ int ObRowReshapeUtil::reshape_row(
   int ret = OB_SUCCESS;
   if (column_cnt > row.get_count()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("column cnt can not be larger than row column cnt", K(ret), K(column_cnt), K(row));
   } else if (!need_reshape) {
     tbl_row.row_val_ = row;
   } else if (OB_ISNULL(row_reshape_ins)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid null reshape ptr", K(ret));
   } else if (OB_UNLIKELY(column_cnt > row_reshape_ins->row_reshape_cells_len_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid column count", K(ret), K(column_cnt), K(row_reshape_ins->row_reshape_cells_len_));
   } else {
     int64_t binary_len_array_count = row_reshape_ins->binary_len_array_.count();
     ObDataBuffer data_buffer(row_reshape_ins->binary_buffer_ptr_, row_reshape_ins->binary_buffer_len_);
@@ -126,7 +121,6 @@ int ObRowReshapeUtil::reshape_row(
         }
         if (OB_UNLIKELY(binary_len_array_count <= j)) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid argument", K(binary_len_array_count), K(ret));
         } else {
           const char *str = cell.get_string_ptr();
           const int32_t len = cell.get_string_len();
@@ -145,7 +139,6 @@ int ObRowReshapeUtil::reshape_row(
             dest_str = const_cast<char *>(str);
           } else if (binary_len < len) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("binary_len should be greater than len", K(ret), K(binary_len), K(len));
           }
           if (OB_SUCC(ret)) {
             // set_binary set both type_ and cs_type

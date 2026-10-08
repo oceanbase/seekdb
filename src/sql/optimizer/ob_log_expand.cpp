@@ -33,11 +33,9 @@ int ObLogExpand::get_plan_item_info(PlanText &plan_text, ObSqlPlanItem &plan_ite
   int ret = OB_SUCCESS;
   if (OB_ISNULL(hash_rollup_info_)) {
     ret  = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null rollup info", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::get_plan_item_info(plan_text, plan_item))) {
   } else if (OB_UNLIKELY(hash_rollup_info_->expand_exprs_.count() <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected expand exprs", K(ret));
   } else {
     ObSEArray<ObRawExpr *, 8> uniq_rollup_exprs;
     if (OB_FAIL(append_array_no_dup(uniq_rollup_exprs, hash_rollup_info_->expand_exprs_))) {
@@ -107,13 +105,10 @@ int ObLogExpand::est_cost()
   int64_t parallel = 0;
   if (OB_ISNULL(hash_rollup_info_) || OB_ISNULL(child) || OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null parameters", K(ret), K(child), K(get_plan()));
   } else if (OB_UNLIKELY((parallel = get_parallel()) < 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected parallel degree", K(ret), K(parallel));
   } else if (OB_UNLIKELY(hash_rollup_info_->expand_exprs_.count() <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected expand exprs", K(ret), K(hash_rollup_info_->expand_exprs_));
   } else {
     ObOptimizerContext &opt_ctx = get_plan()->get_optimizer_context();
     double op_cost = ObOptEstCost::cost_get_rows(child->get_card() / parallel, opt_ctx);
@@ -133,13 +128,10 @@ int ObLogExpand::do_re_est_cost(EstimateCostInfo &param, double &card, double &o
   ObLogicalOperator *child = get_child(ObLogicalOperator::first_child);
   if (OB_ISNULL(child) || OB_ISNULL(get_plan()) || OB_ISNULL(hash_rollup_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null parameters", K(ret), K(child), K(get_plan()));
   } else if (OB_UNLIKELY(parallel < 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expected parallel degree", K(ret), K(parallel));
   } else if (OB_UNLIKELY(hash_rollup_info_->expand_exprs_.count() <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected expand exprs", K(ret), K(hash_rollup_info_->expand_exprs_));
   } else if (OB_FAIL(SMART_CALL(child->re_est_cost(param, child_card, child_cost)))) {
   } else {
     ObOptimizerContext &opt_ctx = get_plan()->get_optimizer_context();
@@ -155,7 +147,6 @@ int ObLogExpand::get_op_exprs(ObIArray<ObRawExpr *> &all_exprs)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(hash_rollup_info_) || OB_ISNULL(hash_rollup_info_->rollup_grouping_id_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid null grouping id expr", K(ret));
   } else if (OB_FAIL(all_exprs.push_back(hash_rollup_info_->rollup_grouping_id_))) {
   } else if (OB_FAIL(append_array_no_dup(all_exprs, hash_rollup_info_->expand_exprs_))) {
   }
@@ -164,7 +155,6 @@ int ObLogExpand::get_op_exprs(ObIArray<ObRawExpr *> &all_exprs)
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(append(all_exprs, hash_rollup_info_->gby_exprs_))) {
-    LOG_WARN("append array failed", K(ret));
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObLogicalOperator::get_op_exprs(all_exprs))) {
@@ -177,7 +167,6 @@ int ObLogExpand::is_my_fixed_expr(const ObRawExpr *expr, bool &is_fixed)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(hash_rollup_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null rollup info", K(ret));
   } else {
     is_fixed = (expr == hash_rollup_info_->rollup_grouping_id_);
     for (int i = 0; !is_fixed && i < hash_rollup_info_->expand_exprs_.count(); i++) {
@@ -202,7 +191,6 @@ int ObLogExpand::dup_and_replace_exprs_within_aggrs(ObRawExprFactory &factory,
   ObRawExprCopier copier(factory);
   if (OB_UNLIKELY(rollup_exprs.count() <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid expand exprs", K(ret));
   } else if (OB_FAIL(append_array_no_dup(uniq_expand_exprs, rollup_exprs))) {
   }
   for (int i = 0; OB_SUCC(ret) && i < uniq_expand_exprs.count(); i++) {
@@ -228,14 +216,12 @@ int ObLogExpand::dup_and_replace_exprs_within_aggrs(ObRawExprFactory &factory,
   }
   // before replacing rollup exprs in place, it is necessary to unshare the related expr constraints to avoid incorrect replacements.
   if (OB_SUCC(ret) && OB_FAIL(ObLogExpand::unshare_constraints(copier, constraints))) {
-    LOG_WARN("unshare constraints failed", K(ret));
   }
   for (int i = 0; OB_SUCC(ret) && i < dup_expr_pairs.count(); i++) {
     for (int j = 0; OB_SUCC(ret) && j < aggr_items.count(); j++) {
       ObAggFunRawExpr *aggr_item = aggr_items.at(j);
       if (OB_ISNULL(aggr_item)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid null aggr item", K(ret));
       } else if (aggr_item->get_expr_type() == T_FUN_GROUPING
                  || aggr_item->get_expr_type() == T_FUN_GROUPING_ID) {
       } else if (OB_FAIL(replace_expr_with_aggr_item(aggr_item, dup_expr_pairs.at(i).element<0>(),
@@ -316,7 +302,6 @@ int ObLogExpand::inner_replace_op_exprs(ObRawExprReplacer &replacer)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(get_plan()) || OB_ISNULL(hash_rollup_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null plan", K(ret));
   } else if (OB_FAIL(replace_exprs_action(replacer, hash_rollup_info_->gby_exprs_))) {
   } else if (OB_FAIL(replace_exprs_action(replacer, hash_rollup_info_->expand_exprs_))) {
   }
@@ -335,7 +320,6 @@ int ObLogExpand::inner_replace_op_exprs(ObRawExprReplacer &replacer)
       ObIAllocator &allocator = get_plan()->get_optimizer_context().get_expr_factory().get_allocator();
       if (OB_ISNULL(replaced_name = (char *)allocator.alloc(pos + 2))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory failed", K(ret));
       } else {
         MEMCPY(replaced_name, name_buf, pos);
         replaced_name[pos] = ')';
@@ -353,7 +337,6 @@ int ObLogExpand::compute_const_exprs()
   ObLogicalOperator *child = NULL;
   if (OB_ISNULL(child = get_child(0)) || OB_ISNULL(hash_rollup_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid null child", K(ret));
   } else {
     ObIArray<ObRawExpr *> &child_const_exprs = child->get_output_const_exprs();
     ObIArray<ObRawExpr *> &output_const_exprs = get_output_const_exprs();
@@ -363,7 +346,6 @@ int ObLogExpand::compute_const_exprs()
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(ObOptimizerUtil::compute_const_exprs(get_filter_exprs(), output_const_exprs))) {
-      LOG_WARN("compute const exprs failed", K(ret));
     }
   }
   return ret;
@@ -375,12 +357,10 @@ int ObLogExpand::compute_equal_set()
   EqualSets *ordering_esets = NULL;
   if (OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid null plan", K(ret));
   } else if (filter_exprs_.empty()) {
     set_output_equal_sets(&empty_expr_sets_);
   } else if (OB_ISNULL(ordering_esets = get_plan()->create_equal_sets())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to create equal sets", K(ret));
   } else if (OB_FAIL(ObEqualAnalysis::compute_equal_set(&get_plan()->get_allocator(), filter_exprs_,
                                                         *ordering_esets))) {
   } else {

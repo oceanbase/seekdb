@@ -77,11 +77,7 @@ int ObAsyncPlanDriver::response_result(ObMySQLResultSet &result)
     // }
     int cret = result.close();
     if (retry_ctrl_.need_retry()) {
-      LOG_WARN("result set open failed, will retry",
-               K(ret), K(cli_ret), K(cret), K(retry_ctrl_.need_retry()));
     } else {
-      LOG_WARN("result set open failed, let's leave process(). EndTransCb will clean this mess",
-               K(ret), K(cli_ret), K(cret), K(retry_ctrl_.need_retry()));
     }
     ret = cli_ret;
   } else if (result.is_with_rows()) {

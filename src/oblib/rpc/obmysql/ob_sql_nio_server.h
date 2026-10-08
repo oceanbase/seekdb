@@ -47,7 +47,7 @@ public:
 private:
   ObSqlSockHandler io_handler_; // for io thread
   lib::ObMutex reactor_lock_;
-  nio_reactor* reactor_ = nullptr;
+  NioReactor* reactor_ = nullptr;
   int n_thread_ = 1;
 };
 extern ObSqlNioServer* global_sql_nio_server;

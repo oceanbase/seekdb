@@ -35,7 +35,6 @@ int64_t ObIOScheduler::get_qindex(ObIORequest& req)
         LOG_INFO("get group index failed, but maybe it is ok", K(ret), K(grp_key), K(index));
       }
     } else {
-      LOG_WARN("get group index failed", K(ret), K(grp_key), K(index));
     }
     index = -1;
   } else if (INT64_MAX == index) {
@@ -52,7 +51,6 @@ int ObIOScheduler::schedule_request(ObIORequest &req)
   ObIOResult* result = req.io_result_;
   if (OB_ISNULL(result)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("io result is null", K(ret), K(req));
   } else if (OB_UNLIKELY(req.is_canceled())) {
     ret = OB_CANCELED;
   } else if (OB_FAIL(req.prepare())) {
@@ -73,7 +71,6 @@ int ObIOScheduler::schedule_request(ObIORequest &req)
           ret = OB_CANCELED;
         } else if (OB_FAIL(device_channel->submit(req))) {
           if (OB_EAGAIN != ret) {
-            LOG_WARN("submit io to device failed", K(ret));
           }
         } else {
           time_guard.click("device_submit");

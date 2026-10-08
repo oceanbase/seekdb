@@ -52,7 +52,6 @@ int ObHashSetOp::inner_open()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(left_) || OB_ISNULL(right_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: left or right is null", K(ret), K(left_), K(right_));
   } else if (OB_FAIL(ObOperator::inner_open())) {
   } else if (OB_FAIL(init_mem_context())) {
   }
@@ -108,7 +107,6 @@ int ObHashSetOp::is_left_has_row(bool &left_has_row)
       left_has_row = false;
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("failed to get next row from left op", K(ret));
     }
   }
   return ret;
@@ -123,7 +121,6 @@ int ObHashSetOp::get_left_row()
   } else {
     if (OB_FAIL(left_->get_next_row())) {
       if (ret != OB_ITER_END) {
-        LOG_WARN("child operator get next row failed", K(ret));
       }
     }
   }
@@ -149,7 +146,6 @@ int ObHashSetOp::get_right_row()
   int ret = OB_SUCCESS;
   if (OB_FAIL(right_->get_next_row())) {
     if (ret != OB_ITER_END) {
-      LOG_WARN("child operator get next row failed", K(ret));
     }
   }
   return ret;
@@ -195,7 +191,6 @@ int ObHashSetOp::build_hash_table_from_left(bool from_child)
   if (OB_ITER_END == ret) {
     if (OB_FAIL(hp_infras_.finish_insert_row())) {
     } else if (!from_child && OB_FAIL(hp_infras_.close_cur_part(InputSide::LEFT))) {
-      LOG_WARN("failed to close cur part", K(ret));
     }
     ret = OB_SUCCESS;
   }
@@ -247,7 +242,6 @@ int ObHashSetOp::build_hash_table_from_left_batch(bool from_child, const int64_t
   if (OB_ITER_END == ret) {
     if (OB_FAIL(hp_infras_.finish_insert_row())) {
     } else if (!from_child && OB_FAIL(hp_infras_.close_cur_part(InputSide::LEFT))) {
-      LOG_WARN("failed to close cur part", K(ret));
     }
   }
   return ret;
@@ -349,7 +343,6 @@ int ObHashSetOp::init_hash_partition_infras_for_batch()
     } else if (OB_ISNULL(hash_values_for_batch_
                         = static_cast<uint64_t *> (ctx_.get_allocator().alloc(batch_size * sizeof(uint64_t))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to init hash values for batch", K(ret), K(batch_size));
     }
   }
   return ret;

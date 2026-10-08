@@ -295,7 +295,6 @@ int ObVTIterCreator::check_is_index(const share::schema::ObTableSchema &table,
   int ret = OB_SUCCESS;
   if (NULL == index_name) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(index_name));
   } else {
     is_index = false;
     int64_t index_name_len = strlen(index_name);

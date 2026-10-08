@@ -47,10 +47,8 @@ int ObDropDatabaseResolver::resolve(const ParseNode &parse_tree)
     || OB_ISNULL(node->children_)
     || OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid parse tree", K(ret), K(node));
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session info should not be null", K(ret));
   } else {
     ObDropDatabaseStmt *drop_database_stmt = NULL;
     if (OB_ISNULL(drop_database_stmt = create_stmt<ObDropDatabaseStmt>())) {
@@ -64,7 +62,6 @@ int ObDropDatabaseResolver::resolve(const ParseNode &parse_tree)
     if (OB_SUCC(ret)) {
       if (node->children_[IF_EXIST] != NULL) {
         if (node->children_[IF_EXIST]->type_ != T_IF_EXISTS) {
-          LOG_WARN("invalid parse tree", K(ret));
         } else {
           drop_database_stmt->set_if_exist(true);;
         }
@@ -77,7 +74,6 @@ int ObDropDatabaseResolver::resolve(const ParseNode &parse_tree)
       ParseNode *dbname_node = node->children_[DBNAME];
       if (OB_ISNULL(dbname_node) || OB_UNLIKELY(T_IDENT != dbname_node->type_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid parse tree", K(ret));
       } else {
         database_name.assign_ptr(dbname_node->str_value_,
                                  static_cast<int32_t>(dbname_node->str_len_));
@@ -113,8 +109,6 @@ int ObDropDatabaseResolver::resolve(const ParseNode &parse_tree)
       } else if (false == ObCharset::is_valid_collation(coll_cs_server_int64)
                  || false == ObCharset::is_valid_collation(coll_server_int64)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid collation type", K(ret), K(coll_cs_server_int64),
-                     K(coll_server_int64));
       } else if (OB_FAIL(ObCharset::charset_name_by_coll(
                   static_cast<ObCollationType>(coll_cs_server_int64),
                   server_charset))) {

@@ -94,7 +94,6 @@ int ObMacroBlockReader::decompress_data_buf(
   int64_t pos = 0;
   if (OB_ISNULL(data_buf) || OB_ISNULL(header_buf)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid input", K(ret), KP(data_buf), KP(header_buf));
   } else if (OB_FAIL(header.deserialize(header_buf, header_size, pos))) {
   } else {
     if (nullptr == compressor_ || compressor_->get_compressor_type() != compressor_type) {
@@ -200,25 +199,20 @@ int ObMacroBlockReader::decompress_data_with_prealloc_buf(
   if (OB_ISNULL(buf) || OB_UNLIKELY(size <= 0) || OB_ISNULL(uncomp_buf)
       || OB_UNLIKELY(uncomp_buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument for decompress_data_with_prealloc_buf", K(ret), KP(buf), K(size));
   } else if (size == uncomp_buf_size) {
     MEMCPY(uncomp_buf, buf, size);
   } else {
     if (OB_NOT_NULL(compressor_)
         && OB_FAIL(comp_pool.get_compressor_type(compressor_->get_compressor_name(), cur_type))) {
-      LOG_WARN("Fail to get current compressor type", K(ret));
     } else if (OB_ISNULL(compressor_) || cur_type != compressor_type) {
       if (OB_FAIL(comp_pool.get_instance().get_compressor(compressor_type, compressor_))) {
       }
     }
 
     if (FAILEDx(compressor_->decompress(buf, size, uncomp_buf, uncomp_buf_size, uncomp_size))) {
-      LOG_WARN("Fail to decompress data", K(ret));
     } else {
       if (OB_UNLIKELY(uncomp_size != uncomp_buf_size)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Uncompressed size is not equal to buffer size",
-            K(ret), K(uncomp_size), K(uncomp_buf_size));
       }
     }
   }
@@ -249,7 +243,6 @@ int ObMacroBlockReader::alloc_buf(ObIAllocator &allocator, const int64_t buf_siz
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(buf_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Fail to allocate memory for decompress buf", K(ret), K(buf_size));
   }
   return ret;
 }
@@ -268,11 +261,9 @@ int ObMacroBlockReader::decompress_data(
   ObMicroBlockHeader header;
   if (OB_ISNULL(input)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid input data", K(ret), KP(input), K(size));
   } else if (OB_FAIL(header.deserialize_and_check_header(input, size))) {
   } else if (OB_UNLIKELY(size < header.header_size_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid input size", K(ret), K(size), K(header));
   } else if (OB_FAIL(do_decompress_data(header, deserialize_meta, input, size,
       uncomp_buf, uncomp_size, is_compressed, need_deep_copy, ext_allocator))) {
   }
@@ -296,7 +287,6 @@ int ObMacroBlockReader::do_decompress_data(
   ObMicroBlockHeader *copied_micro_header = nullptr;
   if (OB_ISNULL(src_buf)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid input data", K(ret), KP(src_buf), K(src_buf_size));
   } else {
     const char *payload_buf = src_buf + header.header_size_;
     int64_t payload_size = src_buf_size - header.header_size_;
@@ -359,10 +349,8 @@ int ObSSTableDataBlockReader::init(const char *data, const int64_t size, const b
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_ISNULL(data) || size <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(data), K(size));
   } else if (OB_FAIL(common_header_.deserialize(data, size, pos))) {
   } else if (OB_FAIL(common_header_.check_integrity())) {
   } else if (OB_FAIL(check_macro_crc_(data, size))) {
@@ -375,7 +363,6 @@ int ObSSTableDataBlockReader::init(const char *data, const int64_t size, const b
       if (OB_FAIL(macro_header_.deserialize(data_, size, pos))) {
       } else if (OB_UNLIKELY(macro_header_.fixed_header_.micro_block_data_offset_ != pos)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("incorrect data offset", K(ret), K(pos), K(macro_header_));
       } else {
         column_types_ = macro_header_.column_types_;
         column_orders_ = macro_header_.column_orders_;
@@ -401,7 +388,6 @@ int ObSSTableDataBlockReader::init(const char *data, const int64_t size, const b
     if (OB_SUCC(ret) && hex_print) {
       if (OB_ISNULL(hex_print_buf_ = static_cast<char *>(allocator_.alloc(OB_DEFAULT_MACRO_BLOCK_SIZE)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("Failed to alloc memory for hex print", K(ret));
       }
     }
   }
@@ -438,7 +424,6 @@ int ObSSTableDataBlockReader::dump(const uint64_t tablet_id, const int64_t scn)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObSSTableDataBlockReader is not inited", K(ret));
   } else if (check_need_print(tablet_id, scn)) {
     printer_.print_common_header(&common_header_);
     switch (common_header_.get_type()) {
@@ -491,7 +476,6 @@ int ObSSTableDataBlockReader::check_macro_crc_(const char *data, const int64_t s
   const int64_t common_header_size = common_header_.get_serialize_size();
   if (OB_UNLIKELY(common_header_size + payload_size > size)) {
     ret = OB_BUF_NOT_ENOUGH;
-    LOG_WARN("macro block buffer not enough", K(ret), K_(common_header), K(common_header_size), K(size));
   } else {
     const char *payload_buf = data + common_header_size;
     const int32_t calculated_checksum = static_cast<int32_t>(ob_crc64(payload_buf, payload_size));
@@ -523,7 +507,6 @@ int ObSSTableDataBlockReader::dump_sstable_macro_block(const MicroBlockType bloc
     } while (OB_SUCC(ret) && OB_SUCC(macro_iter.open_next_micro_block()));
 
     if (OB_FAIL(ret) && OB_ITER_END != ret) {
-      LOG_WARN("Fail to iterate all rows in macro block", K(ret));
     } else if (FALSE_IT(ret = OB_SUCCESS)) {
     } else if (MicroBlockType::DATA == block_type) {
       // dump leaf index block
@@ -547,7 +530,6 @@ int ObSSTableDataBlockReader::dump_sstable_micro_block(
   if (OB_FAIL(macro_iter.get_curr_micro_block_data(micro_data))) {
   } else if (OB_ISNULL(micro_data) || OB_UNLIKELY(!micro_data->is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected invalid micro block data", K(ret), KPC(micro_data));
   } else if (OB_FAIL(dump_sstable_micro_header(*micro_data, micro_idx, block_type))) {
   } else if (OB_FAIL(dump_sstable_micro_data(block_type, macro_iter))) {
   }
@@ -616,10 +598,8 @@ int ObSSTableDataBlockReader::dump_sstable_micro_data(
   } else if (OB_FAIL(macro_bare_iter.get_curr_micro_block_data(block_data))) {
   } else if (OB_ISNULL(block_data)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null block data", K(ret));
   } else if (OB_ISNULL(block_header = block_data->get_micro_header())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Fail to get micro block header", K(ret), KPC(block_data));
   }
   const ObDatumRow *row = nullptr;
   for (int64_t row_idx = 0; OB_SUCC(ret) && row_idx < row_cnt; ++row_idx) {
@@ -643,7 +623,6 @@ int ObSSTableDataBlockReader::dump_sstable_micro_data(
         } else if (OB_FAIL(idx_row_parser.get_header(idx_row_header))) {
         } else if (OB_ISNULL(idx_row_header)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Null pointer to index block row header", K(ret));
         } else if (FALSE_IT(printer_.print_index_row_header(idx_row_header))) {
         } else if (OB_FAIL(idx_row_parser.parse_minor_meta_and_agg_row(
             minor_meta, agg_row_buf, agg_row_buf_size))) {
@@ -678,7 +657,6 @@ int ObSSTableDataBlockReader::dump_macro_block_meta_block(ObMacroBlockRowBareIte
   } else if (OB_FAIL(macro_iter.get_curr_micro_block_data(micro_data))) {
   } else if (OB_ISNULL(micro_data) || OB_UNLIKELY(!micro_data->is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected invalid micro block data", K(ret), KPC(micro_data));
   } else if (OB_FAIL(dump_sstable_micro_header(*micro_data, 0, MicroBlockType::MACRO_META))) {
   } else if (OB_FAIL(macro_iter.get_next_row(row))) {
   } else if (OB_FAIL(macro_meta.parse_row(*const_cast<ObDatumRow *>(row)))) {
@@ -698,8 +676,6 @@ int ObSSTableDataBlockReader::dump_column_info(const int64_t col_cnt, const int6
       || OB_ISNULL(column_orders_)
       || OB_ISNULL(column_checksum_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Invalid column info", K(ret), K(col_cnt),
-        KP_(column_types), KP_(column_orders), KP_(column_checksum));
   } else if (col_cnt > 0) {
     printer_.print_cols_info_start("column_index", "column_type", "column_order", "column_checksum", "collation_type");
     int64_t i = 0;

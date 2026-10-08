@@ -315,9 +315,7 @@ OB_INLINE int datum_lob_locator_get_string(const ObDatum &datum,
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(text_iter.init(0, options, &allocator))) {
-      COMMON_LOG(WARN, "Lob: str iter init failed ", K(ret), K(text_iter));
     } else if (OB_FAIL(text_iter.get_full_data(inrow_data))) {
-      COMMON_LOG(WARN, "Lob: str iter get full data failed ", K(ret), K(text_iter));
     }
   } else { // not v1 or v2 lob
     ret = OB_INVALID_ARGUMENT;
@@ -342,7 +340,6 @@ OB_INLINE int datum_lob_locator_hash(const ObDatum &datum,
     // all lob tc can use longtext type for lob iter
     if (OB_FAIL(datum_lob_locator_get_string(
             datum, allocator, inrow_data, access_ctx))) {
-      COMMON_LOG(WARN, "Lob: get string failed ", K(ret), K(datum));
     } else {
       res = ObCharset::hash(cs_type, inrow_data.ptr(), inrow_data.length(), seed, algo);
     }
@@ -731,7 +728,6 @@ struct DatumStrHashCalculator<CS_TYPE_UTF8MB4_BIN, calc_end_space, T, true /* is
     // all lob tc can use longtext type for lob iter
     if (OB_FAIL(datum_lob_locator_get_string(
             datum, allocator, inrow_data, access_ctx))) {
-      COMMON_LOG(WARN, "Lob: get string failed ", K(ret), K(datum));
     } else {
       res = datum_varchar_hash_utf8mb4_bin<calc_end_space, T>(
             inrow_data.ptr(), inrow_data.length(), seed);
@@ -1060,18 +1056,14 @@ struct DatumJsonHashCalculator : public DefHashMethod<T>
     if (datum.is_null()) {
       res = seed;
     } else if (OB_FAIL(str_iter.init(0, options, &allocator))) {
-      COMMON_LOG(WARN, "Lob: str iter init failed ", K(ret), K(str_iter));
     } else if (OB_FAIL(str_iter.get_full_data(j_bin_str))) {
-      COMMON_LOG(WARN, "Lob: str iter get full data failed ", K(ret), K(str_iter));
     } else {
       ObJsonBin j_bin(j_bin_str.ptr(), j_bin_str.length(), &allocator);
       ObIJsonBase *j_base = &j_bin;
       if (j_bin_str.length() == 0) {
         res = seed;
       } else if (OB_FAIL(j_bin.reset_iter())) {
-        COMMON_LOG(WARN, "Lob: fail to reset json bin iter", K(ret), K(j_bin_str));
       } else if (OB_FAIL(j_base->calc_json_hash_value(seed, T::hash, res))) {
-        COMMON_LOG(WARN, "Lob: fail to calc hash", K(ret), K(*j_base));
       }
     }
     return ret;

@@ -69,14 +69,12 @@ int ObExprSTOverlaps::process_input_geometry(common::ObSrsCacheGuard &srs_guard,
   ObObjType input_type2 = gis_arg2->datum_meta_.type_;
   is_null_res = false;
   if (OB_FAIL(allocator.eval_arg(gis_arg1, ctx, gis_datum1)) || OB_FAIL(allocator.eval_arg(gis_arg2, ctx, gis_datum2))) {
-    LOG_WARN("eval geo args failed", K(ret));
   } else if (gis_datum1->is_null() || gis_datum2->is_null()) {
     is_null_res = true;
   } else if (input_type1 == ObIntType || input_type2 == ObIntType) {
     // bugfix 53283098, should allow int type in calc_result_type2
     ret = OB_ERR_GIS_INVALID_DATA;
     LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_ST_CROSSES);
-    LOG_WARN("invalid type", K(ret), K(input_type1), K(input_type2));
   } else {
     ObGeoType type1;
     ObGeoType type2;
@@ -100,15 +98,12 @@ int ObExprSTOverlaps::process_input_geometry(common::ObSrsCacheGuard &srs_guard,
       if (ret == OB_ERR_GIS_INVALID_DATA) {
         LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_ST_OVERLAPS);
       }
-      LOG_WARN("get type and srid from wkb failed", K(wkb1), K(ret));
     } else if (OB_FAIL(ObGeoTypeUtil::get_type_srid_from_wkb(wkb2, type2, srid2))) {
       if (ret == OB_ERR_GIS_INVALID_DATA) {
         LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_ST_OVERLAPS);
       }
-      LOG_WARN("get type and srid from wkb failed", K(wkb2), K(ret));
     } else if (srid1 != srid2) {
       ret = OB_ERR_GIS_DIFFERENT_SRIDS;
-      LOG_WARN("srid not the same", K(ret), K(srid1), K(srid2));
       LOG_USER_ERROR(OB_ERR_GIS_DIFFERENT_SRIDS, N_ST_OVERLAPS, srid1, srid2);
     } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(
                    ctx, srs_guard, wkb1, srs, true, N_ST_OVERLAPS))) {
@@ -143,22 +138,18 @@ int ObExprSTOverlaps::eval_st_overlaps(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     // do nothing
   } else if (OB_FAIL(ObGeoExprUtils::check_empty(geo1, is_geo1_empty))
              || OB_FAIL(ObGeoExprUtils::check_empty(geo2, is_geo2_empty))) {
-    LOG_WARN("check geo empty failed", K(ret));
   } else if (is_geo1_empty || is_geo2_empty) {
     is_null_res = true;
   } else if (OB_FAIL(ObGeoExprUtils::zoom_in_geos_for_relation(srs, *geo1, *geo2))) {
   } else if (OB_FAIL(guard.init())) {
   } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("fail to get mem ctx", K(ret));
   } else {
     ObGeoFuncResWithNull overlaps_result;
     ObGeoEvalCtx gis_context(*mem_ctx, srs);
     if (OB_FAIL(gis_context.append_geo_arg(geo1)) || OB_FAIL(gis_context.append_geo_arg(geo2))) {
-      LOG_WARN("build gis context failed", K(ret), K(gis_context.get_geo_count()));
     } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Overlaps>::geo_func::eval(
                     gis_context, overlaps_result))) {
-      LOG_WARN("eval st intersection failed", K(ret));
       ObGeoExprUtils::geo_func_error_handle(ret, N_ST_OVERLAPS);
     } else if (overlaps_result.is_null) {
       is_null_res = true;

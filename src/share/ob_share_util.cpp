@@ -38,12 +38,10 @@ int ObShareUtil::get_server_ip(
   char ip_buffer[OB_IP_STR_BUFF] = {'\0'};
   if (!self_addr.ip_to_string(ip_buffer, sizeof(ip_buffer))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("convert server IP to string failed", K(ret));
   } else if (OB_FAIL(ob_write_string(
                  allocator, ObString::make_string(ip_buffer), ip_string))) {
   } else if (ip_string.empty()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("server IP is empty", K(ret));
   }
   return ret;
 }
@@ -70,8 +68,6 @@ int ObShareUtil::set_default_timeout_ctx(ObTimeoutCtx &ctx, const int64_t defaul
   if (OB_FAIL(ctx.set_abs_timeout(abs_timeout_ts))) {
   } else if (ctx.is_timeouted()) {
     ret = OB_TIMEOUT;
-    LOG_WARN("timeouted", KR(ret), K(abs_timeout_ts), K(ctx_timeout_ts),
-        K(worker_timeout_ts), K(default_timeout));
   } else {
   }
   return ret;
@@ -136,12 +132,10 @@ int ObShareUtil::get_ora_rowscn(
     if (OB_FAIL(client.read(res, sql.ptr()))) {
     } else if (NULL == (result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to get sql result", KR(ret));
     } else if (OB_FAIL(result->next())) {
     } else {
       EXTRACT_INT_FIELD_MYSQL(*result, "ORA_ROWSCN", ora_rowscn_val, int64_t);
       if (FAILEDx(ora_rowscn.convert_for_inner_table_field(ora_rowscn_val))) {
-        LOG_WARN("fail to convert val to SCN", KR(ret), K(ora_rowscn_val));
       }
     }
 

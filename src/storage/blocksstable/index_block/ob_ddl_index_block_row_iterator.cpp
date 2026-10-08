@@ -69,7 +69,6 @@ int ObDDLIndexBlockRowIterator::init(const ObMicroBlockData &idx_block_data,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(datum_utils) || !datum_utils->is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguement", K(ret), KP(allocator), KPC(datum_utils));
   } else {
     block_meta_tree_ = reinterpret_cast<const ObBlockMetaTree *>(idx_block_data.buf_);
     is_reverse_scan_ = is_reverse_scan;
@@ -88,7 +87,6 @@ int ObDDLIndexBlockRowIterator::set_iter_param(const ObStorageDatumUtils *datum_
   int ret = OB_SUCCESS;
   if (OB_ISNULL(datum_utils) || OB_UNLIKELY(!datum_utils->is_valid()) || OB_ISNULL(block_meta_tree)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguement", K(ret), KP(block_meta_tree), KPC(datum_utils));
   } else {
     block_meta_tree_ = block_meta_tree;
     is_reverse_scan_ = is_reverse_scan;
@@ -104,10 +102,8 @@ int ObDDLIndexBlockRowIterator::locate_key(const ObDatumRowkey &rowkey)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_UNLIKELY(!rowkey.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid rowkey", K(ret), K(rowkey));
   } else {
     ObDatumRange range;
     range.set_start_key(rowkey);
@@ -116,19 +112,16 @@ int ObDDLIndexBlockRowIterator::locate_key(const ObDatumRowkey &rowkey)
     range.set_right_closed();
     if (OB_ISNULL(block_meta_tree_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("block meta tree is null", K(ret));
     } else if (OB_FAIL(block_meta_tree_->locate_key(range,
                                                     *datum_utils_,
                                                     btree_iter_,
                                                     cur_tree_value_))) {
       if (OB_UNLIKELY(OB_BEYOND_THE_RANGE != ret)) {
-        LOG_WARN("locate rowkey failed", K(ret), K(range), K(*this));
       } else {
         is_iter_finish_ = true;
       }
     } else if (OB_ISNULL(cur_tree_value_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("cur tree value is null", K(ret), KP(cur_tree_value_));
     } else {
       is_iter_start_ = true;
       is_iter_finish_ = false;
@@ -144,13 +137,10 @@ int ObDDLIndexBlockRowIterator::locate_range(const ObDatumRange &range,
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_UNLIKELY(!range.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid range", K(ret), K(range));
   } else if (OB_ISNULL(block_meta_tree_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("block meta tree is null", K(ret));
   } else if (OB_FAIL(block_meta_tree_->locate_range(range,
                                                     *datum_utils_,
                                                     is_left_border,
@@ -159,10 +149,8 @@ int ObDDLIndexBlockRowIterator::locate_range(const ObDatumRange &range,
                                                     btree_iter_,
                                                     cur_tree_value_))) {
     is_iter_finish_ = true;
-    LOG_WARN("block meta tree locate range failed", K(ret), K(range));
   } else if (OB_ISNULL(cur_tree_value_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cur tree value is null", K(ret), KP(cur_tree_value_));
   } else {
     is_iter_start_ = true;
     is_iter_finish_ = false;
@@ -180,10 +168,8 @@ int ObDDLIndexBlockRowIterator::locate_range()
   range.set_right_open();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_ISNULL(block_meta_tree_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("block meta tree is null", K(ret));
   } else if (OB_FAIL(block_meta_tree_->locate_range(range,
                                                     *datum_utils_,
                                                     false, /*is_left_border*/
@@ -192,7 +178,6 @@ int ObDDLIndexBlockRowIterator::locate_range()
                                                     btree_iter_,
                                                     cur_tree_value_))) {
     if (OB_BEYOND_THE_RANGE != ret) {
-      LOG_WARN("block meta tree locate range failed", K(ret), K(range));
     } else {
       is_iter_finish_ = true;
       LOG_INFO("no data to locate", K(ret));
@@ -200,7 +185,6 @@ int ObDDLIndexBlockRowIterator::locate_range()
     }
   } else if (OB_ISNULL(cur_tree_value_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cur tree value is null", K(ret), KP(cur_tree_value_));
   } else {
     is_iter_start_ = true;
     is_iter_finish_ = false;
@@ -214,16 +198,13 @@ int ObDDLIndexBlockRowIterator::skip_to_next_valid_position(const ObDatumRowkey 
   storage::ObBlockMetaTreeValue *tmp_tree_value = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_ISNULL(block_meta_tree_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("block meta tree is null", K(ret));
   } else if (OB_FAIL(block_meta_tree_->skip_to_next_valid_position(rowkey,
                                                                    *datum_utils_,
                                                                    btree_iter_,
                                                                    tmp_tree_value))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("Failed to skip to next valid position in block meta tree", K(ret), K(rowkey));
     } else {
       is_iter_finish_ = true;
     }
@@ -238,10 +219,8 @@ int ObDDLIndexBlockRowIterator::find_rowkeys_belong_to_same_idx_row(ObMicroIndex
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_ISNULL(rows_info)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid rows info", K(ret));
   } else {
     const ObDatumRowkey *cur_rowkey = cur_tree_value_->rowkey_;
     bool is_decided = false;
@@ -253,7 +232,6 @@ int ObDDLIndexBlockRowIterator::find_rowkeys_belong_to_same_idx_row(ObMicroIndex
       int32_t cmp_ret = 0;
       if (OB_ISNULL(cur_rowkey)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("null rowkey", K(ret), K(cur_tree_value_), KP(cur_rowkey));
       } else if (OB_FAIL(rowkey.compare(*cur_rowkey, *datum_utils_, cmp_ret, false))) {
       }
 
@@ -293,10 +271,8 @@ int ObDDLIndexBlockRowIterator::get_current(const ObIndexBlockRowHeader *&idx_ro
   endkey.reset();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_ISNULL(cur_tree_value_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cur tree value is null", K(ret));
   } else {
     idx_row_header = &(cur_tree_value_->header_);
     endkey.set_compact_rowkey(&(cur_tree_value_->block_meta_->end_key_));
@@ -314,10 +290,8 @@ int ObDDLIndexBlockRowIterator::inner_get_current(const ObIndexBlockRowHeader *&
   endkey.reset();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_ISNULL(cur_tree_value_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cur tree value is null", K(ret));
   } else {
     idx_row_header = &(cur_tree_value_->header_);
     endkey.set_compact_rowkey(&(cur_tree_value_->block_meta_->end_key_));
@@ -347,16 +321,13 @@ int ObDDLIndexBlockRowIterator::get_next(const ObIndexBlockRowHeader *&idx_row_h
   bool is_end_key = false;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_FAIL(inner_get_current(idx_row_header, endkey))) {
   } else if (OB_UNLIKELY(nullptr == idx_row_header || !endkey.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null index block row header/endkey", K(ret), KP(idx_row_header), K(endkey));
   } else if (OB_UNLIKELY((idx_row_header->is_data_index() && !idx_row_header->is_major_node()) ||
                          idx_row_header->is_pre_aggregated() ||
                          !idx_row_header->is_major_node())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid index row header", K(ret), KPC(idx_row_header));
   }
 
   if (OB_SUCC(ret)) {
@@ -367,10 +338,8 @@ int ObDDLIndexBlockRowIterator::get_next(const ObIndexBlockRowHeader *&idx_row_h
     storage::ObBlockMetaTreeValue *tmp_tree_value = nullptr;
     if (OB_ISNULL(block_meta_tree_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("block meta iterator is null", K(ret));
     } else if (OB_FAIL(block_meta_tree_->get_next_tree_value(btree_iter_, std::abs(iter_step_), tmp_tree_value))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("get index block row header failed", K(ret), K(*this));
       } else {
         is_iter_finish_ = true;
         is_end_key = true;
@@ -393,10 +362,8 @@ int ObDDLIndexBlockRowIterator::get_next_meta(const ObDataMacroBlockMeta *&meta)
   meta = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_ISNULL(cur_tree_value_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cur tree value is null", K(ret));
   } else {
     meta = cur_tree_value_->block_meta_;
     if (is_iter_start_) {
@@ -405,10 +372,8 @@ int ObDDLIndexBlockRowIterator::get_next_meta(const ObDataMacroBlockMeta *&meta)
     storage::ObBlockMetaTreeValue *tmp_tree_value = nullptr;
     if (OB_ISNULL(block_meta_tree_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("block meta iterator is null", K(ret));
     } else if (OB_FAIL(block_meta_tree_->get_next_tree_value(btree_iter_, std::abs(iter_step_), tmp_tree_value))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("get index block row header failed", K(ret), K(*this));
       } else {
         is_iter_finish_ = true;
         ret = OB_SUCCESS;
@@ -437,13 +402,10 @@ int ObDDLIndexBlockRowIterator::get_index_row_count(const ObDatumRange &range,
   ObBlockMetaTreeValue *cur_tree_value = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_UNLIKELY(!range.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguement", K(ret), K(range));
   } else if (OB_ISNULL(block_meta_tree_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("block meta tree is null", K(ret));
   } else if (OB_FAIL(block_meta_tree_->locate_range(range,
                                                     *datum_utils_,
                                                     is_left_border,
@@ -459,7 +421,6 @@ int ObDDLIndexBlockRowIterator::get_index_row_count(const ObDatumRange &range,
       ObDatumRowkeyWrapper rowkey_wrapper;
       if (OB_FAIL(tmp_iter.get_next(rowkey_wrapper, cur_tree_value))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("get next failed", K(ret));
         } else {
           ret = OB_SUCCESS;
           break;

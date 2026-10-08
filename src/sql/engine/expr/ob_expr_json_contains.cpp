@@ -84,7 +84,6 @@ int ObExprJsonContains::eval_json_contains(const ObExpr &expr, ObEvalCtx &ctx, O
     LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_JSON, 2, N_JSON_CONTAINS);
   } else if (!is_null_result && OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 1,
                                                                        json_candidate, is_null_result))) {
-    LOG_WARN("get_json_doc failed", K(ret));
   } else {}
 
 
@@ -219,7 +218,6 @@ int ObExprJsonContains::json_contains_array(ObIJsonBase* json_target,
   if (OB_FAIL(ret) ||
       OB_FAIL(ObJsonBaseUtil::sort_array_pointer(json_target, t)) ||
       OB_FAIL(ObJsonBaseUtil::sort_array_pointer(json_candidate, c))) {
-    LOG_WARN("sort_array_pointer failed.", K(ret));
   } else {
     uint64_t t_i = 0;
     for (uint64_t c_i = 0; c_i < c.size() && OB_SUCC(ret); c_i++) {

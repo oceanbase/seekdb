@@ -80,7 +80,6 @@ int ObLogDistinct::est_width()
   ObSEArray<ObRawExpr*, 16> output_exprs;
   if (OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid plan", K(ret));
   } else if (OB_FAIL(get_distinct_output_exprs(output_exprs))) {
   } else if (OB_FAIL(ObOptEstCost::estimate_width_for_exprs(get_plan()->get_basic_table_metas(),
                                                             get_plan()->get_selectivity_ctx(),
@@ -100,7 +99,6 @@ int ObLogDistinct::get_distinct_output_exprs(ObIArray<ObRawExpr *> &output_exprs
   ObSEArray<ObRawExpr*, 16> extracted_col_aggr_winfunc_exprs;
   if (OB_ISNULL(plan = get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid input", K(ret));
   } else if (OB_FAIL(append_array_no_dup(candi_exprs, plan->get_select_item_exprs_for_width_est()))) {
   } else if (OB_FAIL(append_array_no_dup(candi_exprs, plan->get_orderby_exprs_for_width_est()))) {
   } else if (OB_FAIL(ObRawExprUtils::extract_col_aggr_winfunc_exprs(candi_exprs,
@@ -123,14 +121,11 @@ int ObLogDistinct::est_cost()
   double child_cost = 0;
   if (OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(child), K(ret));
   } else if (OB_UNLIKELY(child_ndv < 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected total ndv", K(child_ndv), K(ret));
   } else if (OB_FAIL(inner_est_cost(get_parallel(), child->get_card(), child_ndv, distinct_cost))) {
   } else if (need_re_est_child_cost() &&
              OB_FAIL(SMART_CALL(child->re_est_cost(param, child_card, child_cost)))) {
-    LOG_WARN("failed to re est child cost", K(ret));
   } else if (!need_re_est_child_cost() && 
              OB_FALSE_IT(child_cost=child->get_cost())) {
   } else {
@@ -147,10 +142,8 @@ int ObLogDistinct::do_re_est_cost(EstimateCostInfo &param, double &card, double 
   ObLogicalOperator *child = NULL;
   if (OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null child", K(ret));
   } else if (OB_UNLIKELY(total_ndv_ < 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected total ndv", K(total_ndv_), K(ret));
   } else {
     double child_card = child->get_card();
     double child_cost = child->get_cost();
@@ -202,10 +195,8 @@ int ObLogDistinct::inner_est_cost(const int64_t parallel, double child_card, dou
   if (OB_ISNULL(get_plan()) ||
       OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(child), K(ret));
   } else if (OB_UNLIKELY(parallel < 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected parallel", K(parallel), K(ret));
   } else {
     ObOptimizerContext &opt_ctx = get_plan()->get_optimizer_context();
     per_dop_card = child_card / parallel;
@@ -255,7 +246,6 @@ int ObLogDistinct::compute_fd_item_set()
   if (OB_ISNULL(child = get_child(ObLogicalOperator::first_child)) ||
       OB_ISNULL(my_plan_) || OB_ISNULL(get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpect null", K(ret), K(child), K(my_plan_), K(get_stmt()));
   } else if (OB_FAIL(my_plan_->get_fd_item_factory().create_fd_item_set(fd_item_set))) {
   } else if (OB_FAIL(fd_item_set->assign(child->get_fd_item_set()))) {
   } else if (!ObTransformUtils::need_compute_fd_item_set(distinct_exprs_)) {
@@ -310,7 +300,6 @@ int ObLogDistinct::print_outline_data(PlanText &plan_text)
   } else if (OB_ISNULL(get_plan()) || OB_ISNULL(stmt = get_plan()->get_stmt())
       || OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected NULL", K(ret), K(get_plan()), K(stmt), K(child));
   } else if (OB_FAIL(child->get_pushdown_op(log_op_def::LOG_DISTINCT, op))) {
   } else if (OB_FAIL(stmt->get_qb_name(qb_name))) {
   } else if (NULL != op &&
@@ -319,14 +308,12 @@ int ObLogDistinct::print_outline_data(PlanText &plan_text)
                                 ObHint::get_hint_name(T_DISTINCT_PUSHDOWN),
                                 qb_name.length(), 
                                 qb_name.ptr()))) {
-    LOG_WARN("fail to print buffer", K(ret), K(buf), K(buf_len), K(pos));
   } else if (HASH_AGGREGATE == algo_ &&
              OB_FAIL(BUF_PRINTF("%s%s(@\"%.*s\")",
                                 ObQueryHint::get_outline_indent(plan_text.is_oneline_),
                                 ObHint::get_hint_name(T_USE_HASH_DISTINCT),
                                 qb_name.length(), 
                                 qb_name.ptr()))) {
-    LOG_WARN("fail to print buffer", K(ret), K(buf), K(buf_len), K(pos));
   } else if (DIST_BASIC_METHOD != get_dist_method()) {
     ObPQHint pq_hint(T_PQ_DISTINCT_HINT);
     pq_hint.set_qb_name(qb_name);
@@ -350,7 +337,6 @@ int ObLogDistinct::print_used_hint(PlanText &plan_text)
     /* print outline in top distinct */
   } else if (OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected NULL", K(ret), K(get_plan()));
   } else {
     const ObHint *use_hash = get_plan()->get_log_plan_hint().get_normal_hint(T_USE_HASH_DISTINCT);
     const ObHint *pushdown_hint = get_plan()->get_log_plan_hint().get_normal_hint(T_DISTINCT_PUSHDOWN);
@@ -359,7 +345,6 @@ int ObLogDistinct::print_used_hint(PlanText &plan_text)
       bool match_hint = (HASH_AGGREGATE == algo_ && use_hash->is_enable_hint())
                         || (MERGE_AGGREGATE == algo_ && use_hash->is_disable_hint());
       if (match_hint && OB_FAIL(use_hash->print_hint(plan_text))) {
-        LOG_WARN("failed to print used hint for group by", K(ret), K(*use_hash));
       }
     }
     if (OB_SUCC(ret) && (NULL != pushdown_hint || NULL != pq_hint)) {
@@ -367,18 +352,15 @@ int ObLogDistinct::print_used_hint(PlanText &plan_text)
       const ObLogicalOperator *op = NULL;
       if (OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected NULL", K(ret), K(child));
       } else if (OB_FAIL(child->get_pushdown_op(log_op_def::LOG_DISTINCT, op))) {
       } else if (NULL != pushdown_hint && (NULL == op ? pushdown_hint->is_disable_hint() : pushdown_hint->is_enable_hint())
                  && OB_FAIL(pushdown_hint->print_hint(plan_text))) {
-        LOG_WARN("failed to print used hint for group by", K(ret), KPC(pushdown_hint));
       } else if (NULL != pq_hint
                  && ((DIST_HASH_HASH == get_dist_method() && pq_hint->is_force_dist_hash())
                      || (DIST_HASH_HASH_LOCAL == get_dist_method() && pq_hint->is_force_hash_local())
                      || (DIST_PARTITION_WISE == get_dist_method() && pq_hint->is_force_partition_wise())
                      || (DIST_BASIC_METHOD == get_dist_method() && pq_hint->is_force_basic()))
                  && OB_FAIL(pq_hint->print_hint(plan_text))) {
-        LOG_WARN("failed to print used hint for pq group by", K(ret), KPC(pq_hint));
       }
     }
   }
@@ -412,7 +394,6 @@ int ObLogDistinct::compute_property()
   int64_t prefix_pos = 0;
   if (OB_ISNULL(top) || OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::compute_property())) {
   } else if (MERGE_AGGREGATE == algo_) {
     input_sorted_ = true;
@@ -442,7 +423,6 @@ int ObLogDistinct::compute_op_parallel_info()
     ObLogicalOperator *child = get_child(first_child);
     if (OB_ISNULL(child)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null child op", K(ret));
     } else if (child->get_part_cnt() > 0 &&
                get_parallel() > child->get_part_cnt()) {
       int64_t reduce_parallel = child->get_part_cnt();

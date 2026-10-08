@@ -400,7 +400,6 @@ int ObLockRowChecker::check_lock_row_valid(const blocksstable::ObDatumRow &row, 
   int64_t rowkey_read_cnt = MIN(read_info.get_seq_read_column_count(), read_info.get_rowkey_count());
   if (OB_UNLIKELY(!read_info.is_valid() || row.get_column_count() < rowkey_read_cnt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(read_info), K(row));
   } else if (row.is_uncommitted_row()) {
     const ObColumnIndexArray &col_index = read_info.get_columns_index();
     for (int i = rowkey_read_cnt; i < row.get_column_count(); ++i) {
@@ -433,7 +432,6 @@ int get_orig_default_row(const share::schema::ObTableSchema &table_schema,
   const int64_t column_cnt = table_schema.get_column_count();
   if (OB_UNLIKELY(!default_row.is_valid() || default_row.count_ != column_ids.count() || column_ids.count() > column_cnt + 2)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(column_cnt), K(default_row), K(column_ids.count()));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < column_ids.count(); ++i) {
     if (column_ids.at(i).col_id_ == OB_HIDDEN_TRANS_VERSION_COLUMN_ID ||
@@ -445,7 +443,6 @@ int get_orig_default_row(const share::schema::ObTableSchema &table_schema,
         const share::schema::ObColumnSchemaV2 *column = table_schema.column_begin()[j];
         if (NULL == column) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("column must not null", K(ret), K(j), K(column_cnt));
         } else if (column->get_column_id() == column_ids.at(i).col_id_) {
           if (OB_FAIL(default_row.storage_datums_[i].from_obj_enhance(column->get_orig_default_value()))) {
           } else {
@@ -455,7 +452,6 @@ int get_orig_default_row(const share::schema::ObTableSchema &table_schema,
       }
       if (OB_SUCC(ret) && !found) {
         ret = OB_ERR_SYS;
-        LOG_WARN("column id not found", K(ret), K(column_ids.at(i)));
       }
     }
   }

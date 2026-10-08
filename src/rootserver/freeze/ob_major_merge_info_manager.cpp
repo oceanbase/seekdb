@@ -43,7 +43,6 @@ int ObMajorMergeInfoManager::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", KR(ret));
   } else if (OB_FAIL(global_merge_mgr_.init(sql_proxy))) {
   } else if (OB_FAIL(freeze_info_mgr_.init(sql_proxy))) {
   } else {
@@ -72,9 +71,7 @@ int ObMajorMergeInfoManager::reload(const bool force_reload_global_info)
 
   SCN global_broadcast_scn;
   if (force_reload_global_info && OB_FAIL(global_merge_mgr_.reload())) {
-    LOG_WARN("fail to reload global merge info", KR(ret));
   } else if (!force_reload_global_info && OB_FAIL(global_merge_mgr_.try_reload())) {
-    LOG_WARN("fail to try reload global merge info", KR(ret));
   } else if (OB_FAIL(global_merge_mgr_.get_global_broadcast_scn(global_broadcast_scn))) {
   } else if (OB_FAIL(freeze_info_mgr_.reload(global_broadcast_scn))) {
   } else {
@@ -124,7 +121,6 @@ int ObMajorMergeInfoManager::set_freeze_info(const ObMajorFreezeReason freeze_re
   }
 
   if (FAILEDx(freeze_info_mgr_.add_freeze_info(freeze_info))) {
-    LOG_WARN("fail to push back", KR(ret), K(freeze_info));
   }
 
   if (OB_FAIL(ret)) {
@@ -154,7 +150,6 @@ int ObMajorMergeInfoManager::generate_frozen_scn(
      // no acquired snapshot
      ret = OB_SUCCESS;
    } else {
-     LOG_WARN("fail to get max snapshot info", KR(ret));
    }
   }
 
@@ -164,7 +159,6 @@ int ObMajorMergeInfoManager::generate_frozen_scn(
   ObFreezeInfo max_frozen_status;
   ObFreezeInfoProxy freeze_info_proxy{};
   if (FAILEDx(freeze_info_proxy.get_max_freeze_info(*GCTX.sql_proxy_, max_frozen_status))) {
-    LOG_WARN("fail to get freeze info with max frozen_scn", KR(ret));
   } else if (OB_FAIL(freeze_info_mgr_.get_latest_freeze_info(latest_frozen_status))) {
   } else if (FALSE_IT(local_max_frozen_scn = latest_frozen_status.frozen_scn_)) {
   } else if (max_frozen_status.frozen_scn_ != local_max_frozen_scn) {
@@ -173,12 +167,8 @@ int ObMajorMergeInfoManager::generate_frozen_scn(
     // 
     if (local_max_frozen_scn < max_frozen_status.frozen_scn_) {
       ret = OB_EAGAIN;
-      LOG_WARN("max frozen_scn in cache is smaller than max frozen_scn in table, will try again",
-               KR(ret), K(local_max_frozen_scn), K(max_frozen_status));
     } else { // local_max_frozen_scn > max_frozen_status.frozen_scn_
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("max frozen_scn in cache is larger than max frozen_scn in table", KR(ret),
-               K(local_max_frozen_scn), K(max_frozen_status));
     }
   } else if (OB_FAIL(get_gts(tmp_frozen_scn))) {
   } else if ((tmp_frozen_scn <= snapshot_gc_scn)
@@ -204,10 +194,8 @@ int ObMajorMergeInfoManager::get_schema_version(
 
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_service is null", KR(ret));
   } else if (OB_ISNULL(server_schema_service = GCTX.schema_service_->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("server_schema_service is null", KR(ret));
   } else {
     ObRefreshSchemaStatus status;
     
@@ -259,13 +247,10 @@ int ObMajorMergeInfoManager::renew_snapshot_gc_scn(SCN &new_snapshot_gc_scn)
   } else if ((new_snapshot_gc_scn <= latest_snapshot_gc_scn)
              || (cur_snapshot_gc_scn >= new_snapshot_gc_scn)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid snaptshot gc time", KR(ret), K(cur_snapshot_gc_scn), K(new_snapshot_gc_scn),
-      K(latest_snapshot_gc_scn));
   } else if (OB_FAIL(ObGlobalStatProxy::update_snapshot_gc_scn(trans, new_snapshot_gc_scn,
       affected_rows))) {
   } else if (!is_single_row(affected_rows)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("affected_rows expected to be one", KR(ret), K(affected_rows));
   } else if (OB_FAIL(freeze_info_mgr_.update_snapshot_gc_scn(new_snapshot_gc_scn))) {
   }
 
@@ -299,7 +284,6 @@ int ObMajorMergeInfoManager::try_gc_freeze_info()
   SCN cur_snapshot_gc_scn;
 
   if (FAILEDx(try_reload())) {
-    LOG_WARN("fail to try reload", K(ret));
   } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
   } else if (OB_FAIL(ObGlobalStatProxy::select_snapshot_gc_scn_for_update(trans, cur_snapshot_gc_scn))) {
   } else if (OB_FAIL(freeze_info_proxy.get_all_freeze_info(trans, all_freeze_info))) {
@@ -380,7 +364,6 @@ int ObMajorMergeInfoManager::adjust_global_merge_info()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("merge info mgr not inited", KR(ret));
   } else if (OB_FAIL(global_merge_mgr_.adjust_global_merge_info())) {
   }
   return ret;

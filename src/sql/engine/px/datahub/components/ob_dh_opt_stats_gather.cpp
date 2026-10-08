@@ -51,7 +51,6 @@ OB_DEF_DESERIALIZE(ObOptStatsGatherPieceMsg)
       ObOptTableStat *tmp_stat = OB_NEWx(ObOptTableStat, (&arena_));
       if (OB_ISNULL(tmp_stat)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate memory", K(ret));
       } else if (OB_FAIL(tmp_stat->deserialize(buf, data_len, pos))) {
       } else if (OB_FAIL(table_stats_.push_back(tmp_stat))) {
       }
@@ -64,7 +63,6 @@ OB_DEF_DESERIALIZE(ObOptStatsGatherPieceMsg)
       ObOptColumnStat *tmp_col_stat = ObOptColumnStat::malloc_new_column_stat(arena_);
       if (OB_ISNULL(tmp_col_stat)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to create new col stat", K(ret));
       } else if (OB_FAIL(tmp_col_stat->deserialize(buf, data_len, pos))) {
       } else if (OB_FAIL(column_stats_.push_back(tmp_col_stat))) {
       }
@@ -102,7 +100,6 @@ int ObOptStatsGatherPieceMsgListener::on_message(
   int ret = OB_SUCCESS;
   if (pkt.op_id_ != piece_ctx.op_id_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected piece msg", K(ret), K(pkt), K(piece_ctx));
   } else {
     ObOptimizerStatsGatheringOp *osg_op = NULL;
     piece_ctx.received_++;
@@ -110,10 +107,8 @@ int ObOptStatsGatherPieceMsgListener::on_message(
     ObOperatorKit *kit = piece_ctx.op_kit_;
     if (OB_ISNULL(kit) || OB_ISNULL(kit->op_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null op kit", K(ret), K(kit));
     } else if (OB_UNLIKELY(PHY_OPTIMIZER_STATS_GATHERING != kit->op_->get_spec().type_)) { 
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected op", K(ret), K(kit->op_->get_spec().type_));
     } else {
       osg_op = static_cast<ObOptimizerStatsGatheringOp *>(kit->op_);
       if (OB_FAIL(osg_op->on_piece_msg(pkt))) {
@@ -133,7 +128,6 @@ int ObOptStatsGatherPieceMsgCtx::alloc_piece_msg_ctx(const ObOptStatsGatherPiece
   void *buf = ctx.get_allocator().alloc(sizeof(ObOptStatsGatherPieceMsgCtx));
   if (OB_ISNULL(ctx.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("physical plan ctx is null", K(ret));
   } else if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
@@ -141,7 +135,6 @@ int ObOptStatsGatherPieceMsgCtx::alloc_piece_msg_ctx(const ObOptStatsGatherPiece
           ctx.get_physical_plan_ctx()->get_timeout_timestamp());
     if (OB_ISNULL(ctx.get_operator_kit(pkt.target_osg_id_))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null operator kit", K(ret), K(pkt));
     } else {
       static_cast<ObOptStatsGatherPieceMsgCtx*>(msg_ctx)->op_kit_ = ctx.get_operator_kit(pkt.target_osg_id_);
     }

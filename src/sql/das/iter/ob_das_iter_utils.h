@@ -449,7 +449,6 @@ private:
     IterType *iter = nullptr;
     if (OB_ISNULL(iter = OB_NEWx(IterType, &alloc))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to new a das iter", K(ret));
     } else if (OB_FAIL(iter->init(param))) {
     }
     if (OB_SUCC(ret)) {

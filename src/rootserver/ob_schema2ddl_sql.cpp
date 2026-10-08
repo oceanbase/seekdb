@@ -51,7 +51,6 @@ int ObSchema2DDLSql::convert(
     if (OB_FAIL(table_schema.assign(orig_table_schema))) {
     } else if (!table_schema.is_valid() || NULL == sql_buf || buf_size <= 0) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(table_schema), KP(sql_buf), K(buf_size), K(ret));
     }
 
     // table name part
@@ -60,11 +59,8 @@ int ObSchema2DDLSql::convert(
           "create table %s(", table_schema.get_table_name());
       if (n < 0) {
         ret = OB_ERR_SYS;
-        LOG_WARN("snprintf failed", K(n), K(ret));
       } else if (n >= buf_size - sql_buf_write) {
         ret = OB_BUF_NOT_ENOUGH;
-        LOG_WARN("sql buf is not long enough:", "remain_buf_size", buf_size - sql_buf_write,
-            "need", n, K(ret));
       } else {
         sql_buf_write += n;
       }
@@ -77,7 +73,6 @@ int ObSchema2DDLSql::convert(
       const ObColumnSchemaV2 *column = *iter;
       if (NULL == column) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("column is null", KP(column), K(ret));
       } else {
         if (column->get_rowkey_position() > 0 && ObStringTC == column->get_data_type_class()) {
           (const_cast<ObColumnSchemaV2*>(column))->set_data_length(
@@ -90,11 +85,8 @@ int ObSchema2DDLSql::convert(
               column->get_column_name(), type_str_buf);
           if (n < 0) {
             ret = OB_ERR_SYS;
-            LOG_WARN("snprintf failed", K(n), K(ret));
           } else if (n >= buf_size - sql_buf_write) {
             ret = OB_BUF_NOT_ENOUGH;
-            LOG_WARN("sql buf is not long enough", "remain_buf_size", buf_size - sql_buf_write,
-                "need", n, K(ret));
           } else {
             sql_buf_write += n;
           }
@@ -107,11 +99,8 @@ int ObSchema2DDLSql::convert(
             is_first_rowkey = false;
             if (n < 0) {
               ret = OB_ERR_SYS;
-              LOG_WARN("snprintf failed", K(n), K(ret));
             } else if (n >= OB_MAX_SQL_LENGTH - key_buf_write) {
               ret = OB_BUF_NOT_ENOUGH;
-              LOG_WARN("primary key buf is not long enough",
-                  "remain_buf_size", OB_MAX_SQL_LENGTH - key_buf_write, "need", n, K(ret));
             } else {
               key_buf_write += n;
             }
@@ -155,11 +144,8 @@ int ObSchema2DDLSql::convert(
       }
       if (n < 0) {
         ret = OB_ERR_SYS;
-        LOG_WARN("snprintf failed", K(n), K(ret));
       } else if (n >= buf_size - sql_buf_write) {
         ret = OB_BUF_NOT_ENOUGH;
-        LOG_WARN("sql buf is not long enough", "remain_buf_size", buf_size - sql_buf_write,
-            "need", n, K(ret));
       }
     }
   }
@@ -176,7 +162,6 @@ int ObSchema2DDLSql::type2str(
   int64_t nwrite = 0;
   if (!column_schema.is_valid() || NULL == str_buf || buf_size <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(column_schema), KP(str_buf), K(buf_size), K(ret));
   } else {
     {
       switch (column_schema.get_data_type()) {
@@ -239,14 +224,10 @@ int ObSchema2DDLSql::type2str(
       }
       if (n < 0) {
         ret = OB_ERR_SYS;
-        LOG_WARN("snprintf failed", K(n), K(ret));
       } else if (0 == n) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("the type is not supported", "data_type", column_schema.get_data_type(), K(ret));
       } else if (buf_size <= n) {
         ret = OB_BUF_NOT_ENOUGH;
-        LOG_WARN("type string buffer is not enough", "data_type", column_schema.get_data_type(),
-            K(buf_size), "need_size", n, K(ret));
       }
     }
   }
@@ -268,11 +249,8 @@ int ObSchema2DDLSql::type2str(
 
     if (n < 0) {
       ret = OB_ERR_SYS;
-      LOG_WARN("snprintf failed", K(n), K(ret));
     } else if (buf_size - nwrite <= n) {
       ret = OB_BUF_NOT_ENOUGH;
-      LOG_WARN("type string buffer is not enough", "data_type", column_schema.get_data_type(),
-          K(buf_size), "need_size", n, K(ret));
     }
   }
 
@@ -315,17 +293,12 @@ int ObSchema2DDLSql::type2str(
       if (OB_FAIL(ret)) {
       } else if (n < 0) {
         ret = OB_ERR_SYS;
-        LOG_WARN("snprintf failed", K(n), K(ret));
       } else if (0 == n) {
         if (ObTimestampType != column_schema.get_data_type()) {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("the type is not supported",
-              "data_type", column_schema.get_data_type(), K(ret));
         }
       } else if (buf_size <= n) {
         ret = OB_BUF_NOT_ENOUGH;
-        LOG_WARN("type string buffer is not enough", "data_type", column_schema.get_data_type(),
-            K(buf_size), "need_size", n, K(ret));
       }
     }
   }

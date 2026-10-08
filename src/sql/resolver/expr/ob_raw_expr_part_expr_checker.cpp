@@ -34,8 +34,6 @@ int ObRawExprPartExprChecker::check_args_of_from_days(const ObSysFunRawExpr &exp
     } else if (is_time_expr(*sub_expr)
         || is_date_expr(*sub_expr) || is_datetime_expr(*sub_expr)) {
       ret = OB_ERR_WRONG_EXPR_IN_PARTITION_FUNC_ERROR;
-      LOG_WARN("expect no time expr", K(ret),
-               "type", sub_expr->get_result_type().get_type());
     }
   }
   return ret;
@@ -53,19 +51,13 @@ int ObRawExprPartExprChecker::check_args_of_extract(const ObSysFunRawExpr &expr)
   int ret = OB_SUCCESS;
   if (expr.get_param_count() != 2) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param count is not corrent", K(ret),
-             "param_count", expr.get_param_count());
   } else {
     const ObRawExpr *sub_expr = expr.get_param_expr(0);
     const ObRawExpr *sub_expr2= expr.get_param_expr(1);
     if (OB_UNLIKELY(NULL == sub_expr || NULL == sub_expr2)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("sub_expr or sub_expr2 should not be null", K(ret),
-               K(sub_expr), K(sub_expr2));
     } else if (ObRawExpr::EXPR_CONST != sub_expr->get_expr_class()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("sub_expr type class should be EXPR_CONST", K(ret),
-               "expr_class", sub_expr->get_expr_class());
     } else {
       CK (OB_NOT_NULL(sub_expr2 = ObRawExprUtils::skip_implicit_cast(sub_expr2)));
       int64_t date_unit_type = DATE_UNIT_MAX;
@@ -73,7 +65,6 @@ int ObRawExprPartExprChecker::check_args_of_extract(const ObSysFunRawExpr &expr)
       if (OB_FAIL(ret)) {
       } else if (OB_ISNULL(con_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("con_expr should not be NULL", K(ret));
       } else {
         con_expr->get_value().get_int(date_unit_type);
         switch(date_unit_type) {
@@ -84,8 +75,6 @@ int ObRawExprPartExprChecker::check_args_of_extract(const ObSysFunRawExpr &expr)
           case DATE_UNIT_DAY: {
             if (!is_date_expr(*sub_expr2) && !is_datetime_expr(*sub_expr2)) {
               ret = OB_ERR_WRONG_EXPR_IN_PARTITION_FUNC_ERROR;
-              LOG_WARN("expect date or datetime expr", K(ret),
-                       "type", sub_expr2->get_result_type().get_type());
             }
             break;
           }
@@ -95,8 +84,6 @@ int ObRawExprPartExprChecker::check_args_of_extract(const ObSysFunRawExpr &expr)
           case DATE_UNIT_DAY_MICROSECOND: {
             if (!is_datetime_expr(*sub_expr2)) {
               ret = OB_ERR_WRONG_EXPR_IN_PARTITION_FUNC_ERROR;
-              LOG_WARN("expect datetime expr", K(ret),
-                       "type", sub_expr2->get_result_type().get_type());
             }
             break;
           }
@@ -112,8 +99,6 @@ int ObRawExprPartExprChecker::check_args_of_extract(const ObSysFunRawExpr &expr)
           case DATE_UNIT_SECOND_MICROSECOND: {
             if (!is_time_expr(*sub_expr2) && !is_datetime_expr(*sub_expr2)) {
               ret = OB_ERR_WRONG_EXPR_IN_PARTITION_FUNC_ERROR;
-              LOG_WARN("expect time or datetime expr", K(ret),
-                       "type", sub_expr2->get_result_type().get_type());
             }
             break;
           }
@@ -122,8 +107,6 @@ int ObRawExprPartExprChecker::check_args_of_extract(const ObSysFunRawExpr &expr)
             //DATE_UNIT_WEEK depends on default_week_format which is a session
             //variable and cannot be used for partitioning. See bug#57071 of mysql.
             ret = OB_ERR_WRONG_EXPR_IN_PARTITION_FUNC_ERROR;
-            LOG_WARN("this expr can't no exist is partitioning", K(ret),
-                     "type", sub_expr2->get_result_type().get_type());
           }
         }
       }
@@ -139,11 +122,8 @@ int ObRawExprPartExprChecker::default_check_args(const ObRawExpr &expr)
     const ObRawExpr *sub_expr = expr.get_param_expr(i);
     if (OB_ISNULL(sub_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("sub_expr should not be null", K(ret));
     } else if (is_timestamp_expr(*sub_expr)) {
       ret = OB_ERR_WRONG_EXPR_IN_PARTITION_FUNC_ERROR;
-      LOG_WARN("expect date or datetime type", K(ret),
-               "type", sub_expr->get_result_type().get_type());
     }
   }
   return ret;
@@ -199,12 +179,10 @@ int ObRawExprPartExprChecker::visit(ObOpRawExpr &expr)
       PARTITION_FUNC_TYPE_LIST_COLUMNS != func_type_ &&
       !ob_is_integer_type(type)) {
     ret = OB_ERR_VALUES_IS_NOT_INT_TYPE_ERROR;
-    LOG_WARN("part_value_expr type is not correct", K(ret), K(type));
   } else {
     switch (expr.get_expr_type()) {
       case T_OP_REGEXP: {
         ret = OB_ERR_PARTITION_FUNCTION_IS_NOT_ALLOWED;
-        LOG_WARN("invalid partition function", K(ret), "item_type", expr.get_expr_type());
         break;
       }
       default: {

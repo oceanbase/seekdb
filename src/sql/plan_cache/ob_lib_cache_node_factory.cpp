@@ -39,16 +39,13 @@ int ObLCNodeFactory::create_cache_node(ObLibCacheNameSpace ns,
   mem_attr.ctx_id_ = ObCtxIds::PLAN_CACHE_CTX_ID;
   if (OB_ISNULL(lib_cache_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lib cache is null", K(ret));
   } else if (ns <= NS_INVALID || ns >= NS_MAX || OB_ISNULL(LC_CN_ALLOC[ns])) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("out of the max type", K(ret), K(ns));
   } else if (FALSE_IT(mem_attr.label_ = LC_NS_TYPE_LABELS[ns])) {
   } else if (OB_FAIL(parent_context->CREATE_CONTEXT(entity,
                                                     lib::ContextParam().set_mem_attr(mem_attr)))) {
   } else if (OB_ISNULL(entity)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL memory entity", K(ret));
   } else {
     WITH_CONTEXT(entity) {
       if (OB_FAIL(LC_CN_ALLOC[ns](entity, node, lib_cache_))) {
@@ -65,7 +62,6 @@ void ObLCNodeFactory::destroy_cache_node(ObILibCacheNode* node)
     lib_cache_->release_cache_node_memory_account(*node);
   }
   if (OB_NOT_NULL(node) && OB_FAIL(node->before_cache_evicted())) {
-    LOG_WARN("failed to process before_cache_evicted", K(ret));
   }
   // regardless of whether before_cache_evicted succeeds or fails, the cache node
   // will be evicted. so ignore the error code here

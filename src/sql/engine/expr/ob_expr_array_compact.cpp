@@ -57,7 +57,6 @@ int ObExprArrayCompact::calc_result_type1(ObExprResType &type,
   ObCollectionTypeBase *coll_type = NULL;
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec ctx is null", K(ret));
   } else if (ob_is_null(type1.get_type())) {
     type.set_null();
   } else if (!ob_is_collection_sql_type(type1.get_type())) {
@@ -66,7 +65,6 @@ int ObExprArrayCompact::calc_result_type1(ObExprResType &type,
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type1.get_subschema_id(), coll_type))) {
   } else if (coll_type->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid collection type", K(ret), K(coll_type->type_id_));
   } else {
     type.set_collection(type1.get_subschema_id());
     type.set_length((ObAccuracy::DDL_DEFAULT_ACCURACY[ObCollectionSQLType]).get_length());
@@ -86,7 +84,6 @@ int ObExprArrayCompact::eval_array_compact(const ObExpr &expr, ObEvalCtx &ctx, O
 
   if (!ob_is_null(expr.obj_meta_.get_type()) && subschema_id != expr.obj_meta_.get_subschema_id()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("subschema id is not equal", K(ret), K(subschema_id), K(expr.obj_meta_.get_subschema_id()));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, arr_datum))) {
   } else if (arr_datum->is_null()) {
     res.set_null();
@@ -119,7 +116,6 @@ int ObExprArrayCompact::eval_array_compact_batch(const ObExpr &expr, ObEvalCtx &
 
   if (!ob_is_null(expr.obj_meta_.get_type()) && subschema_id != expr.obj_meta_.get_subschema_id()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("subschema id is not equal", K(ret), K(subschema_id), K(expr.obj_meta_.get_subschema_id()));
   } else if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else {
     ObDatumVector arr_datum = expr.args_[0]->locate_expr_datumvector(ctx);
@@ -134,7 +130,6 @@ int ObExprArrayCompact::eval_array_compact_batch(const ObExpr &expr, ObEvalCtx &
                                                          arr_datum.at(j)->get_string(), src_arr))) {
       } else if (OB_NOT_NULL(res_arr) && OB_FALSE_IT(res_arr->clear())) {
       } else if (OB_ISNULL(res_arr) && OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator,ctx, subschema_id, res_arr, false))) {
-        LOG_WARN("construct result array obj failed", K(ret));
       } else if (OB_FAIL(eval_compact(tmp_allocator, ctx, src_arr, res_arr))) {
       } else {
         int32_t res_size = res_arr->get_raw_binary_len();
@@ -145,7 +140,6 @@ int ObExprArrayCompact::eval_array_compact_batch(const ObExpr &expr, ObEvalCtx &
         } else if (OB_FAIL(output_result.get_reserved_buffer(res_buf, res_buf_len))) {
         } else if (res_buf_len < res_size) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get invalid res buf len", K(ret), K(res_buf_len), K(res_size));
         } else if (OB_FAIL(res_arr->get_raw_binary(res_buf, res_buf_len))) {
         } else if (OB_FAIL(output_result.lseek(res_size, 0))) {
         } else {
@@ -169,10 +163,8 @@ int ObExprArrayCompact::eval_compact(ObIAllocator &tmp_allocator, ObEvalCtx &ctx
     bool is_last_null = false;
     if (OB_UNLIKELY(OB_ISNULL(nest_array))) {
       ret = OB_ERR_ARRAY_TYPE_MISMATCH;
-      LOG_WARN("unexpected status: invalid argument", K(ret), K(nest_array));
     } else if (OB_ISNULL(child_type = nest_array->get_child_array())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid child array type", K(ret), K(child_type));
     } else if (OB_FAIL(child_type->clone_empty(tmp_allocator, last_child, false))) {
     } else if (OB_FAIL(child_type->clone_empty(tmp_allocator, this_child, false))) {
     }
@@ -188,7 +180,6 @@ int ObExprArrayCompact::eval_compact(ObIAllocator &tmp_allocator, ObEvalCtx &ctx
       } else if (OB_FALSE_IT(this_child->clear())) {
       } else if (OB_FAIL(src_arr->at(i, *this_child))) {
       } else if (i > 0 && !is_last_null && OB_FAIL(last_child->compare(*this_child, cmp_ret))) {
-        LOG_WARN("failed to compare", K(ret));
       } else if (cmp_ret == 0) {
         // do nothing
       } else if (OB_FAIL(static_cast<ObArrayNested *>(res_arr)->push_back(*this_child))) {
@@ -206,7 +197,6 @@ int ObExprArrayCompact::eval_compact(ObIAllocator &tmp_allocator, ObEvalCtx &ctx
     bool is_last_null = false;
     if (OB_UNLIKELY(!src_type)) {
       ret = OB_ERR_ARRAY_TYPE_MISMATCH;
-      LOG_WARN("unexpected status: invalid argument", K(ret), KP(src_type));
     } else {
       this_elem.set_meta_type(src_type->basic_meta_.get_meta_type());
     }

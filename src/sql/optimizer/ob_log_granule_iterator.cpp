@@ -84,7 +84,6 @@ int ObLogGranuleIterator::get_plan_item_info(PlanText &plan_text,
     if (!gi_flag[i]) {
       continue;
     } else if (has_first && OB_FAIL(BUF_PRINTF(", "))) {
-      LOG_WARN("BUF_PRINTF fails", K(ret));
     } else if (OB_FAIL(BUF_PRINTF("%.*s", 
                                   MAX_GI_FLAG_NAME_LENGTH, 
                                   gi_flag_name[i]))) {
@@ -112,7 +111,6 @@ int ObLogGranuleIterator::allocate_expr_post(ObAllocExprContext &ctx)
   if (OB_FAIL(ObLogicalOperator::allocate_expr_post(ctx))) {
   } else if (NULL != tablet_id_expr_ &&
             OB_FAIL(get_plan()->get_optimizer_context().get_all_exprs().append(tablet_id_expr_))) {
-    LOG_WARN("failed to append expr", K(ret));
   }
   return ret;
 }
@@ -123,11 +121,9 @@ int ObLogGranuleIterator::compute_op_ordering()
   ObLogicalOperator *child = NULL;
   if (OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::compute_op_ordering())) {
   } else if (!child->is_exchange_allocated() && child->get_is_range_order() &&
              OB_FAIL(set_range_order())) {
-    LOG_WARN("failed to set partition order", K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -139,12 +135,10 @@ int ObLogGranuleIterator::set_range_order()
   common::ObIArray<OrderItem> &op_ordering = get_op_ordering();
   if (OB_ISNULL(stmt = get_plan()->get_stmt()) || OB_ISNULL(stmt->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null param", K(ret));
   } else if (affinitize()) {
     ObLogicalOperator *child = get_child(first_child);
     if (OB_ISNULL(child)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null operator", K(child), K(ret));
     } else if (child->get_op_ordering().count() <= 0) {
       //do nothing
     } else {
@@ -178,7 +172,6 @@ int ObLogGranuleIterator::est_cost()
   ObLogicalOperator *child = NULL;
   if (OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(child), K(ret));
   } else {
     card_ = child->get_card();
     op_cost_ = 0;
@@ -222,7 +215,6 @@ int ObLogGranuleIterator::check_adaptive_task_splitting(ObLogTableScan *tsc)
     // synchronize point so disable this feature in some cases
   } else if (OB_ISNULL(tsc)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr");
   } else {
     // find the table scan which can be paused
     SampleInfo::SampleMethod sample_method = tsc->get_sample_info().method_;
@@ -296,7 +288,6 @@ int ObLogGranuleIterator::branch_has_exchange(const ObLogicalOperator *op, bool 
   int ret = OB_SUCCESS;
   if (OB_ISNULL(op)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr");
   } else if (op->get_type() == log_op_def::LOG_EXCHANGE) {
     has_exchange = true;
   } else {
@@ -320,7 +311,6 @@ int ObLogGranuleIterator::check_exist_deadlock_condition(const ObLogicalOperator
   const ObLogicalOperator *parent_op = op->get_parent();
   if (OB_ISNULL(op)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr");
   } else if (op->is_block_op()) {
     // block op will block all child, stop finding deadlock recursively
   } else if (OB_ISNULL(parent_op)) {

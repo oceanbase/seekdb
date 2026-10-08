@@ -172,14 +172,11 @@ int ObExprSTDistanceSphere::eval_st_distance_sphere(const ObExpr &expr,
   } else if (OB_FAIL(guard.init())) {
   } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("fail to get mem ctx", K(ret));
   } else {
     ObGeoEvalCtx gis_context(*mem_ctx, srs1);
     if (OB_FAIL(gis_context.append_val_arg(sphere_radius))) {
     } else if (OB_FAIL(gis_context.append_geo_arg(g1)) || OB_FAIL(gis_context.append_geo_arg(g2))) {
-      LOG_WARN("fail to append geo arg to gis_context", K(ret));
     } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::DistanceSphere>::gis_func::eval(gis_context, result))) {
-      LOG_WARN("fail to eval distance sphere", K(ret));
       if (OB_ERR_LONGITUDE_OUT_OF_RANGE == ret) {
         LOG_USER_ERROR(OB_ERR_LONGITUDE_OUT_OF_RANGE, result, N_ST_DISTANCE_SPHERE, -180.0, 180.0);
       } else if (OB_ERR_LATITUDE_OUT_OF_RANGE == ret) {
@@ -189,7 +186,6 @@ int ObExprSTDistanceSphere::eval_st_distance_sphere(const ObExpr &expr,
       }
     } else if (std::isinf(result)) {
       ret = OB_ERROR_OUT_OF_RANGE;
-      LOG_WARN("INFINITY", K(ret), K(result));
     }
   }
 

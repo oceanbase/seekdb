@@ -49,7 +49,6 @@ AChunk *ObMemoryMgr::alloc_chunk(const int64_t size, const ObMemAttr &attr)
   int ret = OB_SUCCESS;
   if (size <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid size", K(ret), K(size));
   } else {
     const int64_t hold_size = static_cast<int64_t>(CHUNK_MGR.hold(static_cast<uint64_t>(size)));
     bool reach_ctx_limit = false;
@@ -149,7 +148,6 @@ int ObMemoryMgr::set_ctx_hard_limit(const uint64_t ctx_id, const int64_t hard_li
   int ret = OB_SUCCESS;
   if (ctx_id >= ObCtxIds::MAX_CTX_ID || hard_limit <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguemnt", K(ret), K(ctx_id), K(hard_limit));
   } else {
     hard_limit_bytes_[ctx_id] = hard_limit;
   }
@@ -161,7 +159,6 @@ int ObMemoryMgr::set_ctx_limit(const uint64_t ctx_id, const int64_t limit)
   int ret = OB_SUCCESS;
   if (ctx_id >= ObCtxIds::MAX_CTX_ID || limit <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguemnt", K(ret), K(ctx_id), K(limit));
   } else {
     limit_bytes_[ctx_id] = limit;
   }
@@ -173,7 +170,6 @@ int ObMemoryMgr::get_ctx_limit(const uint64_t ctx_id, int64_t &limit) const
   int ret = OB_SUCCESS;
   if (ctx_id >= ObCtxIds::MAX_CTX_ID) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguemnt", K(ret), K(ctx_id));
   } else {
     limit = limit_bytes_[ctx_id];
   }
@@ -185,7 +181,6 @@ int ObMemoryMgr::get_ctx_hold(const uint64_t ctx_id, int64_t &hold) const
   int ret = OB_SUCCESS;
   if (ctx_id >= ObCtxIds::MAX_CTX_ID) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguemnt", K(ret), K(ctx_id));
   } else {
     hold = hold_bytes_[ctx_id];
     if (ObCtxIds::KVSTORE_CACHE_ID == ctx_id) {
@@ -324,10 +319,8 @@ int ObResourceMgrHandle::init(ObResourceMgr *owner, ObResourceState *state)
   int ret = OB_SUCCESS;
   if (is_valid()) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (NULL == owner || NULL == state) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(owner), KP(state));
   } else {
     owner_ = owner;
     state_ = state;
@@ -384,7 +377,6 @@ int ObResourceMgr::init()
   int ret = OB_SUCCESS;
   if (inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else {
     inited_ = true;
   }
@@ -421,7 +413,6 @@ int ObResourceMgr::set_cache_washer(ObICacheWasher &cache_washer)
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     cache_washer_ = &cache_washer;
     ObDisableDiagnoseGuard disable_diagnose_guard;
@@ -439,7 +430,6 @@ int ObResourceMgr::get_handle(ObResourceMgrHandle &handle)
   handle.reset();
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     ObDisableDiagnoseGuard disable_diagnose_guard;
     ObResourceState *resource_state = NULL;
@@ -447,7 +437,6 @@ int ObResourceMgr::get_handle(ObResourceMgrHandle &handle)
       SpinRLockGuard guard(lock_);
       if (OB_FAIL(get_state_unsafe(resource_state))) {
         if (OB_ENTRY_NOT_EXIST != ret) {
-          LOG_WARN("get_state_unsafe failed", K(ret));
         } else {
           ret = OB_SUCCESS;
         }
@@ -460,7 +449,6 @@ int ObResourceMgr::get_handle(ObResourceMgrHandle &handle)
       // maybe other thread create, so retry get here
       if (OB_FAIL(get_state_unsafe(resource_state))) {
         if (OB_ENTRY_NOT_EXIST != ret) {
-          LOG_WARN("get_state_unsafe failed", K(ret));
         } else {
           ret = OB_SUCCESS;
           if (OB_FAIL(create_state_unsafe(resource_state))) {
@@ -507,7 +495,6 @@ int ObResourceMgr::get_state_unsafe(ObResourceState *&resource_state)
   resource_state = NULL;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     resource_state = state_;
     if (NULL == resource_state) {
@@ -525,7 +512,6 @@ int ObResourceMgr::create_state_unsafe(ObResourceState *&resource_state)
   void *ptr = NULL;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     static char buf[sizeof(ObResourceState)] __attribute__((__aligned__(16)));
     ptr = buf;
@@ -545,13 +531,11 @@ int ObResourceMgr::remove_state_unsafe()
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     ObResourceState *resource_state = state_;
     state_ = NULL;
     if (NULL == resource_state) {
       ret = OB_ENTRY_NOT_EXIST;
-      LOG_WARN("resource state not exist", K(ret));
     } else {
       resource_state->~ObResourceState();
       

@@ -91,7 +91,6 @@ int ObOptOSGColumnStat::deep_copy(const ObOptOSGColumnStat &other)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(col_stat_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null");
   } else if (OB_FAIL(col_stat_->deep_copy(*other.col_stat_))) {
   } else if (other.min_val_.is_valid() && OB_FAIL(min_val_.deep_copy(other.min_val_, allocator_))) {
     LOG_WARN("failed to deep copy min val");
@@ -108,7 +107,6 @@ int ObOptOSGColumnStat::set_min_max_datum_to_obj()
   ObObj *max_obj = NULL;
   if (OB_ISNULL(col_stat_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null");
   } else if (OB_ISNULL(min_obj = OB_NEWx(ObObj, (&allocator_))) ||
              OB_ISNULL(max_obj = OB_NEWx(ObObj, (&allocator_)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -137,7 +135,6 @@ int ObOptOSGColumnStat::merge_column_stat(const ObOptOSGColumnStat &other)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(col_stat_) || OB_ISNULL(other.col_stat_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(col_stat_));
   } else if (OB_UNLIKELY(col_stat_->get_table_id() != other.col_stat_->get_table_id() ||
                          col_stat_->get_partition_id() != other.col_stat_->get_partition_id() ||
                          col_stat_->get_column_id() != other.col_stat_->get_column_id())) {
@@ -174,7 +171,6 @@ int ObOptOSGColumnStat::update_column_stat_info(const ObDatum *datum,
   int64_t col_len = 0;
   if (OB_ISNULL(datum) || OB_ISNULL(col_stat_) || datum->is_nop()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KPC(datum), KP(col_stat_));
   } else if (OB_FAIL(calc_col_len(*datum, meta, col_len))) {
   } else if (OB_FALSE_IT(col_stat_->add_col_len(col_len))) {
     // do nothing
@@ -188,7 +184,6 @@ int ObOptOSGColumnStat::update_column_stat_info(const ObDatum *datum,
     } else if (OB_FAIL(tmp_obj.hash_murmur(hash_value, hash_value))) {
     } else if (OB_UNLIKELY(col_stat_->get_llc_bitmap() == NULL || col_stat_->get_llc_bitmap_size() == 0)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("get invalid llc_bitmap", K(ret));
     } else if (OB_FAIL(ObAggregateProcessor::llc_add_value(hash_value,
                                                            col_stat_->get_llc_bitmap(),
                                                            col_stat_->get_llc_bitmap_size()))) {

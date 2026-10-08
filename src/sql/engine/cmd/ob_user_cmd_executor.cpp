@@ -42,7 +42,6 @@ int ObCreateUserExecutor::encrypt_passwd(const common::ObString& pwd,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(enc_buf)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("enc_buf is NULL", K(ret));
   } else if (buf_len < ENC_BUF_LEN) {
     ret = OB_BUF_NOT_ENOUGH;
     LOG_WARN("Encrypt buf not enough");
@@ -71,7 +70,6 @@ int ObCreateUserExecutor::check_user_valid(ObSchemaGetterGuard& schema_guard,
       LOG_USER_WARN(OB_ERR_USER_REFFERD_AS_DEFINER, user_name.length(), user_name.ptr(), host_name.length(), host_name.ptr());
     } else {
       ret = OB_ERR_OPERATION_ON_USER_REFERRED_AS_DEFINER;
-      LOG_WARN("create user has definer", K(ret));
       LOG_USER_ERROR(OB_ERR_OPERATION_ON_USER_REFERRED_AS_DEFINER, opreation_name.length(), opreation_name.ptr(),
                         user_name.length(), user_name.ptr(), host_name.length(), host_name.ptr());
     }
@@ -110,10 +108,8 @@ int ObCreateUserExecutor::execute(ObExecContext &ctx, ObCreateUserStmt &stmt)
   const int64_t FIX_MEMBER_CNT = 4;
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null", K(ret));
   } else if (OB_ISNULL(ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret));
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
@@ -142,7 +138,6 @@ int ObCreateUserExecutor::execute(ObExecContext &ctx, ObCreateUserStmt &stmt)
     } else if (OB_FAIL(users.get_string(users_cnt + 3, x509_subject))) {
     } else if (OB_UNLIKELY(ObSSLType::SSL_TYPE_MAX == (ssl_type_enum = get_ssl_type_from_string(ssl_type)))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("known ssl_type", K(ssl_type), K(ret));
     }
 
     for (int64_t i = 0; OB_SUCC(ret) && i < users_cnt; i += FIX_MEMBER_CNT) {
@@ -173,7 +168,6 @@ int ObCreateUserExecutor::execute(ObExecContext &ctx, ObCreateUserStmt &stmt)
           } else if (OB_FAIL(user_info.set_user_name(user_name))) {
           } else if (OB_FAIL(user_info.set_host(host_name))) {
           } else if (FALSE_IT(user_info.set_ssl_type(ssl_type_enum))) {
-            LOG_WARN("set ssl_type failed", K(ret));
           } else if (OB_FAIL(user_info.set_ssl_cipher(ssl_cipher))) {
           } else if (OB_FAIL(user_info.set_x509_issuer(x509_issuer))) {
           } else if (OB_FAIL(user_info.set_x509_subject(x509_subject))) {
@@ -243,11 +237,9 @@ int ObDropUserExecutor::build_fail_msg(const common::ObIArray<common::ObString> 
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(users.count() < 1) || OB_UNLIKELY(users.count() != hosts.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(users.count()), K(hosts.count()), K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < users.count(); ++i) {
       if (0 != i && OB_FAIL(msg.append_fmt(","))) {
-        LOG_WARN("Build msg fail", K(ret));
       }
       if (OB_SUCC(ret)) {
         const ObString &user = users.at(i);
@@ -272,7 +264,6 @@ int ObDropUserExecutor::string_array_index_extract(const common::ObIArray<common
     in = index.at(i);
     if (in >= src_users.count() || in < 0) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("String index out of range", K(ret), K(in), K(src_users.count()));
     } else if (OB_FAIL(dst_users.push_back(src_users.at(in)))) {
     } else if (OB_FAIL(dst_hosts.push_back(src_hosts.at(in)))) {
     }
@@ -289,19 +280,14 @@ int ObDropUserExecutor::execute(ObExecContext &ctx, ObDropUserStmt &stmt)
 
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null", K(ret));
   } else if (OB_ISNULL(ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret));
   } else if (OB_ISNULL(user_names = stmt.get_users())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("names is NULL", K(ret));
   } else if (OB_UNLIKELY(user_names->count() % 2 != 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("user not specified", K(ret));
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
-    LOG_WARN("get task executor context failed", K(ret));
   } else {
     ObString user_name;
     ObString host_name;
@@ -338,10 +324,8 @@ int ObDropUserExecutor::drop_user(const obcall::ObDropUserArg &arg,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("arg is invalid", K(arg), K(ret));
   } else if (OB_UNLIKELY(arg.users_.count() < 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("user not specified", K(ret));
   } else {
     ObSArray<int64_t> failed_index;
     ObSqlString fail_msg;
@@ -356,7 +340,6 @@ int ObDropUserExecutor::drop_user(const obcall::ObDropUserArg &arg,
       } else if (if_exist_stmt) {
         if (OB_UNLIKELY(failed_users.count() < 1) || OB_UNLIKELY(failed_users.count() != failed_users.count())) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid argument", K(failed_users.count()), K(failed_users.count()), K(ret));
         } else {
           for (int i = 0; OB_SUCC(ret) && i < failed_users.count(); ++i) {
             ObSqlString fail_msg_one;
@@ -387,13 +370,10 @@ int ObLockUserExecutor::execute(ObExecContext &ctx, ObLockUserStmt &stmt)
   const ObStrings *user_names = NULL;
   if (OB_ISNULL(user_names = stmt.get_users())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("names is NULL", K(ret));
   } else if (OB_UNLIKELY(user_names->count() % 2 != 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("user not specified", K(ret));
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
-    LOG_WARN("get task executor context failed", K(ret));
   } else {
     ObString user_name;
     ObString host_name;
@@ -426,15 +406,12 @@ int ObLockUserExecutor::lock_user(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("arg is invalid", K(arg), K(ret));
   } else if (OB_UNLIKELY(arg.users_.count() < 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("user not specified", K(ret));
   } else {
     ObSArray<int64_t> failed_index;
     ObSqlString fail_msg;
     if (OB_FAIL(query::serialize_root_service_call([&]{ return root_commands.lock_user(arg, failed_index); }))) {
-      LOG_WARN("Lock user failed", K(ret));
       if (OB_FAIL(ObDropUserExecutor::build_fail_msg(arg.users_, arg.hosts_, fail_msg))) {
       } else {
         ret = OB_CANNOT_USER;
@@ -467,7 +444,6 @@ int ObAlterUserRoleExecutor::set_role_exec(ObExecContext &ctx, ObAlterUserRoleSt
   CK (ObAlterUserRoleStmt::SET_ROLE == stmt.get_set_role_flag());
   if (OB_ISNULL(session = ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is NULL", K(ret));
   } else {
     const uint64_t user_id = session->get_priv_user_id();
     const ObUserInfo * user_info = NULL;
@@ -480,7 +456,6 @@ int ObAlterUserRoleExecutor::set_role_exec(ObExecContext &ctx, ObAlterUserRoleSt
     OZ (schema_guard.get_user_info(user_id, user_info));
     if (OB_SUCC(ret) && NULL == user_info) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("user info is null", K(ret));
     }
     if (OB_SUCC(ret)) {
       switch (arg.default_role_flag_) {
@@ -531,7 +506,6 @@ int ObAlterUserRoleExecutor::execute(ObExecContext &ctx, ObAlterUserRoleStmt &st
 
   if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
-    LOG_WARN("get task executor context failed", K(ret));
   } else if (ObAlterUserRoleStmt::SET_ROLE == stmt.get_set_role_flag()) {
     OZ (set_role_exec(ctx, stmt));
   } else if (ObAlterUserRoleStmt::SET_DEFAULT_ROLE == stmt.get_set_role_flag()) {
@@ -542,7 +516,6 @@ int ObAlterUserRoleExecutor::execute(ObExecContext &ctx, ObAlterUserRoleStmt &st
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected alter user role operation", K(ret), K(stmt.get_set_role_flag()));
   }
   return ret;
 }
@@ -555,22 +528,16 @@ int ObRenameUserExecutor::execute(ObExecContext &ctx, ObRenameUserStmt &stmt)
   const ObStrings *rename_infos = NULL;
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null", K(ret));
   } else if (OB_ISNULL(ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret));
   } else if (OB_ISNULL(rename_infos = stmt.get_rename_infos())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("names is NULL", K(ret));
   } else if (rename_infos->count() < 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("user not specified", K(ret));
   } else if (rename_infos->count() % 4 != 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("old and new names count not match", K(ret));
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
-    LOG_WARN("get task executor context failed", K(ret));
   } else {
     ObString old_username;
     ObString old_hostname;
@@ -614,15 +581,12 @@ int ObRenameUserExecutor::rename_user(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid arg", K(arg), K(ret));
   } else if (OB_UNLIKELY(arg.old_users_.count() < 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("user not specified", K(arg), K(ret));
   } else {
     ObSArray<int64_t> failed_index;
     ObSqlString fail_msg;
     if (OB_FAIL(query::serialize_root_service_call([&]{ return root_commands.rename_user(arg, failed_index); }))) {
-      LOG_WARN("Rename user failed", K(ret));
       if (OB_FAIL(ObDropUserExecutor::build_fail_msg(arg.old_users_, arg.old_hosts_, fail_msg))) {
       } else {
         ret = OB_CANNOT_USER;

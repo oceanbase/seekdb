@@ -54,7 +54,6 @@ struct Deep_Copy_Action
     int ret = OB_SUCCESS;
     if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("value is NULL", K(ret), K(value));
     } else if (OB_FAIL(mock_fk_parent_table_mgr_.add_mock_fk_parent_table(*value))) {
     }
     return ret;
@@ -108,7 +107,6 @@ int ObMockFKParentTableMgr::init()
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init private mock_fk_parent_table manager twice", K(ret));
   } else if (OB_FAIL(mock_fk_parent_table_map_.init())) {
   } else {
     is_inited_ = true;
@@ -132,7 +130,6 @@ int ObMockFKParentTableMgr::assign(const ObMockFKParentTableMgr &other)
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("mock_fk_parent_table manager not init", K(ret));
   } else if (this != &other) {
     if (OB_FAIL(mock_fk_parent_table_map_.assign(other.mock_fk_parent_table_map_))) {
     } else if (OB_FAIL(mock_fk_parent_table_infos_.assign(other.mock_fk_parent_table_infos_))) {
@@ -146,7 +143,6 @@ int ObMockFKParentTableMgr::deep_copy(const ObMockFKParentTableMgr &other)
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("mock_fk_parent_table manager not init", K(ret));
   } else if (this != &other) {
     reset();
     mock_fk_parent_table_mgr::Deep_Copy_Filter filter;
@@ -197,7 +193,6 @@ int ObMockFKParentTableMgr::rebuild_mock_fk_parent_table_hashmap(
     ObSimpleMockFKParentTableSchema *schema = *iter;
     if (OB_ISNULL(schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("mock_fk_parent_table schema is NULL", K(ret), K(schema));
     } else {
       bool overwrite = false;
       ObMockFKParentTableHashWrapper hash_wrapper(schema->get_database_id(),
@@ -232,14 +227,11 @@ int ObMockFKParentTableMgr::add_mock_fk_parent_table(const ObSimpleMockFKParentT
   ObSimpleMockFKParentTableSchema *replaced_schema = NULL;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("mock_fk_parent_table manager not init", K(ret));
   } else if (OB_UNLIKELY(!schema.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(schema));
   } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_, schema, new_schema))) {
   } else if (OB_ISNULL(new_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL ptr", K(new_schema), K(ret));
   } else if (OB_FAIL(mock_fk_parent_table_infos_.replace(new_schema,
                                              iter,
                                              compare_mock_fk_parent_table,
@@ -288,7 +280,6 @@ int ObMockFKParentTableMgr::del_mock_fk_parent_table(const ObMockFKParentTableKe
   ObSimpleMockFKParentTableSchema *schema_to_del = NULL;
   if (!key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(key));
   } else if (OB_FAIL(mock_fk_parent_table_infos_.remove_if(key,
                      compare_with_mock_fk_parent_table_key,
                      equal_to_mock_fk_parent_table_key,
@@ -301,7 +292,6 @@ int ObMockFKParentTableMgr::del_mock_fk_parent_table(const ObMockFKParentTableKe
     }
   } else if (OB_ISNULL(schema_to_del)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("removed schema return NULL", K(ret), K(key.mock_fk_parent_table_id_));
   } else {
     ObMockFKParentTableHashWrapper wrapper(schema_to_del->get_database_id(),
                                            schema_to_del->get_mock_fk_parent_table_name());
@@ -311,11 +301,6 @@ int ObMockFKParentTableMgr::del_mock_fk_parent_table(const ObMockFKParentTableKe
         LOG_INFO("failed to remove mock_fk_parent_table schema, item may not exist", K(ret));
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to delete mock_fk_parent_table from mock_fk_parent_table hashmap",
-                  K(ret),
-                  K(hash_ret),
-                  K(schema_to_del->get_database_id()),
-                  K(schema_to_del->get_mock_fk_parent_table_name()));
       }
     }
   }
@@ -340,7 +325,6 @@ int ObMockFKParentTableMgr::for_each(Filter &filter, Acation &action, EarlyStopC
     ObSimpleMockFKParentTableSchema *value = NULL;
     if (OB_ISNULL(value = *iter)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL ptr", K(ret));
     } else {
       if (filter(value)) {
         if (OB_FAIL(action(value, mock_fk_parent_table_infos_, mock_fk_parent_table_map_))) {
@@ -359,14 +343,12 @@ int ObMockFKParentTableMgr::get_schema_statistics(ObSchemaStatisticsInfo &schema
   schema_info.schema_type_ = MOCK_FK_PARENT_TABLE_SCHEMA;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     schema_info.count_ = mock_fk_parent_table_infos_.size();
     for (ConstMockFKParentTableIter it = mock_fk_parent_table_infos_.begin();
                      OB_SUCC(ret) && it != mock_fk_parent_table_infos_.end(); it++) {
       if (OB_ISNULL(*it)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("schema is null", K(ret));
       } else {
         schema_info.size_ += (*it)->get_convert_size();
       }
@@ -380,7 +362,6 @@ int ObMockFKParentTableMgr::get_mock_fk_parent_table_schema_count(int64_t &schem
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     schema_count = mock_fk_parent_table_infos_.count();
   }
@@ -403,7 +384,6 @@ int ObMockFKParentTableMgr::get_mock_fk_parent_table_schema(
     const ObSimpleMockFKParentTableSchema *mock_fk_parent_table = NULL;
     if (OB_ISNULL(mock_fk_parent_table = *iter)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL ptr", K(ret), K(mock_fk_parent_table));
     } else if (mock_fk_parent_table->get_mock_fk_parent_table_id() > mock_fk_parent_table_id) {
       is_stop = true;
     } else if (mock_fk_parent_table_id == mock_fk_parent_table->get_mock_fk_parent_table_id()) {
@@ -425,7 +405,6 @@ int ObMockFKParentTableMgr::get_mock_fk_parent_table_schemas_in_runtime(
     const ObSimpleMockFKParentTableSchema *mock_fk_parent_table = NULL;
     if (OB_ISNULL(mock_fk_parent_table = *iter)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL ptr", K(ret));
     } else if (OB_FAIL(schemas.push_back(mock_fk_parent_table))) {
     }
   }
@@ -449,7 +428,6 @@ int ObMockFKParentTableMgr::get_mock_fk_parent_table_schemas_in_database(
     const ObSimpleMockFKParentTableSchema *mock_fk_parent_table = NULL;
     if (OB_ISNULL(mock_fk_parent_table = *iter)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL ptr", K(ret));
     } else if (database_id != mock_fk_parent_table->get_database_id()) {
       // do nothing
     } else if (OB_FAIL(schemas.push_back(mock_fk_parent_table))) {
@@ -467,11 +445,9 @@ int ObMockFKParentTableMgr::get_mock_fk_parent_table_schema_with_name(const uint
   schema = NULL;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_INVALID_ID == database_id
              || 0 == mock_fk_parent_table_name.length()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(database_id), K(mock_fk_parent_table_name));
   } else {
     ObSimpleMockFKParentTableSchema *tmp_schema = NULL;
     ObMockFKParentTableHashWrapper hash_wrap(database_id, mock_fk_parent_table_name);

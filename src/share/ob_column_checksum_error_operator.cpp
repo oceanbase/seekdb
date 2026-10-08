@@ -60,7 +60,6 @@ int ObColumnChecksumErrorOperator::insert_column_checksum_err_info(
   int ret = OB_SUCCESS;
   if (!storage_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("storage not initialized", K(ret));
   } else {
     ret = storage_.insert(info);
     if (OB_FAIL(ret)) {
@@ -76,10 +75,8 @@ int ObColumnChecksumErrorOperator::delete_column_checksum_err_info(
   int ret = OB_SUCCESS;
   if (!storage_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("storage not initialized", K(ret));
   } else if (OB_UNLIKELY(!min_frozen_scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(min_frozen_scn));
   } else {
     ret = storage_.delete_expired(min_frozen_scn, INT64_MAX);
     if (OB_FAIL(ret)) {
@@ -95,10 +92,8 @@ int ObColumnChecksumErrorOperator::delete_column_checksum_err_info_by_scn(
   int ret = OB_SUCCESS;
   if (!storage_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("storage not initialized", K(ret));
   } else if (OB_UNLIKELY(compaction_scn <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(compaction_scn));
   } else {
     // Use SQLite storage - delete by exact frozen_scn
     const char *delete_sql =
@@ -113,7 +108,6 @@ int ObColumnChecksumErrorOperator::delete_column_checksum_err_info_by_scn(
     ObSQLiteConnectionGuard guard(meta_db_pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(delete_sql, binder))) {
     }
   }
@@ -126,10 +120,8 @@ int ObColumnChecksumErrorOperator::check_exist_ckm_error_table(const int64_t com
   exist = false;
   if (OB_UNLIKELY(compaction_scn <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(compaction_scn));
   } else if (!storage_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("storage not initialized", K(ret));
   } else {
     const char *select_sql =
       "SELECT COUNT(*) as cnt FROM __all_column_checksum_error_info "
@@ -149,7 +141,6 @@ int ObColumnChecksumErrorOperator::check_exist_ckm_error_table(const int64_t com
     ObSQLiteConnectionGuard guard(meta_db_pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->query(select_sql, binder, row_processor))) {
     } else if (count > 0) {
       exist = true;

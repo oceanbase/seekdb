@@ -43,7 +43,6 @@ int ObActiveDDLKVMgr::add_tablet(const ObTabletID &tablet_id)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(tablet_id));
   } else {
     ObSpinLockGuard guard(lock_);
     if (!has_exist_in_array(active_ddl_tablets_, tablet_id)) {
@@ -62,7 +61,6 @@ int ObActiveDDLKVMgr::del_tablets(const common::ObIArray<ObTabletID> &tablet_ids
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(tablet_ids.count() < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(tablet_ids.count()));
   } else if (tablet_ids.count() == 0) {
     // do nothing
   } else {
@@ -98,10 +96,8 @@ int ObActiveDDLKVIterator::init(ObLS *ls, ObActiveDDLKVMgr &mgr)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObActiveDDLKVIterator has been inited twice", K(ret));
   } else if (OB_ISNULL(ls)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(ls));
   } else if (OB_FAIL(mgr.get_tablets(active_ddl_tablets_))) {
   } else {
     ls_ = ls;
@@ -118,7 +114,6 @@ int ObActiveDDLKVIterator::get_next_ddl_kv_mgr(ObDDLKvMgrHandle &handle)
   handle.reset();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObActiveDDLKVIterator has not been inited", K(ret));
   } else {
     ObTabletHandle tablet_handle;
     while (OB_SUCC(ret) && !handle.is_valid()) {
@@ -132,7 +127,6 @@ int ObActiveDDLKVIterator::get_next_ddl_kv_mgr(ObDDLKvMgrHandle &handle)
             if (OB_FAIL(to_del_tablets_.push_back(tablet_id))) {
             }
           } else {
-            LOG_WARN("failed to get tablet", K(ret), K(tablet_id));
           }
         } else if (tablet_handle.get_obj()->get_tablet_meta().ddl_commit_scn_.is_valid_and_not_min() &&
           tablet_handle.get_obj()->get_tablet_meta().ddl_checkpoint_scn_ >= tablet_handle.get_obj()->get_tablet_meta().ddl_commit_scn_) {
@@ -163,10 +157,8 @@ int ObLSDDLLogHandler::init(ObLS *ls)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObLSDDLLogHandler init twice", K(ret));
   } else if (nullptr == ls) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(ddl_log_replayer_.init(ls))) {
   } else {
     TCWLockGuard guard(online_lock_);
@@ -193,7 +185,6 @@ int ObLSDDLLogHandler::offline()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ddl log handler not init", K(ret));
   } else {
     TCWLockGuard guard(online_lock_);
     is_online_ = false;
@@ -210,7 +201,6 @@ int ObLSDDLLogHandler::online()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ddl log handler not init", K(ret));
   } else {
     ObLSTabletIterator tablet_iter(ObMDSGetTabletMode::READ_WITHOUT_CHECK);
     if (OB_FAIL(ls_->get_tablet_svr()->build_tablet_iter(tablet_iter))) {
@@ -223,11 +213,9 @@ int ObLSDDLLogHandler::online()
             ret = OB_SUCCESS;
             break;
           } else {
-            LOG_WARN("failed to get next ddl kv mgr", K(ret));
           }
         } else if (OB_UNLIKELY(!ddl_kv_mgr_handle.is_valid())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid tablet handle", K(ret), K(ddl_kv_mgr_handle));
         } else if (OB_FAIL(ls_->get_tablet(ddl_kv_mgr_handle.get_obj()->get_tablet_id(), tablet_handle,
             ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
         } else if (OB_FAIL(tablet_handle.get_obj()->start_direct_load_task_if_need())) {
@@ -257,7 +245,6 @@ int ObLSDDLLogHandler::replay(const void *buffer,
   const char *log_buf = static_cast<const char *>(buffer);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLSDDLLogHandler not inited", K(ret));
   } else if (OB_FAIL(base_header.deserialize(log_buf, buf_size, tmp_pos))) {
   } else if (OB_FAIL(ddl_header.deserialize(log_buf, buf_size, tmp_pos))) {
   } else {
@@ -288,7 +275,6 @@ int ObLSDDLLogHandler::replay(const void *buffer,
       }
       default: {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("Unknown ddl log type", K(ddl_header.get_ddl_clog_type()), K(ret));
       }
       }
       if (OB_FAIL(ret)) {
@@ -342,7 +328,6 @@ int ObLSDDLLogHandler::flush(SCN &rec_scn)
             ret = OB_SUCCESS;
             break;
           } else {
-            LOG_WARN("failed to get ddl kv mgr", K(ret), K(ddl_kv_mgr_handle));
           }
         } else if (OB_UNLIKELY(!ddl_kv_mgr_handle.is_valid())) {
           tmp_ret = OB_ERR_UNEXPECTED;
@@ -352,7 +337,6 @@ int ObLSDDLLogHandler::flush(SCN &rec_scn)
           LOG_TRACE("empty ddl kv", "tablet_id", ddl_kv_mgr_handle.get_obj()->get_tablet_id());
         } else if (!ddl_kvs_handle.at(0).is_valid()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("ddl kv handle should not be empty here", K(ret));
         } else {
           ObArenaAllocator arena(ObMemAttr("DdlCom_LsHan"));
           ObTabletDDLCompleteMdsUserData  ddl_complete;
@@ -364,7 +348,6 @@ int ObLSDDLLogHandler::flush(SCN &rec_scn)
               ret = OB_SUCCESS;
               LOG_INFO("no ddl complete", K(ret), K(ddl_kv_mgr_handle.get_obj()->get_tablet_id()));
             } else {
-              LOG_WARN("failed to get ddl complete", K(ret));
             }
           }
 
@@ -401,11 +384,9 @@ SCN ObLSDDLLogHandler::get_rec_scn()
           ret = OB_SUCCESS;
           break;
         } else {
-          LOG_WARN("get next ddl kv mgr failed", K(ret));
         }
       } else if (OB_UNLIKELY(!ddl_kv_mgr_handle.is_valid())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid ddl kv mgr handle", K(ret), K(ddl_kv_mgr_handle));
       } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->get_rec_scn(rec_scn))) {
       } else if (rec_scn < last_scn) {
         barrier_tablet_id = ddl_kv_mgr_handle.get_obj()->get_tablet_id();

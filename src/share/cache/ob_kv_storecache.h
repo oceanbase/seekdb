@@ -458,7 +458,7 @@ int64_t ObKVCache<Key, Value>::get_miss_cnt() const
     ObKVCacheInstHandle inst_handle;
     if (OB_SUCC(ObKVGlobalCache::get_instance().insts_.get_cache_inst(inst_key, inst_handle))) {
       if (NULL != inst_handle.get_inst()) {
-        miss_cnt = inst_handle.get_inst()->status_.total_miss_cnt_;
+        miss_cnt = inst_handle.get_inst()->status_.total_miss_cnt_.value();
       }
     }
   }

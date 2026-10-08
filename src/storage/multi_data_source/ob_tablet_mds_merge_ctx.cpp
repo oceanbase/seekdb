@@ -60,7 +60,6 @@ int ObTabletMdsMinorMergeCtx::get_merge_tables(ObGetMergeTablesResult &get_merge
   if (OB_FAIL(get_tables_by_key(get_merge_table_result))) {
   } else if (OB_ISNULL(buf = mem_ctx_.alloc(sizeof(ObMdsMinorFilter)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret), "size", sizeof(ObMdsMinorFilter));
   } else {
     // prepare mds compaction filter
     ObMdsMinorFilter *compaction_filter = new (buf) ObMdsMinorFilter();

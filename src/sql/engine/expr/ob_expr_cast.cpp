@@ -164,7 +164,6 @@ int ObExprCast::get_cast_string_len(ObExprResType &type1,
     res_len = 0;//compatible with mysql;
   } else if (OB_ISNULL(type_ctx.get_session())) {
     // calc type don't set ret, just print the log. by design.
-    LOG_WARN("my_session is null");
   } else { // literal
     ObArenaAllocator oballocator(ObModIds::BLOCK_ALLOC);
     ObCollationType cast_coll_type = (CS_TYPE_INVALID != type2.get_collation_type())
@@ -176,7 +175,6 @@ int ObExprCast::get_cast_string_len(ObExprResType &type1,
     ObRawExpr *raw_expr = NULL;
     if (OB_ISNULL(raw_expr = type_ctx.get_raw_expr())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null", K(ret));
     } else {
       ObCastCtx cast_ctx(&oballocator,
                         &type_ctx.get_dtc_params(),
@@ -289,10 +287,8 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
       OB_ISNULL(exec_ctx = session->get_cur_exec_ctx()) ||
       OB_ISNULL(cast_raw_expr = get_raw_expr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ptr is NULL", K(ret), KP(session), KP(cast_raw_expr));
   } else if (OB_UNLIKELY(NOT_ROW_DIMENSION != row_dimension_)) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid row_dimension_", K(row_dimension_), K(ret));
   } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session, enable_decimalint))) {
   } else if (OB_FAIL(get_cast_type(enable_decimalint,
                                    type2, cast_raw_expr->get_cast_mode(), type_ctx, dst_type))) {
@@ -318,7 +314,6 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
       type.set_null();
     } else {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
-      LOG_WARN("explicit cast to lob type not allowed", K(ret), K(dst_type));
     }
   } else {
     // always cast to user requested type
@@ -337,7 +332,6 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
       if (OB_UNLIKELY(float_scale > OB_MAX_DOUBLE_FLOAT_SCALE)) {
         ret = OB_ERR_TOO_BIG_SCALE;
         LOG_USER_ERROR(OB_ERR_TOO_BIG_SCALE, float_scale, "CAST", OB_MAX_DOUBLE_FLOAT_SCALE);
-        LOG_WARN("scale of float overflow", K(ret), K(float_scale), K(float_precision));
       } else if (float_precision < -1 ||
           (SCALE_UNKNOWN_YET == float_scale && float_precision > OB_MAX_DOUBLE_FLOAT_PRECISION)) {
         ret = OB_ERR_TOO_BIG_PRECISION;
@@ -639,8 +633,6 @@ int ObExprCast::cg_expr(ObExprCGCtx &op_cg_ctx,
   if (OB_UNLIKELY(ObMaxType == in_type || ObMaxType == out_type) ||
       OB_ISNULL(op_cg_ctx.allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("in_type or out_type or allocator is invalid", K(ret),
-             K(in_type), K(out_type), KP(op_cg_ctx.allocator_));
   } else {
     // setup cast mode for explicit cast.
     // Implicit cast's cast mode has already been set when creating cast expr, directly get it from raw_expr.get_cast_mode()
@@ -655,7 +647,6 @@ int ObExprCast::cg_expr(ObExprCGCtx &op_cg_ctx,
           // do nothing, setting the zerofill length only makes sense when in_type is a numeric type
         } else if (OB_UNLIKELY(UINT_MAX8 < src_res_type.get_length())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected zerofill length", K(ret), K(src_res_type.get_length()));
         } else if (ob_is_string_or_lob_type(out_type)) {
           // The zerofill information will only be used when cast to string/lob type.
           // for these types, scale is unused, so the previous design is to save child length
@@ -670,7 +661,6 @@ int ObExprCast::cg_expr(ObExprCGCtx &op_cg_ctx,
       const ObRawExpr *src_raw_expr = raw_expr.get_param_expr(0);
       if (OB_ISNULL(src_raw_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null", K(ret));
       } else if (fast_cast_decint) {
         if (CM_IS_EXPLICIT_CAST(cast_mode)) {
           ObDatumCast::get_decint_cast(ob_obj_type_class(in_type), in_prec, in_scale, out_prec,
@@ -702,7 +692,6 @@ DEF_SET_LOCAL_SESSION_VARS(ObExprCast, raw_expr) {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(raw_expr) || OB_ISNULL(raw_expr->get_param_expr(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null expr", K(ret));
   } else {
     ObObjType src = raw_expr->get_param_expr(0)->get_result_type().get_type();
     ObObjType dst = raw_expr->get_result_type().get_type();

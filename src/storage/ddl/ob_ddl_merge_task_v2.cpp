@@ -52,7 +52,6 @@ int ObDDLMergePrepareTask::init(const ObDDLTabletMergeDagParamV2 &merge_param)
   int ret = OB_SUCCESS;
   if (!merge_param.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(merge_param));
   } else {
     merge_param_ = merge_param;
     is_inited_   = true;
@@ -85,14 +84,11 @@ int ObDDLMergePrepareTask::inner_process()
   /* validate tablet context before generating merge tasks */
   if (OB_ISNULL(dag)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("dag should not be null", K(ret));
   } else if (OB_FAIL(merge_param_.get_tablet_param(tablet_id, tablet_param))) {
   } else if (OB_ISNULL(tablet_param)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet param should not be nullptr", K(ret), K(merge_param_));
   } else if (OB_ISNULL(tablet_param->storage_schema_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("storage schema should not be nullptr", K(ret), KPC(tablet_param));
   }
   
   /* pre-check before merge */
@@ -102,7 +98,6 @@ int ObDDLMergePrepareTask::inner_process()
   } else if (OB_FAIL(merge_param_.get_merge_helper(merge_helper))) {
   } else if (OB_ISNULL(merge_helper)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("merge param is invalid", K(ret));
   } else if (OB_FAIL(merge_helper->check_need_merge(dag, merge_param_, need_merge))) {
   }
 
@@ -120,7 +115,6 @@ int ObDDLMergePrepareTask::inner_process()
   } else if (OB_FAIL(dag->alloc_task(assemble_task))) {
   } else if (OB_ISNULL(assemble_task)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("assemble task should not be null", K(ret), K(merge_param_));
   } else if (OB_FAIL(assemble_task->init(merge_param_))) {
   } else if (OB_FAIL(assemble_task->deep_copy_children(get_child_nodes()))) {
   } else if (OB_FAIL(::ObITask::add_child(*assemble_task))) {
@@ -163,7 +157,6 @@ int ObDDLMergePrepareTask::process()
   ObWriteTabletParam *tablet_param = nullptr;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("task is not inited", K(ret), KPC(this));
   } else if (OB_FAIL(inner_process())) {
   } else if (OB_FAIL(merge_param_.get_tablet_param(target_tablet_id, tablet_param))) {
   }
@@ -195,7 +188,6 @@ int ObDDLMergeSliceTask::init(const ObDDLTabletMergeDagParamV2 &merge_param,
   int ret = OB_SUCCESS;
   if (!merge_param.is_valid() || start_slice_idx < 0 || end_slice_idx < start_slice_idx) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid merge param", K(ret), K(merge_param), K(start_slice_idx), K(end_slice_idx));
   } else {
     merge_param_     = merge_param;
     start_slice_idx_ = start_slice_idx;
@@ -216,13 +208,10 @@ int ObDDLMergeSliceTask::process()
   
   if (OB_ISNULL(dag)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("dag should not be null", K(ret));
   } else if (OB_FAIL(merge_param_.get_merge_helper(merge_helper))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get merge helper", K(ret), K(merge_param_));
   } else if (OB_ISNULL(merge_helper)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("merge helper should not be null", K(ret), K(merge_param_));
   } else if (OB_FAIL(merge_helper->merge_slice(dag, merge_param_, start_slice_idx_, end_slice_idx_))) {
   }
 
@@ -253,7 +242,6 @@ int ObDDLMergeAssembleTask::init(const ObDDLTabletMergeDagParamV2 &ddl_merge_par
   int ret = OB_SUCCESS;
   if (!ddl_merge_param.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ddl_merge_param));
   } else {
     merge_param_ = ddl_merge_param;
     is_inited_ = true;
@@ -274,16 +262,13 @@ int ObDDLMergeAssembleTask::process()
 
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("assemble task has not been init", K(ret), KPC(this));
   } else if (OB_FAIL(merge_param_.get_tablet_param(target_tablet_id, tablet_param))) {
   } else if (OB_FAIL(merge_param_.get_merge_helper(merge_helper))) {
   } else if (OB_ISNULL(merge_helper)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("merge helper should not be null", K(ret), K(merge_param_));
   }
 
   if (FAILEDx(merge_helper->assemble_sstable(merge_param_))) {
-    LOG_WARN("failed to assemble major sstable", K(ret));
   }
   FLOG_INFO("[DDL_MERGE_TASK]  ddl update table store finish", K(ret), K(merge_param_));
   return ret;

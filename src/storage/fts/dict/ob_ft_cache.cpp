@@ -32,7 +32,6 @@ int ObDictCache::get_dict(const ObDictCacheKey &key,
   handle.reset();
   if (OB_FAIL(get(key, value, handle))) {
     if (OB_ENTRY_NOT_EXIST != ret) {
-      LOG_WARN("get dict from cache failed", K(ret));
     }
   }
   return ret;

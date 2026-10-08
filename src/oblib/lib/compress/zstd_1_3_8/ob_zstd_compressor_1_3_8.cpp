@@ -46,7 +46,6 @@ int ObZstdCompressor_1_3_8::compress(const char *src_buffer,
     LIB_LOG(WARN, "invalid compress argument, ",
         K(ret), KP(src_buffer), K(src_data_size), KP(dst_buffer), K(dst_buffer_size));
   } else if (OB_FAIL(get_max_overflow_size(src_data_size, max_overflow_size))) {
-    LIB_LOG(WARN, "fail to get max_overflow_size, ", K(ret), K(src_data_size));
   } else if ((src_data_size + max_overflow_size) > dst_buffer_size) {
     ret = OB_BUF_NOT_ENOUGH;
     LIB_LOG(WARN, "dst buffer not enough, ",
@@ -57,8 +56,6 @@ int ObZstdCompressor_1_3_8::compress(const char *src_buffer,
                                           dst_buffer,
                                           static_cast<size_t>(dst_buffer_size),
                                           compress_ret_size))) {
-    LIB_LOG(WARN, "failed to compress zstd", K(ret), K(compress_ret_size),
-        KP(src_buffer), K(src_data_size), KP(dst_buffer), K(dst_buffer_size));
   } else {
     dst_data_size = compress_ret_size;
   }
@@ -90,8 +87,6 @@ int ObZstdCompressor_1_3_8::decompress(const char *src_buffer,
                                               dst_buffer,
                                               dst_buffer_size,
                                               decompress_ret_size))) {
-    LIB_LOG(WARN, "failed to decompress zstd", K(ret), K(decompress_ret_size),
-        KP(src_buffer), K(src_data_size), KP(dst_buffer), K(dst_buffer_size));
   } else {
     dst_data_size = decompress_ret_size;
   }

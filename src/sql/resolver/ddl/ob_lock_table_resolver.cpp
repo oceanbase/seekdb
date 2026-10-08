@@ -29,10 +29,8 @@ int ObLockTableResolver::resolve(const ParseNode &parse_tree)
   ObLockTableStmt *lock_stmt = nullptr;
   if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session should not be null", K(ret), K(session_info_));
   } else if (T_LOCK_TABLE != parse_tree.type_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("wrong node type", K(ret), K(parse_tree.type_));
   } else if (OB_ISNULL(lock_stmt = create_stmt<ObLockTableStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("create lock stmt failed");
@@ -59,20 +57,16 @@ int ObLockTableResolver::resolve_mysql_mode_(const ParseNode &parse_tree)
       // it is unlock table stmt
     } else if (parse_tree.num_child_ != 1) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("mysql lock table should only has one parameter which is mysql lock list", K(ret));
     } else if (OB_ISNULL(parse_tree.children_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("child may be lost", K(ret));
     } else if (FALSE_IT(lock_list = parse_tree.children_[MYSQL_LOCK_LIST])) {
     } else if (lock_list->type_ != T_MYSQL_LOCK_LIST) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("wrong lock list", K(ret), K(lock_list->type_));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < lock_list->num_child_; ++i) {
         const ParseNode *lock_node = lock_list->children_[i];
         if (OB_ISNULL(lock_node)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("lock node is null");
         } else if (OB_FAIL(resolve_mysql_lock_node_(*lock_node))) {
         }
       }
@@ -94,10 +88,8 @@ int ObLockTableResolver::resolve_mysql_lock_node_(const ParseNode &lock_node)
   int ret = OB_SUCCESS;
   if (lock_node.type_ != T_MYSQL_LOCK_NODE) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("this is not a lock node", K(ret), K(lock_node.type_));
   } else if (lock_node.num_child_ != 2) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lock node should only have 2 argument", K(ret), K(lock_node.num_child_));
   } else {
     const ParseNode *table_node = lock_node.children_[LOCK_TABLE_NODE];
     const ParseNode *lock_type = lock_node.children_[LOCK_MODE];
@@ -105,11 +97,9 @@ int ObLockTableResolver::resolve_mysql_lock_node_(const ParseNode &lock_node)
     TableItem *table_item = nullptr;
     if (OB_ISNULL(table_node)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table node is null");
     } else if (OB_FAIL(ObDMLResolver::resolve_table(*table_node, table_item))) {
     } else if (table_item->is_function_table() || table_item->is_json_table()) { // invalid lock target
       ret = OB_WRONG_TABLE_NAME;
-      LOG_WARN("invalid table name", K(ret));
     } else {
       ObMySQLLockNode node;
       node.table_item_ = table_item;

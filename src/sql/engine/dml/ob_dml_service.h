@@ -361,7 +361,6 @@ int ObDASIndexDMLAdaptor<N, DMLIterator>::write_tablet(DMLIterator &iter, int64_
     (void)ObDMLService::init_dml_write_flag(*ctdef_, *rtdef_, write_flag, use_snapshot_opt_);
     if (OB_ISNULL(as)) {
       ret = common::OB_ERR_UNEXPECTED;
-      LOG_WARN("write context service is null", K(ret));
     } else if (OB_FAIL(as->acquire_write_context(rtdef_->timeout_ts_,
                                                  *tx_desc_,
                                                  *snapshot_,
@@ -444,7 +443,6 @@ int ObDASIndexDMLAdaptor<N, DMLIterator>::write_tablet_with_ignore(DMLIterator &
       (void)ObDMLService::init_dml_write_flag(*ctdef_, *rtdef_, write_flag, use_snapshot_opt_);
       if (OB_ISNULL(as)) {
         ret = common::OB_ERR_UNEXPECTED;
-        LOG_WARN("write context service is null", K(ret));
       } else if (OB_FAIL(as->acquire_write_context(rtdef_->timeout_ts_,
                                                    *tx_desc_,
                                                    *snapshot_,

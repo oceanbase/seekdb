@@ -66,7 +66,6 @@ int ObLongopsMgr::find_longops_idx_(const ObILongopsKey &key, int64_t &idx) cons
     ObILongopsStat *stat = longops_stats_.at(i);
     if (OB_ISNULL(stat)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("longops stat is null", K(ret), K(i));
     } else if (stat->get_longops_key() == key) {
       idx = i;
       break;
@@ -83,7 +82,6 @@ int ObLongopsMgr::register_longops(ObILongopsStat *stat)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stat) || OB_UNLIKELY(!stat->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KPC(stat));
   } else {
     common::ObSpinLockGuard guard(lock_);
     int64_t idx = -1;
@@ -91,7 +89,6 @@ int ObLongopsMgr::register_longops(ObILongopsStat *stat)
       if (OB_ENTRY_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("failed to find longops stat", K(ret), KPC(stat));
       }
     } else {
       ret = OB_ENTRY_EXIST;
@@ -111,7 +108,6 @@ int ObLongopsMgr::unregister_longops(ObILongopsStat *stat)
   bool need_free = false;
   if (OB_ISNULL(stat) || OB_UNLIKELY(!stat->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KPC(stat));
   } else {
     ObILongopsKey key = stat->get_longops_key();
     {
@@ -119,7 +115,6 @@ int ObLongopsMgr::unregister_longops(ObILongopsStat *stat)
       int64_t idx = -1;
       if (OB_FAIL(find_longops_idx_(key, idx))) {
         if (OB_ENTRY_NOT_EXIST != ret) {
-          LOG_WARN("failed to find longops stat", K(ret), KPC(stat));
         } else {
           need_free = true;
         }
@@ -142,17 +137,14 @@ int ObLongopsMgr::get_longops(const ObILongopsKey &key, ObLongopsValue &value)
   ObILongopsStat *stat = nullptr;
   if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(key));
   } else {
     common::ObSpinLockGuard guard(lock_);
     int64_t idx = -1;
     if (OB_FAIL(find_longops_idx_(key, idx))) {
     } else if (OB_UNLIKELY(idx >= longops_stats_.count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid longops stat index", K(ret), K(idx), K(longops_stats_.count()));
     } else if (OB_ISNULL(stat = longops_stats_.at(idx))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("longops stat is null", K(ret), K(idx));
     } else if (OB_FAIL(stat->get_longops_value(value))) {
     }
   }
@@ -177,7 +169,6 @@ int ObLongopsMgr::foreach(Callback &callback)
     ObILongopsStat *stat = longops_stats_.at(i);
     if (OB_ISNULL(stat)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("longops stat is null", K(ret), K(i));
     } else if (OB_FAIL(callback(stat->get_longops_key()))) {
     }
   }
@@ -223,10 +214,8 @@ int ObLongopsIterator::init(ObLongopsMgr *longops_mgr)
   ObKeySnapshotCallback callback(key_snapshot_);
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObLongopsIterator has been inited twice", K(ret));
   } else if (OB_ISNULL(longops_mgr)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(longops_mgr));
   } else if (OB_FAIL(longops_mgr->foreach(callback))) {
   } else {
     key_cursor_ = 0;
@@ -241,14 +230,12 @@ int ObLongopsIterator::get_next(ObLongopsValue &value)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLongopsIterator has not been inited", K(ret));
   } else {
     bool need_retry = true;
     while (OB_SUCC(ret) && need_retry && key_cursor_ < key_snapshot_.count()) {
       const ObILongopsKey &key = key_snapshot_.at(key_cursor_);
       if (OB_FAIL(longops_mgr_->get_longops(key, value))) {
         if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
-          LOG_WARN("fail to get parition stat", K(ret), K(key));
         } else {
           need_retry = true;
           ret = OB_SUCCESS;

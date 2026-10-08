@@ -33,10 +33,8 @@ int ObMergeIterStat::add(const ObMergeIterStat& other)
   int ret = OB_SUCCESS;
   if (!is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("self is invalid", K(ret), K(*this));
   } else if (!other.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("other is invalid", K(ret), K(other));
   } else {
     call_cnt_ += other.call_cnt_;
     output_row_cnt_ += other.output_row_cnt_;
@@ -55,10 +53,8 @@ int ObBlockAccessStat::add(const ObBlockAccessStat& other)
   int ret = OB_SUCCESS;
   if (!is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("self is invalid", K(ret), K(*this));
   } else if (!other.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("other is invalid", K(ret), K(other));
   } else {
     effect_read_cnt_ += other.effect_read_cnt_;
     empty_read_cnt_ += other.empty_read_cnt_;
@@ -120,7 +116,6 @@ int ObTableStoreStatIterator::open()
   int ret = OB_SUCCESS;
   if (is_opened_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObTableStoreStatIterator has been opened", K(ret));
   } else {
     cur_idx_ = 0;
     is_opened_ = true;

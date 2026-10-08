@@ -94,7 +94,6 @@ int ObTabletBindingMdsUserData::deep_copy(char *buf, const int64_t buf_len, ObIS
 
   if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len < deep_copy_size)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invaild argument", K(ret), KP(buf), K(buf_len), K(deep_copy_size));
   } else {
     ObTabletBindingMdsUserData *aux_tablet_info = new (buf) ObTabletBindingMdsUserData();
     if (OB_FAIL(aux_tablet_info->assign(*this))) {

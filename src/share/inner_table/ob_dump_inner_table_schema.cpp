@@ -182,7 +182,6 @@ int ObInnerTableSchemaDumper::get_inner_table_schema_info(ObIArray<ObLoadInnerTa
     for (int64_t i = 0; i < ARRAYSIZEOF(func) && OB_SUCC(ret); i++) {
       if (OB_ISNULL(func[i])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("pointer is null", KR(ret));
       } else if (OB_FAIL((this->*(func[i]))(schema_ptrs, info))) {
       } else if (OB_FAIL(infos.push_back(info))) {
       }
@@ -190,7 +189,6 @@ int ObInnerTableSchemaDumper::get_inner_table_schema_info(ObIArray<ObLoadInnerTa
     for (int64_t i = 0; i < ARRAYSIZEOF(func_table_column) && OB_SUCC(ret); i++) {
       if (OB_ISNULL(func_table_column[i])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("pointer is null", KR(ret));
       } else if (OB_FAIL((this->*(func_table_column[i]))(schema_ptrs, info, info_history))) {
       } else if (OB_FAIL(infos.push_back(info))) {
       } else if (OB_FAIL(infos.push_back(info_history))) {
@@ -213,7 +211,6 @@ int ObInnerTableSchemaDumper::get_table_info_(const ObIArray<schema::ObTableSche
     dml.reset();
     if (OB_ISNULL(table = schema_ptrs.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("pointer is null", KR(ret), KP(table), K(i));
     } else if (OB_FAIL(ObTableSqlService::gen_table_dml_without_check(*table,
             false, dml))) {
     } else if (is_core_table(table->get_table_id())) {
@@ -226,7 +223,6 @@ int ObInnerTableSchemaDumper::get_table_info_(const ObIArray<schema::ObTableSche
     }
   }
   if (FAILEDx(constructor.get_load_info(info))) {
-    LOG_WARN("failed to get load info", KR(ret), K(info));
   } else if (OB_FAIL(constructor_history.get_load_info(info_history))) {
   }
   return ret;
@@ -251,14 +247,12 @@ int ObInnerTableSchemaDumper::get_column_info_(const ObIArray<schema::ObTableSch
     ObTableSchema *table = nullptr;
     if (OB_ISNULL(table = schema_ptrs.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("pointer is null", KR(ret), KP(table), K(i));
     } else {
       for (ObTableSchema::const_column_iterator iter = table->column_begin();
           OB_SUCC(ret) && iter != table->column_end(); ++iter) {
         dml.reset();
         if (OB_ISNULL(iter) || OB_ISNULL(*iter)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("pointer is null", KR(ret), KP(iter));
         } else if (OB_FAIL(ObTableSqlService::gen_column_dml_without_check(**iter, dml))) {
         } else if (is_core_table(table->get_table_id()) ) {
         } else if (OB_FAIL(constructor.add_lines(table->get_table_id(), dml))) {
@@ -273,7 +267,6 @@ int ObInnerTableSchemaDumper::get_column_info_(const ObIArray<schema::ObTableSch
     }
   }
   if (FAILEDx(constructor.get_load_info(info))) {
-    LOG_WARN("failed to get load info", KR(ret), K(info));
   } else if (OB_FAIL(constructor_history.get_load_info(info_history))) {
   }
   return ret;
@@ -297,7 +290,6 @@ int ObInnerTableSchemaDumper::get_all_ddl_operation_info_(const ObIArray<schema:
     dml.reset();
     if (OB_ISNULL(table = schema_ptrs.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("pointer is null", KR(ret), KP(table), K(i));
     } else {
       ObSchemaOperationType op_type;
       if (table->is_index_table()) {
@@ -324,16 +316,12 @@ int ObInnerTableSchemaDumper::get_all_ddl_operation_info_(const ObIArray<schema:
       if (OB_SUCC(ret) && table->get_table_id() == OB_ALL_DDL_OPERATION_TID && 
           table->get_column_count() != line_end - line_begin - 1) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("__all_ddl_operation table schema is changed", KR(ret),
-            "count", line_end - line_begin - 1, K(table->get_column_count()));
       }
     }
     if (FAILEDx(constructor.add_lines(table->get_table_id(), dml))) {
-      LOG_WARN("failed to add lines", KR(ret), K(table));
     }
   }
   if (FAILEDx(constructor.get_load_info(info))) {
-    LOG_WARN("failed to get load info", KR(ret), K(info));
   }
   return ret;
 }
@@ -351,7 +339,6 @@ int ObInnerTableSchemaDumper::get_all_core_table_info_(const ObIArray<schema::Ob
     dml.reset();
     if (OB_ISNULL(table = schema_ptrs.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("pointer is null", KR(ret), KP(table), K(i));
     } else if (!is_core_table(table->get_table_id())) {
     } else if (OB_FAIL(ObTableSqlService::gen_table_dml_without_check(*table,
             false, dml, true/*is_history*/))) {
@@ -363,7 +350,6 @@ int ObInnerTableSchemaDumper::get_all_core_table_info_(const ObIArray<schema::Ob
         dml.reset();
         if (OB_ISNULL(iter) || OB_ISNULL(*iter)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("pointer is null", KR(ret), KP(iter));
         } else if (OB_FAIL(ObTableSqlService::gen_column_dml_without_check(**iter,
                 dml, true/*is_history*/))) {
         } else if (OB_FAIL(dml.add_column("is_deleted", 0))) {
@@ -373,7 +359,6 @@ int ObInnerTableSchemaDumper::get_all_core_table_info_(const ObIArray<schema::Ob
     }
   }
   if (FAILEDx(constructor.add_constructor(table_constructor))) {
-    LOG_WARN("faled to add constructor", KR(ret));
   } else if (OB_FAIL(constructor.add_constructor(column_constructor))) {
   } else if (OB_FAIL(constructor.get_load_info(info))) {
   }
@@ -387,7 +372,6 @@ int ObLoadInnerTableSchemaInfoConstructor::add_line(const ObString &line,
   ObString tmp_line;
 
   if (FAILEDx(ob_write_string(allocator_, line, tmp_line, true/*c_style*/))) {
-    LOG_WARN("failed to write string", KR(ret), K(line));
   } else if (OB_FAIL(rows_.push_back(tmp_line))) {
   } else if (OB_FAIL(table_ids_.push_back(table_id))) {
   }
@@ -414,15 +398,12 @@ int ObLoadInnerTableSchemaInfoConstructor::get_load_info(ObLoadInnerTableSchemaI
   ObString header;
   if (!is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("constructor is invalid", KR(ret), K(*this));
   } else if (OB_FAIL(ob_write_string(allocator_, table_name_, table_name, true/*c_style*/))) {
   } else if (OB_FAIL(ob_write_string(allocator_, header_, header, true/*c_style*/))) {
   } else if (OB_ISNULL(table_id_buf = static_cast<uint64_t *>(allocator_.alloc(sizeof(table_id_buf[0]) * table_ids_.count())))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc table_ids_ memory", KR(ret), K(table_ids_.count()));
   } else if (OB_ISNULL(row_buf = static_cast<const char **>(allocator_.alloc(sizeof(row_buf[0]) * rows_.count())))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc rows_ memory", KR(ret), K(rows_.count()));
   } else {
     for (int64_t i = 0; i < table_ids_.count(); i++) {
       table_id_buf[i] = table_ids_[i];
@@ -494,7 +475,6 @@ int ObCoreTableLoadInfoConstructor::add_lines(const uint64_t table_id, ObDMLSqlS
         }
       }
       if (FAILEDx(add_line(line.string(), table_id))) {
-        LOG_WARN("failed to add line", KR(ret), K(line), K(table_id));
       }
     }
   }
@@ -513,7 +493,6 @@ int ObCoreTableLoadInfoConstructor::DumpCoreTableStoreCell::store_cell(
   int ret = OB_SUCCESS;
   if (!src.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(src));
   } else if (OB_FAIL(store_string(src.name_, dest.name_))) {
   } else if (OB_FAIL(store_string(src.value_, dest.value_))) {
   } else {
@@ -534,7 +513,6 @@ int ObMergeLoadInfoConstructor::add_constructor(ObLoadInnerTableSchemaInfoConstr
       || &constructor.get_allocator() != &allocator_ || (!header_.empty() && constructor.get_header() != header_) 
       || !is_valid() || !constructor.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("two construct is not same, cannot merge", KR(ret), KPC(this), K(constructor));
   } else if (OB_FAIL(rows_.push_back(constructor.get_rows()))) {
   } else if (OB_FAIL(table_ids_.push_back(constructor.get_table_ids()))) {
   } else {

@@ -48,7 +48,6 @@ int ObExprSign::calc_result_type1(ObExprResType &type,
   const ObSQLSessionInfo *session = type_ctx.get_session();
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is NULL", K(ret));
   } else {
     if (ob_is_numeric_type(text.get_type())) {
       text.set_calc_type(text.get_type());
@@ -120,7 +119,6 @@ int calc_sign_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected arg_type", K(ret), K(arg_type));
         break;
       }
     }
@@ -135,7 +133,6 @@ int calc_sign_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
       res_datum.set_int(res_int);
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected res_type", K(ret), K(res_type));
     }
   }
   return ret;

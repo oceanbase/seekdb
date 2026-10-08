@@ -40,7 +40,8 @@ int ObDDLService::fork_single_table_in_trans_(const ObTableSchema &src_table_sch
     ObSchemaGetterGuard &schema_guard, ObDDLSQLTransaction &trans,
     ObIAllocator &allocator, ObDDLTaskRecord &task_record,
     common::hash::ObHashMap<uint64_t, uint64_t> *table_id_map,
-    ObSArray<ObTableSchema> *out_table_schemas) {
+    ObSArray<ObTableSchema> *out_table_schemas,
+    const bool preserve_constraint_names) {
   int ret = OB_SUCCESS;
   ObSchemaService *schema_service = schema_service_->get_schema_service();
   ObArenaAllocator inner_allocator(ObModIds::OB_RS_PARTITION_TABLE_TEMP);
@@ -50,7 +51,6 @@ int ObDDLService::fork_single_table_in_trans_(const ObTableSchema &src_table_sch
 
   if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("schema_service must not null", K(ret));
   } else {
     // Rebuild table schema with new id for fork table.
     if (OB_FAIL(rebuild_table_schema_with_new_id(
@@ -58,7 +58,8 @@ int ObDDLService::fork_single_table_in_trans_(const ObTableSchema &src_table_sch
             session_id, USER_TABLE, *schema_service, table_schemas,
             inner_allocator,
             OB_INVALID_ID, // define_user_id
-            false /* delete_unused_columns */))) {
+            false /* delete_unused_columns */,
+            preserve_constraint_names))) {
     } else if (OB_FAIL(
                    generate_object_id_for_partition_schemas(table_schemas))) {
     } else if (OB_FAIL(generate_tables_tablet_id(table_schemas))) {
@@ -83,7 +84,6 @@ int ObDDLService::fork_single_table_in_trans_(const ObTableSchema &src_table_sch
           if (OB_FAIL(schema_guard.get_table_schema( src_index_id, src_index_schema))) {
           } else if (OB_ISNULL(src_index_schema)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("src index schema is null", KR(ret), K(src_index_id));
           } else {
             ObString src_index_name;
             if (OB_FAIL(ObTableSchema::get_index_name(inner_allocator,
@@ -187,10 +187,8 @@ int ObDDLService::create_tables_for_fork_(
   if (OB_FAIL(check_inner_stat())) {
   } else if (table_schemas.count() < 1) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table_schemas have no element", K(ret));
   } else if (!fork_table_info.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("fork table info is invalid", K(ret), K(fork_table_info));
   } else {
     ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
     
@@ -220,7 +218,6 @@ int ObDDLService::create_tables_for_fork_(
     if (OB_SUCC(ret) && THIS_WORKER.is_timeout_ts_valid() &&
         THIS_WORKER.is_timeout()) {
       ret = OB_TIMEOUT;
-      LOG_WARN("already timeout", KR(ret));
     }
 
     if (OB_SUCC(ret)) {
@@ -246,7 +243,6 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
   if (OB_FAIL(check_inner_stat())) {
   } else if (!fork_table_arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(fork_table_arg), K(ret));
   } else {
     LOG_INFO("fork table request accepted", "src_db",
              fork_table_arg.src_database_name_, "src_table",
@@ -282,19 +278,15 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
         LOG_USER_ERROR(OB_ERR_BAD_DATABASE,
                        fork_table_arg.src_database_name_.length(),
                        fork_table_arg.src_database_name_.ptr());
-        LOG_WARN("source database not exist", K(fork_table_arg), K(ret));
       } else if (OB_FAIL(schema_guard.check_database_in_recyclebin(src_db_schema->get_database_id(),
                      is_db_in_recyclebin))) {
       } else if (is_db_in_recyclebin || src_db_schema->is_in_recyclebin()) {
         ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
-        LOG_WARN("can not fork table from database in recyclebin", K(ret),
-                 K(*src_db_schema), K(is_db_in_recyclebin));
       } else if (OB_FAIL(schema_guard.get_table_schema( fork_table_arg.src_database_name_,
                      fork_table_arg.src_table_name_, false /* is_index */,
                      src_table_schema))) {
       } else if (OB_ISNULL(src_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
-        LOG_WARN("source table not exist", K(ret), K(fork_table_arg));
       } else if (OB_FAIL(check_fork_table_supported(
                      *src_table_schema, schema_guard, &fork_table_arg))) {
       }
@@ -309,19 +301,12 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
         LOG_USER_ERROR(OB_ERR_BAD_DATABASE,
                        fork_table_arg.dst_database_name_.length(),
                        fork_table_arg.dst_database_name_.ptr());
-        LOG_WARN("destination database not exist", K(fork_table_arg), K(ret));
       } else if (dst_db_schema->is_in_recyclebin()) {
         ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
-        LOG_WARN("can not create table in recyclebin", K(ret),
-                 K(*dst_db_schema));
       } else if (OB_FAIL(schema_guard.get_mock_fk_parent_table_schema_with_name(dst_db_schema->get_database_id(),
                      fork_table_arg.dst_table_name_, dst_mock_parent_schema))) {
       } else if (OB_NOT_NULL(dst_mock_parent_schema)) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("fork table to mock parent table name is not supported",
-                 KR(ret), "database_id",
-                 dst_db_schema->get_database_id(), "table_name",
-                 fork_table_arg.dst_table_name_);
         LOG_USER_ERROR(OB_NOT_SUPPORTED,
                        "fork table to mock parent table name is");
       } else if (OB_FAIL(schema_guard.get_table_schema( fork_table_arg.dst_database_name_,
@@ -332,7 +317,6 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
         LOG_USER_ERROR(OB_ERR_TABLE_EXIST,
                        fork_table_arg.dst_table_name_.length(),
                        fork_table_arg.dst_table_name_.ptr());
-        LOG_WARN("destination table already exists", K(ret), K(fork_table_arg));
       }
     }
 
@@ -354,13 +338,11 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
           const int64_t lock_timeout_us = GCONF.internal_sql_execute_timeout;
           if (OB_ISNULL(iconn)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("inner connection is null", KR(ret));
           } else if (OB_FAIL(transaction::tablelock::ObInnerConnectionLockUtil::lock_table(
                          src_table_schema->get_table_id(),
                          transaction::tablelock::SHARE, lock_timeout_us, iconn))) {
           } else if (OB_ISNULL(rootserver_local_runtime())) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("rootserver local runtime is null", KR(ret));
           } else if (OB_FAIL(rootserver_local_runtime()->wait_until_change_stream_refreshed(
                          get_sql_proxy(), lock_timeout_us))) {
           } else {
@@ -376,7 +358,6 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
                      fork_snapshot_version))) {
       } else if (fork_snapshot_version <= 0) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid snapshot version", K(ret), K(fork_snapshot_version));
       } else {
         LOG_INFO("fork table snapshot acquired",
                  K(fork_snapshot_version), "src_table_id",

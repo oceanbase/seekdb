@@ -105,7 +105,6 @@ int ObHashUnionOp::inner_get_next_row()
   clear_evaluated_flag();
   if (OB_ISNULL(cur_child_op_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("cur_child_op is null", K(ret), K(cur_child_op_));
   } else if (first_get_left_) {
     if (OB_FAIL(ObHashSetOp::init_hash_partition_infras())) {
     }
@@ -139,7 +138,6 @@ int ObHashUnionOp::inner_get_next_row()
       } else if (OB_FAIL(hp_infras_.start_round())) {
       } else if (OB_FAIL(hp_infras_.get_next_partition(InputSide::LEFT))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("failed to create dumped partitions", K(ret));
         }
       } else if (OB_FAIL(hp_infras_.open_cur_part(InputSide::LEFT))) {
       } else if (OB_FAIL(hp_infras_.resize(
@@ -172,7 +170,6 @@ int ObHashUnionOp::inner_get_next_batch(const int64_t max_row_cnt)
   clear_evaluated_flag();
   if (OB_ISNULL(cur_child_op_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("cur_child_op is null", K(ret));
   } else if (first_get_left_) {
     if (OB_FAIL(init_hash_partition_infras_for_batch())) {
     }
@@ -203,7 +200,6 @@ int ObHashUnionOp::inner_get_next_batch(const int64_t max_row_cnt)
         ret = OB_SUCCESS;
         end_to_process = true;
       } else {
-        LOG_WARN("failed to get batch from infra", K(ret));
       }
     }
     if (OB_SUCC(ret) && end_to_process) {
@@ -219,7 +215,6 @@ int ObHashUnionOp::inner_get_next_batch(const int64_t max_row_cnt)
       } else if (OB_FAIL(hp_infras_.start_round())) {
       } else if (OB_FAIL(hp_infras_.get_next_partition(InputSide::LEFT))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("failed to get next dumped partition", K(ret));
         }
       } else if (OB_FAIL(hp_infras_.open_cur_part(InputSide::LEFT))) {
       } else if (OB_FAIL(hp_infras_.resize(hp_infras_.get_cur_part_row_cnt(InputSide::LEFT)))) {
@@ -230,16 +225,13 @@ int ObHashUnionOp::inner_get_next_batch(const int64_t max_row_cnt)
                                                                         read_rows,
                                                                         nullptr,
                                                                         output_vec))) {
-      LOG_WARN("failed to insert batch for dump", K(ret));
     } else if (!has_got_part_ && OB_FAIL(hp_infras_.insert_row_for_batch(cur_child_op_->get_spec().output_,
                                                                          hash_values_for_batch_,
                                                                          read_rows,
                                                                          child_brs->skip_,
                                                                          output_vec))) {
-      LOG_WARN("failed to insert batch for no dump", K(ret));
     } else if (OB_ISNULL(output_vec)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to get output vec", K(ret));
     } else {
       brs_.size_ = read_rows;
       brs_.skip_->deep_copy(*output_vec, read_rows);

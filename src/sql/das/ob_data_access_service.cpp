@@ -69,7 +69,6 @@ OB_NOINLINE int ObDataAccessService::execute_local_das_task(
   if (OB_FAIL(task_ops.get_aggregated_tasks(task_list))) {
   } else if (task_list.empty()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected empty task_list", K(ret));
   } else if (OB_FAIL(do_local_das_task(task_list))) {
   }
   return ret;
@@ -206,7 +205,6 @@ int ObDataAccessService::rescan_das_task(ObDASRef &das_ref, ObDASScanOp &scan_op
   } else if (OB_FAIL(das_task_wrapper.push_back_task(&scan_op))) {
   } else if (OB_FAIL(execute_local_das_task(das_task_wrapper))) {
     scan_op.errcode_ = ret;
-    LOG_WARN("execute local das task failed", K(ret));
   }
   OB_ASSERT(scan_op.errcode_ == ret);
   if (OB_FAIL(ret) && GCONF._enable_partition_level_retry && scan_op.can_part_retry()) {
@@ -222,7 +220,6 @@ int ObDataAccessService::do_local_das_task(ObIArray<ObIDASTaskOp*> &task_list) {
 
   for (int64_t i = 0; OB_SUCC(ret) && i < task_list.count(); i++) {
     if (OB_FAIL(task_list.at(i)->start_das_task())) {
-      LOG_WARN("start local das task failed", K(ret));
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(task_list.at(i)->state_advance())) {
       }
@@ -248,7 +245,6 @@ int ObDataAccessService::push_parallel_task(ObDASRef &das_ref, ObDasAggregatedTa
     TRANS_LOG(ERROR, "query runtime environment is null", KR(ret));
   } else if (OB_ISNULL(task = ObDASParallelTaskFactory::alloc(das_ref.get_das_ref_count_ctx()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc memory failed", K(ret));
   } else if (OB_FAIL(task->init(&agg_task, timeout_ts))) {
   } else {
     
@@ -267,7 +263,6 @@ int ObDataAccessService::parallel_execute_das_task(common::ObIArray<ObIDASTaskOp
   int ret = OB_SUCCESS;
   if (task_list.empty()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected empty task_list", K(ret));
   } else if (OB_FAIL(do_local_das_task(task_list))) {
   }
   return ret;
@@ -281,7 +276,6 @@ int ObDataAccessService::parallel_submit_das_task(ObDASRef &das_ref, ObDasAggreg
   } else if (OB_FAIL(push_parallel_task(das_ref, agg_task))) {
     // NOTICE: if error occur, must release the reference count
     das_ref.get_das_ref_count_ctx().inc_concurrency_limit();
-    LOG_WARN("fail to push parallel task", K(ret));
   }
   return ret;
 }

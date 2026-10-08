@@ -26,17 +26,14 @@ int ObLogSubPlanScan::generate_access_exprs()
   const ObDMLStmt *stmt = NULL;
   if (OB_ISNULL(get_plan()) || OB_ISNULL(stmt = get_plan()->get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(get_plan()), K(stmt), K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_column_size(); i++) {
       const ColumnItem *col_item = stmt->get_column_item(i);
       if (OB_ISNULL(col_item) || OB_ISNULL(col_item->expr_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(col_item), K(ret));
       } else if (col_item->table_id_ == subquery_id_ &&
                  col_item->expr_->is_explicited_reference() &&
                  OB_FAIL(access_exprs_.push_back(col_item->expr_))) {
-        LOG_WARN("failed to push back expr", K(ret));
       } else { /*do nothing*/ }
     }
   }
@@ -61,10 +58,8 @@ int ObLogSubPlanScan::allocate_expr_post(ObAllocExprContext &ctx)
     ObRawExpr *expr = NULL;
     if (OB_ISNULL(expr = access_exprs_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(mark_expr_produced(expr, branch_id_, id_, ctx))) {
     } else if (!is_plan_root() && OB_FAIL(output_exprs_.push_back(expr))) {
-      LOG_WARN("failed to push back expr", K(ret));
     } else { /*do nothing*/ }
   }
   // check if we can produce some more exprs, such as 1 + 'c1' after we have produced 'c1'
@@ -107,7 +102,6 @@ int ObLogSubPlanScan::do_re_est_cost(EstimateCostInfo &param, double &card, doub
   if (OB_ISNULL(child = get_child(ObLogicalOperator::first_child)) ||
       OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(child), K(ret));
   } else if (OB_FALSE_IT(get_plan()->get_selectivity_ctx().init_op_ctx(&child->get_output_equal_sets(), child->get_card()))) {
   } else if (OB_FAIL(ObOptSelectivity::calculate_selectivity(get_plan()->get_basic_table_metas(),
                                                             get_plan()->get_selectivity_ctx(),

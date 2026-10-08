@@ -41,10 +41,8 @@ int ObFTParserJsonProps::init()
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("Props not init", K(ret));
   } else if (OB_ISNULL(root_ = OB_NEWx(ObJsonObject, &allocator_, &allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to new ObJsonObject", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -63,13 +61,10 @@ int ObFTParserJsonProps::config_set_min_token_size(const int64_t size)
   ObJsonInt *min_token_size = nullptr;
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Props not init", K(ret));
   } else if (OB_ISNULL(min_token_size = OB_NEWx(ObJsonInt, &allocator_, size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Fail to new ObJsonInt", K(ret));
   } else if (!is_valid_min_token_size(size)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", KCSTRING(ObFTSLiteral::MIN_TOKEN_SIZE_SCOPE_STR), K(ret));
   } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_MIN_TOKEN_SIZE),
                                        min_token_size))) {
   } else {
@@ -88,13 +83,10 @@ int ObFTParserJsonProps::config_set_max_token_size(const int64_t size)
   ObJsonInt *max_token_size = nullptr;
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Props not init", K(ret));
   } else if (OB_ISNULL(max_token_size = OB_NEWx(ObJsonInt, &allocator_, size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Fail to new ObJsonInt", K(ret));
   } else if (!is_valid_max_token_size(size)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", KCSTRING(ObFTSLiteral::MAX_TOKEN_SIZE_SCOPE_STR), K(ret));
   } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_MAX_TOKEN_SIZE),
                                        max_token_size))) {
   } else {
@@ -113,13 +105,10 @@ int ObFTParserJsonProps::config_set_ngram_token_size(const int64_t size)
   ObJsonInt *ngram_token_size = nullptr;
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Props not init", K(ret));
   } else if (OB_ISNULL(ngram_token_size = OB_NEWx(ObJsonInt, &allocator_, size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Fail to new ObJsonInt", K(ret));
   } else if (!is_valid_ngram_token_size(size)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", KCSTRING(ObFTSLiteral::NGRAM_TOKEN_SIZE_SCOPE_STR), K(ret));
   } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_NGRAM_TOKEN_SIZE),
                                        ngram_token_size))) {
   } else {
@@ -139,10 +128,8 @@ int ObFTParserJsonProps::config_set_dict_table(const ObString &str)
   ObJsonString *dict_table = nullptr;
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Props not init", K(ret));
   } else if (OB_ISNULL(dict_table = OB_NEWx(ObJsonString, &allocator_, str))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Fail to new ObJsonString", K(ret));
   } else if (OB_FAIL(
                  root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_DICT_TABLE), dict_table))) {
   } else {
@@ -161,10 +148,8 @@ int ObFTParserJsonProps::config_set_stopword_table(const ObString &str)
   ObJsonString *stopword_table = nullptr;
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Props not init", K(ret));
   } else if (OB_ISNULL(stopword_table = OB_NEWx(ObJsonString, &allocator_, str))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Fail to new ObJsonString", K(ret));
   } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE),
                                        stopword_table))) {
   } else {
@@ -183,10 +168,8 @@ int ObFTParserJsonProps::config_set_quantifier_table(const ObString &str)
   ObJsonString *quantifier_table = nullptr;
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Props not init", K(ret));
   } else if (OB_ISNULL(quantifier_table = OB_NEWx(ObJsonString, &allocator_, str))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Fail to new ObJsonString", K(ret));
   } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE),
                                        quantifier_table))) {
   } else {
@@ -205,10 +188,8 @@ int ObFTParserJsonProps::config_set_ik_mode(const ObString &ik_mode)
   ObJsonString *ik_mode_node = nullptr;
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Props not init", K(ret));
   } else if (OB_ISNULL(ik_mode_node = OB_NEWx(ObJsonString, &allocator_, ik_mode))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Fail to new json string", K(ret));
   } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_IK_MODE),
                                        ik_mode_node))) {
   }
@@ -226,13 +207,10 @@ int ObFTParserJsonProps::config_set_min_ngram_token_size(const int64_t size)
   ObJsonInt *ngram_token_size = nullptr;
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Props not init", K(ret));
   } else if (OB_ISNULL(ngram_token_size = OB_NEWx(ObJsonInt, &allocator_, size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Fail to new ObJsonInt", K(ret));
   } else if (!is_valid_min_ngram_token_size(size)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", KCSTRING(ObFTSLiteral::MIN_NGRAM_SIZE_SCOPE_STR), K(ret));
   } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_MIN_NGRAM_SIZE),
                                        ngram_token_size))) {
   } else {
@@ -251,13 +229,10 @@ int ObFTParserJsonProps::config_set_max_ngram_token_size(const int64_t size)
   ObJsonInt *ngram_token_size = nullptr;
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Props not init", K(ret));
   } else if (OB_ISNULL(ngram_token_size = OB_NEWx(ObJsonInt, &allocator_, size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Fail to new ObJsonInt", K(ret));
   } else if (!is_valid_max_ngram_token_size(size)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", KCSTRING(ObFTSLiteral::MAX_NGRAM_SIZE_SCOPE_STR), K(ret));
   } else if (OB_FAIL(root_->object_add(ObString(ObFTSLiteral::CONFIG_NAME_MAX_NGRAM_SIZE),
                                        ngram_token_size))) {
   } else {
@@ -277,7 +252,6 @@ int ObFTParserJsonProps::parse_from_valid_str(const ObString &str)
 
   if (!IS_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Props not init", K(ret));
   } else if (str.empty()) {
     // do nothing and use default {}
   } else if (OB_FAIL(ObJsonParser::get_tree(&allocator_, str, root))) {
@@ -322,13 +296,10 @@ int ObFTParserJsonProps::config_get_min_token_size(int64_t &size) const
             root_->get_object_value(ObString(ObFTSLiteral::CONFIG_NAME_MIN_TOKEN_SIZE), value))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
       } else {
-        LOG_WARN("Fail to get min_token_size", K(ret));
       }
     } else if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("value is null", K(ret));
     } else if (value->json_type() != ObJsonNodeType::J_INT) {
-      LOG_WARN("value is not int", K(ret));
     } else {
       size = value->get_int();
     }
@@ -347,13 +318,10 @@ int ObFTParserJsonProps::config_get_max_token_size(int64_t &size) const
             root_->get_object_value(ObString(ObFTSLiteral::CONFIG_NAME_MAX_TOKEN_SIZE), value))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
       } else {
-        LOG_WARN("Fail to get max_token_size", K(ret));
       }
     } else if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("value is null", K(ret));
     } else if (value->json_type() != ObJsonNodeType::J_INT) {
-      LOG_WARN("value is not int", K(ret));
     } else {
       size = value->get_int();
     }
@@ -372,13 +340,10 @@ int ObFTParserJsonProps::config_get_ngram_token_size(int64_t &size) const
             root_->get_object_value(ObString(ObFTSLiteral::CONFIG_NAME_NGRAM_TOKEN_SIZE), value))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
       } else {
-        LOG_WARN("Fail to get dict_table", K(ret));
       }
     } else if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("value is null", K(ret));
     } else if (value->json_type() != ObJsonNodeType::J_INT) {
-      LOG_WARN("value is not int", K(ret));
     } else {
       size = value->get_int();
     }
@@ -396,13 +361,10 @@ int ObFTParserJsonProps::config_get_dict_table(ObString &str) const
     if (OB_FAIL(root_->get_object_value(ObString(ObFTSLiteral::CONFIG_NAME_DICT_TABLE), value))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
       } else {
-        LOG_WARN("Fail to get dict_table", K(ret));
       }
     } else if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("value is null", K(ret));
     } else if (value->json_type() != ObJsonNodeType::J_STRING) {
-      LOG_WARN("value is not string", K(ret));
     } else {
       ObJsonString *json_str = static_cast<ObJsonString *>(value);
       str = json_str->get_str();
@@ -422,13 +384,10 @@ int ObFTParserJsonProps::config_get_stopword_table(ObString &str) const
             root_->get_object_value(ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE), value))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
       } else {
-        LOG_WARN("Fail to get stopword_table", K(ret));
       }
     } else if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("value is null", K(ret));
     } else if (value->json_type() != ObJsonNodeType::J_STRING) {
-      LOG_WARN("value is not string", K(ret));
     } else {
       ObJsonString *json_str = static_cast<ObJsonString *>(value);
       str = json_str->get_str();
@@ -448,13 +407,10 @@ int ObFTParserJsonProps::config_get_quantifier_table(ObString &str) const
             root_->get_object_value(ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE), value))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
       } else {
-        LOG_WARN("Fail to get quantifier_table", K(ret));
       }
     } else if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("value is null", K(ret));
     } else if (value->json_type() != ObJsonNodeType::J_STRING) {
-      LOG_WARN("value is not string", K(ret));
     } else {
       ObJsonString *json_str = static_cast<ObJsonString *>(value);
       str = json_str->get_str();
@@ -473,14 +429,11 @@ int ObFTParserJsonProps::config_get_ik_mode(ObString &ik_mode) const
     if (OB_FAIL(root_->get_object_value(ObString(ObFTSLiteral::CONFIG_NAME_IK_MODE), value))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
       } else {
-        LOG_WARN("Fail to get ik mode", K(ret));
       }
     } else if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("value is null", K(ret));
     } else if (value->json_type() != ObJsonNodeType::J_STRING) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("value is not string", K(ret));
     } else {
       ObJsonString *json_str = static_cast<ObJsonString *>(value);
       ik_mode = json_str->get_str();
@@ -500,13 +453,10 @@ int ObFTParserJsonProps::config_get_min_ngram_token_size(int64_t &size) const
             root_->get_object_value(ObString(ObFTSLiteral::CONFIG_NAME_MIN_NGRAM_SIZE), value))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
       } else {
-        LOG_WARN("Fail to get min_ngram_token_size", K(ret));
       }
     } else if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("value is null", K(ret));
     } else if (value->json_type() != ObJsonNodeType::J_INT) {
-      LOG_WARN("value is not int", K(ret));
     } else {
       size = value->get_int();
     }
@@ -525,13 +475,10 @@ int ObFTParserJsonProps::config_get_max_ngram_token_size(int64_t &size) const
             root_->get_object_value(ObString(ObFTSLiteral::CONFIG_NAME_MAX_NGRAM_SIZE), value))) {
       if (OB_SEARCH_NOT_FOUND == ret) {
       } else {
-        LOG_WARN("Fail to get min_ngram_token_size", K(ret));
       }
     } else if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("value is null", K(ret));
     } else if (value->json_type() != ObJsonNodeType::J_INT) {
-      LOG_WARN("value is not int", K(ret));
     } else {
       size = value->get_int();
     }
@@ -578,7 +525,6 @@ int ObFTParserJsonProps::rebuild_props_for_ddl(const ObString &parser_name,
     ret = OB_NOT_INIT;
   } else if (parser_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("parser_name is empty", K(ret));
   } else if (OB_FAIL(parser.parse_from_str(parser_name.ptr(), parser_name.length()))) {
   } else {
     if (parser.is_ik()) {
@@ -598,7 +544,6 @@ int ObFTParserJsonProps::rebuild_props_for_ddl(const ObString &parser_name,
       }
     } else {
       ret = OB_FUNCTION_NOT_DEFINED;
-      LOG_WARN("fulltext parser is not supported", K(ret), K(parser_name));
     }
   }
 
@@ -620,7 +565,6 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
   if (OB_FAIL(check_unsupported_config(supported, ARRAYSIZEOF(supported), has_unsupported))) {
   } else if (has_unsupported) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Unsupported config", K(ret));
     if (log_to_user) {
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "ik config");
     }
@@ -672,7 +616,6 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
           if (OB_FAIL(config_set_ik_mode(ObFTSLiteral::FT_IK_MODE_SMART))) {
           }
         } else {
-          LOG_WARN("Fail to get ik mode", K(ret));
           if (log_to_user) {
             LOG_USER_ERROR(OB_INVALID_ARGUMENT, ObFTSLiteral::IK_MODE_SCOPE_STR);
           }
@@ -684,7 +627,6 @@ int ObFTParserJsonProps::ik_rebuild_props_for_ddl(const bool log_to_user)
           // okay
         } else {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("Invalid ik mode", K(ret), K(ik_mode));
           if (log_to_user) {
             LOG_USER_ERROR(OB_INVALID_ARGUMENT, ObFTSLiteral::IK_MODE_SCOPE_STR);
           }
@@ -707,7 +649,6 @@ int ObFTParserJsonProps::ngram_rebuild_props_for_ddl(const bool log_to_user)
   if (OB_FAIL(check_unsupported_config(supported, ARRAYSIZEOF(supported), has_unsupported))) {
   } else if (has_unsupported) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Unsupported config", K(ret));
     if (log_to_user) {
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "ngram config");
     }
@@ -725,7 +666,6 @@ int ObFTParserJsonProps::ngram_rebuild_props_for_ddl(const bool log_to_user)
       }
     } else if (!is_valid_ngram_token_size(ngram_token_size)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Invalid ngram token size", K(ret), K(ngram_token_size));
       if (log_to_user) {
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, ObFTSLiteral::NGRAM_TOKEN_SIZE_SCOPE_STR);
       }
@@ -748,7 +688,6 @@ int ObFTParserJsonProps::space_rebuild_props_for_ddl(const bool log_to_user)
   if (OB_FAIL(check_unsupported_config(supported, ARRAYSIZEOF(supported), has_unsupported))) {
   } else if (has_unsupported) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Unsupported config", K(ret));
     if (log_to_user) {
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "space config");
     }
@@ -767,7 +706,6 @@ int ObFTParserJsonProps::space_rebuild_props_for_ddl(const bool log_to_user)
       }
     } else if (!is_valid_min_token_size(min_token_size)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Invalid min token size", K(ret), K(min_token_size));
       if (log_to_user) {
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, ObFTSLiteral::MIN_TOKEN_SIZE_SCOPE_STR);
       }
@@ -782,13 +720,11 @@ int ObFTParserJsonProps::space_rebuild_props_for_ddl(const bool log_to_user)
       }
     } else if (!is_valid_max_token_size(max_token_size)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Invalid max token size", K(ret), K(max_token_size));
       if (log_to_user) {
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, ObFTSLiteral::MAX_TOKEN_SIZE_SCOPE_STR);
       }
     } else if (min_token_size > max_token_size) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Invalid token size", K(ret), K(min_token_size), K(max_token_size));
       if (log_to_user) {
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, ObFTSLiteral::MIN_MAX_TOKEN_SIZE_SCOPE_STR);
       }
@@ -810,7 +746,6 @@ int ObFTParserJsonProps::beng_rebuild_props_for_ddl(const bool log_to_user)
   if (OB_FAIL(check_unsupported_config(supported, ARRAYSIZEOF(supported), has_unsupported))) {
   } else if (has_unsupported) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Unsupported config", K(ret));
     if (log_to_user) {
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "beng config");
     }
@@ -830,7 +765,6 @@ int ObFTParserJsonProps::beng_rebuild_props_for_ddl(const bool log_to_user)
       }
     } else if (!is_valid_min_token_size(min_token_size)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Invalid min token size", K(ret), K(min_token_size));
       if (log_to_user) {
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, ObFTSLiteral::MIN_TOKEN_SIZE_SCOPE_STR);
       }
@@ -846,7 +780,6 @@ int ObFTParserJsonProps::beng_rebuild_props_for_ddl(const bool log_to_user)
       }
     } else if (!is_valid_max_token_size(max_token_size)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Invalid max token size", K(ret), K(max_token_size));
       if (log_to_user) {
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, ObFTSLiteral::MAX_TOKEN_SIZE_SCOPE_STR);
       }
@@ -856,7 +789,6 @@ int ObFTParserJsonProps::beng_rebuild_props_for_ddl(const bool log_to_user)
       // do nothing
     } else if (min_token_size > max_token_size) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Invalid token size", K(ret), K(min_token_size), K(max_token_size));
       if (log_to_user) {
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, ObFTSLiteral::MIN_MAX_TOKEN_SIZE_SCOPE_STR);
       }
@@ -878,7 +810,6 @@ int ObFTParserJsonProps::ngram2_rebuild_props_for_ddl(const bool log_to_user)
   if (OB_FAIL(check_unsupported_config(supported, ARRAYSIZEOF(supported), has_unsupported))) {
   } else if (has_unsupported) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Unsupported config", K(ret));
     if (log_to_user) {
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "ngram2 config");
     }
@@ -898,7 +829,6 @@ int ObFTParserJsonProps::ngram2_rebuild_props_for_ddl(const bool log_to_user)
       }
     } else if (!is_valid_min_ngram_token_size(min_ngram_size)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Invalid min ngram token size", K(ret), K(min_ngram_size));
       if (log_to_user) {
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, ObFTSLiteral::MIN_NGRAM_SIZE_SCOPE_STR);
       }
@@ -914,14 +844,12 @@ int ObFTParserJsonProps::ngram2_rebuild_props_for_ddl(const bool log_to_user)
       }
     } else if (!is_valid_max_ngram_token_size(max_ngram_size)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Invalid max ngram token size", K(ret), K(max_ngram_size));
     }
 
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (min_ngram_size > max_ngram_size) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Invalid token size", K(ret), K(min_ngram_size), K(max_ngram_size));
       if (log_to_user) {
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, ObFTSLiteral::NGRAM_MIN_MAX_TOKEN_SIZE_SCOPE_STR);
       }
@@ -964,10 +892,8 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
 
   if (OB_UNLIKELY(!properties.is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
   } else if (properties.is_empty()) {
     // not output properties
   } else {
@@ -981,7 +907,6 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
       if (OB_SEARCH_NOT_FOUND == ret) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("Fail to get min_token_size", K(ret));
       }
     } else {
       __FT_PARSER_PROPERTY_SHOW_COMMA(need_comma);
@@ -991,7 +916,6 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
                                   "%s=%ld",
                                   ObFTSLiteral::CONFIG_NAME_MIN_TOKEN_SIZE,
                                   min_token_size))) {
-        LOG_WARN("fail to printf min_token_size", K(ret), K(buf_len), K(pos), K(min_token_size));
       }
     }
 
@@ -1000,7 +924,6 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
       if (OB_SEARCH_NOT_FOUND == ret) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("Fail to get max_token_size", K(ret));
       }
     } else {
       __FT_PARSER_PROPERTY_SHOW_COMMA(need_comma);
@@ -1010,7 +933,6 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
                                   "%s=%ld",
                                   ObFTSLiteral::CONFIG_NAME_MAX_TOKEN_SIZE,
                                   max_token_size))) {
-        LOG_WARN("fail to printf max_token_size", K(ret), K(buf_len), K(pos), K(max_token_size));
       }
     }
 
@@ -1019,7 +941,6 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
       if (OB_SEARCH_NOT_FOUND == ret) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("Fail to get ik mode", K(ret));
       }
     } else {
       __FT_PARSER_PROPERTY_SHOW_COMMA(need_comma);
@@ -1029,7 +950,6 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
                                   "%s=\"%s\"",
                                   ObFTSLiteral::CONFIG_NAME_IK_MODE,
                                   ik_mode.ptr()))) {
-        LOG_WARN("fail to printf ik mode", K(ret), K(buf_len), K(pos), K(ik_mode));
       }
     }
 
@@ -1038,7 +958,6 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
       if (OB_SEARCH_NOT_FOUND == ret) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("Fail to get ngram_token_size", K(ret));
       }
     } else {
       __FT_PARSER_PROPERTY_SHOW_COMMA(need_comma);
@@ -1048,11 +967,6 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
                                   "%s=%ld",
                                   ObFTSLiteral::CONFIG_NAME_NGRAM_TOKEN_SIZE,
                                   ngram_token_size))) {
-        LOG_WARN("fail to printf ngram_token_size",
-                 K(ret),
-                 K(buf_len),
-                 K(pos),
-                 K(ngram_token_size));
       }
     }
 
@@ -1061,7 +975,6 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
       if (OB_SEARCH_NOT_FOUND == ret) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("Fail to get min_ngram_token_size", K(ret));
       }
     } else {
       __FT_PARSER_PROPERTY_SHOW_COMMA(need_comma);
@@ -1079,7 +992,6 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
       if (OB_SEARCH_NOT_FOUND == ret) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("Fail to get max_ngram_token_size", K(ret));
       }
     } else {
       __FT_PARSER_PROPERTY_SHOW_COMMA(need_comma);
@@ -1093,7 +1005,6 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
     }
 
     if (FAILEDx(databuff_printf(buf, buf_len, pos, ") "))) {
-      LOG_WARN("fail to printf parser properties", K(ret), K(buf_len), K(pos), K(properties));
     }
   }
 
@@ -1123,7 +1034,6 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
           ik_mode_smart_ = false;
         } else {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid ik_smart", K(ret), K(ik_smart));
         }
       }
     } else if (parser.is_space()) {
@@ -1181,7 +1091,6 @@ int ObFTParserJsonProps::tokenize_array_to_props_json(ObIAllocator &allocator,
 
   if (OB_ISNULL(array)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < array->element_count(); i++) {
       ObIJsonBase *array_value_item;
@@ -1198,7 +1107,6 @@ int ObFTParserJsonProps::tokenize_array_to_props_json(ObIAllocator &allocator,
     }
     ObJsonBuffer j_buf(&allocator);
     if (FAILEDx(properties_root.print(j_buf, false))) {
-      LOG_WARN("Fail to print json", K(ret));
     } else {
       json_str = j_buf.string();
     }

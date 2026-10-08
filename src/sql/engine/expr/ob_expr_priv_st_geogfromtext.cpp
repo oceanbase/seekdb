@@ -94,7 +94,6 @@ int ObExprPrivSTGeogFromText::eval_priv_st_geogfromtext_common(const ObExpr &exp
       ObString srid_str = wkt.split_on(';');
       if (OB_FAIL(ObGeoExprUtils::parse_srid(srid_str, srid))) {
         LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, func_name);
-        LOG_WARN("parse_srid failed", K(ret), K(srid_str));
       } else if (srid == 0) {
         srid = OB_GEO_DEFAULT_GEOGRAPHY_SRID;
       }
@@ -107,7 +106,6 @@ int ObExprPrivSTGeogFromText::eval_priv_st_geogfromtext_common(const ObExpr &exp
                    ctx, srs_guard, srid, srs_item))) {
     } else if (OB_ISNULL(srs_item)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null srs item", K(ret));
     } else {
       is_geog = srs_item->is_geographical_srs();
     }
@@ -116,14 +114,11 @@ int ObExprPrivSTGeogFromText::eval_priv_st_geogfromtext_common(const ObExpr &exp
     } else if (!is_geog) {
       ret = OB_ERR_SRS_NOT_GEOGRAPHIC;
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, func_name);
-      LOG_WARN("Only lon/lat coordinate systems are supported in geography.", K(ret), K(srid));
     } else if (OB_FAIL(ObWktParser::parse_wkt(tmp_allocator, wkt, geo, true, is_geog))) {
       ret = OB_ERR_GIS_INVALID_DATA;
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, func_name);
-      LOG_WARN("failed to parse wkt", K(ret));
     } else if (OB_ISNULL(geo)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null geo after parse_wkt", K(ret), K(wkt));
     } else if (OB_FAIL(ObGeoExprUtils::correct_coordinate_range(srs_item, geo, func_name))) {
     } 
     

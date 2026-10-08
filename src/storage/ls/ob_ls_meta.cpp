@@ -327,7 +327,6 @@ int ObLSMeta::build_saved_info(const int64_t ls_epoch)
   if (OB_FAIL(check_can_update_())) {
   } else if (!saved_info_.is_empty()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("saved info is not empty, can not build saved info", K(ret), K(*this));
   } else {
     saved_info.clog_checkpoint_scn_ = clog_checkpoint_scn_;
     saved_info.clog_base_lsn_ = clog_base_lsn_;
@@ -371,7 +370,6 @@ int ObLSMeta::init(
   int ret = OB_SUCCESS;
   if (!restore_status.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("init ls meta get invalid argument", K(ret), K(restore_status));
   } else {
     ls_persistent_state_ = ObLSPersistentState::State::LS_INIT;
     clog_checkpoint_scn_ = create_scn;
@@ -424,7 +422,6 @@ int ObLSMeta::check_can_update_()
   int ret = OB_SUCCESS;
   if (!ls_persistent_state_.can_update_ls_meta()) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("state not match, cannot update ls meta", K(ret), KPC(this));
   } else if (!is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("ls meta is not valid, cannot update", K(ret), K(*this));

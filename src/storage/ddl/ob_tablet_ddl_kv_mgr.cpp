@@ -75,13 +75,10 @@ int ObTabletDDLKvMgr::init(const common::ObTabletID &tablet_id)
   ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObTabletDDLKvMgr is already inited", K(ret));
   } else if (OB_UNLIKELY(!tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id));
   } else if (OB_ISNULL(ls_service)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("ls service should not be null", K(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls))) {
   } else if (OB_FAIL(ls->get_ddl_log_handler()->add_tablet(tablet_id))) {
   }
@@ -104,7 +101,6 @@ int ObTabletDDLKvMgr::set_max_freeze_scn(const share::SCN &checkpoint_scn)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!checkpoint_scn.is_valid_and_not_min())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(checkpoint_scn));
   } else {
     ObLatchWGuard guard(lock_, ObLatchIds::TABLET_DDL_KV_MGR_LOCK);
     max_freeze_scn_ = checkpoint_scn;
@@ -117,7 +113,6 @@ int ObTabletDDLKvMgr::get_rec_scn(SCN &rec_scn)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(is_inited_));
   }
 
   // rec scn of ddl redo
@@ -140,7 +135,6 @@ int ObTabletDDLKvMgr::cleanup()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     ObLatchWGuard guard(lock_, ObLatchIds::TABLET_DDL_KV_MGR_LOCK);
     cleanup_unlock();
@@ -295,7 +289,6 @@ int ObTabletDDLKvMgr::get_active_ddl_kv_impl(ObDDLKVHandle &kv_handle)
     ObDDLKV *kv = tail_kv_handle.get_obj();
     if (nullptr == kv) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("error unexpected, kv must not be nullptr", K(ret));
     } else if (kv->is_freezed()) {
       kv = nullptr;
       ret = OB_SUCCESS;
@@ -317,13 +310,11 @@ int ObTabletDDLKvMgr::get_or_create_idem_ddl_kv(
   kv_handle.reset();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTabletDDLKvMgr is not inited", K(ret));
   } else if (OB_UNLIKELY(!macro_redo_scn.is_valid_and_not_min() 
                       || !macro_redo_start_scn.is_valid_and_not_min()
                       || snapshot_version <= 0
                       || data_format_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(macro_redo_scn), K(macro_redo_start_scn), K(snapshot_version), K(data_format_version));
   } else {
     uint32_t lock_tid = 0; // try lock to avoid hang in clog callback
     if (OB_FAIL(rdlock(TRY_LOCK_TIMEOUT, lock_tid))) {
@@ -361,7 +352,6 @@ void ObTabletDDLKvMgr::try_get_ddl_kv_unlock(const SCN &scn, ObDDLKVHandle &kv_h
       ObDDLKV *tmp_kv = tmp_kv_handle.get_obj();
       if (OB_ISNULL(tmp_kv)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ddl kv is null", K(ret), K(tablet_id_), KP(tmp_kv), K(i), K(head_), K(tail_));
       } else if (scn > tmp_kv->get_start_scn() && scn <= tmp_kv->get_freeze_scn()) {
         kv_handle = tmp_kv_handle;
         break;
@@ -382,10 +372,8 @@ int ObTabletDDLKvMgr::freeze_ddl_kv(
   ObLatchWGuard guard(lock_, ObLatchIds::TABLET_DDL_KV_MGR_LOCK);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTabletDDLKvMgr is not inited", K(ret));
   } else if (OB_UNLIKELY(!is_full_ddl_kv(ddl_kv_type))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("only support full ddl kv", K(ret), K(ddl_kv_type));
   } else if (0 == get_count_nolock()) {
     // do nothing
   } else if (OB_FAIL(get_active_ddl_kv_impl(kv_handle))) {
@@ -400,7 +388,6 @@ int ObTabletDDLKvMgr::freeze_ddl_kv(
     ObDDLKV *kv = kv_handle.get_obj();
     if (OB_ISNULL(kv)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ddl kv is null", K(ret), KP(kv), K(kv_handle));
     } else if (OB_FAIL(kv->freeze(freeze_scn))) {
       if (OB_EAGAIN != ret) {
         LOG_ERROR("fail to freeze active ddl kv", K(ret));
@@ -420,7 +407,6 @@ int ObTabletDDLKvMgr::release_ddl_kvs(const ObDDLKVType ddl_kv_type, const SCN &
   ObLatchWGuard guard(lock_, ObLatchIds::TABLET_DDL_KV_MGR_LOCK);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTabletDDLKvMgr is not inited", K(ret));
   } else {
     for (int64_t i = head_; OB_SUCC(ret) && i < tail_; ++i) {
       const int64_t idx = get_idx(head_);
@@ -430,14 +416,12 @@ int ObTabletDDLKvMgr::release_ddl_kvs(const ObDDLKVType ddl_kv_type, const SCN &
           if (OB_SUCC(ret)) {
             ret = OB_E(EventTable::EN_DDL_RELEASE_DDL_KV_FAIL) OB_SUCCESS;
             if (OB_FAIL(ret)) {
-              LOG_WARN("errsim release ddl kv failed", KR(ret));
             }
           }
 #endif
       if (OB_FAIL(ret)) {
       } else if (OB_ISNULL(kv)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ddl kv is null", K(ret), K(tablet_id_), KP(kv), K(i), K(head_), K(tail_));
       } else if (kv->is_closed() && kv->get_freeze_scn() <= end_scn && kv->get_ddl_kv_type() == ddl_kv_type) {
         const SCN &freeze_scn = kv->get_freeze_scn();
         free_ddl_kv(idx);
@@ -456,14 +440,12 @@ int ObTabletDDLKvMgr::get_ddl_kv_min_scn(SCN &min_scn)
   min_scn = SCN::max_scn();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTabletDDLKvMgr is not inited", K(ret));
   } else {
     for (int64_t i = head_; OB_SUCC(ret) && i < tail_; ++i) {
       const int64_t idx = get_idx(head_);
       ObDDLKV *kv = ddl_kv_handles_[idx].get_obj();
       if (OB_ISNULL(kv)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ddl kv is null", K(ret), K(tablet_id_), KP(kv), K(i), K(head_), K(tail_));
       } else {
         min_scn = SCN::min(min_scn, kv->get_min_scn());
       }
@@ -481,7 +463,6 @@ int ObTabletDDLKvMgr::get_ddl_kvs_unlock(
   kv_handle_array.reset();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTabletDDLKvMgr is not inited", K(ret));
   } else {
     for (int64_t pos = head_; OB_SUCC(ret) && pos < tail_; ++pos) {
       const int64_t idx = get_idx(pos);
@@ -489,7 +470,6 @@ int ObTabletDDLKvMgr::get_ddl_kvs_unlock(
       ObDDLKV *cur_kv = cur_kv_handle.get_obj();
       if (OB_ISNULL(cur_kv)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ddl kv is null", K(ret), K(tablet_id_), KP(cur_kv), K(pos), K(head_), K(tail_));
       } else if ((!frozen_only || cur_kv->is_freezed())
                  && ddl_kv_query_param.match_ddl_kv(*cur_kv)) {
         if (OB_FAIL(kv_handle_array.push_back(cur_kv_handle))) {
@@ -510,7 +490,6 @@ int ObTabletDDLKvMgr::get_ddl_kvs(
   ObLatchRGuard guard(lock_, ObLatchIds::TABLET_DDL_KV_MGR_LOCK);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTabletDDLKvMgr is not inited", K(ret));
   } else if (OB_FAIL(get_ddl_kvs_unlock(frozen_only,
                                         kv_handle_array,
                                         ddl_kv_query_param))) {
@@ -525,7 +504,6 @@ int ObTabletDDLKvMgr::get_ddl_kvs_for_query(ObTablet &tablet, ObIArray<ObDDLKVHa
   ObLatchRGuard guard(lock_, ObLatchIds::TABLET_DDL_KV_MGR_LOCK);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTabletDDLKvMgr is not inited", K(ret));
   } else if (OB_FAIL(get_ddl_kvs_unlock(true/*frozen_only*/, kv_handle_array))) {
   }
   return ret;
@@ -537,7 +515,6 @@ int ObTabletDDLKvMgr::check_has_effective_ddl_kv(bool &has_ddl_kv)
   ObLatchRGuard guard(lock_, ObLatchIds::TABLET_DDL_KV_MGR_LOCK);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTabletDDLKvMgr is not inited", K(ret));
   } else {
     has_ddl_kv = 0 != get_count_nolock();
   }
@@ -551,7 +528,6 @@ int ObTabletDDLKvMgr::check_has_freezed_ddl_kv(bool &has_freezed_ddl_kv)
   ObLatchRGuard guard(lock_, ObLatchIds::TABLET_DDL_KV_MGR_LOCK);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTabletDDLKvMgr is not inited", K(ret));
   } else {
     for (int64_t pos = head_; !has_freezed_ddl_kv && OB_SUCC(ret) && pos < tail_; ++pos) {
       const int64_t idx = get_idx(pos);
@@ -559,7 +535,6 @@ int ObTabletDDLKvMgr::check_has_freezed_ddl_kv(bool &has_freezed_ddl_kv)
       ObDDLKV *cur_kv = cur_kv_handle.get_obj();
       if (OB_ISNULL(cur_kv)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ddl kv is null", K(ret), K(tablet_id_), KP(cur_kv), K(pos), K(head_), K(tail_));
       } else if (cur_kv->is_freezed()) {
         has_freezed_ddl_kv = true;
       }
@@ -583,22 +558,18 @@ int ObTabletDDLKvMgr::alloc_ddl_kv(
   ObDDLMemtable *ddl_memtable = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ddl kv manager not init", K(ret));
   } else if (OB_UNLIKELY(!(storage::is_full_ddl_kv(ddl_kv_type)))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("only support full ddl kv", KR(ret), K(ddl_kv_type));
   } else if (OB_FAIL(handle_ddl_kv_queue_overflow(ddl_kv_type))) {
     if (OB_EAGAIN == ret) {
       if (REACH_TIME_INTERVAL(10 * 1000 * 1000L)) { // 10s
         LOG_INFO("too much ddl kv count, need retry", KR(ret), K(ddl_kv_type));
       }
     } else {
-      LOG_WARN("error unexpected, too much ddl kv count", KR(ret), K(ddl_kv_type));
     }
   } else if (OB_FAIL(t3m->acquire_ddl_kv(tmp_kv_handle))) {
   } else if (OB_ISNULL(kv = tmp_kv_handle.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ddl kv is null", K(ret));
   } else if (OB_FAIL(kv->init(tablet_id_,
                               start_scn,
                               snapshot_version,
@@ -627,10 +598,8 @@ void ObTabletDDLKvMgr::free_ddl_kv(const int64_t idx)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTabletDDLKvMgr is not inited", K(ret));
   } else if (OB_UNLIKELY(idx < 0 || idx >= MAX_DDL_KV_CNT_IN_STORAGE)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(idx));
   } else {
     FLOG_INFO("free ddl kv", K(tablet_id_), KPC(ddl_kv_handles_[idx].get_obj()));
     ddl_kv_handles_[idx].reset();
@@ -667,7 +636,6 @@ int ObDDLIdemKey::init(const ObLogicMacroBlockId &logic_block_id,
   table_type_ = table_type;
   if (!logic_block_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid logic block id", K(ret), K(logic_block_id));
   } else {
     logic_block_id_ = logic_block_id;
   }
@@ -718,7 +686,6 @@ int ObDDLMacroIdemChecker::init()
   int ret = OB_SUCCESS;
   if (is_inited()) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("idem chekcer has already been inited", K(ret));
   } else if (OB_FAIL(checksum_map_.create(997, ObMemAttr("idem_checker")))) {
   }
   return ret;
@@ -747,7 +714,6 @@ int ObDDLMacroIdemChecker::calc_block_checksum(const ObDDLMacroBlockType block_t
   } else {
     if (nullptr == buf || buf_size <= 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid value, buf & buf_size should not be empty", K(ret), K(block_type), K(direct_load_type), KP(buf), K(buf_size));
     } else if (ObDDLMacroBlockType::DDL_MB_DATA_TYPE == block_type || ObDDLMacroBlockType::DDL_MB_INDEX_TYPE == block_type) {
       const ObMacroBlockCommonHeader *common_header = reinterpret_cast<const ObMacroBlockCommonHeader *>(buf);
       if (OB_FAIL(common_header->check_integrity())) {
@@ -784,7 +750,6 @@ int ObDDLMacroIdemChecker::check_block_exist(const ObDDLMacroBlockType block_typ
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("failed to get refactored", K(ret), K(logic_id));
       }
     } else if (prev_checksum == checksum) {
       is_marco_block_already_exist = true;

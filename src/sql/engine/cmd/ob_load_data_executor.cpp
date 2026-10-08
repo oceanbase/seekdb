@@ -31,10 +31,8 @@ int ObLoadDataExecutor::execute(ObExecContext &ctx, ObLoadDataStmt &stmt)
   ObLoadDataBase *load_impl = NULL;
   if (!stmt.get_load_arguments().is_csv_format_) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("invalid resolver results", K(ret));
   } else if (OB_ISNULL(load_impl = OB_NEWx(ObLoadDataSPImpl, (&ctx.get_allocator())))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret));
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(load_impl->execute(ctx, stmt))) {

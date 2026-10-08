@@ -46,7 +46,6 @@ int ObVritualCoreInnerTable::init(
   int ret = OB_SUCCESS;
   if (inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (!sql_proxy.is_inited() || NULL == table_name
       || OB_INVALID_ID == table_id || NULL == schema_guard) {
     ret = OB_INVALID_ARGUMENT;
@@ -68,10 +67,8 @@ int ObVritualCoreInnerTable::inner_open()
   const ObTableSchema *table_schema = NULL;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (NULL == allocator_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init, allocator is null", KR(ret));
   } else if (OB_FAIL(schema_guard_->get_table_schema( table_id_, table_schema))) {
   } else if (NULL == table_schema) {
     ret = OB_TABLE_NOT_EXIST;
@@ -107,12 +104,10 @@ int ObVritualCoreInnerTable::inner_open()
             if (OB_FAIL(core_table.get_cur_row(row))) {
             } else if (OB_ISNULL(row)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("current row is null", KR(ret));
             } else if (OB_FAIL(row->get_int("table_id", table_id))
                 || (is_column_table && OB_FAIL(row->get_int("column_id", column_id)))
                 || OB_FAIL(row->get_int("schema_version", schema_version))
                 || OB_FAIL(row->get_int("is_deleted", deleted))) {
-              LOG_WARN("get core history rowkey failed", KR(ret), K(is_column_table));
             } else {
               int64_t idx = 0;
               for (; idx < latest_rows.count(); ++idx) {
@@ -139,7 +134,6 @@ int ObVritualCoreInnerTable::inner_open()
             ret = OB_SUCCESS;
           }
           if (OB_SUCC(ret) && OB_FAIL(core_table.seek_to_head())) {
-            LOG_WARN("seek core history to head failed", KR(ret));
           }
           ObArray<Column> columns;
           while (OB_SUCC(ret) && OB_SUCC(core_table.next())) {
@@ -147,7 +141,6 @@ int ObVritualCoreInnerTable::inner_open()
             if (OB_FAIL(core_table.get_cur_row(row))) {
             } else if (OB_ISNULL(row)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("current row is null", KR(ret));
             } else {
               int64_t idx = 0;
               for (; idx < latest_rows.count()
@@ -181,10 +174,8 @@ int ObVritualCoreInnerTable::inner_get_next_row(ObNewRow *&row)
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (OB_FAIL(scanner_it_.get_next_row(cur_row_))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("get_next_row failed", KR(ret));
     }
   } else {
     row = &cur_row_;
@@ -199,11 +190,9 @@ int ObVritualCoreInnerTable::get_full_row(const ObTableSchema *table,
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (NULL == table) {
     // core_table doesn't need to check
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("table is null", K(ret));
   } else {
     const ObColumnSchemaV2 *column_schema = NULL;
     const char *column_name = NULL;
@@ -211,10 +200,8 @@ int ObVritualCoreInnerTable::get_full_row(const ObTableSchema *table,
     for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
       if (NULL == (column_schema = table->get_column_schema(output_column_ids_.at(i)))) {
         ret = OB_SCHEMA_ERROR;
-        LOG_WARN("column id not exist", "column_id", output_column_ids_.at(i), K(ret));
       } else if (NULL == (column_name = column_schema->get_column_name())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("column name is null", K(column_schema), K(ret));
       } else {
         int inner_ret = OB_SUCCESS;
         if (ObVarcharType == column_schema->get_data_type()
@@ -231,7 +218,6 @@ int ObVritualCoreInnerTable::get_full_row(const ObTableSchema *table,
             ADD_NULL_COLUMN(table, column_name, columns);
           } else {
             ret = inner_ret;
-            LOG_WARN("get_varchar failed", K(column_name), K(ret));
           }
         } else if (ObIntType == column_schema->get_data_type()
             || ObTinyIntType == column_schema->get_data_type()
@@ -250,12 +236,9 @@ int ObVritualCoreInnerTable::get_full_row(const ObTableSchema *table,
             ADD_NULL_COLUMN(table, column_name, columns);
           } else {
             ret = inner_ret;
-            LOG_WARN("get_int failed", K(column_name), K(ret));
           }
         } else {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("data type is not expected", "data_type",
-              column_schema->get_data_type(), K(ret));
         }
       }
     }

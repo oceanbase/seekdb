@@ -17,8 +17,8 @@
 #ifndef OCEANBASE_STORAGE_CONCURRENCY_CONTROL_OB_MULTI_VERSION_GARBAGE_COLLECTOR
 #define OCEANBASE_STORAGE_CONCURRENCY_CONTROL_OB_MULTI_VERSION_GARBAGE_COLLECTOR
 
+#include "lib/task/ob_timer.h"
 #include "share/scn.h"
-#include "share/ob_occam_timer.h"
 
 namespace oceanbase
 {

@@ -38,34 +38,28 @@ int ObAdminSetConfig::verify_config(obcall::ObAdminSetConfigArg &arg)
 
   if (!ctx_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), KR(ret));
   }
 
   if (nullptr == cfg) {
     if (OB_ISNULL(ptr = ob_malloc(sizeof(ObServerConfigChecker),
                                 ObModIds::OB_RS_PARTITION_TABLE_TEMP))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc memory", KR(ret));
     } else if (OB_ISNULL(cfg = new (ptr) ObServerConfigChecker)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("new cfg failed", KR(ret));
     }
   }
 
   FOREACH_X(item, arg.items_, OB_SUCCESS == ret) {
     if (item->name_.is_empty()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("empty config name", "item", *item, KR(ret));
     } else {
       ObConfigItem *ci = nullptr;
       ObConfigItem * const *ci_ptr = cfg->get_container().get(
                                       ObConfigStringKey(item->name_.ptr()));
       if (OB_ISNULL(ci_ptr) || OB_ISNULL(*ci_ptr)) {
         ret = OB_ERR_SYS_CONFIG_UNKNOWN;
-        LOG_WARN("can't find config item", KR(ret), "item", *item);
       } else {
         ci = *ci_ptr;
       }
@@ -74,19 +68,15 @@ int ObAdminSetConfig::verify_config(obcall::ObAdminSetConfigArg &arg)
         const char *err = NULL;
         if (ci->is_not_editable() && !arg.is_inner_) {
           ret = OB_INVALID_CONFIG; //TODO: specific report not editable
-          LOG_WARN("config is not editable", "item", *item, KR(ret));
         } else if (!ci->check_unit(item->value_.ptr())) {
           ret = OB_INVALID_CONFIG;
           LOG_ERROR("invalid config", "item", *item, KR(ret));
         } else if (!ci->set_value_for_validation(item->value_.ptr())) {
           ret = OB_INVALID_CONFIG;
-          LOG_WARN("invalid config", "item", *item, KR(ret));
         } else if (!ci->check()) {
           ret = OB_INVALID_CONFIG;
-          LOG_WARN("invalid value range", "item", *item, KR(ret));
         } else if (!ctx_.local_management_service_->check_config(*ci, err)) {
           ret = OB_INVALID_CONFIG;
-          LOG_WARN("invalid value range", "item", *item, KR(ret));
         }
         if (OB_FAIL(ret)) {
           if (nullptr != err) {
@@ -115,10 +105,8 @@ int ObAdminSetConfig::update_config(obcall::ObAdminSetConfigArg &arg)
   int ret = OB_SUCCESS;
   if (!ctx_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), KR(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < arg.items_.count(); ++i) {
       const ObAdminSetConfigItem &item = arg.items_.at(i);
@@ -136,7 +124,6 @@ int ObAdminSetConfig::update_sys_config_(const obcall::ObAdminSetConfigItem &ite
   int ret = OB_SUCCESS;
   if (OB_ISNULL(GCTX.config_mgr_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.config_mgr_));
   } else {
     if (OB_SUCC(ret) && OB_NOT_NULL(GCTX.config_mgr_)) {
       if (OB_FAIL(GCTX.config_mgr_->save_config(
@@ -161,10 +148,8 @@ int ObAdminSetConfig::execute(obcall::ObAdminSetConfigArg &arg)
   int ret = OB_SUCCESS;
   if (!ctx_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (!arg.is_valid() || OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(verify_config(arg))) {
   } else {
     if (OB_FAIL(ctx_.local_management_service_->set_config_pre_hook(arg))) {

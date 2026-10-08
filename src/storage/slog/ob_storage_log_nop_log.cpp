@@ -42,17 +42,14 @@ int ObStorageLogNopLog::init(const int64_t buffer_size)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_UNLIKELY(buffer_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(buffer_size));
   } else {
     buffer_ = static_cast<char *>(ob_malloc_align(
         ObLogConstants::LOG_FILE_ALIGN_SIZE,
         buffer_size, ObMemAttr("SlogNopLog")));
     if (OB_ISNULL(buffer_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc nop log buffer", K(ret));
     } else {
       buffer_size_ = buffer_size;
       MEMSET(buffer_, 0x01, buffer_size_);
@@ -85,7 +82,6 @@ int ObStorageLogNopLog::set_needed_size(const int64_t size)
     STORAGE_REDO_LOG(WARN, "Not init", K(ret));
   } else if (OB_UNLIKELY(size < 0 || size > buffer_size_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(size), K_(buffer_size));
   } else {
     needed_size_ = size;
   }
@@ -100,7 +96,6 @@ int ObStorageLogNopLog::serialize(char *buf, const int64_t limit, int64_t &pos) 
     STORAGE_REDO_LOG(WARN, "Not init", K(ret));
   } else if (OB_UNLIKELY(nullptr == buf || limit < 0 || pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), KP(buf), K(limit), K(pos));
   } else if (OB_UNLIKELY(pos + needed_size_ > limit)) {
     ret = OB_BUF_NOT_ENOUGH;
   } else {

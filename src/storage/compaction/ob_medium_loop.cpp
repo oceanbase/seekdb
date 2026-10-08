@@ -34,7 +34,6 @@ int ObMediumLoop::start_merge(const int64_t merge_version)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(merge_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(merge_version));
   } else {
     merge_version_ = merge_version;
     schedule_stats_.start_merge();
@@ -54,7 +53,6 @@ int ObMediumLoop::init(const int64_t batch_size)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(merge_version_ <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid merge_version", KR(ret), K_(merge_version));
   } else if (OB_FAIL(tablet_iter_.build_iter(
                  batch_size, *::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()))) {
   }
@@ -113,12 +111,10 @@ int ObMediumLoop::loop_tablets(
           ret = OB_SUCCESS;
           break;
         } else {
-          LOG_WARN("failed to get tablet", K(ret), K(tablet_handle));
         }
       } else if (OB_UNLIKELY(!tablet_handle.is_valid()
         || nullptr == (tablet = tablet_handle.get_obj()))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("tablet handle is invalid", KR(ret), K(tablet_handle));
       } else if (FALSE_IT(tablet_id = tablet->get_tablet_id())) {
       } else if (tablet_id.is_ls_inner_tablet()) {
         // do nothing
@@ -204,7 +200,6 @@ int ObMediumLoop::update_report_scn_as_ls_leader(ObLS &ls, const ObScheduleTable
     } else if (inner_table_merged_scn > ObBasicMergeScheduler::INIT_COMPACTION_SCN
         && OB_FAIL(ObTabletMetaTableCompactionOperator::batch_update_unequal_report_scn_tablet(
             GCTX.meta_db_pool_, inner_table_merged_scn, tablet_id_array))) {
-      LOG_WARN("failed to get unequal report scn", K(ret), K(inner_table_merged_scn));
     }
   } else {
     ret = OB_LS_LOCATION_LEADER_NOT_EXIST;
@@ -226,7 +221,6 @@ int ObScheduleNewMediumLoop::loop()
     if (OB_STATE_NOT_MATCH != ret) {
       LOG_ERROR("failed to initialize compaction status", KR(ret));
     } else {
-      LOG_WARN("not support schedule medium", K(ret), K(func));
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < tablet_check_infos_.count(); ++i) { // ignore OB_FAIL

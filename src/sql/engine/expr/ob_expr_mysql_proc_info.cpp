@@ -599,7 +599,6 @@ int ObExprMysqlProcInfo::get_info_by_field_id(const ObExpr &expr,
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected field id", K(ret), K(field_id));
       }
     }
   }
@@ -676,7 +675,6 @@ int ObExprMysqlProcInfo::get_info_by_field_id(const ObExpr &expr,
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected field id", K(ret), K(field_id));
       }
     }
   }
@@ -736,7 +734,6 @@ int ObExprMysqlProcInfo::calc_mysql_proc_info_arg_cnt_2(const ObExpr &expr,
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argment", K(ret), K(arg2));
   }
 
   return ret;
@@ -852,7 +849,6 @@ int ObExprMysqlProcInfo::calc_mysql_proc_info_arg_cnt_9(const ObExpr &expr,
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argment", K(ret), K(arg2));
   }
 
   return ret;
@@ -871,7 +867,6 @@ int ObExprMysqlProcInfo::eval_mysql_proc_info(const ObExpr &expr,
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid arg cnt", K(ret), K(expr.arg_cnt_));
   }
   return ret;
 }

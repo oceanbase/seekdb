@@ -96,7 +96,6 @@ int ObCodeGenerator::detect_batch_size(
   bool has_registered_vec_op = false;
   if (OB_ISNULL(log_plan.get_plan_root())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null plan root", K(ret));
   } else if (OB_FAIL(ObStaticEngineCG::exist_registered_vec_op(*log_plan.get_plan_root(), true,
                                                                has_registered_vec_op))) {
   }

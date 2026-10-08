@@ -184,7 +184,6 @@ int ObPrivPacker::pack_raw_priv(
     if (packed_array.count() > 0) {
       if (group_id >= packed_array.count()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("group id error", K(ret));
       } else {
         packed_array[group_id] |= packed_priv;
       }
@@ -243,7 +242,7 @@ int ObPrivPacker::raw_obj_priv_from_pack(
   bool exists;
   raw_priv_array.reset();
   if (packed_obj_privs > 0) {
-    CK (OBJ_PRIV_ID_MAX <= N_PIRVS_PER_GROUP);
+    OB_ASSERT(OBJ_PRIV_ID_MAX <= N_PIRVS_PER_GROUP);
     for (raw_priv = 1; OB_SUCC(ret) && raw_priv <= OBJ_PRIV_ID_MAX; raw_priv ++) {
       OZ (ObOraPrivCheck::raw_obj_priv_exists(raw_priv, packed_obj_privs, exists));
       if (OB_SUCC(ret) && exists) {
@@ -263,7 +262,7 @@ int ObPrivPacker::raw_option_obj_priv_from_pack(
   bool exists;
   raw_priv_array.reset();
   if (packed_obj_privs > 0) {
-    CK (OBJ_PRIV_ID_MAX <= N_PIRVS_PER_GROUP);
+    OB_ASSERT(OBJ_PRIV_ID_MAX <= N_PIRVS_PER_GROUP);
     for (raw_priv = 1; OB_SUCC(ret) && raw_priv <= OBJ_PRIV_ID_MAX; raw_priv ++) {
       OZ (ObOraPrivCheck::raw_obj_priv_exists(raw_priv, GRANT_OPTION, packed_obj_privs, exists));
       if (OB_SUCC(ret) && exists) {
@@ -284,7 +283,7 @@ int ObPrivPacker::raw_no_option_obj_priv_from_pack(
   bool exists;
   raw_priv_array.reset();
   if (packed_obj_privs > 0) {
-    CK (OBJ_PRIV_ID_MAX <= N_PIRVS_PER_GROUP);
+    OB_ASSERT(OBJ_PRIV_ID_MAX <= N_PIRVS_PER_GROUP);
     for (raw_priv = 1; OB_SUCC(ret) && raw_priv <= OBJ_PRIV_ID_MAX; raw_priv ++) {
       OZ (ObOraPrivCheck::raw_obj_priv_exists(raw_priv, packed_obj_privs, exists));
       OZ (ObOraPrivCheck::raw_obj_priv_exists(raw_priv, GRANT_OPTION, 
@@ -332,7 +331,6 @@ int ObOraPrivCheck::raw_sys_priv_exists(
       if (OB_SUCC(ret)) {
         if (group_id >= packed_array.count()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("group id error", K(option), K(priv), K(packed_array), K(group_id), K(ret));
         } else if (OB_TEST_PRIVS(packed_array.at(group_id), packed_priv)) {
           exists = true;
         }
@@ -356,7 +354,6 @@ int ObOraPrivCheck::raw_sys_priv_exists(
     if (OB_SUCC(ret)) {
       if (group_id >= packed_array.count()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("group id error", K(priv), K(packed_array), K(group_id), K(ret));
       } else if (OB_TEST_PRIVS(packed_array.at(group_id), packed_priv)) {
         exists = true;
       }
@@ -462,7 +459,7 @@ int ObPrivPacker::get_total_obj_privs(
   bool exists;
   n_cnt = 0;
   if (packed_obj_privs > 0) {
-    CK (OBJ_PRIV_ID_MAX <= N_PIRVS_PER_GROUP);
+    OB_ASSERT(OBJ_PRIV_ID_MAX <= N_PIRVS_PER_GROUP);
     for (raw_priv = 1; OB_SUCC(ret) && raw_priv <= OBJ_PRIV_ID_MAX; raw_priv ++) {
       OZ (ObOraPrivCheck::raw_obj_priv_exists(raw_priv, packed_obj_privs, exists));
       if (OB_SUCC(ret) && exists) {

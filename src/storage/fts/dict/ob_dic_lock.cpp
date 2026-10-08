@@ -34,10 +34,8 @@ int ObDicLock::lock_dic_tables_out_trans(const ObDicLoader &dic_loader,
   const ObArray<ObDicLoader::ObDicTableInfo> &dic_tables_info = dic_loader.get_dic_tables_info();
   if (OB_UNLIKELY(dic_tables_info.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("dic loader is invalid", K(ret), K(dic_tables_info));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql proxy is null", K(ret));
   } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
   } else if (OB_FAIL(lock_dic_tables_out_trans(dic_loader, lock_mode, lock_owner, trans))) {
   }
@@ -60,7 +58,6 @@ int ObDicLock::lock_dic_tables_out_trans(const ObDicLoader &dic_loader,
   const ObArray<ObDicLoader::ObDicTableInfo> &dic_tables_info = dic_loader.get_dic_tables_info();
   if (OB_UNLIKELY(dic_tables_info.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("dic loader is invalid", K(ret), K(dic_tables_info));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < dic_tables_info.count(); ++i) {
       const uint64_t table_id = dic_tables_info.at(i).table_id_;
@@ -80,7 +77,6 @@ int ObDicLock::unlock_dic_tables(const ObDicLoader &dic_loader,
   const ObArray<ObDicLoader::ObDicTableInfo> &dic_tables_info = dic_loader.get_dic_tables_info();
   if (OB_UNLIKELY(dic_tables_info.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("dic loader is invalid", K(ret), K(dic_tables_info));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < dic_tables_info.count(); ++i) {
       const uint64_t table_id = dic_tables_info.at(i).table_id_;
@@ -101,10 +97,8 @@ int ObDicLock::lock_dic_tables_in_trans(
   const ObArray<ObDicLoader::ObDicTableInfo> &dic_tables_info = dic_loader.get_dic_tables_info();
   if (OB_UNLIKELY(dic_tables_info.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("dic loader is invalid", K(ret), K(dic_tables_info));
   } else if (OB_ISNULL(conn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("conn_ is NULL", KR(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < dic_tables_info.count(); ++i) {
       const uint64_t table_id = dic_tables_info.at(i).table_id_;
@@ -130,10 +124,8 @@ int ObDictionaryLockService::lock_tables_shared_in_transaction(
       &table_infos = loader.get_dic_tables_info();
   if (OB_UNLIKELY(table_infos.empty())) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("dictionary loader has no tables", K(ret));
   } else if (OB_ISNULL(conn)) {
     ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("inner SQL connection is null", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < table_infos.count(); ++i) {
       if (OB_FAIL(

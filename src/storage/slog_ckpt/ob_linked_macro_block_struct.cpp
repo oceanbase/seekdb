@@ -33,10 +33,8 @@ int ObLinkedMacroBlockHeader::serialize(char *buf, const int64_t buf_len, int64_
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(NULL == buf || buf_len < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
   } else if (OB_UNLIKELY(LINKED_MACRO_BLOCK_HEADER_VERSION != version_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected ObLinkedMacroBlockHeader verison", K(ret), K(*this));
   }
   SERIALIZE_MEMBER_WITH_MEMCPY(version_);
   SERIALIZE_MEMBER_WITH_MEMCPY(magic_);
@@ -55,7 +53,6 @@ int ObLinkedMacroBlockHeader::deserialize(const char *buf, const int64_t data_le
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(NULL == buf || data_len <= 0 || pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument.", K(ret), KP(buf), K(data_len), K(pos));
   }
   DESERIALIZE_MEMBER_WITH_MEMCPY(version_);
   DESERIALIZE_MEMBER_WITH_MEMCPY(magic_);
@@ -64,9 +61,7 @@ int ObLinkedMacroBlockHeader::deserialize(const char *buf, const int64_t data_le
 
   if (OB_SUCC(ret) && OB_UNLIKELY(LINKED_MACRO_BLOCK_HEADER_VERSION != version_)) {
     ret = OB_DESERIALIZE_ERROR;
-    LOG_WARN("unexpected ObLinkedMacroBlockHeader version", K(ret), K(*this));
   } else if (OB_SUCC(ret) && OB_FAIL(previous_macro_block_id_.deserialize(buf, data_len, pos))) {
-    LOG_WARN("fail to deserialize previous_macro_block_id", K(ret), K(*this));
   }
   return ret;
 }

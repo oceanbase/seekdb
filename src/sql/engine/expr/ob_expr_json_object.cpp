@@ -101,7 +101,6 @@ int ObExprJsonObject::eval_json_object(const ObExpr &expr, ObEvalCtx &ctx, ObDat
 
   if (expr.datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_BIN) {
     ret = OB_ERR_INVALID_JSON_CHARSET;
-    LOG_WARN("invalid out put charset", K(ret), K(expr.datum_meta_.cs_type_));
   }
 
   for (int32 i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; i += 2) {
@@ -111,7 +110,6 @@ int ObExprJsonObject::eval_json_object(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     } else if (json_datum->is_null()) {
       ret = OB_ERR_JSON_DOCUMENT_NULL_KEY;
       LOG_USER_ERROR(OB_ERR_JSON_DOCUMENT_NULL_KEY);
-      LOG_WARN("failed:json key is null", K(ret));
     } else {
       ObString key = json_datum->get_string();
       ObIJsonBase *j_val = NULL;
@@ -124,7 +122,6 @@ int ObExprJsonObject::eval_json_object(const ObExpr &expr, ObEvalCtx &ctx, ObDat
         if (ret == OB_ERR_JSON_DOCUMENT_NULL_KEY) {
           LOG_USER_ERROR(OB_ERR_JSON_DOCUMENT_NULL_KEY);
         }
-        LOG_WARN("failed: append json object kv", K(ret));
       }
     }
   }

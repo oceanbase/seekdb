@@ -148,7 +148,6 @@ struct ObGetTableIdOp
       // do nothing
     } else if (OB_ISNULL(plan = dynamic_cast<ObPhysicalPlan *>(entry.second))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null plan", K(ret), K(plan));
     } else if (OB_FAIL(plan->get_base_table_version(table_id_, version))) {
     } else if (version > 0) {
       plan->set_is_expired(EXPIRED_BY_OPT_STAT);
@@ -410,7 +409,6 @@ int ObPlanCache::check_after_get_plan(int tmp_ret,
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(pc_ctx.sql_ctx_.session_info_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null session info", K(ret));
     }
   }
   // if schema expired, update pcv set;
@@ -442,13 +440,10 @@ int ObPlanCache::get_plan(common::ObIAllocator &allocator,
   if (OB_ISNULL(pc_ctx.sql_ctx_.session_info_)
       || OB_ISNULL(pc_ctx.sql_ctx_.schema_guard_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument",K(ret),
-             K(pc_ctx.sql_ctx_.schema_guard_), K(pc_ctx.exec_ctx_.get_physical_plan_ctx()));
   } else if (pc_ctx.sql_ctx_.multi_stmt_item_.is_batched_multi_stmt()) {
     if (OB_FAIL(construct_multi_stmt_fast_parser_result(allocator,
                                                         pc_ctx))) {
       if (OB_BATCHED_MULTI_STMT_ROLLBACK != ret) {
-        LOG_WARN("failed to construct multi stmt fast parser", K(ret));
       }
     } else {
       pc_ctx.fp_result_ = pc_ctx.multi_stmt_fp_results_.at(0);
@@ -463,12 +458,10 @@ int ObPlanCache::get_plan(common::ObIAllocator &allocator,
     } else if (OB_ISNULL(guard.cache_obj_)
       || ObLibCacheNameSpace::NS_CRSR != guard.cache_obj_->get_ns()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("cache obj is invalid", K(ret));
     } else {
       ObPhysicalPlan* plan = NULL;
       if (OB_ISNULL(plan = static_cast<ObPhysicalPlan*>(guard.cache_obj_))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to cast cache obj to physical plan.", K(ret));
       } else {
         const bool is_internal_maintenance =
             pc_ctx.sql_ctx_.session_info_->is_inner()
@@ -515,7 +508,6 @@ int ObPlanCache::construct_multi_stmt_fast_parser_result(common::ObIAllocator &a
   bool enable_explain_batched_multi_statement = ObSQLUtils::is_enable_explain_batched_multi_statement();
   if (OB_ISNULL(queries = pc_ctx.sql_ctx_.multi_stmt_item_.get_queries())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(queries), K(ret));
   } else if (OB_FAIL(pc_ctx.multi_stmt_fp_results_.reserve(queries->count()))) {
   } else {
     ObFastParserResult parser_result;
@@ -577,7 +569,6 @@ int ObPlanCache::construct_fast_parser_result(common::ObIAllocator &allocator,
   if (OB_ISNULL(pc_ctx.sql_ctx_.session_info_) ||
       OB_ISNULL(pc_ctx.exec_ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else {
     ObSQLMode sql_mode = pc_ctx.sql_ctx_.session_info_->get_sql_mode();
     ObCharsets4Parser charsets4parser = pc_ctx.sql_ctx_.session_info_->get_charsets4parser();
@@ -620,8 +611,6 @@ int ObPlanCache::construct_fast_parser_result(common::ObIAllocator &allocator,
               K(batch_count), K(first_truncated_sql), K(pc_ctx.raw_sql_), K(fp_result));
         } else if (OB_ISNULL(pc_ctx.insert_batch_opt_info_.multi_raw_params_.at(0))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null ptr, can't do batch insert opt, but not need to return error",
-              K(batch_count), K(first_truncated_sql), K(pc_ctx.raw_sql_), K(fp_result));
         } else {
           fp_result.raw_params_.reset();
           if (OB_FAIL(fp_result.raw_params_.assign(
@@ -629,7 +618,6 @@ int ObPlanCache::construct_fast_parser_result(common::ObIAllocator &allocator,
       } else if (!is_insert_values &&
                  OB_FAIL(ObValuesTableCompression::try_batch_exec_params(allocator, pc_ctx,
                                                        *pc_ctx.sql_ctx_.session_info_, fp_result))) {
-        LOG_WARN("failed to check fold params valid", K(ret));
           } else {
             pc_ctx.sql_ctx_.set_is_do_insert_batch_opt(batch_count);
             fp_result.pc_key_.name_.assign_ptr(first_truncated_sql.ptr(), first_truncated_sql.length());
@@ -638,7 +626,6 @@ int ObPlanCache::construct_fast_parser_result(common::ObIAllocator &allocator,
       } else if (!is_insert_values &&
                  OB_FAIL(ObValuesTableCompression::try_batch_exec_params(allocator, pc_ctx,
                                                        *pc_ctx.sql_ctx_.session_info_, fp_result))) {
-        LOG_WARN("failed to check fold params valid", K(ret));
       }
     }
   }
@@ -665,23 +652,18 @@ int ObPlanCache::restore_param_to_truncated_sql(ObPlanCacheCtx &pc_ctx)
   ObString &no_param_sql = pc_ctx.fp_result_.pc_key_.name_;
   if (pc_ctx.insert_batch_opt_info_.multi_raw_params_.empty()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected params count", K(ret), K(pc_ctx.insert_batch_opt_info_.multi_raw_params_.count()));
   } else if (OB_ISNULL(raw_params = pc_ctx.insert_batch_opt_info_.multi_raw_params_.at(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null ptr", K(ret), K(raw_params));
   } else if (OB_ISNULL(buf = (char *)pc_ctx.allocator_.alloc(pc_ctx.raw_sql_.length()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("buff is null", K(ret), K(pc_ctx.raw_sql_.length()));
   } else if (raw_params->count() < ins_params_count) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected params count", K(ret), K(raw_params->count()), K(ins_params_count));
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < raw_params->count(); i++) {
     ObPCParam *pc_param = nullptr;
     if (OB_ISNULL(pc_param = raw_params->at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null ptr", K(ret), K(i), K(raw_params));
     } else {
       int32_t len = (int32_t)pc_param->node_->pos_ - idx;
       LOG_TRACE("print raw_params", K(i), K(buff_len), K(len), K(idx), K(pc_param->node_->pos_),
@@ -691,7 +673,6 @@ int ObPlanCache::restore_param_to_truncated_sql(ObPlanCacheCtx &pc_ctx)
         // So this scenario len == 0 is needed
         if (pc_param->node_->text_len_ > buff_len - pos) {
           ret = OB_BUF_NOT_ENOUGH;
-          LOG_WARN("unexpected len", K(ret), K(i), K(buff_len), K(pc_param->node_->text_len_), K(pos), K(no_param_sql));
         } else {
           MEMCPY(buf + pos, pc_param->node_->raw_text_, pc_param->node_->text_len_);
           pos += (int32_t)pc_param->node_->text_len_;
@@ -700,10 +681,8 @@ int ObPlanCache::restore_param_to_truncated_sql(ObPlanCacheCtx &pc_ctx)
       } else if (len > 0) {
         if (len > buff_len - pos) {
           ret = OB_BUF_NOT_ENOUGH;
-          LOG_WARN("unexpected len", K(ret), K(i), K(buff_len), K(idx), K(pos), K(no_param_sql));
         } else if (pc_param->node_->text_len_ > (buff_len - pos - len)) {
           ret = OB_BUF_NOT_ENOUGH;
-          LOG_WARN("unexpected len", K(ret), K(i), K(buff_len), K(idx), K(pc_param->node_->text_len_), K(pos), K(no_param_sql));
         } else {
           // copy sql text
           // insert into t1 values(?,?);
@@ -723,7 +702,6 @@ int ObPlanCache::restore_param_to_truncated_sql(ObPlanCacheCtx &pc_ctx)
     int32_t len = no_param_sql.length() - idx;
     if (len > buff_len - pos) {
       ret = OB_BUF_NOT_ENOUGH;
-      LOG_WARN("unexpected len", K(ret), K(buff_len), K(pos), K(idx), K(no_param_sql.length()), K(no_param_sql));
     } else if (len > 0) {
       MEMCPY(buf + pos, no_param_sql.ptr() + idx, len);
       idx += len;
@@ -762,8 +740,6 @@ int ObPlanCache::rebuild_raw_params(common::ObIAllocator &allocator,
   int64_t sql_delta_length = pc_ctx.insert_batch_opt_info_.sql_delta_length_;
   if (((row_count * insert_param_count) + upd_param_count) != fp_result.raw_params_.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected raw_params", K(ret),
-        K(row_count), K(insert_param_count), K(upd_param_count), K(fp_result.raw_params_.count()));
   } else {
     pc_ctx.insert_batch_opt_info_.multi_raw_params_.set_capacity(row_count);
   }
@@ -775,7 +751,6 @@ int ObPlanCache::rebuild_raw_params(common::ObIAllocator &allocator,
     ObPCParam *pc_param = fp_result.raw_params_.at(i);
     if (OB_ISNULL(pc_param)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null ptr", K(ret), K(i));
     } else if (FALSE_IT(pc_param->node_->pos_ = pc_param->node_->pos_ - sql_delta_length)) {
       // For the parameters of the update part, pos_ needs to subtract the length of the truncated part
     } else if (OB_FAIL(update_raw_params.push_back(pc_param))) {
@@ -787,7 +762,6 @@ int ObPlanCache::rebuild_raw_params(common::ObIAllocator &allocator,
     ObRawParams *params_array = nullptr;
     if (OB_ISNULL(buf = allocator.alloc(sizeof(ObRawParams)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc memory", K(ret), K(sizeof(ObRawParams)));
     } else {
       params_array = new(buf) ObRawParams(allocator);
       params_array->set_capacity(one_row_params_cnt);
@@ -796,7 +770,6 @@ int ObPlanCache::rebuild_raw_params(common::ObIAllocator &allocator,
     for (int64_t j = 0; OB_SUCC(ret) && j < insert_param_count; j++) {
       if (params_idx >= fp_result.raw_params_.count()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected params_idx", K(ret), K(i), K(j), K(params_idx), K(fp_result.raw_params_));
       } else if (OB_FAIL(params_array->push_back(fp_result.raw_params_.at(params_idx)))) {
       } else {
         params_idx++;
@@ -805,7 +778,6 @@ int ObPlanCache::rebuild_raw_params(common::ObIAllocator &allocator,
 
     if (OB_SUCC(ret)) {
       if (0 != upd_param_count && OB_FAIL(append(*params_array, update_raw_params))) {
-        LOG_WARN("fail to append update raw params", K(ret));
       } else if (OB_FAIL(pc_ctx.insert_batch_opt_info_.multi_raw_params_.push_back(params_array))) {
       }
     }
@@ -894,7 +866,6 @@ int ObPlanCache::check_can_do_insert_opt(common::ObIAllocator &allocator,
   if (ret != OB_SUCCESS) {
     // Here whatever error can be swallowed, just cannot do batch optimization after the error
     can_do_batch = false;
-    LOG_WARN("can't do insert batch optimization, cover the error code by design", K(ret), K(pc_ctx.raw_sql_));
     ret = OB_SUCCESS;
   }
 
@@ -1046,13 +1017,11 @@ int ObPlanCache::add_cache_obj(ObILibCacheCtx &ctx,
          *
          */
         if (OB_FAIL(add_stat_for_cache_obj(ctx, cache_obj))) {
-          LOG_WARN("failed to add stat", K(ret));
           ObILibCacheNode *del_node = NULL;
           int tmp_ret = cache_key_node_map_.erase_refactored(cache_key, &del_node);
           if (OB_UNLIKELY(tmp_ret != OB_SUCCESS)
               || OB_UNLIKELY(del_node != cache_node)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected error", K(ret), K(tmp_ret), K(del_node), K(cache_node));
           } else {
             cache_node->unlock();
             cache_node->dec_ref_count(); //cache node dec ref in block
@@ -1514,10 +1483,8 @@ int ObPlanCache::ref_plan(const ObCacheObjID plan_id, ObCacheObjGuard& guard)
     cache_obj = guard.cache_obj_;
     if (OB_ISNULL(cache_obj)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null cache object", K(ret));
     } else if (ObLibCacheNameSpace::NS_CRSR != cache_obj->get_ns()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("this cache object is not a plan.", K(ret), K(cache_obj->get_ns()));
     }
   }
   return ret;
@@ -1547,10 +1514,8 @@ int ObPlanCache::ref_alloc_plan(const ObCacheObjID plan_id, ObCacheObjGuard& gua
     cache_obj = guard.cache_obj_;
     if (OB_ISNULL(cache_obj)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null cache object", K(ret));
     } else if (ObLibCacheNameSpace::NS_CRSR != cache_obj->get_ns()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("this cache object is not a plan.", K(ret), K(cache_obj->get_ns()));
     }
   }
   return ret;
@@ -1566,7 +1531,6 @@ int ObPlanCache::add_cache_obj_stat(ObILibCacheCtx &ctx, ObILibCacheObject *cach
   } else {
     cache_obj->inc_ref_count();
     if (OB_FAIL(co_mgr_.add_cache_obj(cache_obj))) {
-      LOG_WARN("failed to set element", K(ret), K(cache_obj->get_object_id()));
       co_mgr_.free(cache_obj);
       cache_obj = NULL;
     } else {
@@ -1933,7 +1897,6 @@ int ObPlanCache::get_ps_plan(ObCacheObjGuard& guard,
       }
     } else if (OB_ISNULL(guard.cache_obj_) || OB_UNLIKELY(!guard.cache_obj_->is_valid_cache_obj())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("cache obj is invalid", K(ret), KPC(guard.cache_obj_));
     }
     pc_ctx.fp_result_.pc_key_.name_.reset();
     pc_ctx.fp_result_.pc_key_.key_id_ = new_stmt_id;
@@ -1972,7 +1935,6 @@ int ObPlanCache::construct_plan_cache_key(ObPlanCacheCtx &plan_ctx, ObLibCacheNa
   ObSQLSessionInfo *session = plan_ctx.sql_ctx_.session_info_;
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session info is null");
   } else if (OB_FAIL(construct_plan_cache_key(*session,
                                               ns,
                                               plan_ctx.fp_result_.pc_key_))) {
@@ -2004,10 +1966,8 @@ int ObPlanCache::add_stat_for_cache_obj(ObILibCacheCtx &ctx, ObILibCacheObject *
   bool need_real_add = true;
   if (OB_ISNULL(cache_obj)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(cache_obj));
   } else if (OB_FAIL(cache_obj->check_need_add_cache_obj_stat(ctx, need_real_add))) {
   } else if (need_real_add && OB_FAIL(add_cache_obj_stat(ctx, cache_obj))) {
-    LOG_WARN("failed to add cache obj stat", K(ret));
   }
   return ret;
 }
@@ -2019,7 +1979,6 @@ int ObPlanCache::alloc_cache_obj(ObCacheObjGuard& guard, ObLibCacheNameSpace ns)
   if (OB_FAIL(co_mgr_.alloc(guard, ns, root_context_))) {
   } else if (OB_ISNULL(guard.cache_obj_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cache object manager returned null object", K(ret), K(ns));
   } else {
     guard.cache_obj_->plan_cache_ = this;
   }

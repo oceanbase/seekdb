@@ -414,7 +414,6 @@ int ObLSTxService::replay(const void *buffer,
   const char *log_buf = static_cast<const char *>(buffer);
   if (OB_ISNULL(parent_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid arguments", KP(parent_));
   } else if (OB_FAIL(base_header.deserialize(log_buf, nbytes, tmp_pos))) {
   } else if (OB_FAIL(ObTxReplayExecutor::execute(parent_, this, log_buf, nbytes,
                                                  tmp_pos, lsn, scn,

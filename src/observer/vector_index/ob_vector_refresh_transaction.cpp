@@ -53,11 +53,8 @@ int ObVectorRefreshTransaction::ObSessionParamSaved::save(
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("already save one session param", KR(ret), KP(session_info_),
-             KP(session_info));
   } else if (OB_ISNULL(session_info)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KP(session_info));
   } else {
     bool autocommit = false;
     if (OB_FAIL(query::ObSessionAccess::get_autocommit(
@@ -104,7 +101,6 @@ ObVectorRefreshTransaction::~ObVectorRefreshTransaction()
 {
   int ret = OB_SUCCESS;
   if (in_transaction_ && OB_FAIL(end(OB_SUCCESS == get_errno()))) {
-    LOG_WARN("fail to end vector refresh transaction", KR(ret));
   }
 }
 
@@ -114,11 +110,8 @@ int ObVectorRefreshTransaction::connect_(ObSQLSessionInfo *session_info,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr != sql_client_ || conn_.is_valid())) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("transaction can only be started once", KR(ret),
-             K(sql_client_), K(conn_));
   } else if (OB_UNLIKELY(nullptr == session_info || nullptr == sql_client)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KP(session_info), KP(sql_client));
   } else {
     if (OB_FAIL(
             ObInnerSQLConnection::
@@ -126,7 +119,6 @@ int ObVectorRefreshTransaction::connect_(ObSQLSessionInfo *session_info,
                     session_info, conn_))) {
     } else if (!conn_.is_valid()) {
       ret = OB_INNER_STAT_ERROR;
-      LOG_WARN("connection can not be NULL", KR(ret));
     } else {
       sql_client_ = sql_client;
     }
@@ -140,7 +132,6 @@ int ObVectorRefreshTransaction::start_transaction_()
   ObISQLConnection *connection = get_connection();
   if (OB_ISNULL(connection)) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("connection is NULL", KR(ret));
   } else if (OB_FAIL(connection->start_transaction(false))) {
   }
   if (OB_SUCCESS == get_errno()) {
@@ -155,7 +146,6 @@ int ObVectorRefreshTransaction::end_transaction_(const bool commit)
   ObISQLConnection *connection = get_connection();
   if (OB_ISNULL(connection)) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("connection is NULL", KR(ret));
   } else if (commit) {
     if (OB_FAIL(connection->commit())) {
     }
@@ -173,14 +163,11 @@ int ObVectorRefreshTransaction::start(ObSQLSessionInfo *session_info,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(in_transaction_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("already in transaction", KR(ret));
   } else if (OB_UNLIKELY(nullptr == session_info || nullptr == sql_client)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KP(session_info), KP(sql_client));
   } else if (OB_UNLIKELY(
                  query::ObSessionAccess::is_in_transaction(session_info))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected session is in transaction", KR(ret));
   } else if (OB_FAIL(session_param_saved_.save(session_info))) {
   } else if (OB_FAIL(connect_(session_info, sql_client))) {
   } else if (OB_FAIL(start_transaction_())) {
@@ -222,13 +209,11 @@ int ObVectorRefreshTransaction::lock_domain_table(
   ObInnerSQLConnection *connection = nullptr;
   if (OB_UNLIKELY(!in_transaction_ || OB_INVALID_ID == domain_table_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(in_transaction_), K(domain_table_id));
   } else if (OB_FAIL(owner_id.convert_from_value(
                  ObLockOwnerType::DEFAULT_OWNER_TYPE, get_tid_cache()))) {
   } else if (OB_ISNULL(connection = static_cast<ObInnerSQLConnection *>(
                            get_connection()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("connection is NULL", KR(ret));
   } else {
     ObLockObjRequest lock_arg;
     lock_arg.obj_type_ = ObLockOBJType::OBJ_TYPE_REFRESH_VECTOR_INDEX;

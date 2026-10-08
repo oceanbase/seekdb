@@ -58,7 +58,6 @@ int ObTransformDecorrelate::transform_one_stmt(common::ObIArray<ObParentDMLStmt>
   UNUSED(parent_stmts);
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(decorrelate_lateral_derived_table(stmt, 
                                                        decorrelate_stmts, 
                                                        is_lateral_trans_happened))) {
@@ -93,7 +92,6 @@ int ObTransformDecorrelate::transform_one_stmt_with_outline(common::ObIArray<ObP
                OB_FAIL(decorrelate_aggr_lateral_derived_table(stmt, 
                                                               decorrelate_stmts,
                                                               is_happened))) {
-      LOG_WARN("failed to decorrelate aggr lateral derived table", K(ret));
     } else if (!is_happened) {
     } else {
       ++ctx_->trans_list_loc_;
@@ -118,7 +116,6 @@ int ObTransformDecorrelate::construct_transform_hint(ObDMLStmt &stmt, void *tran
       || OB_ISNULL(decorrelate_stmts = static_cast<ObIArray<ObSelectStmt*>*>(trans_params))
       || OB_UNLIKELY(decorrelate_stmts->empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(ctx_), K(trans_params));
   } else {
     ObHint *hint = NULL;
     ObDMLStmt *child_stmt = NULL;
@@ -127,7 +124,6 @@ int ObTransformDecorrelate::construct_transform_hint(ObDMLStmt &stmt, void *tran
     for (int64_t i = 0; OB_SUCC(ret) && i < decorrelate_stmts->count(); ++i) {
       if (OB_ISNULL(child_stmt = decorrelate_stmts->at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null", K(ret), K(child_stmt));
       } else if (OB_FAIL(ObQueryHint::create_hint(ctx_->allocator_, T_DECORRELATE, hint))) {
       } else if (OB_FAIL(child_stmt->get_qb_name(child_qb_name))) {
       } else if (OB_FAIL(ctx_->add_src_hash_val(child_qb_name))) {
@@ -135,7 +131,6 @@ int ObTransformDecorrelate::construct_transform_hint(ObDMLStmt &stmt, void *tran
       } else if (NULL != (myhint = get_hint(child_stmt->get_stmt_hint()))
                  && myhint->is_enable_hint()
                  && OB_FAIL(ctx_->add_used_trans_hint(myhint))) {
-        LOG_WARN("failed to add used trans hint", K(ret));
       } else {
         hint->set_qb_name(child_qb_name);
       }
@@ -151,14 +146,12 @@ int ObTransformDecorrelate::decorrelate_lateral_derived_table(ObDMLStmt *stmt,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(stmt));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_from_items().count(); ++i) {
     TableItem *table_item = stmt->get_table_item(stmt->get_from_item(i));
     bool is_happened = false;
     if (OB_ISNULL(table_item)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (table_item->is_joined_table()) {
       if (OB_FAIL(transform_joined_table(stmt,
                                          static_cast<JoinedTable*>(table_item),
@@ -198,7 +191,6 @@ int ObTransformDecorrelate::transform_joined_table(ObDMLStmt *parent_stmt,
       OB_ISNULL(left_table = joined_table->left_table_) ||
       OB_ISNULL(right_table = joined_table->right_table_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(parent_stmt), K(joined_table));
   } else {
     bool can_push_where = true;
     bool can_be_decorrelate = true;
@@ -293,7 +285,6 @@ int ObTransformDecorrelate::transform_lateral_inline_view(ObDMLStmt *parent_stmt
       OB_ISNULL(table_item) ||
       OB_ISNULL(ref_query = table_item->ref_query_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(parent_stmt), K(table_item));
   } else if (OB_FAIL(check_transform_validity(parent_stmt,
                                               table_item->ref_query_,
                                               table_item,
@@ -334,7 +325,6 @@ int ObTransformDecorrelate::check_transform_validity(ObDMLStmt *stmt,
   if (OB_ISNULL(stmt) || OB_ISNULL(ref_query) ||
       OB_ISNULL(table_item)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("subquery is null", K(ret), K(ref_query));
   } else if (OB_FAIL(check_hint_allowed_decorrelate(*stmt, *ref_query, is_valid))) {
   } else if (!is_valid) {
     // do nothing
@@ -344,7 +334,6 @@ int ObTransformDecorrelate::check_transform_validity(ObDMLStmt *stmt,
                                                                      joined_table,
                                                                      table_item,
                                                                      is_ref_outer))) {
-    LOG_WARN("failed to check lateral ref outer table", K(ret));
   } else if (is_ref_outer) {
     is_valid = false;
     OPT_TRACE("lateral ref outer table, cannot decorrelate");
@@ -401,7 +390,6 @@ int ObTransformDecorrelate::check_hint_allowed_decorrelate(ObDMLStmt &stmt,
   const ObHint *no_rewrite2 = ref_query.get_stmt_hint().get_no_rewrite_hint();
   if (OB_ISNULL(ctx_) || OB_ISNULL(query_hint = stmt.get_stmt_hint().query_hint_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(ctx_), K(query_hint));
   } else if (query_hint->has_outline_data()) {
     // outline data allowed decorrelate
     allowed = query_hint->is_valid_outline_transform(ctx_->trans_list_loc_, myhint);
@@ -412,7 +400,6 @@ int ObTransformDecorrelate::check_hint_allowed_decorrelate(ObDMLStmt &stmt,
     if (OB_FAIL(ctx_->add_used_trans_hint(no_rewrite1))) {
     } else if (OB_FAIL(ctx_->add_used_trans_hint(no_rewrite2))) {
     } else if (is_disable && OB_FAIL(ctx_->add_used_trans_hint(myhint))) {
-      LOG_WARN("failed to add used trans hint", K(ret));
     }
   }
   return ret;
@@ -430,7 +417,6 @@ int ObTransformDecorrelate::check_lateral_inline_view_validity(TableItem *table_
   if (OB_ISNULL(table_item) ||
       OB_ISNULL(ref_query)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(table_item), K(ref_query));
   } else if (OB_FAIL(ref_query->has_ref_assign_user_var(check_status))) {
   } else if (check_status) {
     is_valid = false;
@@ -491,10 +477,8 @@ int ObTransformDecorrelate::do_transform_lateral_inline_view(ObDMLStmt *stmt,
       OB_ISNULL(ctx_->expr_factory_) ||
       OB_ISNULL(ctx_->allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(stmt), K(ref_query), K(table_item), K(ctx_));
   } else if (!can_push_where && OB_ISNULL(joined_table)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(can_push_where), K(joined_table));
   } else if (need_create_spj) {
     if (OB_FAIL(ObTransformUtils::create_spj_and_pullup_correlated_exprs(table_item->exec_params_,
                                                                          ref_query, 
@@ -534,9 +518,7 @@ int ObTransformDecorrelate::do_transform_lateral_inline_view(ObDMLStmt *stmt,
     } else if (OB_FAIL(copier.copy_on_replace(candi_pullup_conds, pullup_conds))) {
     } else if (OB_FAIL(ObTransformUtils::decorrelate(pullup_conds, table_item->exec_params_))) {
     } else if (can_push_where && OB_FAIL(append(stmt->get_condition_exprs(), pullup_conds))) {
-      LOG_WARN("failed to append condition exprs", K(ret));
     } else if (!can_push_where && OB_FAIL(append(joined_table->get_join_conditions(), pullup_conds))) {
-      LOG_WARN("failed to append on condition exprs", K(ret));
     } else if (OB_FAIL(stmt->adjust_subquery_list())) {
     } else if (OB_FAIL(ref_query->adjust_subquery_list())) {
     } else if (OB_FAIL(ref_query->formalize_stmt(ctx_->session_info_, false))) {
@@ -553,7 +535,6 @@ int ObTransformDecorrelate::check_hint_status(const ObDMLStmt &stmt, bool &need_
   const ObHint *cur_trans_hint = NULL;
   if (OB_ISNULL(ctx_) || OB_ISNULL(query_hint = stmt.get_stmt_hint().query_hint_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(ctx_), K(query_hint));
   } else if (!query_hint->has_outline_data()) {
     need_trans = true;
   } else if (NULL == (cur_trans_hint = query_hint->get_outline_trans_hint(ctx_->trans_list_loc_)) ||
@@ -565,12 +546,10 @@ int ObTransformDecorrelate::check_hint_status(const ObDMLStmt &stmt, bool &need_
     for (int64_t i = 0; !need_trans && OB_SUCC(ret) && i < stmt.get_table_size(); ++i) {
       if (OB_ISNULL(table_item = stmt.get_table_item(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (!table_item->is_lateral_table()) {
         // do nothing
       } else if (OB_ISNULL(select_stmt = table_item->ref_query_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else {
         need_trans = query_hint->is_valid_outline_transform(ctx_->trans_list_loc_,
                                                             get_hint(select_stmt->get_stmt_hint()));
@@ -592,14 +571,12 @@ int ObTransformDecorrelate::decorrelate_aggr_lateral_derived_table(ObDMLStmt *st
       OB_ISNULL(ctx_) ||
       OB_ISNULL(ctx_->session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(stmt), K(ctx_));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_from_items().count(); ++i) {
     TableItem *table_item = stmt->get_table_item(stmt->get_from_item(i));
     bool is_happened = false;
     if (OB_ISNULL(table_item)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (table_item->is_joined_table()) {
       if (OB_FAIL(joined_table_list.push_back(static_cast<JoinedTable*>(table_item)))) {
       }
@@ -616,7 +593,6 @@ int ObTransformDecorrelate::decorrelate_aggr_lateral_derived_table(ObDMLStmt *st
     }
     if (OB_SUCC(ret) && !is_happened && 
         OB_FAIL(from_item_list.push_back(stmt->get_from_item(i)))) {
-      LOG_WARN("failed to push back array", K(ret));
     }
   }
   if (OB_SUCC(ret) && trans_happened) {
@@ -644,7 +620,6 @@ int ObTransformDecorrelate::transform_aggr_lateral_inline_view(ObDMLStmt *parent
       OB_ISNULL(table_item) ||
       OB_ISNULL(ref_query = table_item->ref_query_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(parent_stmt), K(table_item));
   } else if (OB_FAIL(check_transform_aggr_validity(parent_stmt,
                                                    table_item->ref_query_,
                                                    table_item,
@@ -677,7 +652,6 @@ int ObTransformDecorrelate::check_transform_aggr_validity(ObDMLStmt *stmt,
   if (OB_ISNULL(stmt) || OB_ISNULL(ref_query) ||
       OB_ISNULL(table_item)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("subquery is null", K(ret), K(ref_query));
   } else if (OB_FAIL(check_hint_allowed_decorrelate(*stmt, *ref_query, is_valid))) {
   } else if (!is_valid) {
     // do nothing
@@ -724,14 +698,12 @@ int ObTransformDecorrelate::check_transform_aggr_condition_validity(ObDMLStmt *s
       OB_ISNULL(ref_query) ||
       OB_ISNULL(table_item)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(stmt), K(ref_query), K(table_item));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && is_valid && i < ref_query->get_condition_size(); ++i) {
       ObRawExpr *cond = NULL;
       bool is_correlated = false;
       if (OB_ISNULL(cond = ref_query->get_condition_expr(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("condition expr is null", K(ret));
       } else if (OB_FAIL(ObTransformUtils::is_correlated_expr(table_item->exec_params_,
                                                               cond, 
                                                               is_correlated))) {
@@ -773,11 +745,9 @@ int ObTransformDecorrelate::do_transform_aggr_lateral_inline_view(
       OB_ISNULL(ctx_) || 
       OB_ISNULL(ctx_->allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (table_item->table_name_.empty() &&
              OB_FAIL(stmt->generate_view_name(*ctx_->allocator_,
                                               table_item->table_name_))) {
-    LOG_WARN("failed to generate view name", K(ret));
   } else if (table_item->alias_name_.empty() &&
              OB_FALSE_IT(table_item->alias_name_ = table_item->table_name_)) {
     // do nothing
@@ -790,7 +760,6 @@ int ObTransformDecorrelate::do_transform_aggr_lateral_inline_view(
         OB_ISNULL(cond_expr->get_param_expr(0)) ||
         OB_ISNULL(cond_expr->get_param_expr(1))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("nested expr is invalid", K(ret), K(cond_expr));
     } else if (OB_FAIL(ObOptimizerUtil::remove_item(ref_query->get_condition_exprs(),
                                                     cond_expr))) {
     } else if (OB_FAIL(ObTransformUtils::is_correlated_expr(table_item->exec_params_,
@@ -854,7 +823,6 @@ int ObTransformDecorrelate::gather_select_item_null_propagate(ObSelectStmt *ref_
   bool is_scala_group_by = false;
   if (OB_ISNULL(ref_query)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(is_null_prop.prepare_allocate(ref_query->get_select_item_size()))) {
   } else {
     is_scala_group_by = ref_query->is_scala_group_by();
@@ -867,7 +835,6 @@ int ObTransformDecorrelate::gather_select_item_null_propagate(ObSelectStmt *ref_
       is_null_prop.at(i) = true;
     } else if (OB_ISNULL(expr = ref_query->get_select_item(i).expr_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("select expr is null", K(ret), K(expr));
     } else if (OB_FAIL(ObTransformUtils::extract_nullable_exprs(expr, vars))) {
     } else if (vars.count() <= 0) {
       // do nothing
@@ -907,7 +874,6 @@ int ObTransformDecorrelate::transform_from_list(ObDMLStmt &stmt,
                                                               false))) {
     } else if (OB_ISNULL(joined_table)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("joined table is null", K(ret));
     } else if (OB_FAIL(joined_table_list.push_back(static_cast<JoinedTable*>(joined_table)))) {
     } else {
       FromItem item;

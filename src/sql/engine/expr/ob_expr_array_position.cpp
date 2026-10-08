@@ -52,10 +52,8 @@ int ObExprArrayPosition::calc_result_type2(ObExprResType &type,
   uint16_t subschema_id;
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec_ctx is null", K(ret));
   } else if (OB_ISNULL(type_ctx.get_raw_expr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("raw expr is null", K(ret));
   }
 
   if (OB_FAIL(ret)) {
@@ -230,7 +228,6 @@ int ObExprArrayPosition::array_position(const ObExpr &expr,
   }
   default: {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid type", K(ret), K(right_tc));
   }
   }
 

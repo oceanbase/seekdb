@@ -42,18 +42,15 @@ int ObExprDateFormat::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(op_cg_ctx);
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
-  if (rt_expr.arg_cnt_ != 2) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("date_format expr should have two params", K(ret), K(rt_expr.arg_cnt_));
-  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])
-             || OB_ISNULL(rt_expr.args_[1])) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of date_format expr is null", K(ret), K(rt_expr.args_));
-  } else if (ObStringTC != ob_obj_type_class(rt_expr.args_[1]->datum_meta_.type_)
-             && ObNullType != rt_expr.args_[1]->datum_meta_.type_) {
-    rt_expr.eval_func_ = ObExprDateFormat::calc_date_format_invalid;
-  } else {
-    rt_expr.eval_func_ = ObExprDateFormat::calc_date_format;
+  {
+    OB_ASSERT(rt_expr.arg_cnt_ == 2);
+    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
+    if (ObStringTC != ob_obj_type_class(rt_expr.args_[1]->datum_meta_.type_) &&
+        ObNullType != rt_expr.args_[1]->datum_meta_.type_) {
+      rt_expr.eval_func_ = ObExprDateFormat::calc_date_format_invalid;
+    } else {
+      rt_expr.eval_func_ = ObExprDateFormat::calc_date_format;
+    }
   }
   return ret;
 }
@@ -77,13 +74,11 @@ int ObExprDateFormat::calc_date_format(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   ObString locale_name;
   if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("session is null", K(ret), K(session));
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
   } else if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
   } else if (FALSE_IT(ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
                                                        session->is_ignore_stmt(),
 	                                                     sql_mode, cast_mode))) {
-    LOG_WARN("get default cast mode failed", K(ret));
   } else if (OB_FAIL(expr.eval_param_value(ctx, date, format))) {
   } else if (date->is_null() || format->is_null()) {
     expr_datum.set_null();
@@ -134,7 +129,6 @@ int ObExprDateFormat::calc_date_format_invalid(const ObExpr &expr, ObEvalCtx &ct
   ObSQLMode sql_mode = 0;
   if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("session is null", K(ret), K(session));
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
   } else if (FALSE_IT(ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
                                                         session->is_ignore_stmt(),
@@ -229,21 +223,15 @@ int ObExprGetFormat::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(op_cg_ctx);
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
-  if (rt_expr.arg_cnt_ != 2) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get_format expr should have two params", K(ret), K(rt_expr.arg_cnt_));
-  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])
-             || OB_ISNULL(rt_expr.args_[1])) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of get_format expr is null", K(ret), K(rt_expr.args_));
-  } else if (ObIntType != rt_expr.args_[0]->datum_meta_.type_
-            || (ObVarcharType != rt_expr.args_[1]->datum_meta_.type_
-                && ObNullType != rt_expr.args_[1]->datum_meta_.type_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument type", K(ret), K(rt_expr.args_[0]->datum_meta_),
-            K(rt_expr.args_[1]->datum_meta_));
-  } else {
-    rt_expr.eval_func_ = ObExprGetFormat::calc_get_format;
+  {
+    OB_ASSERT(rt_expr.arg_cnt_ == 2);
+    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
+    if (ObIntType != rt_expr.args_[0]->datum_meta_.type_ ||
+        (ObVarcharType != rt_expr.args_[1]->datum_meta_.type_ && ObNullType != rt_expr.args_[1]->datum_meta_.type_)) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      rt_expr.eval_func_ = ObExprGetFormat::calc_get_format;
+    }
   }
   return ret;
 }
@@ -257,7 +245,6 @@ int ObExprGetFormat::calc_get_format(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   } else if (OB_UNLIKELY(unit->is_null() || unit->get_int() < 0
              || unit->get_int() >= GET_FORMAT_MAX)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("unexpected unit unit type", K(ret));
   } else if (format->is_null()) {
     expr_datum.set_null();
   } else {

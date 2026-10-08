@@ -54,7 +54,6 @@ int ObStmtExprReplacer::add_skip_expr(const ObRawExpr *skip_expr)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(skip_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), KP(skip_expr));
   } else if (OB_FAIL(replacer_.add_skip_expr(skip_expr))) {
   }
   return ret;
@@ -112,7 +111,6 @@ int ObSharedExprChecker::destroy()
 {
   int ret = OB_SUCCESS;
   if (shared_expr_set_.created() && OB_FAIL(shared_expr_set_.destroy())) {
-    LOG_WARN("destroy hash set failed", K(ret));
   }
   return ret;
 }
@@ -133,7 +131,6 @@ int ObSharedExprChecker::is_shared_expr(const ObRawExpr *expr, bool &is_shared) 
       is_shared = true;
     } else if (OB_UNLIKELY(OB_HASH_NOT_EXIST != tmp_ret)) {
       ret = tmp_ret;
-      LOG_WARN("failed to check hash set exists", K(ret));
     }
   }
   return ret;
@@ -146,7 +143,6 @@ int ObSharedExprChecker::do_visit(ObRawExpr *&expr)
   uint64_t key = reinterpret_cast<uint64_t>(expr);
   if (OB_ISNULL(expr) || OB_ISNULL(stmt_expr_set_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(expr), K(stmt_expr_set_));
   } else if (expr->has_flag(CNT_COLUMN) ||
               expr->has_flag(CNT_AGG) ||
               expr->has_flag(CNT_SET_OP) ||
@@ -160,7 +156,6 @@ int ObSharedExprChecker::do_visit(ObRawExpr *&expr)
         if (OB_FAIL(shared_expr_set_.set_refactored(key))) {
         }
       } else {
-        LOG_WARN("failed to add expr into set", K(ret));
       }
     }
     if (OB_SUCC(ret) && (!is_shared || need_check_in_share)) {
@@ -182,7 +177,6 @@ int ObStmtExecParamFormatter::do_visit(ObRawExpr *&expr)
     //do nothing
   } else if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret), K(expr));
   } else if (OB_FAIL(expr->extract_info())) {
   }
   return ret;
@@ -193,13 +187,11 @@ int ObStmtExecParamFormatter::do_formalize_exec_param(ObRawExpr *&expr, bool &is
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret), K(expr));
   } else if (expr->is_exec_param_expr()) {
     ObExecParamRawExpr *exec_param = static_cast<ObExecParamRawExpr *>(expr);
     ObRawExpr *ref_expr = exec_param->get_ref_expr();
     if (OB_ISNULL(ref_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ref expr is null", K(ret));
     } else if (OB_FAIL(SMART_CALL(do_formalize_exec_param(ref_expr, is_happened)))) {
     } else if (ref_expr->is_const_expr() &&
                !ref_expr->has_flag(CNT_ONETIME)) {
@@ -234,7 +226,6 @@ int ObStmtExprChecker::check_expr(const ObRawExpr *expr) const
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret));
   } else if (OB_FAIL(check_const_flag(expr))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
@@ -250,13 +241,11 @@ int ObStmtExprChecker::check_const_flag(const ObRawExpr *expr) const
   bool expect_is_const = true;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret), K(expr));
   }
   for (int64_t i = 0; OB_SUCC(ret) && expect_is_const && i < expr->get_param_count(); ++i) {
     const ObRawExpr *param_expr = expr->get_param_expr(i);
     if (OB_ISNULL(param_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("param expr is null", K(ret), K(param_expr));
     } else {
       expect_is_const = param_expr->is_const_expr();
     }
@@ -268,7 +257,6 @@ int ObStmtExprChecker::check_const_flag(const ObRawExpr *expr) const
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(expr->is_const_expr() != expect_is_const)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr const flag is not match", K(ret), K(expect_is_const), KPC(expr));
   }
   return ret;
 }

@@ -49,7 +49,6 @@ int ObIndexStatsEstimator::estimate(const ObOptStatGatherParam &param,
   //            3. AvgRowLen should be added at the last
   if (OB_UNLIKELY(dst_opt_stats.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected empty", K(ret), K(dst_opt_stats.empty()));
   } else if (OB_FAIL(ObDbmsStatsUtils::init_col_stats(allocator,
                                                       column_params.count(),
                                                       src_col_stats))) {
@@ -66,7 +65,6 @@ int ObIndexStatsEstimator::estimate(const ObOptStatGatherParam &param,
   } else if (OB_FAIL(fill_query_timeout_info(ctx_.get_allocator(), duration_time))) {
   } else if (dst_opt_stats.count() > 1 &&
              OB_FAIL(fill_index_group_by_info(ctx_.get_allocator(), param, calc_part_id_str))) {
-    LOG_WARN("failed to group by info", K(ret));
   } else if (OB_FAIL(add_stat_item(ObStatRowCount(src_tab_stat)))) {
   } else if (calc_part_id_str.empty()) {
     if (OB_FAIL(fill_partition_condition(ctx_.get_allocator(), param,
@@ -74,7 +72,6 @@ int ObIndexStatsEstimator::estimate(const ObOptStatGatherParam &param,
     } else if (OB_UNLIKELY(dst_opt_stats.count() != 1) ||
                OB_ISNULL(dst_opt_stats.at(0).table_stat_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected error", K(ret), K(dst_opt_stats.count()));
     } else {
       src_tab_stat->set_partition_id(dst_opt_stats.at(0).table_stat_->get_partition_id());
     }
@@ -90,7 +87,6 @@ int ObIndexStatsEstimator::estimate(const ObOptStatGatherParam &param,
                OB_FAIL(add_stat_item(ObStatNumNull(col_param, src_tab_stat, src_col_stats.at(i)))) ||
                OB_FAIL(add_stat_item(ObStatNumDistinct(col_param, src_col_stats.at(i), param.need_approx_ndv_))) ||
                OB_FAIL(add_stat_item(ObStatLlcBitmap(col_param, src_col_stats.at(i))))) {
-      LOG_WARN("failed to add statistic item", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -111,20 +107,17 @@ int ObIndexStatsEstimator::fill_index_info(common::ObIAllocator &alloc,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(table_name.empty() || index_name.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(table_name), K(index_name));
   } else {
     const char *fmt_str = "INDEX(%.*s %.*s)";
     char *buf = NULL;
     int64_t buf_len = table_name.length() + index_name.length() + strlen(fmt_str);
     if (OB_ISNULL(buf = static_cast<char *>(alloc.alloc(buf_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory", K(ret), K(buf), K(buf_len));
     } else {
       int64_t real_len = sprintf(buf, fmt_str, table_name.length(), table_name.ptr(),
                                                index_name.length(), index_name.ptr());
       if (OB_UNLIKELY(real_len < 0 || real_len > buf_len)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(real_len));
       } else {
         ObString index_str;
         index_str.assign_ptr(buf, real_len);
@@ -152,7 +145,6 @@ int ObIndexStatsEstimator::fill_index_group_by_info(ObIAllocator &allocator,
     type_str = ObString(7, "SUBPART");
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected type", K(param.stat_level_), K(ret));
   }
   if (OB_SUCC(ret)) {
     const int64_t len = strlen(fmt_str) +
@@ -162,14 +154,12 @@ int ObIndexStatsEstimator::fill_index_group_by_info(ObIAllocator &allocator,
     int32_t real_len = -1;
     if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory", K(ret), K(len));
     } else {
       real_len = sprintf(buf, fmt_str, param.data_table_name_.length(),param.data_table_name_.ptr(),
                                        param.tab_name_.length(), param.tab_name_.ptr(),
                                        type_str.length(), type_str.ptr());
       if (OB_UNLIKELY(real_len < 0 || real_len > len)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to print partition hint", K(ret), K(real_len), K(len), K(param));
       } else {
         group_by_string_.assign(buf, real_len);
         //"GROUP BY CALC_PARTITION_ID(xxxxx)"
@@ -204,7 +194,6 @@ int ObIndexStatsEstimator::fill_partition_condition(ObIAllocator &allocator,
     int32_t real_len = -1;
     if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory", K(ret), K(len));
     } else {
       real_len = sprintf(buf, fmt_str, param.data_table_name_.length(),param.data_table_name_.ptr(),
                                        param.tab_name_.length(), param.tab_name_.ptr(),
@@ -212,7 +201,6 @@ int ObIndexStatsEstimator::fill_partition_condition(ObIAllocator &allocator,
                                        dst_partition_id);
       if (OB_UNLIKELY(real_len < 0 || real_len > len)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to print partition hint", K(ret), K(real_len), K(len), K(param));
       } else {
         where_string_.assign(buf, real_len);
       }
@@ -240,17 +228,14 @@ int ObIndexStatsEstimator::fast_gather_index_stats(ObExecContext &ctx,
     //do nothing
   } else if (OB_UNLIKELY(index_param.is_global_index_ && gather_part_ids.count() != 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(index_param.is_global_index_), K(gather_part_ids.count()));
   } else if (OB_FAIL(mgr.get_table_stat(data_param.table_id_, gather_part_ids, data_table_stats))) {
   } else if (index_param.need_estimate_block_ &&
              OB_FAIL(partition_id_block_map.create(10000,
                                                    ObModIds::OB_HASH_BUCKET_TABLE_STATISTICS,
                                                    ObModIds::OB_HASH_BUCKET_TABLE_STATISTICS))) {
-    LOG_WARN("failed to create hash map", K(ret));
   } else if (index_param.need_estimate_block_ &&
              OB_FAIL(ObBasicStatsEstimator::estimate_block_count(ctx, index_param,
                                                                  partition_id_block_map))) {
-    LOG_WARN("failed to estimate block count", K(ret));
   } else {
     bool is_continued = true;
     for (int64_t i = 0; OB_SUCC(ret) && is_continued && i < data_table_stats.count(); ++i) {
@@ -264,7 +249,6 @@ int ObIndexStatsEstimator::fast_gather_index_stats(ObExecContext &ctx,
         void *ptr = NULL;
         if (OB_ISNULL(ptr = allocator.alloc(sizeof(ObOptTableStat)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("memory is not enough", K(ret), K(ptr));
         } else {
           ObOptTableStat *index_stat = new (ptr) ObOptTableStat();
           index_stat->set_table_id(index_param.table_id_);
@@ -287,11 +271,9 @@ int ObIndexStatsEstimator::fast_gather_index_stats(ObExecContext &ctx,
               if (OB_LIKELY(OB_HASH_NOT_EXIST == ret)) {
                 ret = OB_SUCCESS;
               } else {
-                LOG_WARN("failed to get refactored", K(ret));
               }
             } else if (OB_ISNULL(block_num_stat)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("get unexpected error", K(ret), K(block_num_stat));
             } else {
               index_stat->set_macro_block_num(block_num_stat->tab_macro_cnt_);
               index_stat->set_micro_block_num(block_num_stat->tab_micro_cnt_);
@@ -354,7 +336,6 @@ int ObIndexStatsEstimator::fast_get_index_avg_len(const int64_t data_partition_i
     }
     if (OB_SUCC(ret) && OB_UNLIKELY(!is_found)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected error", K(ret), K(is_found), K(data_param), K(index_param));
     }
   }
   if (OB_SUCC(ret) && !column_ids.empty()) {
@@ -372,7 +353,6 @@ int ObIndexStatsEstimator::fast_get_index_avg_len(const int64_t data_partition_i
       for (int64_t i = 0; OB_SUCC(ret) && is_all_valid && i < col_stat_handles.count(); ++i) {
         if (OB_ISNULL(col_stat_handles.at(i).stat_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(col_stat_handles.at(i).stat_), K(ret));
         } else if (col_stat_handles.at(i).stat_->get_last_analyzed() > 0) {
           avg_len += col_stat_handles.at(i).stat_->get_avg_len();
         } else {
@@ -429,7 +409,6 @@ int ObIndexStatsEstimator::get_index_part_id(const int64_t data_tab_partition_id
                          data_param.all_part_infos_.count() != index_param.all_part_infos_.count() ||
                          data_param.all_subpart_infos_.count() != index_param.all_subpart_infos_.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(data_param), K(index_param));
   } else {
     bool is_found = false;
     for (int64_t i = 0; !is_found && i < data_param.all_part_infos_.count(); ++i) {
@@ -448,7 +427,6 @@ int ObIndexStatsEstimator::get_index_part_id(const int64_t data_tab_partition_id
     }
     if (!is_found) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected error", K(ret), K(data_tab_partition_id), K(data_param), K(index_param));
     }
   }
   return ret;
@@ -459,19 +437,16 @@ int ObIndexStatsEstimator::add_no_use_das_hint(common::ObIAllocator &alloc, cons
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(table_name.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(table_name));
   } else {
     const char *fmt_str = "NO_USE_DAS(%.*s)";
     char *buf = NULL;
     int64_t buf_len = table_name.length() + 16;
     if (OB_ISNULL(buf = static_cast<char *>(alloc.alloc(buf_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory", K(ret), K(buf), K(buf_len));
     } else {
       int64_t real_len = snprintf(buf, buf_len, fmt_str, table_name.length(), table_name.ptr());
       if (OB_UNLIKELY(real_len < 0 || real_len > buf_len)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(real_len));
       } else {
         ObString hint;
         hint.assign_ptr(buf, real_len);

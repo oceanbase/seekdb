@@ -13,7 +13,7 @@ source "$HOME/.cargo/env"
 
 On Windows, download and run `rustup-init.exe` from the [official Rust installation page](https://www.rust-lang.org/tools/install), then open a new PowerShell window so `%USERPROFILE%\.cargo\bin` is available in `PATH`.
 
-The repository pins Rust `1.97.1`, includes the `clippy` component, and uses these targets:
+The repository pins Rust `1.98.1`, includes the `clippy` component, and uses these targets:
 
 ```text
 x86_64-unknown-linux-gnu
@@ -73,6 +73,37 @@ brew install zstd lz4 utf8proc thrift re2 brotli
 ```
 
 See [Homebrew optimization](homebrew.md) if a mirror is required.
+
+### macOS 27 (Apple Silicon)
+
+macOS 27 and later select `oceanbase.macos27.arm64.deps`, which does not download
+LLVM. Third-party libraries currently reuse packages from the macOS 15 repository.
+Install Xcode or Command Line Tools with a macOS 27 SDK. CMake checks the active
+developer tools first, then `/Library/Developer/CommandLineTools` if the active
+SDK is too old. It uses the selected tools' Apple Clang by default.
+
+```bash
+bash build.sh release --init
+cmake --build build_release -j8
+```
+
+Select a developer installation with
+`-DOB_MACOS_DEVELOPER_DIR=/path/to/Contents/Developer`, or set `DEVELOPER_DIR` on
+the first configure. An explicitly selected installation must provide SDK 27 or
+newer. The SDK, linker, and Rust/Cargo developer environment are recorded in the
+build rules; subsequent builds do not require the environment variable.
+
+To use Homebrew LLVM compatible with the SDK 27 C++ headers:
+
+```bash
+brew install llvm
+bash build.sh release --init -DOB_MACOS_LLVM_ROOT="$(brew --prefix llvm)"
+```
+
+This selects Homebrew Clang/Clang++; the SDK and linker still come from the Apple
+developer installation. Configuration compiles and links a C++ standard-library
+probe to check LLVM/SDK compatibility. Use a fresh build directory or run
+`bash build.sh clean` before switching compilers in an existing full build.
 
 ## Windows host packages
 

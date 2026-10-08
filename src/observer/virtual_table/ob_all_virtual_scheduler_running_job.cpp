@@ -199,7 +199,6 @@ bool ObAllVirtualSchedulerRunningJob::FillScanner::operator()(
     } // for
     // The scanner supports up to 64M, so the overflow situation is not considered for the time being
     if (FAILEDx(scanner_->add_row(*cur_row_))) {
-      SERVER_LOG(WARN, "fail to add row", K(ret), K(*cur_row_));
     }
   }
   return OB_SUCCESS == ret;

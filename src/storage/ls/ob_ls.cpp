@@ -81,7 +81,6 @@ int ObLS::init(const ObRestoreStatus &restore_status,
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ls is already initialized", K(ret), K_(ls_meta));
   } else if (OB_FAIL(ls_meta_.init(restore_status, create_scn, clog_base_lsn))) {
   } else if (OB_FAIL(ls_freezer_.init(this))) {
   } else {
@@ -89,7 +88,6 @@ int ObLS::init(const ObRestoreStatus &restore_status,
     common::ObInOutBandwidthThrottle *bandwidth_throttle = GCTX.bandwidth_throttle_;
     if (OB_ISNULL(bandwidth_throttle)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("bandwidth throttle should not be NULL", KR(ret));
     } else if (OB_FAIL(txs_svr->create_ls(*this, &tx_palf_param, nullptr))) {
     } else if (OB_FAIL(ls_tablet_svr_.init(this))) {
     } else if (OB_FAIL(tx_table_.init(this))) {
@@ -155,7 +153,6 @@ int ObLS::create_ls(const palf::PalfBaseInfo &palf_base_info)
   ObLogService *logservice = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ls do not init", K(ret));
   } else if (OB_FAIL(logservice->check_palf_exist(is_palf_exist))) {
   } else if (is_palf_exist) {
     ret = OB_ERR_UNEXPECTED;
@@ -208,7 +205,6 @@ int ObLS::remove_ls()
   ObLogService *logservice = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ls do not init", K(ret));
   } else {
     if (OB_FAIL(logservice->remove_ls(log_handler_))) {
     }
@@ -276,7 +272,6 @@ int ObLS::stop()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ls is not inited", K(ret));
   } else if (OB_FAIL(stop_())) {
   } else if (OB_FAIL(running_state_.stop())) {
   } else {
@@ -390,7 +385,6 @@ void ObLS::destroy()
   // test case may not init ls and ObTransService may have been destroyed before ls destroy.
   if (OB_ISNULL(txs_svr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tx service is null, may be memory leak", KP(txs_svr));
   } else if (OB_FAIL(txs_svr->remove_ls(false))) {
   }
   checkpoint_executor_.reset();
@@ -447,7 +441,6 @@ int ObLS::start_local_log_(const int64_t deadline_us, const bool activate_handle
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(apply_service->start_local_append())) {
-    LOG_WARN("start local apply failed", K(ret));
   }
   if (OB_SUCC(ret) && OB_FAIL(replay_service->disable_local_replay())) {
     LOG_WARN("stop local replay failed", K(ret));
@@ -549,7 +542,6 @@ int ObLS::offline_(const int64_t start_ts)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ls is not inited", K(ret));
   } else if (running_state_.is_stopped()) {
     LOG_INFO("ls is stopped state, do nothing", K(ret), K(ls_meta_));
   } else if (OB_FAIL(running_state_.pre_offline())) {
@@ -653,7 +645,6 @@ int ObLS::register_vector_index_log_handler_(
   if (OB_FAIL(replay_handler_.register_handler(type, &handler.replay_handler()))) {
   } else if (OB_FAIL(local_log_handler_set_.register_handler(
                  type, &handler.local_handler()))) {
-    LOG_WARN("local handler register failed", K(ret), K(type), K(ls_meta_));
     replay_handler_.unregister_handler(type);
   } else if (OB_FAIL(checkpoint_executor_.register_handler(
                  type, &handler.checkpoint_handler()))) {
@@ -681,14 +672,11 @@ int ObLS::register_composition_log_handler_(
       ::oceanbase::share::server_service<::oceanbase::storage::ObILSRuntimeAdapter>();
   if (OB_ISNULL(adapter)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("LS runtime adapter is not initialized", K(ret), K(type));
   } else if (OB_FAIL(adapter->resolve_log_handler(type, handler))) {
   } else if (OB_UNLIKELY(!handler.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("composition log handler is invalid", K(ret), K(type), K(ls_meta_));
   } else if (OB_FAIL(replay_handler_.register_handler(type, handler.replay_))) {
   } else if (OB_FAIL(local_log_handler_set_.register_handler(type, handler.local_))) {
-    LOG_WARN("local handler register failed", K(ret), K(type), K(ls_meta_));
     replay_handler_.unregister_handler(type);
   } else if (OB_FAIL(checkpoint_executor_.register_handler(type, handler.checkpoint_))) {
     LOG_WARN("checkpoint handler register failed", K(ret), K(type), K(ls_meta_));
@@ -721,7 +709,6 @@ int ObLS::register_common_service()
   REGISTER_REPLAY_CHECKPOINT_HANDLER(TRANS_ID_LOG_BASE_TYPE, ::oceanbase::share::server_service<::oceanbase::transaction::ObTransIDService>());
   if (OB_SUCC(ret) &&
       OB_FAIL(register_composition_log_handler_(MAJOR_FREEZE_LOG_BASE_TYPE))) {
-    LOG_WARN("failed to register major freeze log handler", K(ret), K(ls_meta_));
   }
   return ret;
 }
@@ -742,7 +729,6 @@ int ObLS::register_local_services_()
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(refresh_handler)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("internal table refresh handler is not initialized", K(ret));
   } else if (OB_FAIL(local_log_handler_set_.register_handler(
       INTERNAL_TABLE_NOTIFIER_LOG_BASE_TYPE, refresh_handler))) {
   }
@@ -779,11 +765,9 @@ int ObLS::init_vector_idx_scheduler_()
       ::oceanbase::share::server_service<::oceanbase::storage::ObILSRuntimeAdapter>();
   if (OB_ISNULL(adapter)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("LS runtime adapter is not initialized", K(ret));
   } else if (vector_idx_scheduler_timer_.inited() ||
              OB_NOT_NULL(vector_idx_scheduler_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("vector index scheduler init twice", KR(ret));
   } else if (OB_FAIL(vector_idx_scheduler_timer_.init(
       "VecIdxSched", common::ObMemAttr("VecIdxSched")))) {
   } else if (OB_FAIL(adapter->create_vector_index_scheduler(
@@ -905,7 +889,6 @@ int ObLS::online_without_lock_(const LocalLogMode log_mode)
   const bool is_append_mode = LocalLogMode::APPEND == log_mode;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ls is not inited", K(ret));
   } else if (running_state_.is_running()) {
     LOG_INFO("ls is running state, do nothing", K(ret));
   } else if (OB_FAIL(ls_tablet_svr_.online())) {
@@ -936,7 +919,6 @@ int ObLS::set_ls_meta(const ObLSMeta &ls_meta)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ls is not inited", K(ret));
   } else {
     ls_meta_ = ls_meta;
     ObAllIDMeta all_id_meta;
@@ -968,7 +950,6 @@ int ObLS::set_ls_epoch(const int64_t ls_epoch)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ls is not inited", K(ret));
   } else {
     ls_epoch_ = ls_epoch;
   }
@@ -980,7 +961,6 @@ int ObLS::get_ls_meta(ObLSMeta &ls_meta) const
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ls is not inited", K(ret));
   } else {
     ls_meta = ls_meta_;
   }
@@ -1026,7 +1006,6 @@ int ObLS::try_sync_reserved_snapshot(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ls is not inited", K(ret));
   } else if (!is_stopped()) {
     ret = reserved_snapshot_mgr_.try_sync_reserved_snapshot(new_reserved_snapshot, update_flag);
   }
@@ -1039,7 +1018,6 @@ int ObLS::get_ls_info(ObLSVTInfo &ls_info)
   bool tx_blocked = false;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ls is not inited", K(ret));
   } else if (OB_FAIL(ls_tx_svr_.check_tx_blocked(tx_blocked))) {
   } else {
     // The primary database uses the weak-read timestamp; the standby database
@@ -1144,10 +1122,8 @@ int ObLS::update_tablet_table_store_without_lock_(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ls is not inited", K(ret));
   } else if (OB_UNLIKELY(!tablet_id.is_valid() || !param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("update tablet table store get invalid argument", K(ret), K(tablet_id), K(param));
   } else if (OB_FAIL(ls_tablet_svr_.update_tablet_table_store(tablet_id, param, handle))) {
   }
   return ret;
@@ -1161,10 +1137,8 @@ int ObLS::update_tablet_table_store(
   RDLockGuard guard(meta_rwlock_);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ls hasn't been inited", K(ret));
   } else if (OB_UNLIKELY(!old_tablet_handle.is_valid() || 0 == tables.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(old_tablet_handle), K(tables));
   } else {
     const common::ObTabletID &tablet_id = old_tablet_handle.get_obj()->get_tablet_meta().tablet_id_;
     if (OB_FAIL(ls_tablet_svr_.update_tablet_table_store(old_tablet_handle, tables))) {
@@ -1183,7 +1157,6 @@ int ObLS::build_tablet_with_batch_tables(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ls is not inited", K(ret));
   } else {
     ret = OB_EAGAIN;
     int64_t retry_count = 0;
@@ -1209,10 +1182,8 @@ int ObLS::inner_build_tablet_with_batch_tables_(
   RDLockGuard guard(meta_rwlock_);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ls is not inited", K(ret));
   } else if (!tablet_id.is_valid() || !param.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("build tablet table store get invalid argument", K(ret), K(tablet_id), K(param));
   } else if (OB_FAIL(ls_tablet_svr_.build_tablet_with_batch_tables(tablet_id, param))) {
   }
   return ret;
@@ -1229,10 +1200,8 @@ int ObLS::build_new_tablet_from_mds_table(
   RDLockGuard guard(meta_rwlock_);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ls is not inited", K(ret));
   } else if (OB_UNLIKELY(!tablet_id.is_valid() || !flush_scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(tablet_id), K(flush_scn));
   } else if (OB_FAIL(ls_tablet_svr_.build_new_tablet_from_mds_table(ctx, tablet_id, mds_mini_sstable_handle, flush_scn, handle))) {
   }
   return ret;
@@ -1267,16 +1236,12 @@ int ObLS::replay_get_tablet_no_check(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ls is not inited", KR(ret));
   } else if (OB_UNLIKELY(!tablet_id.is_valid() || !scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(tablet_id), K(scn));
   } else if (OB_FAIL(ObTabletCreateDeleteHelper::get_tablet(key, tablet_handle))) {
     if (OB_TABLET_NOT_EXIST != ret) {
-      LOG_WARN("failed to get tablet", K(ret), K(key));
     } else if (scn <= tablet_change_checkpoint_scn) {
       ret = OB_OBSOLETE_CLOG_NEED_SKIP;
-      LOG_WARN("tablet already gc", K(ret), K(key), K(scn), K(tablet_change_checkpoint_scn));
     } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>()->get_log_replay_service()->get_max_replayed_scn(max_scn))) {
     }
     // double check for this scenario:
@@ -1285,10 +1250,8 @@ int ObLS::replay_get_tablet_no_check(
     // 3. get_max_replayed_scn > scn
     else if (OB_FAIL(ObTabletCreateDeleteHelper::get_tablet(key, tablet_handle))) {
       if (OB_TABLET_NOT_EXIST != ret) {
-        LOG_WARN("failed to get tablet", K(ret), K(key));
       } else if (!max_scn.is_valid()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("max_scn is invalid", KR(ret), K(key), K(scn), K(tablet_change_checkpoint_scn));
       } else if (scn > SCN::scn_inc(max_scn) || !replay_allow_tablet_not_exist) {
         ret = OB_EAGAIN;
         LOG_INFO("tablet does not exist, but need retry", KR(ret), K(key), K(scn),
@@ -1325,13 +1288,11 @@ int ObLS::replay_get_tablet(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ls is not inited", KR(ret));
   } else if (OB_FAIL(replay_get_tablet_no_check(tablet_id, scn, replay_allow_tablet_not_exist, tablet_handle))) {
   } else if (tablet_id.is_ls_inner_tablet()) {
     // do nothing
   } else if (OB_ISNULL(tablet = tablet_handle.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet should not be NULL", K(ret), KP(tablet), K(tablet_id), K(scn));
   } else if (tablet->is_empty_shell()) {
     ObTabletStatus::Status tablet_status = ObTabletStatus::MAX;
     if (OB_FAIL(tablet->get_latest(data, writer, trans_stat, trans_version))) {
@@ -1340,7 +1301,6 @@ int ObLS::replay_get_tablet(
       LOG_WARN("tablet is empty shell but user data is uncommitted, unexpected", K(ret), KPC(tablet));
     } else if (OB_UNLIKELY(!data.tablet_status_.is_deleted_for_gc())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tablet is empty shell but user data is unexpected", K(ret), K(data), KPC(tablet));
     } else {
       ret = OB_OBSOLETE_CLOG_NEED_SKIP;
       LOG_INFO("tablet is already deleted, need skip", KR(ret), K(tablet_id), K(scn));
@@ -1352,7 +1312,6 @@ int ObLS::replay_get_tablet(
         ret = OB_EAGAIN;
         LOG_INFO("read empty mds data, should retry", KR(ret), K(tablet_id), K(scn));
       } else {
-        LOG_WARN("failed to get latest tablet status", K(ret), KPC(tablet));
       }
     } else if (mds::TwoPhaseCommitState::ON_COMMIT != trans_stat) {
       if (ObTabletStatus::NORMAL == data.tablet_status_
@@ -1612,10 +1571,8 @@ int ObLS::flush_to_recycle_clog()
   ObLSLockGuard lock_myself(this, lock_, read_lock, write_lock);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ls is not inited", K(ret));
   } else if (OB_UNLIKELY(is_offline())) {
     ret = OB_MINOR_FREEZE_NOT_ALLOW;
-    LOG_WARN("offline ls not allowed freeze", K(ret), K_(ls_meta));
   } else if (FALSE_IT(ObDataCheckpoint::set_freeze_source(ObFreezeSourceFlag::CLOG_CHECKPOINT))) {
   } else if (OB_FAIL(checkpoint_executor_.advance_checkpoint_by_flush(SCN::invalid_scn() /*recycle_scn*/))) {
   }
