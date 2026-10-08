@@ -63,6 +63,12 @@ int ObExprSleep::sleep(int64_t usec)
       break;
     } else {
       int64_t current_time = ObTimeUtility::current_time();
+      // The worker status check uses a cached clock that can lag behind short sleeps.
+      // Check the query deadline against the real time before returning success.
+      if (current_time >= THIS_WORKER.get_timeout_ts()) {
+        ret = OB_TIMEOUT;
+        break;
+      }
       usec_rem = current_time < dead_line ? dead_line - current_time : 0;
       usec_req = static_cast<useconds_t>(MIN(CHECK_INTERVAL_IN_US, usec_rem));
     }
