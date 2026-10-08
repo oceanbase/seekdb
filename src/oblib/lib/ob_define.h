@@ -243,8 +243,6 @@ const int64_t OB_MAX_SPAN_LENGTH = 1024;
 const int64_t OB_MAX_SPAN_TAG_LENGTH = 8 * 1024L;
 const int64_t OB_MAX_REF_TYPE_LENGTH = 10;
 const int64_t OB_MAX_LS_FLAG_LENGTH = 2048;
-// The timeout provided to the storage layer will be reduced by 100ms
-const int64_t ESTIMATE_PS_RESERVE_TIME = 100 * 1000;
 const uint64_t MAX_STMT_TYPE_NAME_LENGTH = 128;
 
 const char *const OB_OCEANBASE_NAME = "OceanBase";
