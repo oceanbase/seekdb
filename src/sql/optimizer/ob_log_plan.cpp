@@ -28,6 +28,8 @@
 #include "sql/optimizer/ob_log_subplan_scan.h"
 #include "sql/optimizer/ob_log_subplan_filter.h"
 #include "sql/optimizer/ob_log_material.h"
+#include "sql/optimizer/log_plugin_custom.h"
+#include "sql/optimizer/plugin_candidate_graph.h"
 #include "sql/optimizer/ob_log_select_into.h"
 #include "sql/optimizer/ob_log_expr_values.h"
 #include "sql/optimizer/ob_log_function_table.h"
@@ -48,6 +50,9 @@
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/optimizer/ob_log_insert.h"
 #include "sql/ob_sql_trans_control.h"
+#include "share/rc/ob_module_provider.h"
+#include <unordered_set>
+#include <vector>
 
 using namespace oceanbase;
 using namespace sql;
@@ -245,6 +250,14 @@ int ObLogPlan::get_base_table_items(const ObDMLStmt *stmt,
 //7. Set the sharding info for the first level ObJoinOrder
 //8. Sequentially perform the planning process of the next level (generate_join_levels())
 //9. Retrieve the last level of ObJoinOrder, output
+int ObLogPlan::refresh_plugin_join_hooks()
+{
+  plugin_join_paths_enabled_ = false;
+  // Activation of this stage is sampled once per query block, not an epoch
+  // snapshot. The loader validates current leases/epoch on each invocation.
+  return share::g_mp ? share::g_mp->plugin_join_hooks_available(plugin_join_paths_enabled_) : OB_SUCCESS;
+}
+
 int ObLogPlan::generate_join_orders()
 {
   int ret = OB_SUCCESS;
@@ -258,6 +271,8 @@ int ObLogPlan::generate_join_orders()
   common::ObArray<JoinOrderArray> join_rels;
   if (OB_ISNULL(stmt = get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected NULL", K(stmt), K(ret));
+  } else if (OB_FAIL(refresh_plugin_join_hooks())) {
   } else if (OB_FAIL(stmt->get_from_tables(from_table_items))) {
   } else if (OB_FAIL(get_base_table_items(stmt, base_table_items))) {
   } else if (OB_FAIL(append(quals, stmt->get_condition_exprs()))) {
@@ -2572,6 +2587,19 @@ int ObLogPlan::allocate_join_path(JoinPath *join_path,
   } else {
     Path *left_path = const_cast<Path*>(join_path->left_path_);
     Path *right_path = const_cast<Path*>(join_path->right_path_);
+    // Early subproblem materialization may share already constructed roots.
+    // Keep their previous parent links until the final chosen tree is fixed.
+    struct CachedParents {
+      ObLogicalOperator *nodes[2];
+      ObLogicalOperator *parents[2];
+      CachedParents(Path *left, Path *right)
+          : nodes{left ? left->log_op_ : nullptr, right ? right->log_op_ : nullptr},
+            parents{nodes[0] ? nodes[0]->get_parent() : nullptr,
+                    nodes[1] ? nodes[1]->get_parent() : nullptr} {}
+      ~CachedParents() {
+        for (int i = 0; i < 2; ++i) if (nodes[i]) nodes[i]->set_parent(parents[i]);
+      }
+    } parents(left_path, right_path);
     ObLogicalOperator *left_child = NULL;
     ObLogicalOperator *right_child = NULL;
     ObExchangeInfo left_exch_info;
@@ -2619,7 +2647,7 @@ int ObLogPlan::allocate_join_path(JoinPath *join_path,
       join_op->set_inherit_sharding_index(join_path->inherit_sharding_index_);
       join_op->set_join_path(join_path);
       if (OB_FAIL(join_op->set_merge_directions(join_path->merge_directions_))) {
-      } else if (OB_FAIL(join_op->set_nl_params(static_cast<AccessPath*>(right_path)->nl_params_))) {
+      } else if (OB_FAIL(join_op->set_nl_params(right_path->nl_params_))) {
       } else if (OB_FAIL(join_op->set_join_conditions(join_path->equal_join_conditions_))) {
       } else if (IS_NOT_INNER_JOIN(join_path->join_type_)) {
         if (OB_FAIL(append(join_op->get_join_filters(), join_path->other_join_conditions_))) {
@@ -3568,7 +3596,9 @@ int ObLogPlan::init_candidate_plans()
     } // for join orders end
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(init_candidate_plans(candi_plans))) {
+      ObSEArray<CandidatePlan, 8> contributed;
+      if (OB_FAIL(contribute_plugin_relation_paths(candi_plans, contributed))) {
+      } else if (OB_FAIL(init_candidate_plans(contributed))) {
       } else {
         LOG_TRACE("succeed to init candidate plans", K(candidates_.candidate_plans_.count()));
       }
@@ -5615,6 +5645,325 @@ int ObLogPlan::get_minimal_cost_candidates(
 
 int ObLogPlan::get_minimal_cost_candidate(const ObIArray<CandidatePlan> &candidates,
                                           CandidatePlan &candidate)
+{
+  return run_plugin_candidate_phase(candidates, candidate, nullptr);
+}
+
+int ObLogPlan::contribute_plugin_relation_paths(const ObIArray<CandidatePlan> &candidates,
+                                               ObIArray<CandidatePlan> &result)
+{
+  if (&candidates == &result) return OB_INVALID_ARGUMENT;
+  result.reset();
+  CandidatePlan unused;
+  return run_plugin_candidate_phase(candidates, unused, &result, SEEKDB_PLUGIN_PHASE_RELATION);
+}
+
+int ObLogPlan::contribute_plugin_upper_paths(seekdb_plugin_candidate_phase_t phase)
+{
+  if (phase < SEEKDB_PLUGIN_PHASE_GROUP || phase > SEEKDB_PLUGIN_PHASE_ORDERED) return OB_INVALID_ARGUMENT;
+  if (!share::g_mp) return OB_SUCCESS;
+  bool available = false;
+  int ret = share::g_mp->plugin_upper_hooks_available(phase, available);
+  if (ret != OB_SUCCESS || !available) return ret;
+  ObSEArray<CandidatePlan, 8> result;
+  CandidatePlan unused;
+  if (OB_FAIL(run_plugin_candidate_phase(candidates_.candidate_plans_, unused, &result, phase))) {
+  } else {
+    const bool final_sort = candidates_.is_final_sort_;
+    ret = init_candidate_plans(result);
+    candidates_.is_final_sort_ = final_sort;
+  }
+  return ret;
+}
+
+int ObLogPlan::run_plugin_candidate_phase(const ObIArray<CandidatePlan> &candidates,
+    CandidatePlan &candidate, ObIArray<CandidatePlan> *contributions, seekdb_plugin_candidate_phase_t phase)
+{
+  if (!seekdb_plugin_candidate_hook_point(phase) ||
+      ((phase != SEEKDB_PLUGIN_PHASE_SELECT) != (contributions != nullptr))) return OB_INVALID_ARGUMENT;
+  if (!share::g_mp) return contributions ? contributions->assign(candidates) :
+      get_minimal_cost_candidate_core(candidates, candidate);
+  candidate.reset();
+  if (candidates.empty() || candidates.count() > UINT32_MAX) return OB_ERR_UNEXPECTED;
+  for (int64_t i = 0; i < candidates.count(); ++i) {
+    if (!candidates.at(i).plan_tree_) return OB_ERR_UNEXPECTED;
+  }
+  struct Selection {
+    ObLogPlan &plan;
+    const ObIArray<CandidatePlan> &candidates;
+    CandidatePlan &selected;
+    const bool contributing;
+    const bool require_order;
+    bool invalid = false;
+    int build_error = OB_SUCCESS;
+    ObSEArray<CandidatePlan, 8> extended;
+    bool extended_ready = false;
+    uint32_t additions = 0;
+    CandidateGraph graph;
+    Selection(ObLogPlan &p, const ObIArray<CandidatePlan> &c, CandidatePlan &s, bool adding, bool ordered)
+        : plan(p), candidates(c), selected(s), contributing(adding), require_order(ordered) {}
+    const ObIArray<CandidatePlan> &all() const { return extended_ready ? extended : candidates; }
+    static uint32_t SEEKDB_PLUGIN_CALL count(void *opaque) {
+      return static_cast<uint32_t>(static_cast<Selection *>(opaque)->all().count());
+    }
+    static int32_t SEEKDB_PLUGIN_CALL error(void *opaque) {
+      const auto &self = *static_cast<Selection *>(opaque);
+      return self.build_error != OB_SUCCESS ? self.build_error : self.invalid ? OB_INVALID_ARGUMENT : self.graph.error();
+    }
+    static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL root(void *opaque, uint32_t index, uint32_t *out) {
+      auto &self = *static_cast<Selection *>(opaque);
+      return self.graph.root(index < self.all().count() ? self.all().at(index).plan_tree_ : nullptr, out);
+    }
+    static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL describe_plan(void *opaque, uint32_t id, seekdb_plugin_plan_info_v1_t *out) {
+      return static_cast<Selection *>(opaque)->graph.plan(id, out);
+    }
+    static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL child(void *opaque, uint32_t id, uint32_t index, uint32_t *out) {
+      return static_cast<Selection *>(opaque)->graph.child(id, index, out);
+    }
+    static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL expression(void *opaque, uint32_t id, uint32_t role,
+        uint32_t index, uint32_t *out, uint32_t *ordering) {
+      return static_cast<Selection *>(opaque)->graph.expression(id, role, index, out, ordering);
+    }
+    static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL describe_expression(void *opaque, uint32_t id, seekdb_plugin_expr_info_v1_t *out) {
+      return static_cast<Selection *>(opaque)->graph.describe(id, out);
+    }
+    static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL argument(void *opaque, uint32_t id, uint32_t index, uint32_t *out) {
+      return static_cast<Selection *>(opaque)->graph.argument(id, index, out);
+    }
+    static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL query(void *opaque, seekdb_plugin_query_info_v1_t *out) {
+      auto &self = *static_cast<Selection *>(opaque);
+      return self.graph.query(self.plan.get_stmt(), out);
+    }
+    static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL plan_semantics(void *opaque, uint32_t id, seekdb_plugin_plan_semantics_v1_t *out) {
+      return static_cast<Selection *>(opaque)->graph.plan_semantics(id, out);
+    }
+    static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL expression_semantics(void *opaque, uint32_t id, seekdb_plugin_expr_semantics_v1_t *out) {
+      return static_cast<Selection *>(opaque)->graph.expression_semantics(id, out);
+    }
+    static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL scope(void *opaque, uint32_t plan, uint32_t expr, uint32_t *out) {
+      auto &self = *static_cast<Selection *>(opaque);
+      return self.graph.scope(self.plan.get_stmt(), plan, expr, out);
+    }
+    static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL column_count(void *opaque, uint32_t *out) {
+      auto &self = *static_cast<Selection *>(opaque);
+      return self.graph.column_count(self.plan.get_stmt(), out);
+    }
+    static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL column(void *opaque, uint32_t index, uint32_t *out) {
+      auto &self = *static_cast<Selection *>(opaque);
+      return self.graph.column(self.plan.get_stmt(), index, out);
+    }
+    static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL target(void *opaque, uint32_t index, uint32_t *out) {
+      auto &self = *static_cast<Selection *>(opaque);
+      return self.graph.target(self.plan.get_stmt(), index, out);
+    }
+    static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL binding_count(void *opaque, uint32_t plan, uint32_t role, uint32_t *out) {
+      return static_cast<Selection *>(opaque)->graph.binding_count(plan, role, out);
+    }
+    static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL sort_info(void *opaque, uint32_t id,
+        seekdb_plugin_sort_info_v1_t *out) {
+      return static_cast<Selection *>(opaque)->graph.sort_info(id, out);
+    }
+    static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL value_info(void *opaque, uint32_t plan,
+        uint32_t expression, seekdb_plugin_value_info_v1_t *out) {
+      return static_cast<Selection *>(opaque)->graph.value_info(plan, expression, out);
+    }
+    static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL sort_key(void *opaque, uint32_t id,
+        uint32_t ordinal, uint32_t *expr, uint32_t *flags) {
+      return static_cast<Selection *>(opaque)->graph.sort_key(id, ordinal, expr, flags);
+    }
+    static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL binding(void *opaque, uint32_t plan, uint32_t role,
+        uint32_t index, uint32_t *parameter, uint32_t *value) {
+      return static_cast<Selection *>(opaque)->graph.binding(plan, role, index, parameter, value);
+    }
+    static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL build(void *opaque,
+        const seekdb_plugin_path_request_v1_t *request, uint32_t *index) try {
+      auto &self = *static_cast<Selection *>(opaque);
+      if (index) *index = UINT32_MAX;
+      int ret = error(opaque);
+      const bool custom = request && request->kind == SEEKDB_PLUGIN_PATH_CUSTOM;
+      const bool layout = custom && request->struct_size == sizeof(seekdb_plugin_custom_path_request_v2_t);
+      const bool bound = custom && request->struct_size == sizeof(seekdb_plugin_custom_path_request_v4_t);
+      const bool fragment = bound || (custom && request->struct_size == sizeof(seekdb_plugin_custom_path_request_v3_t));
+      if (ret == OB_SUCCESS) {
+        if (!request || !index || (!layout && !fragment && request->struct_size != (custom ? sizeof(seekdb_plugin_custom_path_request_v1_t) : sizeof(*request))) || request->reserved_word ||
+            request->reserved[0] || request->reserved[1] || request->reserved[2] || request->reserved[3] ||
+            request->input_index >= self.all().count()) ret = OB_INVALID_ARGUMENT;
+        else if (!custom && request->kind != SEEKDB_PLUGIN_PATH_MATERIALIZE) ret = OB_NOT_SUPPORTED;
+        else if (self.additions >= 64 || self.all().count() == UINT32_MAX) ret = OB_SIZE_OVERFLOW;
+      }
+      if (ret == OB_SUCCESS && !self.extended_ready) {
+        ret = self.extended.assign(self.candidates);
+        if (ret == OB_SUCCESS) self.extended_ready = true;
+      }
+      // ORDER BY has already satisfied SQL ordering (including top-N). Do not
+      // let a new algorithm silently erase that guarantee before LIMIT/final
+      // selection. A future required-property builder may restore order here.
+      if (ret == OB_SUCCESS && custom && self.require_order &&
+          !(reinterpret_cast<const seekdb_plugin_custom_path_request_v1_t *>(request)->flags &
+            SEEKDB_PLUGIN_PATH_PRESERVES_ORDER)) ret = OB_NOT_SUPPORTED;
+      if (ret == OB_SUCCESS) {
+        ObLogicalOperator *input = self.all().at(request->input_index).plan_tree_;
+        ObLogicalOperator *result = input;
+        // set_child in the existing factory helper changes the input parent.
+        // Keep unselected/failed alternatives from mutating the published tree.
+        {
+          struct ParentRestore {
+            ObLogicalOperator *input; ObLogicalOperator *saved;
+            ~ParentRestore() { input->set_parent(saved); }
+          } restore{input, input->get_parent()};
+          if (custom) {
+            auto *node = static_cast<LogPluginCustom *>(self.plan.get_log_op_factory().allocate(self.plan, LOG_PLUGIN_CUSTOM));
+            if (!node) ret = OB_ALLOCATE_MEMORY_FAILED;
+            else if ((ret = node->configure(*reinterpret_cast<const seekdb_plugin_custom_path_request_v1_t *>(request))) == OB_SUCCESS) {
+              if (layout) ret = node->configure_layout(*reinterpret_cast<const seekdb_plugin_custom_path_request_v2_t *>(request), self.graph);
+              if (fragment) ret = node->configure_fragment(*reinterpret_cast<const seekdb_plugin_custom_path_request_v3_t *>(request), self.graph, *input);
+              if (ret == OB_SUCCESS && bound) ret = node->configure_bindings(*reinterpret_cast<const seekdb_plugin_custom_path_request_v4_t *>(request), self.graph);
+              if (ret == OB_SUCCESS) {
+                if (!fragment) node->set_child(ObLogicalOperator::first_child, input);
+                ret = node->compute_property();
+              }
+              if (ret == OB_SUCCESS) result = node;
+            }
+          } else {
+            ret = self.plan.allocate_material_as_top(result);
+          }
+        }
+        if (ret == OB_SUCCESS) ret = self.extended.push_back(CandidatePlan(result));
+        if (ret == OB_SUCCESS) {
+          ++self.additions;
+          *index = static_cast<uint32_t>(self.extended.count() - 1);
+        }
+      }
+      if (ret != OB_SUCCESS && self.build_error == OB_SUCCESS) self.build_error = ret;
+      return ret == OB_SUCCESS ? SEEKDB_PLUGIN_STATUS_OK : ret == OB_ALLOCATE_MEMORY_FAILED ?
+          SEEKDB_PLUGIN_STATUS_NO_MEMORY : ret == OB_INVALID_ARGUMENT ? SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT :
+          ret == OB_NOT_SUPPORTED ? SEEKDB_PLUGIN_STATUS_UNSUPPORTED_ABI : SEEKDB_PLUGIN_STATUS_INTERNAL;
+    } catch (const std::bad_alloc &) {
+      if (index) *index = UINT32_MAX;
+      auto &self = *static_cast<Selection *>(opaque);
+      if (self.build_error == OB_SUCCESS) self.build_error = OB_ALLOCATE_MEMORY_FAILED;
+      return SEEKDB_PLUGIN_STATUS_NO_MEMORY;
+    } catch (...) {
+      if (index) *index = UINT32_MAX;
+      auto &self = *static_cast<Selection *>(opaque);
+      if (self.build_error == OB_SUCCESS) self.build_error = OB_ERR_UNEXPECTED;
+      return SEEKDB_PLUGIN_STATUS_INTERNAL;
+    }
+    static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL get(void *opaque, uint32_t index,
+        seekdb_plugin_candidate_info_v1_t *out) {
+      auto &self = *static_cast<Selection *>(opaque);
+      if (!out || out->struct_size != sizeof(*out) || index >= self.all().count()) {
+        self.invalid = true;
+        return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+      }
+      const auto &op = *self.all().at(index).plan_tree_;
+      *out = {sizeof(*out), static_cast<uint32_t>(op.get_type()), op.get_cost(),
+              op.get_card(), op.get_width(), {0, 0, 0, 0}};
+      return SEEKDB_PLUGIN_STATUS_OK;
+    }
+    static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL select(void *opaque, uint32_t index) {
+      auto &self = *static_cast<Selection *>(opaque);
+      if (self.contributing || index >= self.all().count()) {
+        self.invalid = true;
+        return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+      }
+      self.selected = self.all().at(index);
+      return SEEKDB_PLUGIN_STATUS_OK;
+    }
+    static int next(void *opaque) {
+      auto &self = *static_cast<Selection *>(opaque);
+      // A prior hook's provisional choice must not bias the default algorithm.
+      self.selected.reset();
+      if (self.contributing) return error(opaque);
+      return self.plan.get_minimal_cost_candidate_core(self.all(), self.selected);
+    }
+    static int validate(void *opaque) try {
+      const auto &self = *static_cast<Selection *>(opaque);
+      const int ret = error(opaque);
+      if (ret != OB_SUCCESS) return ret;
+      // The additive phase neither chooses nor mutates shared input parents.
+      // Builders have already checked each new fragment; upper planning keeps
+      // all alternatives. adjust_final_plan_info repairs the final chosen tree.
+      if (self.contributing) return OB_SUCCESS;
+      for (int64_t i = 0; i < self.all().count(); ++i) {
+        if (self.selected.plan_tree_ == self.all().at(i).plan_tree_) {
+          // Prepare the full constructed forest before committing any links.
+          // Allocation/validation failure must not leave a half-published tree.
+          std::vector<ObLogicalOperator *> work{self.selected.plan_tree_};
+          std::unordered_set<ObLogicalOperator *> visited;
+          std::vector<std::pair<ObLogicalOperator *, ObLogicalOperator *>> edges;
+          while (!work.empty()) {
+            auto *node = work.back(); work.pop_back();
+            if (!node || !visited.insert(node).second) return OB_INVALID_ARGUMENT;
+            bool constructed = false;
+            for (int64_t j = self.candidates.count(); j < self.all().count(); ++j)
+              if (self.all().at(j).plan_tree_ == node) constructed = true;
+            if (!constructed) continue;
+            if (visited.size() > 4096) return OB_SIZE_OVERFLOW;
+            for (int64_t child = 0; child < node->get_num_of_child(); ++child) {
+              auto *input = node->get_child(child);
+              if (!input) return OB_ERR_UNEXPECTED;
+              edges.emplace_back(input, node); work.push_back(input);
+            }
+          }
+          for (const auto &edge : edges) edge.first->set_parent(edge.second);
+          return OB_SUCCESS;
+        }
+      }
+      return OB_STATE_NOT_MATCH;
+    } catch (const std::bad_alloc &) { return OB_ALLOCATE_MEMORY_FAILED;
+    } catch (...) { return OB_ERR_UNEXPECTED; }
+  } selection{*this, candidates, candidate, contributions != nullptr, phase == SEEKDB_PLUGIN_PHASE_ORDERED};
+  seekdb_plugin_candidate_context_v8_t value_view = {};
+  auto &sort_view = value_view.v7;
+  auto &bindings_view = sort_view.v6;
+  auto &semantics_view = bindings_view.v5;
+  auto &query_view = semantics_view.v4;
+  auto &graph_view = query_view.v3;
+  auto &extended_view = graph_view.v2;
+  auto &view = extended_view.v1;
+  view.struct_size = sizeof(value_view);
+  view.candidate_count = static_cast<uint32_t>(candidates.count());
+  view.host_context = &selection;
+  view.get = Selection::get;
+  view.select = Selection::select;
+  extended_view.current_count = Selection::count;
+  extended_view.build = Selection::build;
+  extended_view.get_error = Selection::error;
+  graph_view.root = Selection::root;
+  graph_view.plan = Selection::describe_plan;
+  graph_view.child = Selection::child;
+  graph_view.expression = Selection::expression;
+  graph_view.describe_expression = Selection::describe_expression;
+  graph_view.argument = Selection::argument;
+  query_view.query = Selection::query;
+  query_view.target = Selection::target;
+  semantics_view.plan_semantics = Selection::plan_semantics;
+  semantics_view.expression_semantics = Selection::expression_semantics;
+  semantics_view.scope = Selection::scope;
+  semantics_view.column_count = Selection::column_count;
+  semantics_view.column = Selection::column;
+  bindings_view.binding_count = Selection::binding_count;
+  bindings_view.binding = Selection::binding;
+  sort_view.sort_info = Selection::sort_info;
+  sort_view.sort_key = Selection::sort_key;
+  value_view.value_info = Selection::value_info;
+  int ret = phase >= SEEKDB_PLUGIN_PHASE_GROUP ? share::g_mp->run_plugin_upper_hooks(phase, view,
+      Selection::next, &selection, Selection::validate) : phase == SEEKDB_PLUGIN_PHASE_JOIN ? share::g_mp->run_plugin_join_hooks(view, Selection::next,
+      &selection, Selection::validate) : contributions ? share::g_mp->run_plugin_relation_hooks(view, Selection::next,
+      &selection, Selection::validate) : share::g_mp->run_plugin_candidate_hooks(view, Selection::next,
+      &selection, Selection::validate);
+  // Enforce sticky errors even for controlled providers and publish only after
+  // the entire hook chain has succeeded. No partial alternatives on failure.
+  if (ret == OB_SUCCESS) ret = Selection::validate(&selection);
+  if (ret == OB_SUCCESS && contributions) ret = contributions->assign(selection.all());
+  if (ret != OB_SUCCESS && contributions) contributions->reset();
+  if (ret != OB_SUCCESS) candidate.reset();
+  return ret;
+}
+
+int ObLogPlan::get_minimal_cost_candidate_core(const ObIArray<CandidatePlan> &candidates,
+                                             CandidatePlan &candidate)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(get_optimizer_context().generate_random_plan())) {

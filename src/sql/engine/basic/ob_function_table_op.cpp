@@ -19,6 +19,7 @@
 #include "sql/engine/basic/ob_function_table_op.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
+#include "sql/engine/expr/plugin_function_expr.h"
 
 
 namespace oceanbase
@@ -36,6 +37,10 @@ int ObFunctionTableOp::inner_open()
   already_calc_ = false;
   if (OB_ISNULL(MY_SPEC.value_expr_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("value expr is not init", K(ret));
+  } else if (T_FUN_SYS_PLUGIN_TABLE_FUNCTION ==
+             MY_SPEC.value_expr_->type_) {
+    next_row_func_ = &ObFunctionTableOp::inner_get_next_row_plugin;
   } else if (ObExtendType == MY_SPEC.value_expr_->datum_meta_.type_) {
     next_row_func_ = &ObFunctionTableOp::inner_get_next_row_udf;
   } else {
@@ -48,6 +53,10 @@ int ObFunctionTableOp::inner_rescan()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOperator::inner_rescan())) {
+  } else if (nullptr != MY_SPEC.value_expr_ &&
+             T_FUN_SYS_PLUGIN_TABLE_FUNCTION == MY_SPEC.value_expr_->type_ &&
+             OB_FAIL(PluginTableFunctionExpr::rescan(
+                 *MY_SPEC.value_expr_, eval_ctx_))) {
   } else {
     node_idx_ = 0;
     if (MY_SPEC.has_correlated_expr_) {
@@ -63,6 +72,10 @@ int ObFunctionTableOp::inner_rescan()
 int ObFunctionTableOp::inner_close()
 {
   int ret = OB_SUCCESS;
+  if (nullptr != MY_SPEC.value_expr_ &&
+      T_FUN_SYS_PLUGIN_TABLE_FUNCTION == MY_SPEC.value_expr_->type_) {
+    ret = PluginTableFunctionExpr::close(*MY_SPEC.value_expr_, eval_ctx_);
+  }
   node_idx_ = 0;
   row_count_ = 0;
   col_count_ = 0;
@@ -213,6 +226,47 @@ int ObFunctionTableOp::inner_get_next_row_sys_func()
     MY_SPEC.column_exprs_.at(0)->locate_datum_for_write(eval_ctx_).set_datum(*value);
     MY_SPEC.column_exprs_.at(0)->set_evaluated_projected(eval_ctx_);
   }
+  return ret;
+}
+
+int ObFunctionTableOp::inner_get_next_row_plugin()
+{
+  clear_evaluated_flag();
+  int ret = ctx_.check_status();
+  if (OB_SUCCESS == ret) {
+    ret = PluginTableFunctionExpr::fetch_row(
+        *MY_SPEC.value_expr_, eval_ctx_, MY_SPEC.column_exprs_);
+  }
+  if (OB_SUCCESS != ret && OB_ITER_END != ret) {
+    LOG_WARN("failed to read plugin table-function row", K(ret));
+  }
+  return ret;
+}
+
+int ObFunctionTableOp::inner_get_next_batch(const int64_t max_row_cnt)
+{
+  clear_evaluated_flag();
+  clear_datum_eval_flag();
+  brs_.size_ = 0;
+  const int64_t maximum = std::min(max_row_cnt, MY_SPEC.max_batch_size_);
+  if (maximum <= 0 || maximum > UINT32_MAX || !MY_SPEC.value_expr_) return OB_INVALID_ARGUMENT;
+  int ret = ctx_.check_status();
+  if (OB_SUCCESS != ret) return ret;
+  ObEvalCtx::BatchInfoScopeGuard batch(eval_ctx_);
+  batch.set_batch_idx(0); batch.set_batch_size(maximum);
+  if (MY_SPEC.value_expr_->type_ == T_FUN_SYS_PLUGIN_TABLE_FUNCTION) {
+    uint32_t rows = 0;
+    ret = PluginTableFunctionExpr::fetch_batch(*MY_SPEC.value_expr_, eval_ctx_, MY_SPEC.column_exprs_,
+        static_cast<uint32_t>(maximum), rows);
+    if (ret == OB_SUCCESS) brs_.size_ = rows;
+  } else {
+    // Legacy PL/system function tables retain one-row evaluation semantics;
+    // vectorized parents may consume that row without a new materialization.
+    batch.set_batch_size(1);
+    ret = inner_get_next_row();
+    if (ret == OB_SUCCESS) brs_.size_ = 1;
+  }
+  if (ret == OB_ITER_END) { brs_.end_ = true; ret = OB_SUCCESS; }
   return ret;
 }
 

@@ -174,6 +174,7 @@ OBSERVER_PRIVATE_HEADERS = [
     "virtual_table/ob_all_virtual_timestamp_service.h",
     "virtual_table/ob_all_virtual_tmp_file.h",
     "virtual_table/ob_all_virtual_tracepoint_info.h",
+    "virtual_table/plugin_memory_table.h",
     "virtual_table/ob_all_virtual_transaction_checkpoint.h",
     "virtual_table/ob_all_virtual_transaction_freeze_checkpoint.h",
     "virtual_table/ob_all_virtual_tx_ctx_mgr_stat.h",

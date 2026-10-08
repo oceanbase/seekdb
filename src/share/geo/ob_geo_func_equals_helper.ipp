@@ -22,6 +22,7 @@
 #include "share/geo/ob_geo_to_tree_visitor.h"
 #include "lib/oblog/ob_log_module.h"
 #include "share/geo/ob_geo_func_utils.h"
+#include "seekdb/geo/cartesian_algorithms.hpp"
 
 using namespace oceanbase::common;
 namespace oceanbase
@@ -46,7 +47,7 @@ int eval_equals_without_strategy(const ObGeometry *g1, const ObGeometry *g2, boo
   if (OB_ISNULL(geo1) || OB_ISNULL(geo2)) {
     ret = OB_ERR_INVALID_NULL_SDO_GEOMETRY;
   } else {
-    result = bg::equals(*geo1, *geo2);
+    result = seekdb::geo::cartesian::equals(*geo1, *geo2);
   }
   return OB_SUCCESS;
 }

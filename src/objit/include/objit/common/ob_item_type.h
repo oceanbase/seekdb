@@ -868,6 +868,14 @@ typedef enum ObItemType
   T_FUN_SYS_EMBEDDED_VEC = 1928,
   T_FUN_SYS_AI_PROMPT = 1929,
   T_FUN_SYS_VEC_VISIBLE = 1930, // vector index table 5
+  T_FUN_SYS_PLUGIN_FUNCTION = 1931,
+  T_FUN_SYS_PLUGIN_TABLE_FUNCTION = 1932,
+  T_FUN_SYS_PLUGIN_TYPE_ENCODE = 1933,
+  T_FUN_SYS_PLUGIN_CAST = 1934,
+  T_FUN_SYS_PLUGIN_TYPE_VALUE = 1935,
+  T_FUN_SYS_PLUGIN_TYPE_COMPARE = 1936,
+  T_FUN_SYS_PLUGIN_TYPE_BETWEEN = 1937,
+  T_FUN_SYS_PLUGIN_TYPE_IN = 1938,
 
   ///< @note add new sys function type before this line
   T_FUN_SYS_END = 2000,
@@ -2274,6 +2282,7 @@ typedef enum ObItemType
   T_FORK_DATABASE = 4917,
   T_DIFF_TABLE = 4918,
   T_MERGE_TABLE = 4919,
+  T_SF_NATIVE_BODY = 4927, // AS module, implementation LANGUAGE C
   T_MAX //Attention: add a new type before T_MAX
 } ObItemType;
 

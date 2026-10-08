@@ -118,6 +118,7 @@ ObInnerSQLConnection::ObInnerSQLConnection()
     : inited_(false), extern_session_(NULL), inner_session_(NULL),
       self_weak_guard_(),
       is_spi_conn_(false),
+      plugin_catalog_sql_(false),
       ob_sql_(NULL), vt_iter_creator_(NULL),
       ref_ctx_(NULL),
       sql_modifier_(NULL),
@@ -279,6 +280,7 @@ int ObInnerSQLConnection::init(ObSql *ob_sql,
 int ObInnerSQLConnection::destroy()
 {
   int ret = OB_SUCCESS;
+  plugin_catalog_sql_ = false;
   try_release_query_lock();
   // uninited connection can be destroy too
   if (inited_) {
@@ -448,6 +450,19 @@ int ObInnerSQLConnection::init_session(sql::ObSQLSessionInfo* extern_session, co
   return ret;
 }
 
+int ObInnerSQLConnection::enable_plugin_catalog_sql()
+{
+  if (!inited_ || !is_spi_conn_ || !extern_session_
+      || extern_session_->get_is_deserialized()
+      || extern_session_->get_nested_count() <= 0
+      || !data_plane::tx_desc_is_statement_ready(extern_session_->get_tx_desc())
+      || data_plane::tx_desc_is_committing(extern_session_->get_tx_desc())) {
+    return OB_TRANS_INVALID_STATE;
+  }
+  plugin_catalog_sql_ = true;
+  return OB_SUCCESS;
+}
+
 int ObInnerSQLConnection::init_result(ObInnerSQLResult &res,
                                       ObVirtualTableIteratorFactory *vt_iter_factory,
                                       int64_t retry_cnt,
@@ -474,12 +489,25 @@ int ObInnerSQLConnection::init_result(ObInnerSQLResult &res,
   res.sql_ctx().is_dynamic_sql_ = is_dynamic_sql;
   res.sql_ctx().is_cursor_ = is_cursor;
   res.sql_ctx().schema_guard_ = &schema_guard;
-  if (OB_FAIL(res.result_set().init())) {
+  if (plugin_catalog_sql_ && OB_FAIL(enable_plugin_catalog_sql())) {
+    // Reject stale borrowed state before parsing/executing, including retries.
+  } else if (OB_FAIL(res.result_set().init())) {
   } else if (is_prepare_protocol
              && NULL == secondary_namespace
              && !is_dynamic_sql) {
     result_set.set_simple_ps_protocol();
   } else { /*do nothing*/ }
+  if (OB_SUCC(ret)) ret = init_plugin_catalog_context(result_set.get_exec_context());
+  return ret;
+}
+
+int ObInnerSQLConnection::init_plugin_catalog_context(ObExecContext &context)
+{
+  int ret = OB_SUCCESS;
+  if (plugin_catalog_sql_ && OB_FAIL(enable_plugin_catalog_sql())) {
+  } else if (plugin_catalog_sql_) {
+    context.set_is_plugin_sql(true);
+  }
   return ret;
 }
 
@@ -723,7 +751,9 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
   const ObGlobalContext &gctx = ObServer::get_instance().get_gctx();
   int64_t start_time = ObTimeUtility::current_time();
   get_session().set_query_start_time(start_time); //FIXME temporarily written like this
-  get_session().set_trans_type(transaction::ObTxClass::SYS);
+  if (!plugin_catalog_sql_) {
+    get_session().set_trans_type(transaction::ObTxClass::SYS);
+  }
   int64_t abs_timeout_us = 0;
   int64_t execution_id = 0;
   const uint64_t* trace_id_val = ObCurTraceId::get();
@@ -955,6 +985,24 @@ int ObInnerSQLConnection::start_transaction_inner(
   return ret;
 }
 
+int ObInnerSQLConnection::check_mds_transaction(transaction::ObTxDataSourceType type) const
+{
+  if (!inited_) return OB_NOT_INIT;
+  if (!plugin_catalog_sql_) return is_in_trans() ? OB_SUCCESS : OB_ERR_UNEXPECTED;
+  // Only the host's DDL commit signal may use a borrowed catalog connection.
+  // Do not turn this into an owned transaction or allow arbitrary MDS types.
+  if (type != transaction::ObTxDataSourceType::DDL_TRANS) return OB_NOT_SUPPORTED;
+  if (!is_spi_conn_ || !extern_session_ || extern_session_->get_is_deserialized()
+      || extern_session_->get_nested_count() <= 0
+      || !data_plane::tx_desc_is_active(extern_session_->get_tx_desc())
+      || !data_plane::tx_desc_is_statement_ready(extern_session_->get_tx_desc())
+      || data_plane::tx_desc_is_committing(extern_session_->get_tx_desc())) {
+    return OB_TRANS_INVALID_STATE;
+  }
+  return data_plane::tx_desc_is_read_only(extern_session_->get_tx_desc())
+      ? OB_ERR_READ_ONLY_TRANSACTION : OB_SUCCESS;
+}
+
 int ObInnerSQLConnection::register_multi_data_source(
                                                      const transaction::ObTxDataSourceType type,
                                                      const char *buf,
@@ -964,6 +1012,11 @@ int ObInnerSQLConnection::register_multi_data_source(
   int ret = OB_SUCCESS;
   transaction::ObTxDesc *tx_desc = nullptr;
 
+  if (OB_FAIL(check_mds_transaction(type))) {
+    LOG_WARN("invalid transaction for inner connection MDS registration", K(ret), K(type));
+    return ret;
+  }
+
   SMART_VAR(ObInnerSQLResult, res, get_session(),
             ob_sql_->get_plan_cache_access_service(), is_inner_session())
   {
@@ -972,9 +1025,7 @@ int ObInnerSQLConnection::register_multi_data_source(
     }
 
     if (OB_SUCC(ret)) {
-      if (!is_in_trans()) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(res.init())) {
+      if (OB_FAIL(res.init())) {
       } else if (OB_ISNULL(tx_desc = get_session().get_tx_desc())) {
         ret = OB_ERR_UNEXPECTED;
       } else {
@@ -1503,10 +1554,31 @@ int ObInnerSQLConnectionAccess::lock_obj(
     const transaction::tablelock::ObLockObjRequest &request,
     common::sqlclient::ObISQLConnection *connection)
 {
-  return nullptr == connection
-      ? common::OB_INVALID_ARGUMENT
-      : transaction::tablelock::ObInnerConnectionLockUtil::lock_obj(
-            request, connection);
+  auto *native = dynamic_cast<observer::ObInnerSQLConnection *>(connection);
+  if (nullptr == native) return common::OB_INVALID_ARGUMENT;
+  // Root's lock adapter expects the connection's transaction marker, normally
+  // set by start_transaction(). SPI borrows an external statement instead: it
+  // must not issue BEGIN (or acquire ownership of the caller's transaction).
+  // Admit only a prepared nested caller and lend the marker for this lock call.
+  const bool was_in_trans = native->is_in_trans();
+  if (!was_in_trans && native->is_extern_session()) {
+    auto &session = native->get_session();
+    if (request.op_type_ != transaction::tablelock::IN_TRANS_COMMON_LOCK)
+      return common::OB_NOT_SUPPORTED;
+    if (session.get_is_deserialized() || session.get_nested_count() <= 0 ||
+        !data_plane::tx_desc_is_statement_ready(session.get_tx_desc()) ||
+        data_plane::tx_desc_is_committing(session.get_tx_desc()))
+      return common::OB_TRANS_INVALID_STATE;
+    if (session.get_tx_read_only() || data_plane::tx_desc_is_read_only(session.get_tx_desc()))
+      return common::OB_ERR_READ_ONLY_TRANSACTION;
+    native->set_is_in_trans(true);
+  }
+  struct RestoreMarker {
+    observer::ObInnerSQLConnection &connection;
+    bool previous;
+    ~RestoreMarker() { connection.set_is_in_trans(previous); }
+  } restore{*native, was_in_trans};
+  return transaction::tablelock::ObInnerConnectionLockUtil::lock_obj(request, connection);
 }
 
 int ObInnerSQLConnectionAccess::register_multi_data_source(

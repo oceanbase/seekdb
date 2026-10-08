@@ -161,7 +161,10 @@ def sql_validate_source_inventory(
         standalone_sources,
         extra_sources,
         parser_sources,
-        separately_owned_sources):
+        separately_owned_sources,
+        gis_plugin_adapters,
+        extension_runtime_sources,
+        core_gis_replaced_sources):
     """Freezes SQL's checked-in source and release Unity baselines."""
 
     group_keys = {}
@@ -208,20 +211,40 @@ def sql_validate_source_inventory(
             fail("duplicate separately owned SQL source: %s" % path)
         separate_paths[path] = True
 
+    conditional_paths = {}
+    for path in gis_plugin_adapters + extension_runtime_sources:
+        if not path.startswith(_SQL_SOURCE_PREFIX) or "/../" in path:
+            fail("conditional SQL source is outside src/sql: %s" % path)
+        if path in conditional_paths or path in unity_paths or path in standalone_paths or path in parser_paths or path in separate_paths:
+            fail("duplicate conditional SQL source: %s" % path)
+        conditional_paths[path] = True
+    replaced_paths = {}
+    for path in core_gis_replaced_sources:
+        if path in replaced_paths or (path not in unity_paths and path not in standalone_paths):
+            fail("SQL GIS replacement must reference a distinct baseline owner: %s" % path)
+        replaced_paths[path] = True
+    if len(gis_plugin_adapters) != 5 or len(extension_runtime_sources) != 4 or len(replaced_paths) != 16:
+        fail("SQL conditional inventory requires 5 GIS adapters, 4 runtime sources and 16 replacements")
+
     if len(unity_groups) != 67:
         fail("SQL inventory must contain 67 regular Unity groups, got %s" % len(unity_groups))
     if len(simd_unity_groups) != 1:
         fail("SQL inventory must contain 1 SIMD Unity group, got %s" % len(simd_unity_groups))
-    if len(unity_paths) != 1110:
-        fail("SQL inventory must contain 1110 Unity sources, got %s" % len(unity_paths))
-    if len(standalone_paths) != 26:
-        fail("SQL inventory must contain 26 standalone sources, got %s" % len(standalone_paths))
+    # Extension management adds its resolvers/executors to the ordinary groups. The
+    # plugin function expression and SQL SPI context own standalone objects.
+    # Preserve fixed ownership checks; adding an arbitrary source is not enough
+    # to admit it into the production graph.
+    # Generic plugin logical/physical nodes add two core bridge sources.
+    if len(unity_paths) != 1118:
+        fail("SQL inventory must contain 1118 Unity sources, got %s" % len(unity_paths))
+    if len(standalone_paths) != 28:
+        fail("SQL inventory must contain 28 standalone sources, got %s" % len(standalone_paths))
     if len(parser_paths) != 15:
         fail("SQL inventory must contain 15 checked-in parser sources, got %s" % len(parser_paths))
     if len(separate_paths) != 7:
         fail("SQL inventory must contain 7 separately owned sources, got %s" % len(separate_paths))
-    if len(unity_paths) + len(standalone_paths) + len(parser_paths) + len(separate_paths) != 1158:
-        fail("SQL checked-in source ownership must cover exactly 1158 files")
+    if len(unity_paths) + len(standalone_paths) + len(parser_paths) + len(separate_paths) + len(conditional_paths) != 1177:
+        fail("SQL checked-in source ownership must cover exactly 1177 files")
 
     sql_groups_named(unity_groups, SQL_OPTIMIZER_GROUP_NAMES)
     sql_groups_without(unity_groups, SQL_OPTIMIZER_GROUP_NAMES, SQL_PREPARE_SOURCES)

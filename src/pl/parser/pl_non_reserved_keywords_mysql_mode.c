@@ -116,6 +116,7 @@ static const NonReservedKeyword Mysql_pl_none_reserved_keywords[] =
   {"when", WHEN},
   {"while", WHILE},
   {"language", LANGUAGE},
+  {"variadic", VARIADIC},
   {"sql", SQL},
   {"no", NO},
   {"contains", CONTAINS},

@@ -224,6 +224,7 @@ OBSERVER_UNITY_GROUPS = [
             "src/observer/virtual_table/ob_all_virtual_ls_info.cpp",
             "src/observer/virtual_table/ob_all_virtual_timestamp_service.cpp",
             "src/observer/virtual_table/ob_all_virtual_tracepoint_info.cpp",
+            "src/observer/virtual_table/plugin_memory_table.cpp",
         ],
         generated_srcs = [],
         external_srcs = [],

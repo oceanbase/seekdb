@@ -899,7 +899,7 @@ private:
       const ObDatumVector &src,
       common::ObDatumCmpFuncType cmp_func,
       const bool is_number,
-      const T &param);
+      const T &param, const ObExpr *ordered = nullptr);
   template <typename T>
   int min_calc_batch(
       AggrCell &aggr_cell,
@@ -907,7 +907,7 @@ private:
       const ObDatumVector &src,
       common::ObDatumCmpFuncType cmp_func,
       const bool is_number,
-      const T &param);
+      const T &param, const ObExpr *ordered = nullptr);
   template <typename T>
   int add_calc_batch(
       ObDatum &dst, const ObDatumVector &src,
@@ -995,12 +995,14 @@ private:
                ObDatum &base,
                const ObDatum &other,
                common::ObDatumCmpFuncType cmp_func,
-               const bool is_number);
+               const bool is_number, const ObExpr *ordered = nullptr);
   int min_calc(AggrCell &aggr_cell,
                ObDatum &base,
                const ObDatum &other,
                common::ObDatumCmpFuncType cmp_func,
-               const bool is_number);
+               const bool is_number, const ObExpr *ordered = nullptr);
+  int compare_extremum(const ObExpr *ordered, common::ObDatumCmpFuncType native,
+                      const ObDatum &left, const ObDatum &right, int &ordering);
 
   int prepare_add_calc(const ObDatum &iter_value, AggrCell &aggr_cell, const ObAggrInfo &aggr_info);
   int add_calc(const ObDatum &iter_value, AggrCell &aggr_cell, const ObAggrInfo &aggr_info);

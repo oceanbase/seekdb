@@ -15,6 +15,7 @@
  */
 
 #include "lib/worker.h"
+#include "share/plugin/plugin_sql_type.h"
 #include "share/schema/ob_schema_mgr.h"
 
 
@@ -1045,14 +1046,29 @@ int ObSchemaRetrieveUtils::fill_column_schema(const bool check_deleted, T &resul
       ret = fill_column_schema_default_value<T>(result, column, default_type);
     }
 
-    if (OB_SUCC(ret) && (column.is_enum_or_set() || column.is_collection())) {
+    const bool requires_extended_type_info =
+        column.is_enum_or_set() || column.is_collection();
+    if (OB_SUCC(ret) &&
+        (requires_extended_type_info || column.get_meta_type().is_lob())) {
       ObString extend_type_info;
-      EXTRACT_VARCHAR_FIELD_MYSQL(result, "extended_type_info", extend_type_info);
+      if (requires_extended_type_info) {
+        EXTRACT_VARCHAR_FIELD_MYSQL(result, "extended_type_info",
+                                    extend_type_info);
+      } else {
+        EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "extended_type_info",
+                                             extend_type_info);
+      }
       int64_t pos = 0;
       if (extend_type_info.empty()) {
-        ret = OB_ERR_UNEXPECTED;
-        SHARE_SCHEMA_LOG(WARN, "extend_type_info is empty", K(ret));
+        if (requires_extended_type_info) {
+          ret = OB_ERR_UNEXPECTED;
+          SHARE_SCHEMA_LOG(WARN, "extend_type_info is empty", K(ret));
+        }
       } else if (OB_FAIL(column.deserialize_extended_type_info(extend_type_info.ptr(), extend_type_info.length(), pos))) {
+      } else if (!requires_extended_type_info &&
+                 !plugin::is_plugin_sql_type(column.get_extended_type_info())) {
+        ret = OB_ERR_UNEXPECTED;
+        SHARE_SCHEMA_LOG(WARN, "invalid plugin SQL type metadata", K(ret));
       } else {}
     }
 
@@ -1615,6 +1631,20 @@ int ObSchemaRetrieveUtils::fill_routine_schema(T &result, ObRoutineInfo &routine
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, comment, routine_info);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, route_sql, routine_info);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, type_id, routine_info, uint64_t);
+    ObString native_module, native_implementation;
+    int64_t native_abi = 0;
+    // Pre-native catalogs and old history rows denote ordinary SQL routines.
+    // A partially populated binding must fail validation, never become PL.
+    EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(
+        result, "native_module_id", native_module, true, true, ObString());
+    EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(
+        result, "native_implementation_id", native_implementation, true, true, ObString());
+    EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(
+        result, "native_abi_version", native_abi, int64_t, true, true, 0);
+    if (OB_SUCC(ret)) {
+      ret = routine_info.set_native_binding(native_module, native_implementation, native_abi);
+      if (OB_SUCC(ret) && !routine_info.is_native_binding_valid()) ret = OB_INVALID_DATA;
+    }
   }
   return ret;
 }
@@ -3232,7 +3262,7 @@ int ObSchemaRetrieveUtils::fill_mock_fk_parent_table_schema(T &result,
   return ret;
 }
 
-int ObSchemaRetrieveUtils::fill_sys_table_lob_tid(ObTableSchema &table)
+inline int ObSchemaRetrieveUtils::fill_sys_table_lob_tid(ObTableSchema &table)
 {
   int ret = OB_SUCCESS;
   const int64_t table_id = table.get_table_id();

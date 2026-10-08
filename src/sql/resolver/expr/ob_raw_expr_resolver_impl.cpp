@@ -20,6 +20,10 @@
 #include "lib/json/ob_json_print_utils.h"
 #include "sql/pl/ob_pl_resolver.h"
 #include "sql/resolver/dml/ob_inlist_resolver.h"
+#include "share/rc/ob_module_provider.h"
+#include "sql/engine/expr/plugin_function_expr.h"
+
+#include <vector>
 
 namespace oceanbase
 {
@@ -28,6 +32,20 @@ namespace sql
 {
 
 namespace {
+#ifdef SEEKDB_WITH_EXPERIMENTAL_PLUGINS
+// Types on columns and subqueries are not known yet in early expression
+// resolution. Keep one value node until normal logical type deduction.
+bool retain_plugin_single_eval(const ObRawExpr *value, uint32_t depth = 0)
+{
+  if (!value || depth >= 64 || value->get_plugin_type() ||
+      value->get_expr_type() == T_REF_COLUMN || value->get_expr_type() == T_REF_QUERY ||
+      value->get_expr_type() == T_FUN_SYS_PLUGIN_FUNCTION ||
+      value->get_expr_type() == T_FUN_SYS_PLUGIN_CAST || value->get_expr_type() == T_FUN_SYS_PLUGIN_TYPE_VALUE) return true;
+  for (int64_t i = 0; i < value->get_param_count(); ++i)
+    if (retain_plugin_single_eval(value->get_param_expr(i), depth + 1)) return true;
+  return false;
+}
+#endif
 static int change_json_expr_res_type_if_need(common::ObIAllocator &allocator, ObString &str, ParseNode &ret_node, int8_t json_expr_flag)
 {
   INIT_SUCC(ret);
@@ -931,6 +949,22 @@ int ObRawExprResolverImpl::do_recursive_resolve(const ParseNode *node,
         modification_type_to_int(const_cast<ParseNode&>(*node));
         // deal node
         if (OB_FAIL(SMART_CALL(recursive_resolve(node, expr)))) {
+        }
+        break;
+      }
+      case T_FUN_SYS_PLUGIN_TYPE_VALUE: {
+        if (node->num_child_ != 2 || !node->children_ || !node->children_[0] || !node->children_[1] ||
+            node->children_[1]->type_ != T_IDENT || !node->children_[1]->str_value_ ||
+            node->children_[1]->str_len_ <= 0 || node->children_[1]->str_len_ > SEEKDB_PLUGIN_MAX_IDENTIFIER_BYTES) {
+          ret = OB_ERR_PARSER_SYNTAX;
+        } else {
+          ObRawExpr *value = nullptr;
+          if (OB_FAIL(SMART_CALL(recursive_resolve(node->children_[0], value)))) {
+          } else if (OB_FAIL(PluginTypeValueExpr::prepare(ctx_.expr_factory_,
+              ObString(node->children_[1]->str_len_, node->children_[1]->str_value_), value))) {
+          } else {
+            expr = value;
+          }
         }
         break;
       }
@@ -2136,6 +2170,53 @@ int ObRawExprResolverImpl::process_geo_func_node(const ParseNode *node, ObRawExp
   int ret = OB_SUCCESS;
   ObSysFunRawExpr *func_expr = NULL;
 
+#if !SEEKDB_ENABLE_CORE_GIS
+  if (node && node->type_ != T_FUN_SYS_ARRAY && node->type_ != T_FUN_SYS_MAP) {
+    // POINT/collection names are grammar keywords with legacy parse-node
+    // shapes. Normalize only that syntax; use the ordinary catalog resolver
+    // for binding, arity, types and evaluation, just like ST_Area(name).
+    if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(T_FUN_SYS, func_expr))) return ret;
+    if (OB_FAIL(set_geo_func_name(func_expr, node->type_))) return ret;
+    if (node->type_ == T_FUN_SYS_GEOMCOLLECTION && node->value_ == 1) {
+      func_expr->set_func_name(N_GEOMETRYCOLLECTION);
+    }
+    if (!node->children_ || node->num_child_ < 1) return OB_ERR_PARSER_SYNTAX;
+    ParseNode name = {}, arguments = {}, call = {};
+    name.type_ = T_IDENT;
+    name.str_value_ = func_expr->get_func_name().ptr();
+    name.str_len_ = func_expr->get_func_name().length();
+    ParseNode *parameters = node->children_[0];
+    if (node->type_ == T_FUN_SYS_POINT) {
+      if (node->num_child_ != 2) return OB_ERR_PARSER_SYNTAX;
+      arguments.type_ = T_EXPR_LIST;
+      arguments.num_child_ = node->num_child_;
+      arguments.children_ = node->children_;
+      parameters = &arguments;
+    }
+    ParseNode *children[] = {&name, parameters};
+    call.type_ = T_FUN_SYS;
+    // Ordinary parenthesized call, not Oracle's NEW constructor syntax.
+    call.int16_values_[0] = 1;
+    call.num_child_ = parameters ? 2 : 1;
+    call.children_ = children;
+    ret = process_fun_sys_node(&call, expr, false);
+    if (ret == OB_ERR_FUNCTION_UNKNOWN) {
+      // Keyword constructors have no outer T_FUN_SYS fallback. Once a module
+      // only publishes implementations, resolve its SQL declaration through
+      // the same database routine namespace as an ordinary function call.
+      ParseNode *object_access = nullptr;
+      if (OB_FAIL(ObResolverUtils::transform_sys_func_to_objaccess(
+              &ctx_.expr_factory_.get_allocator(), &call, object_access))) {
+      } else if (OB_ISNULL(object_access)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        ret = process_obj_access_node(*object_access, expr);
+      }
+    }
+    return ret;
+  }
+#endif
+
   if (OB_ISNULL(node)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(node->type_, func_expr))) {
@@ -2842,6 +2923,14 @@ int ObRawExprResolverImpl::process_between_node(const ParseNode *node, ObRawExpr
         }
       }
     }
+    #ifdef SEEKDB_WITH_EXPERIMENTAL_PLUGINS
+    if (OB_SUCC(ret) && can_transform_in_mysql_mode) {
+      // Do not duplicate a plugin value or choose two independent common
+      // types before column/subquery types have been resolved. Native BETWEEN
+      // still has its ordinary evaluator and range-extraction implementation.
+      can_transform_in_mysql_mode = !retain_plugin_single_eval(btw_params[0]);
+    }
+    #endif
     // The content of the 4th raw expr is same to that of the 1st raw expr.
     // But the ptr addresses need to be different because our optimizer relys on it.
     if (OB_SUCC(ret)) {
@@ -3126,9 +3215,16 @@ int ObRawExprResolverImpl::process_in_or_not_in_node(const ParseNode *node,
       }
     } else if (T_OP_ROW == param_type2) {
       ObOpRawExpr *row_expr = static_cast<ObOpRawExpr *>(sub_expr2);
+      bool keep_single_list = false;
+#ifdef SEEKDB_WITH_EXPERIMENTAL_PLUGINS
+      if (row_expr && row_expr->get_param_count() == 1) {
+        keep_single_list = retain_plugin_single_eval(sub_expr1) || retain_plugin_single_eval(row_expr->get_param_expr(0));
+      }
+#endif
       if (OB_ISNULL(row_expr)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (1 == row_expr->get_param_count()) {
+        LOG_WARN("failed to cast ObOpRawExpr", K(ret));
+      } else if (1 == row_expr->get_param_count() && !keep_single_list) {
         ObRawExpr *param = row_expr->get_param_expr(0);
         if (OB_FAIL(in_expr->set_param_exprs(sub_expr1, param))) {
         } else {
@@ -5023,6 +5119,8 @@ int ObRawExprResolverImpl::process_fun_sys_node(const ParseNode *node,
   int ret = OB_SUCCESS;
   ObSysFunRawExpr *func_expr = NULL;
   ObString func_name;
+  ObString plugin_sql_name;
+  bool is_plugin_function = false;
   if (OB_ISNULL(node) || OB_ISNULL(ctx_.session_info_)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_UNLIKELY(1 > node->num_child_) || OB_ISNULL(node->children_) || OB_ISNULL(node->children_[0])) {
@@ -5084,7 +5182,49 @@ int ObRawExprResolverImpl::process_fun_sys_node(const ParseNode *node,
     ObExprOperatorType type;
     type = ObExprOperatorFactory::get_type_by_name(func_name);
     if (OB_UNLIKELY(T_INVALID == (type))) {
-      ret = OB_ERR_FUNCTION_UNKNOWN;
+      const int32_t sql_argument_count =
+          node->num_child_ > 1 && nullptr != node->children_[1]
+              ? node->children_[1]->num_child_
+              : 0;
+      if (nullptr != share::g_mp && sql_argument_count >= 0) {
+        std::vector<const char *> unresolved_types(
+            static_cast<size_t>(sql_argument_count), nullptr);
+        std::string owned_name(func_name.ptr(), func_name.length());
+        // MySQL function names are case-insensitive; catalog identifiers use
+        // canonical ASCII names. Keep the same identity for preflight and the
+        // hidden dispatch argument used during typed binding.
+        for (char &character : owned_name) {
+          if (character >= 'A' && character <= 'Z') character += 'a' - 'A';
+        }
+        seekdb_plugin_sql_binding_v1_t binding = {};
+        int lookup_ret = OB_ENTRY_NOT_EXIST;
+        if (T_FROM_SCOPE == ctx_.current_scope_) {
+          lookup_ret = share::g_mp->resolve_plugin_sql_object(
+              SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION, owned_name.c_str(),
+              unresolved_types.empty() ? nullptr : unresolved_types.data(),
+              static_cast<uint32_t>(unresolved_types.size()), &binding);
+        }
+        if (OB_SUCCESS != lookup_ret) {
+          lookup_ret = share::g_mp->resolve_plugin_sql_object(
+              SEEKDB_PLUGIN_EXTENSION_FUNCTION, owned_name.c_str(),
+              unresolved_types.empty() ? nullptr : unresolved_types.data(),
+              static_cast<uint32_t>(unresolved_types.size()), &binding);
+        }
+        if (OB_SUCCESS == lookup_ret) {
+          if (OB_SUCC(ret = ob_write_string(ctx_.expr_factory_.get_allocator(),
+                  ObString(owned_name.size(), owned_name.data()), plugin_sql_name))) {
+            func_name = ObString::make_string(
+                binding.kind == SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION
+                    ? PluginTableFunctionExpr::SQL_DISPATCH_NAME
+                    : PluginFunctionExpr::SQL_DISPATCH_NAME);
+            is_plugin_function = true;
+          }
+        } else {
+          ret = OB_ERR_FUNCTION_UNKNOWN;
+        }
+      } else {
+        ret = OB_ERR_FUNCTION_UNKNOWN;
+      }
     }
   }
 
@@ -5094,8 +5234,21 @@ int ObRawExprResolverImpl::process_fun_sys_node(const ParseNode *node,
       if (OB_ISNULL(node->children_) || OB_ISNULL(node->children_[1])
           || OB_UNLIKELY(T_EXPR_LIST != node->children_[1]->type_)) {
         ret = OB_ERR_PARSER_SYNTAX;
-      } else if (OB_FAIL(func_expr->init_param_exprs(node->children_[1]->num_child_))) {
+        LOG_WARN("invalid node children", K(ret), K(node->children_));
+      } else if (OB_FAIL(func_expr->init_param_exprs(
+                     node->children_[1]->num_child_ +
+                     (is_plugin_function ? 1 : 0)))) {
       } else {
+        if (is_plugin_function) {
+          ObConstRawExpr *name_expression = nullptr;
+          if (OB_FAIL(ObRawExprUtils::build_const_string_expr(
+                  ctx_.expr_factory_, ObVarcharType, plugin_sql_name,
+                  CS_TYPE_UTF8MB4_BIN, name_expression))) {
+            LOG_WARN("failed to build plugin SQL function identity", K(ret));
+          } else if (OB_FAIL(func_expr->add_param_expr(name_expression))) {
+            LOG_WARN("failed to add plugin SQL function identity", K(ret));
+          }
+        }
         ObRawExpr *para_expr = NULL;
         int32_t num = node->children_[1]->num_child_;
         int current_columns_count = ctx_.columns_->count();
@@ -5130,6 +5283,15 @@ int ObRawExprResolverImpl::process_fun_sys_node(const ParseNode *node,
         }
       }
     } //end > 1
+    else if (is_plugin_function) {
+      ObConstRawExpr *name_expression = nullptr;
+      if (OB_FAIL(func_expr->init_param_exprs(1))) {
+      } else if (OB_FAIL(ObRawExprUtils::build_const_string_expr(
+                     ctx_.expr_factory_, ObVarcharType, plugin_sql_name,
+                     CS_TYPE_UTF8MB4_BIN, name_expression))) {
+      } else if (OB_FAIL(func_expr->add_param_expr(name_expression))) {
+      }
+    }
   }
 
   if (OB_SUCC(ret)) {

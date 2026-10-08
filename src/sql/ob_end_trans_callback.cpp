@@ -47,12 +47,17 @@ ObEndTransAsyncCallback::~ObEndTransAsyncCallback()
 
 void ObEndTransAsyncCallback::callback(int cb_param, const transaction::ObTransID &trans_id)
 {
-  UNUSED(trans_id);
-  callback(cb_param);
+  callback_with_transaction(cb_param, trans_id.get_id());
 }
 
 void ObEndTransAsyncCallback::callback(int cb_param)
 {
+  callback_with_transaction(cb_param, transaction_id_);
+}
+
+void ObEndTransAsyncCallback::callback_with_transaction(int cb_param, int64_t transaction_id)
+{
+  const int data_result = cb_param;
   bool need_disconnect = false;
   if (OB_UNLIKELY(!has_set_need_rollback_)) {
     LOG_ERROR_RET(OB_ERR_UNEXPECTED, "is_need_rollback_ has not been set",
@@ -71,10 +76,10 @@ void ObEndTransAsyncCallback::callback(int cb_param)
   CHECK_BALANCE("[async callback]");
 
   if (OB_SUCCESS == this->last_err_) {
-    mysql_end_trans_cb_.callback(cb_param);
+    mysql_end_trans_cb_.callback(cb_param, data_result, transaction_id, is_need_rollback_);
   } else {
     cb_param = this->last_err_;
-    mysql_end_trans_cb_.callback(cb_param);
+    mysql_end_trans_cb_.callback(cb_param, data_result, transaction_id, is_need_rollback_);
   }
 }
 

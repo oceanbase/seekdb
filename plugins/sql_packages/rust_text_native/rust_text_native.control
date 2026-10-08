@@ -1,0 +1,4 @@
+default_version = '1.0'
+native_module = 'org.seekdb.rust-text'
+install_source = 'native'
+superuser = false

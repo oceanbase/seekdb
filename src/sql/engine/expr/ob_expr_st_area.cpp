@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#if SEEKDB_ENABLE_CORE_GIS
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_expr_st_area.h"
@@ -116,3 +117,5 @@ int ObExprSTArea::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr, O
 
 }
 }
+
+#endif // SEEKDB_ENABLE_CORE_GIS

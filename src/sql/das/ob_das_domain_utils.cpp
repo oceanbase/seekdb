@@ -152,14 +152,31 @@ int ObDASDomainUtils::generate_spatial_index_rows(
   const ObSrsItem *srs_item = NULL;
   const ObSrsBoundsItem *srs_bound = NULL;
   uint32_t srid = UINT32_MAX;
-  uint64_t rowkey_num = das_ctdef.table_param_.get_data_table().get_rowkey_column_num();
+  const int64_t rowkey_num = das_ctdef.table_param_.get_data_table().get_rowkey_column_num();
+  const int64_t original_count = spat_rows.count();
   lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("S2Adapter"));
 
-  if (OB_FAIL(ObGeoTypeUtil::get_srid_from_wkb(wkb_str, srid))) {
+  // Keep storage projection/encoding in the host. With core GIS disabled,
+  // ObS2Adapter obtains an owned covering snapshot through the leased GIS SPI.
+  if (rowkey_num < 2 || row_projector.count() < rowkey_num ||
+      das_ctdef.column_types_.count() < rowkey_num ||
+      das_ctdef.column_accuracys_.count() < rowkey_num) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_num; ++i) {
+    if (row_projector.at(i) < 0 || row_projector.at(i) >= dml_row.cnt_) {
+      ret = OB_INVALID_ARGUMENT;
+    }
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(ObGeoTypeUtil::get_srid_from_wkb(wkb_str, srid))) {
   } else if (srid != 0 &&
       OB_FAIL(srs_provider.get_tenant_srs_guard(srs_guard))) {
   } else if (srid != 0 &&
       OB_FAIL(srs_guard.get_srs_item(srid, srs_item))) {
+  } else if (srid != 0 && OB_ISNULL(srs_item)) {
+    ret = OB_ERR_SRS_NOT_FOUND;
   } else if (((srid == 0) || !(srs_item->is_geographical_srs())) &&
               OB_FAIL(srs_provider.get_srs_bounds(srid, srs_item, srs_bound))) {
   } else {
@@ -213,6 +230,13 @@ int ObDASDomainUtils::generate_spatial_index_rows(
     }
   }
 
+  // Callers may already have rows from another geometry. Never publish a
+  // prefix of this geometry's rows when allocation/reshape/append fails.
+  if (OB_FAIL(ret)) {
+    while (spat_rows.count() > original_count) {
+      spat_rows.pop_back();
+    }
+  }
   return ret;
 }
 

@@ -30,7 +30,9 @@ _SQL_NIO_INPUTS = [
     "Cargo.toml",
     "rust-toolchain.toml",
     "sql-nio/Cargo.toml",
-] + glob(["sql-nio/src/*.rs"])
+    "plugin-runtime/Cargo.toml",
+    "seekdb-host/Cargo.toml",
+] + glob(["sql-nio/src/**/*.rs", "plugin-runtime/src/**/*.rs", "seekdb-host/src/**/*.rs"])
 
 # Cargo remains the authoritative Rust dependency resolver used by the
 # upstream CMake build.  Keep the action local and outside the sandbox until
@@ -39,12 +41,12 @@ _SQL_NIO_INPUTS = [
 genrule(
     name = "_sql_nio_static_unix",
     srcs = _SQL_NIO_INPUTS,
-    outs = ["libsql_nio.a"],
+    outs = ["libseekdb_host.a"],
     cmd = """
 set -eu
 export CARGO_TARGET_DIR="$(@D)/sql_nio-cargo-target"
-cargo build --release --manifest-path "$(location Cargo.toml)" --package sql-nio
-cp "$$CARGO_TARGET_DIR/release/libsql_nio.a" "$@"
+cargo build --release --manifest-path "$(location Cargo.toml)" --package seekdb-host --features plugins
+cp "$$CARGO_TARGET_DIR/release/libseekdb_host.a" "$@"
 """,
     tags = [
         "no-remote",
@@ -59,11 +61,11 @@ cp "$$CARGO_TARGET_DIR/release/libsql_nio.a" "$@"
 genrule(
     name = "_sql_nio_static_windows",
     srcs = _SQL_NIO_INPUTS,
-    outs = ["sql_nio.lib"],
+    outs = ["seekdb_host.lib"],
     cmd_bat = """
 set CARGO_TARGET_DIR=$(@D)\\sql_nio-cargo-target
-cargo build --release --manifest-path "$(location Cargo.toml)" --package sql-nio
-copy /Y "%CARGO_TARGET_DIR%\\release\\sql_nio.lib" "$@"
+cargo build --release --manifest-path "$(location Cargo.toml)" --package seekdb-host --features plugins
+copy /Y "%CARGO_TARGET_DIR%\\release\\seekdb_host.lib" "$@"
 """,
     tags = [
         "no-remote",

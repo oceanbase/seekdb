@@ -1,0 +1,18 @@
+manifest_schema_version = 1
+plugin_id = "org.seekdb.reference.invalid-extensions"
+package_version = "1.0.0"
+build_id = "reference-invalid-extensions-abi-v1"
+abi_major = 1
+abi_minor = 0
+catalog_schema_version = 0
+data_format_version = 0
+entrypoint = "seekdb_reference_invalid_extensions.so"
+capabilities = ["extension.catalog.v1"]
+
+[[provides]]
+service_id = "org.seekdb.reference.invalid-extensions.impl"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.reference.invalid-extensions.catalog"
+version = "1.0.0"

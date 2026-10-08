@@ -31,6 +31,7 @@
 #include "ob_log_json_table.h"
 #include "ob_log_values.h"
 #include "ob_log_material.h"
+#include "log_plugin_custom.h"
 #include "ob_log_window_function.h"
 #include "ob_log_select_into.h"
 #include "ob_log_topk.h"
@@ -80,6 +81,11 @@ ObLogicalOperator *ObLogOperatorFactory::allocate(ObLogPlan &plan, ObLogOpType t
   ObLogicalOperator *ret_op = NULL;
   void *ptr = NULL;
   switch (type) {
+  case LOG_PLUGIN_CUSTOM: {
+    ptr = allocator_.alloc(sizeof(LogPluginCustom));
+    if (ptr) ret_op = new (ptr) LogPluginCustom(plan);
+    break;
+  }
   case LOG_GROUP_BY: {
     ptr = allocator_.alloc(sizeof(ObLogGroupBy));
     if (NULL != ptr) {

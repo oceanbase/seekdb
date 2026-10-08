@@ -51,6 +51,7 @@ public:
   virtual ~ObSqlEndTransCb();
 
   void callback(int cb_param);
+  void callback(int cb_param, int data_result, int64_t transaction_id, bool rollback);
   int init(ObMPPacketSender& packet_sender, 
            sql::ObSQLSessionInfo *sess_info, 
            int32_t stmt_id = 0,
@@ -100,6 +101,9 @@ private:
 
   CallbackState state_;
   int pending_cb_param_;
+  int pending_data_result_;
+  int64_t pending_transaction_id_;
+  bool pending_rollback_;
   DISALLOW_COPY_AND_ASSIGN(ObSqlEndTransCb);
 };
 } //end of namespace obmysql

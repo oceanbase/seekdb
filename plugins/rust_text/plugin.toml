@@ -1,0 +1,82 @@
+manifest_schema_version = 1
+plugin_id = "org.seekdb.rust-text"
+package_version = "1.0.0"
+build_id = "rust-text-owned-memory-v15"
+abi_major = 1
+abi_minor = 0
+catalog_schema_version = 1
+data_format_version = 1
+entrypoint = "libseekdb_rust_text.so"
+capabilities = ["extension.catalog.v1", "extension.registration.v1"]
+
+[[provides]]
+service_id = "org.seekdb.rust-text.stored-codec"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.rust-text.stored-from-bytes"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.rust-text.stored-to-bytes"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.rust-text.routine-ddl"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.rust-text.routine-id"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.rust-text.sql-series"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.rust-text.catalog.install"
+version = "1.1.0"
+
+[[provides]]
+service_id = "org.seekdb.rust-text.planning"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.rust-text.planning-count"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.rust-text.words-or-null"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.rust-text.words-bytes"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.rust-text.words"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.rust-text.identity"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.rust-text.char-count"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.rust-text.sql-chars"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.rust-text.codec"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.rust-text.from-bytes"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.rust-text.to-bytes"
+version = "1.0.0"

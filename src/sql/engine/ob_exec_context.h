@@ -500,6 +500,13 @@ protected:
 public:
   ObStmtFactory *get_stmt_factory();
   ObRawExprFactory *get_expr_factory();
+  // Synchronous scoped compilation only: no allocation or ownership transfer.
+  // Swap back before destroying the borrowed factories or resetting this ctx.
+  void swap_resolver_factories(ObStmtFactory *&statements, ObRawExprFactory *&expressions)
+  {
+    std::swap(stmt_factory_, statements);
+    std::swap(expr_factory_, expressions);
+  }
 
   int check_status();
   int fast_check_status(const int64_t n = 0xFF);
@@ -527,6 +534,8 @@ public:
   int get_package_guard(pl::ObPLPackageGuard *&package_guard);
   inline pl::ObPLPackageGuard* get_original_package_guard() { return package_guard_; }
   inline void set_package_guard(pl::ObPLPackageGuard* v) { package_guard_ = v; }
+  // Borrow without lazily allocating an outer guard during a scoped override.
+  pl::ObPLPackageGuard *peek_package_guard() const { return package_guard_; }
   int init_pl_ctx();
   inline ObIAllocator* get_pl_expr_alloc() { return pl_expr_allocator_; }
   inline void set_pl_expr_alloc(ObIAllocator *alloc) { pl_expr_allocator_ = alloc; }
@@ -682,6 +691,12 @@ public:
   }
   void set_is_online_stats_gathering(bool v) { is_online_stats_gathering_ = v; }
   bool is_online_stats_gathering() const { return is_online_stats_gathering_; }
+  void set_is_plugin_sql(bool value) { is_plugin_sql_ = value; }
+  bool is_plugin_sql() const { return is_plugin_sql_; }
+  void set_plugin_sql_savepoint(bool value) { has_plugin_sql_savepoint_ = value; }
+  bool has_plugin_sql_savepoint() const { return has_plugin_sql_savepoint_; }
+  void set_plugin_sql_tx_id(int64_t id) { plugin_sql_tx_id_ = id; }
+  int64_t get_plugin_sql_tx_id() const { return plugin_sql_tx_id_; }
   void set_ddl_idempotent_autoinc_params(const int64_t slice_count,
                                          const int64_t slice_idx,
                                          const int64_t slice_row_idx,
@@ -933,6 +948,12 @@ protected:
   ObUserLoggingCtx user_logging_ctx_;
   // for online stats gathering
   bool is_online_stats_gathering_;
+  // Host SQL invoked synchronously from a plugin, in the caller transaction.
+  bool is_plugin_sql_;
+  // A plain SELECT acquired a statement savepoint before invoking host SQL.
+  // Its lifetime is the result set, not one plugin callback or result row.
+  bool has_plugin_sql_savepoint_;
+  int64_t plugin_sql_tx_id_;
   
   // for calculating idempotent auto increment value in DDL
   bool is_ddl_idempotent_auto_inc_;

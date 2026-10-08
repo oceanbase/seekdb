@@ -19,6 +19,7 @@
 #include "share/geo/ob_geo_dispatcher.h"
 #include "share/geo/ob_geo_func_correct.h"
 #include "share/geo/ob_geo_utils.h"
+#include "seekdb/geo/cartesian_algorithms.hpp"
 
 using namespace oceanbase::common;
 namespace oceanbase
@@ -49,7 +50,7 @@ private:
     } else {
       geo_candidate = reinterpret_cast<GeoType *>(const_cast<ObGeometry *>(g));
     }
-    boost::geometry::correct(*geo_candidate);
+    seekdb::geo::cartesian::correct(*geo_candidate);
     return OB_SUCCESS;
   }
 

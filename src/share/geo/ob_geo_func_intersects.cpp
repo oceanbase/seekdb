@@ -20,6 +20,7 @@
 #include "share/geo/ob_geo_func_intersects.h"
 #include "share/geo/ob_geo_func_disjoint.h"
 #include "share/geo/ob_geo_utils.h"
+#include "seekdb/geo/cartesian_algorithms.hpp"
 
 using namespace oceanbase::common;
 namespace oceanbase
@@ -55,7 +56,7 @@ int eval_intersects_without_strategy(const ObGeometry *g1, const ObGeometry *g2,
     geo1 = reinterpret_cast<const GeoType1 *>(g1);
     geo2 = reinterpret_cast<const GeoType2 *>(g2);
   }
-  result = bg::intersects(*geo1, *geo2);
+  result = seekdb::geo::cartesian::intersects(*geo1, *geo2);
   return OB_SUCCESS;
 }
 

@@ -127,6 +127,12 @@ public:
 
   ObWarningBuffer &operator= (const ObWarningBuffer &other);
 
+  // Append retained warnings/notes in order, preserving their metadata and the
+  // total count (including warnings already evicted from other's ring). Does
+  // not change the error item. Self-append is rejected; allocation failure may
+  // leave a valid prefix appended and is returned to the caller.
+  int append_warnings(const ObWarningBuffer &other);
+
   /*
    * get WarningItem
    * idx range [0, get_readable_warning_count)

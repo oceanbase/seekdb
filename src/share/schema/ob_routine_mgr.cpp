@@ -81,9 +81,10 @@ ObRoutineMgr::ObRoutineMgr()
     : local_allocator_(lib::ObMemAttr(ObModIds::OB_SCHEMA_GETTER_GUARD, ObCtxIds::SCHEMA_SERVICE)),
       allocator_(local_allocator_),
       routine_infos_(0, NULL, lib::ObMemAttr(ObModIds::OB_SCHEMA_ROUTINE_INFO_VECTOR, ObCtxIds::SCHEMA_SERVICE)),
+      routine_name_infos_(0, NULL, lib::ObMemAttr(ObModIds::OB_SCHEMA_ROUTINE_INFO_VECTOR, ObCtxIds::SCHEMA_SERVICE)),
       routine_id_map_(lib::ObMemAttr(ObModIds::OB_SCHEMA_ROUTINE_ID_MAP, ObCtxIds::SCHEMA_SERVICE)),
       routine_name_map_(lib::ObMemAttr(ObModIds::OB_SCHEMA_ROUTINE_NAME_MAP, ObCtxIds::SCHEMA_SERVICE)),
-      is_inited_(false)
+      is_inited_(false), name_index_valid_(true)
 {
 }
 
@@ -91,9 +92,10 @@ ObRoutineMgr::ObRoutineMgr(ObIAllocator &allocator)
     : local_allocator_(lib::ObMemAttr(ObModIds::OB_SCHEMA_GETTER_GUARD, ObCtxIds::SCHEMA_SERVICE)),
       allocator_(allocator),
       routine_infos_(0, NULL, lib::ObMemAttr(ObModIds::OB_SCHEMA_ROUTINE_INFO_VECTOR, ObCtxIds::SCHEMA_SERVICE)),
+      routine_name_infos_(0, NULL, lib::ObMemAttr(ObModIds::OB_SCHEMA_ROUTINE_INFO_VECTOR, ObCtxIds::SCHEMA_SERVICE)),
       routine_id_map_(lib::ObMemAttr(ObModIds::OB_SCHEMA_ROUTINE_ID_MAP, ObCtxIds::SCHEMA_SERVICE)),
       routine_name_map_(lib::ObMemAttr(ObModIds::OB_SCHEMA_ROUTINE_NAME_MAP, ObCtxIds::SCHEMA_SERVICE)),
-      is_inited_(false)
+      is_inited_(false), name_index_valid_(true)
 {
 }
 
@@ -123,8 +125,10 @@ void ObRoutineMgr::reset()
   } else {
     // reset will not release memory for vector, use clear()
     routine_infos_.clear();
+    routine_name_infos_.clear();
     routine_id_map_.clear();
     routine_name_map_.clear();
+    name_index_valid_ = true;
   }
 }
 
@@ -135,8 +139,11 @@ int ObRoutineMgr::assign(const ObRoutineMgr &other)
 
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
+  } else if (!other.check_inner_stat() || !other.name_index_valid_) {
+    ret = OB_STATE_NOT_MATCH;
   } else if (this != &other) {
     reset();
+    name_index_valid_ = false;
     #define ASSIGN_FIELD(x)                        \
       if (OB_SUCC(ret)) {                          \
         if (OB_FAIL(x.assign(other.x))) {          \
@@ -144,9 +151,11 @@ int ObRoutineMgr::assign(const ObRoutineMgr &other)
         }                                          \
       }
     ASSIGN_FIELD(routine_infos_);
+    ASSIGN_FIELD(routine_name_infos_);
     ASSIGN_FIELD(routine_id_map_);
     ASSIGN_FIELD(routine_name_map_);
     #undef ASSIGN_FIELD
+    name_index_valid_ = OB_SUCC(ret);
   }
 
   return ret;
@@ -158,6 +167,8 @@ int ObRoutineMgr::deep_copy(const ObRoutineMgr &other)
 
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
+  } else if (!other.check_inner_stat() || !other.name_index_valid_) {
+    ret = OB_STATE_NOT_MATCH;
   } else if (this != &other) {
     reset();
     for (RoutineIter iter = other.routine_infos_.begin();
@@ -168,6 +179,7 @@ int ObRoutineMgr::deep_copy(const ObRoutineMgr &other)
       } else if (OB_FAIL(add_routine(*routine))) {
       }
     }
+    if (OB_FAIL(ret)) name_index_valid_ = false;
   }
   return ret;
 }
@@ -185,6 +197,69 @@ bool ObRoutineMgr::compare_routine(const ObSimpleRoutineSchema *lhs, const ObSim
 bool ObRoutineMgr::equal_routine(const ObSimpleRoutineSchema *lhs, const ObSimpleRoutineSchema *rhs)
 {
   return lhs->get_routine_key() == rhs->get_routine_key();
+}
+
+int ObRoutineMgr::compare_routine_name(const ObSimpleRoutineSchema *lhs,
+                                      const ObRoutineNameHashWrapper &rhs)
+{
+  int cmp = 0;
+  if (lhs->get_database_id() != rhs.get_database_id()) {
+    cmp = lhs->get_database_id() < rhs.get_database_id() ? -1 : 1;
+  } else if (lhs->get_package_id() != rhs.get_package_id()) {
+    cmp = lhs->get_package_id() < rhs.get_package_id() ? -1 : 1;
+  } else if (lhs->get_routine_type() != rhs.get_routine_type()) {
+    cmp = lhs->get_routine_type() < rhs.get_routine_type() ? -1 : 1;
+  } else if (0 != (cmp = ObSchemaNameComparator().compare(lhs->get_routine_name(), rhs.get_routine_name()))) {
+  } else if (lhs->get_overload() != rhs.get_overload()) {
+    cmp = lhs->get_overload() < rhs.get_overload() ? -1 : 1;
+  }
+  return cmp;
+}
+
+bool ObRoutineMgr::compare_name_key(const ObSimpleRoutineSchema *lhs,
+                                   const ObRoutineNameHashWrapper &rhs)
+{
+  return compare_routine_name(lhs, rhs) < 0;
+}
+
+bool ObRoutineMgr::compare_names(const ObSimpleRoutineSchema *lhs, const ObSimpleRoutineSchema *rhs)
+{
+  return compare_name_key(lhs, ObGetRoutineKey<ObRoutineNameHashWrapper, ObSimpleRoutineSchema *>()(rhs));
+}
+
+bool ObRoutineMgr::equal_names(const ObSimpleRoutineSchema *lhs, const ObSimpleRoutineSchema *rhs)
+{
+  return 0 == compare_routine_name(lhs, ObGetRoutineKey<ObRoutineNameHashWrapper, ObSimpleRoutineSchema *>()(rhs));
+}
+
+int ObRoutineMgr::get_standalone_function_schemas(uint64_t database_id, const ObString &name,
+    ObIArray<const ObSimpleRoutineSchema *> &schemas) const
+{
+  int ret = OB_SUCCESS;
+  schemas.reset();
+  if (!check_inner_stat()) {
+    ret = OB_NOT_INIT;
+  } else if (OB_INVALID_ID == database_id || name.empty()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!name_index_valid_) {
+    ret = OB_STATE_NOT_MATCH;
+  } else {
+    ObRoutineNameHashWrapper first(database_id, OB_INVALID_ID, name, 0, ROUTINE_FUNCTION_TYPE);
+    for (ConstRoutineIter it = routine_name_infos_.lower_bound(first, compare_name_key);
+         OB_SUCC(ret) && it != routine_name_infos_.end(); ++it) {
+      const ObSimpleRoutineSchema *routine = *it;
+      if (OB_ISNULL(routine)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (routine->get_database_id() != database_id || routine->get_package_id() != OB_INVALID_ID
+                 || routine->get_routine_type() != ROUTINE_FUNCTION_TYPE
+                 || ObSchemaNameComparator().compare(routine->get_routine_name(), name) != 0) {
+        break;
+      } else if (OB_FAIL(schemas.push_back(routine))) {
+      }
+    }
+  }
+  if (OB_FAIL(ret)) schemas.reset();
+  return ret;
 }
 
 bool ObRoutineMgr::compare_with_routine_id(const ObSimpleRoutineSchema *lhs,
@@ -223,10 +298,20 @@ int ObRoutineMgr::add_routine(const ObSimpleRoutineSchema &routine_schema)
   ObSimpleRoutineSchema *new_routine_schema = NULL;
   RoutineIter iter = NULL;
   ObSimpleRoutineSchema *replaced_routine = NULL;
+  const ObSimpleRoutineSchema *name_collision = NULL;
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
   } else if (!routine_schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (!name_index_valid_ && OB_FAIL(rebuild_routine_hashmap())) {
+  } else if (OB_FAIL(get_routine_schema(routine_schema.get_database_id(), routine_schema.get_package_id(),
+      routine_schema.get_routine_name(), routine_schema.get_overload(), routine_schema.get_routine_type(),
+      name_collision))) {
+  } else if (name_collision != NULL && name_collision->get_routine_id() != routine_schema.get_routine_id()) {
+    // A new ID cannot silently replace an existing name/slot in only one index.
+    ret = OB_STATE_NOT_MATCH;
+  } else if (routine_name_infos_.capacity() < routine_infos_.count() + 1
+             && OB_FAIL(routine_name_infos_.reserve(MAX(16L, 2 * (routine_infos_.count() + 1))))) {
   } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_,
                                                  routine_schema,
                                                  new_routine_schema))) {
@@ -238,6 +323,17 @@ int ObRoutineMgr::add_routine(const ObSimpleRoutineSchema &routine_schema)
                                             equal_routine,
                                             replaced_routine))) {
   } else {
+    name_index_valid_ = false;
+    if (NULL != replaced_routine) {
+      ret = routine_name_infos_.remove_if(replaced_routine, compare_names, equal_names);
+      if (OB_SUCC(ret)) {
+        const auto old_key = ObGetRoutineKey<ObRoutineNameHashWrapper, ObSimpleRoutineSchema *>()(replaced_routine);
+        ret = routine_name_map_.erase_refactored(old_key);
+      }
+    }
+    if (OB_SUCC(ret)) {
+      ret = routine_name_infos_.insert_unique(new_routine_schema, iter, compare_names, equal_names);
+    }
     int over_write = 1;
     int hash_ret = routine_id_map_.set_refactored(new_routine_schema->get_routine_id(),
                                                   new_routine_schema, over_write);
@@ -255,9 +351,11 @@ int ObRoutineMgr::add_routine(const ObSimpleRoutineSchema &routine_schema)
         ret = OB_ERR_UNEXPECTED;
       }
     }
+    name_index_valid_ = OB_SUCC(ret);
   }
   // ignore ret
-  if (routine_infos_.count() != routine_id_map_.item_count() ||
+  if (!name_index_valid_ || routine_infos_.count() != routine_name_infos_.count() ||
+      routine_infos_.count() != routine_id_map_.item_count() ||
       routine_infos_.count() != routine_name_map_.item_count()) {
     LOG_WARN("routine info is non-consistent",
              "routine_infos_count", routine_infos_.count(),
@@ -267,6 +365,7 @@ int ObRoutineMgr::add_routine(const ObSimpleRoutineSchema &routine_schema)
              "routine_name", routine_schema.get_routine_name());
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = rebuild_routine_hashmap())) {
+      if (OB_SUCC(ret)) ret = tmp_ret;
     }
   }
   return ret;
@@ -296,12 +395,15 @@ int ObRoutineMgr::del_routine(const ObRoutineId &routine_id)
     ret = OB_NOT_INIT;
   } else if (!routine_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (!name_index_valid_ && OB_FAIL(rebuild_routine_hashmap())) {
   } else if (OB_FAIL(routine_infos_.remove_if(routine_id, compare_with_routine_id,
                                               equal_with_routine_id,
                                               schema_to_del))) {
   } else if (OB_ISNULL(schema_to_del)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
+    name_index_valid_ = false;
+    ret = routine_name_infos_.remove_if(schema_to_del, compare_names, equal_names);
     int hash_ret = routine_id_map_.erase_refactored(schema_to_del->get_routine_id());
     if (OB_SUCCESS != hash_ret) {
       ret = OB_ERR_UNEXPECTED;
@@ -319,9 +421,11 @@ int ObRoutineMgr::del_routine(const ObRoutineId &routine_id)
         ret = OB_ERR_UNEXPECTED;
       }
     }
+    name_index_valid_ = OB_SUCC(ret);
   }
   // ignore ret
-  if (routine_infos_.count() != routine_id_map_.item_count() ||
+  if (!name_index_valid_ || routine_infos_.count() != routine_name_infos_.count() ||
+      routine_infos_.count() != routine_id_map_.item_count() ||
       routine_infos_.count() != routine_name_map_.item_count()) {
     LOG_WARN("routine info is non-consistent",
              "routine_infos_count", routine_infos_.count(),
@@ -330,6 +434,7 @@ int ObRoutineMgr::del_routine(const ObRoutineId &routine_id)
              "routine_id", routine_id.get_routine_id());
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = rebuild_routine_hashmap())){
+      if (OB_SUCC(ret)) ret = tmp_ret;
     }
   }
 
@@ -463,6 +568,8 @@ int ObRoutineMgr::rebuild_routine_hashmap()
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
   } else {
+    name_index_valid_ = false;
+    routine_name_infos_.reset();
     routine_id_map_.clear();
     routine_name_map_.clear();
     for (ConstRoutineIter iter = routine_infos_.begin();
@@ -470,6 +577,7 @@ int ObRoutineMgr::rebuild_routine_hashmap()
       ObSimpleRoutineSchema *routine_schema = *iter;
       if (OB_ISNULL(routine_schema)) {
         ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(routine_name_infos_.push_back(routine_schema))) {
       } else {
         int over_write = 1;
         int hash_ret = routine_id_map_.set_refactored(routine_schema->get_routine_id(),
@@ -491,6 +599,15 @@ int ObRoutineMgr::rebuild_routine_hashmap()
         }
       }
     }
+    if (OB_SUCC(ret)) {
+      routine_name_infos_.sort(compare_names);
+      for (int64_t i = 1; OB_SUCC(ret) && i < routine_name_infos_.count(); ++i) {
+        if (equal_names(routine_name_infos_.at(i - 1), routine_name_infos_.at(i))) {
+          ret = OB_STATE_NOT_MATCH;
+        }
+      }
+    }
+    name_index_valid_ = OB_SUCC(ret);
   }
 
   return ret;

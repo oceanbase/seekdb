@@ -1,0 +1,19 @@
+[package]
+name = "seekdb-plugin-runtime"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "seekdb host-side plugin lifecycle and extension runtime"
+
+[lib]
+name = "seekdb_plugin_runtime"
+crate-type = ["rlib"]
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_System_LibraryLoader",
+] }

@@ -73,7 +73,12 @@ public:
                                  common::ObString &db,
                                  common::ObString &table,
                                  ObIAllocator *allocator,
-                                 bool is_grant = true); // revoke on object which has been deleted
+                                 bool is_grant = true,
+                                 ObSQLSessionInfo *session = nullptr); // revoke on object which has been deleted
+
+  static int resolve_native_privilege_target(const ParseNode &signature, ObSQLSessionInfo &session,
+      ObIAllocator &allocator, ObSchemaChecker &checker, const ObString &database,
+      const ObString &name, obcall::NativeRoutinePrivilegeTarget &target);
 
   template<class T>
   static int resolve_priv_set(
@@ -226,7 +231,8 @@ int ObGrantResolver::resolve_priv_object(const ParseNode *priv_object_node,
                                          common::ObString &db,
                                          common::ObString &table,
                                          ObIAllocator *allocator,
-                                         bool is_grant)
+                                         bool is_grant,
+                                         ObSQLSessionInfo *session)
 {
   int ret = OB_SUCCESS;
   share::schema::ObObjectType object_type = share::schema::ObObjectType::INVALID;
@@ -234,6 +240,13 @@ int ObGrantResolver::resolve_priv_object(const ParseNode *priv_object_node,
   if (OB_ISNULL(grant_stmt) || OB_ISNULL(schema_checker) || OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (priv_object_node != NULL) {
+    if (priv_object_node->num_child_ != 0) {
+      if (priv_object_node->value_ != 3 || priv_object_node->num_child_ != 1 ||
+          !priv_object_node->children_ || !priv_object_node->children_[0] || !session) return OB_INVALID_ARGUMENT;
+      ret = resolve_native_privilege_target(*priv_object_node->children_[0], *session,
+          *allocator, *schema_checker, db, table, grant_stmt->native_target());
+      if (ret != OB_SUCCESS) return ret;
+    }
     if (priv_object_node->value_ == 1) {
       const share::schema::ObTableSchema *table_schema = NULL;
       if (OB_FAIL(schema_checker->get_table_schema( db, table, false, table_schema))) {
@@ -250,9 +263,37 @@ int ObGrantResolver::resolve_priv_object(const ParseNode *priv_object_node,
       }
     } else if (priv_object_node->value_ == 2 || priv_object_node->value_ == 3) {
       object_type = (priv_object_node->value_ == 2) ? ObObjectType::PROCEDURE : ObObjectType::FUNCTION;
+      bool native_selected = grant_stmt->native_target().resolved_;
+      if (native_selected) object_id = grant_stmt->native_target().routine_.get_routine_id();
+      if (object_type == ObObjectType::FUNCTION && !native_selected) {
+        uint64_t database_id = OB_INVALID_ID;
+        ObSEArray<const share::schema::ObRoutineInfo *, 4> family;
+        if (!schema_checker->get_schema_guard()) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(schema_checker->get_database_id(db, database_id))) {
+        } else if (OB_FAIL(schema_checker->get_schema_guard()->get_standalone_function_infos(
+            database_id, table, family))) {
+        } else {
+          bool has_native = false;
+          for (int64_t i = 0; OB_SUCC(ret) && i < family.count(); ++i) {
+            if (!family.at(i)) ret = OB_ERR_UNEXPECTED;
+            else has_native = has_native || family.at(i)->is_native();
+          }
+          if (OB_SUCC(ret) && has_native) {
+            if (family.count() != 1) ret = OB_ERR_FUNC_DUP;
+            else if (OB_FAIL(grant_stmt->native_target().assign(*family.at(0)))) {
+            } else {
+              object_id = family.at(0)->get_routine_id();
+              native_selected = true;
+            }
+          }
+        }
+      }
       uint64_t routine_id = 0;
       bool is_proc = false;
-      if (OB_FAIL(schema_checker->get_routine_id(db, table, routine_id, is_proc))) {
+      if (OB_FAIL(ret) || native_selected) {
+        // The owned native target must not be overwritten by slot-0 lookup.
+      } else if (OB_FAIL(schema_checker->get_routine_id(db, table, routine_id, is_proc))) {
         if (OB_ERR_SP_DOES_NOT_EXIST == ret && !is_grant) {
           ret = OB_SUCCESS;
         }

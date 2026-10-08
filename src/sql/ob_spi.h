@@ -171,6 +171,7 @@ public:
       plan_cache_access_service_(NULL),
       sql_ctx_(),
       schema_guard_(share::schema::ObSchemaMgrItem::MOD_SPI_RESULT_SET),
+      routine_overlay_captured_(false),
       orign_nested_count_(-1),
       cursor_nested_count_(-1),
       orign_session_value_(NULL),
@@ -184,6 +185,10 @@ public:
       sql::ObSQLSessionInfo &session_info,
       query::ObIPlanCacheAccessService &plan_cache_access_service);
   int close_result_set();
+  // Capture once when the statement/cursor opens, including an empty view.
+  // Retry/fetch retains this owner instead of borrowing a former caller guard.
+  int capture_routine_overlay(const share::schema::ObSchemaGetterGuard *parent);
+  int restore_routine_overlay();
   void reset()
   {
     //result_set_.reset();
@@ -194,6 +199,8 @@ public:
     }
     sql_ctx_.reset();
     schema_guard_.reset();
+    routine_overlay_.reset();
+    routine_overlay_captured_ = false;
     need_end_nested_stmt_ = EST_NEED_NOT;
     orign_nested_count_ = -1;
     cursor_nested_count_ = -1;
@@ -284,6 +291,8 @@ private:
   query::ObIPlanCacheAccessService *plan_cache_access_service_;
   sql::ObSqlCtx sql_ctx_; // life period follow result_set_
   share::schema::ObSchemaGetterGuard schema_guard_;
+  std::shared_ptr<const share::schema::RoutineSchemaOverlay> routine_overlay_;
+  bool routine_overlay_captured_;
   int64_t orign_nested_count_;
   int64_t cursor_nested_count_;
   sql::ObSQLSessionInfo::StmtSavedValue *orign_session_value_;
@@ -334,9 +343,11 @@ public:
                   pl::ObPLBlockNS *secondary_ns,
                   bool is_dynamic_sql,
                   bool is_cursor,
-                  bool is_parser_dynamic_sql = false)
+                  bool is_parser_dynamic_sql = false,
+                  const share::schema::ObSchemaGetterGuard *parent_schema_guard = nullptr)
     : sess_info_(sess_info),
       secondary_ns_(secondary_ns),
+      parent_schema_guard_(parent_schema_guard),
       is_dynamic_sql_(is_dynamic_sql),
       is_cursor_(is_cursor),
       is_parser_dynamic_sql_(is_parser_dynamic_sql)
@@ -344,6 +355,9 @@ public:
     }
     ObSQLSessionInfo &sess_info_;    // session used for pl execution
     pl::ObPLBlockNS *secondary_ns_;  // sql resolve process used to look up if it is a pl variable namespace
+    // Borrowed only during synchronous prepare_pl_sql. The result's dedicated
+    // guard acquires shared ownership of the overlay, never of this pointer.
+    const share::schema::ObSchemaGetterGuard *parent_schema_guard_;
     union {
       uint16_t flag_;
       struct {

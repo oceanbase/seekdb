@@ -31,6 +31,8 @@ namespace oceanbase { namespace pl { class ObPLDataType; } }
 #define SP_PARAM_TYPE_MASK    0x3C
 // Is cast required by default value
 #define SP_PARAM_DEFAULT_CAST 0x200
+// Native VARIADIC array parameter; param_type_ stores its element SQL type.
+#define SP_PARAM_NATIVE_VARIADIC 0x400
 // The low 2 bits of flag_ are used to indicate the parameter IN OUT attribute
 // When Type is INT, the low 3-6 bits of flag_ are used to represent the PL_INTEGER type
 // When Type is Extend, flag_ low 3-6 bits are used to indicate the source of the external type
@@ -220,6 +222,8 @@ public:
   OB_INLINE void set_out_sp_param_flag() { flag_ = (flag_ & ~SP_PARAM_MODE_MASK) | SP_PARAM_OUT; }
   OB_INLINE void set_inout_sp_param_flag() { flag_ = (flag_ & ~SP_PARAM_MODE_MASK) | SP_PARAM_INOUT; }
   OB_INLINE int64_t get_mode() const { return flag_ & SP_PARAM_MODE_MASK; }
+  bool is_native_variadic() const { return (flag_ & SP_PARAM_NATIVE_VARIADIC) != 0; }
+  void set_native_variadic() { flag_ |= SP_PARAM_NATIVE_VARIADIC; }
   // ObExtendType indicates that this Type is not a base type, and the final type is determined by flag_
   OB_INLINE bool is_extern_type() const { return ObExtendType == param_type_.get_obj_type(); }
 
@@ -322,6 +326,15 @@ public:
   virtual ~ObRoutineInfo();
   ObRoutineInfo &operator=(const ObRoutineInfo &src_schema);
   int assign(const ObRoutineInfo &other);
+  // Stable C ABI identity, independent of SQL name and runtime generations.
+  // ABI 0 and empty IDs denote an ordinary SQL/PL routine.
+  int set_native_binding(const common::ObString &module_id,
+                         const common::ObString &implementation_id, int64_t abi_version);
+  bool is_native() const { return native_abi_version_ != 0; }
+  bool is_native_binding_valid() const;
+  const common::ObString &get_native_module_id() const { return native_module_id_; }
+  const common::ObString &get_native_implementation_id() const { return native_implementation_id_; }
+  int64_t get_native_abi_version() const { return native_abi_version_; }
   bool is_user_field_valid() const;
   bool is_valid() const;
   void reset();
@@ -473,7 +486,8 @@ public:
                K_(comment),
                K_(route_sql),
                K_(type_id),
-               K_(routine_params));
+               K_(routine_params),
+               K_(native_module_id), K_(native_implementation_id), K_(native_abi_version));
 private:
 //set by user,
   uint64_t database_id_;          //set by sys,
@@ -495,6 +509,9 @@ private:
   common::ObSEArray<ObRoutineParam *, 64> routine_params_;
   //set by user, for function, idx 0 param is ret type
   TgTimingEvent tg_timing_event_;
+  common::ObString native_module_id_;
+  common::ObString native_implementation_id_;
+  int64_t native_abi_version_;
 };
 }  // namespace schema
 }  // namespace share

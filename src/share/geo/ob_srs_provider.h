@@ -19,6 +19,8 @@
 
 #include <stdint.h>
 #include "lib/ob_errno.h"
+#include "lib/string/ob_string.h"
+#include <limits>
 
 namespace oceanbase
 {
@@ -27,6 +29,18 @@ namespace common
 
 class ObSrsItem;
 struct ObSrsBoundsItem;
+
+// Immutable catalog bytes, independent of the GIS implementation generation.
+// Strings are borrowed from the snapshot protected by ObSrsCacheGuard.
+struct SrsDefinition {
+  uint32_t srid = 0;
+  ObString definition;
+  ObString proj4text;
+  double min_x = std::numeric_limits<double>::quiet_NaN();
+  double min_y = std::numeric_limits<double>::quiet_NaN();
+  double max_x = std::numeric_limits<double>::quiet_NaN();
+  double max_y = std::numeric_limits<double>::quiet_NaN();
+};
 
 // Stable snapshot seam owned by Share.  The Observer adapter keeps the
 // concrete cache and its reference-counting policy behind this interface.
@@ -39,6 +53,8 @@ public:
   virtual int get_srs_item(
       uint64_t srs_id,
       const ObSrsItem *&srs_item) = 0;
+  virtual int get_srs_definition(uint64_t, const SrsDefinition *&definition)
+  { definition = nullptr; return OB_NOT_SUPPORTED; }
 };
 
 // Owns one reference to a provider snapshot without exposing the concrete
@@ -62,6 +78,11 @@ public:
         : snapshot_->get_srs_item(srs_id, srs_item);
   }
   bool empty() const { return nullptr == snapshot_; }
+  int get_srs_definition(uint64_t srid, const SrsDefinition *&definition) const
+  {
+    definition = nullptr;
+    return snapshot_ == nullptr ? OB_NOT_INIT : snapshot_->get_srs_definition(srid, definition);
+  }
 
   void bind(ObISrsSnapshot &snapshot)
   {
