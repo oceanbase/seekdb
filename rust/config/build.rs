@@ -230,12 +230,11 @@ fn generate_bridge(parameters: &[Parameter], internal_state: &[Parameter]) -> St
             }
             _ => unreachable!(),
         }
-        match parameter.kind.as_str() {
-            "MOMENT" => code.push_str(&format!(
+        if parameter.kind == "MOMENT" {
+            code.push_str(&format!(
                 "pub fn {}_parts() -> bridge::MomentTime {{ parse_moment_parts(&{}()) }}\n",
                 parameter.name, parameter.name
-            )),
-            _ => {}
+            ));
         }
     }
     code.push_str("pub static CATALOG: &[ParameterMeta] = &[\n");
