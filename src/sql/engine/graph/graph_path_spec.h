@@ -219,14 +219,19 @@ struct GraphExpandStats
 {
   int64_t input_states_ = 0;
   int64_t distinct_sources_ = 0;
+  // False only when a hop has multiple physical batches of tolerance-compared
+  // DOUBLE keys. In that case distinct_sources_ is the sum of per-batch source
+  // groups (the actual access work), not an exact hop-wide NDV.
+  bool distinct_sources_exact_ = true;
   int64_t scanned_edges_ = 0;
   int64_t looked_up_vertices_ = 0;
   int64_t orphan_edges_ = 0;
   int64_t output_states_ = 0;
   int64_t peak_path_memory_ = 0;
-  TO_STRING_KV(K_(input_states), K_(distinct_sources), K_(scanned_edges),
-               K_(looked_up_vertices), K_(orphan_edges), K_(output_states),
-               K_(peak_path_memory));
+  TO_STRING_KV(K_(input_states), K_(distinct_sources),
+               K_(distinct_sources_exact), K_(scanned_edges),
+               K_(looked_up_vertices), K_(orphan_edges),
+               K_(output_states), K_(peak_path_memory));
 };
 
 } // namespace sql

@@ -97,6 +97,10 @@ public:
   int64_t get_frontier_count() const { return current_state_ids_->count(); }
   int64_t get_path_state_count() const { return state_store_.count(); }
   int64_t get_peak_memory() const { return peak_memory_bytes_; }
+  // Statistics for the most recently completed source-hop -> target-hop
+  // expansion. They aggregate every physical input batch in that BFS level.
+  const GraphExpandStats &get_last_hop_stats() const
+  { return last_hop_stats_; }
   bool empty() const { return current_state_ids_->empty(); }
 
   // Clears path history and both frontier buffers for close, rescan, or any
@@ -107,12 +111,20 @@ private:
   int build_input_batch(int64_t start, int64_t &next_start);
   int consume_input_batch(GraphPathDirection direction,
                           GraphPathMode path_mode);
+  int start_hop_stats();
+  int record_hop_source(const GraphElementIdentity &source_identity);
+  void accumulate_expand_stats();
+  void finish_hop_stats();
   int check_memory_limit();
   int fail(int error);
 
 private:
   GraphExpand &expand_;
   GraphPathStateStore state_store_;
+  // Tracks distinct source identities across all physical batches in one hop.
+  // Tolerance-compared DOUBLE keys cannot use an equality-compatible hash and
+  // therefore retain GraphExpand's bounded, per-batch source counts instead.
+  GraphIdentityIndex hop_source_index_;
   int64_t input_batch_size_;
   int64_t memory_limit_;
   common::ObArray<int64_t> frontier_buffer_a_;
@@ -123,6 +135,10 @@ private:
   common::ObArray<GraphPathState> path_buffer_;
   int64_t hop_{0};
   int64_t peak_memory_bytes_{0};
+  GraphExpandStats current_hop_stats_{};
+  GraphExpandStats last_hop_stats_{};
+  bool collecting_hop_stats_{false};
+  bool hop_source_index_enabled_{true};
 
   DISALLOW_COPY_AND_ASSIGN(GraphFeedbackFrontier);
 };

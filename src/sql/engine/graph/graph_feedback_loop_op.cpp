@@ -519,6 +519,23 @@ const ObTableScanSpec *find_table_scan_spec(const ObOpSpec *root,
   return result;
 }
 
+bool identity_has_double_key(const GraphElementIdentity &identity)
+{
+  bool has_double = false;
+  for (int64_t i = 0;
+       !has_double && i < identity.rowkey_.get_obj_cnt(); ++i) {
+    has_double = identity.rowkey_.get_obj_ptr()[i].get_type_class()
+        == ObDoubleTC;
+  }
+  return has_double;
+}
+
+int64_t saturated_stat_add(int64_t left, int64_t right)
+{
+  return left < 0 || right < 0 || left > INT64_MAX - right
+      ? INT64_MAX : left + right;
+}
+
 } // namespace
 
 GraphFeedbackFrontier::GraphFeedbackFrontier(ObIAllocator &allocator,
@@ -527,6 +544,7 @@ GraphFeedbackFrontier::GraphFeedbackFrontier(ObIAllocator &allocator,
                                              int64_t memory_limit)
     : expand_(expand),
       state_store_(allocator, memory_limit),
+      hop_source_index_(allocator),
       input_batch_size_(input_batch_size),
       memory_limit_(memory_limit),
       frontier_buffer_a_(OB_MALLOC_NORMAL_BLOCK_SIZE,
@@ -550,9 +568,10 @@ int GraphFeedbackFrontier::check_memory_limit()
   const int64_t buffer_b_bytes = frontier_buffer_b_.get_data_size();
   const int64_t input_bytes = input_batch_.get_data_size();
   const int64_t path_bytes = path_buffer_.get_data_size();
+  const int64_t hop_source_index_bytes = hop_source_index_.used_memory();
   const int64_t memory_parts[] = {
       buffer_a_bytes, buffer_b_bytes, input_bytes, path_bytes,
-      expand_.used_memory()};
+      hop_source_index_bytes, expand_.used_memory()};
 
   if (OB_UNLIKELY(memory_limit_ <= 0)) {
     ret = OB_INVALID_ARGUMENT;
@@ -575,8 +594,99 @@ int GraphFeedbackFrontier::check_memory_limit()
              K_(memory_limit));
   } else if (OB_SUCC(ret)) {
     peak_memory_bytes_ = std::max(peak_memory_bytes_, used);
+    if (collecting_hop_stats_) {
+      current_hop_stats_.peak_path_memory_ = std::max(
+          current_hop_stats_.peak_path_memory_, used);
+    }
   }
   return ret;
+}
+
+int GraphFeedbackFrontier::start_hop_stats()
+{
+  int ret = OB_SUCCESS;
+  GraphPathState first_state;
+  current_hop_stats_ = GraphExpandStats();
+  collecting_hop_stats_ = true;
+  hop_source_index_.reset();
+  current_hop_stats_.input_states_ = current_state_ids_->count();
+  if (OB_UNLIKELY(current_state_ids_->empty())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("cannot collect stats for an empty graph frontier", K(ret));
+  } else if (OB_FAIL(state_store_.get_state(current_state_ids_->at(0),
+                                             first_state))) {
+    LOG_WARN("failed to inspect graph hop source type", K(ret));
+  } else {
+    hop_source_index_enabled_ =
+        !identity_has_double_key(first_state.current_identity_);
+    current_hop_stats_.distinct_sources_exact_ =
+        hop_source_index_enabled_
+        || !expand_.can_partition_sources()
+        || current_state_ids_->count() <= input_batch_size_;
+    if (hop_source_index_enabled_
+        && OB_FAIL(hop_source_index_.init(current_state_ids_->count()))) {
+      LOG_WARN("failed to initialize graph hop source index", K(ret),
+               "input_count", current_state_ids_->count());
+    } else if (OB_FAIL(check_memory_limit())) {
+      LOG_WARN("graph hop source index exceeds memory limit", K(ret),
+               "input_count", current_state_ids_->count());
+    }
+  }
+  return ret;
+}
+
+int GraphFeedbackFrontier::record_hop_source(
+    const GraphElementIdentity &source_identity)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!collecting_hop_stats_ || !source_identity.is_valid())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid graph hop source statistics state", K(ret),
+             K_(collecting_hop_stats), K(source_identity));
+  } else if (hop_source_index_enabled_) {
+    int64_t source_index = -1;
+    bool inserted = false;
+    if (OB_UNLIKELY(identity_has_double_key(source_identity))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("graph hop source key type changed within one level", K(ret),
+               K(source_identity));
+    } else if (OB_FAIL(hop_source_index_.get_or_insert(
+                   source_identity, source_index, inserted))) {
+      LOG_WARN("failed to record graph hop source", K(ret),
+               K(source_identity));
+    }
+  }
+  return ret;
+}
+
+void GraphFeedbackFrontier::accumulate_expand_stats()
+{
+  const GraphExpandStats &batch_stats = expand_.get_stats();
+  if (!hop_source_index_enabled_) {
+    current_hop_stats_.distinct_sources_ = saturated_stat_add(
+        current_hop_stats_.distinct_sources_,
+        batch_stats.distinct_sources_);
+  }
+  current_hop_stats_.scanned_edges_ = saturated_stat_add(
+      current_hop_stats_.scanned_edges_, batch_stats.scanned_edges_);
+  current_hop_stats_.looked_up_vertices_ = saturated_stat_add(
+      current_hop_stats_.looked_up_vertices_,
+      batch_stats.looked_up_vertices_);
+  current_hop_stats_.orphan_edges_ = saturated_stat_add(
+      current_hop_stats_.orphan_edges_, batch_stats.orphan_edges_);
+}
+
+void GraphFeedbackFrontier::finish_hop_stats()
+{
+  if (hop_source_index_enabled_) {
+    current_hop_stats_.distinct_sources_ = hop_source_index_.count();
+  }
+  // GraphExpand counts every candidate extension. The frontier count records
+  // the paths actually accepted after path-mode rules such as TRAIL.
+  current_hop_stats_.output_states_ = current_state_ids_->count();
+  last_hop_stats_ = current_hop_stats_;
+  collecting_hop_stats_ = false;
+  hop_source_index_.reset();
 }
 
 int GraphFeedbackFrontier::add_seed(
@@ -644,6 +754,9 @@ int GraphFeedbackFrontier::build_input_batch(int64_t start,
       } else if (OB_FAIL(input_batch_.push_back(input))) {
         LOG_WARN("failed to append graph expand input", K(ret),
                  K(path_state_id));
+      } else if (OB_FAIL(record_hop_source(input.source_identity_))) {
+        LOG_WARN("failed to collect graph hop source statistics", K(ret),
+                 K(path_state_id));
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(check_memory_limit())) {
@@ -692,6 +805,9 @@ int GraphFeedbackFrontier::consume_input_batch(
   // GraphExpand::used_memory() after release().
   if (OB_SUCC(ret) && OB_FAIL(check_memory_limit())) {
   }
+  if (OB_SUCC(ret)) {
+    accumulate_expand_stats();
+  }
   expand_.release();
   return ret;
 }
@@ -715,6 +831,9 @@ int GraphFeedbackFrontier::expand(GraphPathDirection direction,
              "path_mode", static_cast<int64_t>(path_mode));
   } else {
     next_state_ids_->reuse();
+    if (OB_FAIL(start_hop_stats())) {
+      LOG_WARN("failed to start graph hop statistics", K(ret), K_(hop));
+    }
     while (OB_SUCC(ret) && start < current_state_ids_->count()) {
       if (OB_FAIL(build_input_batch(start, next_start))) {
       } else if (OB_FAIL(consume_input_batch(direction, path_mode))) {
@@ -727,6 +846,8 @@ int GraphFeedbackFrontier::expand(GraphPathDirection direction,
       next_state_ids_->reuse();
       ++hop_;
       if (OB_FAIL(check_memory_limit())) {
+      } else {
+        finish_hop_stats();
       }
     }
   }
@@ -792,6 +913,7 @@ void GraphFeedbackFrontier::reset()
   frontier_buffer_a_.reset();
   frontier_buffer_b_.reset();
   input_batch_.reset();
+  hop_source_index_.reset();
   // ModulePageAllocator may wrap the query arena, whose individual free() is
   // a no-op. Keep this reusable result block across rescans so reset does not
   // lose the only pointer to memory that remains charged to the query.
@@ -800,6 +922,10 @@ void GraphFeedbackFrontier::reset()
   next_state_ids_ = &frontier_buffer_b_;
   hop_ = 0;
   peak_memory_bytes_ = 0;
+  current_hop_stats_ = GraphExpandStats();
+  last_hop_stats_ = GraphExpandStats();
+  collecting_hop_stats_ = false;
+  hop_source_index_enabled_ = true;
 }
 
 GraphFeedbackLoopSpec::GraphFeedbackLoopSpec(common::ObIAllocator &allocator,
