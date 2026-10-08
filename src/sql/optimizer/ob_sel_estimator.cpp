@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_OPT
 #include "sql/optimizer/ob_access_path_estimation.h"
 #include "sql/optimizer/ob_sel_estimator.h"
+#include "sql/resolver/expr/ob_shared_expr_resolver.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
@@ -1653,6 +1654,7 @@ int ObBoolOpSelEstimator::create_estimator(ObSelEstimatorFactory &factory,
   estimator = NULL;
   ObBoolOpSelEstimator *bool_estimator = NULL;
   ObSEArray<ObRawExpr *, 4> exprs;
+  ObQuestionmarkEqualCtx equal_ctx(false);
   if (T_OP_NOT != expr.get_expr_type() &&
       T_OP_AND != expr.get_expr_type() &&
       T_OP_OR != expr.get_expr_type() &&
@@ -1666,10 +1668,29 @@ int ObBoolOpSelEstimator::create_estimator(ObSelEstimatorFactory &factory,
     for (int64_t i = 0; OB_SUCC(ret) && i < expr.get_param_count(); ++i) {
       const ObRawExpr *child_expr = expr.get_param_expr(i);
       ObSelEstimator *child_estimator = NULL;
+      bool is_duplicate = false;
       if (OB_ISNULL(child_expr)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (ObOptimizerUtil::find_equal_expr(exprs, child_expr)) {
-        // do nothing
+      }
+      for (int64_t j = 0; OB_SUCC(ret) && !is_duplicate && j < exprs.count(); ++j) {
+        equal_ctx.equal_pairs_.reuse();
+        // Auto-parameterization gives equal literal values different questionmark indexes.
+        // Compare their current values so idempotent predicates are estimated only once.
+        is_duplicate = child_expr == exprs.at(j) || child_expr->same_as(*exprs.at(j), &equal_ctx);
+        if (OB_UNLIKELY(OB_SUCCESS != equal_ctx.err_code_)) {
+          ret = equal_ctx.err_code_;
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (is_duplicate) {
+        if (!equal_ctx.equal_pairs_.empty()) {
+          ObQueryCtx *query_ctx = ctx.get_opt_ctx().get_query_ctx();
+          if (OB_ISNULL(query_ctx)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (OB_FAIL(append(query_ctx->all_equal_param_constraints_,
+                                    equal_ctx.equal_pairs_))) {
+          }
+        }
       } else if (OB_FAIL(SMART_CALL(factory.create_estimator(ctx, child_expr, child_estimator)))) {
       } else if (OB_FAIL(exprs.push_back(const_cast<ObRawExpr *>(child_expr)))) {
       } else {

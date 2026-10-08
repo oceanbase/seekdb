@@ -720,4 +720,36 @@ Outputs & filters:
       is_index_back=true, is_global_index=false, 
       range_key([t1.__ivf_center_id_0_0]), range(MIN ; MAX)always true
 drop table t1;
+drop table if exists t_issue1439_or_selectivity;
+create table t_issue1439_or_selectivity(
+id bigint not null,
+embedding vector(3) not null,
+category int not null,
+primary key(id),
+key idx_category(category),
+vector key idx_embedding(embedding)
+with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128, ef_search=64));
+analyze table t_issue1439_or_selectivity;
+call dbms_stats.set_table_stats('TEST', 'T_ISSUE1439_OR_SELECTIVITY', numrows=>200000);
+alter system flush plan cache;
+select p.operator, p.cardinality
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1439_or_selectivity') > 0
+and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%'
+order by length(s.statement), p.plan_id;
+operator	cardinality
+VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)	2
+VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)	2
+alter system flush plan cache;
+select p.operator, p.cardinality, s.hit_count
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1439_or_selectivity') > 0
+and p.operator like 'VECTOR INDEX ADAPTIVE SCAN%'
+order by p.cardinality, p.plan_id;
+operator	cardinality	hit_count
+VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)	2	1
+VECTOR INDEX ADAPTIVE SCAN (POST-ITERATIVE-FILTER)	64	1
+drop table t_issue1439_or_selectivity;
 alter system set vector_memory_limit = 0;
