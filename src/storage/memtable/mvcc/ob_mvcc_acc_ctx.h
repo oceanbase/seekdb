@@ -41,7 +41,6 @@ class ObITableReadInfo;
 
 namespace memtable
 {
-class ObQueryAllocator;
 class ObMemtableCtx;
 
 struct ObMvccMdsFilter final

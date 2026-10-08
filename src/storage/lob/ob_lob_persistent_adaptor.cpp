@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #define USING_LOG_PREFIX STORAGE
+#include "lib/rc/context.h"
 #include "ob_lob_persistent_adaptor.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/access/ob_table_scan_iterator.h"
@@ -233,7 +234,7 @@ int ObPersistentLobApator::build_lob_meta_table_dml(
   dml_base_param.write_flag_.reset();
   dml_base_param.write_flag_.set_is_insert_up();
   if (param.skip_flush_redo()) dml_base_param.write_flag_.set_skip_flush_redo();
-  dml_base_param.dml_allocator_ = param.allocator_;
+  dml_base_param.dml_allocator_ = &CURRENT_CONTEXT->get_malloc_allocator();
   if (OB_FAIL(get_meta_table_dml_param(dml_base_param.table_param_))) {
   } else if (OB_FAIL(dml_base_param.snapshot_.assign(param.snapshot_))) {
   }

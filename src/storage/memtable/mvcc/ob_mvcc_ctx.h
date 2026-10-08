@@ -90,7 +90,6 @@ public: // for mvcc engine invoke
   virtual void free_mvcc_row_callback(ObITransCallback *cb) = 0;
   virtual storage::ObExtInfoCallback *alloc_ext_info_callback() = 0;
   virtual void free_ext_info_callback(ObITransCallback *cb) = 0;
-  virtual common::ObIAllocator &get_query_allocator() = 0;
   virtual void set_conflict_trans_id(const uint32_t descriptor)
   { UNUSED(descriptor); }
   virtual int read_lock_yield() { return common::OB_SUCCESS; }

@@ -130,92 +130,6 @@ public:
   }
 };
 
-class ObQueryAllocator final : public common::ObIAllocator
-{
-public:
-  explicit ObQueryAllocator()
-    : alloc_count_(0),
-      free_count_(0),
-      alloc_size_(0),
-      is_inited_(false) {}
-  ~ObQueryAllocator()
-  {
-    if (OB_UNLIKELY(ATOMIC_LOAD(&free_count_) != ATOMIC_LOAD(&alloc_count_))) {
-      TRANS_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "query allocator leak found", K(alloc_count_), K(free_count_), K(alloc_size_));
-    }
-    ATOMIC_STORE(&is_inited_, false);
-  }
-  int init()
-  {
-    int ret = OB_SUCCESS;
-    ObMemAttr attr(ObModIds::OB_QUERY_ALLOCATOR);
-    if (OB_UNLIKELY(free_count_ != alloc_count_)) {
-      TRANS_LOG(ERROR, "query allocator leak found", K(alloc_count_), K(free_count_), K(alloc_size_));
-    }
-    if (IS_NOT_INIT) {
-      if (OB_FAIL(allocator_.init(NULL, //use default allocator in fifo_allocator
-                                  common::OB_MALLOC_NORMAL_BLOCK_SIZE,
-                                  attr))) {
-      } else {
-        ATOMIC_STORE(&is_inited_, true);
-      }
-    }
-    if (OB_SUCC(ret)) {
-      allocator_.set_attr(attr);
-    }
-    ATOMIC_STORE(&alloc_count_, 0);
-    ATOMIC_STORE(&free_count_, 0);
-    ATOMIC_STORE(&alloc_size_, 0);
-    return ret;
-  }
-  void reset(bool only_check = false)
-  {
-    if (OB_UNLIKELY(ATOMIC_LOAD(&free_count_) != ATOMIC_LOAD(&alloc_count_))) {
-      TRANS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "query allocator leak found", K(alloc_count_), K(free_count_), K(alloc_size_));
-      OB_SAFE_ABORT();
-    }
-    if (!only_check) {
-      allocator_.reset();
-      ATOMIC_STORE(&alloc_count_, 0);
-      ATOMIC_STORE(&free_count_, 0);
-      ATOMIC_STORE(&alloc_size_, 0);
-      ATOMIC_STORE(&is_inited_, false);
-    }
-  }
-  void *alloc(const int64_t size) override
-  {
-    void *ret = nullptr;
-    if (OB_ISNULL(ret = allocator_.alloc(size))) {
-      TRANS_LOG_RET(ERROR, common::OB_ALLOCATE_MEMORY_FAILED, "query alloc failed",
-        K(alloc_count_), K(free_count_), K(alloc_size_), K(size));
-    } else {
-      ATOMIC_INC(&alloc_count_);
-      ATOMIC_FAA(&alloc_size_, size);
-    }
-    return ret;
-  }
-  void* alloc(const int64_t size, const ObMemAttr &attr) override
-  {
-    UNUSED(attr);
-    return alloc(size);
-  }
-  void free(void *ptr) override
-  {
-    if (OB_ISNULL(ptr)) {
-      // do nothing
-    } else {
-      ATOMIC_INC(&free_count_);
-      allocator_.free(ptr);
-    }
-  }
-private:
-  ObFIFOAllocator allocator_;
-  int64_t alloc_count_;
-  int64_t free_count_;
-  int64_t alloc_size_;
-  bool is_inited_;
-};
-
 // The speciaal allocator for ObMemtableCtx, used to allocate callback.
 // The page size is 8K, support concurrency, but at a poor performance.
 class ObMemtableCtxCbAllocator final : public common::ObIAllocator
@@ -323,7 +237,6 @@ public:
   int init();
   virtual void *old_row_alloc(const int64_t size) override;
   virtual void old_row_free(void *row) override;
-  virtual common::ObIAllocator &get_query_allocator();
   virtual void inc_lock_for_read_retry_count();
   virtual int read_lock_yield()
   {
@@ -430,17 +343,9 @@ public: // callback
   virtual void free_mvcc_row_callback(ObITransCallback *cb) override;
   virtual storage::ObExtInfoCallback *alloc_ext_info_callback() override;
   virtual void free_ext_info_callback(ObITransCallback *cb) override;
-  void *alloc_lock_link_node() { return mem_ctx_obj_pool_.alloc<transaction::tablelock::ObMemCtxLockOpLinkNode>(); }
-  void free_lock_link_node(void *ptr) { mem_ctx_obj_pool_.free<transaction::tablelock::ObMemCtxLockOpLinkNode>(ptr); }
-  void *alloc_table_lock_callback() { return mem_ctx_obj_pool_.alloc<transaction::tablelock::ObOBJLockCallback>(); }
-  virtual void free_table_lock_callback(ObITransCallback *cb) override
-  {
-    mem_ctx_obj_pool_.free<transaction::tablelock::ObOBJLockCallback>(cb);
-  }
-  virtual ObOBJLockCallback *create_table_lock_callback(ObIMvccCtx &ctx, ObLockMemtable *memtable) override
-  {
-    return lock_mem_ctx_.create_table_lock_callback(ctx, memtable);
-  }
+  virtual void free_table_lock_callback(ObITransCallback *cb) override;
+  virtual ObOBJLockCallback *create_table_lock_callback(ObIMvccCtx &ctx,
+                                                        ObLockMemtable *memtable) override;
 
   bool is_for_replay() const { return trans_mgr_.is_for_replay(); }
   int append_callback(ObITransCallback *cb) { return trans_mgr_.append(cb); }
@@ -458,10 +363,6 @@ public: // callback
   void set_for_replay(const bool for_replay) { trans_mgr_.set_for_replay(for_replay); }
   void inc_pending_log_size(const int64_t size) { trans_mgr_.inc_pending_log_size(size); }
   void inc_flushed_log_size(const int64_t size) { trans_mgr_.inc_flushed_log_size(size); }
-  void *alloc_prio_link_node()
-  { return mem_ctx_obj_pool_.alloc<transaction::tablelock::ObMemCtxLockPrioOpLinkNode>(); }
-  void free_prio_link_node(void *ptr)
-  { mem_ctx_obj_pool_.free<transaction::tablelock::ObMemCtxLockPrioOpLinkNode>(ptr); }
   int64_t get_write_epoch() const { return trans_mgr_.get_write_epoch(); }
 public:
   // tx_status
@@ -479,7 +380,7 @@ public:
   int enable_lock_table(transaction::ObLSTxCtxMgr *ls_tx_ctx_mgr);
   // for mintest
   int enable_lock_table(storage::ObTableHandleV2 &handle);
-  transaction::tablelock::ObLockMemCtx &get_lock_mem_ctx() { return lock_mem_ctx_; }
+  int get_lock_mem_ctx(transaction::tablelock::ObLockMemCtx *&lock_mem_ctx);
   int get_tx_seq_replay_idx(const transaction::ObTxSEQ seq) const
   { return trans_mgr_.get_tx_seq_replay_idx(seq); }
   int check_lock_exist(const ObLockID &lock_id,
@@ -508,8 +409,8 @@ public:
   int recover_from_table_lock_durable_info(const ObTableLockInfo &table_lock_info);
   int get_table_lock_store_info(ObTableLockInfo &table_lock_info);
   // for deadlock detect.
-  void set_table_lock_killed() { lock_mem_ctx_.set_killed(); }
-  bool is_table_lock_killed() const { return lock_mem_ctx_.is_killed(); }
+  void set_table_lock_killed();
+  bool is_table_lock_killed() const;
   // The SQL can be rollbacked, and the callback of it will be removed, too.
   // In this case, the remove count of callbacks is larger than 0, but the callbacks
   // may be all decided. So we can't exactly know whether they're decided.
@@ -519,10 +420,7 @@ public:
   }
   void print_first_mvcc_callback();
   int get_callback_list_stat(ObIArray<ObTxCallbackListStat> &stats);
-  int get_lock_memtable(ObLockMemtable *&memtable)
-  {
-    return lock_mem_ctx_.get_lock_memtable(memtable);
-  }
+  int get_lock_memtable(ObLockMemtable *&memtable);
   int add_priority_record(const transaction::tablelock::ObTableLockPrioArg &arg,
                           const transaction::tablelock::ObTableLockOp &lock_op);
   int remove_priority_record(const transaction::tablelock::ObTableLockOp &lock_op);
@@ -541,6 +439,8 @@ private:
                            const transaction::ObTxSEQ from_seq_no);
   int register_multi_source_data_if_need_(
       const transaction::tablelock::ObTableLockOp &lock_op);
+  int ensure_lock_mem_ctx_();
+  void destroy_lock_mem_ctx_();
   static int64_t get_us() { return ::oceanbase::common::ObTimeUtility::current_time(); }
   int reset_log_generator_();
   int reuse_log_generator_();
@@ -560,8 +460,6 @@ private:
   int64_t tx_status_;
   int8_t elr_state_;
   int64_t ref_;
-  // allocate memory for callback when query executing
-  ObQueryAllocator query_allocator_;
   ObMemtableCtxCbAllocator ctx_cb_allocator_;
   ObRedoLogGenerator log_gen_;
   RetryInfo retry_info_;
@@ -584,7 +482,8 @@ private:
   bool has_row_updated_;
   transaction::ObMemtableCtxObjPool mem_ctx_obj_pool_;
   // table lock mem ctx.
-  transaction::tablelock::ObLockMemCtx lock_mem_ctx_;
+  transaction::ObLSTxCtxMgr *ls_tx_ctx_mgr_;
+  transaction::tablelock::ObLockMemCtx *lock_mem_ctx_;
   // trans callback mgr
   ObTransCallbackMgr trans_mgr_;
   bool is_inited_;

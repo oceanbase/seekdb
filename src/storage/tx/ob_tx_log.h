@@ -842,7 +842,9 @@ public:
   int deserialize_log_body(T &tx_log_body); // make cur_log_type_ is UNKNOWN
   // fill log except RedoLog
   template <typename T>
-  int add_new_log(T &tx_log_body, ObTxBigSegmentBuf * big_segment_buf = nullptr);
+  int add_new_log(T &tx_log_body,
+                  ObTxBigSegmentBuf *big_segment_buf = nullptr,
+                  bool *need_big_segment = nullptr);
   // fill RedoLog and mutator_buf
   int prepare_mutator_buf(ObTxRedoLog &redo);
   int finish_mutator_buf(ObTxRedoLog &redo, const int64_t &mutator_size);
@@ -913,11 +915,16 @@ int ObTxLogBlock::deserialize_log_body(T &tx_log_body)
 }
 
 template <typename T>
-int ObTxLogBlock::add_new_log(T &tx_log_body, ObTxBigSegmentBuf *big_segment_buf)
+int ObTxLogBlock::add_new_log(T &tx_log_body,
+                              ObTxBigSegmentBuf *big_segment_buf,
+                              bool *need_big_segment)
 {
   int ret = OB_SUCCESS;
   int64_t tmp_pos = pos_;
   ObTxLogHeader header(T::LOG_TYPE);
+  if (OB_NOT_NULL(need_big_segment)) {
+    *need_big_segment = false;
+  }
   if ((OB_ISNULL(fill_buf_.get_buf()))) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(ERROR, "invalid argument", K(*this));
@@ -965,8 +972,12 @@ int ObTxLogBlock::add_new_log(T &tx_log_body, ObTxBigSegmentBuf *big_segment_buf
              && ObTxLogTypeChecker::can_be_spilt(T::LOG_TYPE)) {
     // use big segment
     if (OB_ISNULL(big_segment_buf)) {
-      ret = OB_INVALID_ARGUMENT;
-      TRANS_LOG(WARN, "invalid argument", K(ret), KPC(big_segment_buf));
+      if (OB_NOT_NULL(need_big_segment)) {
+        *need_big_segment = true;
+      } else {
+        ret = OB_INVALID_ARGUMENT;
+        TRANS_LOG(WARN, "invalid argument", K(ret), KPC(big_segment_buf));
+      }
     } else if (OB_FALSE_IT(big_segment_buf_ = big_segment_buf)) {
     } else if (OB_FAIL(big_segment_buf_->init_for_serialize(header.get_serialize_size()
                                                             + tx_log_body.get_serialize_size()))) {

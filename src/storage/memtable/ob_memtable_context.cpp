@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
+#include <new>
 #include "ob_memtable_context.h"
+#include "storage/lob/ob_ext_info_callback.h"
 #include "storage/tx/ob_tx_ctx.h"
 #include "storage/tablelock/ob_lock_memtable.h"
 
@@ -36,7 +38,6 @@ ObMemtableCtx::ObMemtableCtx()
       tx_status_(ObTxStatus::NORMAL),
       elr_state_(ELR_STATE_INIT),
       ref_(0),
-      query_allocator_(),
       ctx_cb_allocator_(),
       ctx_(NULL),
       truncate_cnt_(0),
@@ -51,7 +52,8 @@ ObMemtableCtx::ObMemtableCtx()
       is_master_(true),
       has_row_updated_(false),
       mem_ctx_obj_pool_(ctx_cb_allocator_),
-      lock_mem_ctx_(*this),
+      ls_tx_ctx_mgr_(NULL),
+      lock_mem_ctx_(NULL),
       trans_mgr_(*this, ctx_cb_allocator_, mem_ctx_obj_pool_),
       is_inited_(false)
 {
@@ -70,8 +72,7 @@ int ObMemtableCtx::init()
   if (IS_INIT) { // use is_inited_ to prevent memtable ctx from being inited repeatedly
     ret = OB_INIT_TWICE;
   } else {
-    if (OB_FAIL(query_allocator_.init())) {
-    } else if (OB_FAIL(ctx_cb_allocator_.init())) {
+    if (OB_FAIL(ctx_cb_allocator_.init())) {
     } else if (OB_FAIL(reset_log_generator_())) {
     } else {
       // do nothing
@@ -88,7 +89,24 @@ int ObMemtableCtx::init()
 int ObMemtableCtx::enable_lock_table(ObTableHandleV2 &handle)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(lock_mem_ctx_.init(handle))) {
+  ObLockMemCtx *new_lock_mem_ctx = NULL;
+  ObLockMemCtx *lock_mem_ctx = ATOMIC_LOAD(&lock_mem_ctx_);
+  if (OB_UNLIKELY(!handle.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_NOT_NULL(lock_mem_ctx)) {
+    ret = lock_mem_ctx->init(handle);
+  } else if (OB_ISNULL(new_lock_mem_ctx =
+                           new (std::nothrow) ObLockMemCtx(ctx_cb_allocator_))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_FAIL(new_lock_mem_ctx->init(handle))) {
+  } else if (!ATOMIC_BCAS(&lock_mem_ctx_,
+                          static_cast<ObLockMemCtx *>(NULL),
+                          new_lock_mem_ctx)) {
+    delete new_lock_mem_ctx;
+    new_lock_mem_ctx = NULL;
+  }
+  if (OB_FAIL(ret) && OB_NOT_NULL(new_lock_mem_ctx)) {
+    delete new_lock_mem_ctx;
   }
   return ret;
 }
@@ -96,9 +114,47 @@ int ObMemtableCtx::enable_lock_table(ObTableHandleV2 &handle)
 int ObMemtableCtx::enable_lock_table(ObLSTxCtxMgr *ls_tx_ctx_mgr)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(lock_mem_ctx_.init(ls_tx_ctx_mgr))) {
+  if (OB_ISNULL(ls_tx_ctx_mgr)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    ls_tx_ctx_mgr_ = ls_tx_ctx_mgr;
   }
   return ret;
+}
+
+int ObMemtableCtx::ensure_lock_mem_ctx_()
+{
+  int ret = OB_SUCCESS;
+  ObLockMemCtx *new_lock_mem_ctx = NULL;
+  if (OB_NOT_NULL(ATOMIC_LOAD(&lock_mem_ctx_))) {
+    // already initialized
+  } else if (OB_ISNULL(ls_tx_ctx_mgr_)) {
+    ret = OB_ERR_UNEXPECTED;
+    TRANS_LOG(WARN, "ls tx ctx mgr is null", K(ret));
+  } else if (OB_ISNULL(new_lock_mem_ctx =
+                           new (std::nothrow) ObLockMemCtx(ctx_cb_allocator_))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_FAIL(new_lock_mem_ctx->init(ls_tx_ctx_mgr_))) {
+  } else if (!ATOMIC_BCAS(&lock_mem_ctx_,
+                          static_cast<ObLockMemCtx *>(NULL),
+                          new_lock_mem_ctx)) {
+    delete new_lock_mem_ctx;
+    new_lock_mem_ctx = NULL;
+  }
+  if (OB_FAIL(ret) && OB_NOT_NULL(new_lock_mem_ctx)) {
+    delete new_lock_mem_ctx;
+  }
+  return ret;
+}
+
+void ObMemtableCtx::destroy_lock_mem_ctx_()
+{
+  ObLockMemCtx *lock_mem_ctx = ATOMIC_LOAD(&lock_mem_ctx_);
+  if (OB_NOT_NULL(lock_mem_ctx)) {
+    ATOMIC_STORE(&lock_mem_ctx_, static_cast<ObLockMemCtx *>(NULL));
+    delete lock_mem_ctx;
+  }
+  ls_tx_ctx_mgr_ = NULL;
 }
 
 void ObMemtableCtx::reset()
@@ -139,11 +195,10 @@ void ObMemtableCtx::reset()
     truncate_cnt_ = 0;
     unsubmitted_cnt_ = 0;
     mem_ctx_obj_pool_.reset();
-    lock_mem_ctx_.reset();
+    destroy_lock_mem_ctx_();
     retry_info_.reset();
     trans_mgr_.reset();
     log_gen_.reset();
-    query_allocator_.reset(/*only_check*/ true);
     ctx_cb_allocator_.reset(/*only_check*/ true);
     ref_ = 0;
     is_master_ = true;
@@ -155,6 +210,9 @@ void ObMemtableCtx::reset()
     //FIXME: ObIMemtableCtx don't have resetfunction,
     //thus ObIMvccCtx::reset is called, so resource_link_is not reset
     ObIMemtableCtx::reset();
+  } else {
+    // The handle-based mintest path may initialize lock state before init().
+    destroy_lock_mem_ctx_();
   }
 }
 
@@ -369,15 +427,11 @@ void ObMemtableCtx::free_mvcc_row_callback(ObITransCallback *cb)
 
 storage::ObExtInfoCallback *ObMemtableCtx::alloc_ext_info_callback()
 {
-  int ret = OB_SUCCESS;
-  void *cb_buffer = nullptr;
-  storage::ObExtInfoCallback *cb = nullptr;
-  if (nullptr == (cb_buffer = mem_ctx_obj_pool_.alloc<storage::ObExtInfoCallback>())) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    TRANS_LOG(WARN, "alloc ObExtInfoCallback fail", K(ret));
-  } else if (nullptr == (cb = new(cb_buffer) storage::ObExtInfoCallback())) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    TRANS_LOG(WARN, "construct ObExtInfoCallback object fail", K(ret), "cb_buffer", cb_buffer);
+  storage::ObExtInfoCallback *cb =
+      new (std::nothrow) storage::ObExtInfoCallback();
+  if (OB_ISNULL(cb)) {
+    TRANS_LOG_RET(WARN, OB_ALLOCATE_MEMORY_FAILED,
+                  "alloc ObExtInfoCallback failed");
   } else {
     trans_mgr_.add_callback_ext_info_log_count(1);
   }
@@ -392,17 +446,43 @@ void ObMemtableCtx::free_ext_info_callback(ObITransCallback *cb)
     TRANS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "cb is not ext info callback", "type", cb->get_mutator_type(), K(*this));
   } else {
     ObExtInfoCallback *ext_cb = static_cast<ObExtInfoCallback *>(cb);
-    ext_cb->~ObExtInfoCallback();
-    mem_ctx_obj_pool_.free<storage::ObExtInfoCallback>(cb);
+    delete ext_cb;
     TRANS_LOG(DEBUG, "callback release succ", KP(cb), K(*this), K(lbt()));
     trans_mgr_.add_callback_ext_info_log_count(-1);
     cb = NULL;
   }
 }
 
-ObIAllocator &ObMemtableCtx::get_query_allocator()
+void ObMemtableCtx::free_table_lock_callback(ObITransCallback *cb)
 {
-  return query_allocator_;
+  if (OB_ISNULL(cb)) {
+    TRANS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "table lock callback is null",
+                  KP(cb), K(*this));
+  } else if (!cb->is_table_lock_callback()) {
+    TRANS_LOG_RET(ERROR, OB_ERR_UNEXPECTED,
+                  "callback is not table lock callback", KPC(cb), K(*this));
+  } else {
+    ObLockMemCtx *lock_mem_ctx = ATOMIC_LOAD(&lock_mem_ctx_);
+    if (OB_ISNULL(lock_mem_ctx)) {
+      TRANS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "lock mem ctx is null",
+                    KPC(cb), K(*this));
+    } else {
+      lock_mem_ctx->free_table_lock_callback(cb);
+    }
+  }
+}
+
+ObOBJLockCallback *ObMemtableCtx::create_table_lock_callback(ObIMvccCtx &ctx,
+                                                             ObLockMemtable *memtable)
+{
+  ObOBJLockCallback *cb = NULL;
+  ObLockMemCtx *lock_mem_ctx = ATOMIC_LOAD(&lock_mem_ctx_);
+  if (OB_ISNULL(lock_mem_ctx)) {
+    TRANS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "lock mem ctx is null", K(*this));
+  } else {
+    cb = lock_mem_ctx->create_table_lock_callback(ctx, memtable);
+  }
+  return cb;
 }
 
 int ObMemtableCtx::trans_begin()
@@ -634,7 +714,10 @@ int ObMemtableCtx::log_submitted(const ObRedoLogSubmitHelper &helper)
 
 int ObMemtableCtx::sync_log_succ(const SCN scn, const ObCallbackScopeArray &callbacks)
 {
-  lock_mem_ctx_.sync_log_succ(scn);
+  ObLockMemCtx *lock_mem_ctx = ATOMIC_LOAD(&lock_mem_ctx_);
+  if (OB_NOT_NULL(lock_mem_ctx)) {
+    lock_mem_ctx->sync_log_succ(scn);
+  }
   log_gen_.sync_log_succ(callbacks, scn);
   return OB_SUCCESS;
 }
@@ -854,7 +937,10 @@ bool ObMemtableCtx::pending_log_size_too_large(const ObTxSEQ &write_seq_no)
 int ObMemtableCtx::get_table_lock_store_info(ObTableLockInfo &table_lock_info)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(lock_mem_ctx_.get_table_lock_store_info(table_lock_info))) {
+  ObLockMemCtx *lock_mem_ctx = ATOMIC_LOAD(&lock_mem_ctx_);
+  if (OB_ISNULL(lock_mem_ctx)) {
+    table_lock_info.reset();
+  } else if (OB_FAIL(lock_mem_ctx->get_table_lock_store_info(table_lock_info))) {
   }
   return ret;
 }
@@ -865,7 +951,10 @@ int ObMemtableCtx::recover_from_table_lock_durable_info(const ObTableLockInfo &t
   const int64_t op_cnt = table_lock_info.table_lock_ops_.count();
   ObLockMemtable* lock_memtable = nullptr;
   ObMemCtxLockOpLinkNode *lock_op_node = nullptr;
+  ObLockMemCtx *lock_mem_ctx = NULL;
   const int64_t curr_timestamp = ObTimeUtility::current_time();
+  if (op_cnt > 0 && OB_FAIL(get_lock_mem_ctx(lock_mem_ctx))) {
+  }
   for (int64_t i = 0; i < op_cnt && OB_SUCC(ret); ++i) {
     tablelock::ObTableLockOp lock_op = table_lock_info.table_lock_ops_.at(i);
     if (!lock_op.is_valid()) {
@@ -876,13 +965,13 @@ int ObMemtableCtx::recover_from_table_lock_durable_info(const ObTableLockInfo &t
       // the tx ctx table may be copied from other ls replica we need fix the lockop's create timestamp.
     } else if (FALSE_IT(lock_op.create_timestamp_ = OB_MIN(curr_timestamp,
                                                            lock_op.create_timestamp_))) {
-    } else if (OB_FAIL(lock_mem_ctx_.add_lock_record(lock_op, lock_op_node))) {
-    } else if (OB_FAIL(lock_mem_ctx_.get_lock_memtable(lock_memtable))) {
+    } else if (OB_FAIL(lock_mem_ctx->add_lock_record(lock_op, lock_op_node))) {
+    } else if (OB_FAIL(lock_mem_ctx->get_lock_memtable(lock_memtable))) {
     } else if (OB_NOT_NULL(lock_memtable)
               && OB_FAIL(lock_memtable->recover_obj_lock(lock_op))) {
       TRANS_LOG(ERROR, "recover_obj_lock failed", K(ret), K(*lock_memtable));
     } else {
-      lock_mem_ctx_.sync_log_succ(table_lock_info.max_durable_scn_);
+      lock_mem_ctx->sync_log_succ(table_lock_info.max_durable_scn_);
     }
   }
 
@@ -894,9 +983,11 @@ int ObMemtableCtx::check_lock_need_replay(const SCN &scn,
                                           bool &need_replay)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(lock_mem_ctx_.check_lock_need_replay(scn,
-                                                   lock_op,
-                                                   need_replay))) {
+  ObLockMemCtx *lock_mem_ctx = NULL;
+  if (OB_FAIL(get_lock_mem_ctx(lock_mem_ctx))) {
+  } else if (OB_FAIL(lock_mem_ctx->check_lock_need_replay(scn,
+                                                          lock_op,
+                                                          need_replay))) {
   }
   return ret;
 }
@@ -909,13 +1000,16 @@ int ObMemtableCtx::check_lock_exist(const ObLockID &lock_id,
                                     uint64_t lock_mode_cnt_in_same_trans[]) const
 {
   int ret = OB_SUCCESS;
+  ObLockMemCtx *lock_mem_ctx = ATOMIC_LOAD(&lock_mem_ctx_);
   is_exist = false;
-  if (OB_FAIL(lock_mem_ctx_.check_lock_exist(lock_id,
-                                             owner_id,
-                                             mode,
-                                             op_type,
-                                             is_exist,
-                                             lock_mode_cnt_in_same_trans))) {
+  if (OB_ISNULL(lock_mem_ctx)) {
+    // no table lock in this transaction
+  } else if (OB_FAIL(lock_mem_ctx->check_lock_exist(lock_id,
+                                                    owner_id,
+                                                    mode,
+                                                    op_type,
+                                                    is_exist,
+                                                    lock_mode_cnt_in_same_trans))) {
   }
   return ret;
 }
@@ -926,9 +1020,12 @@ int ObMemtableCtx::check_modify_schema_elapsed(
 {
   int ret = OB_SUCCESS;
   ObLockID lock_id;
+  ObLockMemCtx *lock_mem_ctx = ATOMIC_LOAD(&lock_mem_ctx_);
 
-  if (OB_FAIL(get_lock_id(tablet_id, lock_id))) {
-  } else if (OB_FAIL(lock_mem_ctx_.check_modify_schema_elapsed(lock_id,
+  if (OB_ISNULL(lock_mem_ctx)) {
+    // no table lock in this transaction
+  } else if (OB_FAIL(get_lock_id(tablet_id, lock_id))) {
+  } else if (OB_FAIL(lock_mem_ctx->check_modify_schema_elapsed(lock_id,
                                                                schema_version))) {
     if (OB_EAGAIN != ret) {
       TRANS_LOG(WARN, "check schema version elapsed failed", K(ret), K(lock_id),
@@ -945,9 +1042,12 @@ int ObMemtableCtx::check_modify_time_elapsed(
   int ret = OB_SUCCESS;
 
   ObLockID lock_id;
+  ObLockMemCtx *lock_mem_ctx = ATOMIC_LOAD(&lock_mem_ctx_);
 
-  if (OB_FAIL(get_lock_id(tablet_id, lock_id))) {
-  } else if (OB_FAIL(lock_mem_ctx_.check_modify_time_elapsed(lock_id,
+  if (OB_ISNULL(lock_mem_ctx)) {
+    // no table lock in this transaction
+  } else if (OB_FAIL(get_lock_id(tablet_id, lock_id))) {
+  } else if (OB_FAIL(lock_mem_ctx->check_modify_time_elapsed(lock_id,
                                                              timestamp))) {
     if (OB_EAGAIN != ret) {
       TRANS_LOG(WARN, "check timestamp elapsed failed", K(ret), K(lock_id),
@@ -959,12 +1059,18 @@ int ObMemtableCtx::check_modify_time_elapsed(
 
 int ObMemtableCtx::iterate_tx_obj_lock_op(ObLockOpIterator &iter) const
 {
-  return lock_mem_ctx_.iterate_tx_obj_lock_op(iter);
+  ObLockMemCtx *lock_mem_ctx = ATOMIC_LOAD(&lock_mem_ctx_);
+  return OB_ISNULL(lock_mem_ctx)
+             ? OB_SUCCESS
+             : lock_mem_ctx->iterate_tx_obj_lock_op(iter);
 }
 
 int ObMemtableCtx::iterate_tx_lock_priority_list(ObPrioOpIterator &iter) const
 {
-  return lock_mem_ctx_.iterate_tx_lock_priority_list(iter);
+  ObLockMemCtx *lock_mem_ctx = ATOMIC_LOAD(&lock_mem_ctx_);
+  return OB_ISNULL(lock_mem_ctx)
+             ? OB_SUCCESS
+             : lock_mem_ctx->iterate_tx_lock_priority_list(iter);
 }
 
 int ObMemtableCtx::add_lock_record(const tablelock::ObTableLockOp &lock_op)
@@ -972,19 +1078,21 @@ int ObMemtableCtx::add_lock_record(const tablelock::ObTableLockOp &lock_op)
   int ret = OB_SUCCESS;
   ObMemCtxLockOpLinkNode *lock_op_node = nullptr;
   ObLockMemtable *memtable = nullptr;
+  ObLockMemCtx *lock_mem_ctx = NULL;
   if (OB_UNLIKELY(!lock_op.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", K(ret), K(lock_op));
-  } else if (OB_FAIL(lock_mem_ctx_.add_lock_record(lock_op, lock_op_node))) {
+  } else if (OB_FAIL(get_lock_mem_ctx(lock_mem_ctx))) {
+  } else if (OB_FAIL(lock_mem_ctx->add_lock_record(lock_op, lock_op_node))) {
   } else if (OB_FAIL(register_multi_source_data_if_need_(lock_op))) {
   } else if (OB_UNLIKELY(!lock_op.need_register_callback())) {
     // do nothing
-  } else if (OB_FAIL(lock_mem_ctx_.get_lock_memtable(memtable))) {
+  } else if (OB_FAIL(lock_mem_ctx->get_lock_memtable(memtable))) {
   } else if (OB_FAIL(register_table_lock_cb(memtable,
                                             lock_op_node))) {
   }
   if (OB_FAIL(ret) && lock_op_node != NULL) {
-    lock_mem_ctx_.remove_lock_record(lock_op_node);
+    lock_mem_ctx->remove_lock_record(lock_op_node);
   }
   return ret;
 }
@@ -996,30 +1104,38 @@ int ObMemtableCtx::replay_add_lock_record(
   int ret = OB_SUCCESS;
   ObMemCtxLockOpLinkNode *lock_op_node = nullptr;
   ObLockMemtable *memtable = nullptr;
+  ObLockMemCtx *lock_mem_ctx = NULL;
   if (OB_UNLIKELY(!lock_op.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", K(ret), K(lock_op));
-  } else if (OB_FAIL(lock_mem_ctx_.add_lock_record(lock_op, lock_op_node))) {
+  } else if (OB_FAIL(get_lock_mem_ctx(lock_mem_ctx))) {
+  } else if (OB_FAIL(lock_mem_ctx->add_lock_record(lock_op, lock_op_node))) {
   } else if (OB_UNLIKELY(!lock_op.need_register_callback())) {
     // do nothing
-  } else if (OB_FAIL(lock_mem_ctx_.get_lock_memtable(memtable))) {
+  } else if (OB_FAIL(lock_mem_ctx->get_lock_memtable(memtable))) {
   } else if (OB_FAIL(register_table_lock_replay_cb(memtable,
                                                    lock_op_node,
                                                    scn))) {
   } else {
     // make sure the replayed tablelock will be minor merged.
     // and update the max durable log ts.
-    lock_mem_ctx_.sync_log_succ(scn);
+    lock_mem_ctx->sync_log_succ(scn);
   }
   if (OB_FAIL(ret) && lock_op_node != NULL) {
-    lock_mem_ctx_.remove_lock_record(lock_op_node);
+    lock_mem_ctx->remove_lock_record(lock_op_node);
   }
   return ret;
 }
 
 void ObMemtableCtx::remove_lock_record(ObMemCtxLockOpLinkNode *lock_op)
 {
-  lock_mem_ctx_.remove_lock_record(lock_op);
+  ObLockMemCtx *lock_mem_ctx = ATOMIC_LOAD(&lock_mem_ctx_);
+  if (OB_ISNULL(lock_mem_ctx)) {
+    TRANS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "lock mem ctx is null",
+                  KP(lock_op), K(*this));
+  } else {
+    lock_mem_ctx->remove_lock_record(lock_op);
+  }
 }
 
 int ObMemtableCtx::clear_table_lock_(const bool is_commit,
@@ -1027,10 +1143,12 @@ int ObMemtableCtx::clear_table_lock_(const bool is_commit,
                                      const SCN &commit_scn)
 {
   int ret = OB_SUCCESS;
-  ObLockMemtable *memtable = nullptr;
+  ObLockMemCtx *lock_mem_ctx = ATOMIC_LOAD(&lock_mem_ctx_);
   if (is_read_only_) {
     // read only trx no need deal with table lock.
-  } else if (OB_FAIL(lock_mem_ctx_.clear_table_lock(is_commit,
+  } else if (OB_ISNULL(lock_mem_ctx)) {
+    // no table lock in this transaction
+  } else if (OB_FAIL(lock_mem_ctx->clear_table_lock(is_commit,
                                                     commit_version,
                                                     commit_scn))) {
   }
@@ -1041,9 +1159,12 @@ int ObMemtableCtx::rollback_table_lock_(transaction::ObTxSEQ to_seq_no,
                                         transaction::ObTxSEQ from_seq_no)
 {
   int ret = OB_SUCCESS;
+  ObLockMemCtx *lock_mem_ctx = ATOMIC_LOAD(&lock_mem_ctx_);
   if (is_read_only_) {
     // read only trx no need deal with table lock.
-  } else if (OB_FAIL(lock_mem_ctx_.rollback_table_lock(to_seq_no, from_seq_no))) {
+  } else if (OB_ISNULL(lock_mem_ctx)) {
+    // no table lock in this transaction
+  } else if (OB_FAIL(lock_mem_ctx->rollback_table_lock(to_seq_no, from_seq_no))) {
   }
 
   return ret;
@@ -1090,10 +1211,12 @@ int ObMemtableCtx::replay_lock(const tablelock::ObTableLockOp &lock_op,
 {
   int ret = OB_SUCCESS;
   ObLockMemtable *memtable = nullptr;
+  ObLockMemCtx *lock_mem_ctx = NULL;
   if (OB_UNLIKELY(!lock_op.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", K(lock_op));
-  } else if (OB_FAIL(lock_mem_ctx_.get_lock_memtable(memtable))) {
+  } else if (OB_FAIL(get_lock_mem_ctx(lock_mem_ctx))) {
+  } else if (OB_FAIL(lock_mem_ctx->get_lock_memtable(memtable))) {
   } else if (OB_FAIL(memtable->replay_lock(this, lock_op, scn))) {
   } else {
     // do nothing
@@ -1162,20 +1285,64 @@ void ObMemtableCtx::check_all_redo_flushed()
   trans_mgr_.check_all_redo_flushed();
 }
 
+int ObMemtableCtx::get_lock_mem_ctx(ObLockMemCtx *&lock_mem_ctx)
+{
+  int ret = OB_SUCCESS;
+  lock_mem_ctx = NULL;
+  if (OB_FAIL(ensure_lock_mem_ctx_())) {
+  } else if (OB_ISNULL(lock_mem_ctx = ATOMIC_LOAD(&lock_mem_ctx_))) {
+    ret = OB_ERR_UNEXPECTED;
+    TRANS_LOG(ERROR, "lock mem ctx is null after initialization", K(ret),
+              K(*this));
+  }
+  return ret;
+}
+
+int ObMemtableCtx::get_lock_memtable(ObLockMemtable *&memtable)
+{
+  int ret = OB_SUCCESS;
+  ObLockMemCtx *lock_mem_ctx = NULL;
+  if (OB_FAIL(get_lock_mem_ctx(lock_mem_ctx))) {
+  } else if (OB_FAIL(lock_mem_ctx->get_lock_memtable(memtable))) {
+  }
+  return ret;
+}
+
+void ObMemtableCtx::set_table_lock_killed()
+{
+  int ret = OB_SUCCESS;
+  ObLockMemCtx *lock_mem_ctx = NULL;
+  if (OB_FAIL(get_lock_mem_ctx(lock_mem_ctx))) {
+    TRANS_LOG(WARN, "failed to initialize lock mem ctx when killing table lock",
+              K(ret), K(*this));
+  } else {
+    lock_mem_ctx->set_killed();
+  }
+}
+
+bool ObMemtableCtx::is_table_lock_killed() const
+{
+  ObLockMemCtx *lock_mem_ctx = ATOMIC_LOAD(&lock_mem_ctx_);
+  return OB_NOT_NULL(lock_mem_ctx) && lock_mem_ctx->is_killed();
+}
+
 int ObMemtableCtx::add_priority_record(
     const tablelock::ObTableLockPrioArg &arg,
     const tablelock::ObTableLockOp &lock_op)
 {
   int ret = OB_SUCCESS;
   ObMemCtxLockPrioOpLinkNode *prio_op_node = NULL;
+  ObLockMemCtx *lock_mem_ctx = NULL;
   if (OB_UNLIKELY(!lock_op.is_valid())
       || OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", K(ret), K(lock_op), K(arg));
-  } else if (OB_FAIL(lock_mem_ctx_.add_priority_record(arg, lock_op, prio_op_node))) {
+  } else if (OB_FAIL(get_lock_mem_ctx(lock_mem_ctx))) {
+  } else if (OB_FAIL(lock_mem_ctx->add_priority_record(arg, lock_op,
+                                                       prio_op_node))) {
   }
   if (OB_FAIL(ret) && prio_op_node != NULL) {
-    lock_mem_ctx_.remove_priority_record(prio_op_node);
+    lock_mem_ctx->remove_priority_record(prio_op_node);
   }
   return ret;
 }
@@ -1184,7 +1351,10 @@ int ObMemtableCtx::get_prio_op_array(
     transaction::tablelock::ObTableLockPrioOpArray &prio_op_array)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(lock_mem_ctx_.get_priority_array(prio_op_array))) {
+  ObLockMemCtx *lock_mem_ctx = ATOMIC_LOAD(&lock_mem_ctx_);
+  if (OB_ISNULL(lock_mem_ctx)) {
+    // no priority operation in this transaction
+  } else if (OB_FAIL(lock_mem_ctx->get_priority_array(prio_op_array))) {
   }
   return ret;
 }
@@ -1196,7 +1366,10 @@ int ObMemtableCtx::remove_priority_record(const tablelock::ObTableLockOp &lock_o
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", K(ret), K(lock_op));
   } else {
-    lock_mem_ctx_.remove_priority_record(lock_op);
+    ObLockMemCtx *lock_mem_ctx = ATOMIC_LOAD(&lock_mem_ctx_);
+    if (OB_NOT_NULL(lock_mem_ctx)) {
+      lock_mem_ctx->remove_priority_record(lock_op);
+    }
   }
   return ret;
 }
@@ -1206,8 +1379,15 @@ int ObMemtableCtx::prepare_prio_op_list(
 {
   int ret = OB_SUCCESS;
   ObMemCtxLockPrioOpLinkNode *prio_op_node = NULL;
+  ObLockMemCtx *lock_mem_ctx = ATOMIC_LOAD(&lock_mem_ctx_);
+  if (OB_ISNULL(lock_mem_ctx) && !prio_op_array.empty()) {
+    if (OB_FAIL(get_lock_mem_ctx(lock_mem_ctx))) {
+    }
+  }
   // step 1, remove expired priority list
-  if (OB_FAIL(lock_mem_ctx_.clear_priority_list())) {
+  if (OB_FAIL(ret)) {
+  } else if (OB_NOT_NULL(lock_mem_ctx)
+             && OB_FAIL(lock_mem_ctx->clear_priority_list())) {
   }
   // step 2, install priority array
   if (OB_FAIL(ret)) {
@@ -1216,8 +1396,8 @@ int ObMemtableCtx::prepare_prio_op_list(
     for (int64_t i = 0; OB_SUCC(ret) && i < prio_op_array.count(); i++) {
       prio_op_node = NULL;
       const ObTableLockPrioArg arg(prio_op_array.at(i).priority_);
-      if (OB_FAIL(lock_mem_ctx_.prepare_priority_task(arg, prio_op_array.at(i).lock_op_,
-              prio_op_node))) {
+      if (OB_FAIL(lock_mem_ctx->prepare_priority_task(
+              arg, prio_op_array.at(i).lock_op_, prio_op_node))) {
       }
     }
   }

@@ -124,7 +124,6 @@ private:
 };
 
 typedef common::ObSEArray<ObTxBufferNode, 1> ObTxBufferNodeArray;
-typedef common::ObSEArray<storage::mds::BufferCtxNode , 1> ObTxBufferCtxArray;
 }
 }
 #endif

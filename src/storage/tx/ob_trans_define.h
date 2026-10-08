@@ -18,6 +18,7 @@
 #define OCEANBASE_TRANSACTION_OB_TRANS_DEFINE_
 
 #include <cstdint>
+#include <memory>
 #include "lib/time/ob_clock_generator.h"
 #include "share/transaction/ob_tx_id.h"
 #include "common/ob_range.h"
@@ -25,7 +26,6 @@
 #include "common/ob_tablet_id.h"
 #include "lib/core_local/ob_core_local_storage.h"
 #include "lib/list/ob_list.h"
-#include "lib/trace/ob_trace_event.h"
 #include "share/log/palf/lsn.h"
 #include "share/log/ob_log_base_header.h"
 #include "share/scn.h"
@@ -96,57 +96,6 @@ class ObTxMultiDataSourceLog;
 enum class NotifyType : int64_t;
 typedef palf::LSN LogOffSet;
 enum { MAX_CALLBACK_LIST_COUNT = 64 };
-class ObReserveAllocator : public ObIAllocator
-{
-public:
-  ObReserveAllocator() : pos_(0), size_(0) {}
-  ~ObReserveAllocator() { reset(); }
-  void *alloc(const int64_t sz)
-  {
-    return alloc_from_buf_(sz);
-  }
-  void* alloc(const int64_t sz, const ObMemAttr &attr)
-  {
-    UNUSED(attr);
-    return alloc_from_buf_(sz);
-  }
-  void free(void *p)
-  {
-    // do nothing
-  }
-public:
-  bool is_contain(void *p) const
-  {
-    return ((int64_t)p >= (int64_t)buf_) && ((int64_t)p < (int64_t)buf_ + size_);
-  }
-  void reset()
-  {
-    pos_ = 0;
-    size_ = 0;
-  }
-  void reuse()
-  {
-    pos_ = 0;
-  }
-private:
-  void *alloc_from_buf_(const int64_t sz)
-  {
-    void *ptr = NULL;
-    const int64_t aligned_sz = ob_aligned_to2(sz, 16);
-    if (pos_ + aligned_sz < size_) {
-      ptr = reinterpret_cast<void *>(buf_ + pos_);
-      pos_ = pos_ + aligned_sz;
-    }
-    return ptr;
-  }
-private:
-  static const int64_t RESERVED_MEM_SIZE = 256;
-private:
-  char buf_[RESERVED_MEM_SIZE];
-  int64_t pos_;
-  int64_t size_;
-};
-
 class TransModulePageAllocator : public common::ModulePageAllocator
 {
 public:
@@ -156,44 +105,6 @@ public:
   explicit TransModulePageAllocator(common::ObIAllocator &allocator)
     : ModulePageAllocator(allocator) {}
   virtual ~TransModulePageAllocator() {}
-  void *alloc(const int64_t sz)
-  {
-    return inner_alloc_(sz, attr_);
-  }
-  void *alloc(const int64_t sz, const ObMemAttr &attr)
-  {
-    return inner_alloc_(sz, attr);
-  }
-  void free(void *ptr)
-  {
-    if (NULL != ptr) {
-      inner_free_(ptr);
-    }
-  }
-  void reset()
-  {
-    common::ModulePageAllocator::reset();
-    reserve_allocator_.reset();
-  }
-protected:
-  void *inner_alloc_(const int64_t sz, const ObMemAttr &attr)
-  {
-    void *ptr = ModulePageAllocator::alloc(sz, attr);
-    if (NULL == ptr) {
-      ptr = reserve_allocator_.alloc(sz);
-    }
-    return ptr;
-  }
-  void inner_free_(void *ptr)
-  {
-    if (reserve_allocator_.is_contain(ptr)) {
-      reserve_allocator_.free(ptr);
-    } else {
-      ModulePageAllocator::free(ptr);
-    }
-  }
-private:
-  ObReserveAllocator reserve_allocator_;
 };
 
 
@@ -485,24 +396,6 @@ private:
 };
 
 typedef common::ObReserveArenaAllocator<1024> ObTxReserveArenaAllocator;
-
-class ObTransTraceLog : public common::ObTraceEventRecorder
-{
-public:
-  ObTransTraceLog()
-      : common::ObTraceEventRecorder::ObTraceEventRecorderBase(
-          true, common::ObLatchIds::TRANS_TRACE_RECORDER_LOCK) {}
-  ~ObTransTraceLog() {}
-  void destroy() {}
-  int64_t to_string(char *buf, const int64_t buf_len) const
-  {
-    int64_t ret = 0;
-    check_lock();
-    ret = ObTraceEventRecorder::to_string(buf, buf_len);
-    check_unlock();
-    return ret;
-  }
-};
 
 class ObStmtInfo  // unreferenced, need remove
 {
@@ -1138,16 +1031,51 @@ static const char * to_str_ctx_source(const TxCtxSource & ctx_src)
 
 class ObTxMDSCache;
 
+class TxBufferNodeArrayHolder
+{
+public:
+  TxBufferNodeArrayHolder() : allocator_(nullptr), array_() {}
+  explicit TxBufferNodeArrayHolder(TransModulePageAllocator &allocator)
+    : allocator_(&allocator), array_()
+  {}
+  ~TxBufferNodeArrayHolder() = default;
+
+  int ensure(ObTxBufferNodeArray *&array);
+  int assign(const TxBufferNodeArrayHolder &other);
+  int reserve(const int64_t capacity);
+  int push_back(const ObTxBufferNode &node);
+  int remove(const int64_t idx);
+  void reset() { array_.reset(); }
+  bool empty() const { return nullptr == array_ || array_->empty(); }
+  int64_t count() const { return nullptr == array_ ? 0 : array_->count(); }
+  ObTxBufferNode &at(const int64_t idx) { return array_->at(idx); }
+  const ObTxBufferNode &at(const int64_t idx) const { return array_->at(idx); }
+  ObTxBufferNode &operator[](const int64_t idx) { return array_->at(idx); }
+  const ObTxBufferNode &operator[](const int64_t idx) const { return array_->at(idx); }
+  ObTxBufferNodeArray &get_array();
+  const ObTxBufferNodeArray &get_array() const;
+  operator const ObTxBufferNodeArray &() const { return get_array(); }
+
+  int serialize(char *buf, const int64_t buf_len, int64_t &pos) const;
+  int deserialize(const char *buf, const int64_t data_len, int64_t &pos);
+  int64_t get_serialize_size() const;
+  TO_STRING_KV("multi_data_source", get_array());
+
+private:
+  TransModulePageAllocator *allocator_;
+  std::unique_ptr<ObTxBufferNodeArray> array_;
+};
+
 static const int64_t MAX_TABLET_MODIFY_RECORD_COUNT = 16;
 // exec info need to be persisted by "trans context table"
 struct ObTxExecInfo
 {
   OB_UNIS_VERSION(2);
 public:
-  ObTxExecInfo() {}
+  ObTxExecInfo() : multi_data_source_() {}
   explicit ObTxExecInfo(TransModulePageAllocator &allocator)
     : redo_lsns_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "REDO_LSNS")),
-      multi_data_source_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "MDS_ARRAY")),
+      multi_data_source_(allocator),
       checksum_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "TX_CHECKSUM")),
       checksum_scn_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "TX_CHECKSUM"))
   {
@@ -1155,8 +1083,6 @@ public:
     checksum_scn_.push_back(share::SCN());
   }
 public:
-  int generate_mds_buffer_ctx_array();
-  int merge_buffer_ctx_array_to_multi_data_source() const;
   void clear_buffer_ctx_in_multi_data_source();
   void reset();
   // can not destroy in tx_ctx_table
@@ -1201,8 +1127,7 @@ public:
   bool has_write_state_;
   LogOffSet prev_record_lsn_;
   ObRedoLSNArray redo_lsns_;
-  ObTxBufferNodeArray multi_data_source_;
-  ObTxBufferCtxArray mds_buffer_ctx_array_;
+  TxBufferNodeArrayHolder multi_data_source_;
   share::SCN prepare_version_;
   int64_t next_log_entry_no_;
   share::SCN max_applied_log_ts_;

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 
+#include "lib/rc/context.h"
 #include "ob_vector_index_async_task_util.h"
 #include "share/rc/ob_server_runtime.h"
 #include "observer/vector_index/ob_vector_index_async_task.h"
@@ -1715,7 +1716,7 @@ int ObVecIndexAsyncTask::refresh_snapshot_index_data(ObPluginVectorIndexAdaptor 
     dml_param.branch_id_ = 0;
     dml_param.store_ctx_guard_ = &store_ctx_guard;
     dml_param.schema_version_ = snapshot_table_schema->get_schema_version();
-    dml_param.dml_allocator_ = &allocator_;
+    dml_param.dml_allocator_ = &CURRENT_CONTEXT->get_malloc_allocator();
     if (OB_ISNULL(adaptor.get_snap_data_()) || !adaptor.get_snap_data_()->is_inited()) {  // adaptor created by vector index async task, there won't be access from other threads.
       LOG_INFO("data table is empty, won't create snapshot index");
     } else if (OB_FAIL(oas->get_write_store_ctx_guard(timeout_us, *tx_desc, snapshot, 0, dml_param.write_flag_, store_ctx_guard))) {

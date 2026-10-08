@@ -15,6 +15,7 @@
  */
 
 #include "ob_mvcc_ctx.h"
+#include "storage/lob/ob_ext_info_callback.h"
 #include "storage/tx/ob_tx_ctx.h"
 #include "storage/ls/ob_freezer.h"
 namespace oceanbase
