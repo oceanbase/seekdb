@@ -19,7 +19,6 @@
 #include "share/ob_debug_sync.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/rc/ob_server_runtime.h"
-#include "storage/compaction/ob_freeze_info_mgr.h"
 #include "storage/compaction/ob_schedule_dag_func.h"
 #include "storage/ddl/ob_tablet_fork_task.h"
 #include "storage/ls/ob_ls.h"
@@ -158,7 +157,10 @@ public:
     ++metadata_depth;
     ret_ = OB_SUCCESS;
   }
-  ~PhysicalReclamationGuard() { if (held_) { --metadata_depth; metadata_mutex.unlock(); } }
+  ~PhysicalReclamationGuard() { release_publication(); }
+  void release_publication() {
+    if (held_) { --metadata_depth; metadata_mutex.unlock(); held_ = false; }
+  }
   int error() const { return ret_; }
 private:
   std::unique_lock<std::mutex> serial_;
@@ -720,6 +722,148 @@ int NamespaceForkKernelPrototype::protect_snapshot_tablets(
   return ret;
 }
 
+int NamespaceForkKernelPrototype::load_physical_retention(PhysicalSnapshotRetention &plan)
+{
+  auto *store = directory_kv_store();
+  if (store == nullptr) { return OB_NOT_INIT; }
+  // This is a collector entry, not an operation nested in source publication.
+  if (metadata_depth != 0) { return OB_STATE_NOT_MATCH; }
+  PhysicalReclamationGuard fence;
+  int ret = fence.error();
+  const int64_t deadline = std::min(directory_deadline(),
+      ObTimeUtility::current_time() + 30 * 1000 * 1000L);
+  constexpr size_t max_entries = 262144;
+  InstanceMetaStore::Transaction tx;
+  PhysicalSnapshotRetention staged;
+  const char *stage = "cut";
+  uint64_t last_physical = 0;
+  std::vector<ns::NamespaceCatalogViews::Entry> views;
+  if (OB_SUCC(ret)) { ret = store->begin_weak_read(tx, deadline); }
+  if (OB_SUCC(ret)) {
+    staged.read_snapshot = tx.snapshot_version().get_val_for_tx();
+    ns::namespace_registry().catalog_views().list(views);
+  }
+  // New readers now choose a snapshot >= this cut, or reuse a previously
+  // registered View. Physical GC stays serialized until the traversal ends,
+  // but ordinary source publication and SQL admission can proceed immediately.
+  fence.release_publication();
+  rootserver::InstanceNamespaceMetadata metadata(*store, tx);
+  int64_t watermark = 0;
+  bool empty_cut = false;
+  if (OB_SUCC(ret)) {
+    stage = "watermark";
+    ret = metadata.get_snapshot_gc_watermark(watermark);
+    if (ret == OB_ENTRY_NOT_EXIST) { empty_cut = true; ret = OB_SUCCESS; }
+  }
+  if (OB_SUCC(ret)) {
+    // Before the first watermark advances, retain from the beginning. The
+    // coordination row lock prevents future forks from publishing at S<=C.
+    staged.new_source_floor = std::min(staged.read_snapshot, std::max(int64_t{1}, watermark));
+  }
+  std::vector<ns::CatalogPageRef> roots;
+  if (OB_SUCC(ret)) { stage = "roots"; }
+  if (OB_SUCC(ret)) {
+    ret = metadata.scan_namespaces([&](const rootserver::InstanceNamespaceRecord &record) {
+      // Root and coordination first commit together. A weak cut before that
+      // commit is an empty catalog, with floor 1; existing directory records
+      // without their coordination row are an inconsistent snapshot.
+      if (empty_cut) { return OB_STATE_NOT_MATCH; }
+      if (record.roots.state != 2 && record.roots.directory.page != 0) {
+        if (roots.size() >= max_entries) { return OB_SIZE_OVERFLOW; }
+        roots.push_back(record.roots.directory);
+      }
+      return OB_SUCCESS;
+    });
+  }
+  auto retain = [&](rootserver::InstanceNamespaceMetadata &reader,
+                    const std::vector<ns::CatalogPageRef> &selected, int64_t snapshot) {
+    rootserver::InstanceCatalogPageStore pages(reader);
+    ns::NamespaceCatalogTree tree(pages);
+    const auto result = tree.retain_sources(selected, snapshot, max_entries, staged.tablets);
+    if (result.ok()) { return OB_SUCCESS; }
+    if (result.error == ns::CatalogTreeError::STORE) { return result.store_error; }
+    return result.error == ns::CatalogTreeError::TOO_LARGE
+        || result.error == ns::CatalogTreeError::TOO_DEEP ? OB_SIZE_OVERFLOW : OB_CHECKSUM_ERROR;
+  };
+  if (OB_SUCC(ret)) { stage = "source_tree"; ret = retain(metadata, roots, staged.read_snapshot); }
+  for (const auto &view : views) {
+    if (OB_FAIL(ret)) { break; }
+    stage = "read_view";
+    InstanceMetaStore::Transaction historical;
+    ret = store->begin_read(historical, deadline, [&](SCN &snapshot) {
+      return snapshot.convert_for_tx(view.snapshot);
+    });
+    rootserver::InstanceNamespaceMetadata history(*store, historical);
+    if (OB_SUCC(ret)) { ret = retain(history, {view.roots.directory}, view.snapshot); }
+    if (historical.is_active()) {
+      const int end = store->rollback(historical);
+      if (OB_SUCC(ret)) { ret = end; }
+    }
+  }
+
+  // The graph names physical incarnations. Complete local copies have their
+  // own table-store/block references; only incomplete copies need their source
+  // tablet and its older versions. Completion is evaluated on this replica.
+  std::unordered_map<uint64_t, int64_t> expanded;
+  std::unordered_set<uint64_t> path;
+  std::function<int(uint64_t, int64_t, int)> extend;
+  extend = [&](uint64_t physical, int64_t needed, int depth) -> int {
+    last_physical = physical;
+    stage = "physical_handle";
+    if (depth >= 64) { return OB_SIZE_OVERFLOW; }
+    if (physical == 0 || needed <= 0 || path.count(physical) != 0) { return OB_CHECKSUM_ERROR; }
+    if (ObTimeUtility::current_time() >= deadline) { return OB_TIMEOUT; }
+    const auto previous = expanded.find(physical);
+    if (previous != expanded.end() && previous->second <= needed) { return OB_SUCCESS; }
+    ObTabletHandle handle;
+    int rc = ObTabletCreateDeleteHelper::check_and_get_tablet(
+        ObTabletMapKey(ObTabletID(physical)), handle, 0,
+        ObMDSGetTabletMode::READ_WITHOUT_CHECK, transaction::ObTransVersion::MAX_TRANS_VERSION);
+    if (rc != OB_SUCCESS) { return rc; }
+    const ObTablet &tablet = *handle.get_obj();
+    if (tablet.is_empty_shell()) { return OB_SNAPSHOT_DISCARDED; }
+    ObTabletCreateDeleteMdsUserData status;
+    mds::MdsWriter writer;
+    mds::TwoPhaseCommitState state;
+    SCN version;
+    stage = "physical_identity";
+    rc = tablet.get_latest_tablet_status(status, writer, state, version);
+    if (rc != OB_SUCCESS) { return rc; }
+    if (status.create_transaction_id_ <= 0) { return OB_CHECKSUM_ERROR; }
+    auto found = staged.tablets.find(physical);
+    if (found == staged.tablets.end()) {
+      if (staged.tablets.size() >= max_entries) { return OB_SIZE_OVERFLOW; }
+      staged.tablets.emplace(physical, PhysicalSnapshotRequirement{status.create_transaction_id_, needed});
+    } else if (found->second.create_transaction_id != status.create_transaction_id_) {
+      return OB_CHECKSUM_ERROR;
+    } else {
+      needed = std::min(needed, found->second.snapshot);
+      found->second.snapshot = needed;
+    }
+    path.insert(physical);
+    const auto &fork = tablet.get_tablet_meta().fork_info_;
+    if (fork.is_valid() && !fork.is_complete() && fork.get_fork_src_tablet_id().is_valid()) {
+      rc = extend(fork.get_fork_src_tablet_id().id(),
+          std::min(needed, fork.get_fork_snapshot_version()), depth + 1);
+    }
+    path.erase(physical);
+    if (rc == OB_SUCCESS) { expanded[physical] = needed; }
+    return rc;
+  };
+  for (auto current = staged.tablets.begin(); OB_SUCC(ret) && current != staged.tablets.end(); ++current) {
+    ret = extend(current->first, current->second.snapshot, 0);
+  }
+  if (tx.is_active()) {
+    const int end = store->rollback(tx);
+    if (OB_SUCC(ret)) { ret = end; }
+  }
+  if (OB_SUCC(ret) && !staged.is_valid()) { ret = OB_STATE_NOT_MATCH; }
+  if (OB_SUCC(ret)) { plan = std::move(staged); }
+  else { LOG_WARN("failed to collect physical snapshot retention", K(ret), K(stage),
+      K(last_physical), "read_snapshot", staged.read_snapshot, "watermark", watermark); }
+  return ret;
+}
+
 int NamespaceForkKernelPrototype::reclaim_unreferenced_tablets(
     ObIArray<ObTabletID> &candidates, bool &need_retry,
     const std::function<int(const ObIArray<ObTabletID> &)> &reclaim)
@@ -922,7 +1066,6 @@ int NamespaceForkKernelPrototype::control_namespace(const ObString &source, cons
   }
   if (OB_SUCC(ret)) {
     id = child.id;
-    ret = observer::namespace_worker_prototype::reload_storage_freeze_info();
   }
   if (OB_SUCC(ret) && target_name != "__template__"
       && target_name != "__template_build__") {
@@ -1263,7 +1406,10 @@ int NamespaceForkKernelPrototype::ensure_tablet(const ObTabletID &tablet_id) {
             ret = ObTabletCreateDeleteHelper::check_and_get_tablet(
                 ObTabletMapKey(ObTabletID(item.source.physical_tablet_id)), source_handle, 0,
                 ObMDSGetTabletMode::READ_WITHOUT_CHECK, transaction::ObTransVersion::MAX_TRANS_VERSION);
-            if (OB_SUCC(ret) && source_handle.get_obj()->is_empty_shell()) { ret = OB_SNAPSHOT_DISCARDED; }
+            if (OB_SUCC(ret) && (source_handle.get_obj()->is_empty_shell()
+                || source_handle.get_obj()->get_multi_version_start() > item.cap)) {
+              ret = OB_SNAPSHOT_DISCARDED;
+            }
             if (OB_SUCC(ret)) {
               ObTabletCreateDeleteMdsUserData status;
               mds::MdsWriter writer;
@@ -1281,30 +1427,6 @@ int NamespaceForkKernelPrototype::ensure_tablet(const ObTabletID &tablet_id) {
           }
         }
         if (OB_SUCC(ret) && !requested_found) { ret = OB_STATE_NOT_MATCH; }
-        auto *freeze = share::server_service<ObFreezeInfoMgr>();
-        if (OB_SUCC(ret) && !freeze) {
-          ret = OB_STATE_NOT_MATCH;
-        }
-        for (const auto &item : items) {
-          if (OB_FAIL(ret)) { break; }
-          failure_stage = "snapshot_pin";
-          // The resolved cap is exactly the fork snapshot id of the chain hop
-          // below the source, so its snapshot row is a point query away.
-          Roots inherited;
-          rootserver::InstanceNamespacePin pin;
-          if (OB_FAIL(metadata.get_snapshot(uint64_t(item.cap), inherited))) {
-          } else if (OB_FAIL(metadata.get_pin(uint64_t(item.cap), pin))) {
-          } else {
-            ObStorageSnapshotInfo reserved;
-            if (pin.schema_version != inherited.schema_version) {
-              ret = OB_STATE_NOT_MATCH;
-            } else if (OB_FAIL(freeze->get_min_reserved_snapshot(
-                           ObTabletID(item.source.physical_tablet_id), item.cap, reserved))) {
-            } else if (reserved.snapshot_ > item.cap) {
-              ret = OB_SNAPSHOT_DISCARDED;
-            }
-          }
-        }
       }
       return ret;
     });

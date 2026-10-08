@@ -2,6 +2,7 @@
 #define OCEANBASE_NAMESPACE_CATALOG_H_
 
 // Persistent namespace catalog values and their storage-independent encoding.
+#include "storage/physical_snapshot_retention.h"
 #include <cstddef>
 #include <cstdint>
 #include <map>
@@ -35,10 +36,7 @@ struct CatalogTabletSource {
 };
 // One physical incarnation and the oldest snapshot needed by the collected
 // source views. This is transient GC work, never a Namespace ownership index.
-struct PhysicalRetention {
-  int64_t create_transaction_id = 0;
-  int64_t snapshot = 0;
-};
+using PhysicalRetention = storage::PhysicalSnapshotRequirement;
 struct CatalogChange {
   CatalogValue value;
   bool erase = false;

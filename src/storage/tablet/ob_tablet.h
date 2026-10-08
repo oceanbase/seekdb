@@ -467,6 +467,7 @@ public:
       share::ObTabletAutoincInterval &result);
 
   int update_tablet_autoinc_seq(const uint64_t autoinc_seq, const bool is_tablet_creating);
+  int get_create_transaction_id(int64_t &create_transaction_id) const;
   int get_kept_snapshot_info(
       const int64_t min_reserved_snapshot_on_ls,
       ObStorageSnapshotInfo &snapshot_info) const;

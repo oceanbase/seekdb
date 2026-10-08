@@ -816,6 +816,7 @@ int ObPartitionMergePolicy::diagnose_table_count_unsafe(
   const ObTabletID &tablet_id = tablet.get_tablet_meta().tablet_id_;
   int64_t min_merged_snapshot = INT64_MAX;
   int64_t first_minor_start_scn = 0;
+  int64_t create_transaction_id = 0;
   ObStorageSnapshotInfo snapshot_info;
   ObTabletMemberWrapper<ObTabletTableStore> table_store_wrapper;
 
@@ -831,8 +832,10 @@ int ObPartitionMergePolicy::diagnose_table_count_unsafe(
       const ObSSTable *minor_sstable = static_cast<const ObSSTable *>(minor_tables.get_boundary_table(false/*last*/));
       first_minor_start_scn = minor_sstable->get_start_scn().get_val_for_tx();
     } else if (FALSE_IT(min_merged_snapshot = major_sstable->get_snapshot_version())) {
+    } else if (OB_FAIL(tablet.get_create_transaction_id(create_transaction_id))) {
     } else if (OB_FAIL(SERVER_CALL_FREEZE_INFO_MGR(get_min_reserved_snapshot,
         tablet_id,
+        create_transaction_id,
         min_merged_snapshot,
         snapshot_info))) {
     }

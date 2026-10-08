@@ -46,6 +46,9 @@ public:
       bool &need_retry,
       const std::function<int(const common::ObIArray<common::ObTabletID> &)> &reclaim);
   static int collect_dropped_namespace_tablets();
+  // Build from one readable cut without holding the publication fence during
+  // tree/native traversal. Failure leaves the caller's previous plan intact.
+  static int load_physical_retention(PhysicalSnapshotRetention &plan);
   static int control_namespace(const common::ObString &source, const common::ObString &target,
                                 uint64_t &namespace_id);
   static int observe_database(common::ObISQLClient &trans, const share::schema::ObDatabaseSchema &schema);

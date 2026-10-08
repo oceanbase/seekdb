@@ -30,6 +30,7 @@
 #include "share/ob_snapshot_table_proxy.h"
 #include "share/scn.h"
 #include "storage/compaction/ob_snapshot_gc_scn_renewal_state.h"
+#include "storage/physical_snapshot_retention.h"
 
 namespace oceanbase
 {
@@ -83,7 +84,7 @@ struct ObFrozenStatus;
 class ObFreezeInfoMgr
 {
 public:
-  using InstancePinLoader = std::function<int(common::ObIArray<share::ObSnapshotInfo> &)>;
+  using PhysicalRetentionLoader = std::function<int(PhysicalSnapshotRetention &)>;
 
   struct NeighbourFreezeInfo {
     share::ObFreezeInfo next;
@@ -105,9 +106,9 @@ public:
 
   int init(common::ObMySQLProxy &sql_proxy);
   // Installed by the composition root before start().
-  void set_instance_pin_loader(InstancePinLoader loader)
+  void set_physical_retention_loader(PhysicalRetentionLoader loader)
   {
-    instance_pin_loader_ = std::move(loader);
+    physical_retention_loader_ = std::move(loader);
   }
   void init_for_test() { inited_ = true; }
   // The throwaway fork prototype uses the normal reload protocol before publishing its handle.
@@ -129,6 +130,7 @@ public:
   int64_t get_min_reserved_snapshot_for_tx();
   int get_min_reserved_snapshot(
       const ObTabletID &tablet_id,
+      const int64_t create_transaction_id,
       const int64_t merged_version,
       ObStorageSnapshotInfo &snapshot_info);
 
@@ -168,7 +170,8 @@ private:
   int inner_update_info(
       const share::SCN &new_snapshot_gc_scn,
       const common::ObIArray<share::ObFreezeInfo> &new_freeze_infos,
-      const common::ObIArray<share::ObSnapshotInfo> &new_snapshots);
+      const common::ObIArray<share::ObSnapshotInfo> &new_snapshots,
+      PhysicalSnapshotRetention &new_retention);
 
   class ReloadTask : public common::ObTimerTask
   {
@@ -204,7 +207,8 @@ private:
   int64_t cur_idx_;
   ObSnapshotGcScnRenewalState snapshot_gc_scn_renewal_state_;
   common::ObTimer reload_timer_;
-  InstancePinLoader instance_pin_loader_;
+  PhysicalRetentionLoader physical_retention_loader_;
+  PhysicalSnapshotRetention physical_retention_;
   bool inited_;
 };
 

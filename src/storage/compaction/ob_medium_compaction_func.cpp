@@ -470,6 +470,7 @@ int ObMediumCompactionScheduleFunc::get_max_reserved_snapshot(int64_t &max_reser
 
   ObStorageSnapshotInfo snapshot_info;
   int64_t last_major_snapshot_version = 0;
+  int64_t create_transaction_id = 0;
   ObTablet *tablet = nullptr;
   if (OB_UNLIKELY(!tablet_handle_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
@@ -482,8 +483,9 @@ int ObMediumCompactionScheduleFunc::get_max_reserved_snapshot(int64_t &max_reser
   } else if (0 == ls_.get_min_reserved_snapshot()) {
     ret = OB_NO_NEED_MERGE;
     // not sync reserved snapshot yet, should not schedule now
+  } else if (OB_FAIL(tablet->get_create_transaction_id(create_transaction_id))) {
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObFreezeInfoMgr>()->get_min_reserved_snapshot(
-      tablet->get_tablet_meta().tablet_id_, last_major_snapshot_version, snapshot_info))) {
+      tablet->get_tablet_meta().tablet_id_, create_transaction_id, last_major_snapshot_version, snapshot_info))) {
   } else {
     max_reserved_snapshot = MAX(ls_.get_min_reserved_snapshot(), snapshot_info.snapshot_);
   }

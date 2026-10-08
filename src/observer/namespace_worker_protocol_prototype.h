@@ -209,7 +209,6 @@ inline bool serves_namespace_schema()
 // The shared transaction service provides the clock for a fork snapshot.
 int acquire_storage_snapshot(int64_t &snapshot);
 // Refresh snapshot retention after committing a new acquired-snapshot row.
-int reload_storage_freeze_info();
 int build_tablet_write_defensive(const share::schema::ObTableSchema &schema,
                                  int64_t schema_version,
                                  common::ObMySQLTransaction &trans);

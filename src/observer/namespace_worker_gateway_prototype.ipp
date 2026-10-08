@@ -27,10 +27,6 @@ int acquire_storage_snapshot(int64_t &snapshot) {
   return freeze_info_proxy == nullptr ? OB_NOT_INIT
       : rootserver::ObDDLTaskUtil::calc_snapshot_with_gts(*freeze_info_proxy, snapshot);
 }
-int reload_storage_freeze_info() {
-  auto *freeze = share::server_service<storage::ObFreezeInfoMgr>();
-  return freeze ? freeze->reload_for_test() : OB_NOT_INIT;
-}
 int drain_storage_namespace_access(uint64_t namespace_id) {
   if (namespace_id <= 1 || namespace_id >= ns::NamespaceObjectKey::NAMESPACE_LIMIT) {
     return OB_INVALID_ARGUMENT;

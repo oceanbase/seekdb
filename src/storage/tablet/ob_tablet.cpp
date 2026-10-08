@@ -3913,6 +3913,26 @@ int ObTablet::fetch_tablet_autoinc_seq_cache(
   return ret;
 }
 
+int ObTablet::get_create_transaction_id(int64_t &create_transaction_id) const
+{
+  create_transaction_id = 0;
+  int ret = OB_SUCCESS;
+  // LS internal tablets have no transactional CREATE identity.
+  if (!is_ls_inner_tablet()) {
+    ObTabletCreateDeleteMdsUserData status;
+    mds::MdsWriter writer;
+    mds::TwoPhaseCommitState state;
+    SCN version;
+    if (OB_FAIL(get_latest_tablet_status(status, writer, state, version))) {
+    } else if (status.create_transaction_id_ <= 0) {
+      ret = OB_STATE_NOT_MATCH;
+    } else {
+      create_transaction_id = status.create_transaction_id_;
+    }
+  }
+  return ret;
+}
+
 // MIN { ls min_reserved_snapshot, freeze_info, all_acquired_snapshot}
 int ObTablet::get_kept_snapshot_info(
     const int64_t min_reserved_snapshot_on_ls,
@@ -3967,7 +3987,9 @@ int ObTablet::get_kept_snapshot_info(
   }
 
   ObStorageSnapshotInfo old_snapshot_info;
-  if (FAILEDx(::oceanbase::share::server_service<::oceanbase::storage::ObFreezeInfoMgr>()->get_min_reserved_snapshot(tablet_id, max_merged_snapshot, snapshot_info))) {
+  int64_t create_transaction_id = 0;
+  if (FAILEDx(get_create_transaction_id(create_transaction_id))) {
+  } else if (FAILEDx(::oceanbase::share::server_service<::oceanbase::storage::ObFreezeInfoMgr>()->get_min_reserved_snapshot(tablet_id, create_transaction_id, max_merged_snapshot, snapshot_info))) {
     LOG_WARN("failed to get multi version from freeze info mgr", K(ret), K(tablet_id));
   } else {
     old_snapshot_info = snapshot_info;

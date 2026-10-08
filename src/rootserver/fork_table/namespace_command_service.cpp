@@ -30,7 +30,6 @@
 #include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
 #include "share/ob_snapshot_table_proxy.h"
 #include "share/ob_debug_sync.h"
-#include "storage/compaction/ob_freeze_info_mgr.h"
 #include "rootserver/ddl_task/ob_ddl_task_util.h"
 #include "observer/namespace_worker_protocol_prototype.h"
 #include "namespace/namespace.h"
@@ -56,10 +55,6 @@ int ObDDLService::drop_namespace_prototype_(const ObString &name)
     if (OB_SUCC(ret)) { ret = NamespaceForkKernelPrototype::finish_namespace_drop(id); }
   }
   if (OB_SUCC(ret) && id > 1) { ns::namespace_registry().remove(id); }
-  if (OB_SUCC(ret)) {
-    auto *freeze = share::server_service<ObFreezeInfoMgr>();
-    ret = freeze ? freeze->reload_for_test() : OB_NOT_INIT;
-  }
   // A failed attempt leaves DELETING persisted. Reissuing the same operation resumes it.
   LOG_INFO("PROTOTYPE_V7_NAMESPACE_DROP", K(ret), K(name), K(id));
   return ret;

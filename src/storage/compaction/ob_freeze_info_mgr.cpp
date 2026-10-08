@@ -90,7 +90,8 @@ ObFreezeInfoMgr::ObFreezeInfoMgr()
     cur_idx_(0),
     snapshot_gc_scn_renewal_state_(),
     reload_timer_(),
-    instance_pin_loader_(),
+    physical_retention_loader_(),
+    physical_retention_(),
     inited_(false)
 {
 }
@@ -131,7 +132,7 @@ int ObFreezeInfoMgr::start()
 {
   int ret = OB_SUCCESS;
 
-  if (OB_UNLIKELY(!inited_)) {
+  if (OB_UNLIKELY(!inited_) || !physical_retention_loader_) {
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "not init", K(ret));
   } else if (OB_FAIL(reload_timer_.schedule(reload_task_, RELOAD_INTERVAL, true))) {
@@ -349,6 +350,7 @@ int64_t ObFreezeInfoMgr::get_min_reserved_snapshot_for_tx()
 // get smallest kept snapshot
 int ObFreezeInfoMgr::get_min_reserved_snapshot(
     const ObTabletID &tablet_id,
+    const int64_t create_transaction_id,
     const int64_t merged_version,
     ObStorageSnapshotInfo &snapshot_info)
 {
@@ -389,6 +391,14 @@ int ObFreezeInfoMgr::get_min_reserved_snapshot(
       if (OB_FAIL(is_snapshot_related_to_tablet(tablet_id, snapshot, related))) {
       } else if (related) {
         snapshot_info.update_by_smaller_snapshot(snapshot.snapshot_type_, snapshot.snapshot_scn_.get_val_for_tx());
+      }
+    }
+    if (OB_SUCC(ret)) {
+      int64_t retained = 0;
+      if (!physical_retention_.get(tablet_id.id(), create_transaction_id, retained)) {
+        ret = OB_STATE_NOT_MATCH;
+      } else {
+        snapshot_info.update_by_smaller_snapshot(share::SNAPSHOT_FOR_MULTI_VERSION, retained);
       }
     }
   }
@@ -495,14 +505,15 @@ int ObFreezeInfoMgr::try_update_info()
   ObSEArray<ObFreezeInfo, 4> freeze_infos;
   share::SCN new_snapshot_gc_scn;
   share::ObSnapshotTableProxy snapshot_proxy;
+  PhysicalSnapshotRetention retention;
 
-  if (OB_ISNULL(sql_proxy_)) {
+  if (OB_ISNULL(sql_proxy_) || !physical_retention_loader_) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(ObFreezeInfoManager::fetch_new_freeze_info(
         share::SCN::base_scn(), *sql_proxy_, freeze_infos, new_snapshot_gc_scn))) {
   } else if (OB_FAIL(snapshot_proxy.get_all_snapshots(*sql_proxy_, snapshots))) {
-  } else if (instance_pin_loader_ && OB_FAIL(instance_pin_loader_(snapshots))) {
-  } else if (OB_FAIL(inner_update_info(new_snapshot_gc_scn, freeze_infos, snapshots))) {
+  } else if (OB_FAIL(physical_retention_loader_(retention))) {
+  } else if (OB_FAIL(inner_update_info(new_snapshot_gc_scn, freeze_infos, snapshots, retention))) {
   }
   return ret;
 }
@@ -510,15 +521,21 @@ int ObFreezeInfoMgr::try_update_info()
 int ObFreezeInfoMgr::inner_update_info(
     const share::SCN &new_snapshot_gc_scn,
     const common::ObIArray<share::ObFreezeInfo> &new_freeze_infos,
-    const common::ObIArray<share::ObSnapshotInfo> &new_snapshots)
+    const common::ObIArray<share::ObSnapshotInfo> &new_snapshots,
+    PhysicalSnapshotRetention &new_retention)
 {
   int ret = OB_SUCCESS;
   int64_t snapshot_gc_ts = 0;
   {
     WLockGuard lock_guard(lock_);
-    if (OB_FAIL(freeze_info_mgr_.update_freeze_info(new_freeze_infos, new_snapshot_gc_scn))) {
+    if (!new_retention.is_valid()
+        || new_retention.read_snapshot < physical_retention_.read_snapshot) {
+      ret = OB_EAGAIN;
+    } else if (OB_FAIL(freeze_info_mgr_.update_freeze_info(new_freeze_infos, new_snapshot_gc_scn))) {
     } else if (OB_FAIL(update_next_snapshots(new_snapshots))) {
     } else {
+      // The old workset is destroyed by the caller after this short lock ends.
+      std::swap(physical_retention_, new_retention);
       snapshot_gc_ts = freeze_info_mgr_.get_snapshot_gc_scn().get_val_for_tx();
     }
   }
