@@ -25,6 +25,7 @@
 #include "sql/engine/ob_operator.h"
 #include "sql/engine/ob_physical_plan_ctx.h"
 #include "sql/engine/table/ob_table_scan_op.h"
+#include "sql/optimizer/ob_table_location.h"
 #include "sql/session/ob_sql_session_info.h"
 
 namespace oceanbase
@@ -58,15 +59,6 @@ bool identity_matches(const GraphElementIdentity &identity,
       && identity.element_id_ == element_id
       && identity.rowkey_.get_obj_cnt() == key_count;
   return matches;
-}
-
-uint64_t identity_array_hash(const ObIArray<GraphElementIdentity> &identities)
-{
-  uint64_t hash = do_hash(identities.count(), 0);
-  for (int64_t i = 0; i < identities.count(); ++i) {
-    hash = identities.at(i).hash(hash);
-  }
-  return hash;
 }
 
 bool has_tolerance_compared_key(
@@ -257,6 +249,7 @@ GraphExpandDasAccess::GraphExpandDasAccess(
     ObIAllocator &work_area_allocator)
     : exec_ctx_(exec_ctx),
       eval_ctx_(eval_ctx),
+      work_area_allocator_(work_area_allocator),
       edge_das_ref_(eval_ctx, exec_ctx),
       identity_page_allocator_(exec_ctx.get_allocator()),
       edge_cursor_allocator_(exec_ctx.get_allocator()),
@@ -267,6 +260,7 @@ GraphExpandDasAccess::GraphExpandDasAccess(
 GraphExpandDasAccess::~GraphExpandDasAccess()
 {
   release();
+  destroy_vertex_routers();
 }
 
 bool GraphExpandDasAccess::VertexLookupBinding::is_valid() const
@@ -324,6 +318,7 @@ int GraphExpandDasAccess::init(const GraphPathDesc &path_desc,
                                const GraphExpandScanDesc &target_scan)
 {
   int ret = reset_edge_scan(OB_SUCCESS);
+  destroy_vertex_routers();
   initialized_ = false;
   path_desc_ = GraphPathDesc();
   access_desc_ = GraphExpandAccessDesc();
@@ -389,6 +384,83 @@ void GraphExpandDasAccess::release()
   }
 }
 
+void GraphExpandDasAccess::destroy_vertex_routers()
+{
+  if (source_vertex_router_ != nullptr) {
+    source_vertex_router_->~ObTableLocation();
+    work_area_allocator_.free(source_vertex_router_);
+    source_vertex_router_ = nullptr;
+  }
+  if (target_vertex_router_ != nullptr) {
+    target_vertex_router_->~ObTableLocation();
+    work_area_allocator_.free(target_vertex_router_);
+    target_vertex_router_ = nullptr;
+  }
+}
+
+int GraphExpandDasAccess::get_vertex_router(
+    const VertexLookupBinding &binding,
+    ObTableLocation *&router)
+{
+  int ret = OB_SUCCESS;
+  router = nullptr;
+  ObTableLocation **slot = nullptr;
+  if (&binding == &source_binding_) {
+    slot = &source_vertex_router_;
+  } else if (&binding == &target_binding_) {
+    slot = &target_vertex_router_;
+  } else {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  if (OB_SUCC(ret) && *slot == nullptr) {
+    void *buf = work_area_allocator_.alloc(sizeof(ObTableLocation));
+    ObTableLocation *candidate = nullptr;
+    ObSqlCtx *sql_ctx = exec_ctx_.get_sql_ctx();
+    ObSQLSessionInfo *session = exec_ctx_.get_my_session();
+    ObArray<uint64_t> key_columns(
+        OB_MALLOC_NORMAL_BLOCK_SIZE,
+        ModulePageAllocator(work_area_allocator_, "GraphVtxRoute"));
+    if (OB_ISNULL(buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_ISNULL(sql_ctx) || OB_ISNULL(sql_ctx->schema_guard_)
+               || OB_ISNULL(session)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("graph vertex router context is incomplete", K(ret),
+               K(sql_ctx), K(session));
+    } else {
+      candidate = new(buf) ObTableLocation(work_area_allocator_);
+      for (int64_t i = 0; OB_SUCC(ret) && i < binding.key_count_; ++i) {
+        if (OB_FAIL(key_columns.push_back(binding.key_columns_[i]))) {
+          LOG_WARN("failed to append graph vertex routing column", K(ret),
+                   K(i), K(binding));
+        }
+      }
+      if (OB_SUCC(ret)) {
+        ObSqlSchemaGuard schema_guard;
+        schema_guard.set_schema_guard(sql_ctx->schema_guard_);
+        if (OB_FAIL(candidate->init_table_location_with_column_ids(
+                schema_guard, binding.table_id_, key_columns, exec_ctx_,
+                false))) {
+          LOG_WARN("failed to initialize graph vertex router", K(ret),
+                   K(binding));
+        }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      *slot = candidate;
+    } else if (candidate != nullptr) {
+      candidate->~ObTableLocation();
+      work_area_allocator_.free(candidate);
+    } else if (buf != nullptr) {
+      work_area_allocator_.free(buf);
+    }
+  }
+  if (OB_SUCC(ret)) {
+    router = *slot;
+  }
+  return ret;
+}
+
 int64_t GraphExpandDasAccess::used_memory() const
 {
   const int64_t page_bytes = identity_page_allocator_.total();
@@ -429,7 +501,8 @@ int GraphExpandDasAccess::reset_edge_scan(int ret)
   edge_cursor_allocator_.reuse();
   edge_source_index_.reset();
   edge_cursor_.reset();
-  edge_sources_hash_ = 0;
+  edge_sources_data_ = nullptr;
+  edge_source_count_ = 0;
   has_edge_cursor_ = false;
   edge_scan_active_ = false;
   return ret;
@@ -750,15 +823,23 @@ int GraphExpandDasAccess::lookup_vertices(
   int ret = OB_SUCCESS;
   ObDASRef das_ref(eval_ctx_, exec_ctx_);
   ObDASScanRtDef scan_rtdef;
-  ObArray<ObNewRange> ranges(
-      OB_MALLOC_NORMAL_BLOCK_SIZE,
-      ModulePageAllocator(das_ref.get_das_alloc(), "GraphVtxRange"));
   GraphIdentityIndex requested_index(das_ref.get_das_alloc());
   GraphIdentityIndex existing_index(das_ref.get_das_alloc());
   ObArray<int64_t> requested_positions(
       OB_MALLOC_NORMAL_BLOCK_SIZE,
       ModulePageAllocator(das_ref.get_das_alloc(), "GraphVtxLookup"));
+  ObArray<uint64_t> key_columns(
+      OB_MALLOC_NORMAL_BLOCK_SIZE,
+      ModulePageAllocator(das_ref.get_das_alloc(), "GraphVtxRoute"));
+  ObArray<ObTabletID> routed_tablet_ids(
+      OB_MALLOC_NORMAL_BLOCK_SIZE,
+      ModulePageAllocator(das_ref.get_das_alloc(), "GraphVtxRoute"));
+  ObArray<ObObjectID> routed_partition_ids(
+      OB_MALLOC_NORMAL_BLOCK_SIZE,
+      ModulePageAllocator(das_ref.get_das_alloc(), "GraphVtxRoute"));
   const bool use_identity_index = !has_tolerance_compared_key(requested);
+  bool has_task = false;
+  ObTableLocation *router = nullptr;
   das_ref.set_mem_attr(ObMemAttr("GraphVtxLookup"));
   if (OB_FAIL(init_scan_rtdef(*binding.scan_desc_, *binding.scan_ctdef_,
                               binding.loc_meta_, false,
@@ -771,6 +852,24 @@ int GraphExpandDasAccess::lookup_vertices(
              && OB_FAIL(existing_index.init(requested.count()))) {
     LOG_WARN("failed to initialize graph vertex result index", K(ret),
              "request_count", requested.count());
+  }
+  ObDASTableLoc *table_loc = scan_rtdef.table_loc_;
+  if (OB_SUCC(ret) && (OB_ISNULL(table_loc)
+                       || table_loc->get_tablet_locs().empty())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("graph vertex lookup has no tablet location", K(ret),
+             KPC(table_loc));
+  } else if (OB_SUCC(ret)
+             && table_loc->get_tablet_locs().size() > 1
+             && OB_FAIL(get_vertex_router(binding, router))) {
+    LOG_WARN("failed to get graph vertex router", K(ret), K(binding));
+  }
+  for (int64_t key = 0;
+       OB_SUCC(ret) && router != nullptr && key < binding.key_count_; ++key) {
+    if (OB_FAIL(key_columns.push_back(binding.key_columns_[key]))) {
+      LOG_WARN("failed to append graph vertex routing column", K(ret),
+               K(key), K(binding));
+    }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < requested.count(); ++i) {
     int64_t entry_index = -1;
@@ -797,14 +896,48 @@ int GraphExpandDasAccess::lookup_vertices(
       }
     }
     if (OB_SUCC(ret) && append_range) {
-      ObObj *keys = static_cast<ObObj *>(
-          das_ref.get_das_alloc().alloc(sizeof(ObObj) * binding.key_count_));
-      ObNewRange range;
-      if (OB_ISNULL(keys)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
+      ObDASTabletLoc *tablet_loc = nullptr;
+      if (router == nullptr) {
+        tablet_loc = table_loc->get_first_tablet_loc();
       } else {
-        new(keys) ObObj[binding.key_count_];
-        for (int64_t key = 0; OB_SUCC(ret) && key < binding.key_count_; ++key) {
+        routed_tablet_ids.reuse();
+        routed_partition_ids.reuse();
+        ObNewRow key_row;
+        key_row.cells_ = const_cast<ObObj *>(
+            requested.at(i).rowkey_.get_obj_ptr());
+        key_row.count_ = requested.at(i).rowkey_.get_obj_cnt();
+        if (OB_FAIL(router->calculate_tablet_id_by_row(
+                exec_ctx_, binding.table_id_, key_columns, key_row,
+                routed_tablet_ids, routed_partition_ids))) {
+          LOG_WARN("failed to route graph vertex identity", K(ret), K(i),
+                   K(requested.at(i)), K(binding));
+        } else if (OB_UNLIKELY(routed_tablet_ids.count()
+                                   != routed_partition_ids.count()
+                               || routed_tablet_ids.count() > 1)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("graph vertex identity has ambiguous routing", K(ret),
+                   K(i), K(requested.at(i)), K(routed_tablet_ids),
+                   K(routed_partition_ids));
+        } else if (!routed_tablet_ids.empty()
+                   && OB_FAIL(table_loc->get_tablet_loc_by_id(
+                       routed_tablet_ids.at(0), tablet_loc))) {
+          LOG_WARN("failed to find routed graph vertex tablet", K(ret),
+                   K(i), K(routed_tablet_ids.at(0)));
+        }
+      }
+      if (OB_SUCC(ret) && tablet_loc != nullptr) {
+        ObObj *keys = static_cast<ObObj *>(
+            das_ref.get_das_alloc().alloc(
+                sizeof(ObObj) * binding.key_count_));
+        ObNewRange range;
+        ObDASScanOp *scan_op = nullptr;
+        if (OB_ISNULL(keys)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+        } else {
+          new(keys) ObObj[binding.key_count_];
+        }
+        for (int64_t key = 0;
+             OB_SUCC(ret) && key < binding.key_count_; ++key) {
           ret = ob_write_obj(das_ref.get_das_alloc(),
                              requested.at(i).rowkey_.get_obj_ptr()[key],
                              keys[key]);
@@ -812,45 +945,31 @@ int GraphExpandDasAccess::lookup_vertices(
         if (OB_SUCC(ret)) {
           ObRowkey rowkey(keys, binding.key_count_);
           if (OB_FAIL(range.build_range(binding.table_id_, rowkey))) {
-          } else if (OB_FAIL(ranges.push_back(range))) {
+          } else if (OB_FAIL(das_ref.prepare_das_task(
+                         tablet_loc, scan_op))) {
+          } else if (OB_ISNULL(scan_op)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else {
+            scan_op->set_scan_ctdef(binding.scan_ctdef_);
+            scan_op->set_scan_rtdef(&scan_rtdef);
+            scan_op->set_can_part_retry(false);
+            if (OB_FAIL(scan_op->get_scan_param()
+                            .key_ranges_.push_back(range))) {
+            } else {
+              has_task = true;
+            }
           }
         }
       }
     }
   }
-  ObDASTableLoc *table_loc = scan_rtdef.table_loc_;
-  if (OB_SUCC(ret) && (OB_ISNULL(table_loc)
-                       || table_loc->get_tablet_locs().empty())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("graph vertex lookup has no tablet location", K(ret),
-             KPC(table_loc));
-  }
-  if (OB_SUCC(ret)) {
-    // A full primary key contains every partition key. This first adapter
-    // deliberately fans the exact multi-get ranges to the local tablet list;
-    // storage can return a row from only its owning tablet. A later routing
-    // optimization may prune ranges per tablet without changing this contract.
-    for (DASTabletLocListIter node = table_loc->tablet_locs_begin();
-         OB_SUCC(ret) && node != table_loc->tablet_locs_end(); ++node) {
-      ObDASScanOp *scan_op = nullptr;
-      if (OB_FAIL(das_ref.prepare_das_task(*node, scan_op))) {
-      } else if (OB_ISNULL(scan_op)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        scan_op->set_scan_ctdef(binding.scan_ctdef_);
-        scan_op->set_scan_rtdef(&scan_rtdef);
-        scan_op->set_can_part_retry(false);
-        for (int64_t i = 0; OB_SUCC(ret) && i < ranges.count(); ++i) {
-          ret = scan_op->get_scan_param().key_ranges_.push_back(ranges.at(i));
-        }
-      }
-    }
+  if (OB_SUCC(ret) && has_task) {
     table_loc->is_reading_ = true;
   }
-  if (OB_SUCC(ret) && OB_FAIL(das_ref.execute_all_task())) {
+  if (OB_SUCC(ret) && has_task && OB_FAIL(das_ref.execute_all_task())) {
     LOG_WARN("failed to execute graph vertex lookup DAS tasks", K(ret));
   }
-  if (OB_SUCC(ret)) {
+  if (OB_SUCC(ret) && has_task) {
     DASOpResultIter result_iter = das_ref.begin_result_iter();
     bool finished = false;
     while (OB_SUCC(ret) && !finished) {
@@ -1075,7 +1194,8 @@ int GraphExpandDasAccess::validate_edge_scan_request(
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_SUCC(ret) && after_edge != nullptr
              && (!edge_scan_active_ || !has_edge_cursor_
-                 || edge_sources_hash_ != identity_array_hash(sources)
+                 || edge_sources_data_ != sources.get_data()
+                 || edge_source_count_ != sources.count()
                  || !(*after_edge == edge_cursor_))) {
     ret = OB_INVALID_ARGUMENT;
   }
@@ -1458,7 +1578,11 @@ int GraphExpandDasAccess::scan_edges(
     if (OB_FAIL(build_edge_source_index(sources))) {
       LOG_WARN("failed to build graph edge source index", K(ret));
     } else {
-      edge_sources_hash_ = identity_array_hash(sources);
+      // GraphExpand keeps this array immutable until the stateful scan ends.
+      // Pointer plus count is therefore a constant-time continuation token;
+      // avoid rehashing a potentially whole-level frontier for every page.
+      edge_sources_data_ = sources.get_data();
+      edge_source_count_ = sources.count();
     }
     if (OB_SUCC(ret) && access_desc_.uses_adjacency_index()
         && OB_FAIL(start_adjacency_edge_scan(sources, empty))) {

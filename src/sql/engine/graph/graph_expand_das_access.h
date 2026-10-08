@@ -28,6 +28,7 @@ namespace sql
 class ObEvalCtx;
 class ObExecContext;
 class ObExpr;
+class ObTableLocation;
 struct ObDASScanCtDef;
 struct ObDASScanRtDef;
 struct ObDASTableLocMeta;
@@ -133,6 +134,9 @@ private:
   int lookup_vertices(const VertexLookupBinding &binding,
                       const common::ObIArray<GraphElementIdentity> &requested,
                       common::ObIArray<GraphElementIdentity> &existing);
+  int get_vertex_router(const VertexLookupBinding &binding,
+                        ObTableLocation *&router);
+  void destroy_vertex_routers();
   int init_scan_rtdef(const GraphExpandScanDesc &scan_desc,
                       const ObDASScanCtDef &scan_ctdef,
                       const ObDASTableLocMeta *loc_meta,
@@ -176,6 +180,7 @@ private:
 private:
   ObExecContext &exec_ctx_;
   ObEvalCtx &eval_ctx_;
+  common::ObIAllocator &work_area_allocator_;
   ObDASRef edge_das_ref_;
   // Materialized edge identities are page-local views. The caller stabilizes
   // them before the next scan_edges() call, when this arena can be reused.
@@ -188,6 +193,8 @@ private:
   GraphExpandAccessDesc access_desc_{};
   VertexLookupBinding source_binding_{};
   VertexLookupBinding target_binding_{};
+  ObTableLocation *source_vertex_router_{nullptr};
+  ObTableLocation *target_vertex_router_{nullptr};
   EdgeScanBinding edge_binding_{};
   ObDASScanRtDef *edge_scan_rtdef_{nullptr};
   ObDASScanRtDef *edge_lookup_rtdef_{nullptr};
@@ -196,7 +203,8 @@ private:
   // Retain the last vertex multi-get's transient DAS footprint until the
   // caller performs its post-access query-memory check.
   int64_t vertex_lookup_memory_bytes_{0};
-  uint64_t edge_sources_hash_{0};
+  const GraphElementIdentity *edge_sources_data_{nullptr};
+  int64_t edge_source_count_{0};
   bool has_edge_cursor_{false};
   bool edge_scan_active_{false};
   bool initialized_{false};
