@@ -981,7 +981,6 @@ int ObTxCtx::recover_tx_ctx_table_info(ObTxCtxTableInfo &ctx_info)
       mt_ctx_.set_trans_version(exec_info_.prepare_version_);
     }
     exec_info_.multi_data_source_.reset();
-    exec_info_.mds_buffer_ctx_array_.reset();
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (OB_FAIL(deep_copy_mds_array_(ctx_info.exec_info_.multi_data_source_, _unused_))) {
@@ -1794,8 +1793,14 @@ int ObTxCtx::on_success_ops_(ObTxLogCb *log_cb)
       if (!mds_cache_) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(ERROR, "mds cache is null for mds log callback", K(ret), KPC(log_cb));
-      } else if (OB_FAIL(log_cb->get_mds_range().move_from_cache_to_arr(*mds_cache_,
-                                                                        exec_info_.multi_data_source_))) {
+      } else {
+        ObTxBufferNodeArray *mds_array = nullptr;
+        if (OB_FAIL(exec_info_.multi_data_source_.ensure(mds_array))) {
+        } else if (OB_FAIL(log_cb->get_mds_range().move_from_cache_to_arr(*mds_cache_,
+                                                                          *mds_array))) {
+        }
+      }
+      if (OB_FAIL(ret)) {
       } else if (FALSE_IT(mds_cache_->clear_submitted_iterator())) {
         // do nothing
       } else if (OB_FAIL(notify_data_source_(NotifyType::ON_REDO,
@@ -2957,8 +2962,7 @@ int ObTxCtx::ensure_mds_cache_()
 
 void ObTxCtx::destroy_mds_cache_()
 {
-  if (!mds_cache_ && (!exec_info_.multi_data_source_.empty() ||
-                      !exec_info_.mds_buffer_ctx_array_.empty())) {
+  if (!mds_cache_ && !exec_info_.multi_data_source_.empty()) {
     TRANS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "mds data exists without cache",
                   K_(trans_id), K_(exec_info));
   }
@@ -2997,7 +3001,7 @@ int ObTxCtx::prepare_mds_final_notify_array_(const bool need_reserve,
 ObTxBufferNodeArray &ObTxCtx::get_mds_final_notify_array_()
 {
   return mds_cache_ ? mds_cache_->get_final_notify_array()
-                    : exec_info_.multi_data_source_;
+                    : exec_info_.multi_data_source_.get_array();
 }
 
 int64_t ObTxCtx::get_mds_cache_count_() const
@@ -4405,7 +4409,6 @@ int ObTxCtx::get_tx_ctx_table_info_(ObTxCtxTableInfo &info)
              OB_FAIL(mt_ctx_.calc_checksum_before_scn(target_scn,
                  exec_info_.checksum_, exec_info_.checksum_scn_))) {
     TRANS_LOG(ERROR, "calc checksum before log ts failed", K(ret), KPC(this));
-  } else if (OB_FAIL(exec_info_.generate_mds_buffer_ctx_array())) {
   } else if (OB_FAIL(info.exec_info_.assign(exec_info_))) {
   } else {
     info.tx_id_ = trans_id_;
@@ -4414,8 +4417,6 @@ int ObTxCtx::get_tx_ctx_table_info_(ObTxCtxTableInfo &info)
       TRANS_LOG(INFO, "store ctx_info: ", K(ret), K(info), KPC(this));
     }
   }
-  exec_info_.mds_buffer_ctx_array_.reset();
-
   return ret;
 }
 
