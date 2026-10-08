@@ -1770,7 +1770,8 @@ int ObServer::init_opts_config(const ObServerOptions &opts)
     }
   }
 
-  if (OB_SUCC(ret) && OB_FAIL(set_bootstrap_parameter("syslog_level", OB_LOGGER.get_level_str()))) {
+  if (OB_SUCC(ret) && opts.log_level_specified_
+      && OB_FAIL(set_bootstrap_parameter("syslog_level", OB_LOGGER.get_level_str()))) {
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < opts.parameters_.count(); ++i) {
