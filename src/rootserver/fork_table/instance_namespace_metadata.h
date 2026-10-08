@@ -188,6 +188,8 @@ public:
   // are written in this transaction and reclaimed with their catalog roots.
   int save_object(const std::string &data, uint64_t &object);
   int read_object(uint64_t object, std::string &data);
+  int find_tablet_source(ns::CatalogPageRef root, uint64_t logical_tablet,
+                         ns::CatalogTabletSource &source, int64_t &cap);
   // Locks the Namespace root, checks the caller's schema base, and stages both
   // COW trees and their schema version in this transaction. Equal versions are
   // permitted for physical materialization. The caller must roll back on any

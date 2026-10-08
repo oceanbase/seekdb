@@ -77,6 +77,8 @@ public:
       int64_t schema_version,
       const common::ObIArray<const share::schema::ObTableSchema *> &current_schemas,
       const common::ObIArray<const share::schema::ObTableSchema *> &previous_schemas);
+  static int finish_schema_publication(uint64_t namespace_id, int64_t schema_version,
+                                       const std::vector<uint64_t> &removed_owned);
   static int is_tablet_owned(uint64_t namespace_id,
                              const common::ObTabletID &tablet_id,
                              bool &owned);

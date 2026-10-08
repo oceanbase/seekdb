@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 namespace oceanbase { namespace sql { class ObSQLSessionInfo; } }
@@ -32,6 +33,7 @@ namespace oceanbase { namespace query { class ObIRootCommandService; } }
 namespace oceanbase { namespace query { class ObIDeadlockSessionService; } }
 namespace oceanbase { namespace rootserver { class ObIRootserverLocalRuntime; } }
 namespace oceanbase { namespace rootserver { class ObLocalManagementService; } }
+namespace oceanbase { namespace rootserver { class NamespaceSchemaPublication; } }
 namespace oceanbase { namespace common { namespace sqlclient { class ObISQLConnection; } } }
 namespace oceanbase { namespace transaction { namespace tablelock { struct ObLockObjRequest; } } }
 namespace oceanbase { namespace transaction { namespace tablelock { class ObIInnerConnectionLockRuntime; } } }
@@ -49,10 +51,16 @@ public:
   virtual int fetch_version(bool published, bool core_version, int64_t &version) = 0;
   virtual int begin_change() = 0;
   virtual int finish_change(int64_t committed_schema_version) = 0;
+  virtual int stage_publication(common::ObMySQLTransaction &sql,
+      share::schema::ObMultiVersionSchemaService &schema_service, int64_t version,
+      std::unique_ptr<rootserver::NamespaceSchemaPublication> &publication) = 0;
   virtual int publish(share::schema::ObMultiVersionSchemaService &schema_service,
                       int64_t &published_schema_version) = 0;
 };
 constexpr size_t MAX_FRAME = 256 * 1024;
+int stage_namespace_schema_publication(uint64_t namespace_id, common::ObMySQLTransaction &sql,
+    share::schema::ObMultiVersionSchemaService &schema_service, int64_t version,
+    std::unique_ptr<rootserver::NamespaceSchemaPublication> &publication);
 constexpr size_t MAX_SQL_MESSAGE = 64 * 1024 * 1024;
 struct RequestTag { uint64_t slot = 0, generation = 0; };
 class StorageSpaceHandle final

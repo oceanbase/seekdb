@@ -7,6 +7,7 @@
 #include "observer/namespace_worker_protocol_prototype.h"
 #include "rootserver/ob_tablet_creator.h"
 #include "rootserver/fork_table/table_creation_descriptor.h"
+#include "rootserver/fork_table/namespace_schema_publication.h"
 #include "rootserver/ob_tablet_drop.h"
 #include "rootserver/ddl_task/ob_ddl_task_util.h"
 #include "rootserver/fork_table/instance_namespace_metadata.h"
@@ -520,6 +521,10 @@ int NamespaceForkKernelPrototype::ensure_control_schema() {
     rootserver::InstanceNamespaceDirectory directory(access->instance_meta_store());
     ret = directory.ensure_root("ns1", schema_version, watermark.get_val_for_tx(),
         ObTimeUtility::current_time() + 120 * 1000 * 1000, created);
+  }
+  if (OB_SUCC(ret) && created) {
+    rootserver::NamespaceSchemaPublication publication(access->instance_meta_store(), proxy->target_namespace());
+    ret = publication.initialize(guard);
   }
   if (OB_SUCC(ret)) {
     ret = observer::namespace_worker_prototype::complete_namespace_schema_bootstrap(*schema_service);
@@ -1164,7 +1169,6 @@ int NamespaceForkKernelPrototype::publish_schema_delta(
   int ret = OB_SUCCESS;
   MetadataReadGuard publication;
   if (publication.error() != OB_SUCCESS) { return publication.error(); }
-  ObArray<ObTabletID> private_tablets;
   std::unordered_set<uint64_t> current_table_ids;
   std::unordered_set<uint64_t> previous_table_ids;
   for (int64_t i = 0; OB_SUCC(ret) && i < current_schemas.count(); ++i) {
@@ -1211,6 +1215,17 @@ int NamespaceForkKernelPrototype::publish_schema_delta(
           return physical_tablet_birth(encoded(namespace_id, local_tablet), birth);
         }, directory_deadline(), removed_owned); }
   }
+  if (OB_SUCC(ret)) { ret = finish_schema_publication(namespace_id, schema_version, removed_owned); }
+  LOG_INFO("PROTOTYPE_NAMESPACE_SCHEMA_DELTA", K(ret), K(namespace_id), K(schema_version),
+      "current_count", current_schemas.count(), "previous_count", previous_schemas.count());
+  return ret;
+}
+
+int NamespaceForkKernelPrototype::finish_schema_publication(uint64_t namespace_id,
+    int64_t schema_version, const std::vector<uint64_t> &removed_owned)
+{
+  int ret = OB_SUCCESS;
+  ObArray<ObTabletID> private_tablets;
   for (uint64_t local_tablet : removed_owned) {
     if (OB_FAIL(ret)) { break; }
     ret = private_tablets.push_back(ObTabletID(encoded(namespace_id, local_tablet)));
@@ -1252,9 +1267,7 @@ int NamespaceForkKernelPrototype::publish_schema_delta(
       if (OB_SUCC(ret)) { ret = end_ret; }
     }
   }
-  LOG_INFO("PROTOTYPE_NAMESPACE_SCHEMA_DELTA", K(ret), K(namespace_id), K(schema_version),
-      "current_count", current_schemas.count(),
-      "previous_count", previous_schemas.count(),
+  LOG_INFO("namespace physical schema cleanup", K(ret), K(namespace_id), K(schema_version),
       "private_delete_count", private_tablets.count());
   return ret;
 }
@@ -1643,12 +1656,26 @@ int NamespaceForkKernelPrototype::ensure_tablet(
   if (OB_SUCC(ret) && !already) {
     failure_stage = "exceptions";
     ret = query::ObInnerSQLConnectionAccess::with_native_transaction(
-        trans.get_connection(), [&](transaction::ObTxDesc &) -> int {
+        trans.get_connection(), [&](transaction::ObTxDesc &native) -> int {
+      ns::CatalogChanges sources;
       for (const auto &item : items) {
         if (OB_FAIL(ret)) { break; }
         ret = metadata.put_exception({db, item.local_tablet,
             local_of(item.schema->get_table_id()), 0, 0});
+        ns::CatalogTabletSource source;
+        int64_t cap = 0;
+        if (OB_SUCC(ret)) { ret = metadata.find_tablet_source(root.directory, item.local_tablet, source, cap); }
+        source.physical_tablet_id = encoded(db, item.local_tablet);
+        source.create_transaction_id = native.get_tx_id().get_id();
+        if (OB_SUCC(ret) && (!source.is_valid() || source.table_id != item.schema->get_table_id())) {
+          ret = OB_STATE_NOT_MATCH;
+        }
+        if (OB_SUCC(ret)) {
+          sources[ns::NamespaceCatalogCodec::object_key(item.local_tablet)] = {
+              {ns::NamespaceCatalogCodec::encode_source(source), 0}, false};
+        }
       }
+      if (OB_SUCC(ret)) { ret = metadata.stage_catalog_delta(db, root.schema_version, root.schema_version, {}, sources); }
       return ret;
     });
   }

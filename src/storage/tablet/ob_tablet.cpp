@@ -194,7 +194,8 @@ ObTablet::ObTablet(const bool is_external_tablet)
     is_external_tablet_(is_external_tablet)
 {
 #if defined(__x86_64__) && !defined(_WIN32)
-  check_size<ObTablet, ObRowkeyReadInfo, 1360>();
+  // Includes the creating transaction retained in the persisted tablet status.
+  check_size<ObTablet, ObRowkeyReadInfo, 1368>();
 #endif
   MEMSET(memtables_, 0x0, sizeof(memtables_));
 }

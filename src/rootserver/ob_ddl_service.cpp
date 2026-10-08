@@ -41,6 +41,7 @@
 #include "share/ob_global_stat_proxy.h"
 #include "rootserver/fork_table/ob_fork_table_util.h"
 #include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
+#include "rootserver/fork_table/namespace_schema_publication.h"
 #include "observer/namespace_worker_protocol_prototype.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
 #include "sql/resolver/expr/ob_raw_expr_modify_column_name.h"
@@ -25245,6 +25246,7 @@ int ObDDLSQLTransaction::lock_ddl_epoch_(common::ObMySQLTransaction &trans)
 int ObDDLSQLTransaction::end(const bool commit)
 {
   int ret = OB_SUCCESS;
+  std::unique_ptr<NamespaceSchemaPublication> publication;
 
   int tmp_ret = OB_SUCCESS;
   int64_t committed_schema_version = OB_INVALID_VERSION;
@@ -25317,25 +25319,37 @@ int ObDDLSQLTransaction::end(const bool commit)
     }
   }
 
+  if (OB_SUCC(ret) && commit && committed_schema_version > 0 && namespace_schema_change_started_) {
+    ret = observer::namespace_worker_prototype::stage_namespace_schema_publication(
+        namespace_id_, *this, *schema_service_, committed_schema_version, publication);
+    if (OB_FAIL(ret)) { LOG_WARN("failed to stage namespace schema publication", K(ret), K(committed_schema_version)); }
+  }
   if (OB_SUCCESS != (tmp_ret = common::ObMySQLTransaction::end(commit && OB_SUCC(ret)))) {
     LOG_WARN("failed to end transaction", K(ret), K(tmp_ret), K(commit));
   }
   ret = OB_SUCC(ret) ? tmp_ret : ret;
   const bool namespace_transaction_committed = commit && OB_SUCC(ret);
+  if (publication != nullptr) {
+    const int detach_ret = publication->detach();
+    if (OB_SUCC(ret)) { ret = detach_ret; }
+  }
   // A native SQL transaction can start but fail its schema-version check or
   // Namespace registration. Such a transaction must not release another
   // DDL's registration during explicit rollback or destructor cleanup.
   if (namespace_schema_change_started_) {
     namespace_schema_change_started_ = false;
     const int finish_schema_ret = observer::namespace_worker_prototype::finish_namespace_schema_change(
-        namespace_id_, namespace_transaction_committed && committed_schema_version > 0
+        namespace_id_, publication == nullptr && namespace_transaction_committed && committed_schema_version > 0
             ? committed_schema_version : 0);
     if (OB_SUCC(ret)) { ret = finish_schema_ret; }
     if (namespace_transaction_committed
         && OB_SUCC(ret)
         && committed_schema_version > 0) {
       int64_t published_schema_version = OB_INVALID_VERSION;
-      if (OB_FAIL(observer::namespace_worker_prototype::publish_namespace_schema_change(
+      if (publication != nullptr) {
+        ret = storage::NamespaceForkKernelPrototype::finish_schema_publication(
+            namespace_id_, committed_schema_version, publication->removed_owned());
+      } else if (OB_FAIL(observer::namespace_worker_prototype::publish_namespace_schema_change(
               namespace_id_, *schema_service_, published_schema_version))) {
         LOG_WARN("failed to publish committed namespace schema transaction",
             KR(ret), K(committed_schema_version));

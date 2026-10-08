@@ -33,7 +33,8 @@ ObTabletCreateDeleteMdsUserData::ObTabletCreateDeleteMdsUserData()
     create_commit_scn_(share::SCN::invalid_scn()),
     create_commit_version_(ObTransVersion::INVALID_TRANS_VERSION),
     delete_commit_scn_(share::SCN::invalid_scn()),
-    delete_commit_version_(ObTransVersion::INVALID_TRANS_VERSION)
+    delete_commit_version_(ObTransVersion::INVALID_TRANS_VERSION),
+    create_transaction_id_(0)
 {
 }
 
@@ -46,7 +47,8 @@ ObTabletCreateDeleteMdsUserData::ObTabletCreateDeleteMdsUserData(
     create_commit_scn_(share::SCN::invalid_scn()),
     create_commit_version_(create_commit_version),
     delete_commit_scn_(share::SCN::invalid_scn()),
-    delete_commit_version_(ObTransVersion::INVALID_TRANS_VERSION)
+    delete_commit_version_(ObTransVersion::INVALID_TRANS_VERSION),
+    create_transaction_id_(0)
 {
 }
 
@@ -59,6 +61,7 @@ int ObTabletCreateDeleteMdsUserData::assign(const ObTabletCreateDeleteMdsUserDat
   create_commit_version_ = other.create_commit_version_;
   delete_commit_scn_ = other.delete_commit_scn_;
   delete_commit_version_ = other.delete_commit_version_;
+  create_transaction_id_ = other.create_transaction_id_;
   return ret;
 }
 
@@ -70,6 +73,7 @@ void ObTabletCreateDeleteMdsUserData::reset()
   create_commit_version_ = ObTransVersion::INVALID_TRANS_VERSION;
   delete_commit_scn_.set_invalid();
   delete_commit_version_ = ObTransVersion::INVALID_TRANS_VERSION;
+  create_transaction_id_ = 0;
 }
 
 void ObTabletCreateDeleteMdsUserData::on_init()
@@ -173,7 +177,8 @@ OB_SERIALIZE_MEMBER(
     create_commit_scn_,
     create_commit_version_,
     delete_commit_scn_,
-    delete_commit_version_
+    delete_commit_version_,
+    create_transaction_id_
 )
 
 } // namespace storage

@@ -63,7 +63,7 @@ public:
 
   TO_STRING_KV(K_(tablet_status), K_(data_type),
       K_(create_commit_scn), K_(create_commit_version),
-      K_(delete_commit_scn), K_(delete_commit_version));
+      K_(delete_commit_scn), K_(delete_commit_version), K_(create_transaction_id));
 private:
   void create_tablet_on_commit_(const share::SCN &commit_version, const share::SCN &commit_scn);
   void delete_tablet_on_commit_(const share::SCN &commit_version, const share::SCN &commit_scn);
@@ -77,6 +77,11 @@ public:
   int64_t create_commit_version_; // create tx commit trans version
   share::SCN delete_commit_scn_; // delete tx commit log scn
   int64_t delete_commit_version_; // delete tx commit trans version
+  // Stable physical incarnation, available before commit and retained through
+  // deletion. Unlike create_commit_version_, this never denotes an inherited
+  // logical birth. The pair (tablet ID, creating transaction) identifies the
+  // physical object on both the primary and its replicas.
+  int64_t create_transaction_id_;
 };
 
 inline bool ObTabletCreateDeleteMdsUserData::is_valid() const

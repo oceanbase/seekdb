@@ -1060,11 +1060,16 @@ int ObTabletCreateMdsHelper::set_tablet_status(
   const ObTabletStatus status(ObTabletStatus::NORMAL);
   ObTablet *tablet = tablet_handle.get_obj();
   mds::MdsCtx &user_ctx = static_cast<mds::MdsCtx&>(ctx);
-  const ObTabletCreateDeleteMdsUserData data(status, data_type, create_commit_version);
+  ObTabletCreateDeleteMdsUserData data(status, data_type, create_commit_version);
+  const mds::MdsWriter writer = user_ctx.get_writer();
+  data.create_transaction_id_ = writer.writer_id_;
 
   if (OB_ISNULL(tablet)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet is null", K(ret), K(tablet_handle));
+  } else if (writer.writer_type_ != mds::WriterType::TRANSACTION || writer.writer_id_ <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("tablet creation requires a transaction identity", K(ret), K(writer));
   } else if (data_type == ObTabletMdsUserDataType::PROTOTYPE_MATERIALIZE_TABLET
       && (!tablet->get_tablet_meta().fork_info_.is_valid()
           || create_commit_version <= 0

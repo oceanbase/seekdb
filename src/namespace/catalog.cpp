@@ -185,6 +185,35 @@ bool NamespaceCatalogCodec::decode_node(const std::string &data, int64_t cap,
   return pos == data.size();
 }
 
+std::string NamespaceCatalogCodec::encode_source(const CatalogTabletSource &source)
+{
+  std::string data;
+  number(data, source.table_id);
+  number(data, source.physical_tablet_id);
+  number(data, static_cast<uint64_t>(source.create_transaction_id));
+  number(data, source.data_tablet_id);
+  number(data, source.lob_meta_tablet_id);
+  number(data, source.lob_piece_tablet_id);
+  return data;
+}
+
+bool NamespaceCatalogCodec::decode_source(const std::string &data, CatalogTabletSource &source)
+{
+  if (data.size() != 48) { return false; }
+  CatalogTabletSource decoded;
+  uint64_t identity = 0;
+  size_t pos = 0;
+  if (!number(data, pos, decoded.table_id) || !number(data, pos, decoded.physical_tablet_id)
+      || !number(data, pos, identity) || identity > uint64_t(INT64_MAX)
+      || !number(data, pos, decoded.data_tablet_id)
+      || !number(data, pos, decoded.lob_meta_tablet_id)
+      || !number(data, pos, decoded.lob_piece_tablet_id)) { return false; }
+  decoded.create_transaction_id = static_cast<int64_t>(identity);
+  if (!decoded.is_valid()) { return false; }
+  source = decoded;
+  return true;
+}
+
 std::string NamespaceCatalogCodec::encode_object(uint64_t size,
     const std::vector<uint64_t> &chunks)
 {

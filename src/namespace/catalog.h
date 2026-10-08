@@ -19,6 +19,20 @@ namespace ns {
 
 struct CatalogPageRef { uint64_t page = 0; int64_t cap = 0; };
 struct CatalogValue { std::string data; int64_t cap = 0; };
+// Source and binding for one logical tablet. The cap lives on the COW path;
+// the physical identity remains unchanged when a view is forked.
+struct CatalogTabletSource {
+  uint64_t table_id = 0;
+  uint64_t physical_tablet_id = 0;
+  int64_t create_transaction_id = 0;
+  uint64_t data_tablet_id = 0;
+  uint64_t lob_meta_tablet_id = 0;
+  uint64_t lob_piece_tablet_id = 0;
+  bool is_valid() const {
+    return table_id != 0 && physical_tablet_id != 0
+        && create_transaction_id > 0 && data_tablet_id != 0;
+  }
+};
 struct CatalogChange {
   CatalogValue value;
   bool erase = false;
@@ -82,6 +96,8 @@ public:
   static bool decode_entry(const std::string &data, uint64_t &schema_object,
                            uint64_t &local_table, uint64_t &local_tablet,
                            uint64_t &bound_tablet);
+  static std::string encode_source(const CatalogTabletSource &source);
+  static bool decode_source(const std::string &data, CatalogTabletSource &source);
   static std::string encode_node(const CatalogNode &node);
   static bool decode_node(const std::string &data, int64_t cap, CatalogNode &node);
   static std::string encode_object(uint64_t size, const std::vector<uint64_t> &chunks);

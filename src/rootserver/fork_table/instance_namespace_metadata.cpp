@@ -927,6 +927,22 @@ int InstanceNamespaceMetadata::read_object(uint64_t object, std::string &data)
   return ret;
 }
 
+int InstanceNamespaceMetadata::find_tablet_source(ns::CatalogPageRef root,
+    uint64_t logical_tablet, ns::CatalogTabletSource &source, int64_t &cap)
+{
+  InstanceCatalogPageStore pages(*this);
+  ns::NamespaceCatalogTree tree(pages);
+  ns::CatalogValue value;
+  const auto result = tree.find(root, ns::NamespaceCatalogCodec::object_key(logical_tablet), value);
+  if (!result.ok()) {
+    return result.error == ns::CatalogTreeError::NOT_FOUND ? OB_ENTRY_NOT_EXIST
+        : result.error == ns::CatalogTreeError::STORE ? result.store_error : OB_CHECKSUM_ERROR;
+  }
+  if (!ns::NamespaceCatalogCodec::decode_source(value.data, source)) { return OB_CHECKSUM_ERROR; }
+  cap = value.cap;
+  return OB_SUCCESS;
+}
+
 int InstanceNamespaceMetadata::stage_catalog_delta(uint64_t namespace_id,
     int64_t base_schema_version, int64_t schema_version,
     const ns::CatalogChanges &definitions, const ns::CatalogChanges &sources)
@@ -970,17 +986,20 @@ int InstanceNamespaceMetadata::collect_unreachable_pages(
   if (!transaction_.is_directory_gc() || max_deletes <= 0 || max_deletes > 256) {
     return OB_INVALID_ARGUMENT;
   }
-  std::vector<ns::CatalogPageRef> pending;
+  // Only table-definition leaves own description objects. Source leaves have
+  // physical identities, not object-page references.
+  struct PendingTree { ns::CatalogPageRef ref; bool definitions; };
+  std::vector<PendingTree> pending;
   int ret = scan_namespaces([&](const InstanceNamespaceRecord &record) {
-    if (record.roots.catalog.page != 0) { pending.push_back(record.roots.catalog); }
-    if (record.roots.directory.page != 0) { pending.push_back(record.roots.directory); }
+    if (record.roots.catalog.page != 0) { pending.push_back({record.roots.catalog, true}); }
+    if (record.roots.directory.page != 0) { pending.push_back({record.roots.directory, false}); }
     return OB_SUCCESS;
   });
   if (ret == OB_SUCCESS) {
     ret = scan_snapshots([&](uint64_t, const ns::CatalogRoots &roots) {
       if (roots.ref_count > 0) {
-        if (roots.catalog.page != 0) { pending.push_back(roots.catalog); }
-        if (roots.directory.page != 0) { pending.push_back(roots.directory); }
+        if (roots.catalog.page != 0) { pending.push_back({roots.catalog, true}); }
+        if (roots.directory.page != 0) { pending.push_back({roots.directory, false}); }
       }
       return OB_SUCCESS;
     });
@@ -988,12 +1007,13 @@ int InstanceNamespaceMetadata::collect_unreachable_pages(
   InstanceCatalogPageStore pages(*this);
   ns::NamespaceCatalogTree tree(pages);
   std::unordered_set<uint64_t> reachable;
-  std::unordered_set<uint64_t> visited_nodes;
+  std::unordered_set<uint64_t> visited_nodes[2];
   std::unordered_set<uint64_t> visited_objects;
   while (ret == OB_SUCCESS && !pending.empty()) {
-    const ns::CatalogPageRef ref = pending.back();
+    const PendingTree item = pending.back();
+    const ns::CatalogPageRef ref = item.ref;
     pending.pop_back();
-    if (!visited_nodes.insert(ref.page).second) { continue; }
+    if (!visited_nodes[item.definitions].insert(ref.page).second) { continue; }
     reachable.insert(ref.page);
     ns::CatalogNode node;
     const auto result = tree.read_node(ref, node);
@@ -1005,8 +1025,8 @@ int InstanceNamespaceMetadata::collect_unreachable_pages(
         default: ret = OB_ERR_UNEXPECTED; break;
       }
     } else if (!node.leaf) {
-      pending.insert(pending.end(), node.children.begin(), node.children.end());
-    } else {
+      for (const auto &child : node.children) { pending.push_back({child, item.definitions}); }
+    } else if (item.definitions) {
       for (const auto &value : node.values) {
         uint64_t object = 0, table = 0, tablet = 0, bound = 0;
         if (!ns::NamespaceCatalogCodec::decode_entry(

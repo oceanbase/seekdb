@@ -13,6 +13,7 @@
 #include "rootserver/ddl_task/ob_sys_ddl_util.h"
 #include "rootserver/ddl_task/ob_ddl_scheduler.h"
 #include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
+#include "rootserver/fork_table/namespace_schema_publication.h"
 #include "query/tablelock/ob_table_lock_runtime.h"
 #include "storage/tablelock/ob_table_lock_service.h"
 #include "share/ob_autoincrement_service.h"
@@ -161,6 +162,16 @@ public:
     return bootstrap_.load(std::memory_order_acquire) ? OB_SUCCESS
         : storage::NamespaceForkKernelPrototype::finish_schema_change(ns_, committed_schema_version);
   }
+  int stage_publication(common::ObMySQLTransaction &sql, ObMultiVersionSchemaService &schema,
+      int64_t version, std::unique_ptr<rootserver::NamespaceSchemaPublication> &publication) override
+  {
+    if (bootstrap_.load(std::memory_order_acquire)) { return OB_SUCCESS; }
+    auto *access = share::server_service<storage::ObAccessService>();
+    if (access == nullptr) { return OB_NOT_INIT; }
+    NamespaceSchemaLoadScope scope(ns_);
+    publication.reset(new rootserver::NamespaceSchemaPublication(access->instance_meta_store(), ns_));
+    return publication->stage(sql, schema, version);
+  }
   int publish(ObMultiVersionSchemaService &schema_service,
               int64_t &published_schema_version) override
   {
@@ -240,6 +251,13 @@ int publish_namespace_schema_change(uint64_t namespace_id,
   auto *lifecycle = namespace_schema_lifecycle(namespace_id);
   return lifecycle == nullptr ? OB_NOT_INIT
       : lifecycle->publish(schema_service, published_schema_version);
+}
+int stage_namespace_schema_publication(uint64_t namespace_id, common::ObMySQLTransaction &sql,
+    ObMultiVersionSchemaService &schema, int64_t version,
+    std::unique_ptr<rootserver::NamespaceSchemaPublication> &publication)
+{
+  auto *lifecycle = namespace_schema_lifecycle(namespace_id);
+  return lifecycle == nullptr ? OB_NOT_INIT : lifecycle->stage_publication(sql, schema, version, publication);
 }
 rootserver::ObIRootserverLocalRuntime *root_namespace_ddl_runtime()
 {
