@@ -3317,18 +3317,13 @@ def_table_schema(
   table_type = 'VIRTUAL_TABLE',
   gm_columns     = [],
   rowkey_columns = [
-  ('ctx_id', 'int'),
-  ('label', 'varchar:OB_MAX_CHAR_LENGTH')
+  ('mod_name', 'varchar:OB_MAX_CHAR_LENGTH')
   ],
 
   normal_columns = [
-  ('ctx_name', 'varchar:OB_MAX_CHAR_LENGTH'),
-  ('mod_type', 'varchar:OB_MAX_CHAR_LENGTH'),
-  ('mod_id', 'int'),
-  ('mod_name', 'varchar:OB_MAX_CHAR_LENGTH'),
   ('hold', 'int'),
   ('used', 'int'),
-  ('count', 'int')
+  ('mem_limit', 'int', 'true')
   ],  vtable_route_policy = 'local'
   )
 
@@ -7451,17 +7446,12 @@ def_table_schema(
   gm_columns      = [],
   view_definition = """
 SELECT
-     ctx_name AS CTX_NAME,
      mod_name AS MOD_NAME,
-     sum(COUNT) AS COUNT,
-     sum(hold) AS HOLD,
-     sum(USED) AS USED
+     hold AS HOLD,
+     used AS USED,
+     mem_limit AS MEM_LIMIT
 FROM
     oceanbase.__all_virtual_memory_info
-WHERE
-        mod_type='user'
-GROUP BY ctx_name, mod_name
-ORDER BY ctx_name, mod_name
 """.replace("\n", " ")
 )
 

@@ -34,6 +34,12 @@ ObDfc::ObDfc()
 ObDfc::~ObDfc()
 {}
 
+void ObDfc::get_memory_info(int64_t &hold, int64_t &used)
+{
+  hold = mem_mgr_.get_used_memory_size();
+  used = get_current_buffer_used();
+}
+
 int ObDfc::server_module_new(ObDfc *&dfc_manager)
 {
   int ret = OB_SUCCESS;
