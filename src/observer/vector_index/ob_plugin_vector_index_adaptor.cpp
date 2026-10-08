@@ -3922,6 +3922,15 @@ int ObPluginVectorIndexAdaptor::query_result(ObVectorQueryAdaptorResultContext *
     if (query_cond->only_complete_data_) {
       // do nothing
     } else if (OB_FAIL(vsag_query_vids(ctx, query_cond, dim, query_vector, vids_iter))) {
+      if (ret == OB_ERR_VSAG_RETURN_ERROR) {
+        // The in-memory index can be replaced while a query is starting.  Use
+        // the normal refresh path for the same transient VSAG error handled
+        // below after snapshot loading.
+        ctx->status_ = PVQ_REFRESH;
+        LOG_INFO("vsag query got transient error, mark refresh",
+            K(ret), K(snapshot_tablet_id_), K(get_snapshot_key_prefix()));
+        ret = OB_SUCCESS;
+      }
     }
   } else { // need load data
     if (OB_ISNULL(query_cond->row_iter_) || OB_ISNULL(query_cond->scan_param_)) {
@@ -3963,6 +3972,15 @@ int ObPluginVectorIndexAdaptor::query_result(ObVectorQueryAdaptorResultContext *
     } else if (query_cond->only_complete_data_) {
       // do nothing
     } else if (OB_FAIL(vsag_query_vids(ctx, query_cond, dim, query_vector, vids_iter))) {
+      if (ret == OB_ERR_VSAG_RETURN_ERROR) {
+        // A query can race with an index refresh/replacement just as the
+        // snapshot deserialization above can.  Return the existing refresh
+        // status instead of exposing a transient VSAG error to SQL.
+        ctx->status_ = PVQ_REFRESH;
+        LOG_INFO("vsag query got transient error, mark refresh",
+            K(ret), K(snapshot_tablet_id_), K(get_snapshot_key_prefix()));
+        ret = OB_SUCCESS;
+      }
     } else {
       close_snap_data_rb_flag();
     }
@@ -3981,15 +3999,18 @@ int ObPluginVectorIndexAdaptor::deserialize_snap_data(ObVectorQueryConditions *q
   int ret = OB_SUCCESS;
   ObVectorIndexAlgorithmType index_type;
   ObString key_prefix;
-  ObTableScanIterator *table_scan_iter = static_cast<ObTableScanIterator *>(query_cond->row_iter_);
+  ObTableScanIterator *table_scan_iter = nullptr;
   ObArenaAllocator tmp_allocator("VectorAdaptor", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObArenaAllocator allocator;
-  if (OB_ISNULL(table_scan_iter) || OB_ISNULL(query_cond)) {
+  if (OB_ISNULL(query_cond)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FALSE_IT(table_scan_iter = static_cast<ObTableScanIterator *>(query_cond->row_iter_))) {
+  } else if (OB_ISNULL(table_scan_iter) || OB_ISNULL(query_cond->lob_read_options_)
+             || OB_ISNULL(query_cond->scan_param_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_ISNULL(row) || row->get_column_count() < 2) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ob_write_string(allocator, row->storage_datums_[0].get_string(), key_prefix))) {
-  } else if (OB_FAIL(ObPluginVectorIndexUtils::iter_table_rescan(*query_cond->scan_param_, table_scan_iter))) {
   } else {
     ObHNSWDeserializeCallback::CbParam param(
         query_cond->row_iter_, &tmp_allocator, *query_cond->lob_read_options_);
@@ -4000,6 +4021,8 @@ int ObPluginVectorIndexAdaptor::deserialize_snap_data(ObVectorQueryConditions *q
     ObString target_prefix;
     if (!get_snapshot_key_prefix().empty() && key_prefix.prefix_match(get_snapshot_key_prefix()) && !snap_data_->rb_flag_) {
       // skip deserialize, already been deserialized by other concurrent thread
+    } else if (OB_FAIL(param.set_first_row(*row))) {
+    } else if (OB_FAIL(param.prepare_stream_size())) {
     } else if (OB_FAIL(index_seri.deserialize(snap_data_->index_, param, cb))) {
     } else if (OB_FAIL(obvectorutil::immutable_optimize(snap_data_->index_))) {
     } else if (OB_FALSE_IT(index_type = get_snap_index_type())) {

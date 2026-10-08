@@ -16,8 +16,10 @@
 #ifndef OCEANBASE_QUERY_VECTOR_INDEX_SERIALIZE_H_
 #define OCEANBASE_QUERY_VECTOR_INDEX_SERIALIZE_H_
 #include <iostream>
+#include <limits>
 #include "lib/function/ob_function.h"
 #include "lib/allocator/page_arena.h"
+#include "lib/container/ob_se_array.h"
 #include "common/row/ob_row_iterator.h"
 #include "share/ob_lob_access_utils.h"
 #include "query/vector/ob_vector_query_result.h"
@@ -25,6 +27,14 @@
 
 namespace oceanbase
 {
+namespace blocksstable
+{
+class ObDatumRow;
+}
+namespace storage
+{
+class ObTableScanParam;
+}
 namespace share
 {
 
@@ -86,12 +96,28 @@ public:
   struct CbParam
   {
     virtual ~CbParam() = default;
+    virtual int prepare_stream_size() { return OB_NOT_SUPPORTED; }
+    virtual int get_stream_size(int64_t &size) const
+    {
+      size = 0;
+      return OB_NOT_SUPPORTED;
+    }
+    virtual int seek_to(const int64_t position,
+                        char *&data,
+                        int64_t &data_size,
+                        int64_t &block_begin)
+    {
+      UNUSEDx(position, data, data_size, block_begin);
+      return OB_NOT_SUPPORTED;
+    }
   };
   using Callback = ObFunction<int(char *&, const int64_t, int64_t &, CbParam &)>;
   explicit ObIStreamBuf(char *data, const int64_t capacity, CbParam &cb_param, Callback &cb) 
     : ObStreamBuf(data, capacity),
       cb_param_(cb_param),
-      cb_(cb)
+      cb_(cb),
+      stream_pos_(0),
+      synthetic_pos_(-1)
   {
     setg(data_, data_, data_);
   }
@@ -114,6 +140,12 @@ private:
 private:
   CbParam &cb_param_;
   Callback cb_;
+  // Position of the current callback buffer in the logical input stream.
+  int64_t stream_pos_;
+  // IOStreamReader probes the stream length with seekg(0, end) followed by
+  // tellg().  The input is callback-backed and has no physical end pointer,
+  // so retain that logical position until the caller seeks back to data.
+  int64_t synthetic_pos_;
 };
 
 class ObHNSWDeserializeCallback {
@@ -125,17 +157,12 @@ public:
       : iter_(iter),
         allocator_(allocator),
         lob_read_options_(&lob_read_options),
-        str_iter_(nullptr)
+        snapshot_data_allocator_("VecSnapData", OB_MALLOC_NORMAL_BLOCK_SIZE),
+        snapshot_block_idx_(0),
+        stream_size_(0),
+        stream_size_valid_(false)
     {}
-    virtual ~CbParam() {
-      if (str_iter_ != nullptr) {
-        str_iter_->~ObTextStringIter();
-        if (allocator_ != nullptr) {
-          allocator_->free(str_iter_);
-        }
-        str_iter_ = nullptr;
-      }
-    }
+    virtual ~CbParam() = default;
     bool is_valid() const
     {
       return nullptr != iter_
@@ -143,10 +170,31 @@ public:
              && nullptr != lob_read_options_
              && nullptr != lob_read_options_->read_service_;
     }
+    int set_first_row(const blocksstable::ObDatumRow &row);
+    int stage_snapshot_row(const blocksstable::ObDatumRow &row, const bool save_key);
+    virtual int prepare_stream_size() override;
+    virtual int get_stream_size(int64_t &size) const override
+    {
+      int ret = stream_size_valid_ ? OB_SUCCESS : OB_NOT_SUPPORTED;
+      size = stream_size_;
+      return ret;
+    }
+    virtual int seek_to(const int64_t position,
+                        char *&data,
+                        int64_t &data_size,
+                        int64_t &block_begin) override;
     ObNewRowIterator *iter_;
     ObIAllocator *allocator_;
     const common::ObLobReadOptions *lob_read_options_;
-    ObTextStringIter *str_iter_;
+    // LOB locators returned by a table scan are tied to the scan row/access
+    // context.  Keep the actual snapshot bytes while that row is valid, then
+    // let VSAG consume this stable, single-scan image.
+    ObArenaAllocator snapshot_data_allocator_;
+    ObString snapshot_key_;
+    ObSEArray<ObString, 8> snapshot_blocks_;
+    int64_t snapshot_block_idx_;
+    int64_t stream_size_;
+    bool stream_size_valid_;
   };
 public:
   ObHNSWDeserializeCallback(void *adp) : index_type_(VIAT_MAX), adp_(adp)
