@@ -59,6 +59,7 @@ ObTabletMeta::ObTabletMeta()
     last_persisted_committed_tablet_status_(),
     space_usage_(),
     create_schema_version_(0),
+    create_table_id_(OB_INVALID_ID),
     compat_mode_(lib::Worker::CompatMode::INVALID),
     has_next_tablet_(false),
     is_empty_shell_(false),
@@ -99,6 +100,7 @@ int ObTabletMeta::init(
     ref_tablet_id_ = old_tablet_meta.ref_tablet_id_;
     create_scn_ = old_tablet_meta.create_scn_;
     create_schema_version_ = old_tablet_meta.create_schema_version_;
+    create_table_id_ = old_tablet_meta.create_table_id_;
     micro_index_clustered_ = old_tablet_meta.micro_index_clustered_;
     start_scn_ = old_tablet_meta.start_scn_;
     ddl_start_scn_ = SCN::max(ddl_info.ddl_start_scn_, old_tablet_meta.ddl_start_scn_);
@@ -138,6 +140,7 @@ int ObTabletMeta::init(
 int ObTabletMeta::init(
     const common::ObTabletID &tablet_id,
     const common::ObTabletID &data_tablet_id,
+    const uint64_t table_id,
     const share::SCN create_scn,
     const int64_t snapshot_version,
     const ObTabletTableStoreFlag &table_store_flag,
@@ -167,6 +170,7 @@ int ObTabletMeta::init(
     data_tablet_id_ = data_tablet_id;
     create_scn_ = create_scn;
     create_schema_version_ = create_schema_version;
+    create_table_id_ = table_id;
     compat_mode_ = lib::Worker::CompatMode::MYSQL;
     micro_index_clustered_ = micro_index_clustered;
     start_scn_ = INIT_CLOG_CHECKPOINT_SCN;
@@ -257,6 +261,7 @@ int ObTabletMeta::init(
     ref_tablet_id_ = old_tablet_meta.ref_tablet_id_;
     create_scn_ = old_tablet_meta.create_scn_;
     create_schema_version_ = old_tablet_meta.create_schema_version_;
+    create_table_id_ = old_tablet_meta.create_table_id_;
     micro_index_clustered_ = old_tablet_meta.micro_index_clustered_;
     start_scn_ = old_tablet_meta.start_scn_;
     ddl_start_scn_ = old_tablet_meta.ddl_start_scn_;
@@ -314,6 +319,7 @@ int ObTabletMeta::init(
     ref_tablet_id_ = old_tablet_meta.ref_tablet_id_;
     create_scn_ = old_tablet_meta.create_scn_;
     create_schema_version_ = old_tablet_meta.create_schema_version_;
+    create_table_id_ = old_tablet_meta.create_table_id_;
     micro_index_clustered_ = old_tablet_meta.micro_index_clustered_;
     start_scn_ = old_tablet_meta.start_scn_;
     clog_checkpoint_scn_ = old_tablet_meta.clog_checkpoint_scn_;
@@ -387,6 +393,7 @@ int ObTabletMeta::assign(const ObTabletMeta &other)
     extra_medium_info_ = other.extra_medium_info_;
     space_usage_ = other.space_usage_;
     create_schema_version_ = other.create_schema_version_;
+    create_table_id_ = other.create_table_id_;
     compat_mode_ = other.compat_mode_;
     has_next_tablet_ = other.has_next_tablet_;
     is_empty_shell_ = other.is_empty_shell_;
@@ -416,6 +423,7 @@ void ObTabletMeta::reset()
   has_next_tablet_ = false;
   create_scn_ = ObTabletMeta::INVALID_CREATE_SCN;
   create_schema_version_ = 0;
+  create_table_id_ = OB_INVALID_ID;
   micro_index_clustered_ = false;
   start_scn_.reset();
   clog_checkpoint_scn_.reset();
@@ -462,6 +470,7 @@ bool ObTabletMeta::is_valid() const
               && clog_checkpoint_scn_ >= INIT_CLOG_CHECKPOINT_SCN
               && start_scn_ >= INIT_CLOG_CHECKPOINT_SCN
               && start_scn_ <= clog_checkpoint_scn_))
+      && create_table_id_ != OB_INVALID_ID
       && create_schema_version_ >= 0
       && space_usage_.is_valid();
 }
@@ -552,6 +561,8 @@ int ObTabletMeta::serialize(char *buf, const int64_t len, int64_t &pos) const
     LOG_WARN("failed to serialize has truncate info", K(ret), K(len), K(new_pos), K_(has_truncate_info));
   } else if (new_pos - pos < length && OB_FAIL(fork_info_.serialize(buf, len, new_pos))) {
     LOG_WARN("failed to serialize fork info", K(ret), K(len), K(new_pos), K_(fork_info));
+  } else if (OB_FAIL(serialization::encode_i64(buf, len, new_pos, create_table_id_))) {
+    LOG_WARN("failed to serialize table identity", K(ret));
   } else if (OB_UNLIKELY(length != new_pos - pos)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet meta's length doesn't match standard length", K(ret), K(new_pos), K(pos), K(length), K(length));
@@ -570,6 +581,7 @@ int ObTabletMeta::deserialize(
   int ret = OB_SUCCESS;
   int64_t new_pos = pos;
   int8_t compat_mode = static_cast<int8_t>(lib::Worker::CompatMode::INVALID);
+  int64_t table_id = 0;
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
@@ -647,10 +659,13 @@ int ObTabletMeta::deserialize(
       LOG_WARN("failed to deserialize has_truncate_info", K(ret), K(len));
     } else if (new_pos - pos < length_ && OB_FAIL(fork_info_.deserialize(buf, len, new_pos))) {
       LOG_WARN("failed to deserialize fork info", K(ret), K(len), K(new_pos));
+    } else if (OB_FAIL(serialization::decode_i64(buf, len, new_pos, &table_id))) {
+      LOG_WARN("failed to deserialize table identity", K(ret));
     } else if (OB_UNLIKELY(length_ != new_pos - pos)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tablet's length doesn't match standard length", K(ret), K(new_pos), K(pos), K_(length));
     } else {
+      create_table_id_ = static_cast<uint64_t>(table_id);
       compat_mode_ = static_cast<lib::Worker::CompatMode>(compat_mode);
       pos = new_pos;
       is_inited_ = true;
@@ -698,6 +713,7 @@ int64_t ObTabletMeta::get_serialize_size() const
   size += serialization::encoded_length_bool(micro_index_clustered_);
   size += serialization::encoded_length_bool(has_truncate_info_);
   size += fork_info_.get_serialize_size();
+  size += serialization::encoded_length_i64(create_table_id_);
   return size;
 }
 

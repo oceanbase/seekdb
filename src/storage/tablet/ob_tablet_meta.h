@@ -62,6 +62,7 @@ public:
   int init(
       const common::ObTabletID &tablet_id,
       const common::ObTabletID &data_tablet_id,
+      const uint64_t table_id,
       const share::SCN create_scn,
       const int64_t snapshot_version,
       const ObTabletTableStoreFlag &table_store_flag,
@@ -119,6 +120,7 @@ public:
   TO_STRING_KV(K_(version),
                K_(tablet_id),
                K_(data_tablet_id),
+               K_(create_table_id),
                K_(ref_tablet_id),
                K_(has_next_tablet),
                K_(create_scn),
@@ -178,6 +180,8 @@ public:
   ObTabletCreateDeleteMdsUserData last_persisted_committed_tablet_status_; // quick access for tablet status in sstables
   ObTabletSpaceUsage space_usage_; // alignment: 8B, size: 48B
   int64_t create_schema_version_;
+  // Immutable creation identity, also available after the SQL object is dropped.
+  uint64_t create_table_id_;
   lib::Worker::CompatMode compat_mode_; // alignment: 1B, size: 4B
   bool has_next_tablet_; // alignment: 1B, size: 2B
   bool is_empty_shell_; // alignment: 1B, size: 2B
