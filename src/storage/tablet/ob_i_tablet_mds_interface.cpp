@@ -181,7 +181,10 @@ int ObITabletMdsInterface::read_raw_data(
 {
   int ret = OB_SUCCESS;
   const common::ObTabletID &tablet_id = get_tablet_meta_().tablet_id_;
-  const int64_t abs_timeout = timeout_us + ObClockGenerator::getClock();
+  const int64_t now = ObClockGenerator::getClock();
+  // A remaining duration derived from an unlimited deadline can overflow when
+  // reconstructed later, even if the duration itself is less than INT64_MAX.
+  const int64_t abs_timeout = timeout_us > INT64_MAX - now ? INT64_MAX : now + timeout_us;
   ObMdsReadInfoCollector placeholder_collector;
   SMART_VARS_3((ObTableScanParam, scan_param), (ObStoreCtx, store_ctx), (ObMdsRowIterator, iter)) {
     if (OB_FAIL(ObMdsScanParamHelper::build_scan_param(
