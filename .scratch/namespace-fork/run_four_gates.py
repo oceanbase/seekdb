@@ -53,6 +53,8 @@ gates = [
     ('sql', [[tools / 'namespace_sql_worker_prototype.py', '--binary', binary, '--case', 'full']]),
     ('direct', [
         [local / 'large_partition_fork_probe.py', '--binary', binary],
+        [local / 'fork_service_latency_probe.py', '--binary', binary,
+         '--result', args.log_dir / 'fork-service-latency-results.json'],
         [local / 'automatic_catalog_gc_probe.py', '--binary', binary],
         [local / 'sql_read_view_probe.py', '--binary', binary],
         [local / 'physical_retention_mvcc_probe.py', '--binary', binary],
