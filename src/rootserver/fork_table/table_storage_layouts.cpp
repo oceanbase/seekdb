@@ -123,5 +123,52 @@ int TableStorageLayouts::publish(ObCreateTabletSchema &schema)
   return ret;
 }
 
+int TableStorageLayouts::retire(uint64_t table_id)
+{
+  if (namespace_id_ == 0 || namespace_id_ == OB_INVALID_ID
+      || table_id == 0 || table_id == OB_INVALID_ID) { return OB_INVALID_ARGUMENT; }
+  char key[16];
+  int64_t pos = 0;
+  int ret = serialization::encode_i64(key, sizeof(key), pos, namespace_id_);
+  if (ret == OB_SUCCESS) { ret = serialization::encode_i64(key, sizeof(key), pos, table_id); }
+  bool existed = false;
+  if (ret == OB_SUCCESS) {
+    ret = store_.erase(tx_, MetaCollection::TABLE_STORAGE_LAYOUTS, ObString(sizeof(key), key), existed);
+  }
+  return ret;
+}
+
+int TableStorageLayouts::retire_namespace()
+{
+  if (namespace_id_ == 0 || namespace_id_ >= INT64_MAX) { return OB_INVALID_ARGUMENT; }
+  char lower[8], upper[8];
+  int64_t pos = 0;
+  int ret = serialization::encode_i64(lower, sizeof(lower), pos, namespace_id_);
+  pos = 0;
+  if (ret == OB_SUCCESS) {
+    ret = serialization::encode_i64(upper, sizeof(upper), pos, namespace_id_ + 1);
+  }
+  InstanceMetaStore::KeyRange range;
+  range.lower.assign_ptr(lower, sizeof(lower));
+  range.upper.assign_ptr(upper, sizeof(upper));
+  range.has_lower = range.has_upper = true;
+  ObArray<uint64_t> tables;
+  if (ret == OB_SUCCESS) {
+    ret = store_.scan(tx_, MetaCollection::TABLE_STORAGE_LAYOUTS, range,
+        [&](const ObString &key, const ObString &, bool &) {
+      int64_t owner = 0, table = 0, offset = 0;
+      int rc = key.length() != 16 ? OB_CHECKSUM_ERROR : OB_SUCCESS;
+      if (rc == OB_SUCCESS) { rc = serialization::decode_i64(key.ptr(), key.length(), offset, &owner); }
+      if (rc == OB_SUCCESS) { rc = serialization::decode_i64(key.ptr(), key.length(), offset, &table); }
+      if (rc == OB_SUCCESS && (owner != namespace_id_ || table <= 0)) { rc = OB_CHECKSUM_ERROR; }
+      if (rc == OB_SUCCESS) { rc = tables.push_back(table); }
+      return rc;
+    });
+  }
+  // End the scan before writing through its transaction.
+  for (int64_t i = 0; ret == OB_SUCCESS && i < tables.count(); ++i) { ret = retire(tables.at(i)); }
+  return ret;
+}
+
 } // namespace rootserver
 } // namespace oceanbase

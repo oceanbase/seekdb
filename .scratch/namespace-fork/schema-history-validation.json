@@ -1,5 +1,5 @@
 {
-  "scope": "Foundation, atomic DDL/layout publication, durable retention, physical C membership, major/medium layouts, primary freeze preparation, exact meta-major bodies, SSTable origin, per-row redo versions, physical report identity and Namespace historical checksum now have targeted evidence below. Independent logical group verification and mid-round recovery also have targeted evidence. Updated 8000-partition validation, layout/body/binding GC, and full standby integration remain incomplete. Legacy freeze.schema_version generation/storage/serialization/readers have now been removed and tested, including native retention/recovery and production parent/child index checks.",
+  "scope": "Foundation, atomic DDL/layout publication, durable retention, physical C membership, major/medium layouts, primary freeze preparation, exact meta-major bodies, SSTable origin, per-row redo versions, physical report identity and Namespace historical checksum now have targeted evidence below. Independent logical group verification and mid-round recovery also have targeted evidence. Updated 8000-partition validation, layout/body/binding GC, and full standby integration remain incomplete. Legacy freeze.schema_version generation/storage/serialization/readers have now been removed and tested, including native retention/recovery and production parent/child index checks. Logical table and Namespace bindings now retire atomically with catalog deletion; native MVCC/rollback/restart and production retired-source takeover/reclamation passed. The 8000-partition freeze preparation scan has measured evidence; full performance and major/checksum scope remain separate. Body/G physical reclamation and full current-branch standby/promotion remain incomplete.",
   "runs": [
     {
       "name": "layout_history",
@@ -6590,6 +6590,194 @@
           "bytes": 13512077
         }
       ]
+    },
+    {
+      "name": "layout_binding_retirement",
+      "log": "/tmp/seekdb-layout-retirement-native-test-2.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-retirement-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_table_storage_layout_td5zo2t4",
+          "pid": 1106388,
+          "port": 48765
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-retirement-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_table_storage_layout_td5zo2t4",
+          "pid": 1107989,
+          "port": 48765
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-retirement-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_table_storage_layout_td5zo2t4",
+          "pid": 1108264,
+          "port": 48765
+        },
+        {
+          "event": "PASS",
+          "case": "table_storage_layout",
+          "owner_definitions": 7,
+          "checked_physical": 56,
+          "parent_child_independent": true,
+          "late_partition_no_overwrite": true,
+          "index_and_lob": true,
+          "conflict_nowait": true,
+          "rollback": true,
+          "participant_lifetime": true,
+          "crash_recovery": true,
+          "retire_mvcc": true,
+          "cross_store_atomic": true,
+          "exact_without_head": true,
+          "drop_table": true,
+          "drop_namespace": true,
+          "surviving_descendant": true
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_table_storage_layout_td5zo2t4/data.tar.gz",
+          "bytes": 6237210
+        }
+      ]
+    },
+    {
+      "name": "retired_source_after_binding_retirement",
+      "log": "/tmp/seekdb-layout-retirement-baseline-test-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_retired_baseline_restart_f4oe98g0",
+          "pid": 1109398,
+          "port": 40625
+        },
+        {
+          "event": "retired_sources_before_restart",
+          "physical": [
+            [
+              4611686155866541377,
+              3,
+              1,
+              0
+            ],
+            [
+              4611686155866541378,
+              3,
+              1,
+              0
+            ],
+            [
+              4611686155866541379,
+              3,
+              1,
+              0
+            ],
+            [
+              4611686155866541380,
+              3,
+              1,
+              0
+            ],
+            [
+              4611686430744448321,
+              1,
+              1,
+              0
+            ],
+            [
+              4611686430744448322,
+              1,
+              1,
+              0
+            ],
+            [
+              4611686430744448323,
+              1,
+              1,
+              0
+            ],
+            [
+              4611686430744448324,
+              1,
+              1,
+              0
+            ]
+          ],
+          "schemas": [
+            [
+              "t",
+              500003,
+              200001
+            ],
+            [
+              "__AUX_LOB_META_500005_",
+              500005,
+              200003
+            ],
+            [
+              "__AUX_LOB_PIECE_500006_",
+              500006,
+              200004
+            ],
+            [
+              "__idx_500003_iv",
+              500004,
+              200002
+            ]
+          ]
+        },
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_retired_baseline_restart_f4oe98g0",
+          "pid": 1110400,
+          "port": 40625
+        },
+        {
+          "event": "PASS",
+          "case": "retired_baseline_restart",
+          "intermediate_namespace_deleted": true,
+          "source_table_dropped": true,
+          "sources_reclaimed": true
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_retired_baseline_restart_f4oe98g0/data.tar.gz",
+          "bytes": 7540566
+        }
+      ]
+    },
+    {
+      "name": "freeze_preparation_8000_after_layout_history",
+      "log": "/tmp/seekdb-layout-history-freeze-8000-test-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_large_lww5uj0y",
+          "pid": 1109414,
+          "port": 10093
+        },
+        {
+          "event": "PASS",
+          "case": "freeze_preparation_large",
+          "partitions": 8000,
+          "inspected": 8716,
+          "locked_recheck_us": 38396,
+          "request": {
+            "error": null,
+            "seconds": 0.08850793167948723
+          },
+          "frozen": 1791588924216136012
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_large_lww5uj0y/data.tar.gz",
+          "bytes": 8747913
+        }
+      ]
     }
   ],
   "meta_layout_builds": [
@@ -6660,6 +6848,29 @@
       "log": "/tmp/seekdb-freeze-without-schema-production-build-1.log",
       "result": "PASS",
       "test_hooks_removed": true
+    }
+  ],
+  "failures": [
+    {
+      "name": "layout_retirement_probe_weak_horizon",
+      "log": "/tmp/seekdb-layout-retirement-native-test-1.log",
+      "cause": "Probe mistook a weak snapshot before creation for a visible head delete; exact body read returned 4018. Require a weak horizon at or after a post-delete snapshot.",
+      "resolved_by": "/tmp/seekdb-layout-retirement-native-test-2.log"
+    },
+    {
+      "name": "standby_sstable_replay_startup_1",
+      "log": "/tmp/seekdb-layout-history-standby-1/standby_sstable_replay.log",
+      "cause": "Fixed startup delay expired before root handshake was ready."
+    },
+    {
+      "name": "standby_sstable_replay_startup_2",
+      "log": "/tmp/seekdb-layout-history-standby-2/standby_sstable_replay.log",
+      "cause": "Generic framework poll authenticates as admin before exec_init_sql creates that user."
+    },
+    {
+      "name": "standby_sstable_replay_startup_3",
+      "log": "/tmp/seekdb-layout-history-standby-3/standby_sstable_replay.log",
+      "cause": "deploy_get_value aborts on a transient null; it cannot be used to poll the root handshake."
     }
   ]
 }

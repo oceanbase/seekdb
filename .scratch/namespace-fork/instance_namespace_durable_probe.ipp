@@ -125,6 +125,7 @@ static int run_instance_namespace_durable_probe()
       META_DURABLE_CALL(kv.rollback(tx));
       rootserver::InstanceNamespaceDirectory directory(kv);
       META_DURABLE_CALL(directory.finish_drop(2,
+          share::server_service<ObAccessService>()->storage_schema_store(),
           ObTimeUtility::current_time() + 120000000));
       META_DURABLE_CALL(kv.begin(tx, ObTimeUtility::current_time() + 120000000, true));
       InstanceNamespaceRecord deleted;

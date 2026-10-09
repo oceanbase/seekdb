@@ -191,6 +191,15 @@ int InstanceMetaStore::attach(Transaction &tx, ObTxDesc &descriptor, const int64
   return begin_impl(tx, deadline, descriptor.is_rdonly(), false, &descriptor);
 }
 
+int InstanceMetaStore::attach(Transaction &tx, const Transaction &owner, const int64_t deadline)
+{
+  if (!owner.is_active() || owner.owner_ == nullptr || owner.scanning_
+      || owner.owner_ == this || &owner.owner_->transactions_ != &transactions_) {
+    return OB_INVALID_ARGUMENT;
+  }
+  return attach(tx, *owner.descriptor_, std::min(deadline, owner.deadline_));
+}
+
 int InstanceMetaStore::begin_impl(Transaction &tx, const int64_t deadline,
     const bool read_only, const bool directory_gc, ObTxDesc *borrowed,
     const SnapshotAcquirer *acquire)

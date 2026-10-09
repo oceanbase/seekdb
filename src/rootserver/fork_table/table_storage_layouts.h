@@ -40,6 +40,12 @@ public:
   // Called under existing same-object DDL publication coordination. Even a
   // definition-only version change publishes the complete layout and its V.
   int publish(storage::ObCreateTabletSchema &schema);
+  // Retire logical ownership in the same transaction as catalog deletion.
+  // Physical layouts remain available to old files and inherited sources.
+  // An inherited table may never have allocated a binding in this owner.
+  int retire(uint64_t table_id);
+  // Caller has closed and drained this Namespace's publication paths.
+  int retire_namespace();
 private:
   int bind(storage::ObCreateTabletSchema &schema);
   storage::InstanceMetaStore &store_;

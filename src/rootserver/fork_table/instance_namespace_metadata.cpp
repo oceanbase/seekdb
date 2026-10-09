@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "rootserver/fork_table/instance_namespace_metadata.h"
+#include "rootserver/fork_table/table_storage_layouts.h"
 #include "namespace/namespace.h"
 #include "lib/hash_func/murmur_hash.h"
 #include "lib/allocator/ob_allocator.h"
@@ -1213,16 +1214,24 @@ int InstanceNamespaceDirectory::prune_deleted(uint64_t id,
   return ret;
 }
 
-int InstanceNamespaceDirectory::finish_drop(uint64_t id, int64_t deadline)
+int InstanceNamespaceDirectory::finish_drop(uint64_t id, storage::InstanceMetaStore &layouts,
+    int64_t deadline)
 {
   if (id <= 1) { return OB_INVALID_ARGUMENT; }
-  storage::InstanceMetaStore::Transaction tx;
+  storage::InstanceMetaStore::Transaction tx, layout_tx;
   int ret = store_.begin(tx, deadline);
   if (ret == OB_SUCCESS) {
     InstanceNamespaceMetadata metadata(store_, tx);
     ret = metadata.finish_namespace_drop(id);
   }
-  return finish_directory_transaction(store_, tx, ret);
+  if (ret == OB_SUCCESS) { ret = layouts.attach(layout_tx, tx, deadline); }
+  if (ret == OB_SUCCESS) { ret = TableStorageLayouts(layouts, layout_tx, id).retire_namespace(); }
+  ret = finish_directory_transaction(store_, tx, ret);
+  if (layout_tx.is_active()) {
+    const int end = layouts.detach(layout_tx);
+    if (ret == OB_SUCCESS) { ret = end; }
+  }
+  return ret;
 }
 
 int InstanceNamespaceDirectory::schema_version(uint64_t id,

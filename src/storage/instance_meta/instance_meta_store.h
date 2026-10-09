@@ -126,6 +126,9 @@ public:
   // detaching, so snapshot retention and directory GC protection span commit.
   // Only the owner may commit/rollback/release the native descriptor.
   int attach(Transaction &tx, transaction::ObTxDesc &descriptor, int64_t deadline);
+  // Join another KV tablet's transaction using the same native owner. As for
+  // the descriptor overload, end the owner before detaching this participant.
+  int attach(Transaction &tx, const Transaction &owner, int64_t deadline);
   int detach(Transaction &tx);
   int commit(Transaction &tx);
   int rollback(Transaction &tx);

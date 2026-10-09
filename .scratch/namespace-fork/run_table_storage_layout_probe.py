@@ -33,6 +33,7 @@ def run(binary):
         exp.start()
         initial = log_tail(exp, {})
         assert 'TABLE_LAYOUT_PASS ' in initial and 'TABLE_LAYOUT_FAIL' not in initial, initial[-5000:]
+        assert 'retire_mvcc=1 cross_store_atomic=1 exact_without_head=1' in initial
         initial_physical = re.findall(r'TABLET_LAYOUT_AUDIT tablet=(\d+) table=(\d+) layout=(\d+)', initial)
         assert initial_physical and all(int(row[2]) > 0 for row in initial_physical), initial_physical
         exp.sql('CREATE DATABASE layout_sql')
@@ -88,10 +89,33 @@ def run(binary):
             assert exp.sql('SELECT COUNT(*),SUM(extra) FROM layout_sql.t', child) == ((8, 56),)
             assert exp.sql('SELECT v FROM layout_sql.t WHERE id=1', child) == ((11,),)
         assert exp.sql('SELECT id,v,parent_only FROM layout_sql.t') == ((1, 10, 9),)
+        # DROP retires ownership, while descendants can still use old sources.
+        exp.sql('FORK NAMESPACE layout_grandchild FROM layout_child')
+        exp.sql('SET recyclebin=off')
+        exp.sql('DROP TABLE layout_sql.t')
+        exp.sql('DROP NAMESPACE layout_child')
+        cursors = {p.stat().st_ino: p.stat().st_size for p in (exp.base / 'log').glob('seekdb.log*')}
+        exp.connection.close()
+        exp.connection = None
+        exp.proc.kill()
+        exp.proc.wait(timeout=15)
+        exp.start()
+        retired = log_tail(exp, cursors)
+        remaining = {(int(ns), int(table)) for ns, table in re.findall(
+            r'TABLE_LAYOUT_AUDIT ns=(\d+) table=(\d+)', retired)}
+        assert 'TABLE_LAYOUT_AUDIT_END ' in retired, retired[-5000:]
+        assert not any(ns == child_id for ns, _ in remaining), remaining
+        assert all((1, table) not in remaining for table in parent_defs), (remaining, parent_defs)
+        with connect(exp, 'root@layout_grandchild') as grandchild:
+            assert exp.sql('SELECT COUNT(*),SUM(extra) FROM layout_sql.t', grandchild) == ((8, 56),)
+            exp.sql('UPDATE layout_sql.t SET v=77 WHERE id=1', grandchild)
+            assert exp.sql('SELECT v FROM layout_sql.t WHERE id=1', grandchild) == ((77,),)
         exp.record('PASS', case='table_storage_layout', owner_definitions=len(expected),
                    checked_physical=checked, parent_child_independent=True,
                    late_partition_no_overwrite=True, index_and_lob=True,
-                   conflict_nowait=True, rollback=True, participant_lifetime=True, crash_recovery=True)
+                   conflict_nowait=True, rollback=True, participant_lifetime=True, crash_recovery=True,
+                   retire_mvcc=True, cross_store_atomic=True, exact_without_head=True,
+                   drop_table=True, drop_namespace=True, surviving_descendant=True)
     finally:
         exp.close()
 

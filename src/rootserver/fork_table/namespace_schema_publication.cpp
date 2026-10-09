@@ -147,6 +147,7 @@ int build_publication(InstanceNamespaceMetadata &metadata, TableStorageLayouts &
     if (ret != OB_SUCCESS) { break; }
     if (current.count(entry.first) == 0 || !current.at(entry.first)->has_tablet()) {
       definitions[NamespaceCatalogCodec::object_key(entry.first)] = {{}, true};
+      ret = layouts.retire(entry.first);
     }
   }
   for (const auto &entry : current) {

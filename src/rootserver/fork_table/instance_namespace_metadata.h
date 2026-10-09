@@ -200,7 +200,7 @@ public:
       int64_t deadline, bool &pruned);
   // Clears the owned roots and marks DELETED. Shared physical GC subsequently
   // reclaims unreferenced owned and orphan tablets.
-  int finish_drop(uint64_t id, int64_t deadline);
+  int finish_drop(uint64_t id, storage::InstanceMetaStore &layouts, int64_t deadline);
   int schema_version(uint64_t id, int64_t deadline, int64_t &version);
   // One invocation owns its snapshot, mark set and candidates. Traversal
   // permits ordinary KV transactions. A short exclusive transaction validates

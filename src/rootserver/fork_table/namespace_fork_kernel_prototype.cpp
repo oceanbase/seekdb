@@ -534,10 +534,11 @@ int NamespaceForkKernelPrototype::begin_namespace_drop(const ObString &name, uin
 }
 int NamespaceForkKernelPrototype::finish_namespace_drop(uint64_t id) {
   auto *store = directory_kv_store();
-  if (store == nullptr) { return OB_NOT_INIT; }
+  auto *access_service = share::server_service<ObAccessService>();
+  if (store == nullptr || access_service == nullptr) { return OB_NOT_INIT; }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
   rootserver::InstanceNamespaceDirectory directory(*store);
-  int ret = directory.finish_drop(id, directory_deadline());
+  int ret = directory.finish_drop(id, access_service->storage_schema_store(), directory_deadline());
   if (OB_SUCC(ret)) { invalidate_namespace_state(id); }
   return ret;
 }

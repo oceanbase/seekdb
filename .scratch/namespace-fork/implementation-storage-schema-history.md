@@ -1,6 +1,17 @@
 # 物理布局历史改造进度
 
 目标以 [design-storage-schema-boundaries.md](design-storage-schema-boundaries.md) 为准。
+
+### 当前推进：布局绑定退休及实际主备验证
+
+- 普通 DDL 从目录移除表/辅助对象时，在共同发布事务内删除 `(Namespace, table_id) -> G` 绑定。删除尚未独立物化的继承对象允许本来就没有绑定。Namespace 删除在清除目录根的同一个原生事务内删除其全部绑定；使用受限前缀扫描，结束扫描后才逐行删除。
+- `InstanceMetaStore::attach` 可借用另一个 KV tablet 的原生事务，调用者仍负责先结束 owner 再释放 participant。Namespace 删除不额外经过 SQL，也没有第二个提交。
+- 绑定删除不删除布局 head/正文。被删除 Namespace 的物理对象仍可能供后代使用，而且可能继续完成接管；接管安装目前仍按目标 G 的可读 head 取完整布局。确定文件版本的正文读取已解除对 current head 的额外依赖。
+- 本段只是完整 GC 中的逻辑归属退休。正文/G 的物理引用回收仍未完成。不能按主库本机文件列表发送复制的正文 DELETE，因为备库的文件/接管进度可以更慢；对本机 minor filter 的评估也必须覆盖持有的旧 tablet 链、独立 SSTable handle、回放与文件复制，不能将一次 current tablet 遍历等同于全部引用。
+- 原生/生产两轮构建均成功。`run_table_storage_layout_probe.py` 扩展跨两个 KV tablet 提交/回滚、删除前 MVCC、无 head 的精确正文读取、真实 DROP TABLE/DROP NAMESPACE 后重启及后代读写；此脚本已在四件套原生 gate 中。第1轮原生测试因测试读水位尚在对象创建前，将“未看见 head”误当成“已看见删除”，精确读返回4018；驱动已增加删除提交后的可读水位断言。
+- 第2轮原生测试完整通过：`/tmp/seekdb-layout-retirement-native-test-2.log`，实例 `namespace_fork_PROTOTYPE_table_storage_layout_td5zo2t4`；核对7个逻辑对象、56个物理对象，两个重启均通过，最终删除的 Namespace 无剩余绑定，后代读回8行并继续更新。生产回归 `/tmp/seekdb-layout-retirement-baseline-test-1.log` 也通过：父表和中间 Namespace 删除后强制重启，后代继续读主表/索引/LOB，旧来源最终完成接管并被物理 GC 回收。此处物理来源 GC 通过不表示布局正文 GC 已实现。
+- 生产8000分区 freeze 复核通过：`/tmp/seekdb-layout-history-freeze-8000-test-1.log`，检查8716个tablet，最终持锁复核38396微秒，完整请求88.51毫秒，F=1791588924216136012。此用例暂停后续major，只证明准备/复核成本，不证明8000分区整轮合并及checksum完成；首次服务性能仍单独验证。
+- 实际 obtest `standby_sstable_replay` 第1轮在固定启动等待后执行初始化SQL时握手失败，未进入复制验证。第2轮等待误用了框架的 admin 连接，而 admin 尚待初始化创建；第3轮 root 轮询因 `deploy_get_value` 对暂时的null立即抛错而退出。最终复用已有 `namespace_setup_template_local.test` 的30秒启动等待，并明确给冷继承准备300秒SQL请求预算。前三次日志在 `/tmp/seekdb-layout-history-standby-{1,2,3}`，第4轮已经执行真实主库major并进入备库启动，结果待补充。该实际用例由四件套的 `run_standby_suite.py` 覆盖。
 本文件记录实现和验证证据，不缩减已确认范围。2026-10-10 开始实施。
 
 ### 当前推进：移除 freeze 的全局 schema 版本

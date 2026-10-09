@@ -83,7 +83,92 @@ static int run_table_storage_layout_native_probe()
   BIND_CALL(TableStorageLayouts(store, first, owner).prepare_create(retry));
   BIND_CHECK(retry.get_storage_layout_id() != aborted_g);
   BIND_CALL(store.commit(first));
-  fprintf(stderr, "TABLE_LAYOUT_PASS parent=%lu child=%lu conflict_nowait=1 no_seed_overwrite=1 rollback=1 participant_lifetime=1\n",
+
+  auto count_owner = [&](Tx &reader, uint64_t id, int64_t &count) {
+    count = 0;
+    return store.scan(reader, MetaCollection::TABLE_STORAGE_LAYOUTS, {},
+        [&](const ObString &key, const ObString &, bool &) {
+      int64_t found = 0, pos = 0;
+      int rc = serialization::decode_i64(key.ptr(), key.length(), pos, &found);
+      if (rc == OB_SUCCESS && found == id) { ++count; }
+      return rc;
+    });
+  };
+  Tx old_reader;
+  BIND_CALL(store.begin(old_reader, deadline(), true));
+  int64_t count = 0;
+  BIND_CALL(count_owner(old_reader, child, count));
+  BIND_CHECK(count == 1);
+  auto &directory = share::server_service<ObAccessService>()->instance_meta_store();
+  const auto marker_collection = static_cast<MetaCollection>(10072);
+  const auto marker_key = ObString::make_string("layout_retirement");
+  // Namespace deletion and binding retirement use two KV tablets, one native
+  // transaction. Verify both rollback and commit, including MVCC old readers.
+  for (bool commit : {false, true}) {
+    Tx owner_tx, participant;
+    BIND_CALL(directory.begin(owner_tx, deadline()));
+    BIND_CALL(store.attach(participant, owner_tx, deadline()));
+    BIND_CALL(directory.put(owner_tx, marker_collection, marker_key, marker_key));
+    BIND_CALL(TableStorageLayouts(store, participant, child).retire_namespace());
+    BIND_CALL(count_owner(participant, child, count));
+    BIND_CHECK(count == 0);
+    BIND_CALL(commit ? directory.commit(owner_tx) : directory.rollback(owner_tx));
+    BIND_CALL(store.detach(participant));
+    BIND_CALL(store.begin(first, deadline(), true));
+    BIND_CALL(count_owner(first, child, count));
+    BIND_CHECK(count == (commit ? 0 : 1));
+    BIND_CALL(count_owner(first, owner, count));
+    BIND_CHECK(count == 2);
+    BIND_CALL(StorageSchemaHistory(store, first).read_version(child_g, version));
+    BIND_CHECK(version == 11);
+    BIND_CALL(store.commit(first));
+    BIND_CALL(directory.begin(owner_tx, deadline(), true));
+    ObString marker;
+    ret = directory.get(owner_tx, marker_collection, marker_key, allocator, marker);
+    BIND_CHECK(commit ? ret == OB_SUCCESS : ret == OB_ENTRY_NOT_EXIST);
+    BIND_CALL(directory.commit(owner_tx));
+  }
+  BIND_CALL(count_owner(old_reader, child, count));
+  BIND_CHECK(count == 1);
+  BIND_CALL(StorageSchemaHistory(store, old_reader).read_version(child_g, version));
+  BIND_CHECK(version == 11);
+  BIND_CALL(store.commit(old_reader));
+
+  // Physical exact reads must not depend on a live logical binding or head.
+  BIND_CALL(store.begin(first, deadline()));
+  char head[24];
+  int64_t pos = 0;
+  BIND_CALL(serialization::encode_i64(head, sizeof(head), pos, child_g));
+  BIND_CALL(serialization::encode_i64(head, sizeof(head), pos, -1));
+  BIND_CALL(serialization::encode_i64(head, sizeof(head), pos, 0));
+  bool existed = false;
+  BIND_CALL(store.erase(first, MetaCollection::STORAGE_LAYOUTS, ObString(sizeof(head), head), existed));
+  BIND_CHECK(existed);
+  BIND_CALL(store.commit(first));
+  BIND_CALL(store.begin(first, deadline(), true));
+  const share::SCN after_delete = first.snapshot_version();
+  BIND_CALL(store.commit(first));
+  bool observed = false;
+  const int64_t until = deadline();
+  while (!observed && ObTimeUtility::current_time() < until) {
+    BIND_CALL(store.begin_weak_read(first, deadline()));
+    ret = StorageSchemaHistory(store, first).read_version(child_g, version);
+    BIND_CHECK(ret == OB_SUCCESS || ret == OB_ENTRY_NOT_EXIST);
+    observed = ret == OB_ENTRY_NOT_EXIST && first.snapshot_version() >= after_delete;
+    BIND_CALL(store.commit(first));
+    if (!observed) { usleep(10000); }
+  }
+  BIND_CHECK(observed);
+  ObStorageSchema exact;
+  BIND_CALL(StorageSchemaHistory::read_published(store, child_g, 11, deadline(), allocator, exact));
+  BIND_CHECK(exact.get_schema_version() == 11);
+  BIND_CALL(store.begin(first, deadline()));
+  BIND_CALL(TableStorageLayouts(store, first, owner).retire(table));
+  BIND_CALL(TableStorageLayouts(store, first, owner).retire(table));
+  BIND_CALL(count_owner(first, owner, count));
+  BIND_CHECK(count == 1);
+  BIND_CALL(store.commit(first));
+  fprintf(stderr, "TABLE_LAYOUT_PASS parent=%lu child=%lu conflict_nowait=1 no_seed_overwrite=1 rollback=1 participant_lifetime=1 retire_mvcc=1 cross_store_atomic=1 exact_without_head=1\n",
       parent_g, child_g);
 #undef BIND_CALL
 #undef BIND_CHECK

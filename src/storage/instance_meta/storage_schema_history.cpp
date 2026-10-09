@@ -202,10 +202,10 @@ int StorageSchemaHistory::read_published(InstanceMetaStore &store, uint64_t layo
   }
   InstanceMetaStore::Transaction tx;
   int ret = store.begin_weak_read(tx, deadline);
-  int64_t visible_version = 0;
   StorageSchemaHistory history(store, tx);
-  if (ret == OB_SUCCESS) { ret = history.read_version(layout_id, visible_version); }
-  if (ret == OB_SUCCESS && visible_version < schema_version) { ret = OB_EAGAIN; }
+  // The referenced immutable body is itself committed in the publication
+  // transaction. Its visibility is sufficient; the current head may have a
+  // different lifetime from a retired object's still-referenced files.
   if (ret == OB_SUCCESS) { ret = history.read_published(layout_id, schema_version, allocator, schema); }
   if (tx.is_active()) {
     const int end = store.commit(tx);

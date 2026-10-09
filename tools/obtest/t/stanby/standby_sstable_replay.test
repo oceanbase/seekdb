@@ -6,7 +6,20 @@
 
 --disable_all_result_log
 db_p=OBI(cluster=1,proxy_num=0,role=primary);
-db_p.reboot;
+db_p.reset;
+db_p.clean_all_asvr;
+db_p.reboot_logservice;
+db_p.deploy;
+# Use the same startup allowance as namespace_setup_template_local.test;
+# the framework's check_until_timeout needs the admin user created below.
+db_p.sleep 30;
+db_p.bootstrap;
+db_p.addserver;
+db_p.exec_init_sql;
+db_p.reboot_proxy;
+db_p.reboot_asvr;
+db_p.add_asvr;
+db_p.prepare_agent;
 
 sleep 5;
 --enable_all_result_log
@@ -24,6 +37,9 @@ db_p.mysql alter system set ob_compaction_schedule_interval = '3s';
 
 ob_connect(conn_sys_p, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
 connection conn_sys_p;
+set ob_query_timeout=300000000;
+set ob_trx_timeout=300000000;
+alter system set internal_sql_execute_timeout='300s';
 
 --enable_query_log
 --enable_result_log
