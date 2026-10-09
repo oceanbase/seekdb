@@ -23,7 +23,9 @@
 #include "rpc/obmysql/ob_sql_sock_session.h"
 #include "nio.h"
 
-void OB_WEAK_SYMBOL request_finish_callback();
+// The storage module supplies the strong implementation when linked.
+void OB_WEAK_SYMBOL request_finish_callback()
+{}
 
 namespace oceanbase
 {

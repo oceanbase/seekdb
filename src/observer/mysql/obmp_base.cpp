@@ -25,7 +25,7 @@
 #include "observer/mysql/obmp_utils.h"
 #include "observer/mysql/ob_query_driver.h"
 #include "sql/engine/expr/ob_expr_xml_func_helper.h"
-void OB_WEAK_SYMBOL request_finish_callback();
+void request_finish_callback();
 namespace oceanbase
 {
 using namespace share;
