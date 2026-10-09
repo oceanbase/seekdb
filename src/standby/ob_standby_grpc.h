@@ -229,8 +229,6 @@ public:
   int get_promotion_boundary(
       const StandbyPromotionBoundaryRequest &request,
       StandbyPromotionBoundary &boundary);
-  int fetch_tablet_info(const obcall::ObCopyTabletInfoArg& arg,
-                        std::function<int(const obcall::ObCopyTabletInfo&)> callback);
   int create_tablet_info_stream(
       const obcall::ObCopyTabletInfoArg &arg,
       grpc::ClientContext &context,
@@ -255,6 +253,7 @@ public:
       const common::ObAddr &src_addr,
       int64_t timeout,
       bool rpc_tls_enabled,
+      const share::ObTaskId &copy_view_id,
       common::ObIAllocator &allocator,
       ObLSMeta &ls_meta,
       share::SCN &physical_checkpoint_scn,
@@ -263,6 +262,7 @@ public:
       const common::ObAddr &src_addr,
       int64_t timeout,
       bool rpc_tls_enabled,
+      const share::ObTaskId &copy_view_id,
       const obcall::ObCopyTabletsSSTableInfoArg &arg,
       common::ObIAllocator &allocator,
       restore::ObRestoreHelperSSTableInfoCtx &sstable_info_ctx);
@@ -270,6 +270,7 @@ public:
       const common::ObAddr &src_addr,
       int64_t timeout,
       bool rpc_tls_enabled,
+      const share::ObTaskId &copy_view_id,
       const obcall::ObCopySSTableMacroRangeInfoArg &arg,
       common::ObIAllocator &allocator,
       restore::ObRestoreHelperSSTableMacroRangeCtx &macro_range_ctx);
@@ -277,6 +278,7 @@ public:
       const common::ObAddr &src_addr,
       int64_t timeout,
       bool rpc_tls_enabled,
+      const share::ObTaskId &copy_view_id,
       const obcall::ObCopyMacroBlockRangeArg &arg,
       common::ObIAllocator &allocator,
       restore::ObRestoreHelperMacroBlockCtx &macro_block_ctx);
@@ -284,6 +286,7 @@ public:
       const common::ObAddr &src_addr,
       int64_t timeout,
       bool rpc_tls_enabled,
+      const share::ObTaskId &copy_view_id,
       const obcall::ObCopyTabletInfoArg &arg,
       common::ObIAllocator &allocator,
       restore::ObRestoreHelperTabletInfoCtx &tablet_info_ctx);

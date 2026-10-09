@@ -18,6 +18,7 @@
 #define OCEANBASE_STANDBY_STANDBY_HOST_H_
 
 #include <stdint.h>
+#include <functional>
 #include "lib/allocator/ob_allocator.h"
 #include "lib/net/ob_addr.h"
 #include "lib/string/ob_string.h"
@@ -95,6 +96,9 @@ public:
 
   virtual void reset_max_id_cache() = 0;
   virtual int refresh_schema() = 0;
+  // Capture physical objects before reclamation can break an incomplete
+  // copy's source chain. The callback retains native handles, not SQL services.
+  virtual int capture_physical_copy_view(const std::function<int()> &capture) = 0;
 
   virtual int bootstrap_primary() = 0;
   virtual int report_bootstrap_telemetry() = 0;

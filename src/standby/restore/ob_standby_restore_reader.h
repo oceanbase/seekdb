@@ -101,7 +101,8 @@ public:
       const ObCopyMacroRangeInfo &copy_macro_range_info,
       const int64_t data_version,
       const share::SCN backfill_tx_scn,
-      const int64_t io_timeout_ms);
+      const int64_t io_timeout_ms,
+      const ObTabletHandle &handle);
   int get_next_macro_block(
       blocksstable::ObBufferReader &data,
       obcall::ObCopyMacroBlockHeader &copy_macro_block_header);
@@ -141,15 +142,13 @@ public:
   ObCopyTabletInfoObProducer();
   virtual ~ObCopyTabletInfoObProducer();
   int init(
-    const share::ObLSID &ls_id,
-    const common::ObIArray<common::ObTabletID> &tablet_id_array);
+    const common::ObIArray<ObTabletHandle> &tablets);
   int get_next_tablet_info(obcall::ObCopyTabletInfo &tablet_info);
 
 private:
   bool is_inited_;
-  ObArray<common::ObTabletID> tablet_id_array_;
+  ObArray<ObTabletHandle> tablets_;
   int64_t tablet_index_;
-  ObLS *ls_;
   DISALLOW_COPY_AND_ASSIGN(ObCopyTabletInfoObProducer);
 };
 
@@ -176,7 +175,7 @@ class ObCopySSTableInfoObProducer
 public:
   ObCopySSTableInfoObProducer();
   virtual ~ObCopySSTableInfoObProducer() {}
-  int init(const obcall::ObCopyTabletSSTableInfoArg &tablet_sstable_info, ObLS *ls);
+  int init(const obcall::ObCopyTabletSSTableInfoArg &tablet_sstable_info, const ObTabletHandle &handle);
   int get_next_sstable_info(obcall::ObCopyTabletSSTableInfo &sstable_info);
   int get_copy_tablet_sstable_header(obcall::ObCopyTabletSSTableHeader &copy_header);
 private:
@@ -224,7 +223,8 @@ public:
       const share::ObLSID & ls_id,
       const common::ObTabletID &tablet_id,
       const common::ObIArray<ObITable::TableKey> &copy_table_key_array,
-      const int64_t macro_range_max_marco_count);
+      const int64_t macro_range_max_marco_count,
+      const ObTabletHandle &handle);
 
   int get_next_sstable_macro_range_info(obcall::ObCopySSTableMacroRangeInfoHeader &header);
 private:
@@ -235,7 +235,6 @@ private:
   common::ObArray<ObITable::TableKey> copy_table_key_array_;
   int64_t sstable_index_;
   bool is_sstable_iter_init_;
-  ObLS *ls_;
   ObTabletHandle tablet_handle_;
   int64_t macro_range_max_marco_count_;
   DISALLOW_COPY_AND_ASSIGN(ObCopySSTableMacroObProducer);
@@ -267,7 +266,8 @@ public:
       const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
       const obcall::ObCopySSTableMacroRangeInfoHeader &header,
-      const int64_t macro_range_max_marco_count);
+      const int64_t macro_range_max_marco_count,
+      const ObTabletHandle &handle);
   virtual int get_next_macro_range_info(ObCopyMacroRangeInfo &macro_range_info);
   virtual Type get_type() const { return COPY_SSTABLE_MACRO_RANGE_INFO_OB_PRODUCER; }
 

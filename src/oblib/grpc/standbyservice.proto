@@ -29,6 +29,9 @@ enum FetchLSViewEntryType {
   LS_META_PACKAGE = 0;
   // Following messages: serialized ObCopyTabletInfo
   TABLET_INFO = 1;
+  // Inventory is complete. Keep the stream open to retain the copy view;
+  // cancelling it releases the native handles after the copy finishes.
+  VIEW_END = 2;
 }
 
 message FetchLSViewReq {

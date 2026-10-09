@@ -35,19 +35,19 @@ using storage::ObICopySSTableMacroRangeObProducer;
 int ObStandbyGrpcStreamUtil::build_tablet_sstable_info(
     grpc::ServerContext *context,
     const obcall::ObCopyTabletSSTableInfoArg &tablet_arg,
-    storage::ObLS *ls,
+    const storage::ObTabletHandle &handle,
     grpc::ServerWriter<standbyservice::FetchTabletSSTableInfoRes> *writer)
 {
   int ret = OB_SUCCESS;
 
-  if (OB_ISNULL(ls) || OB_ISNULL(writer)) {
+  if (!handle.is_valid() || OB_ISNULL(writer)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(ls), KP(writer));
+    LOG_WARN("invalid argument", K(ret), KP(writer));
   } else {
     ObCopySSTableInfoObProducer producer;
     obcall::ObCopyTabletSSTableHeader header;
     standbyservice::FetchTabletSSTableInfoRes header_response;
-    if (OB_FAIL(producer.init(tablet_arg, ls))) {
+    if (OB_FAIL(producer.init(tablet_arg, handle))) {
       LOG_WARN("failed to init copy sstable info ob producer", K(ret), K(tablet_arg));
     } else if (OB_FAIL(producer.get_copy_tablet_sstable_header(header))) {
       LOG_WARN("failed to get copy tablet sstable header", K(ret), K(tablet_arg));
@@ -92,6 +92,7 @@ int ObStandbyGrpcStreamUtil::build_sstable_macro_info(
     grpc::ServerContext *context,
     const obcall::ObCopySSTableMacroRangeInfoHeader &header,
     const obcall::ObCopySSTableMacroRangeInfoArg &arg,
+    const storage::ObTabletHandle &handle,
     grpc::ServerWriter<standbyservice::FetchSSTableMacroInfoRes> *writer)
 {
   int ret = OB_SUCCESS;
@@ -112,7 +113,7 @@ int ObStandbyGrpcStreamUtil::build_sstable_macro_info(
     } else if (header.macro_range_count_ > 0) {
       ObCopySSTableMacroRangeObProducer producer;
       if (OB_FAIL(producer.init(arg.ls_id_, arg.tablet_id_,
-              header, arg.macro_range_max_marco_count_))) {
+              header, arg.macro_range_max_marco_count_, handle))) {
         LOG_WARN("failed to init sstable macro range producer", K(ret), K(arg), K(header));
       }
       if (OB_SUCC(ret)) {

@@ -37,6 +37,10 @@
 #include "standby/restore/ob_restore_helper_ctx.h"
 #include "logservice/ob_log_handler.h"
 #include <string>
+#include <map>
+#include <memory>
+#include <mutex>
+#include <thread>
 
 using namespace oceanbase::common;
 using namespace oceanbase::obcall;
@@ -48,6 +52,29 @@ namespace oceanbase
 {
 namespace standby
 {
+
+static std::string encode_copy_view_id(const share::ObTaskId &id)
+{
+  char key[256];
+  const int64_t length = id.to_string(key, sizeof(key));
+  return std::string(key, length);
+}
+
+// Native handles retain the exact table stores and macro-block references.
+// This view lives only as long as its LS-view stream and in-flight copy RPCs.
+struct PhysicalCopyView final
+{
+  ObStandbyLSViewMeta meta;
+  std::map<uint64_t, ObTabletHandle> tablets;
+
+  int get(const ObTabletID &id, ObTabletHandle &handle) const
+  {
+    const auto found = tablets.find(id.id());
+    if (found == tablets.end()) { return OB_TABLET_NOT_EXIST; }
+    handle = found->second;
+    return OB_SUCCESS;
+  }
+};
 
 class StandbyGrpcService final : public standbyservice::StandbyService::Service
 {
@@ -106,6 +133,32 @@ public:
       standbyservice::GetPromotionBoundaryRes* response) override;
 
 private:
+  static int copy_view_key(grpc::ServerContext *context, std::string &key)
+  {
+    const auto &metadata = context->client_metadata();
+    const auto found = metadata.find("standby-copy-view");
+    if (found == metadata.end() || metadata.count("standby-copy-view") != 1
+        || found->second.empty() || found->second.size() > 256) { return OB_INVALID_ARGUMENT; }
+    key.assign(found->second.data(), found->second.size());
+    return OB_SUCCESS;
+  }
+
+  int get_copy_view(grpc::ServerContext *context, std::shared_ptr<PhysicalCopyView> &view)
+  {
+    std::string key;
+    int ret = copy_view_key(context, key);
+    if (OB_SUCC(ret)) {
+      std::lock_guard<std::mutex> lock(copy_views_mutex_);
+      const auto found = copy_views_.find(key);
+      if (found == copy_views_.end() || !(view = found->second.lock())) {
+        ret = OB_SNAPSHOT_DISCARDED;
+      }
+    }
+    return ret;
+  }
+
+  std::mutex copy_views_mutex_;
+  std::map<std::string, std::weak_ptr<PhysicalCopyView>> copy_views_;
   common::ObAddr promotion_node_id_;
   int64_t io_timeout_ms_;
   bool rpc_tls_enabled_;
@@ -261,125 +314,96 @@ int StandbyPromotionBoundaryRequest::add_visited(const common::ObAddr &addr)
 OB_SERIALIZE_MEMBER(StandbyPromotionBoundaryRequest, visited_);
 
 grpc::Status StandbyGrpcService::fetch_ls_view(
-    grpc::ServerContext* context,
-    const FetchLSViewReq* request,
-    grpc::ServerWriter<FetchLSViewRes>* writer)
+    grpc::ServerContext *context,
+    const FetchLSViewReq *request,
+    grpc::ServerWriter<FetchLSViewRes> *writer)
 {
-  int ret = OB_SUCCESS;
-  const int64_t start_ts = ObTimeUtil::current_time();
-  share::ObLSID ls_id(share::ObLSID::SYS_LS_ID);
   UNUSED(request);
+  int ret = OB_SUCCESS;
+  std::string key;
+  bool registered = false;
   SERVER_MODULE_SCOPE {
-    ObLSService *ls_service = nullptr;
+    auto view = std::make_shared<PhysicalCopyView>();
+    ObLSService *ls_service = share::server_service<ObLSService>();
     ObLS *ls = nullptr;
-    bool ls_meta_sent = false;
-    int64_t total_tablet_count = 0;
-    LOG_INFO("start to fetch ls view", K(ls_id));
-    auto fill_ls_meta_f = [&context, &writer, &ls_meta_sent](const ObStandbyLSViewMeta &ls_view_meta)->int {
-      int ret = OB_SUCCESS;
-      if (context->IsCancelled()) {
-        ret = OB_CANCELED;
-        LOG_WARN("client cancelled fetch_ls_view request", K(ret));
-      } else {
-        FetchLSViewRes response;
-        response.set_entry_type(standbyservice::LS_META_PACKAGE);
-        if (OB_FAIL(serialize_ob_to_proto(ls_view_meta, &response))) {
-          LOG_ERROR("failed to serialize standby ls view meta", K(ret));
-        } else if (!writer->Write(response)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_ERROR("failed to write ls meta package to stream", K(ret));
-        } else {
-          ls_meta_sent = true;
-        }
-      }
-      return ret;
-    };
-
-    auto fill_tablet_meta_f = [&context,
-                               &writer,
-                               &total_tablet_count]
-        (const obcall::ObCopyTabletInfo &tablet_info, const ObTabletHandle &tablet_handle)->int {
-      int ret = OB_SUCCESS;
-      UNUSED(tablet_handle);
-      if (context->IsCancelled()) {
-        ret = OB_CANCELED;
-        LOG_WARN("client cancelled fetch_ls_view request", K(ret));
-      } else {
-        FetchLSViewRes response;
-        response.set_entry_type(standbyservice::TABLET_INFO);
-        if (OB_FAIL(serialize_ob_to_proto(tablet_info, &response))) {
-          LOG_ERROR("failed to serialize ObCopyTabletInfo", K(ret), K(tablet_info));
-        } else if (!writer->Write(response)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_ERROR("failed to write tablet info to stream", K(ret), K(tablet_info));
-        } else {
-          ++total_tablet_count;
-          LOG_INFO("fetch_ls_view batch sent", K(total_tablet_count));
-        }
-      }
-      return ret;
-    };
-
-    LOG_INFO("start to fetch ls view", K(ls_id));
-    if (OB_ISNULL(ls_service = share::server_service<storage::ObLSService>())) {
-      ret = OB_ERR_UNEXPECTED;
-      STORAGE_LOG(WARN, "ls service should not be null", K(ret), KP(ls_service));
+    if (OB_FAIL(copy_view_key(context, key))) {
+    } else if (OB_ISNULL(ls_service)) {
+      ret = OB_NOT_INIT;
     } else if (OB_FAIL(ls_service->get_ls(ls))) {
-      LOG_WARN("failed to get log stream", K(ret), K(ls_id));
     } else if (OB_ISNULL(ls)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("log stream should not be NULL", K(ret), KP(ls), K(ls_id));
     } else {
-      ObStandbyLSViewMeta ls_view_meta;
-      ObLSTabletIterator tablet_iter(ObMDSGetTabletMode::READ_WITHOUT_CHECK);
-      if (OB_FAIL(ls->get_physical_restore_base(
-              ls_view_meta.ls_meta_, ls_view_meta.physical_checkpoint_scn_))) {
-        LOG_WARN("failed to get physical restore base", K(ret), K(ls_id));
-      } else if (!ls_view_meta.is_valid()) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid standby ls view meta", K(ret), K(ls_view_meta));
-      } else if (OB_FAIL(fill_ls_meta_f(ls_view_meta))) {
-        LOG_WARN("failed to stream ls meta", K(ret), K(ls_id));
-      } else if (OB_FAIL(ls->build_tablet_iter(tablet_iter))) {
-        LOG_WARN("failed to build tablet iterator", K(ret), K(ls_id));
-      }
-
-      while (OB_SUCC(ret)) {
-        ObTabletHandle tablet_handle;
-        ObTablet *tablet = nullptr;
-        obcall::ObCopyTabletInfo tablet_info;
-        if (OB_FAIL(tablet_iter.get_next_tablet(tablet_handle))) {
-          if (OB_ITER_END == ret) {
-            ret = OB_SUCCESS;
-          } else {
-            LOG_WARN("failed to iterate source tablets", K(ret), K(ls_id));
-          }
-          break;
-        } else if (OB_ISNULL(tablet = tablet_handle.get_obj())) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("source tablet is null", K(ret), K(tablet_handle));
-        } else if (FALSE_IT(tablet_info.tablet_id_ = tablet->get_tablet_meta().tablet_id_)) {
-        } else if (FALSE_IT(tablet_info.status_ = ObCopyTabletStatus::TABLET_EXIST)) {
-        } else if (FALSE_IT(tablet_info.version_ = DATA_CURRENT_VERSION)) {
-        } else if (OB_FAIL(tablet_info.param_.build_from_tablet(*tablet))) {
-          LOG_WARN("failed to build source tablet meta", K(ret), KPC(tablet));
-        } else if (OB_FAIL(fill_tablet_meta_f(tablet_info, tablet_handle))) {
-          LOG_WARN("failed to stream source tablet meta", K(ret), K(tablet_info));
+      ret = host_.capture_physical_copy_view([&]() {
+        int rc = ls->get_physical_restore_base(view->meta.ls_meta_, view->meta.physical_checkpoint_scn_);
+        ObLSTabletIterator iter(ObMDSGetTabletMode::READ_WITHOUT_CHECK);
+        if (rc == OB_SUCCESS) { rc = ls->build_tablet_iter(iter); }
+        while (rc == OB_SUCCESS) {
+          ObTabletHandle handle;
+          rc = iter.get_next_tablet(handle);
+          if (rc == OB_ITER_END) { rc = OB_SUCCESS; break; }
+          if (rc != OB_SUCCESS) { break; }
+          if (context->IsCancelled()) { rc = OB_CANCELED; break; }
+          if (handle.get_obj() == nullptr) { rc = OB_ERR_UNEXPECTED; break; }
+          view->tablets.emplace(handle.get_obj()->get_tablet_meta().tablet_id_.id(), handle);
         }
-      }
+        // An incomplete child's source must be in the same captured inventory,
+        // even if the current source is logically deleted or its owner is gone.
+        for (const auto &entry : view->tablets) {
+          if (rc != OB_SUCCESS) { break; }
+          if (entry.second.get_obj()->is_empty_shell()) { continue; }
+          const auto &fork = entry.second.get_obj()->get_tablet_meta().fork_info_;
+          if (fork.is_valid() && !fork.is_complete() && fork.get_fork_src_tablet_id().is_valid()) {
+            const auto source = view->tablets.find(fork.get_fork_src_tablet_id().id());
+            if (source == view->tablets.end() || source->second.get_obj()->is_empty_shell()) {
+              rc = OB_SNAPSHOT_DISCARDED;
+            }
+          }
+        }
+        return rc;
+      });
     }
-
-    if (OB_SUCC(ret) && !ls_meta_sent) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("ls meta is not sent in fetch_ls_view stream", K(ret), K(ls_id));
+    if (OB_SUCC(ret) && !view->meta.is_valid()) { ret = OB_ERR_UNEXPECTED; }
+    if (OB_SUCC(ret)) {
+      std::lock_guard<std::mutex> lock(copy_views_mutex_);
+      if (!copy_views_.emplace(key, view).second) { ret = OB_INIT_TWICE; }
+      else { registered = true; }
     }
     if (OB_SUCC(ret)) {
-      LOG_INFO("fetch_ls_view stream finished", K(ls_id), K(total_tablet_count),
-          "cost_ts", ObTimeUtil::current_time() - start_ts);
+      FetchLSViewRes response;
+      response.set_entry_type(standbyservice::LS_META_PACKAGE);
+      if (OB_FAIL(serialize_ob_to_proto(view->meta, &response))) {
+      } else if (!writer->Write(response)) { ret = OB_CANCELED; }
     }
+    for (const auto &entry : view->tablets) {
+      if (OB_FAIL(ret)) { break; }
+      obcall::ObCopyTabletInfo info;
+      info.tablet_id_ = ObTabletID(entry.first);
+      info.status_ = ObCopyTabletStatus::TABLET_EXIST;
+      info.version_ = DATA_CURRENT_VERSION;
+      FetchLSViewRes response;
+      response.set_entry_type(standbyservice::TABLET_INFO);
+      if (context->IsCancelled()) { ret = OB_CANCELED; }
+      else if (OB_FAIL(info.param_.build_from_tablet(*entry.second.get_obj()))) {
+      } else if (OB_FAIL(serialize_ob_to_proto(info, &response))) {
+      } else if (!writer->Write(response)) { ret = OB_CANCELED; }
+    }
+    if (OB_SUCC(ret)) {
+      FetchLSViewRes end;
+      end.set_entry_type(standbyservice::VIEW_END);
+      if (!writer->Write(end)) { ret = OB_CANCELED; }
+    }
+    LOG_INFO("physical copy view captured", K(ret), "tablets", view->tablets.size());
+    // The existing streaming RPC owns the view. Cancellation, peer loss and
+    // server shutdown release it; there is no durable session or cleanup job.
+    while (OB_SUCC(ret) && !context->IsCancelled()) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    if (registered) {
+      std::lock_guard<std::mutex> lock(copy_views_mutex_);
+      copy_views_.erase(key);
+    }
+    LOG_INFO("physical copy view released", K(ret), "tablets", view->tablets.size());
   }
-  LOG_INFO("fetch_ls_view stream finished", K(ls_id), "cost_ts", ObTimeUtil::current_time() - start_ts);
-
   return obgrpc::ob_error_to_grpc_status(ret);
 }
 
@@ -439,20 +463,17 @@ grpc::Status StandbyGrpcService::fetch_tablet_info(
   }
 
   SERVER_MODULE_SCOPE {
-    ObLSService *ls_service = nullptr;
-    ObLS *ls = nullptr;
+    std::shared_ptr<PhysicalCopyView> view;
+    ObArray<ObTabletHandle> tablets;
     ObCopyTabletInfoObProducer producer;
-    if (OB_ISNULL(ls_service = share::server_service<ObLSService>())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ls service should not be null", K(ret));
-    } else if (OB_FAIL(ls_service->get_ls(ls))) {
-      LOG_WARN("failed to get log stream", K(ret), K(arg));
-    } else if (OB_ISNULL(ls)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("log stream should not be NULL", K(ret), KP(ls), K(arg));
-    } else if (OB_FAIL(producer.init(arg.ls_id_, arg.tablet_id_list_))) {
-      LOG_WARN("failed to init copy tablet info producer", K(ret), K(arg));
-    } else {
+    if (OB_SUCC(ret)) { ret = get_copy_view(context, view); }
+    for (int64_t i = 0; OB_SUCC(ret) && i < arg.tablet_id_list_.count(); ++i) {
+      ObTabletHandle handle;
+      if (OB_FAIL(view->get(arg.tablet_id_list_.at(i), handle))) {
+      } else { ret = tablets.push_back(handle); }
+    }
+    if (OB_SUCC(ret)) { ret = producer.init(tablets); }
+    if (OB_SUCC(ret)) {
       ObCopyTabletInfo tablet_info;
       while (OB_SUCC(ret)) {
         tablet_info.reset();
@@ -508,22 +529,15 @@ grpc::Status StandbyGrpcService::fetch_tablet_sstable_info(
   } else {
     SERVER_MODULE_SCOPE {
       ObCopyTabletsSSTableInfoObProducer tablets_producer;
-      ObLSService *ls_service = nullptr;
+      std::shared_ptr<PhysicalCopyView> view;
       obcall::ObCopyTabletSSTableInfoArg tablet_arg;
-      ObLS *ls = nullptr;
-      if (OB_FAIL(tablets_producer.init(arg.ls_id_, arg.tablet_sstable_info_arg_list_))) {
-        LOG_WARN("failed to init copy tablets sstable info ob producer", K(ret), K(arg));
-      } else if (OB_ISNULL(ls_service = share::server_service<ObLSService>())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ls service should not be null", K(ret));
-      } else if (OB_FAIL(ls_service->get_ls(ls))) {
-        LOG_WARN("failed to get log stream", K(ret), K(arg));
-      } else if (OB_ISNULL(ls)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("log stream should not be NULL", K(ret), KP(ls), K(arg));
+      if (OB_FAIL(get_copy_view(context, view))) {
+      } else if (OB_FAIL(tablets_producer.init(arg.ls_id_, arg.tablet_sstable_info_arg_list_))) {
+        LOG_WARN("failed to init copy tablets sstable info producer", K(ret), K(arg));
       }
       while (OB_SUCC(ret)) {
         tablet_arg.reset();
+        ObTabletHandle handle;
         if (context->IsCancelled()) {
           ret = OB_CANCELED;
           LOG_WARN("client cancelled the request", K(ret));
@@ -536,8 +550,9 @@ grpc::Status StandbyGrpcService::fetch_tablet_sstable_info(
           } else {
             LOG_WARN("failed to get next tablet sstable info", K(ret), K(arg));
           }
+        } else if (OB_FAIL(view->get(tablet_arg.tablet_id_, handle))) {
         } else if (OB_FAIL(ObStandbyGrpcStreamUtil::build_tablet_sstable_info(
-                       context, tablet_arg, ls, writer))) {
+                       context, tablet_arg, handle, writer))) {
           LOG_WARN("failed to build tablet sstable info", K(ret), K(tablet_arg));
         }
       }
@@ -566,10 +581,14 @@ grpc::Status StandbyGrpcService::fetch_sstable_macro_info(
     LOG_WARN("failed to deserialize ObCopySSTableMacroRangeInfoArg", K(ret));
   } else {
     SERVER_MODULE_SCOPE {
+      std::shared_ptr<PhysicalCopyView> view;
+      ObTabletHandle handle;
       ObCopySSTableMacroObProducer producer;
       obcall::ObCopySSTableMacroRangeInfoHeader header;
-      if (OB_FAIL(producer.init(arg.ls_id_, arg.tablet_id_,
-          arg.copy_table_key_array_, arg.macro_range_max_marco_count_))) {
+      if (OB_FAIL(get_copy_view(context, view))) {
+      } else if (OB_FAIL(view->get(arg.tablet_id_, handle))) {
+      } else if (OB_FAIL(producer.init(arg.ls_id_, arg.tablet_id_,
+          arg.copy_table_key_array_, arg.macro_range_max_marco_count_, handle))) {
         LOG_WARN("failed to init copy sstable macro ob producer", K(ret), K(arg));
       } else {
         while (OB_SUCC(ret)) {
@@ -588,7 +607,7 @@ grpc::Status StandbyGrpcService::fetch_sstable_macro_info(
               LOG_WARN("failed to get next sstable macro range info", K(ret));
             }
           } else if (OB_FAIL(ObStandbyGrpcStreamUtil::build_sstable_macro_info(
-                         context, header, arg, writer))) {
+                         context, header, arg, handle, writer))) {
             LOG_WARN("failed to build sstable macro info", K(ret), K(header));
           }
         }
@@ -620,13 +639,17 @@ grpc::Status StandbyGrpcService::fetch_macro_block(
   } else {
     LOG_INFO("fetch_macro_block arg decoded", K(arg));
     SERVER_MODULE_SCOPE {
+      std::shared_ptr<PhysicalCopyView> view;
+      ObTabletHandle handle;
       ObCopyMacroBlockObProducer producer;
       blocksstable::ObBufferReader data;
       obcall::ObCopyMacroBlockHeader header;
       FetchMacroBlockRes header_response;
       FetchMacroBlockRes data_response;
-      if (OB_FAIL(producer.init(arg.ls_id_, arg.table_key_,
-          arg.copy_macro_range_info_, arg.data_version_, arg.backfill_tx_scn_, io_timeout_ms_))) {
+      if (OB_FAIL(get_copy_view(context, view))) {
+      } else if (OB_FAIL(view->get(arg.table_key_.get_tablet_id(), handle))) {
+      } else if (OB_FAIL(producer.init(arg.ls_id_, arg.table_key_,
+          arg.copy_macro_range_info_, arg.data_version_, arg.backfill_tx_scn_, io_timeout_ms_, handle))) {
         LOG_ERROR("failed to init copy macro block ob producer", K(ret), K(arg));
       }
       common::ObArenaAllocator header_allocator("MacroBlkHeader");
@@ -1020,6 +1043,7 @@ int ObStandbyGrpcClient::init_tablet_sstable_info_stream(
     const common::ObAddr &src_addr,
     int64_t timeout,
     bool rpc_tls_enabled,
+    const share::ObTaskId &copy_view_id,
     const obcall::ObCopyTabletsSSTableInfoArg &arg,
     common::ObIAllocator &allocator,
     restore::ObRestoreHelperSSTableInfoCtx &sstable_info_ctx)
@@ -1040,6 +1064,8 @@ int ObStandbyGrpcClient::init_tablet_sstable_info_stream(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc grpc client context", K(ret));
     } else if (FALSE_IT(sstable_info_ctx.sstable_info_context_ = new (ctx_buf) grpc::ClientContext())) {
+    } else if (FALSE_IT(sstable_info_ctx.sstable_info_context_->AddMetadata(
+        "standby-copy-view", encode_copy_view_id(copy_view_id)))) {
     } else if (OB_FAIL(grpc_client->create_tablet_sstable_info_stream(arg, *sstable_info_ctx.sstable_info_context_,
                                                                           sstable_info_ctx.sstable_info_reader_))) {
         LOG_WARN("failed to create tablet sstable info stream", K(ret), K(arg), K(src_addr));
@@ -1070,6 +1096,7 @@ int ObStandbyGrpcClient::init_sstable_macro_info_stream(
     const common::ObAddr &src_addr,
     int64_t timeout,
     bool rpc_tls_enabled,
+    const share::ObTaskId &copy_view_id,
     const obcall::ObCopySSTableMacroRangeInfoArg &arg,
     common::ObIAllocator &allocator,
     restore::ObRestoreHelperSSTableMacroRangeCtx &macro_range_ctx)
@@ -1090,6 +1117,8 @@ int ObStandbyGrpcClient::init_sstable_macro_info_stream(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc grpc client context", K(ret));
     } else if (FALSE_IT(macro_range_ctx.macro_info_context_ = new (ctx_buf) grpc::ClientContext())) {
+    } else if (FALSE_IT(macro_range_ctx.macro_info_context_->AddMetadata(
+        "standby-copy-view", encode_copy_view_id(copy_view_id)))) {
     } else if (OB_FAIL(grpc_client->create_sstable_macro_info_stream(arg, *macro_range_ctx.macro_info_context_,
                                                                           macro_range_ctx.macro_info_reader_))) {
         LOG_WARN("failed to create sstable macro info stream", K(ret), K(arg), K(src_addr));
@@ -1120,6 +1149,7 @@ int ObStandbyGrpcClient::init_macro_block_stream(
     const common::ObAddr &src_addr,
     int64_t timeout,
     bool rpc_tls_enabled,
+    const share::ObTaskId &copy_view_id,
     const obcall::ObCopyMacroBlockRangeArg &arg,
     common::ObIAllocator &allocator,
     restore::ObRestoreHelperMacroBlockCtx &macro_block_ctx)
@@ -1140,6 +1170,8 @@ int ObStandbyGrpcClient::init_macro_block_stream(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc grpc client context", K(ret));
     } else if (FALSE_IT(macro_block_ctx.macro_block_context_ = new (ctx_buf) grpc::ClientContext())) {
+    } else if (FALSE_IT(macro_block_ctx.macro_block_context_->AddMetadata(
+        "standby-copy-view", encode_copy_view_id(copy_view_id)))) {
     } else if (OB_FAIL(grpc_client->create_macro_block_stream(arg, *macro_block_ctx.macro_block_context_,
                                                                   macro_block_ctx.macro_block_reader_))) {
         LOG_WARN("failed to create macro block stream", K(ret), K(arg), K(src_addr));
@@ -1170,6 +1202,7 @@ int ObStandbyGrpcClient::init_tablet_info_stream(
     const common::ObAddr &src_addr,
     int64_t timeout,
     bool rpc_tls_enabled,
+    const share::ObTaskId &copy_view_id,
     const obcall::ObCopyTabletInfoArg &arg,
     common::ObIAllocator &allocator,
     restore::ObRestoreHelperTabletInfoCtx &tablet_info_ctx)
@@ -1190,6 +1223,8 @@ int ObStandbyGrpcClient::init_tablet_info_stream(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc grpc client context", K(ret));
     } else if (FALSE_IT(tablet_info_ctx.tablet_info_context_ = new (ctx_buf) grpc::ClientContext())) {
+    } else if (FALSE_IT(tablet_info_ctx.tablet_info_context_->AddMetadata(
+        "standby-copy-view", encode_copy_view_id(copy_view_id)))) {
     } else if (OB_FAIL(grpc_client->create_tablet_info_stream(arg, *tablet_info_ctx.tablet_info_context_,
                                                                   tablet_info_ctx.tablet_info_reader_))) {
         LOG_WARN("failed to create tablet info stream", K(ret), K(arg), K(src_addr));
@@ -1425,67 +1460,6 @@ int ObStandbyGrpcClient::get_promotion_boundary(
   return ret;
 }
 
-int ObStandbyGrpcClient::fetch_tablet_info(
-    const obcall::ObCopyTabletInfoArg& arg,
-    std::function<int(const obcall::ObCopyTabletInfo&)> callback)
-{
-  int ret = OB_SUCCESS;
-
-  if (!is_inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObStandbyGrpcClient not inited", K(ret));
-  } else {
-    FetchTabletInfoReq req;
-    if (OB_FAIL(serialize_ob_to_proto(arg, &req))) {
-      LOG_WARN("failed to serialize ObCopyTabletInfoArg", K(ret));
-    } else {
-      grpc::ClientContext context;
-      grpc_client_.ctx_.set_grpc_context(context);
-      auto reader = grpc_client_.stub_->fetch_tablet_info(&context, req);
-
-      if (OB_ISNULL(reader)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to create stream reader", K(ret));
-      } else {
-        FetchTabletInfoRes response;
-        while (reader->Read(&response)) {
-          const std::string& res_buf = response.buf();
-          const uint64_t res_size = response.size();
-
-          if (res_size > 0) {
-            ObCopyTabletInfo tablet_info;
-            if (OB_FAIL(deserialize_proto_to_ob(response, tablet_info))) {
-              LOG_WARN("failed to deserialize ObCopyTabletInfo", K(ret), K(res_size));
-              break;
-            } else {
-              if (OB_FAIL(callback(tablet_info))) {
-                if (OB_ITER_END == ret) {
-                  ret = OB_SUCCESS;
-                  LOG_INFO("callback requested to stop");
-                } else {
-                  LOG_WARN("callback failed", K(ret));
-                }
-                break;
-              }
-            }
-          }
-        }
-
-        grpc::Status status = reader->Finish();
-        int grpc_ret = grpc_client_.translate_error(status);
-
-        if (OB_FAIL(grpc_ret)) {
-          LOG_WARN("fetch_tablet_info stream failed", K(ret));
-        } else {
-          LOG_INFO("fetch_tablet_info stream completed", K(arg));
-        }
-      }
-    }
-  }
-
-  return ret;
-}
-
 int ObStandbyGrpcClient::create_tablet_info_stream(
     const obcall::ObCopyTabletInfoArg &arg,
     grpc::ClientContext &context,
@@ -1525,6 +1499,9 @@ int ObStandbyGrpcClient::create_ls_view_stream(
   } else {
     FetchLSViewReq req;
     grpc_client_.ctx_.set_grpc_context(context);
+    // This stream owns the copy view until the copier releases it. Data RPCs
+    // retain their normal deadlines; LS inventory time does not bound copying.
+    context.set_deadline(std::chrono::system_clock::time_point::max());
     reader = grpc_client_.stub_->fetch_ls_view(&context, req);
     if (OB_ISNULL(reader.get())) {
       ret = OB_ERR_UNEXPECTED;
@@ -1627,6 +1604,7 @@ int ObStandbyGrpcClient::init_ls_view_stream(
     const common::ObAddr &src_addr,
     int64_t timeout,
     bool rpc_tls_enabled,
+    const share::ObTaskId &copy_view_id,
     common::ObIAllocator &allocator,
     ObLSMeta &ls_meta,
     share::SCN &physical_checkpoint_scn,
@@ -1651,6 +1629,7 @@ int ObStandbyGrpcClient::init_ls_view_stream(
           LOG_WARN("failed to alloc grpc client context", K(ret));
         } else {
           ls_view_ctx.ls_view_context_ = new (ctx_buf) grpc::ClientContext();
+          ls_view_ctx.ls_view_context_->AddMetadata("standby-copy-view", encode_copy_view_id(copy_view_id));
           if (OB_FAIL(grpc_client->create_ls_view_stream(
                   *ls_view_ctx.ls_view_context_, ls_view_ctx.ls_view_reader_))) {
             LOG_WARN("failed to create ls view stream", K(ret), K(src_addr), K(timeout));
@@ -1688,6 +1667,7 @@ int ObStandbyGrpcClient::init_ls_view_stream(
 
   if (OB_FAIL(ret)) {
     if (ls_view_ctx.ls_view_reader_ && OB_NOT_NULL(grpc_client)) {
+      ls_view_ctx.ls_view_context_->TryCancel();
       int tmp_ret = OB_SUCCESS;
       if(OB_TMP_FAIL(restore::ObRestoreHelperCtxUtil::close_reader(ls_view_ctx.ls_view_reader_, grpc_client))) {
         LOG_WARN("failed to close ls view reader", KR(tmp_ret));

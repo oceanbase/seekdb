@@ -1137,6 +1137,13 @@ int NamespaceForkKernelPrototype::collect_catalog_pages()
   return ret;
 }
 
+int NamespaceForkKernelPrototype::capture_physical_copy_view(const std::function<int()> &capture)
+{
+  if (!capture) { return OB_INVALID_ARGUMENT; }
+  PhysicalReclamationGuard fence;
+  return fence.error() == OB_SUCCESS ? capture() : fence.error();
+}
+
 int NamespaceForkKernelPrototype::collect_dropped_namespace_tablets() {
   auto *store = directory_kv_store();
   if (store == nullptr || !ATOMIC_LOAD(&GCTX.sys_package_ready_)) { return OB_SUCCESS; }

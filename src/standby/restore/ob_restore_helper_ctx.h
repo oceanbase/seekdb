@@ -93,6 +93,7 @@ public:
   virtual void reset() override;
   virtual void destroy() override;
   bool ls_meta_fetched_;
+  bool tablets_fetched_ = false;
   standby::ObStandbyGrpcClient *grpc_client_;
   grpc::ClientContext *ls_view_context_;
   std::unique_ptr<grpc::ClientReader<standbyservice::FetchLSViewRes>> ls_view_reader_;

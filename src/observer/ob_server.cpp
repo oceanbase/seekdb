@@ -166,6 +166,11 @@ public:
     }
   }
 
+  int capture_physical_copy_view(const std::function<int()> &capture) override
+  {
+    return storage::NamespaceForkKernelPrototype::capture_physical_copy_view(capture);
+  }
+
   int refresh_schema() override
   {
     int ret = OB_SUCCESS;

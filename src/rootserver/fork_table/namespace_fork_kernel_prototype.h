@@ -47,6 +47,7 @@ public:
       const std::function<int(const common::ObIArray<common::ObTabletID> &)> &reclaim);
   static int collect_dropped_namespace_tablets();
   static int collect_catalog_pages();
+  static int capture_physical_copy_view(const std::function<int()> &capture);
   // Bounded primary-side creation from persisted sources. Existing physical
   // tablets subsequently complete takeover through the native scheduler.
   static int materialize_inherited_tablets();

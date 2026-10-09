@@ -113,6 +113,7 @@ private:
 
 private:
   bool is_inited_;
+  share::ObTaskId copy_view_id_;
   bool replay_base_prepared_;
   common::ObAddr src_;
   common::ObInOutBandwidthThrottle *bandwidth_throttle_;

@@ -527,39 +527,40 @@ const char descriptor_table_protodef_standbyservice_2eproto[] PROTOBUF_SECTION_V
   "\022\n\nsource_lsn\030\003 \001(\004\022\017\n\007end_scn\030\004 \001(\004\"4\n\027"
   "GetPromotionBoundaryReq\022\013\n\003buf\030\001 \001(\014\022\014\n\004"
   "size\030\002 \001(\004\"4\n\027GetPromotionBoundaryRes\022\013\n"
-  "\003buf\030\001 \001(\014\022\014\n\004size\030\002 \001(\004*<\n\024FetchLSViewE"
+  "\003buf\030\001 \001(\014\022\014\n\004size\030\002 \001(\004*J\n\024FetchLSViewE"
   "ntryType\022\023\n\017LS_META_PACKAGE\020\000\022\017\n\013TABLET_"
-  "INFO\020\0012\235\010\n\016StandbyService\022Q\n\rfetch_ls_vi"
-  "ew\022\036.standbyservice.FetchLSViewReq\032\036.sta"
-  "ndbyservice.FetchLSViewRes0\001\022]\n\021fetch_ta"
-  "blet_info\022\".standbyservice.FetchTabletIn"
-  "foReq\032\".standbyservice.FetchTabletInfoRe"
-  "s0\001\022s\n\031fetch_tablet_sstable_info\022).stand"
-  "byservice.FetchTabletSSTableInfoReq\032).st"
-  "andbyservice.FetchTabletSSTableInfoRes0\001"
-  "\022p\n\030fetch_sstable_macro_info\022(.standbyse"
-  "rvice.FetchSSTableMacroInfoReq\032(.standby"
-  "service.FetchSSTableMacroInfoRes0\001\022]\n\021fe"
-  "tch_macro_block\022\".standbyservice.FetchMa"
-  "croBlockReq\032\".standbyservice.FetchMacroB"
-  "lockRes0\001\022l\n\030get_ls_view_tablet_count\022\'."
-  "standbyservice.GetLSViewTabletCountReq\032\'"
-  ".standbyservice.GetLSViewTabletCountRes\022"
-  "v\n\032check_restore_precondition\022+.standbys"
-  "ervice.CheckRestorePreconditionReq\032+.sta"
-  "ndbyservice.CheckRestorePreconditionRes\022"
-  "x\n\034fetch_standby_palf_base_info\022+.standb"
-  "yservice.FetchStandbyPalfBaseInfoReq\032+.s"
-  "tandbyservice.FetchStandbyPalfBaseInfoRe"
-  "s\022G\n\tfetch_log\022\033.standbyservice.FetchLog"
-  "Req\032\033.standbyservice.FetchLogRes0\001\022j\n\026ge"
-  "t_promotion_boundary\022\'.standbyservice.Ge"
-  "tPromotionBoundaryReq\032\'.standbyservice.G"
-  "etPromotionBoundaryResb\006proto3"
+  "INFO\020\001\022\014\n\010VIEW_END\020\0022\235\010\n\016StandbyService\022"
+  "Q\n\rfetch_ls_view\022\036.standbyservice.FetchL"
+  "SViewReq\032\036.standbyservice.FetchLSViewRes"
+  "0\001\022]\n\021fetch_tablet_info\022\".standbyservice"
+  ".FetchTabletInfoReq\032\".standbyservice.Fet"
+  "chTabletInfoRes0\001\022s\n\031fetch_tablet_sstabl"
+  "e_info\022).standbyservice.FetchTabletSSTab"
+  "leInfoReq\032).standbyservice.FetchTabletSS"
+  "TableInfoRes0\001\022p\n\030fetch_sstable_macro_in"
+  "fo\022(.standbyservice.FetchSSTableMacroInf"
+  "oReq\032(.standbyservice.FetchSSTableMacroI"
+  "nfoRes0\001\022]\n\021fetch_macro_block\022\".standbys"
+  "ervice.FetchMacroBlockReq\032\".standbyservi"
+  "ce.FetchMacroBlockRes0\001\022l\n\030get_ls_view_t"
+  "ablet_count\022\'.standbyservice.GetLSViewTa"
+  "bletCountReq\032\'.standbyservice.GetLSViewT"
+  "abletCountRes\022v\n\032check_restore_precondit"
+  "ion\022+.standbyservice.CheckRestorePrecond"
+  "itionReq\032+.standbyservice.CheckRestorePr"
+  "econditionRes\022x\n\034fetch_standby_palf_base"
+  "_info\022+.standbyservice.FetchStandbyPalfB"
+  "aseInfoReq\032+.standbyservice.FetchStandby"
+  "PalfBaseInfoRes\022G\n\tfetch_log\022\033.standbyse"
+  "rvice.FetchLogReq\032\033.standbyservice.Fetch"
+  "LogRes0\001\022j\n\026get_promotion_boundary\022\'.sta"
+  "ndbyservice.GetPromotionBoundaryReq\032\'.st"
+  "andbyservice.GetPromotionBoundaryResb\006pr"
+  "oto3"
   ;
 static ::PROTOBUF_NAMESPACE_ID::internal::once_flag descriptor_table_standbyservice_2eproto_once;
 const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable descriptor_table_standbyservice_2eproto = {
-  false, false, 2310, descriptor_table_protodef_standbyservice_2eproto, "standbyservice.proto",
+  false, false, 2324, descriptor_table_protodef_standbyservice_2eproto, "standbyservice.proto",
   &descriptor_table_standbyservice_2eproto_once, nullptr, 0, 20,
   schemas, file_default_instances, TableStruct_standbyservice_2eproto::offsets,
   file_level_metadata_standbyservice_2eproto, file_level_enum_descriptors_standbyservice_2eproto, file_level_service_descriptors_standbyservice_2eproto,
@@ -579,6 +580,7 @@ bool FetchLSViewEntryType_IsValid(int value) {
   switch (value) {
     case 0:
     case 1:
+    case 2:
       return true;
     default:
       return false;

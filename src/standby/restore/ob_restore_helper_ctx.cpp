@@ -54,13 +54,17 @@ bool ObRestoreHelperLSViewCtx::is_valid() const
 void ObRestoreHelperLSViewCtx::reset()
 {
   ls_meta_fetched_ = false;
-  int ret = OB_SUCCESS;
+  tablets_fetched_ = false;
   if (ls_view_reader_) {
     if (OB_NOT_NULL(ls_view_context_)) {
       ls_view_context_->TryCancel();
     }
-    if (OB_FAIL(ObRestoreHelperCtxUtil::close_reader(ls_view_reader_, grpc_client_))) {
-      LOG_ERROR("stream finished with error", K(ret));
+    // Cancellation is the normal release of the source's copy view.
+    const auto status = ls_view_reader_->Finish();
+    ls_view_reader_.reset();
+    if (!status.ok() && status.error_code() != grpc::StatusCode::CANCELLED) {
+      const int ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("copy view stream finished with error", "grpc_code", status.error_code());
     }
   }
   if (OB_NOT_NULL(ls_view_context_)) {

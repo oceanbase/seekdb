@@ -24,7 +24,7 @@ namespace oceanbase
 {
 namespace storage
 {
-class ObLS;
+class ObTabletHandle;
 }
 namespace standby
 {
@@ -35,12 +35,13 @@ public:
   static int build_tablet_sstable_info(
       grpc::ServerContext *context,
       const obcall::ObCopyTabletSSTableInfoArg &tablet_arg,
-      storage::ObLS *ls,
+      const storage::ObTabletHandle &handle,
       grpc::ServerWriter<standbyservice::FetchTabletSSTableInfoRes> *writer);
   static int build_sstable_macro_info(
       grpc::ServerContext *context,
       const obcall::ObCopySSTableMacroRangeInfoHeader &header,
       const obcall::ObCopySSTableMacroRangeInfoArg &arg,
+      const storage::ObTabletHandle &handle,
       grpc::ServerWriter<standbyservice::FetchSSTableMacroInfoRes> *writer);
 };
 

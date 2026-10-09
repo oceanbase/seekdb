@@ -143,12 +143,13 @@ namespace standbyservice {
 enum FetchLSViewEntryType : int {
   LS_META_PACKAGE = 0,
   TABLET_INFO = 1,
+  VIEW_END = 2,
   FetchLSViewEntryType_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
   FetchLSViewEntryType_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
 };
 bool FetchLSViewEntryType_IsValid(int value);
 constexpr FetchLSViewEntryType FetchLSViewEntryType_MIN = LS_META_PACKAGE;
-constexpr FetchLSViewEntryType FetchLSViewEntryType_MAX = TABLET_INFO;
+constexpr FetchLSViewEntryType FetchLSViewEntryType_MAX = VIEW_END;
 constexpr int FetchLSViewEntryType_ARRAYSIZE = FetchLSViewEntryType_MAX + 1;
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* FetchLSViewEntryType_descriptor();

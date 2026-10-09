@@ -76,6 +76,7 @@ int ObStandbySSTableCopier::CopyTabletCtx::get_copy_tablet_record_extra_info(
 
 ObStandbySSTableCopier::ObStandbySSTableCopier()
     : is_inited_(false),
+      copy_view_id_(),
       replay_base_prepared_(false),
       src_(),
       bandwidth_throttle_(nullptr),
@@ -100,6 +101,7 @@ int ObStandbySSTableCopier::init(
     LOG_WARN("invalid standby sstable copier argument", K(ret), K(src), KP(bandwidth_throttle));
   } else {
     src_ = src;
+    copy_view_id_.init(config.self_addr_);
     bandwidth_throttle_ = bandwidth_throttle;
     config_ = &config;
     is_inited_ = true;
@@ -194,13 +196,11 @@ int ObStandbySSTableCopier::copy(share::SCN &restore_checkpoint_scn)
 int ObStandbySSTableCopier::init_helper_(ObStandbyRestoreHelper &helper) const
 {
   int ret = OB_SUCCESS;
-  ObTaskId task_id;
-  task_id.init(config_->self_addr_);
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("standby sstable copier not init", K(ret));
-  } else if (OB_FAIL(helper.init(src_, task_id, bandwidth_throttle_, *config_))) {
-    LOG_WARN("failed to init standby restore helper", K(ret), K_(src), K(task_id));
+  } else if (OB_FAIL(helper.init(src_, copy_view_id_, bandwidth_throttle_, *config_))) {
+    LOG_WARN("failed to init standby restore helper", K(ret), K_(src), K_(copy_view_id));
   }
   return ret;
 }

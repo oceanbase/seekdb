@@ -250,7 +250,7 @@ int ObStandbyRestoreHelper::fetch_ls_meta(
     } else if (OB_FAIL(get_ls_view_rpc_timeout_(rpc_timeout_us))) {
       LOG_WARN("failed to get ls view rpc timeout", K(ret), K_(src));
     } else if (OB_FAIL(oceanbase::standby::ObStandbyGrpcClient::init_ls_view_stream(
-                          src_, rpc_timeout_us, config_->rpc_tls_enabled_, ctx_allocator_, ls_meta,
+                          src_, rpc_timeout_us, config_->rpc_tls_enabled_, task_id_, ctx_allocator_, ls_meta,
                           physical_checkpoint_scn, *ls_view_ctx))) {
       LOG_WARN("failed to init ls view stream", K(ret), K_(src), K(rpc_timeout_us));
     }
@@ -276,6 +276,8 @@ int ObStandbyRestoreHelper::fetch_next_tablet_info(obcall::ObCopyTabletInfo &tab
     if (!ls_view_ctx->ls_meta_fetched_) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ls meta not fetched yet, fetch_ls_meta should be called first", K(ret), KPC(this));
+    } else if (ls_view_ctx->tablets_fetched_) {
+      ret = OB_ITER_END;
     } else if (OB_ISNULL(ls_view_ctx->grpc_client_) || !ls_view_ctx->ls_view_reader_) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ls view stream is not initialized", K(ret), KP(ls_view_ctx));
@@ -285,8 +287,11 @@ int ObStandbyRestoreHelper::fetch_next_tablet_info(obcall::ObCopyTabletInfo &tab
         if (OB_FAIL(ObRestoreHelperCtxUtil::close_reader(ls_view_ctx->ls_view_reader_, ls_view_ctx->grpc_client_))) {
           LOG_WARN("failed to close reader", K(ret));
         } else {
-          ret = OB_ITER_END;
+          ret = OB_ERR_UNEXPECTED; // A complete inventory must end with VIEW_END.
         }
+      } else if (standbyservice::VIEW_END == response.entry_type()) {
+        ls_view_ctx->tablets_fetched_ = true;
+        ret = OB_ITER_END;
       } else if (standbyservice::TABLET_INFO == response.entry_type()) {
         if (OB_FAIL(obgrpc::deserialize_proto_to_ob(response, tablet_info))) {
           LOG_WARN("failed to deserialize ObCopyTabletInfo", K(ret));
@@ -319,7 +324,7 @@ int ObStandbyRestoreHelper::init_for_fetch_tablet_meta(const common::ObIArray<co
     if (OB_FAIL(arg.tablet_id_list_.assign(tablet_id_array))) {
       LOG_WARN("failed to assign tablet id list", K(ret), K(tablet_id_array));
     } else if (OB_FAIL(standby::ObStandbyGrpcClient::init_tablet_info_stream(
-        src_, RPC_TIMEOUT_US, config_->rpc_tls_enabled_, arg, ctx_allocator_, *tablet_info_ctx))) {
+        src_, RPC_TIMEOUT_US, config_->rpc_tls_enabled_, task_id_, arg, ctx_allocator_, *tablet_info_ctx))) {
        LOG_WARN("failed to create tablet info stream", K(ret), K(arg));
     }
   }
@@ -498,7 +503,7 @@ int ObStandbyRestoreHelper::init_for_build_tablets_sstable_info(
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(standby::ObStandbyGrpcClient::init_tablet_sstable_info_stream(
-              src_, RPC_TIMEOUT_US, config_->rpc_tls_enabled_, arg,
+              src_, RPC_TIMEOUT_US, config_->rpc_tls_enabled_, task_id_, arg,
               ctx_allocator_, *sstable_info_ctx))) {
         LOG_WARN("failed to init tablet sstable info stream", K(ret), K(arg), K_(src));
       } else {
@@ -633,7 +638,7 @@ int ObStandbyRestoreHelper::init_for_sstable_macro_range(const common::ObIArray<
     if (OB_FAIL(arg.copy_table_key_array_.assign(copy_table_key_array))) {
       LOG_WARN("failed to assign copy table key array", K(ret), "key_cnt", copy_table_key_array.count());
     } else if (OB_FAIL(standby::ObStandbyGrpcClient::init_sstable_macro_info_stream(
-        src_, RPC_TIMEOUT_US, config_->rpc_tls_enabled_, arg,
+        src_, RPC_TIMEOUT_US, config_->rpc_tls_enabled_, task_id_, arg,
         ctx_allocator_, *macro_range_ctx))) {
       LOG_WARN("failed to init sstable macro info stream", K(ret), K(arg), K_(src));
     }
@@ -742,7 +747,7 @@ int ObStandbyRestoreHelper::init_for_macro_block_copy(
     if (OB_FAIL(arg.copy_macro_range_info_.assign(macro_range_info))) {
       LOG_WARN("failed to assign macro range info", K(ret), K(macro_range_info));
     } else if (OB_FAIL(standby::ObStandbyGrpcClient::init_macro_block_stream(
-        src_, RPC_TIMEOUT_US, config_->rpc_tls_enabled_, arg,
+        src_, RPC_TIMEOUT_US, config_->rpc_tls_enabled_, task_id_, arg,
         ctx_allocator_, *macro_block_ctx))) {
       LOG_WARN("failed to init macro block stream", K(ret), K(arg), K_(src));
     } else if (OB_FAIL(macro_block_ctx->data_buffer_.ensure_space(common::OB_DEFAULT_MACRO_BLOCK_SIZE))) {

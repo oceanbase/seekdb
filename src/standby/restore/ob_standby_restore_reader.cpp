@@ -224,11 +224,10 @@ int ObCopyMacroBlockObProducer::init(
     const ObCopyMacroRangeInfo &copy_macro_range_info,
     const int64_t data_version,
     const share::SCN backfill_tx_scn,
-    const int64_t io_timeout_ms)
+    const int64_t io_timeout_ms,
+    const ObTabletHandle &handle)
 {
   int ret = OB_SUCCESS;
-  ObLSService *ls_service = nullptr;
-  ObLS *ls = nullptr;
   ObTablet* tablet = nullptr;
   const bool is_reverse_scan = false;
   ObSSTableMetaHandle meta_handle;
@@ -237,24 +236,16 @@ int ObCopyMacroBlockObProducer::init(
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("cannot init twice", K(ret));
-  } else if (!ls_id.is_valid() || !table_key.is_valid()
+  } else if (!handle.is_valid() || !ls_id.is_valid() || !table_key.is_valid()
       || !copy_macro_range_info.is_valid()
       || data_version < obcall::ObCopyMacroBlockRangeArg::DISABLE_MACRO_BLOCK_REUSE_DATA_VERSION
       || !backfill_tx_scn.is_valid() || io_timeout_ms <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(ls_id), K(table_key),
         K(copy_macro_range_info), K(data_version), K(backfill_tx_scn));
-  } else if (OB_ISNULL(ls_service = share::server_service<ObLSService>())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls service should not be null", K(ret), KP(ls_service));
-  } else if (OB_FAIL(ls_service->get_ls(ls))) {
-    LOG_WARN("fail to get log stream", KR(ret), K(ls_id));
-  } else if (OB_UNLIKELY(nullptr == ls)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("log stream should not be NULL", KR(ret), K(ls_id), KPC(ls));
-  } else if (OB_FAIL(ls->get_tablet(table_key.get_tablet_id(), tablet_handle_,
-      ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-    LOG_WARN("failed to get tablet", K(ret), K(table_key));
+  } else if (handle.get_obj()->get_tablet_meta().tablet_id_ != table_key.get_tablet_id()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (FALSE_IT(tablet_handle_ = handle)) {
   } else if (OB_UNLIKELY(nullptr == (tablet = tablet_handle_.get_obj()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet not be NULL", KR(ret), K(ls_id), KPC(tablet));
@@ -497,9 +488,8 @@ int ObCopyMacroBlockObProducer::prefetch_()
 
 ObCopyTabletInfoObProducer::ObCopyTabletInfoObProducer()
   : is_inited_(false),
-    tablet_id_array_(),
-    tablet_index_(0),
-    ls_(nullptr)
+    tablets_(),
+    tablet_index_(0)
 {
 }
 
@@ -507,32 +497,13 @@ ObCopyTabletInfoObProducer::~ObCopyTabletInfoObProducer()
 {
 }
 
-int ObCopyTabletInfoObProducer::init(
-    const share::ObLSID &ls_id,
-    const common::ObIArray<common::ObTabletID> &tablet_id_array)
+int ObCopyTabletInfoObProducer::init(const common::ObIArray<ObTabletHandle> &tablets)
 {
   int ret = OB_SUCCESS;
-  ObLSService *ls_service = nullptr;
-
-  if (is_inited_) {
-    ret = OB_INIT_TWICE;
-    LOG_WARN("copy table info ob producer init twice", K(ret));
-  } else if (!ls_id.is_valid() || tablet_id_array.empty()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("copy tablet info ob producer init get invalid argument", K(ret), K(ls_id), K(tablet_id_array));
-  } else if (OB_ISNULL(ls_service = share::server_service<ObLSService>())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls service should not be null", K(ret), KP(ls_service));
-  } else if (OB_FAIL(ls_service->get_ls(ls_))) {
-    LOG_WARN("fail to get log stream", KR(ret), K(ls_id));
-  } else if (OB_UNLIKELY(nullptr == ls_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("log stream should not be NULL", KR(ret), K(ls_id));
-  } else if (OB_FAIL(tablet_id_array_.assign(tablet_id_array))) {
-    LOG_WARN("failed to assign tablet id array", K(ret), K(ls_id), K(tablet_id_array));
-  } else {
-    is_inited_ = true;
-  }
+  if (is_inited_) { ret = OB_INIT_TWICE; }
+  else if (tablets.empty()) { ret = OB_INVALID_ARGUMENT; }
+  else if (OB_FAIL(tablets_.assign(tablets))) {
+  } else { is_inited_ = true; }
   return ret;
 }
 
@@ -540,35 +511,19 @@ int ObCopyTabletInfoObProducer::get_next_tablet_info(obcall::ObCopyTabletInfo &t
 {
   int ret = OB_SUCCESS;
   tablet_info.reset();
-  ObLS *ls = nullptr;
-  ObTabletHandle tablet_handle;
   ObTablet *tablet = nullptr;
 
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("copy tablet info ob producer do not init", K(ret));
-  } else if (tablet_index_ == tablet_id_array_.count()) {
+  } else if (tablet_index_ == tablets_.count()) {
     ret = OB_ITER_END;
   } else {
-    const ObTabletID &tablet_id = tablet_id_array_.at(tablet_index_);
+    const ObTabletHandle &tablet_handle = tablets_.at(tablet_index_);
+    const ObTabletID &tablet_id = tablet_handle.get_obj()->get_tablet_meta().tablet_id_;
     tablet_info.tablet_id_ = tablet_id;
     tablet_info.version_ = DATA_CURRENT_VERSION;
-    if (OB_ISNULL(ls = ls_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("log stream should not be NULL", K(ret), KP(ls));
-    } else if (OB_FAIL(ls->get_tablet(tablet_id, tablet_handle,
-        ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US, ObMDSGetTabletMode::READ_WITHOUT_CHECK))
-               && OB_TABLET_NOT_EXIST != ret) {
-      LOG_WARN("failed to get tablet", K(ret), K(tablet_id), K(tablet_handle));
-    } else if (OB_TABLET_NOT_EXIST == ret) {
-      ret = OB_SUCCESS;
-      tablet_info.status_ = ObCopyTabletStatus::TABLET_NOT_EXIST;
-      if (OB_FAIL(tablet_info.param_.build_deleted_tablet_info(ObLSID(ObLSID::SYS_LS_ID), tablet_id))) {
-        LOG_WARN("failed to build deleted tablet info", K(ret), K(tablet_id));
-      } else {
-        LOG_INFO("tablet not exist, build deleted tablet info", K(tablet_id));
-      }
-    } else if (OB_ISNULL(tablet = tablet_handle.get_obj())) {
+    if (OB_ISNULL(tablet = tablet_handle.get_obj())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tablet should not be NULL", K(ret), KP(tablet), K(tablet_id));
     } else if (OB_FAIL(tablet_info.param_.build_from_tablet(*tablet))) {
@@ -697,7 +652,7 @@ void errsim_copy_new_sstable_array(const ObTabletID &tablet_id, ObTableStoreIter
 
 int ObCopySSTableInfoObProducer::init(
     const obcall::ObCopyTabletSSTableInfoArg &tablet_sstable_info,
-    ObLS *ls)
+    const ObTabletHandle &handle)
 {
   int ret = OB_SUCCESS;
   ObTablet *tablet = nullptr;
@@ -705,20 +660,13 @@ int ObCopySSTableInfoObProducer::init(
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("copy sstable info ob producer init twice", K(ret));
-  } else if (!tablet_sstable_info.is_valid() || OB_ISNULL(ls)) {
+  } else if (!tablet_sstable_info.is_valid() || !handle.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("copy sstable info ob producer init get invalid argument",
-        K(ret), K(tablet_sstable_info), KP(ls));
-  // Physical restore must include retired tablets still used as fork sources,
-  // and CREATE records whose committed state has not reached the checkpoint.
-  } else if (OB_FAIL(ls->get_tablet(tablet_sstable_info.tablet_id_, tablet_handle_,
-      ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-    if (OB_TABLET_NOT_EXIST == ret) {
-      status_ = ObCopyTabletStatus::TABLET_NOT_EXIST;
-      ret = OB_SUCCESS;
-    } else {
-      LOG_WARN("failed to get tablet handle", K(ret), K(tablet_sstable_info));
-    }
+        K(ret), K(tablet_sstable_info));
+  } else if (handle.get_obj()->get_tablet_meta().tablet_id_ != tablet_sstable_info.tablet_id_) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (FALSE_IT(tablet_handle_ = handle)) {
   } else if (OB_ISNULL(tablet = tablet_handle_.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet should not be NULL", K(ret), K(tablet_sstable_info));
@@ -957,7 +905,6 @@ ObCopySSTableMacroObProducer::ObCopySSTableMacroObProducer()
     copy_table_key_array_(),
     sstable_index_(0),
     is_sstable_iter_init_(false),
-    ls_(nullptr),
     tablet_handle_(),
     macro_range_max_marco_count_(0)
 {
@@ -967,31 +914,22 @@ int ObCopySSTableMacroObProducer::init(
     const share::ObLSID & ls_id,
     const common::ObTabletID &tablet_id,
     const common::ObIArray<ObITable::TableKey> &copy_table_key_array,
-    const int64_t macro_range_max_marco_count)
+    const int64_t macro_range_max_marco_count,
+    const ObTabletHandle &handle)
 {
   int ret = OB_SUCCESS;
-  ObLSService *ls_service = nullptr;
-  ObLS *ls = nullptr;
 
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("copy sstable macro ob producer init twice", K(ret));
-  } else if (!ls_id.is_valid() || !tablet_id.is_valid()
+  } else if (!handle.is_valid() || !ls_id.is_valid() || !tablet_id.is_valid()
       || copy_table_key_array.empty() || macro_range_max_marco_count <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("init copy sstable macro ob producer get invalid argument", K(ret),
         K(ls_id), K(tablet_id), K(copy_table_key_array), K(macro_range_max_marco_count));
-  } else if (OB_ISNULL(ls_service = share::server_service<ObLSService>())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls service should not be null", K(ret), KP(ls_service));
-  } else if (OB_FAIL(ls_service->get_ls(ls_))) {
-    LOG_WARN("fail to get log stream", KR(ret), K(ls_id));
-  } else if (OB_UNLIKELY(nullptr == (ls = ls_))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("log stream should not be NULL", KR(ret), K(ls_id));
-  } else if (OB_FAIL(ls->get_tablet(tablet_id, tablet_handle_,
-      ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-    LOG_WARN("failed to get tablet", K(ret), K(tablet_id));
+  } else if (handle.get_obj()->get_tablet_meta().tablet_id_ != tablet_id) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (FALSE_IT(tablet_handle_ = handle)) {
   } else if (OB_FAIL(copy_table_key_array_.assign(copy_table_key_array))) {
     LOG_WARN("failed to assign sstable array", K(ret), K(ls_id), K(tablet_id), K(copy_table_key_array));
   } else {
@@ -1090,11 +1028,10 @@ int ObCopySSTableMacroRangeObProducer::init(
     const share::ObLSID &ls_id,
     const common::ObTabletID &tablet_id,
     const obcall::ObCopySSTableMacroRangeInfoHeader &header,
-    const int64_t macro_range_max_marco_count)
+    const int64_t macro_range_max_marco_count,
+    const ObTabletHandle &handle)
 {
   int ret = OB_SUCCESS;
-  ObLSService *ls_service = nullptr;
-  ObLS *ls = nullptr;
   ObTablet *tablet = nullptr;
   ObSSTable *sstable = nullptr;
   const bool is_reverse_scan = false;
@@ -1103,22 +1040,14 @@ int ObCopySSTableMacroRangeObProducer::init(
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("copy sstable macro range ob producer init twice", K(ret));
-  } else if (!ls_id.is_valid() || !tablet_id.is_valid()
+  } else if (!handle.is_valid() || !ls_id.is_valid() || !tablet_id.is_valid()
       || !header.is_valid() || macro_range_max_marco_count <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("init copy sstable macro range get invalid argument",
         K(ret), K(ls_id), K(tablet_id), K(header), K(macro_range_max_marco_count));
-  } else if (OB_ISNULL(ls_service = share::server_service<ObLSService>())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls service should not be null", K(ret), KP(ls_service));
-  } else if (OB_FAIL(ls_service->get_ls(ls))) {
-    LOG_WARN("fail to get log stream", KR(ret), K(ls_id));
-  } else if (OB_UNLIKELY(nullptr == ls)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("log stream should not be NULL", KR(ret), K(ls_id));
-  } else if (OB_FAIL(ls->get_tablet(tablet_id, tablet_handle_,
-      ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-    LOG_WARN("failed to get tablet", K(ret), K(tablet_id));
+  } else if (handle.get_obj()->get_tablet_meta().tablet_id_ != tablet_id) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (FALSE_IT(tablet_handle_ = handle)) {
   } else if (OB_ISNULL(tablet = tablet_handle_.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet should not be NULL", K(ret), KP(tablet), K(ls_id), K(tablet_id), K(header));
