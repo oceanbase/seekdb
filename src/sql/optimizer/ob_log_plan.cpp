@@ -6918,18 +6918,11 @@ int ObLogPlan::inner_candi_allocate_subplan_filter(ObIArray<ObLogPlan*> &subplan
   ObSEArray<ObSEArray<CandidatePlan, 4>, 8> best_dist_subplan_list;
   ObSEArray<CandidatePlan, 4> subquery_plans;
   const bool has_onetime = !onetime_idxs.is_empty();
-  bool has_rescan_subplan = false;
-  for (int64_t i = 0; !has_rescan_subplan && i < subplans.count(); ++i) {
-    has_rescan_subplan = !initplan_idxs.has_member(i + 1) && !onetime_idxs.has_member(i + 1);
-  }
-  const bool has_hinted_initplan = !has_rescan_subplan && !initplan_idxs.is_empty() &&
-      get_optimizer_context().get_global_hint().has_parallel_hint();
   int64_t dist_methods = DIST_INVALID_METHOD;
   if (OB_FAIL(prepare_subplan_candidate_list(subplans, params, best_subplan_list,
                                              best_dist_subplan_list))) {
   } else if (OB_FAIL(get_valid_subplan_filter_dist_method(subplans,
                                                           has_onetime,
-                                                          has_hinted_initplan,
                                                           false,
                                                           dist_methods))) {
   } else if (DIST_INVALID_METHOD != dist_methods &&
@@ -6949,7 +6942,6 @@ int ObLogPlan::inner_candi_allocate_subplan_filter(ObIArray<ObLogPlan*> &subplan
     OPT_TRACE("success to generate subplan filter plan with hint");
   } else if (OB_FAIL(get_valid_subplan_filter_dist_method(subplans,
                                                           has_onetime,
-                                                          has_hinted_initplan,
                                                           true,
                                                           dist_methods))) {
   } else if (OB_FAIL(inner_candi_allocate_subplan_filter(best_subplan_list,
@@ -7031,7 +7023,6 @@ int ObLogPlan::prepare_subplan_candidate_list(ObIArray<ObLogPlan*> &subplans,
 
 int ObLogPlan::get_valid_subplan_filter_dist_method(ObIArray<ObLogPlan*> &subplans,
                                                     const bool has_onetime,
-                                                    const bool has_hinted_initplan,
                                                     const bool ignore_hint,
                                                     int64_t &dist_methods)
 {
@@ -7077,13 +7068,6 @@ int ObLogPlan::get_valid_subplan_filter_dist_method(ObIArray<ObLogPlan*> &subpla
       dist_methods &= ~DIST_HASH_ALL;
       dist_methods &= ~DIST_RANDOM_ALL;
       OPT_TRACE("SPF will not use DIST_NONE_ALL/DIST_HASH_ALL/DIST_RANDOM_ALL method due to onetime subquery");
-    }
-
-    if (OB_SUCC(ret) && has_hinted_initplan) {
-      // A worker-local SPF can materialize only its local part of an init-plan.
-      // Keep the SPF on one server, where its PX child is fully collected first.
-      dist_methods &= (DIST_BASIC_METHOD | DIST_PULL_TO_LOCAL);
-      OPT_TRACE("SPF will use basic or pull to local method due to hinted init-plan");
     }
 
     if (OB_FAIL(ret)) {
@@ -7541,7 +7525,21 @@ int ObLogPlan::create_subplan_filter_plan(ObLogicalOperator *&top,
   }
   const bool has_hinted_initplan = !has_rescan_subplan && !initplan_idxs.is_empty() &&
       get_optimizer_context().get_global_hint().has_parallel_hint();
-  if (OB_ISNULL(top)) {
+  bool is_child_ops_match_all = false;
+  bool requires_local_initplan = false;
+  if (has_hinted_initplan) {
+    if (OB_FAIL(check_if_all_match_all(subquery_ops, is_child_ops_match_all))) {
+    } else if (!is_child_ops_match_all) {
+      // A worker-local SPF must see the complete init-plan result. Match-all
+      // children already provide it at every worker; only other PX children
+      // require a single-instance SPF and collected child results.
+      requires_local_initplan = true;
+      cur_dist_methods &= (DIST_BASIC_METHOD | DIST_PULL_TO_LOCAL);
+      OPT_TRACE("SPF will use basic or pull to local method due to hinted PX init-plan");
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_ISNULL(top)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(get_subplan_filter_distributed_method(top,
                                                            subquery_ops,
@@ -7550,7 +7548,7 @@ int ObLogPlan::create_subplan_filter_plan(ObLogicalOperator *&top,
                                                            cur_dist_methods))) {
   } else if (DIST_INVALID_METHOD == (dist_algo = get_dist_algo(cur_dist_methods))) {
     top = NULL;
-  } else if (has_hinted_initplan &&
+  } else if (requires_local_initplan &&
              DistAlgo::DIST_BASIC_METHOD != dist_algo &&
              DistAlgo::DIST_PULL_TO_LOCAL != dist_algo) {
     ret = OB_ERR_UNEXPECTED;
@@ -7616,7 +7614,7 @@ int ObLogPlan::create_subplan_filter_plan(ObLogicalOperator *&top,
                                                     is_update_set))) {
   } else { /*do nothing*/
   }
-  if (OB_SUCC(ret) && has_hinted_initplan && NULL != top &&
+  if (OB_SUCC(ret) && requires_local_initplan && NULL != top &&
       (OB_ISNULL(top->get_sharding()) || !top->get_sharding()->is_single() ||
        ObGlobalHint::DEFAULT_PARALLEL != top->get_parallel())) {
     ret = OB_ERR_UNEXPECTED;
