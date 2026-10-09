@@ -473,6 +473,7 @@ extern ObUnicaseInfo ob_unicase_unicode520;
 extern ObCharsetInfo ob_charset_bin;
 extern ObCharsetInfo ob_charset_utf8mb4_bin;
 extern ObCharsetInfo ob_charset_utf8mb4_general_ci;
+extern ObCharsetInfo ob_charset_utf8mb4_unicode_ci;
 extern ObCollationHandler ob_collation_mb_bin_handler;
 extern ObCharsetHandler ob_charset_utf8mb4_handler;
 extern ObCollationHandler ob_collation_binary_handler;
