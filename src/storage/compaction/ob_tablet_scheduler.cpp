@@ -580,7 +580,6 @@ int ObTabletScheduler::schedule_merge(const int64_t broadcast_version)
     update_frozen_version_and_merge_progress(broadcast_version);
     LOG_INFO("schedule merge major version", K(broadcast_version));
 
-    medium_loop_.start_merge(broadcast_version); // set all statistics
     if (OB_TMP_FAIL(timer_task_mgr_.set_active_medium_loop(true/*active*/, true/*immediate*/))) {
       LOG_WARN_RET(tmp_ret, "failed to wakeup medium loop", K(broadcast_version));
     }

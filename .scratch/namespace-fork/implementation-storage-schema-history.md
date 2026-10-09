@@ -20,12 +20,12 @@
 
 ## 当前证据
 
-- 创建/删除 MDS 数据独立保存 physical_create_version_；物化仍保留原来的逻辑可见性。基础编译、物化回滚与崩溃恢复验证已通过（见后文），消费者未接线。
+- 创建/删除 MDS 数据独立保存 physical_create_version_；物化仍保留原来的逻辑可见性。基础编译、物化回滚与崩溃恢复验证已通过（见后文）；物理调度资格正在接线，上层进度/checksum 尚未统一。
 - 已确认 InstanceMetaStore 可按 tablet ID 创建独立存储实例，支持借用 SQL 原生事务；布局存储复用该基础。
 - 当前 KV 单值上限 64 KiB，完整布局最大尺寸需要处理，不能默认为任意表定义都能放入一行。
 - 新增 `StorageSchemaHistory`：按 `(G, chunk)` 存储完整布局，首块保存大小和来源版本，小布局一行；大布局按固定位置分块，发布/缩小和读取均在同一原生事务快照中完成。拒绝简化 schema 和同 G 的倒退/重复版本，首次创建不会覆盖现有布局。
-- 专用 LS 内部 tablet 已接入创建、删除、mini/minor 和活跃读者 MVCC 保留。持久 freeze 保留尚未接入，不能据此宣称长周期合并历史已受保护。
-- `ObCreateTabletSchema` 与 `ObTabletMeta` 已增加稳定 G，并覆盖复制及持久化；上层分配/绑定正在本轮接入（见下节），合并仍走旧读取路径。这是实施中的接口基础，不是最终可交付状态。
+- 专用 LS 内部 tablet 已接入创建、删除、mini/minor、活跃读者和持久 freeze 保留。持久保留的故障与恢复证据见后文，完整主备和逻辑校验仍须验证。
+- `ObCreateTabletSchema` 与 `ObTabletMeta` 已增加稳定 G，并覆盖复制及持久化；上层分配/绑定已接入共同 DDL/创建入口。major 和普通 medium 正在切换布局读取；meta major、freeze 准备及完整进度/checksum 尚未完成。
 
 ## 后续接线线索
 
@@ -35,6 +35,23 @@
 - G 整体记录的删除必须等待旧物理 incarnation / 任务 / fork 描述引用满足要求；不能只保护活跃读者，也不能永久遗留无主 G。
 
 ## 验证记录
+
+### 物理合并资格与布局读取（进行中）
+
+- 新增不感知 Namespace 的 `PhysicalMergeCandidate`，从真实创建 MDS 读取 incarnation/C/G。未提交 CREATE、已提交删除和存活对象分别处理；合并轮次以 C<=F 判断。`round_satisfied` 与“真的产生了合并结果”分开，C>F 不伪造 finish/checksum。
+- major 迭代改为先获取物理对象再显式判定原生状态，避免原先过滤器隐藏尚未提交的状态。新轮次在合并循环线程接收并重建迭代器，先验证可读水位，再取得候选 ID；reload 线程不再修改正在遍历的数组。
+- major 跳过所有 F<C 的旧 freeze，直接读取 G@F 并固定进 medium_info；删除旧的跨对象版本比较、schema 缺失后跳下一个 freeze、改用普通 medium 等分支。普通 medium 也读取自己的目标 B；旧 B 已不受保留或早于 C 时，在注册原生读者后选择新的可读 B，同时重算合并输入，不把当前布局贴到旧快照上。
+- 首轮构建通过（`/tmp/seekdb-physical-merge-layout-build-1.log`），真实 major 用例失败（`/tmp/seekdb-physical-merge-layout-major-test-1.log`）：只有父/模板 bootstrap core 对象未完成。旧 `schema_version==0` 判断把有效的对象定义 V=0 当作无效全局版本，已删除该判断；没有按 Namespace/对象编号增加例外。
+- 修正后生产构建通过（`/tmp/seekdb-physical-merge-layout-build-2.log`）；真实 major 通过（`/tmp/seekdb-physical-merge-layout-major-test-2.log`，实例 `namespace_fork_PROTOTYPE_major_progress_47h8bv4e`，F=1791573603250786024）。冻结、广播、完成水位一致，实际 MAJOR 使用编码后的物理 tablet ID。
+- 原生资格测试通过（`/tmp/seekdb-physical-merge-identity-test-2.log`，实例 `namespace_fork_PROTOTYPE_shared_transaction_4qf8vcyg`）：真实未提交 CREATE 不参与；回滚与提交后 crash；恢复 370 个 tablet，358 个使用持久 MDS 状态；每个对象明确断言 C-1 不参与、C/C+1 参与，并与崩溃前原生提交记录核对。
+- 父子布局测试通过（`/tmp/seekdb-physical-merge-layout-test-4.log`，实例 `namespace_fork_PROTOTYPE_physical_merge_layout_tpqvyoqe`）：父子分别 DDL，F 后再分别加列，实际合并仍使用各自 F 时的 G/V；F=1791573906729989023，父 G=2037/V=1791573906570696，子 G=2347/V=1791573906483312。之后读写新列正确。F 后创建的 tablet 明确 C>F、member=0，未生成 F 的假 MAJOR。
+- 测试驱动失败也保留：首次两个驱动在二进制复制尚未结束时启动，得到 Text file busy（`/tmp/seekdb-physical-merge-layout-test-1.log`、`/tmp/seekdb-physical-merge-identity-test-1.log`），等待复制完成后重跑。父子测试第 2/3 轮把 freeze 返回后尚未刷新的进度视图值 1 当作本轮 F，原生日志实际已经读到正确 G@F；改为等待新 F 在视图出现，第 4 轮通过。测试还保留完整行读取游标，避免半行日志被消费。
+- 普通 medium 接线首轮编译失败：重选输入接口需要非 const ObTablet，已修正。修正后的原生构建通过（`/tmp/seekdb-physical-merge-medium-native-build-2.log`）。新测试及注入入口已加入四件套。
+- 普通与强制旧目标的首轮驱动均失败（`/tmp/seekdb-medium-layout-target-test-1.log`、`/tmp/seekdb-medium-layout-target-old-test-1.log`）：实际 tablet freeze 命令返回成功，但未到布局准备。静态核对确认 `ObScheduleTabletFunc(merge_version, reason)` 的枚举被当作第二个整数参数 loop_cnt，merge_reason 仍为 NONE；用户请求和 mini 后事件两处均有此错。构造函数调整为枚举在第二位、循环次数在第三位，使旧调用正确传递原因且避免整数误传；正常轮次显式传 NONE 和 loop_cnt。
+- 原因参数修正后的原生构建通过（`/tmp/seekdb-physical-merge-medium-native-build-3.log`）。真实 tablet freeze 两项均通过：普通目标 B=1791574214151667160/V=1791574214148104（`/tmp/seekdb-medium-layout-target-test-2.log`，实例 `namespace_fork_PROTOTYPE_medium_layout_target_0pcp9nu5`）；测试注入过旧目标 1 后重选 B=1791574214935918076>=C，使用 V=1791574214915232（`/tmp/seekdb-medium-layout-target-old-test-2.log`，实例 `namespace_fork_PROTOTYPE_medium_layout_target_dbiue2j0`）。两项均断言实际 MAJOR 结果位于选定 B、新加列默认值正确；不只断言调度函数返回成功。
+- 扩展历史保留测试通过（`/tmp/seekdb-medium-layout-retention-test-1.log`，实例 `namespace_fork_PROTOTYPE_layout_retention_it0oeg02`）：保留、暂停恢复、原生读者交接以及释放后拒绝旧 F 均通过；旧 F=1791574037475174043 已被回收后，`read_current` 返回新的受保护目标 1791574091456492010 和 V=12，未将新布局作为旧 F 的结果返回。
+- 最终全部本轮生产源码注入已移除，生产构建通过（`/tmp/seekdb-physical-merge-production-final-build-2.log`）。生产真实 major 最终回归通过（`/tmp/seekdb-physical-merge-production-major-final.log`，实例 `namespace_fork_PROTOTYPE_major_progress_ymfwurg1`，F=1791574304026577012）。原因参数修正后再次执行父子/F 后 DDL 回归通过（`/tmp/seekdb-physical-merge-layout-test-final.log`，实例 `namespace_fork_PROTOTYPE_physical_merge_layout_aqro4e3c`，F=1791574305122558023）。只执行针对性用例，未跑完整 mysqltest/sysbench。
+- 尚未完成：上层 SQLite 进度/incarnation 校验、Namespace checksum、freeze 准备、G/绑定回收、meta major 和实际主备。特别是 meta major 现有实现会合入已确定的 minor 并将结果快照推进到 tablet.snapshot_version；现有 medium_info 又会在 MDS minor 中按 <=last_major_snapshot 回收，不能直接假定旧 medium_info 永久存在，也不能无条件拿旧 major 的布局解释后续加列数据。该路径必须补足确定布局及其持久生命周期，再删除剩余 SQL schema helper，不能以本节通过代替完成。
 
 ### 持久布局历史保留（进行中）
 

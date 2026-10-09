@@ -64,6 +64,11 @@ public:
     ObIAllocator &allocator,
     storage::ObStorageSchema &storage_schema,
     bool &is_skip_merge_index);
+  static int read_layout_for_merge(
+    const ObTablet &tablet,
+    const share::SCN &target,
+    ObIAllocator &allocator,
+    storage::ObStorageSchema &storage_schema);
   static int batch_check_medium_finish(
     ObIArray<ObTabletCheckInfo> &finish_tablet_infos,
     const ObIArray<ObTabletCheckInfo> &tablet_check_infos,
@@ -89,9 +94,9 @@ protected:
       const ObTabletID &tablet_id,
       share::ObTabletCompactionScnInfo &ret_info);
   int prepare_medium_info(
-    const ObGetMergeTablesResult &result,
-    const int64_t schema_version,
+    ObGetMergeTablesResult &result,
     ObMediumCompactionInfo &medium_info);
+  int prepare_medium_layout(ObGetMergeTablesResult &result, ObMediumCompactionInfo &medium_info);
   int choose_encoding_limit(ObMediumCompactionInfo &medium_info);
   int init_parallel_range_and_schema_changed(
       const ObGetMergeTablesResult &result,
@@ -112,21 +117,14 @@ protected:
   int choose_medium_snapshot(
       const int64_t max_sync_medium_scn,
       ObMediumCompactionInfo &medium_info,
-      ObGetMergeTablesResult &result,
-      int64_t &schema_version);
+      ObGetMergeTablesResult &result);
   int choose_major_snapshot(
       const int64_t max_sync_medium_scn,
       ObMediumCompactionInfo &medium_info,
-      ObGetMergeTablesResult &result,
-      int64_t &schema_version);
+      ObGetMergeTablesResult &result);
   int find_valid_freeze_info(
       ObMediumCompactionInfo &medium_info,
-      share::ObFreezeInfo &freeze_info,
-      bool &force_schedule_medium_merge);
-  int switch_to_choose_medium_snapshot(
-    const int64_t freeze_version,
-    ObMediumCompactionInfo &medium_info,
-    int64_t &schema_version);
+      share::ObFreezeInfo &freeze_info);
 
   int schedule_next_medium_primary_cluster(
     const int64_t major_snapshot,
@@ -134,9 +132,7 @@ protected:
 
   int choose_new_medium_snapshot(
     const int64_t max_reserved_snapshot,
-    ObMediumCompactionInfo &medium_info,
-    ObGetMergeTablesResult &result,
-    int64_t &schema_version);
+    ObMediumCompactionInfo &medium_info);
   int get_max_reserved_snapshot(int64_t &max_reserved_snapshot);
   int check_frequency(
     const int64_t max_reserved_snapshot,
@@ -144,8 +140,7 @@ protected:
   int choose_scn_for_user_request(
     const int64_t max_sync_medium_scn,
     ObMediumCompactionInfo &medium_info,
-    ObGetMergeTablesResult &result,
-    int64_t &schema_version);
+      ObGetMergeTablesResult &result);
   int get_adaptive_reason(const int64_t schedule_major_snapshot);
   int fill_mds_filter_info(ObMediumCompactionInfo &medium_info);
   static const int64_t DEFAULT_SCHEDULE_MEDIUM_INTERVAL = 60LL * 1000LL * 1000LL; // 60s
@@ -155,7 +150,6 @@ protected:
 #ifdef ERRSIM
   int errsim_choose_medium_snapshot(
     const int64_t max_sync_medium_scn,
-    int64_t &schema_version,
     ObMediumCompactionInfo &medium_info,
     ObGetMergeTablesResult &result);
 #endif

@@ -80,6 +80,7 @@ public:
     NO_MAJOR_SSTABLE,
     INVALID_LS_STATE, // for ss
     DATABASE_SKIP_MERGE,
+    NO_LIVE_TABLET,
     EXECUTE_STATE_MAX,
   };
   static const char *tablet_execute_state_to_str(const TabletExecuteState &state);
@@ -105,6 +106,7 @@ public:
       allocator_(ObMemAttr("MediumList")),
       medium_list_(nullptr),
       tablet_merge_finish_(false),
+      participates_in_round_(false),
       execute_state_(EXECUTE_STATE_MAX),
       new_round_state_(NEW_ROUND_STATE_MAX),
       is_inited_(false)
@@ -130,6 +132,8 @@ public:
   bool need_diagnose() const;
   bool could_schedule_new_round() const { return can_merge() && inner_check_new_round_state(); }
   bool tablet_merge_finish() const { return tablet_merge_finish_; }
+  bool participates_in_round() const { return participates_in_round_; }
+  bool round_satisfied() const { return !participates_in_round_ || tablet_merge_finish_; }
 
   // CAREFUL! medium list may be NULL for some situation
   const compaction::ObMediumCompactionInfoList *medium_list() const { return medium_list_; }
@@ -137,7 +141,7 @@ public:
   TabletScheduleNewRoundState get_new_round_state() const { return new_round_state_; }
   // when execute, check cound execute for different merge_type
   static int check_could_execute(const ObMergeType merge_type, const storage::ObTablet &tablet);
-  TO_STRING_KV(K_(tablet_id), K_(tablet_merge_finish),
+  TO_STRING_KV(K_(tablet_id), K_(tablet_merge_finish), K_(participates_in_round),
     "execute_state", tablet_execute_state_to_str(execute_state_),
     "new_round_state", new_round_state_to_str(new_round_state_), KPC_(medium_list));
 protected:
@@ -164,6 +168,7 @@ protected:
   ObArenaAllocator allocator_;
   const compaction::ObMediumCompactionInfoList *medium_list_;
   bool tablet_merge_finish_;
+  bool participates_in_round_;
   TabletExecuteState execute_state_;
   TabletScheduleNewRoundState new_round_state_;
   bool is_inited_;

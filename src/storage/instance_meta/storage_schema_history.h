@@ -32,6 +32,12 @@ public:
   static int read_at(InstanceMetaStore &store, uint64_t layout_id,
       const share::SCN &target, int64_t deadline,
       common::ObIAllocator &allocator, ObStorageSchema &schema);
+  // Select a new locally readable target after registering retention. Used by
+  // non-global compactions when their tentative old snapshot is no longer
+  // protected. The returned target belongs to this exact layout read.
+  static int read_current(InstanceMetaStore &store, uint64_t layout_id,
+      const share::SCN &minimum_target, int64_t deadline,
+      common::ObIAllocator &allocator, share::SCN &target, ObStorageSchema &schema);
 
 private:
   int write(uint64_t layout_id, const ObStorageSchema &schema, bool create);

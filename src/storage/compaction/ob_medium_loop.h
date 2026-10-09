@@ -32,7 +32,6 @@ struct ObMediumLoop
       tablet_iter_(true/*is_major*/)
   {}
   ~ObMediumLoop() {}
-  int start_merge(const int64_t merge_version);
   int init(const int64_t batch_size);
   int loop();
   OB_INLINE bool schedule_ignore_error(const int ret)
@@ -42,6 +41,7 @@ struct ObMediumLoop
       || OB_LS_NOT_EXIST == ret;
   }
 private:
+  int start_merge(const int64_t merge_version);
   int loop_tablets(
     storage::ObLS *ls,
     ObScheduleTabletFunc &tablet_schedule_func);

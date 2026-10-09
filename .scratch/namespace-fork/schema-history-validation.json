@@ -1,5 +1,5 @@
 {
-  "scope": "Storage foundation, DDL/layout binding, durable freeze retention and targeted recovery; compaction layout consumers, unified progress/checksum, freeze readiness, layout GC and full standby integration remain incomplete.",
+  "scope": "Foundation, DDL/layout publication, durable retention, physical C membership, major/ordinary-medium G@target selection and targeted recovery verified in listed runs. Full progress/checksum, freeze readiness, meta major layout lifetime, layout GC and standby integration remain incomplete.",
   "runs": [
     {
       "name": "layout_history",
@@ -759,6 +759,532 @@
           "event": "data_archived",
           "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_7t9vdj26/data.tar.gz",
           "bytes": 5800545
+        }
+      ]
+    },
+    {
+      "name": "major_layout_zero_version_failure",
+      "log": "/tmp/seekdb-physical-merge-layout-major-test-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_o0dzlj0w",
+          "pid": 382915,
+          "port": 62505
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_o0dzlj0w/data.tar.gz",
+          "bytes": 9042957
+        }
+      ],
+      "failure_tail": [
+        "{\"event\": \"data_archived\", \"path\": \"/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_o0dzlj0w/data.tar.gz\", \"bytes\": 9042957}",
+        "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.",
+        "  from cryptography.hazmat.backends import default_backend",
+        "Traceback (most recent call last):",
+        "  File \".scratch/namespace-fork/primary_major_namespace_probe.py\", line 27, in <module>",
+        "    raise AssertionError(rows)",
+        "AssertionError: ((1791573176235980024, 1791573176235980024, 1),)"
+      ]
+    },
+    {
+      "name": "production_major_G_at_F",
+      "log": "/tmp/seekdb-physical-merge-layout-major-test-2.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_47h8bv4e",
+          "pid": 398836,
+          "port": 58949
+        },
+        {
+          "event": "PASS",
+          "case": "major_progress_physical_ids",
+          "rows": [
+            [
+              1791573603250786024,
+              1791573603250786024,
+              1791573603250786024
+            ]
+          ]
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_47h8bv4e/data.tar.gz",
+          "bytes": 8986590
+        }
+      ]
+    },
+    {
+      "name": "physical_layout_copy_race",
+      "log": "/tmp/seekdb-physical-merge-layout-test-1.log",
+      "events": [],
+      "failure_tail": [
+        "  File \"/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_worker_bootstrap_prototype.py\", line 22, in start",
+        "    self.proc = subprocess.Popen(command, env=env, stdout=self.output, stderr=subprocess.STDOUT)",
+        "  File \"/usr/lib64/python3.8/subprocess.py\", line 858, in __init__",
+        "    self._execute_child(args, executable, preexec_fn, close_fds,",
+        "  File \"/usr/lib64/python3.8/subprocess.py\", line 1720, in _execute_child",
+        "    raise child_exception_type(errno_num, err_msg, err_filename)",
+        "OSError: [Errno 26] Text file busy: '/data/1/nijia.nj/test/seekdb-physical-merge-layout-native'"
+      ]
+    },
+    {
+      "name": "creation_probe_copy_race",
+      "log": "/tmp/seekdb-physical-merge-identity-test-1.log",
+      "events": [],
+      "failure_tail": [
+        "  File \"/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_worker_bootstrap_prototype.py\", line 22, in start",
+        "    self.proc = subprocess.Popen(command, env=env, stdout=self.output, stderr=subprocess.STDOUT)",
+        "  File \"/usr/lib64/python3.8/subprocess.py\", line 858, in __init__",
+        "    self._execute_child(args, executable, preexec_fn, close_fds,",
+        "  File \"/usr/lib64/python3.8/subprocess.py\", line 1720, in _execute_child",
+        "    raise child_exception_type(errno_num, err_msg, err_filename)",
+        "OSError: [Errno 26] Text file busy: '/data/1/nijia.nj/test/seekdb-physical-merge-layout-native'"
+      ]
+    },
+    {
+      "name": "layout_stale_progress_view_1",
+      "log": "/tmp/seekdb-physical-merge-layout-test-2.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-physical-merge-layout-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_merge_layout_ibixk9xl",
+          "pid": 403573,
+          "port": 50975
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_merge_layout_ibixk9xl/data.tar.gz",
+          "bytes": 7912828
+        }
+      ],
+      "failure_tail": [
+        "  from cryptography.hazmat.backends import default_backend",
+        "Traceback (most recent call last):",
+        "  File \".scratch/namespace-fork/physical_merge_layout_probe.py\", line 145, in <module>",
+        "    run(a.binary)",
+        "  File \".scratch/namespace-fork/physical_merge_layout_probe.py\", line 112, in run",
+        "    assert matches and all(row['V'] == version and row['C'] <= frozen",
+        "AssertionError: (4611686155866541377, 1791573683863672, [])"
+      ]
+    },
+    {
+      "name": "layout_stale_progress_view_2",
+      "log": "/tmp/seekdb-physical-merge-layout-test-3.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-physical-merge-layout-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_merge_layout_pqav5z4t",
+          "pid": 409797,
+          "port": 48689
+        },
+        {
+          "event": "freeze_selected",
+          "frozen": 1,
+          "parent_tablet": 4611686155866541377,
+          "child_tablet": 4611686430744448321,
+          "parent_version": 1791573762263784,
+          "child_version": 1791573762183536
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_merge_layout_pqav5z4t/data.tar.gz",
+          "bytes": 12917582
+        }
+      ],
+      "failure_tail": [
+        "  File \".scratch/namespace-fork/physical_merge_layout_probe.py\", line 155, in <module>",
+        "    if __name__ == '__main__':",
+        "  File \".scratch/namespace-fork/physical_merge_layout_probe.py\", line 116, in run",
+        "    f\"AND tablet_id IN ({parent_tablet},{child_tablet})\", log=False)",
+        "  File \".scratch/namespace-fork/physical_merge_layout_probe.py\", line 57, in wait_for",
+        "    raise AssertionError(message)",
+        "AssertionError: ('physical major incomplete', 1, 4611686155866541377, 4611686430744448321)"
+      ]
+    },
+    {
+      "name": "parent_child_layout_F",
+      "log": "/tmp/seekdb-physical-merge-layout-test-4.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-physical-merge-layout-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_merge_layout_tpqvyoqe",
+          "pid": 415430,
+          "port": 17953
+        },
+        {
+          "event": "freeze_selected",
+          "frozen": 1791573906729989023,
+          "parent_tablet": 4611686155866541377,
+          "child_tablet": 4611686430744448321,
+          "parent_version": 1791573906570696,
+          "child_version": 1791573906483312
+        },
+        {
+          "event": "PASS",
+          "case": "physical_merge_layout",
+          "frozen": 1791573906729989023,
+          "layouts": {
+            "4611686155866541377": {
+              "tablet": 4611686155866541377,
+              "G": 2037,
+              "C": 1791573905741209000,
+              "F": 1791573906729989023,
+              "V": 1791573906570696,
+              "ret": 0
+            },
+            "4611686430744448321": {
+              "tablet": 4611686430744448321,
+              "G": 2347,
+              "C": 1791573906528723054,
+              "F": 1791573906729989023,
+              "V": 1791573906483312,
+              "ret": 0
+            }
+          },
+          "late": {
+            "tablet": 4611686155866541378,
+            "C": 1791573907178591116,
+            "F": 1791573906729989023,
+            "member": 0,
+            "satisfied": 1,
+            "complete": 1,
+            "state": 0,
+            "ret": 0
+          },
+          "post_freeze_ddl": true,
+          "independent_branches": true
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_merge_layout_tpqvyoqe/data.tar.gz",
+          "bytes": 10929182
+        }
+      ]
+    },
+    {
+      "name": "physical_C_eligibility_recovery",
+      "log": "/tmp/seekdb-physical-merge-identity-test-2.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-physical-merge-layout-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_4qf8vcyg",
+          "pid": 403518,
+          "port": 18447
+        },
+        {
+          "event": "case_pass",
+          "case": "rollback_create",
+          "lob_binding": true,
+          "sequence": true
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-physical-merge-layout-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_4qf8vcyg",
+          "pid": 405519,
+          "port": 18447
+        },
+        {
+          "event": "physical_creation_versions_verified",
+          "tablets": 367,
+          "authority": "pre_crash_native_commit",
+          "persisted_mds_tablets": 358
+        },
+        {
+          "event": "case_pass",
+          "case": "crash_committed",
+          "lob_binding": true,
+          "sequence": true
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-physical-merge-layout-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_4qf8vcyg",
+          "pid": 406111,
+          "port": 18447
+        },
+        {
+          "event": "physical_creation_versions_verified",
+          "tablets": 370,
+          "authority": "pre_crash_native_commit",
+          "persisted_mds_tablets": 358
+        },
+        {
+          "event": "PASS",
+          "case": "shared_transaction_selected",
+          "selected": [
+            "rollback_create",
+            "crash_committed"
+          ],
+          "flushed_redo": false,
+          "recovered_committed_retry": true
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_4qf8vcyg/data.tar.gz",
+          "bytes": 5853030
+        }
+      ]
+    },
+    {
+      "name": "medium_reason_argument_failure",
+      "log": "/tmp/seekdb-medium-layout-target-test-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-physical-merge-medium-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_medium_layout_target_21vbazm3",
+          "pid": 428660,
+          "port": 29301
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_medium_layout_target_21vbazm3/data.tar.gz",
+          "bytes": 7079727
+        }
+      ],
+      "failure_tail": [
+        "  File \".scratch/namespace-fork/medium_layout_target_probe.py\", line 58, in <module>",
+        "    run(a.binary, a.force_old_target)",
+        "  File \".scratch/namespace-fork/medium_layout_target_probe.py\", line 39, in run",
+        "    chosen = wait_for(selected, ('tablet-only medium did not select layout', physical))",
+        "  File \"/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/physical_merge_layout_probe.py\", line 60, in wait_for",
+        "    raise AssertionError(message)",
+        "AssertionError: ('tablet-only medium did not select layout', 4611686155866541377)"
+      ]
+    },
+    {
+      "name": "medium_old_reason_argument_failure",
+      "log": "/tmp/seekdb-medium-layout-target-old-test-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-physical-merge-medium-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_medium_layout_target_xy6w9435",
+          "pid": 428658,
+          "port": 59469
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_medium_layout_target_xy6w9435/data.tar.gz",
+          "bytes": 7127050
+        }
+      ],
+      "failure_tail": [
+        "  File \".scratch/namespace-fork/medium_layout_target_probe.py\", line 58, in <module>",
+        "    run(a.binary, a.force_old_target)",
+        "  File \".scratch/namespace-fork/medium_layout_target_probe.py\", line 39, in run",
+        "    chosen = wait_for(selected, ('tablet-only medium did not select layout', physical))",
+        "  File \"/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/physical_merge_layout_probe.py\", line 60, in wait_for",
+        "    raise AssertionError(message)",
+        "AssertionError: ('tablet-only medium did not select layout', 4611686155866541377)"
+      ]
+    },
+    {
+      "name": "history_release_new_target",
+      "log": "/tmp/seekdb-medium-layout-retention-test-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-physical-merge-medium-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_it0oeg02",
+          "pid": 428724,
+          "port": 32863
+        },
+        {
+          "event": "layout_retention_verified",
+          "recovered": 0,
+          "evidence": "LAYOUT_RETENTION_PASS recovered=0 F=1791574037475174043 active=1791574039456984004 durable=1791574037475174043 mini_minor=1 released=0 handoff=0\n"
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-physical-merge-medium-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_it0oeg02",
+          "pid": 431284,
+          "port": 32863
+        },
+        {
+          "event": "layout_retention_verified",
+          "recovered": 1,
+          "evidence": "LAYOUT_RETENTION_NEW_TARGET old=1791574037475174043 selected=1791574091456492010 V=12\n\nLAYOUT_RETENTION_PASS recovered=1 F=1791574037475174043 active=1791574068471112000 durable=1791574072427811981 mini_minor=1 released=1 handoff=1\n"
+        },
+        {
+          "event": "PASS",
+          "case": "layout_retention",
+          "no_old_reader": true,
+          "mini_minor": true,
+          "crash_recovery": true,
+          "release_after_completion": true,
+          "paused_broadcast_without_freeze_row": true,
+          "concurrent_reader_handoff": true
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_it0oeg02/data.tar.gz",
+          "bytes": 5951234
+        }
+      ]
+    },
+    {
+      "name": "medium_layout_native",
+      "log": "/tmp/seekdb-medium-layout-target-test-2.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-physical-merge-medium-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_medium_layout_target_0pcp9nu5",
+          "pid": 436438,
+          "port": 38647
+        },
+        {
+          "event": "PASS",
+          "case": "medium_layout_target",
+          "selected": {
+            "tablet": 4611686155866541377,
+            "G": 2027,
+            "C": 1791574214068373041,
+            "proposed": 1791574214151667160,
+            "B": 1791574214151667160,
+            "V": 1791574214148104,
+            "ret": 0
+          },
+          "forced_old": false
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_medium_layout_target_0pcp9nu5/data.tar.gz",
+          "bytes": 6884096
+        }
+      ]
+    },
+    {
+      "name": "medium_reselect_old_target",
+      "log": "/tmp/seekdb-medium-layout-target-old-test-2.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-physical-merge-medium-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_medium_layout_target_dbiue2j0",
+          "pid": 436435,
+          "port": 46367
+        },
+        {
+          "event": "PASS",
+          "case": "medium_layout_target",
+          "selected": {
+            "tablet": 4611686155866541377,
+            "G": 2039,
+            "C": 1791574214724566029,
+            "proposed": 1,
+            "B": 1791574214935918076,
+            "V": 1791574214915232,
+            "ret": 0
+          },
+          "forced_old": true
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_medium_layout_target_dbiue2j0/data.tar.gz",
+          "bytes": 6762160
+        }
+      ]
+    },
+    {
+      "name": "production_major_final",
+      "log": "/tmp/seekdb-physical-merge-production-major-final.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_ymfwurg1",
+          "pid": 441255,
+          "port": 53299
+        },
+        {
+          "event": "PASS",
+          "case": "major_progress_physical_ids",
+          "rows": [
+            [
+              1791574304026577012,
+              1791574304026577012,
+              1791574304026577012
+            ]
+          ]
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_ymfwurg1/data.tar.gz",
+          "bytes": 8987326
+        }
+      ]
+    },
+    {
+      "name": "parent_child_layout_final",
+      "log": "/tmp/seekdb-physical-merge-layout-test-final.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-physical-merge-medium-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_merge_layout_aqro4e3c",
+          "pid": 441177,
+          "port": 40349
+        },
+        {
+          "event": "freeze_selected",
+          "frozen": 1791574305122558023,
+          "parent_tablet": 4611686155866541377,
+          "child_tablet": 4611686430744448321,
+          "parent_version": 1791574304974248,
+          "child_version": 1791574304844336
+        },
+        {
+          "event": "PASS",
+          "case": "physical_merge_layout",
+          "frozen": 1791574305122558023,
+          "layouts": {
+            "4611686155866541377": {
+              "tablet": 4611686155866541377,
+              "G": 2047,
+              "C": 1791574304324076029,
+              "F": 1791574305122558023,
+              "V": 1791574304974248,
+              "ret": 0
+            },
+            "4611686430744448321": {
+              "tablet": 4611686430744448321,
+              "G": 2355,
+              "C": 1791574304940157034,
+              "F": 1791574305122558023,
+              "V": 1791574304844336,
+              "ret": 0
+            }
+          },
+          "late": {
+            "tablet": 4611686155866541378,
+            "C": 1791574305586651188,
+            "F": 1791574305122558023,
+            "member": 0,
+            "satisfied": 1,
+            "complete": 1,
+            "state": 0,
+            "ret": 0
+          },
+          "post_freeze_ddl": true,
+          "independent_branches": true
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_merge_layout_aqro4e3c/data.tar.gz",
+          "bytes": 11177453
         }
       ]
     }

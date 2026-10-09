@@ -36,6 +36,7 @@ int ObMediumLoop::start_merge(const int64_t merge_version)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(merge_version));
   } else {
+    tablet_iter_.reset();
     merge_version_ = merge_version;
     schedule_stats_.start_merge();
 
@@ -52,7 +53,11 @@ int ObMediumLoop::start_merge(const int64_t merge_version)
 int ObMediumLoop::init(const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(merge_version_ <= 0)) {
+  const int64_t requested = ObBasicMergeScheduler::get_merge_scheduler()->get_frozen_version();
+  // Adopt a new round on the loop thread. The reload thread must not reset a
+  // candidate array while this thread is traversing a previous round.
+  if (requested > merge_version_ && OB_FAIL(start_merge(requested))) {
+  } else if (OB_UNLIKELY(merge_version_ <= 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid merge_version", KR(ret), K_(merge_version));
   } else if (OB_FAIL(tablet_iter_.build_iter(
@@ -66,7 +71,7 @@ int ObMediumLoop::loop()
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
 
-  ObScheduleTabletFunc func(merge_version_, loop_cnt_);
+  ObScheduleTabletFunc func(merge_version_, ObAdaptiveMergePolicy::NONE, loop_cnt_);
   schedule_stats_.weak_read_ts_ready_ = true;
   if (!tablet_iter_.is_scan_finish()) {
     ObLS *ls = tablet_iter_.get_ls();
@@ -103,6 +108,8 @@ int ObMediumLoop::loop_tablets(
       schedule_stats_.weak_read_ts_ready_ = false;
     }
   } else {
+    // The iterator obtains IDs lazily below, after func.init has confirmed
+    // the native readable horizon. New rounds discard the previous ID list.
     ObTabletHandle tablet_handle;
     ObTablet *tablet = nullptr;
     ObTabletID tablet_id;

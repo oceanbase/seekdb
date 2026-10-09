@@ -182,7 +182,8 @@ ObCompactionScheduleIterator::ObCompactionScheduleIterator(
   : ObBasicMergeScheduleIterator(),
     is_major_(is_major),
     report_scn_flag_(false),
-    tablet_get_mode_(storage::ObMDSGetTabletMode::READ_ALL_COMMITED)
+    tablet_get_mode_(is_major ? storage::ObMDSGetTabletMode::READ_WITHOUT_CHECK
+                             : storage::ObMDSGetTabletMode::READ_ALL_COMMITED)
 {
 }
 

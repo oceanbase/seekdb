@@ -651,6 +651,7 @@ STORAGE_PRIVATE_HEADERS = [
     "compaction/ob_partition_merger.h",
     "compaction/ob_partition_rows_merger.h",
     "compaction/ob_schedule_status_cache.h",
+    "compaction/physical_merge_candidate.h",
     "compaction/ob_schedule_tablet_func.h",
     "ddl/ob_ddl_continuous_vector.h",
     "ddl/ob_ddl_dag_thread_pool.h",

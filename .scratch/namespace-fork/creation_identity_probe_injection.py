@@ -15,6 +15,8 @@ if a.action=='enable':
         assert s.count(anchor)==1,anchor
         block='// LOCAL_CREATION_IDENTITY_BEGIN\n'+code+'\n// LOCAL_CREATION_IDENTITY_END\n'
         s=s.replace(anchor,block+anchor if before else anchor+block,1)
+    hook('#include "namespace/catalog.h"\n',
+         '#include "storage/compaction/physical_merge_candidate.h"')
     hook('int NamespaceForkKernelPrototype::ensure_control_schema(bool initial_install) {\n',
          '#include "'+str(Path(__file__).with_name('creation_identity_native_probe.ipp').resolve())+'"',True)
     hook('int NamespaceForkKernelPrototype::ensure_control_schema(bool initial_install) {\n',

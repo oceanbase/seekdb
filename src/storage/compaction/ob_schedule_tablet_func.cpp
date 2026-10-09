@@ -26,8 +26,8 @@ namespace compaction
 
 ObScheduleTabletFunc::ObScheduleTabletFunc(
   const int64_t merge_version,
-  const int64_t loop_cnt,
-  const ObAdaptiveMergePolicy::AdaptiveMergeReason merge_reason)
+  const ObAdaptiveMergePolicy::AdaptiveMergeReason merge_reason,
+  const int64_t loop_cnt)
   : ObBasicScheduleTabletFunc(merge_version, loop_cnt),
     tablet_status_(),
     time_guard_(),
@@ -65,8 +65,8 @@ int ObScheduleTabletFunc::schedule_tablet(
     LOG_WARN("failed to init tablet status", KR(ret), K_(ls_status), K(tablet_id));
   } else {
     time_guard_.click(ObCompactionScheduleTimeGuard::INIT_TABLET_STATUS);
+    tablet_merge_finish = tablet_status_.round_satisfied();
     if (tablet_status_.tablet_merge_finish()) {
-      tablet_merge_finish = true;
       tablet_cnt_.finish_cnt_++;
     }
     if (tablet_status_.could_schedule_new_round() && OB_TMP_FAIL(schedule_tablet_new_round(tablet_handle, false/*user_request*/))) {
@@ -106,7 +106,7 @@ int ObScheduleTabletFunc::schedule_tablet_new_round(
   if (OB_ISNULL(tablet_status_.medium_list())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("medium list in tablet status is null", KR(ret), K_(tablet_status));
-  } else if (!tablet_status_.tablet_merge_finish()
+  } else if (!tablet_status_.round_satisfied()
       || user_request
       || ObBasicMergeScheduler::get_merge_scheduler()->enable_adaptive_compaction()) {
     ObMediumCompactionScheduleFunc func(
@@ -114,7 +114,7 @@ int ObScheduleTabletFunc::schedule_tablet_new_round(
         *tablet_status_.medium_list(), &tablet_cnt_,
         merge_reason_);
     if (OB_FAIL(func.schedule_next_medium_for_leader(
-        tablet_status_.tablet_merge_finish() ? 0 : merge_version_,
+        tablet_status_.round_satisfied() ? 0 : merge_version_,
         medium_clog_submitted))) {
     } else if (medium_clog_submitted) {
       if (OB_TMP_FAIL(clear_stat_tablets_.push_back(tablet_id))) {
@@ -146,7 +146,7 @@ int ObScheduleTabletFunc::request_schedule_new_round(
                  ls_status_.get_ls(), merge_version_, *tablet,
                  should_skip_merge_, ls_could_schedule_new_round_))) {
   } else if (user_request) { // should print error log for user request
-    if (!tablet_status_.tablet_merge_finish()) {
+    if (!tablet_status_.round_satisfied()) {
       ret = OB_MAJOR_FREEZE_NOT_FINISHED;
       LOG_WARN("no major sstable or database major compaction is unfinished; cannot schedule another medium compaction",
         K(ret), K_(ls_status), K(tablet_id), K_(merge_version), K_(tablet_status));
@@ -162,7 +162,7 @@ int ObScheduleTabletFunc::request_schedule_new_round(
       schedule_flag = true;
     }
   } else {
-    schedule_flag = tablet_status_.tablet_merge_finish() && tablet_status_.could_schedule_new_round();
+    schedule_flag = tablet_status_.round_satisfied() && tablet_status_.could_schedule_new_round();
   }
   if (OB_SUCC(ret) && schedule_flag && OB_TMP_FAIL(schedule_tablet_new_round(tablet_handle, user_request))) {
     LOG_ERROR("failed to schedule tablet new round", KR(tmp_ret), K_(ls_status), K(tablet_id));

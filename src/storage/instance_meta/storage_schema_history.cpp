@@ -96,6 +96,26 @@ int StorageSchemaHistory::read_at(InstanceMetaStore &store, uint64_t layout_id,
   return ret;
 }
 
+int StorageSchemaHistory::read_current(InstanceMetaStore &store, uint64_t layout_id,
+    const share::SCN &minimum_target, int64_t deadline,
+    common::ObIAllocator &allocator, share::SCN &target, ObStorageSchema &schema)
+{
+  target.reset();
+  if (!minimum_target.is_valid() || minimum_target.is_min() || minimum_target.is_max()) {
+    return OB_INVALID_ARGUMENT;
+  }
+  InstanceMetaStore::Transaction tx;
+  int ret = store.begin_weak_read(tx, deadline);
+  if (ret == OB_SUCCESS && tx.snapshot_version() < minimum_target) { ret = OB_EAGAIN; }
+  if (ret == OB_SUCCESS) { ret = StorageSchemaHistory(store, tx).read(layout_id, allocator, schema); }
+  if (ret == OB_SUCCESS) { target = tx.snapshot_version(); }
+  if (tx.is_active()) {
+    const int end = store.commit(tx);
+    if (ret == OB_SUCCESS) { ret = end; }
+  }
+  return ret;
+}
+
 int StorageSchemaHistory::write(uint64_t layout_id, const ObStorageSchema &schema, bool create)
 {
   int ret = OB_SUCCESS;

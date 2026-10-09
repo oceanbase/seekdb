@@ -19,6 +19,7 @@
 #include "share/rc/ob_server_runtime.h"
 #include "src/storage/compaction/ob_basic_schedule_tablet_func.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
+#include "storage/compaction/physical_merge_candidate.h"
 namespace oceanbase
 {
 using namespace storage;
@@ -127,6 +128,7 @@ const static char * ObTabletExecuteStateStr[] = {
     "NO_MAJOR_SSTABLE",
     "INVALID_LS_STATE",
     "DATABASE_SKIP_MERGE",
+    "NO_LIVE_TABLET",
     "STATE_MAX"
 };
 
@@ -177,7 +179,7 @@ int ObTabletStatusCache::init_for_major(
     const ObTabletID &tablet_id = tablet.get_tablet_id();
     if (OB_FAIL(inner_init_state(merge_version, tablet, should_skip_merge))) {
     } else if (OB_FAIL(update_tablet_report_status(ls, tablet))) {
-    } else {
+    } else if (execute_state_ != NO_LIVE_TABLET) {
       inner_init_could_schedule_new_round(tablet,
                                           ls_could_schedule_new_round,
                                           true /*normal_schedule*/);
@@ -206,7 +208,7 @@ int ObTabletStatusCache::init_for_diagnose(
   } else {
     const ObTabletID &tablet_id = tablet.get_tablet_id();
     if (OB_FAIL(inner_init_state(merge_version, tablet, false/*should_skip_merge*/))) {
-    } else {
+    } else if (execute_state_ != NO_LIVE_TABLET) {
       inner_init_could_schedule_new_round(tablet,
                                           true /*ls_could_schedule_new_round*/,
                                           false /*normal_schedule*/);
@@ -234,21 +236,27 @@ int ObTabletStatusCache::inner_init_state(
   int ret = OB_SUCCESS;
   const ObTabletID &tablet_id = tablet.get_tablet_id();
   const int64_t last_major_snapshot = tablet.get_last_major_snapshot_version();
+  PhysicalMergeCandidate candidate;
 
-  if (OB_UNLIKELY(!tablet.is_data_complete())) {
+  if (OB_FAIL(candidate.load(tablet))) {
+  } else if (!candidate.is_live()) {
+    execute_state_ = NO_LIVE_TABLET;
+  } else if (FALSE_IT(participates_in_round_ = candidate.participates(merge_version))) {
+  } else if (OB_UNLIKELY(!tablet.is_data_complete())) {
     execute_state_ = DATA_NOT_COMPLETE;
     if (REACH_THREAD_TIME_INTERVAL(PRINT_LOG_INVERVAL)) {
       LOG_INFO("tablet is not data complete, could not to merge now", K(ret), K(tablet_id));
     }
   } else if (last_major_snapshot <= 0) {
     execute_state_ = NO_MAJOR_SSTABLE;
-  } else if (FALSE_IT(tablet_merge_finish_ = (last_major_snapshot >= merge_version))){
+  } else if (FALSE_IT(tablet_merge_finish_ = participates_in_round_ && last_major_snapshot >= merge_version)){
   } else if (should_skip_merge) {
     execute_state_ = DATABASE_SKIP_MERGE;
   } else {
     execute_state_ = CAN_MERGE;
   }
-  if (FAILEDx(tablet.read_medium_info_list(allocator_, medium_list_))) {
+  if (OB_SUCC(ret) && execute_state_ != NO_LIVE_TABLET
+      && OB_FAIL(tablet.read_medium_info_list(allocator_, medium_list_))) {
     LOG_WARN("failed to load medium info list", K(ret), K(tablet_id));
   }
   return ret;
@@ -284,6 +292,7 @@ void ObTabletStatusCache::inner_destroy()
   allocator_.reset(); // use this allocator to read mds, medium list may be null after read mds
   tablet_id_.reset();
   tablet_merge_finish_ = false;
+  participates_in_round_ = false;
   execute_state_ = EXECUTE_STATE_MAX;
   new_round_state_ = NEW_ROUND_STATE_MAX;
 }
@@ -383,7 +392,8 @@ bool ObTabletStatusCache::need_diagnose() const
 {
   bool bret = false;
   if (!can_merge()) {
-    bret = (INVALID_LS_STATE != execute_state_ && DATABASE_SKIP_MERGE != execute_state_);
+    bret = (INVALID_LS_STATE != execute_state_ && DATABASE_SKIP_MERGE != execute_state_
+        && NO_LIVE_TABLET != execute_state_);
   }
   return bret;
 }

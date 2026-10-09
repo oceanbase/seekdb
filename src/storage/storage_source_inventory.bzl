@@ -360,6 +360,7 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/compaction/ob_schedule_dag_func.cpp",
             "src/storage/compaction/ob_extra_medium_info.cpp",
             "src/storage/compaction/ob_medium_compaction_func.cpp",
+            "src/storage/compaction/physical_merge_candidate.cpp",
             "src/storage/compaction/ob_medium_compaction_mgr.cpp",
             "src/storage/compaction/ob_medium_compaction_info.cpp",
             "src/storage/compaction/ob_compaction_diagnose.cpp",

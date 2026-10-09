@@ -224,6 +224,13 @@ static int run_layout_retention_native_probe()
     ObStorageSchema obsolete;
     RETENTION_CHECK(StorageSchemaHistory::read_at(store, layout_id, frozen, deadline(), allocator, obsolete)
         == OB_SNAPSHOT_DISCARDED);
+    SCN selected;
+    ObStorageSchema current;
+    RETENTION_CALL(StorageSchemaHistory::read_current(store, layout_id, frozen,
+        deadline(), allocator, selected, current));
+    RETENTION_CHECK(selected > frozen && current.get_schema_version() == 12);
+    fprintf(stderr, "LAYOUT_RETENTION_NEW_TARGET old=%ld selected=%ld V=%ld\n",
+        frozen.get_val_for_tx(), selected.get_val_for_tx(), current.get_schema_version());
   } else {
     // Model a paused replica whose primary has already retired this freeze.
     // Its local persisted broadcast is still unfinished, even though the

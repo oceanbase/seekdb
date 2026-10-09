@@ -20,6 +20,12 @@ static int record_creation_identity(InstanceMetaStore::Transaction &tx,
       || status.physical_create_version_ != transaction::ObTransVersion::INVALID_TRANS_VERSION)) {
     ret = OB_ERR_UNEXPECTED;
   }
+  compaction::PhysicalMergeCandidate candidate;
+  if (ret == OB_SUCCESS) { ret = candidate.load(*handle.get_obj()); }
+  if (ret == OB_SUCCESS && (candidate.state != compaction::PhysicalMergeCandidate::State::UNCOMMITTED
+      || candidate.participates(ObTimeUtility::current_time_ns()))) {
+    ret = OB_ERR_UNEXPECTED;
+  }
   uint64_t id = tablet.id();
   if (ret == OB_SUCCESS) {
     ret = directory_kv_store()->put(tx, IDENTITY_PROBE_COLLECTION,
@@ -71,6 +77,16 @@ static int verify_creation_identities()
         // optional transaction version. Python checks C against the pre-crash
         // on_commit trace for BOTH memory and persisted reads.
         || (version.is_valid() && status.physical_create_version_ != version.get_val_for_tx()))) { ret = OB_ERR_UNEXPECTED; }
+    compaction::PhysicalMergeCandidate candidate;
+    if (ret == OB_SUCCESS) { ret = candidate.load(*handle.get_obj()); }
+    if (ret == OB_SUCCESS && (!candidate.is_live()
+        || candidate.create_transaction_id != entry.second
+        || candidate.create_version != status.physical_create_version_
+        || candidate.participates(candidate.create_version - 1)
+        || !candidate.participates(candidate.create_version)
+        || !candidate.participates(candidate.create_version + 1))) {
+      ret = OB_ERR_UNEXPECTED;
+    }
     fprintf(stderr, "CREATION_IDENTITY_RECOVER tablet=%lu expected=%ld actual=%ld logical=%ld physical=%ld node_version_valid=%d ret=%d\n",
         entry.first, entry.second, status.create_transaction_id_, status.create_commit_version_,
         status.physical_create_version_, version.is_valid(), ret);
@@ -92,5 +108,6 @@ static int verify_creation_identities()
     ret = OB_ERR_UNEXPECTED;
   }
   fprintf(stderr, "CREATION_IDENTITY_VERIFY records=%lu deletion_codec=1 ret=%d\n", expected.size(), ret);
+  fprintf(stderr, "MERGE_ELIGIBILITY_VERIFY records=%lu exact_C_boundary=1 uncommitted_create=1 ret=%d\n", expected.size(), ret);
   return ret;
 }
