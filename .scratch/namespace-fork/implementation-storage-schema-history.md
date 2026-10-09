@@ -3,7 +3,18 @@
 目标以 [design-storage-schema-boundaries.md](design-storage-schema-boundaries.md) 为准。
 本文件记录实现和验证证据，不缩减已确认范围。2026-10-10 开始实施。
 
-### 当前推进：各 Namespace 的历史定义与逻辑校验
+### 当前推进：校验组独立检查与整轮发布恢复
+
+- 主表及其索引/全文辅助对象按历史定义分组；缺项组返回等待后，继续检查同 Namespace 的其他组和后续 Namespace。完整性仍先由定义确定，不从已到达结果推定。
+- 每组每张表只读取和构建一次 checksum，供组内比较复用，组结束释放；不保存跨调用的 schema/checksum。进度每轮重算，已完成 Namespace 仅保存计数，避免重复累加未完成 Namespace 的计数。
+- `report_scn` 保持整轮完成后统一推进。发现原顺序是先发布 report、后持久整轮完成，崩溃可能使后来 medium 提前覆盖需要重验的 F。改为先提交已有 `last_merged_scn`，再推进 report；补报沿用已有 medium loop，不增加持久证明或恢复队列。
+- 新增 `checksum_group_recovery_probe.py`，已加入四件套：删除初始 Namespace 某索引报告，断言其他组及孩子仍比较；后继 DML/转储/单tablet medium 请求不能替换待校验 F；分别在缺项和全部校验完成但整轮状态尚未提交时 kill，重启重新校验，最后恢复完成。
+- 原生构建 `/tmp/seekdb-checksum-groups-native-build-1.log`、移除全部注入后的生产构建 `/tmp/seekdb-checksum-groups-production-build-1.log` 均通过。生产真实大合并 `/tmp/seekdb-checksum-groups-production-major-test-1.log` 通过，F=1791587012053589006。
+- 新增两次崩溃测试 `/tmp/seekdb-checksum-groups-recovery-test-1.log` 完整通过，F=1791587088712172012，实例 `namespace_fork_PROTOTYPE_checksum_group_recovery_uetpbrvp`。每次重启均重新观察实际比较；完成提交前所有8个用户物理对象仍报告 F，report_scn<F；最后整轮持久完成后补齐报告，父/子数据分别为17/27与110/120。实例已停止并归档。这不代表后续布局GC或实际主备已经完成。
+
+- `/tmp/seekdb-checksum-groups-index-test-1.log` 全套通过：F后DDL，本地/全局/全文索引，缺项、错误V、行数不一致及清错恢复，同分区数TRUNCATE。复用每组报告没有改变既有比较语义。用例均纳入四件套；未跑完整mysqltest/sysbench。8000分区最终验证、布局回收、旧freeze字段清理和真实主备仍未完成。
+
+### 先前阶段：各 Namespace 的历史定义与逻辑校验
 
 - 替换旧的默认空间逻辑 checker/validator；共同枚举 F 时的 `(Namespace, table_id) -> G` 绑定，在同一个受保护原生快照中逐 G 读取 V，关闭 KV 事务后才激活所属 Namespace。绑定及版本选择不依赖已到达的 checksum。
 - 精确版本与现有单表缓存相同时直接借用该定义；否则使用已有 SQL backend 读取该表自身 V 的历史。不将主表 V 用作索引 V，不构造一个历史 Namespace guard。
@@ -22,7 +33,7 @@
 - 第3轮 `/tmp/seekdb-namespace-checksum-native-test-3.log` 整套通过：初始F=1791586249838726027；F后COMMENT及新建索引不改变本轮定义/成员；父子本地、全局、全文辅助校验都实际执行。缺项F=1791586272505358041、错误V的F=1791586294732374006均先阻止完成再恢复；行数错误F=1791586325539070006触发真实错误标志和Namespace 3诊断，恢复输入并执行CLEAR MERGE ERROR后完成；同数量分区替换F=1791586352503264012通过，原生日志明确记录旧主表绑定退休。
 - 三轮测试使用的实例均已停止并归档；没有运行完整mysqltest/sysbench。最终生产与native-v2的业务实现一致，测试控制点只存在于native副本。校验中途重启、每组独立推进/上报、8000分区验证、布局引用GC、旧freeze字段和实际主备仍是整体目标中的未完成项。
 
-#### 下一步接线注意
+#### 该阶段留下的问题（后续处理见文件开头）
 
 当前checker按Namespace保存本轮已完成状态，完整定义及checksum在调用结束后释放；单个Namespace中仍先等待所有必要输入再比较。后续须使主表及其索引组独立检查，不以其他组缺项为开始比较的条件。`report_scn`目前仍由整轮完成入口统一发布；如恢复组完成后提前推进medium的行为，必须同时保证中途重启仍能证明已经验证，且旧F的必要结果不会提前丢失。仓内`ObMediumLoop::update_report_scn_as_ls_leader`会按已有合并水位更新报告，而`ObTablet::get_tablet_runtime_info_by_sstable`产生的上报初始report_scn为0、SQLite写入使用INSERT OR REPLACE；不能未经核对就把这个字段当作永不丢失的组完成凭证。本轮没有新增持久化校验名单或常驻历史缓存。
 

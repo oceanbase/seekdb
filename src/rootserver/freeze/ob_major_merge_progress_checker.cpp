@@ -71,7 +71,7 @@ int ObMajorMergeProgressChecker::check_progress()
   ObArray<TableStorageLayouts::Definition> definitions;
   std::vector<InstanceNamespaceRecord> owners;
   pending_.reset();
-  progress_.merge_finish_ = false;
+  progress_.reset();
   const int64_t deadline = MIN(THIS_WORKER.get_timeout_ts(), ObTimeUtility::current_time() + 120L * 1000 * 1000);
   if (!initialized_ || access == nullptr || ls_service == nullptr) {
     ret = OB_NOT_INIT;
@@ -93,17 +93,21 @@ int ObMajorMergeProgressChecker::check_progress()
   } else {
     InstanceNamespaceDirectory directory(access->instance_meta_store());
     ret = directory.list_live(deadline, owners);
+    bool waiting = false;
     for (const auto &owner : owners) {
       if (ret != OB_SUCCESS || stop_) { break; }
-      if (completed_.count(owner.id) != 0) { continue; }
       bool participates = false;
       for (int64_t i = 0; !participates && i < definitions.count(); ++i) {
         participates = definitions.at(i).namespace_id == owner.id;
       }
       // No bindings at F: this owner was created later or owns no SQL objects.
       if (!participates) { continue; }
+      ObMergeProgress owner_progress;
+      const auto completed = completed_.find(owner.id);
       ns::NamespaceRuntime *runtime = nullptr;
-      if (!ns::namespace_registry().get(owner.id, runtime) || runtime == nullptr) {
+      if (completed != completed_.end()) {
+        owner_progress = completed->second;
+      } else if (!ns::namespace_registry().get(owner.id, runtime) || runtime == nullptr) {
         ret = OB_EAGAIN;
       } else if (OB_FAIL(observer::namespace_worker_prototype::prepare_namespace_login(*runtime))) {
       } else {
@@ -112,11 +116,24 @@ int ObMajorMergeProgressChecker::check_progress()
         if (sql == nullptr || schemas == nullptr) { ret = OB_NOT_INIT; }
         else {
           ret = ObChecksumValidator::check_namespace(owner.id, definitions, freeze_, *ls,
-              *sql, *schemas, stop_, progress_, pending_);
+              *sql, *schemas, stop_, owner_progress, pending_);
         }
       }
-      if (ret == OB_SUCCESS) { completed_.insert(owner.id); }
+      if (ret == OB_SUCCESS && completed == completed_.end()) {
+        completed_.emplace(owner.id, owner_progress);
+      }
+      if (ret == OB_EAGAIN || ret == OB_SCHEMA_EAGAIN) {
+        waiting = true;
+        ret = OB_SUCCESS;
+      }
+      progress_.total_table_cnt_ += owner_progress.total_table_cnt_;
+      progress_.merged_tablet_cnt_ += owner_progress.merged_tablet_cnt_;
+      progress_.unmerged_tablet_cnt_ += owner_progress.unmerged_tablet_cnt_;
+      for (int i = 0; i < ObMergeProgress::RECORD_TABLE_TYPE_CNT; ++i) {
+        progress_.table_cnt_[i] += owner_progress.table_cnt_[i];
+      }
     }
+    if (ret == OB_SUCCESS && waiting) { ret = OB_EAGAIN; }
     if (ret == OB_SUCCESS && !stop_) { progress_.set_merge_finished(); }
   }
   if (stop_) { ret = OB_CANCELED; }

@@ -49,6 +49,7 @@ struct MergeTable
   ObTableSchema *owned_schema = nullptr;
   const ObTableSchema *schema = nullptr;
   ObArray<ObTabletID> tablets;
+  std::unique_ptr<ObTableCkmItems> checksum;
   bool retired = false;
   bool excluded = false;
 };
@@ -214,14 +215,15 @@ int build_checksum(MergeTable &table, const ObFreezeInfo &freeze, ObLS &ls,
 }
 
 int compare_pair(MergeTable &data, MergeTable &index, bool fts,
-    const ObFreezeInfo &freeze, ObLS &ls, ObMySQLProxy &sql, ObUncompactInfo &pending)
+    const ObFreezeInfo &freeze, ObMySQLProxy &sql)
 {
   int ret = OB_SUCCESS;
   if (!data.retired && !index.retired && !data.excluded && !index.excluded) {
-    ObTableCkmItems data_items, index_items;
-    if (OB_FAIL(build_checksum(data, freeze, ls, data_items, pending))) {
-    } else if (OB_FAIL(build_checksum(index, freeze, ls, index_items, pending))) {
+    if (data.checksum == nullptr || index.checksum == nullptr) {
+      ret = OB_ERR_UNEXPECTED;
     } else {
+      ObTableCkmItems &data_items = *data.checksum;
+      ObTableCkmItems &index_items = *index.checksum;
       data_items.set_is_fts_index(fts);
       index_items.set_is_fts_index(fts);
       ObColumnChecksumErrorInfo error;
@@ -242,8 +244,8 @@ int compare_pair(MergeTable &data, MergeTable &index, bool fts,
   return ret;
 }
 
-int verify_indexes(MergeTables &tables, const ObFreezeInfo &freeze, ObLS &ls,
-    ObMySQLProxy &sql, volatile bool &stop, ObUncompactInfo &pending)
+int verify_indexes(MergeTables &tables, const ObFreezeInfo &freeze,
+    ObMySQLProxy &sql, volatile bool &stop)
 {
   int ret = OB_SUCCESS;
   for (const auto &entry : tables) {
@@ -255,9 +257,9 @@ int verify_indexes(MergeTables &tables, const ObFreezeInfo &freeze, ObLS &ls,
       // A readable index at F must have a definition for its data table too.
       ret = OB_SCHEMA_EAGAIN;
     } else if (!index.schema->should_not_validate_data_index_ckm()) {
-      ret = compare_pair(*found->second, index, false, freeze, ls, sql, pending);
+      ret = compare_pair(*found->second, index, false, freeze, sql);
     } else if (is_rowkey_doc_aux(index.schema->get_index_type())) {
-      ret = compare_pair(*found->second, index, true, freeze, ls, sql, pending);
+      ret = compare_pair(*found->second, index, true, freeze, sql);
     } else if (is_doc_rowkey_aux(index.schema->get_index_type())
         || is_fts_index_aux(index.schema->get_index_type())) {
       MergeTable *paired = nullptr;
@@ -280,34 +282,18 @@ int verify_indexes(MergeTables &tables, const ObFreezeInfo &freeze, ObLS &ls,
       }
       if (ret == OB_SUCCESS && paired == nullptr) { ret = OB_SCHEMA_EAGAIN; }
       if (ret == OB_SUCCESS) {
-        ret = doc_rowkey ? compare_pair(*paired, index, true, freeze, ls, sql, pending)
-                        : compare_pair(index, *paired, true, freeze, ls, sql, pending);
+        ret = doc_rowkey ? compare_pair(*paired, index, true, freeze, sql)
+                        : compare_pair(index, *paired, true, freeze, sql);
       }
     }
   }
   return stop ? OB_CANCELED : ret;
 }
-} // namespace
-
-int ObChecksumValidator::check_namespace(uint64_t namespace_id,
-    const ObIArray<TableStorageLayouts::Definition> &definitions,
-    const ObFreezeInfo &freeze, ObLS &ls, ObMySQLProxy &sql,
-    ObMultiVersionSchemaService &schemas, volatile bool &stop,
-    ObMergeProgress &progress, ObUncompactInfo &pending)
+int check_group(MergeTables &tables, const ObFreezeInfo &freeze, ObLS &ls,
+    ObSchemaService &backend, ObMySQLProxy &sql, volatile bool &stop,
+    ObUncompactInfo &pending)
 {
-  ObSchemaGetterGuard current;
-  MergeTables tables;
-  auto *backend = schemas.get_schema_service();
-  int ret = backend == nullptr ? OB_NOT_INIT : schemas.get_runtime_schema_guard(current);
-  for (int64_t i = 0; ret == OB_SUCCESS && !stop && i < definitions.count(); ++i) {
-    const auto &definition = definitions.at(i);
-    if (definition.namespace_id != namespace_id) { continue; }
-    std::unique_ptr<MergeTable> table(new (std::nothrow) MergeTable(definition));
-    if (!table) { ret = OB_ALLOCATE_MEMORY_FAILED; }
-    else if (OB_FAIL(load_definition(*table, current, *backend, sql))) {
-    } else if (!tables.emplace(definition.table_id, std::move(table)).second) { ret = OB_ERR_UNEXPECTED; }
-  }
-  // First fix the complete expected graph, independently of report arrival.
+  int ret = OB_SUCCESS;
   // Inspect data objects before indexes; a committed binding replacement
   // retires the old whole-table comparison even if its index results vanished.
   for (int pass = 0; ret == OB_SUCCESS && !stop && pass < 2; ++pass) {
@@ -319,29 +305,80 @@ int ObChecksumValidator::check_namespace(uint64_t namespace_id,
         const auto data = tables.find(table.schema->get_data_table_id());
         if (data != tables.end() && data->second->retired) { table.retired = true; }
       }
-      if (!table.retired) { ret = inspect_table(table, freeze, ls, *backend, sql, pending); }
+      if (!table.retired) { ret = inspect_table(table, freeze, ls, backend, sql, pending); }
     }
   }
   for (auto &entry : tables) {
     MergeTable &table = *entry.second;
     if (ret != OB_SUCCESS || stop) { break; }
     if (!table.retired && !table.excluded) {
-      ObTableCkmItems items;
-      ret = build_checksum(table, freeze, ls, items, pending);
+      table.checksum.reset(new (std::nothrow) ObTableCkmItems);
+      if (table.checksum == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+      else { ret = build_checksum(table, freeze, ls, *table.checksum, pending); }
     }
   }
-  if (ret == OB_SUCCESS && !stop) { ret = verify_indexes(tables, freeze, ls, sql, stop, pending); }
-  if (stop) { ret = OB_CANCELED; }
-  if (ret == OB_SUCCESS) {
-    for (const auto &entry : tables) {
-      const MergeTable &table = *entry.second;
-      ++progress.total_table_cnt_;
-      progress.update_table_cnt(table.retired || table.excluded
-          ? ObTableCompactionInfo::CAN_SKIP_VERIFYING : ObTableCompactionInfo::VERIFIED);
-      if (!table.retired && !table.excluded) { progress.merged_tablet_cnt_ += table.tablets.count(); }
+  if (ret == OB_SUCCESS && !stop) { ret = verify_indexes(tables, freeze, sql, stop); }
+  return stop ? OB_CANCELED : ret;
+}
+} // namespace
+
+int ObChecksumValidator::check_namespace(uint64_t namespace_id,
+    const ObIArray<TableStorageLayouts::Definition> &definitions,
+    const ObFreezeInfo &freeze, ObLS &ls, ObMySQLProxy &sql,
+    ObMultiVersionSchemaService &schemas, volatile bool &stop,
+    ObMergeProgress &progress, ObUncompactInfo &pending)
+{
+  ObSchemaGetterGuard current;
+  std::map<uint64_t, MergeTables> groups;
+  auto *backend = schemas.get_schema_service();
+  int ret = backend == nullptr ? OB_NOT_INIT : schemas.get_runtime_schema_guard(current);
+  // Fix the expected graph from definitions before examining any reports.
+  for (int64_t i = 0; ret == OB_SUCCESS && !stop && i < definitions.count(); ++i) {
+    const auto &definition = definitions.at(i);
+    if (definition.namespace_id != namespace_id) { continue; }
+    std::unique_ptr<MergeTable> table(new (std::nothrow) MergeTable(definition));
+    if (!table) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+    else if (OB_FAIL(load_definition(*table, current, *backend, sql))) {
+    } else {
+      const uint64_t data_table_id = table->schema->is_index_table()
+          ? table->schema->get_data_table_id() : definition.table_id;
+      if (!groups[data_table_id].emplace(definition.table_id, std::move(table)).second) {
+        ret = OB_ERR_UNEXPECTED;
+      }
     }
+  }
+  bool waiting = false;
+  for (auto &group : groups) {
+    if (ret != OB_SUCCESS || stop) { break; }
+    ret = check_group(group.second, freeze, ls, *backend, sql, stop, pending);
+    const bool group_waiting = ret == OB_EAGAIN || ret == OB_SCHEMA_EAGAIN;
+    waiting |= group_waiting;
+    if (ret == OB_SUCCESS || group_waiting) {
+      for (const auto &entry : group.second) {
+        const MergeTable &table = *entry.second;
+        ++progress.total_table_cnt_;
+        progress.update_table_cnt(group_waiting ? ObTableCompactionInfo::INITIAL
+            : table.retired || table.excluded ? ObTableCompactionInfo::CAN_SKIP_VERIFYING
+                                             : ObTableCompactionInfo::VERIFIED);
+        if (!group_waiting && !table.retired && !table.excluded) {
+          progress.merged_tablet_cnt_ += table.tablets.count();
+        }
+      }
+      if (!group_waiting) {
+        LOG_INFO("historical checksum group complete", K(namespace_id),
+            "data_table_id", group.first, K(freeze.frozen_scn_));
+      }
+      ret = OB_SUCCESS;
+    }
+    // Release report arrays after each group; a large earlier group must not
+    // accumulate with all later groups while their schemas remain in use.
+    for (auto &entry : group.second) { entry.second->checksum.reset(); }
+  }
+  if (stop) { ret = OB_CANCELED; }
+  else if (ret == OB_SUCCESS && waiting) { ret = OB_EAGAIN; }
+  if (ret == OB_SUCCESS) {
     LOG_INFO("Namespace historical checksum complete", K(namespace_id), K(freeze.frozen_scn_),
-        "table_count", tables.size());
+        "group_count", groups.size());
   }
   return ret;
 }

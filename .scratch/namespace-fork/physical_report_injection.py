@@ -9,6 +9,18 @@ p.add_argument('action', choices=('enable', 'disable'))
 a = p.parse_args()
 root = Path(__file__).resolve().parents[2]
 changes = (
+    ('src/rootserver/freeze/ob_global_merge_manager.cpp',
+     'int ObGlobalMergeManagerBase::try_update_global_last_merged_scn()\n{\n',
+     '''  if (const char *path = getenv("SEEKDB_CHECKSUM_COMPLETION_GATE")) {
+    if (FILE *gate = fopen(path, "r")) {
+      fclose(gate);
+      fprintf(stderr, "CHECKSUM_BEFORE_DURABLE_COMPLETION F=%ld\\n",
+          global_merge_info_.global_broadcast_scn().get_val_for_tx());
+      fflush(stderr);
+      return OB_SUCCESS;
+    }
+  }
+'''),
     ('src/rootserver/freeze/ob_major_merge_scheduler.cpp',
      '  DEBUG_SYNC(RS_VALIDATE_CHECKSUM);\n',
      '''  if (const char *path = getenv("SEEKDB_PHYSICAL_REPORT_GATE")) {

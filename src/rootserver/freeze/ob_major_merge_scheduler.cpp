@@ -441,10 +441,16 @@ int ObMajorMergeScheduler::try_update_global_merged_scn()
       LOG_WARN("should not update global merged scn, cuz is_merge_error is true", K(global_info));
     } else if (global_info.last_merged_scn() != global_info.global_broadcast_scn()) {
       if (FALSE_IT(global_broadcast_scn_val = global_info.global_broadcast_scn_.get_scn_val())) {
-      } else if (OB_FAIL(update_all_tablets_report_scn(global_broadcast_scn_val))) {
       } else if (OB_FAIL(merge_info_mgr_->get_global_merge_mgr().try_update_global_last_merged_scn())) {
       } else if (OB_FAIL(ObGlobalMergeTableOperator::load_global_merge_info(
             *sql_proxy_, global_info, true/*print_sql*/))) {
+      } else if (global_info.is_last_merge_complete()
+          && OB_FAIL(update_all_tablets_report_scn(global_broadcast_scn_val))) {
+        // The durable round completion must precede report_scn: the latter
+        // permits another medium to replace this F's checksum. A crash before
+        // durable completion must leave the original inputs for revalidation.
+        // If report publication fails, the medium loop repairs it from the
+        // already committed last_merged_scn.
       } else if (global_info.is_last_merge_complete() && OB_FAIL(progress_checker_->clear_cached_info())) { // clear only when merge finished
         LOG_WARN("fail to do prepare handle of progress checker", KR(ret));
       } else {

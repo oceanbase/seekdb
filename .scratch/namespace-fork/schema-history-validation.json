@@ -1,5 +1,5 @@
 {
-  "scope": "Foundation, atomic DDL/layout publication, durable retention, physical C membership, major/medium layouts, primary freeze preparation, exact meta-major bodies, SSTable origin, per-row redo versions, physical report identity and Namespace historical checksum now have targeted evidence below. Logical group-level progress/recovery, layout/body/binding GC, legacy freeze.schema_version removal and full standby integration remain incomplete.",
+  "scope": "Foundation, atomic DDL/layout publication, durable retention, physical C membership, major/medium layouts, primary freeze preparation, exact meta-major bodies, SSTable origin, per-row redo versions, physical report identity and Namespace historical checksum now have targeted evidence below. Independent logical group verification and mid-round recovery also have targeted evidence. Updated 8000-partition validation, layout/body/binding GC, legacy freeze.schema_version removal and full standby integration remain incomplete.",
   "runs": [
     {
       "name": "layout_history",
@@ -6193,6 +6193,238 @@
           "bytes": 34246466
         }
       ]
+    },
+    {
+      "name": "checksum_groups_recovery_1",
+      "log": "/tmp/seekdb-checksum-groups-recovery-test-1.log",
+      "status": "PASS",
+      "note": "PASS: independent groups and owners while one result is missing; pending F survives later DML/minor/medium request and crash; crash before durable round completion revalidates without early report release.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-checksum-groups-native-v1",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_checksum_group_recovery_uetpbrvp",
+          "pid": 1018907,
+          "port": 16351
+        },
+        {
+          "event": "PASS",
+          "case": "independent_groups_and_owners",
+          "frozen": 1791587088712172012,
+          "pairs": [
+            [
+              1,
+              500005,
+              1791587088712172012
+            ],
+            [
+              3,
+              500003,
+              1791587088712172012
+            ],
+            [
+              3,
+              500005,
+              1791587088712172012
+            ]
+          ]
+        },
+        {
+          "event": "crash_for_recovery",
+          "pid": 1018907
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-checksum-groups-native-v1",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_checksum_group_recovery_uetpbrvp",
+          "pid": 1026620,
+          "port": 16351
+        },
+        {
+          "event": "PASS",
+          "case": "missing_input_restart_revalidates",
+          "frozen": 1791587088712172012
+        },
+        {
+          "event": "crash_for_recovery",
+          "pid": 1026620
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-checksum-groups-native-v1",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_checksum_group_recovery_uetpbrvp",
+          "pid": 1027733,
+          "port": 16351
+        },
+        {
+          "event": "PASS",
+          "case": "completion_publication_restart",
+          "frozen": 1791587088712172012
+        },
+        {
+          "event": "PASS",
+          "case": "checksum_group_recovery"
+        },
+        {
+          "event": "stopped",
+          "pid": 1027733,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_checksum_group_recovery_uetpbrvp/data.tar.gz",
+          "bytes": 16828248
+        }
+      ]
+    },
+    {
+      "name": "checksum_groups_production_major_1",
+      "log": "/tmp/seekdb-checksum-groups-production-major-test-1.log",
+      "status": "PASS",
+      "note": "PASS: production without injection, real major freeze and physical progress.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_0qnv_8i7",
+          "pid": 1022251,
+          "port": 9161
+        },
+        {
+          "event": "sstable_identity",
+          "tablet_id": 200001,
+          "rows": []
+        },
+        {
+          "event": "sstable_identity",
+          "tablet_id": 4611686155866541377,
+          "rows": [
+            [
+              4611686155866541377,
+              "MAJOR"
+            ]
+          ]
+        },
+        {
+          "event": "PASS",
+          "case": "major_progress_physical_ids",
+          "rows": [
+            [
+              1791587012053589006,
+              1791587012053589006,
+              1791587012053589006
+            ]
+          ]
+        },
+        {
+          "event": "stopped",
+          "pid": 1022251,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_0qnv_8i7/data.tar.gz",
+          "bytes": 8970478
+        }
+      ]
+    },
+    {
+      "name": "checksum_groups_indexes_1",
+      "log": "/tmp/seekdb-checksum-groups-index-test-1.log",
+      "status": "PASS",
+      "note": "Full local/global/FTS regression after per-group report reuse, with missing/wrong-V/row-count faults and post-F same-count partition replacement.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-checksum-groups-native-v1",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_namespace_checksum_is60pdvp",
+          "pid": 1018909,
+          "port": 12885
+        },
+        {
+          "event": "freeze_prepared",
+          "frozen": 1791587089821914006,
+          "elapsed_s": 133.375
+        },
+        {
+          "event": "PASS",
+          "case": "independent_namespace_local_global_indexes",
+          "frozen": 1791587089821914006,
+          "root_version": 1791586955953752,
+          "child_version": 1791586956432440
+        },
+        {
+          "event": "freeze_prepared",
+          "frozen": 1791587110447715013,
+          "elapsed_s": 0.945
+        },
+        {
+          "event": "PASS",
+          "case": "child_global_index_report_fault",
+          "fault": "missing",
+          "frozen": 1791587110447715013,
+          "tablet": 4611686430744448325
+        },
+        {
+          "event": "freeze_prepared",
+          "frozen": 1791587132982706012,
+          "elapsed_s": 10.633
+        },
+        {
+          "event": "PASS",
+          "case": "child_global_index_report_fault",
+          "fault": "schema_version",
+          "frozen": 1791587132982706012,
+          "tablet": 4611686430744448325
+        },
+        {
+          "event": "freeze_prepared",
+          "frozen": 1791587163843645041,
+          "elapsed_s": 0.949
+        },
+        {
+          "event": "checksum_error_diagnostic",
+          "rows": [
+            [
+              3,
+              500003,
+              500011
+            ]
+          ]
+        },
+        {
+          "event": "PASS",
+          "case": "child_global_index_report_fault",
+          "fault": "row_count",
+          "frozen": 1791587163843645041,
+          "tablet": 4611686430744448325
+        },
+        {
+          "event": "freeze_prepared",
+          "frozen": 1791587190618782018,
+          "elapsed_s": 10.36
+        },
+        {
+          "event": "PASS",
+          "case": "post_freeze_same_count_partition_replacement",
+          "frozen": 1791587190618782018
+        },
+        {
+          "event": "PASS",
+          "case": "namespace_historical_checksum",
+          "native": true
+        },
+        {
+          "event": "stopped",
+          "pid": 1018909,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_namespace_checksum_is60pdvp/data.tar.gz",
+          "bytes": 32598681
+        }
+      ]
     }
   ],
   "meta_layout_builds": [
@@ -6239,6 +6471,17 @@
     },
     {
       "log": "/tmp/seekdb-sstable-layout-production-final-build-2.log",
+      "result": "PASS",
+      "test_hooks_removed": true
+    }
+  ],
+  "checksum_group_builds": [
+    {
+      "log": "/tmp/seekdb-checksum-groups-native-build-1.log",
+      "result": "PASS"
+    },
+    {
+      "log": "/tmp/seekdb-checksum-groups-production-build-1.log",
       "result": "PASS",
       "test_hooks_removed": true
     }

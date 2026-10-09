@@ -18,7 +18,7 @@
 #define OCEANBASE_ROOTSERVER_FREEZE_OB_MAJOR_MERGE_PROGRESS_CHECKER_
 #include "rootserver/freeze/ob_major_merge_progress_util.h"
 #include "share/ob_freeze_info_proxy.h"
-#include <set>
+#include <map>
 
 namespace oceanbase {
 namespace rootserver {
@@ -56,8 +56,9 @@ private:
   share::ObFreezeInfo freeze_;
   compaction::ObMergeProgress progress_;
   compaction::ObUncompactInfo pending_;
-  // Only completed owners in this F. No schemas or checksums survive a pass.
-  std::set<uint64_t> completed_;
+  // Only completed owners' counters in this F. No schemas or checksums
+  // survive a pass. Recovery verifies again before releasing any result.
+  std::map<uint64_t, compaction::ObMergeProgress> completed_;
   DISALLOW_COPY_AND_ASSIGN(ObMajorMergeProgressChecker);
 };
 } // namespace rootserver
