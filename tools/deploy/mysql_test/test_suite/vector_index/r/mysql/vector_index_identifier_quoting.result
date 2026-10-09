@@ -7,7 +7,7 @@ CREATE TABLE `c1_plain` (`id` INT PRIMARY KEY, v VECTOR(3),
 VECTOR INDEX `idx`(v) WITH (distance=l2,type=hnsw,lib=vsag));
 INSERT INTO `c1_plain` VALUES (1,'[1,0,0]'),(2,'[0,1,0]'),(3,'[0,0,1]');
 SET @c1_table_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'c1_plain'
-AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
+  AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
 SET @c1_index_name = 'idx';
 SET @c1_prefix = CONCAT('`', REPLACE(DATABASE(), '`', '``'),
 '`.`__idx_', @c1_table_id, '_', REPLACE(@c1_index_name, '`', '``'));
@@ -49,7 +49,7 @@ PARTITION BY RANGE COLUMNS(`id`)
 (PARTITION p0 VALUES LESS THAN (3), PARTITION p1 VALUES LESS THAN MAXVALUE);
 INSERT INTO `c1_partition_plain` VALUES (1,'[1,0,0]'),(2,'[0,1,0]'),(3,'[0,0,1]');
 SET @c1_table_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'c1_partition_plain'
-AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
+  AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
 SET @c1_index_name = 'idx';
 SET @c1_prefix = CONCAT('`', REPLACE(DATABASE(), '`', '``'),
 '`.`__idx_', @c1_table_id, '_', REPLACE(@c1_index_name, '`', '``'));
@@ -91,7 +91,7 @@ PARTITION BY RANGE COLUMNS(`order`)
 (PARTITION p0 VALUES LESS THAN (3), PARTITION p1 VALUES LESS THAN MAXVALUE);
 INSERT INTO `c1_partition_keyword` VALUES (1,'[1,0,0]'),(2,'[0,1,0]'),(3,'[0,0,1]');
 SET @c1_table_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'c1_partition_keyword'
-AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
+  AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
 SET @c1_index_name = 'idx';
 SET @c1_prefix = CONCAT('`', REPLACE(DATABASE(), '`', '``'),
 '`.`__idx_', @c1_table_id, '_', REPLACE(@c1_index_name, '`', '``'));
@@ -133,7 +133,7 @@ PARTITION BY RANGE COLUMNS(`key id`)
 (PARTITION p0 VALUES LESS THAN (3), PARTITION p1 VALUES LESS THAN MAXVALUE);
 INSERT INTO `c1_partition_space` VALUES (1,'[1,0,0]'),(2,'[0,1,0]'),(3,'[0,0,1]');
 SET @c1_table_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'c1_partition_space'
-AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
+  AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
 SET @c1_index_name = 'idx';
 SET @c1_prefix = CONCAT('`', REPLACE(DATABASE(), '`', '``'),
 '`.`__idx_', @c1_table_id, '_', REPLACE(@c1_index_name, '`', '``'));
@@ -175,7 +175,7 @@ PARTITION BY RANGE COLUMNS(`key``id`)
 (PARTITION p0 VALUES LESS THAN (3), PARTITION p1 VALUES LESS THAN MAXVALUE);
 INSERT INTO `c1_partition_backtick` VALUES (1,'[1,0,0]'),(2,'[0,1,0]'),(3,'[0,0,1]');
 SET @c1_table_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'c1_partition_backtick'
-AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
+  AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
 SET @c1_index_name = 'idx';
 SET @c1_prefix = CONCAT('`', REPLACE(DATABASE(), '`', '``'),
 '`.`__idx_', @c1_table_id, '_', REPLACE(@c1_index_name, '`', '``'));
@@ -208,7 +208,7 @@ CREATE TABLE `c1_table``quoted` (`id` INT PRIMARY KEY, v VECTOR(3),
 VECTOR INDEX `idx`(v) WITH (distance=l2,type=hnsw,lib=vsag));
 INSERT INTO `c1_table``quoted` VALUES (1,'[1,0,0]'),(2,'[0,1,0]'),(3,'[0,0,1]');
 SET @c1_table_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'c1_table`quoted'
-AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
+  AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
 SET @c1_index_name = 'idx';
 SET @c1_prefix = CONCAT('`', REPLACE(DATABASE(), '`', '``'),
 '`.`__idx_', @c1_table_id, '_', REPLACE(@c1_index_name, '`', '``'));
@@ -248,7 +248,7 @@ CREATE TABLE `c1_index` (`id` INT PRIMARY KEY, v VECTOR(3),
 VECTOR INDEX `idx``quoted`(v) WITH (distance=l2,type=hnsw,lib=vsag));
 INSERT INTO `c1_index` VALUES (1,'[1,0,0]'),(2,'[0,1,0]'),(3,'[0,0,1]');
 SET @c1_table_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'c1_index'
-AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
+  AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
 SET @c1_index_name = 'idx`quoted';
 SET @c1_prefix = CONCAT('`', REPLACE(DATABASE(), '`', '``'),
 '`.`__idx_', @c1_table_id, '_', REPLACE(@c1_index_name, '`', '``'));
@@ -289,7 +289,7 @@ CREATE TABLE `c1_database` (`id` INT PRIMARY KEY, v VECTOR(3),
 VECTOR INDEX `idx`(v) WITH (distance=l2,type=hnsw,lib=vsag));
 INSERT INTO `c1_database` VALUES (1,'[1,0,0]'),(2,'[0,1,0]'),(3,'[0,0,1]');
 SET @c1_table_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'c1_database'
-AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
+  AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
 SET @c1_index_name = 'idx';
 SET @c1_prefix = CONCAT('`', REPLACE(DATABASE(), '`', '``'),
 '`.`__idx_', @c1_table_id, '_', REPLACE(@c1_index_name, '`', '``'));
