@@ -968,6 +968,53 @@ int ObFlushKVCacheResolver::resolve(const ParseNode &parse_tree)
 }
 
 
+int ObRefreshFTDictResolver::resolve(const ParseNode &parse_tree)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(T_REFRESH_FT_DICT != parse_tree.type_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("type is not T_REFRESH_FT_DICT", "type", get_type_name(parse_tree.type_));
+  } else if (OB_UNLIKELY(2 != parse_tree.num_child_ || NULL == parse_tree.children_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("children of refresh ft dict node should be 2", K(ret));
+  } else {
+    ObRefreshFTDictStmt *stmt = create_stmt<ObRefreshFTDictStmt>();
+    if (NULL == stmt) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_ERROR("create ObRefreshFTDictStmt failed");
+    } else {
+      stmt_ = stmt;
+      ParseNode *db_node = parse_tree.children_[0];
+      ParseNode *table_node = parse_tree.children_[1];
+      ObString db_name;
+      ObString table_name;
+      if (NULL == table_node || NULL == table_node->str_value_ || table_node->str_len_ <= 0) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("table name should not be empty", K(ret));
+      } else if (FALSE_IT(table_name.assign_ptr(table_node->str_value_, table_node->str_len_))) {
+      } else if (NULL != db_node && NULL != db_node->str_value_ && db_node->str_len_ > 0) {
+        db_name.assign_ptr(db_node->str_value_, db_node->str_len_);
+      } else if (OB_ISNULL(params_.session_info_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("session info is null", K(ret));
+      } else {
+        db_name = params_.session_info_->get_database_name();
+        if (db_name.empty()) {
+          ret = OB_ERR_NO_DB_SELECTED;
+          LOG_WARN("no database selected for refresh fulltext dict", K(ret));
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(stmt->db_name_.assign(db_name))) {
+        LOG_WARN("assign db name failed", K(db_name), K(ret));
+      } else if (OB_FAIL(stmt->table_name_.assign(table_name))) {
+        LOG_WARN("assign table name failed", K(table_name), K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
 int ObFlushIlogCacheResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;

@@ -107,6 +107,10 @@ public:
 
   int load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
 
+  // Evict the cached dict identified by desc (used by ALTER SYSTEM REFRESH FULLTEXT DICT).
+  // Evicting a dict that was never loaded is a no-op.
+  int erase_cache(const ObFTDictDesc &desc);
+
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);
 

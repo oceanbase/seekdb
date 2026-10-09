@@ -18,6 +18,7 @@
 #define _OCEANBASE_STORAGE_FTS_DICT_OB_FT_DICT_DEF_H_
 
 #include "lib/charset/ob_charset.h"
+#include "lib/hash_func/murmur_hash.h"
 
 #include <cstdint>
 
@@ -55,6 +56,7 @@ enum class ObFTDictType : uint32_t
   DICT_IK_MAIN = 1,
   DICT_IK_QUAN = 2,
   DICT_IK_STOP = 3,
+  DICT_IK_CUSTOM = 4,
 };
 
 class ObFTDictDesc
@@ -66,6 +68,18 @@ public:
                const ObCollationType coll_type)
       : name_(name), type_(type), charset_(charset), coll_type_(coll_type)
   {
+  }
+
+  // Identity of this dict in the dict-hub map and the kv cache: builtin dicts use
+  // their type; custom table dicts mix in the table name so different dict tables
+  // never collide.
+  inline uint64_t get_cache_name() const
+  {
+    uint64_t cache_name = static_cast<uint64_t>(type_);
+    if (ObFTDictType::DICT_IK_CUSTOM == type_) {
+      cache_name = common::murmurhash(name_.ptr(), name_.length(), 0) | (1ULL << 63);
+    }
+    return cache_name;
   }
 
 public:

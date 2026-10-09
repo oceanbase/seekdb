@@ -256,6 +256,8 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"disconnect", DISCONNECT},
   {"directory", DIRECTORY},
   {"disable", DISABLE},
+  {"dict", DICT},
+  {"fulltext_dict", FULLTEXT_DICT},
   {"discard", DISCARD},
   {"disk", DISK},
   {"diskgroup", DISKGROUP},

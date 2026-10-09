@@ -1148,6 +1148,22 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
 
 #undef __FT_PARSER_PROPERTY_SHOW_COMMA
 
+int ObFTParserProperty::copy_dict_table_str_(char *buf, common::ObString &dst, const common::ObString &src)
+{
+  int ret = OB_SUCCESS;
+  if (src.empty()) {
+    dst.reset();
+  } else if (src.length() + 1 > FT_DICT_TABLE_NAME_BUF_LEN) {
+    ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("dict table name too long", K(ret), K(src.length()));
+  } else {
+    MEMCPY(buf, src.ptr(), src.length());
+    buf[src.length()] = '\0';
+    dst.assign_ptr(buf, src.length());
+  }
+  return ret;
+}
+
 int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const ObString &json_str)
 {
   int ret = OB_SUCCESS;
@@ -1158,10 +1174,44 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
     LOG_WARN("fail to parse from json str", K(ret), K(json_str));
   } else {
     if (parser.is_ik()) {
-      // set dict tables and copy dict name
-      dict_table_ = ObString(ObFTSLiteral::CONFIG_NAME_DICT_TABLE);
-      stopword_table_ = ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE);
-      quantifier_table_ = ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE);
+      // read the custom dict table names from the properties json; they stay
+      // empty when the config key is absent (built-in dicts are used then).
+      // Values are deep-copied into owned buffers: the json tree they are read
+      // from is destroyed when this function returns.
+      ObString dict_table_value;
+      ObString stopword_table_value;
+      ObString quantifier_table_value;
+      if (OB_FAIL(props.config_get_dict_table(dict_table_value))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("fail to get dict_table", K(ret));
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(props.config_get_stopword_table(stopword_table_value))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("fail to get stopword_table", K(ret));
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(props.config_get_quantifier_table(quantifier_table_value))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("fail to get quantifier_table", K(ret));
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(copy_dict_table_str_(dict_table_buf_, dict_table_, dict_table_value))) {
+        LOG_WARN("fail to copy dict table name", K(ret));
+      } else if (OB_FAIL(copy_dict_table_str_(stopword_table_buf_, stopword_table_, stopword_table_value))) {
+        LOG_WARN("fail to copy stopword table name", K(ret));
+      } else if (OB_FAIL(copy_dict_table_str_(quantifier_table_buf_, quantifier_table_, quantifier_table_value))) {
+        LOG_WARN("fail to copy quantifier table name", K(ret));
+      }
       ObString ik_smart;
       if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
         if (OB_SEARCH_NOT_FOUND == ret) {

@@ -25,6 +25,7 @@
 #include "lib/utility/utility.h"
 #include "storage/fts/ob_fts_struct.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
+#include "storage/fts/ob_fts_literal.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 #include "storage/fts/dict/ob_ft_dict_hub.h"
@@ -278,8 +279,13 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
   }
 
   ObFTRangeDict *dict = nullptr;
-  ObFTDictDesc main_dict_desc("main_dict",
-                              ObFTDictType::DICT_IK_MAIN,
+  // a custom dict table (PARSER_PROPERTIES dict_table) replaces the built-in main dict;
+  // quantifier and stopword dicts stay built-in. The DDL-time default
+  // ("oceanbase.__ft_dict_ik_utf8") means "use the built-in main dict".
+  const bool use_custom_dict = !param.ik_param_.main_dict_.empty()
+      && 0 != param.ik_param_.main_dict_.case_compare(ObFTSLiteral::FT_DEFAULT_IK_DICT_UTF8_TABLE);
+  ObFTDictDesc main_dict_desc(use_custom_dict ? param.ik_param_.main_dict_ : ObString("main_dict"),
+                              use_custom_dict ? ObFTDictType::DICT_IK_CUSTOM : ObFTDictType::DICT_IK_MAIN,
                               ObCharsetType::CHARSET_UTF8MB4,
                               ObCollationType::CS_TYPE_UTF8MB4_BIN);
 

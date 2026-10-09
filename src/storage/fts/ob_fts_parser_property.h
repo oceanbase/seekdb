@@ -139,6 +139,10 @@ public:
   ~ObFTParserProperty() = default;
   int parse_for_parser_helper(const ObFTParser &parser, const ObString &json_str);
 
+  // deep-copy src into buf and let dst reference buf (keeps table names alive
+  // after the json tree they were parsed from is gone)
+  static int copy_dict_table_str_(char *buf, common::ObString &dst, const common::ObString &src);
+
   bool is_equal(const ObFTParserProperty &other) const
   {
     return min_token_size_ == other.min_token_size_ && max_token_size_ == other.max_token_size_
@@ -160,6 +164,8 @@ public:
                K_(ik_mode_smart));
 
 public:
+  static constexpr int64_t FT_DICT_TABLE_NAME_BUF_LEN = 512;
+
   int64_t min_token_size_;
   int64_t max_token_size_;
   int64_t ngram_token_size_;
@@ -169,6 +175,12 @@ public:
   common::ObString quantifier_table_;
   int64_t min_ngram_token_size_;
   int64_t max_ngram_token_size_;
+
+  // owned storage backing the ObString table names above: config values are read
+  // out of a short-lived json tree, so they must be deep-copied to stay valid
+  char stopword_table_buf_[FT_DICT_TABLE_NAME_BUF_LEN];
+  char dict_table_buf_[FT_DICT_TABLE_NAME_BUF_LEN];
+  char quantifier_table_buf_[FT_DICT_TABLE_NAME_BUF_LEN];
 };
 
 } // end namespace storage
