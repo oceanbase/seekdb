@@ -1,0 +1,31 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/atomic-physical-drop-artifacts/seekdb-production", "base": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_parent_truncate_5bfg2bud", "pid": 3947374, "port": 60699}
+{"event": "sql", "sql": "CREATE DATABASE nstrunc_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE trunc_parent_1 FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=10000000", "rows": []}
+{"event": "parent_recyclebin", "iteration": 1, "value": [[0]]}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=20", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE trunc_child_1 FROM trunc_parent_1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=10000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "before_truncate", "iteration": 1, "parent_namespace": 3, "child_namespace": 4, "old_logical_tablet": 200001, "physical": [[4611686155866541377, 1, 1, 0], [4611686430744448321, 1, 1, 0]], "materialize_parent": true, "materialize_child": false, "prime_parent_schema": false}
+{"event": "sql", "sql": "TRUNCATE TABLE nstrunc_repro.t1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "after_truncate", "iteration": 1, "old_logical_tablet": 200001, "new_parent_tablet": 200002, "physical": [[4611686155866541377, 1, 1, 0], [4611686430744448321, 3, 1, 0], [4611686430744448322, 1, 1, 0]], "parent_source": [[500003, 4611686430744448322, 771, 200002, 0, 0], 0], "child_source": [[500003, 4611686430744448321, 601, 200001, 0, 0], 1791454105964500005]}
+{"event": "sql", "sql": "SET ob_query_timeout=2000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "descendant_result", "iteration": 1, "expected": [[1, 20]], "actual": [[1, 20]], "error": null, "elapsed_s": 0.001, "passed": true}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=v+100", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 120]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 120]]}
+{"event": "first_write_after_truncate", "rows": [[1, 120]]}
+{"event": "PASS", "case": "fork_parent_truncate", "results": [true], "materialize_parent": true, "materialize_child": false, "prime_parent_schema": false}
+{"event": "stopped", "pid": 3947374, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_parent_truncate_5bfg2bud/data.tar.gz", "bytes": 3374806}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

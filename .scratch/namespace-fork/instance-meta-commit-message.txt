@@ -1,0 +1,18 @@
+Add native transactional instance metadata storage
+
+Create an LS-owned metadata tablet with a fixed collection/key/value schema,
+without registering SQL catalog objects or creating another namespace runtime.
+Wrap native AccessService operations in store-owned transactions, including
+snapshot reads, row locking, cross-collection writes, and automatic rollback.
+
+Keep native transaction snapshots visible to mini/minor compaction and use
+ordinary row memtables for the metadata tablet. Prepared physical access plans
+only resolve a namespace schema service when version checking requires it.
+Use VARBINARY consistently for stored columns and lookup keys.
+
+Validated release build, native CRUD/transaction/lock/boundary regressions,
+mini/minor snapshot retention, forced-exit recovery, and namespace bootstrap,
+SQL, direct, and TLS gates. Test code and documentation remain local.
+
+Namespace business metadata still uses its existing SQL adapters; replacing
+those adapters and moving namespace hooks above AccessService are follow-ups.

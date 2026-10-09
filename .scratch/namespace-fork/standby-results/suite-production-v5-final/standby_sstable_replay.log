@@ -1,0 +1,783 @@
+Run case stanby/standby_sstable_replay
+[2026-10-03 05:02:49.374][INFO ] [MyTest         :78] - print args => [-use_ob_connector, true, -result_file, r/stanby/standby_sstable_replay.result, -test_file, t/stanby/standby_sstable_replay.test]
+[-use_ob_connector, true, -result_file, r/stanby/standby_sstable_replay.result, -test_file, t/stanby/standby_sstable_replay.test]
+[2026-10-03 05:02:49.377][INFO ] [MyTest         :81] - start case => t/stanby/standby_sstable_replay.test
+[2026-10-03 05:02:49.381][INFO ] [MyTest         :84] - use data id => obtest_nijia.nj_6.12.232.130
+[2026-10-03 05:02:49.451][INFO ] [TestCase       :107] - initilize deploy processor
+[2026-10-03 05:02:49.463][INFO ] [DeployConfig   :590] - config port and dataid. port_base=>1124, obs_port=>1124, mysql_port=>1159, data_id=>obtest_nijia.nj_6.12.232.130_0, port_offset=>0
+[2026-10-03 05:02:49.516][INFO ] [DeployConfig   :577] - config port and dataid. port_base=>42000, obs_port=>42000, mysql_port=>42035, data_id=>obtest_nijia.nj_6.12.232.130_042000
+[2026-10-03 05:02:49.521][INFO ] [OfsProcessor   :53] - ofs_deployer: null/hap.py
+[2026-10-03 05:02:49.522][INFO ] [OfsCreateTenantProcessor:32] - ofsshell: null/../../bin/ofsshell
+[2026-10-03 05:02:49.522][INFO ] [TestCase       :761] - Read file => t/stanby/standby_sstable_replay.test
+[2026-10-03 05:02:49.523][INFO ] [TestCase       :721] - Finish read case: file_lines => 163, lineNo => 101
+[2026-10-03 05:02:49.533][INFO ] [Command        :536] - > LINE => 7, CMD => Q_DISABLE_ALL_RESULT_LOG, CONTENT => --disable_all_result_log
+[2026-10-03 05:02:49.535][INFO ] [Command        :353] - start[1790974969534] time[1] tag[Q_DISABLE_ALL_RESULT_LOG]
+[2026-10-03 05:02:49.539][INFO ] [Command        :536] - > LINE => 8, CMD => Q_DEPLOY, CONTENT => db_p=OBI(cluster=1,proxy_num=0,role=primary);
+[2026-10-03 05:02:49.542][INFO ] [DeployProcessor:78] - OBI define => db_p=OBI(cluster=1,proxy_num=0,role=primary)
+[2026-10-03 05:02:49.558][INFO ] [Deploy         :381] - execute db_p.z_num result => 1 result type => java.lang.Integer
+[2026-10-03 05:02:49.631][INFO ] [Deploy         :464] - assign rpc port. observer=>db_p.z1.obs0, rpc_port=>42000
+[2026-10-03 05:02:49.632][INFO ] [Deploy         :471] - assign mysql port. observer=>db_p.z1.obs0, mysql_port=>42035
+[2026-10-03 05:02:49.632][INFO ] [Deploy         :478] - assign backup io rpc port. observer=>db_p.z1.obs0, obesi_port=>42070
+[2026-10-03 05:02:49.638][INFO ] [OBLog          :99] - config.ob_version='.'
+[2026-10-03 05:02:49.638][INFO ] [OBLog          :100] - config.oblog_version='default'
+[2026-10-03 05:02:49.638][INFO ] [OBLog          :117] - set oblog version='.'
+[2026-10-03 05:02:49.639][INFO ] [OBLog          :126] - set oblog work_dir=''
+[2026-10-03 05:02:49.639][INFO ] [OBLog          :148] - oblog.is_obcdc_exist: false
+[2026-10-03 05:02:49.639][INFO ] [OBLog          :149] - oblog.exec: oblog/oblog_tailf
+[2026-10-03 05:02:49.639][INFO ] [OBLog          :150] - oblog.configFile: oblog/liboblog.conf
+[2026-10-03 05:02:49.639][INFO ] [OBLog          :151] - oblog.dataFile: oblog/data.log
+[2026-10-03 05:02:49.640][INFO ] [OBLog          :152] - oblog.envCon: LD_LIBRARY_PATH=oblog:$LD_LIBRARY_PATH
+[2026-10-03 05:02:49.640][INFO ] [OBLog          :153] - oblog.startCmdHead: ulimit -c unlimited; LD_LIBRARY_PATH=oblog:$LD_LIBRARY_PATH oblog/oblog_tailf
+[2026-10-03 05:02:49.640][INFO ] [OBLog          :154] - oblog.defaultStartCmd: ulimit -c unlimited; LD_LIBRARY_PATH=oblog:$LD_LIBRARY_PATH oblog/oblog_tailf  -f oblog/liboblog.conf -D oblog/data.log -H oblog/heartbeat.log -d
+[2026-10-03 05:02:49.945][INFO ] [Deploy         :1128] - start observer version is lite mode: true
+[2026-10-03 05:02:49.946][INFO ] [Command        :353] - start[1790974969539] time[406] tag[Q_DEPLOY]
+[2026-10-03 05:02:49.947][INFO ] [Command        :536] - > LINE => 9, CMD => Q_DEPLOY, CONTENT => db_p.reboot;
+[2026-10-03 05:02:49.948][INFO ] [DeployProcessor:93] - deploy => db_p.reboot
+[2026-10-03 05:02:49.948][INFO ] [Deploy         :287] - execute db_p.reset
+[2026-10-03 05:02:49.948][INFO ] [Deploy         :381] - execute db_p.lite_mode result => true result type => java.lang.Boolean
+[2026-10-03 05:02:49.948][INFO ] [Deploy         :294] - execute db_p.reset result => true
+[2026-10-03 05:02:49.949][INFO ] [Deploy         :287] - execute db_p.clean_asvr
+[2026-10-03 05:02:49.949][INFO ] [Deploy         :294] - execute db_p.clean_asvr result => true
+[2026-10-03 05:02:49.954][INFO ] [Deploy         :287] - execute db_p.z1.obs0.force_stop_asvr
+[2026-10-03 05:02:49.957][INFO ] [Role           :1228] - pkill -9 -u nijia.nj -f '^/data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.asvr0/bin/observer' on 6.12.232.130
+[2026-10-03 05:02:49.988][INFO ] [Role           :1230] - pkill asvr result is => 1
+[2026-10-03 05:02:49.988][INFO ] [Deploy         :294] - execute db_p.z1.obs0.force_stop_asvr result => true
+[2026-10-03 05:02:49.988][INFO ] [Deploy         :287] - execute db_p.z1.obs0.rmdir_asvr
+[2026-10-03 05:02:49.988][INFO ] [Role           :1237] - try to remove asvr dir server  => db_p.z1.obs0
+[2026-10-03 05:02:49.994][INFO ] [Role           :1264] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.asvr0 , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:02:49.994][INFO ] [Deploy         :294] - execute db_p.z1.obs0.rmdir_asvr result => true
+[2026-10-03 05:02:49.994][INFO ] [Deploy         :331] - execute db_p.z1.obs0.clean_asvr  result => true
+[2026-10-03 05:02:49.995][INFO ] [Deploy         :362] - execute db_p.z1.clean_asvr  result => true [true]
+[2026-10-03 05:02:49.995][INFO ] [Deploy         :362] - execute db_p.clean_asvr_everywhere result => true [true]
+[2026-10-03 05:02:49.995][INFO ] [Deploy         :331] - execute db_p.clean_all_asvr result => true
+[2026-10-03 05:02:49.996][INFO ] [Deploy         :287] - execute db_p.deploy_logservice
+[2026-10-03 05:02:49.996][INFO ] [Deploy         :294] - execute db_p.deploy_logservice result => true
+[2026-10-03 05:02:49.996][INFO ] [Deploy         :287] - execute db_p.bootstrap_logservice
+[2026-10-03 05:02:49.996][INFO ] [Deploy         :294] - execute db_p.bootstrap_logservice result => true
+[2026-10-03 05:02:49.997][INFO ] [Deploy         :331] - execute db_p.reboot_logservice result => true
+[2026-10-03 05:02:49.999][INFO ] [Deploy         :287] - execute db_p.z1.check_local_bin
+[2026-10-03 05:02:50.05][INFO ] [Deploy         :294] - execute db_p.z1.check_local_bin result => true
+[2026-10-03 05:02:50.05][INFO ] [Deploy         :287] - execute db_p.z1.check_ssh
+[2026-10-03 05:02:50.06][INFO ] [Deploy         :294] - execute db_p.z1.check_ssh result => true
+[2026-10-03 05:02:50.07][INFO ] [Deploy         :287] - execute db_p.z1.obs0.check_dir 
+[2026-10-03 05:02:50.15][INFO ] [Deploy         :294] - execute db_p.z1.obs0.check_dir  result => true
+[2026-10-03 05:02:50.27][INFO ] [Deploy         :362] - execute db_p.z1.check_dir result => true [true]
+[2026-10-03 05:02:50.28][INFO ] [Deploy         :287] - execute db_p.z1.obs0.force_stop 
+[2026-10-03 05:02:50.29][INFO ] [Role           :1307] - pkill -9 -u nijia.nj -f '^/data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/bin/observer|^/data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/bin/obesi' on 6.12.232.130
+[2026-10-03 05:02:50.46][INFO ] [Role           :1309] - pkill result is => 1
+[2026-10-03 05:02:50.47][INFO ] [Role           :1142] - wait stop /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/bin/observer on 6.12.232.130
+[2026-10-03 05:02:50.47][INFO ] [Role           :1190] - ps uxf | grep "/data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/bin/observer" | grep -v grep
+[2026-10-03 05:02:50.90][INFO ] [Role           :1154] - check port on 6.12.232.130
+[2026-10-03 05:02:50.91][INFO ] [RemoteShell    :143] - netstat -lpnt 2>/dev/null | grep '0.0.0.0:42000 ' | awk -F ' ' '{print $7}'
+[2026-10-03 05:02:50.131][INFO ] [RemoteShell    :143] - netstat -lpnt 2>/dev/null | grep '0.0.0.0:42035 ' | awk -F ' ' '{print $7}'
+[2026-10-03 05:02:50.165][INFO ] [Role           :1164] - stop obs0 took 2 s
+[2026-10-03 05:02:50.166][INFO ] [Deploy         :294] - execute db_p.z1.obs0.force_stop  result => true
+[2026-10-03 05:02:50.166][INFO ] [Deploy         :362] - execute db_p.z1.force_stop result => true [true]
+[2026-10-03 05:02:50.167][INFO ] [Deploy         :362] - execute db_p.z1.force_stop_logstore result => true []
+[2026-10-03 05:02:50.167][INFO ] [Deploy         :331] - execute db_p.z1.force_stop_all result => true
+[2026-10-03 05:02:50.168][INFO ] [Deploy         :287] - execute db_p.z1.obs0.rmdir 
+[2026-10-03 05:02:50.168][INFO ] [Deploy         :381] - execute db_p.lite_mode result => true result type => java.lang.Boolean
+[2026-10-03 05:02:50.171][INFO ] [Role           :1395] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_p.z1.obs0.nijia.nj/sstable /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store/slog /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_p.z1.obs0.nijia.nj/sort_dir , on => 6.12.232.130
+[2026-10-03 05:02:50.177][INFO ] [Role           :1397] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_p.z1.obs0.nijia.nj/sstable /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store/slog /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_p.z1.obs0.nijia.nj/sort_dir , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:02:50.190][INFO ] [Role           :1402] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/log , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:02:50.195][INFO ] [Role           :1407] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/admin , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:02:50.199][INFO ] [Role           :1412] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/wallet , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:02:50.203][INFO ] [Role           :1417] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/etc/observer.c*nf*.bin* /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/etc/seekdb.c*nf*.bin* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:02:50.208][INFO ] [Role           :1423] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/etc/observer.data_version.bin* /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/etc/seekdb.data_version.bin* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:02:50.213][INFO ] [Role           :1429] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/etc2/observer.c*nf*.bin* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:02:50.217][INFO ] [Role           :1434] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/etc3/observer.c*nf*.bin* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:02:50.222][INFO ] [Role           :1439] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/run/observer.pid /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/run/seekdb.pid , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:02:50.236][INFO ] [Role           :1444] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/clog_shm , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:02:50.240][INFO ] [Role           :1449] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/ilog_shm , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:02:50.244][INFO ] [Role           :1454] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/manifest* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:02:50.251][INFO ] [Role           :1467] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/core* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:02:50.256][INFO ] [Role           :1504] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/ /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_p.z1.obs0.nijia.nj/ , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:02:50.725][INFO ] [Role           :1510] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0 , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:02:50.730][INFO ] [Deploy         :294] - execute db_p.z1.obs0.rmdir  result => true
+[2026-10-03 05:02:50.730][INFO ] [Deploy         :362] - execute db_p.z1.rmdir result => true [true]
+[2026-10-03 05:02:50.730][INFO ] [Deploy         :331] - execute db_p.z1.cleanup result => true
+[2026-10-03 05:02:50.731][INFO ] [Deploy         :362] - execute db_p.z1.cleanup_logstore result => true []
+[2026-10-03 05:02:50.731][INFO ] [Deploy         :331] - execute db_p.z1.cleanup_all result => true
+[2026-10-03 05:02:50.731][INFO ] [Deploy         :287] - execute db_p.z1.genconf
+[2026-10-03 05:02:50.732][INFO ] [Deploy         :294] - execute db_p.z1.genconf result => true
+[2026-10-03 05:02:50.734][INFO ] [Deploy         :287] - execute db_p.z1.obs0.mkdir 
+[2026-10-03 05:02:50.735][INFO ] [Role           :1768] - mkdir -p /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/;mkdir -p /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store/clog /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store/ilog /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store/slog /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_p.z1.obs0.nijia.nj/sort_dir /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_p.z1.obs0.nijia.nj/sstable;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_p.z1.obs0.nijia.nj/sstable /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store/clog /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store/ilog /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store/slog /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_p.z1.obs0.nijia.nj/sort_dir /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/ on 6.12.232.130
+[2026-10-03 05:02:50.749][INFO ] [Deploy         :294] - execute db_p.z1.obs0.mkdir  result => true
+[2026-10-03 05:02:50.749][INFO ] [Deploy         :362] - execute db_p.z1.mkdir_obs result => true [true]
+[2026-10-03 05:02:50.750][INFO ] [Deploy         :362] - execute db_p.z1.mkdir_logstore result => true []
+[2026-10-03 05:02:50.750][INFO ] [Deploy         :331] - execute db_p.z1.mkdir result => true
+[2026-10-03 05:02:50.751][INFO ] [Deploy         :287] - execute db_p.z1.obs0.rsync 
+[2026-10-03 05:02:50.751][INFO ] [Role           :1648] - sync server finish, time = 0
+[2026-10-03 05:02:50.752][INFO ] [Role           :1563] - rsync server => db_p.z1.obs0 version if specified => .
+[2026-10-03 05:02:50.757][INFO ] [Role           :1635] - check disk dir ==> './admin' exist
+[2026-10-03 05:02:50.766][WARN ] [Role           :1638] - check disk dir ==> './plugin_dir' not exist
+[2026-10-03 05:02:50.770][INFO ] [Role           :1635] - check disk dir ==> './wallet' exist
+[2026-10-03 05:02:50.771][INFO ] [Role           :1590] - transfer cmd to =>  rsync -WrptgoDRLv --timeout=600 bin etc lib  admin  wallet /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0
+[2026-10-03 05:02:55.632][INFO ] [Role           :1604] - rsync cmd =>  rsync -WrptgoDRLv --timeout=600 bin etc lib  admin  wallet /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0
+[2026-10-03 05:02:55.633][INFO ] [Deploy         :294] - execute db_p.z1.obs0.rsync  result => true
+[2026-10-03 05:02:55.633][INFO ] [Deploy         :362] - execute db_p.z1.rsync_obs result => true [true]
+[2026-10-03 05:02:55.634][INFO ] [Deploy         :362] - execute db_p.z1.rsync_logstore result => true []
+[2026-10-03 05:02:55.634][INFO ] [Deploy         :331] - execute db_p.z1.rsync result => true
+[2026-10-03 05:02:55.635][INFO ] [Deploy         :362] - execute db_p.z1.start_logstore result => true []
+[2026-10-03 05:02:55.635][INFO ] [Deploy         :287] - execute db_p.z1.sleep 5
+[2026-10-03 05:03:00.636][INFO ] [Deploy         :294] - execute db_p.z1.sleep 5 result => true
+[2026-10-03 05:03:00.637][INFO ] [Deploy         :287] - execute db_p.z1.obs0.start 
+[2026-10-03 05:03:00.637][INFO ] [Deploy         :381] - execute db_p.lite_mode result => true result type => java.lang.Boolean
+[2026-10-03 05:03:00.638][INFO ] [Deploy         :381] - execute db_p.lite_mode result => true result type => java.lang.Boolean
+6.12.232.130 is not a valid IPv6 address.
+[2026-10-03 05:03:00.640][INFO ] [Role           :539] - cluster_id1
+[2026-10-03 05:03:00.640][INFO ] [Deploy         :381] - execute db_p.z_num result => 1 result type => java.lang.Integer
+[2026-10-03 05:03:00.640][INFO ] [Role           :552] - db_p have 1 ZONE
+[2026-10-03 05:03:00.641][INFO ] [Role           :584] - ofs_list ofs_list='z1@' has_ofs_zone false
+[2026-10-03 05:03:00.641][INFO ] [Role           :637] - ulimit -c unlimited -s 4096;cd /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0;LD_LIBRARY_PATH=./lib:/usr/local/lib:/usr/lib:/usr/lib64:/usr/local/lib64:$LD_LIBRARY_PATH /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/bin/observer --port 42035 --data-dir /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store --redo-dir /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/clog  --role=PRIMARY --parameter enable_rpc_service=true --parameter rpc_port=42000 --parameter datafile_size='2G' --parameter log_disk_size='2G' --parameter cpu_count=4 --parameter memory_limit='8G' on 6.12.232.130
+[2026-10-03 05:03:00.708][INFO ] [Deploy         :294] - execute db_p.z1.obs0.start  result => true
+[2026-10-03 05:03:00.709][INFO ] [Deploy         :362] - execute db_p.z1.start_obs result => true [true]
+[2026-10-03 05:03:00.710][INFO ] [Deploy         :331] - execute db_p.z1.start result => true
+[2026-10-03 05:03:00.710][INFO ] [Deploy         :287] - execute db_p.z1.sleep 8
+[2026-10-03 05:03:08.711][INFO ] [Deploy         :294] - execute db_p.z1.sleep 8 result => true
+[2026-10-03 05:03:08.711][INFO ] [Deploy         :331] - execute db_p.z1.reboot  result => true
+[2026-10-03 05:03:08.711][INFO ] [Deploy         :362] - execute db_p.deploy result => true [true]
+[2026-10-03 05:03:08.712][INFO ] [Deploy         :287] - execute db_p.sleep 5
+[2026-10-03 05:03:13.712][INFO ] [Deploy         :294] - execute db_p.sleep 5 result => true
+[2026-10-03 05:03:13.713][INFO ] [Deploy         :287] - execute db_p.bootstrap
+[2026-10-03 05:03:13.713][INFO ] [Deploy         :381] - execute db_p.z_num result => 1 result type => java.lang.Integer
+[2026-10-03 05:03:13.713][INFO ] [Deploy         :381] - execute db_p.zone_names result => [Ljava.lang.String;@23ceabc1 result type => [Ljava.lang.String;
+[2026-10-03 05:03:13.714][INFO ] [Deploy         :381] - execute db_p.z1.obs_num result => 1 result type => java.lang.Integer
+[2026-10-03 05:03:13.714][INFO ] [Deploy         :287] - execute db_p.z1.obs0.get status
+[2026-10-03 05:03:13.715][WARN ] [Deploy         :298] - execute db_p.z1.obs0.get status result => null
+[2026-10-03 05:03:13.715][INFO ] [Deploy         :381] - execute db_p.lite_mode result => true result type => java.lang.Boolean
+[2026-10-03 05:03:13.715][INFO ] [Deploy         :294] - execute db_p.bootstrap result => true
+[2026-10-03 05:03:13.715][INFO ] [Deploy         :287] - execute db_p.addserver
+[2026-10-03 05:03:13.716][INFO ] [Deploy         :381] - execute db_p.z_num result => 1 result type => java.lang.Integer
+[2026-10-03 05:03:13.716][INFO ] [Deploy         :381] - execute db_p.zone_names result => [Ljava.lang.String;@23ceabc1 result type => [Ljava.lang.String;
+[2026-10-03 05:03:13.716][INFO ] [Deploy         :381] - execute db_p.z1.obs_num result => 1 result type => java.lang.Integer
+[2026-10-03 05:03:13.716][INFO ] [Deploy         :294] - execute db_p.addserver result => true
+[2026-10-03 05:03:13.717][INFO ] [Deploy         :287] - execute db_p.exec_init_sql
+[2026-10-03 05:03:13.717][INFO ] [Deploy         :381] - execute db_p.lite_mode result => true result type => java.lang.Boolean
+[2026-10-03 05:03:13.718][INFO ] [Deploy         :287] - execute db_p.z1.obs0.mysql_tenant_root create user 'admin' IDENTIFIED BY 'admin';use oceanbase;grant all on *.* to 'admin' WITH GRANT OPTION;create database if not exists test;
+[2026-10-03 05:03:13.719][INFO ] [Role           :3182] - sql =>create user 'admin' IDENTIFIED BY 'admin';use oceanbase;grant all on *.* to 'admin' WITH GRANT OPTION;create database if not exists test;
+ will be executed with connection[z1.obs0]root@sys:@6.12.232.130:42035
+[2026-10-03 05:03:13.816][INFO ] [Deploy         :294] - execute db_p.z1.obs0.mysql_tenant_root create user 'admin' IDENTIFIED BY 'admin';use oceanbase;grant all on *.* to 'admin' WITH GRANT OPTION;create database if not exists test; result => true
+[2026-10-03 05:03:13.817][INFO ] [Deploy         :381] - execute db_p.lite_mode result => true result type => java.lang.Boolean
+[2026-10-03 05:03:13.817][INFO ] [Deploy         :381] - execute db_p.lite_mode result => true result type => java.lang.Boolean
+[2026-10-03 05:03:13.818][INFO ] [Deploy         :287] - execute db_p.z1.obs0.mysql_tenant_root create user 'proxyro' IDENTIFIED BY '3u^0kCdpE';grant select on oceanbase.* to 'proxyro' WITH GRANT OPTION;
+[2026-10-03 05:03:13.819][INFO ] [Role           :3182] - sql =>create user 'proxyro' IDENTIFIED BY '3u^0kCdpE';grant select on oceanbase.* to 'proxyro' WITH GRANT OPTION;
+ will be executed with connection[z1.obs0]root@sys:@6.12.232.130:42035
+[2026-10-03 05:03:13.887][INFO ] [Deploy         :294] - execute db_p.z1.obs0.mysql_tenant_root create user 'proxyro' IDENTIFIED BY '3u^0kCdpE';grant select on oceanbase.* to 'proxyro' WITH GRANT OPTION; result => true
+[2026-10-03 05:03:13.887][INFO ] [Deploy         :287] - execute db_p.z1.obs0.mysql_tenant_root create user 'sysslaveuser' IDENTIFIED BY 'sysslaveuser';grant select on *.* to 'sysslaveuser' WITH GRANT OPTION;
+[2026-10-03 05:03:13.887][INFO ] [Role           :3182] - sql =>create user 'sysslaveuser' IDENTIFIED BY 'sysslaveuser';grant select on *.* to 'sysslaveuser' WITH GRANT OPTION;
+ will be executed with connection[z1.obs0]root@sys:@6.12.232.130:42035
+[2026-10-03 05:03:13.951][INFO ] [Deploy         :294] - execute db_p.z1.obs0.mysql_tenant_root create user 'sysslaveuser' IDENTIFIED BY 'sysslaveuser';grant select on *.* to 'sysslaveuser' WITH GRANT OPTION; result => true
+[2026-10-03 05:03:13.952][INFO ] [Deploy         :294] - execute db_p.exec_init_sql result => true
+[2026-10-03 05:03:13.952][INFO ] [Deploy         :287] - execute db_p.register_proxy
+[2026-10-03 05:03:13.953][INFO ] [Deploy         :294] - execute db_p.register_proxy result => true
+[2026-10-03 05:03:13.953][INFO ] [Deploy         :287] - execute db_p.deploy_proxy
+[2026-10-03 05:03:13.953][INFO ] [Deploy         :294] - execute db_p.deploy_proxy result => true
+[2026-10-03 05:03:13.953][INFO ] [Deploy         :287] - execute db_p.sleep 5
+[2026-10-03 05:03:18.953][INFO ] [Deploy         :294] - execute db_p.sleep 5 result => true
+[2026-10-03 05:03:18.954][INFO ] [Deploy         :331] - execute db_p.reboot_proxy result => true
+[2026-10-03 05:03:18.954][INFO ] [Deploy         :287] - execute db_p.deploy_asvr
+[2026-10-03 05:03:18.954][INFO ] [Deploy         :294] - execute db_p.deploy_asvr result => true
+[2026-10-03 05:03:18.954][INFO ] [Deploy         :287] - execute db_p.sleep 5
+[2026-10-03 05:03:23.955][INFO ] [Deploy         :294] - execute db_p.sleep 5 result => true
+[2026-10-03 05:03:23.955][INFO ] [Deploy         :331] - execute db_p.reboot_asvr result => true
+[2026-10-03 05:03:23.955][INFO ] [Deploy         :287] - execute db_p.add_asvr
+[2026-10-03 05:03:23.955][INFO ] [OBI            :1509] - There is no need to add asvr.
+[2026-10-03 05:03:23.956][INFO ] [Deploy         :294] - execute db_p.add_asvr result => true
+[2026-10-03 05:03:23.956][INFO ] [Deploy         :287] - execute db_p.prepare_agent
+[2026-10-03 05:03:23.956][INFO ] [Deploy         :294] - execute db_p.prepare_agent result => true
+[2026-10-03 05:03:23.956][INFO ] [Deploy         :331] - execute db_p.reboot result => true
+[2026-10-03 05:03:23.956][INFO ] [Command        :353] - start[1790974969947] time[34008] tag[Q_DEPLOY]
+[2026-10-03 05:03:23.957][INFO ] [Command        :536] - > LINE => 11, CMD => Q_SLEEP, CONTENT => 5
+[2026-10-03 05:03:28.958][INFO ] [Command        :353] - start[1790975003957] time[5001] tag[Q_SLEEP]
+[2026-10-03 05:03:28.959][INFO ] [Command        :536] - > LINE => 12, CMD => Q_ENABLE_ALL_RESULT_LOG, CONTENT => --enable_all_result_log
+[2026-10-03 05:03:28.959][INFO ] [Command        :353] - start[1790975008959] time[0] tag[Q_ENABLE_ALL_RESULT_LOG]
+[2026-10-03 05:03:28.959][INFO ] [Command        :536] - > LINE => 17, CMD => Q_ECHO, CONTENT => ========== Phase 1: Prepare primary SSTable and log tail ==========
+[2026-10-03 05:03:28.960][INFO ] [Command        :353] - start[1790975008959] time[0] tag[Q_ECHO]
+[2026-10-03 05:03:28.960][INFO ] [Command        :536] - > LINE => 19, CMD => Q_DISABLE_QUERY_LOG, CONTENT => --disable_query_log
+[2026-10-03 05:03:28.960][INFO ] [Command        :353] - start[1790975008960] time[0] tag[Q_DISABLE_QUERY_LOG]
+[2026-10-03 05:03:28.961][INFO ] [Command        :536] - > LINE => 20, CMD => Q_DISABLE_RESULT_LOG, CONTENT => --disable_result_log
+[2026-10-03 05:03:28.961][INFO ] [Command        :353] - start[1790975008961] time[0] tag[Q_DISABLE_RESULT_LOG]
+[2026-10-03 05:03:28.962][INFO ] [Command        :536] - > LINE => 22, CMD => Q_DEPLOY, CONTENT => db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 30;
+[2026-10-03 05:03:28.962][INFO ] [DeployProcessor:93] - deploy => db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 30
+[2026-10-03 05:03:28.963][INFO ] [Deploy         :287] - execute db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 30
+[2026-10-03 05:03:28.963][INFO ] [Deploy         :287] - execute db_p.select_one_value select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY'
+Loading class `com.mysql.jdbc.Driver'. This is deprecated. The new driver class is `com.mysql.cj.jdbc.Driver'. The driver is automatically registered via the SPI and manual loading of the driver class is generally unnecessary.
+[2026-10-03 05:03:29.68][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY'
+[2026-10-03 05:03:29.340][INFO ] [Deploy         :294] - execute db_p.select_one_value select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' result => 1
+[2026-10-03 05:03:29.341][INFO ] [OBI            :5345] - check success! use time = 0
+[2026-10-03 05:03:29.341][INFO ] [Deploy         :294] - execute db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 30 result => true
+[2026-10-03 05:03:29.341][INFO ] [Command        :353] - start[1790975008962] time[379] tag[Q_DEPLOY]
+[2026-10-03 05:03:29.345][INFO ] [Command        :536] - > LINE => 23, CMD => Q_DEPLOY, CONTENT => db_p.mysql alter system set ob_compaction_schedule_interval = '3s';
+[2026-10-03 05:03:29.345][INFO ] [DeployProcessor:93] - deploy => db_p.mysql alter system set ob_compaction_schedule_interval = '3s'
+[2026-10-03 05:03:29.346][INFO ] [Deploy         :287] - execute db_p.mysql alter system set ob_compaction_schedule_interval = '3s'
+[2026-10-03 05:03:29.346][INFO ] [Deploy         :287] - execute db_p.z1.obs0.mysql alter system set ob_compaction_schedule_interval = '3s'
+[2026-10-03 05:03:29.346][INFO ] [Role           :3236] - sql =>alter system set ob_compaction_schedule_interval = '3s'
+ will be executed with connection[z1.obs0]admin:admin@6.12.232.130:42035
+[2026-10-03 05:03:29.378][INFO ] [Deploy         :294] - execute db_p.z1.obs0.mysql alter system set ob_compaction_schedule_interval = '3s' result => true
+[2026-10-03 05:03:29.378][INFO ] [Deploy         :294] - execute db_p.mysql alter system set ob_compaction_schedule_interval = '3s' result => true
+[2026-10-03 05:03:29.378][INFO ] [Command        :353] - start[1790975009345] time[32] tag[Q_DEPLOY]
+[2026-10-03 05:03:29.378][INFO ] [Command        :536] - > LINE => 25, CMD => Q_CONNECT, CONTENT => ob_connect(conn_sys_p, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR)
+[2026-10-03 05:03:29.381][INFO ] [SQLProcessor   :1505] - conn_sys_p create a physical connection  using jdbc:mysql://6.12.232.130:42035/oceanbase?useAffectedRows=true&emulateUnsupportedPstmts=false&characterEncoding=utf8&useServerPrepStmts=true&prepStmtCacheSqlLimit=1000&enableQueryTimeouts=false&useLocalSessionState=false&useLocalTransactionState=false&rewriteBatchedStatements=true&allowMultiQueries=true&socketTimeout=1800000 user/pwd is root@sys/
+[2026-10-03 05:03:29.410][INFO ] [SQLProcessor   :1519] - connection => conn_sys_p is mysql mode.
+[2026-10-03 05:03:29.410][INFO ] [SQLProcessor   :1522] - put conn: dataid=conn_sys_p currentConn=com.mysql.cj.jdbc.ConnectionImpl@5119fb47 hashcode => 1360657223
+[2026-10-03 05:03:29.411][INFO ] [Command        :353] - start[1790975009378] time[32] tag[Q_CONNECT]
+[2026-10-03 05:03:29.411][INFO ] [Command        :536] - > LINE => 26, CMD => Q_CONNECTION, CONTENT => connection conn_sys_p
+[2026-10-03 05:03:29.411][INFO ] [SQLProcessor   :1128] - use connection => conn_sys_p hashcode => 1360657223
+[2026-10-03 05:03:29.413][INFO ] [SQLProcessor   :1158] - connection => conn_sys_p is mysql mode. conn=com.mysql.cj.jdbc.ConnectionImpl@5119fb47
+[2026-10-03 05:03:29.413][INFO ] [Command        :353] - start[1790975009411] time[2] tag[Q_CONNECTION]
+[2026-10-03 05:03:29.413][INFO ] [Command        :536] - > LINE => 28, CMD => Q_ENABLE_QUERY_LOG, CONTENT => --enable_query_log
+[2026-10-03 05:03:29.413][INFO ] [Command        :353] - start[1790975009413] time[0] tag[Q_ENABLE_QUERY_LOG]
+[2026-10-03 05:03:29.414][INFO ] [Command        :536] - > LINE => 29, CMD => Q_ENABLE_RESULT_LOG, CONTENT => --enable_result_log
+[2026-10-03 05:03:29.414][INFO ] [Command        :353] - start[1790975009414] time[0] tag[Q_ENABLE_RESULT_LOG]
+[2026-10-03 05:03:29.414][INFO ] [Command        :536] - > LINE => 31, CMD => Q_QUERY, CONTENT => create table test_bootstrap_sstable_replay(id int primary key, name varchar(64), value int);
+[2026-10-03 05:03:29.491][INFO ] [Command        :353] - start[1790975009414] time[76] tag[Q_QUERY]
+[2026-10-03 05:03:29.491][INFO ] [Command        :536] - > LINE => 32, CMD => Q_QUERY, CONTENT => insert into test_bootstrap_sstable_replay values(1, 'major_1', 10);
+[2026-10-03 05:03:29.497][INFO ] [Command        :353] - start[1790975009491] time[5] tag[Q_QUERY]
+[2026-10-03 05:03:29.498][INFO ] [Command        :536] - > LINE => 33, CMD => Q_QUERY, CONTENT => insert into test_bootstrap_sstable_replay values(2, 'major_2', 20);
+[2026-10-03 05:03:29.501][INFO ] [Command        :353] - start[1790975009498] time[3] tag[Q_QUERY]
+[2026-10-03 05:03:29.502][INFO ] [Command        :536] - > LINE => 34, CMD => Q_QUERY, CONTENT => insert into test_bootstrap_sstable_replay values(3, 'major_3', 30);
+[2026-10-03 05:03:29.505][INFO ] [Command        :353] - start[1790975009502] time[3] tag[Q_QUERY]
+[2026-10-03 05:03:29.506][INFO ] [Command        :536] - > LINE => 35, CMD => Q_QUERY, CONTENT => select count(*) from test_bootstrap_sstable_replay;
+[2026-10-03 05:03:29.511][INFO ] [Command        :353] - start[1790975009506] time[5] tag[Q_QUERY]
+[2026-10-03 05:03:29.512][INFO ] [Command        :536] - > LINE => 36, CMD => Q_QUERY, CONTENT => select sum(value) from test_bootstrap_sstable_replay;
+[2026-10-03 05:03:29.515][INFO ] [Command        :353] - start[1790975009512] time[2] tag[Q_QUERY]
+[2026-10-03 05:03:29.516][INFO ] [Command        :536] - > LINE => 38, CMD => Q_DISABLE_QUERY_LOG, CONTENT => --disable_query_log
+[2026-10-03 05:03:29.516][INFO ] [Command        :353] - start[1790975009516] time[0] tag[Q_DISABLE_QUERY_LOG]
+[2026-10-03 05:03:29.516][INFO ] [Command        :536] - > LINE => 39, CMD => Q_DISABLE_RESULT_LOG, CONTENT => --disable_result_log
+[2026-10-03 05:03:29.516][INFO ] [Command        :353] - start[1790975009516] time[0] tag[Q_DISABLE_RESULT_LOG]
+[2026-10-03 05:03:29.517][INFO ] [Command        :536] - > LINE => 41, CMD => Q_QUERY, CONTENT => ALTER SYSTEM MINOR FREEZE;
+[2026-10-03 05:03:29.521][INFO ] [Command        :353] - start[1790975009517] time[4] tag[Q_QUERY]
+[2026-10-03 05:03:29.522][INFO ] [Command        :536] - > LINE => 42, CMD => Q_SLEEP, CONTENT => 5
+[2026-10-03 05:03:34.522][INFO ] [Command        :353] - start[1790975009522] time[5000] tag[Q_SLEEP]
+[2026-10-03 05:03:34.523][INFO ] [Command        :536] - > LINE => 44, CMD => Q_QUERY, CONTENT => ALTER SYSTEM MAJOR FREEZE;
+[2026-10-03 05:03:34.536][INFO ] [Command        :353] - start[1790975014523] time[12] tag[Q_QUERY]
+[2026-10-03 05:03:34.537][INFO ] [Command        :536] - > LINE => 45, CMD => Q_DEPLOY, CONTENT => db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN, 1, 100;
+[2026-10-03 05:03:34.538][INFO ] [DeployProcessor:93] - deploy => db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN, 1, 100
+[2026-10-03 05:03:34.538][INFO ] [Deploy         :287] - execute db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN, 1, 100
+[2026-10-03 05:03:34.538][INFO ] [Deploy         :287] - execute db_p.select_one_value select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN
+[2026-10-03 05:03:34.539][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN
+[2026-10-03 05:03:34.552][INFO ] [Deploy         :294] - execute db_p.select_one_value select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN result => 0
+[2026-10-03 05:03:34.552][WARN ] [OBI            :5348] - expect => 1, actual => 0, left timeout => 100, totaltime => 100, file => 45/163, file_percent => 27
+[2026-10-03 05:03:35.552][INFO ] [Deploy         :287] - execute db_p.select_one_value select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN
+[2026-10-03 05:03:35.555][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN
+[2026-10-03 05:03:35.566][INFO ] [Deploy         :294] - execute db_p.select_one_value select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN result => 1
+[2026-10-03 05:03:35.567][INFO ] [OBI            :5345] - check success! use time = 1
+[2026-10-03 05:03:35.567][INFO ] [Deploy         :294] - execute db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN, 1, 100 result => true
+[2026-10-03 05:03:35.567][INFO ] [Command        :353] - start[1790975014537] time[1029] tag[Q_DEPLOY]
+[2026-10-03 05:03:35.567][INFO ] [Command        :536] - > LINE => 47, CMD => Q_LET, CONTENT => $__i__
+[2026-10-03 05:03:35.568][INFO ] [Command        :353] - start[1790975015567] time[0] tag[Q_LET]
+[2026-10-03 05:03:35.568][INFO ] [Command        :536] - > LINE => 47, CMD => Q_WHILE, CONTENT => $__i__ > 0
+[2026-10-03 05:03:35.972][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 05:03:36.973][INFO ] [Command        :353] - start[1790975015973] time[1000] tag[Q_SLEEP]
+[2026-10-03 05:03:36.973][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 05:03:36.973][INFO ] [Command        :353] - start[1790975016973] time[0] tag[Q_DEC]
+[2026-10-03 05:03:36.974][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 05:03:36.974][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 05:03:36.975][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 05:03:36.984][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 05:03:36.984][INFO ] [Command        :353] - start[1790975016974] time[10] tag[Q_LET_DEPLOY]
+[2026-10-03 05:03:36.984][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 05:03:36.997][INFO ] [Command        :353] - start[1790975016985] time[12] tag[Q_IF]
+[2026-10-03 05:03:37.06][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 05:03:38.06][INFO ] [Command        :353] - start[1790975017006] time[1000] tag[Q_SLEEP]
+[2026-10-03 05:03:38.07][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 05:03:38.07][INFO ] [Command        :353] - start[1790975018007] time[0] tag[Q_DEC]
+[2026-10-03 05:03:38.07][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 05:03:38.07][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 05:03:38.08][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 05:03:38.16][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 05:03:38.16][INFO ] [Command        :353] - start[1790975018007] time[9] tag[Q_LET_DEPLOY]
+[2026-10-03 05:03:38.17][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 05:03:38.26][INFO ] [Command        :353] - start[1790975018017] time[9] tag[Q_IF]
+[2026-10-03 05:03:38.35][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 05:03:39.36][INFO ] [Command        :353] - start[1790975018036] time[1000] tag[Q_SLEEP]
+[2026-10-03 05:03:39.36][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 05:03:39.36][INFO ] [Command        :353] - start[1790975019036] time[0] tag[Q_DEC]
+[2026-10-03 05:03:39.37][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 05:03:39.37][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 05:03:39.38][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 05:03:39.47][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 05:03:39.47][INFO ] [Command        :353] - start[1790975019037] time[10] tag[Q_LET_DEPLOY]
+[2026-10-03 05:03:39.47][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 05:03:39.56][INFO ] [Command        :353] - start[1790975019047] time[8] tag[Q_IF]
+[2026-10-03 05:03:39.63][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 05:03:40.64][INFO ] [Command        :353] - start[1790975019063] time[1000] tag[Q_SLEEP]
+[2026-10-03 05:03:40.64][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 05:03:40.64][INFO ] [Command        :353] - start[1790975020064] time[0] tag[Q_DEC]
+[2026-10-03 05:03:40.65][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 05:03:40.65][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 05:03:40.65][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 05:03:40.74][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 05:03:40.74][INFO ] [Command        :353] - start[1790975020065] time[9] tag[Q_LET_DEPLOY]
+[2026-10-03 05:03:40.74][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 05:03:40.81][INFO ] [Command        :353] - start[1790975020074] time[7] tag[Q_IF]
+[2026-10-03 05:03:40.86][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 05:03:41.86][INFO ] [Command        :353] - start[1790975020086] time[1000] tag[Q_SLEEP]
+[2026-10-03 05:03:41.87][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 05:03:41.87][INFO ] [Command        :353] - start[1790975021087] time[0] tag[Q_DEC]
+[2026-10-03 05:03:41.87][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 05:03:41.87][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 05:03:41.88][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 05:03:41.96][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 05:03:41.96][INFO ] [Command        :353] - start[1790975021087] time[8] tag[Q_LET_DEPLOY]
+[2026-10-03 05:03:41.96][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 05:03:41.105][INFO ] [Command        :353] - start[1790975021096] time[8] tag[Q_IF]
+[2026-10-03 05:03:41.112][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 05:03:42.112][INFO ] [Command        :353] - start[1790975021112] time[1000] tag[Q_SLEEP]
+[2026-10-03 05:03:42.113][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 05:03:42.113][INFO ] [Command        :353] - start[1790975022113] time[0] tag[Q_DEC]
+[2026-10-03 05:03:42.113][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 05:03:42.114][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 05:03:42.114][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 05:03:42.120][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 05:03:42.120][INFO ] [Command        :353] - start[1790975022113] time[7] tag[Q_LET_DEPLOY]
+[2026-10-03 05:03:42.121][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 05:03:42.132][INFO ] [Command        :353] - start[1790975022121] time[11] tag[Q_IF]
+[2026-10-03 05:03:42.137][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 05:03:43.137][INFO ] [Command        :353] - start[1790975022137] time[1000] tag[Q_SLEEP]
+[2026-10-03 05:03:43.138][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 05:03:43.138][INFO ] [Command        :353] - start[1790975023138] time[0] tag[Q_DEC]
+[2026-10-03 05:03:43.138][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 05:03:43.138][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 05:03:43.139][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 05:03:43.146][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 0
+[2026-10-03 05:03:43.146][INFO ] [Command        :353] - start[1790975023138] time[8] tag[Q_LET_DEPLOY]
+[2026-10-03 05:03:43.147][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 05:03:43.152][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET, CONTENT => $__i__
+[2026-10-03 05:03:43.152][INFO ] [Command        :353] - start[1790975023152] time[0] tag[Q_LET]
+[2026-10-03 05:03:43.152][INFO ] [Command        :353] - start[1790975023147] time[5] tag[Q_IF]
+[2026-10-03 05:03:43.157][INFO ] [Command        :353] - start[1790975015568] time[7588] tag[Q_WHILE]
+[2026-10-03 05:03:43.157][INFO ] [Command        :536] - > LINE => 59, CMD => Q_DEPLOY, CONTENT => db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN, 1, 30;
+[2026-10-03 05:03:43.158][INFO ] [DeployProcessor:93] - deploy => db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN, 1, 30
+[2026-10-03 05:03:43.158][INFO ] [Deploy         :287] - execute db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN, 1, 30
+[2026-10-03 05:03:43.158][INFO ] [Deploy         :287] - execute db_p.select_one_value select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN
+[2026-10-03 05:03:43.158][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN
+[2026-10-03 05:03:43.167][INFO ] [Deploy         :294] - execute db_p.select_one_value select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN result => 1
+[2026-10-03 05:03:43.167][INFO ] [OBI            :5345] - check success! use time = 0
+[2026-10-03 05:03:43.167][INFO ] [Deploy         :294] - execute db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN, 1, 30 result => true
+[2026-10-03 05:03:43.167][INFO ] [Command        :353] - start[1790975023157] time[9] tag[Q_DEPLOY]
+[2026-10-03 05:03:43.167][INFO ] [Command        :536] - > LINE => 60, CMD => Q_LET_DEPLOY, CONTENT => $primary_sstable_scn
+[2026-10-03 05:03:43.168][INFO ] [Deploy         :287] - execute db_p.select select LAST_SCN from oceanbase.DBA_OB_MAJOR_COMPACTION, LAST_SCN, 1
+[2026-10-03 05:03:43.168][INFO ] [SQLProcessor   :2086] - execute sql => select LAST_SCN from oceanbase.DBA_OB_MAJOR_COMPACTION
+[2026-10-03 05:03:43.175][INFO ] [Deploy         :294] - execute db_p.select select LAST_SCN from oceanbase.DBA_OB_MAJOR_COMPACTION, LAST_SCN, 1 result => 1790975014524927018
+[2026-10-03 05:03:43.176][INFO ] [Command        :353] - start[1790975023167] time[8] tag[Q_LET_DEPLOY]
+[2026-10-03 05:03:43.176][INFO ] [Command        :536] - > LINE => 63, CMD => Q_LET_DEPLOY, CONTENT => $bootstrap_tablet_id
+[2026-10-03 05:03:43.176][INFO ] [Deploy         :287] - execute db_p.select select ((1 << 62) | (1 << 37) | tablet_id) as tablet_id from oceanbase.__all_table where table_name = 'test_bootstrap_sstable_replay' limit 1, tablet_id, 1
+[2026-10-03 05:03:43.176][INFO ] [SQLProcessor   :2086] - execute sql => select ((1 << 62) | (1 << 37) | tablet_id) as tablet_id from oceanbase.__all_table where table_name = 'test_bootstrap_sstable_replay' limit 1
+[2026-10-03 05:03:43.186][INFO ] [Deploy         :294] - execute db_p.select select ((1 << 62) | (1 << 37) | tablet_id) as tablet_id from oceanbase.__all_table where table_name = 'test_bootstrap_sstable_replay' limit 1, tablet_id, 1 result => 4611686155866541377
+[2026-10-03 05:03:43.187][INFO ] [Command        :353] - start[1790975023176] time[10] tag[Q_LET_DEPLOY]
+[2026-10-03 05:03:43.187][INFO ] [Command        :536] - > LINE => 64, CMD => Q_DEPLOY, CONTENT => db_p.check_until_timeout select count(*) > 0 from oceanbase.V\$OB_SSTABLES where tablet_id = $bootstrap_tablet_id and table_type in ('MAJOR', 'CO_MAJOR') and end_log_scn = $primary_sstable_scn, 1, 120;
+[2026-10-03 05:03:43.188][INFO ] [DeployProcessor:93] - deploy => db_p.check_until_timeout select count(*) > 0 from oceanbase.V$OB_SSTABLES where tablet_id = 4611686155866541377 and table_type in ('MAJOR', 'CO_MAJOR') and end_log_scn = 1790975014524927018, 1, 120
+[2026-10-03 05:03:43.188][INFO ] [Deploy         :287] - execute db_p.check_until_timeout select count(*) > 0 from oceanbase.V$OB_SSTABLES where tablet_id = 4611686155866541377 and table_type in ('MAJOR', 'CO_MAJOR') and end_log_scn = 1790975014524927018, 1, 120
+[2026-10-03 05:03:43.188][INFO ] [Deploy         :287] - execute db_p.select_one_value select count(*) > 0 from oceanbase.V$OB_SSTABLES where tablet_id = 4611686155866541377 and table_type in ('MAJOR', 'CO_MAJOR') and end_log_scn = 1790975014524927018
+[2026-10-03 05:03:43.189][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) > 0 from oceanbase.V$OB_SSTABLES where tablet_id = 4611686155866541377 and table_type in ('MAJOR', 'CO_MAJOR') and end_log_scn = 1790975014524927018
+[2026-10-03 05:03:43.211][INFO ] [Deploy         :294] - execute db_p.select_one_value select count(*) > 0 from oceanbase.V$OB_SSTABLES where tablet_id = 4611686155866541377 and table_type in ('MAJOR', 'CO_MAJOR') and end_log_scn = 1790975014524927018 result => 1
+[2026-10-03 05:03:43.211][INFO ] [OBI            :5345] - check success! use time = 0
+[2026-10-03 05:03:43.211][INFO ] [Deploy         :294] - execute db_p.check_until_timeout select count(*) > 0 from oceanbase.V$OB_SSTABLES where tablet_id = 4611686155866541377 and table_type in ('MAJOR', 'CO_MAJOR') and end_log_scn = 1790975014524927018, 1, 120 result => true
+[2026-10-03 05:03:43.211][INFO ] [Command        :353] - start[1790975023187] time[24] tag[Q_DEPLOY]
+[2026-10-03 05:03:43.211][INFO ] [Command        :536] - > LINE => 66, CMD => Q_ENABLE_QUERY_LOG, CONTENT => --enable_query_log
+[2026-10-03 05:03:43.212][INFO ] [Command        :353] - start[1790975023212] time[0] tag[Q_ENABLE_QUERY_LOG]
+[2026-10-03 05:03:43.212][INFO ] [Command        :536] - > LINE => 67, CMD => Q_ENABLE_RESULT_LOG, CONTENT => --enable_result_log
+[2026-10-03 05:03:43.212][INFO ] [Command        :353] - start[1790975023212] time[0] tag[Q_ENABLE_RESULT_LOG]
+[2026-10-03 05:03:43.212][INFO ] [Command        :536] - > LINE => 69, CMD => Q_QUERY, CONTENT => insert into test_bootstrap_sstable_replay values(4, 'tail_4', 40);
+[2026-10-03 05:03:43.216][INFO ] [Command        :353] - start[1790975023212] time[3] tag[Q_QUERY]
+[2026-10-03 05:03:43.216][INFO ] [Command        :536] - > LINE => 70, CMD => Q_QUERY, CONTENT => insert into test_bootstrap_sstable_replay values(5, 'tail_5', 50);
+[2026-10-03 05:03:43.219][INFO ] [Command        :353] - start[1790975023217] time[2] tag[Q_QUERY]
+[2026-10-03 05:03:43.220][INFO ] [Command        :536] - > LINE => 71, CMD => Q_QUERY, CONTENT => select count(*), sum(value) from test_bootstrap_sstable_replay;
+[2026-10-03 05:03:43.224][INFO ] [Command        :353] - start[1790975023220] time[3] tag[Q_QUERY]
+[2026-10-03 05:03:43.224][INFO ] [Command        :536] - > LINE => 73, CMD => Q_DISABLE_QUERY_LOG, CONTENT => --disable_query_log
+[2026-10-03 05:03:43.224][INFO ] [Command        :353] - start[1790975023224] time[0] tag[Q_DISABLE_QUERY_LOG]
+[2026-10-03 05:03:43.224][INFO ] [Command        :536] - > LINE => 74, CMD => Q_DISABLE_RESULT_LOG, CONTENT => --disable_result_log
+[2026-10-03 05:03:43.224][INFO ] [Command        :353] - start[1790975023224] time[0] tag[Q_DISABLE_RESULT_LOG]
+[2026-10-03 05:03:43.225][INFO ] [Command        :536] - > LINE => 76, CMD => Q_DEPLOY, CONTENT => db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and sync_scn > $primary_sstable_scn, 1, 30;
+[2026-10-03 05:03:43.226][INFO ] [DeployProcessor:93] - deploy => db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and sync_scn > 1790975014524927018, 1, 30
+[2026-10-03 05:03:43.226][INFO ] [Deploy         :287] - execute db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and sync_scn > 1790975014524927018, 1, 30
+[2026-10-03 05:03:43.226][INFO ] [Deploy         :287] - execute db_p.select_one_value select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and sync_scn > 1790975014524927018
+[2026-10-03 05:03:43.227][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and sync_scn > 1790975014524927018
+[2026-10-03 05:03:43.236][INFO ] [Deploy         :294] - execute db_p.select_one_value select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and sync_scn > 1790975014524927018 result => 1
+[2026-10-03 05:03:43.236][INFO ] [OBI            :5345] - check success! use time = 0
+[2026-10-03 05:03:43.236][INFO ] [Deploy         :294] - execute db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and sync_scn > 1790975014524927018, 1, 30 result => true
+[2026-10-03 05:03:43.236][INFO ] [Command        :353] - start[1790975023225] time[11] tag[Q_DEPLOY]
+[2026-10-03 05:03:43.237][INFO ] [Command        :536] - > LINE => 77, CMD => Q_LET_DEPLOY, CONTENT => $primary_tail_scn
+[2026-10-03 05:03:43.237][INFO ] [Deploy         :287] - execute db_p.select select sync_scn from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', sync_scn, 1
+[2026-10-03 05:03:43.237][INFO ] [SQLProcessor   :2086] - execute sql => select sync_scn from oceanbase.__all_virtual_server_stat where role = 'PRIMARY'
+[2026-10-03 05:03:43.245][INFO ] [Deploy         :294] - execute db_p.select select sync_scn from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', sync_scn, 1 result => 1790975023226601011
+[2026-10-03 05:03:43.245][INFO ] [Command        :353] - start[1790975023237] time[8] tag[Q_LET_DEPLOY]
+[2026-10-03 05:03:43.245][INFO ] [Command        :536] - > LINE => 79, CMD => Q_ENABLE_QUERY_LOG, CONTENT => --enable_query_log
+[2026-10-03 05:03:43.245][INFO ] [Command        :353] - start[1790975023245] time[0] tag[Q_ENABLE_QUERY_LOG]
+[2026-10-03 05:03:43.246][INFO ] [Command        :536] - > LINE => 80, CMD => Q_ENABLE_RESULT_LOG, CONTENT => --enable_result_log
+[2026-10-03 05:03:43.246][INFO ] [Command        :353] - start[1790975023246] time[0] tag[Q_ENABLE_RESULT_LOG]
+[2026-10-03 05:03:43.246][INFO ] [Command        :536] - > LINE => 82, CMD => Q_ECHO, CONTENT => Phase 1 completed: primary has copied-SSTable base plus pre-bootstrap log tail
+[2026-10-03 05:03:43.246][INFO ] [Command        :353] - start[1790975023246] time[0] tag[Q_ECHO]
+[2026-10-03 05:03:43.246][INFO ] [Command        :536] - > LINE => 87, CMD => Q_ECHO, CONTENT => ========== Phase 2: Bootstrap standby after SSTable exists ==========
+[2026-10-03 05:03:43.246][INFO ] [Command        :353] - start[1790975023246] time[0] tag[Q_ECHO]
+[2026-10-03 05:03:43.246][INFO ] [Command        :536] - > LINE => 89, CMD => Q_DISABLE_ALL_RESULT_LOG, CONTENT => --disable_all_result_log
+[2026-10-03 05:03:43.247][INFO ] [Command        :353] - start[1790975023247] time[0] tag[Q_DISABLE_ALL_RESULT_LOG]
+[2026-10-03 05:03:43.247][INFO ] [Command        :536] - > LINE => 90, CMD => Q_DEPLOY, CONTENT => db_s=OBI(cluster=1,proxy_num=0,primary=db_p);
+[2026-10-03 05:03:43.247][INFO ] [DeployProcessor:78] - OBI define => db_s=OBI(cluster=1,proxy_num=0,primary=db_p)
+[2026-10-03 05:03:43.247][INFO ] [Deploy         :381] - execute db_s.z_num result => 1 result type => java.lang.Integer
+[2026-10-03 05:03:43.248][INFO ] [Deploy         :464] - assign rpc port. observer=>db_s.z1.obs0, rpc_port=>42001
+[2026-10-03 05:03:43.248][INFO ] [Deploy         :471] - assign mysql port. observer=>db_s.z1.obs0, mysql_port=>42036
+[2026-10-03 05:03:43.248][INFO ] [Deploy         :478] - assign backup io rpc port. observer=>db_s.z1.obs0, obesi_port=>42071
+[2026-10-03 05:03:43.248][INFO ] [OBLog          :99] - config.ob_version='.'
+[2026-10-03 05:03:43.248][INFO ] [OBLog          :100] - config.oblog_version='default'
+[2026-10-03 05:03:43.248][INFO ] [OBLog          :117] - set oblog version='.'
+[2026-10-03 05:03:43.249][INFO ] [OBLog          :126] - set oblog work_dir=''
+[2026-10-03 05:03:43.249][INFO ] [OBLog          :148] - oblog.is_obcdc_exist: false
+[2026-10-03 05:03:43.249][INFO ] [OBLog          :149] - oblog.exec: oblog/oblog_tailf
+[2026-10-03 05:03:43.249][INFO ] [OBLog          :150] - oblog.configFile: oblog/liboblog.conf
+[2026-10-03 05:03:43.249][INFO ] [OBLog          :151] - oblog.dataFile: oblog/data.log
+[2026-10-03 05:03:43.249][INFO ] [OBLog          :152] - oblog.envCon: LD_LIBRARY_PATH=oblog:$LD_LIBRARY_PATH
+[2026-10-03 05:03:43.249][INFO ] [OBLog          :153] - oblog.startCmdHead: ulimit -c unlimited; LD_LIBRARY_PATH=oblog:$LD_LIBRARY_PATH oblog/oblog_tailf
+[2026-10-03 05:03:43.249][INFO ] [OBLog          :154] - oblog.defaultStartCmd: ulimit -c unlimited; LD_LIBRARY_PATH=oblog:$LD_LIBRARY_PATH oblog/oblog_tailf  -f oblog/liboblog.conf -D oblog/data.log -H oblog/heartbeat.log -d
+[2026-10-03 05:03:43.505][INFO ] [Deploy         :1128] - start observer version is lite mode: true
+[2026-10-03 05:03:43.505][INFO ] [Command        :353] - start[1790975023247] time[258] tag[Q_DEPLOY]
+[2026-10-03 05:03:43.505][INFO ] [Command        :536] - > LINE => 91, CMD => Q_DEPLOY, CONTENT => db_s.reboot;
+[2026-10-03 05:03:43.506][INFO ] [DeployProcessor:93] - deploy => db_s.reboot
+[2026-10-03 05:03:43.506][INFO ] [Deploy         :287] - execute db_s.reset
+[2026-10-03 05:03:43.506][INFO ] [Deploy         :381] - execute db_s.lite_mode result => true result type => java.lang.Boolean
+[2026-10-03 05:03:43.506][INFO ] [Deploy         :294] - execute db_s.reset result => true
+[2026-10-03 05:03:43.506][INFO ] [Deploy         :287] - execute db_s.clean_asvr
+[2026-10-03 05:03:43.506][INFO ] [Deploy         :294] - execute db_s.clean_asvr result => true
+[2026-10-03 05:03:43.508][INFO ] [Deploy         :287] - execute db_s.z1.obs0.force_stop_asvr
+[2026-10-03 05:03:43.508][INFO ] [Role           :1228] - pkill -9 -u nijia.nj -f '^/data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.asvr0/bin/observer' on 6.12.232.130
+[2026-10-03 05:03:43.528][INFO ] [Role           :1230] - pkill asvr result is => 1
+[2026-10-03 05:03:43.529][INFO ] [Deploy         :294] - execute db_s.z1.obs0.force_stop_asvr result => true
+[2026-10-03 05:03:43.529][INFO ] [Deploy         :287] - execute db_s.z1.obs0.rmdir_asvr
+[2026-10-03 05:03:43.529][INFO ] [Role           :1237] - try to remove asvr dir server  => db_s.z1.obs0
+[2026-10-03 05:03:43.533][INFO ] [Role           :1264] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.asvr0 , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:03:43.534][INFO ] [Deploy         :294] - execute db_s.z1.obs0.rmdir_asvr result => true
+[2026-10-03 05:03:43.534][INFO ] [Deploy         :331] - execute db_s.z1.obs0.clean_asvr  result => true
+[2026-10-03 05:03:43.534][INFO ] [Deploy         :362] - execute db_s.z1.clean_asvr  result => true [true]
+[2026-10-03 05:03:43.535][INFO ] [Deploy         :362] - execute db_s.clean_asvr_everywhere result => true [true]
+[2026-10-03 05:03:43.535][INFO ] [Deploy         :331] - execute db_s.clean_all_asvr result => true
+[2026-10-03 05:03:43.535][INFO ] [Deploy         :287] - execute db_s.deploy_logservice
+[2026-10-03 05:03:43.535][INFO ] [Deploy         :294] - execute db_s.deploy_logservice result => true
+[2026-10-03 05:03:43.535][INFO ] [Deploy         :287] - execute db_s.bootstrap_logservice
+[2026-10-03 05:03:43.535][INFO ] [Deploy         :294] - execute db_s.bootstrap_logservice result => true
+[2026-10-03 05:03:43.535][INFO ] [Deploy         :331] - execute db_s.reboot_logservice result => true
+[2026-10-03 05:03:43.536][INFO ] [Deploy         :287] - execute db_s.z1.check_local_bin
+[2026-10-03 05:03:43.540][INFO ] [Deploy         :294] - execute db_s.z1.check_local_bin result => true
+[2026-10-03 05:03:43.541][INFO ] [Deploy         :287] - execute db_s.z1.check_ssh
+[2026-10-03 05:03:43.541][INFO ] [Deploy         :294] - execute db_s.z1.check_ssh result => true
+[2026-10-03 05:03:43.541][INFO ] [Deploy         :287] - execute db_s.z1.obs0.check_dir 
+[2026-10-03 05:03:43.548][INFO ] [Deploy         :294] - execute db_s.z1.obs0.check_dir  result => true
+[2026-10-03 05:03:43.549][INFO ] [Deploy         :362] - execute db_s.z1.check_dir result => true [true]
+[2026-10-03 05:03:43.549][INFO ] [Deploy         :287] - execute db_s.z1.obs0.force_stop 
+[2026-10-03 05:03:43.550][INFO ] [Role           :1307] - pkill -9 -u nijia.nj -f '^/data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/bin/observer|^/data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/bin/obesi' on 6.12.232.130
+[2026-10-03 05:03:43.564][INFO ] [Role           :1309] - pkill result is => 1
+[2026-10-03 05:03:43.564][INFO ] [Role           :1142] - wait stop /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/bin/observer on 6.12.232.130
+[2026-10-03 05:03:43.565][INFO ] [Role           :1190] - ps uxf | grep "/data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/bin/observer" | grep -v grep
+[2026-10-03 05:03:43.597][INFO ] [Role           :1154] - check port on 6.12.232.130
+[2026-10-03 05:03:43.598][INFO ] [RemoteShell    :143] - netstat -lpnt 2>/dev/null | grep '0.0.0.0:42001 ' | awk -F ' ' '{print $7}'
+[2026-10-03 05:03:43.622][INFO ] [RemoteShell    :143] - netstat -lpnt 2>/dev/null | grep '0.0.0.0:42036 ' | awk -F ' ' '{print $7}'
+[2026-10-03 05:03:43.649][INFO ] [Role           :1164] - stop obs0 took 2 s
+[2026-10-03 05:03:43.649][INFO ] [Deploy         :294] - execute db_s.z1.obs0.force_stop  result => true
+[2026-10-03 05:03:43.649][INFO ] [Deploy         :362] - execute db_s.z1.force_stop result => true [true]
+[2026-10-03 05:03:43.650][INFO ] [Deploy         :362] - execute db_s.z1.force_stop_logstore result => true []
+[2026-10-03 05:03:43.650][INFO ] [Deploy         :331] - execute db_s.z1.force_stop_all result => true
+[2026-10-03 05:03:43.650][INFO ] [Deploy         :287] - execute db_s.z1.obs0.rmdir 
+[2026-10-03 05:03:43.650][INFO ] [Deploy         :381] - execute db_s.lite_mode result => true result type => java.lang.Boolean
+[2026-10-03 05:03:43.651][INFO ] [Role           :1395] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_s.z1.obs0.nijia.nj/sstable /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store/slog /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_s.z1.obs0.nijia.nj/sort_dir , on => 6.12.232.130
+[2026-10-03 05:03:43.658][INFO ] [Role           :1397] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_s.z1.obs0.nijia.nj/sstable /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store/slog /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_s.z1.obs0.nijia.nj/sort_dir , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:03:43.671][INFO ] [Role           :1402] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/log , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:03:43.676][INFO ] [Role           :1407] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/admin , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:03:43.681][INFO ] [Role           :1412] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/wallet , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:03:43.685][INFO ] [Role           :1417] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/etc/observer.c*nf*.bin* /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/etc/seekdb.c*nf*.bin* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:03:43.689][INFO ] [Role           :1423] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/etc/observer.data_version.bin* /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/etc/seekdb.data_version.bin* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:03:43.694][INFO ] [Role           :1429] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/etc2/observer.c*nf*.bin* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:03:43.698][INFO ] [Role           :1434] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/etc3/observer.c*nf*.bin* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:03:43.703][INFO ] [Role           :1439] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/run/observer.pid /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/run/seekdb.pid , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:03:43.707][INFO ] [Role           :1444] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/clog_shm , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:03:43.711][INFO ] [Role           :1449] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/ilog_shm , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:03:43.714][INFO ] [Role           :1454] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/manifest* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:03:43.722][INFO ] [Role           :1467] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/core* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:03:43.727][INFO ] [Role           :1504] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/ /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_s.z1.obs0.nijia.nj/ , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:03:43.947][INFO ] [Role           :1510] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0 , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 05:03:43.951][INFO ] [Deploy         :294] - execute db_s.z1.obs0.rmdir  result => true
+[2026-10-03 05:03:43.952][INFO ] [Deploy         :362] - execute db_s.z1.rmdir result => true [true]
+[2026-10-03 05:03:43.952][INFO ] [Deploy         :331] - execute db_s.z1.cleanup result => true
+[2026-10-03 05:03:43.952][INFO ] [Deploy         :362] - execute db_s.z1.cleanup_logstore result => true []
+[2026-10-03 05:03:43.952][INFO ] [Deploy         :331] - execute db_s.z1.cleanup_all result => true
+[2026-10-03 05:03:43.953][INFO ] [Deploy         :287] - execute db_s.z1.genconf
+[2026-10-03 05:03:43.953][INFO ] [Deploy         :294] - execute db_s.z1.genconf result => true
+[2026-10-03 05:03:43.953][INFO ] [Deploy         :287] - execute db_s.z1.obs0.mkdir 
+[2026-10-03 05:03:43.954][INFO ] [Role           :1768] - mkdir -p /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/;mkdir -p /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store/clog /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store/ilog /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store/slog /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_s.z1.obs0.nijia.nj/sort_dir /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_s.z1.obs0.nijia.nj/sstable;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_s.z1.obs0.nijia.nj/sstable /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store/clog /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store/ilog /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store/slog /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_s.z1.obs0.nijia.nj/sort_dir /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/ on 6.12.232.130
+[2026-10-03 05:03:43.968][INFO ] [Deploy         :294] - execute db_s.z1.obs0.mkdir  result => true
+[2026-10-03 05:03:43.968][INFO ] [Deploy         :362] - execute db_s.z1.mkdir_obs result => true [true]
+[2026-10-03 05:03:43.969][INFO ] [Deploy         :362] - execute db_s.z1.mkdir_logstore result => true []
+[2026-10-03 05:03:43.969][INFO ] [Deploy         :331] - execute db_s.z1.mkdir result => true
+[2026-10-03 05:03:43.970][INFO ] [Deploy         :287] - execute db_s.z1.obs0.rsync 
+[2026-10-03 05:03:43.970][INFO ] [Role           :1648] - sync server finish, time = 0
+[2026-10-03 05:03:43.970][INFO ] [Role           :1563] - rsync server => db_s.z1.obs0 version if specified => .
+[2026-10-03 05:03:43.975][INFO ] [Role           :1635] - check disk dir ==> './admin' exist
+[2026-10-03 05:03:43.980][WARN ] [Role           :1638] - check disk dir ==> './plugin_dir' not exist
+[2026-10-03 05:03:43.986][INFO ] [Role           :1635] - check disk dir ==> './wallet' exist
+[2026-10-03 05:03:43.986][INFO ] [Role           :1590] - transfer cmd to =>  rsync -WrptgoDRLv --timeout=600 bin etc lib  admin  wallet /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0
+[2026-10-03 05:03:48.799][INFO ] [Role           :1604] - rsync cmd =>  rsync -WrptgoDRLv --timeout=600 bin etc lib  admin  wallet /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0
+[2026-10-03 05:03:48.799][INFO ] [Deploy         :294] - execute db_s.z1.obs0.rsync  result => true
+[2026-10-03 05:03:48.799][INFO ] [Deploy         :362] - execute db_s.z1.rsync_obs result => true [true]
+[2026-10-03 05:03:48.800][INFO ] [Deploy         :362] - execute db_s.z1.rsync_logstore result => true []
+[2026-10-03 05:03:48.800][INFO ] [Deploy         :331] - execute db_s.z1.rsync result => true
+[2026-10-03 05:03:48.800][INFO ] [Deploy         :362] - execute db_s.z1.start_logstore result => true []
+[2026-10-03 05:03:48.800][INFO ] [Deploy         :287] - execute db_s.z1.sleep 5
+[2026-10-03 05:03:53.801][INFO ] [Deploy         :294] - execute db_s.z1.sleep 5 result => true
+[2026-10-03 05:03:53.801][INFO ] [Deploy         :287] - execute db_s.z1.obs0.start 
+[2026-10-03 05:03:53.802][INFO ] [Deploy         :381] - execute db_s.lite_mode result => true result type => java.lang.Boolean
+[2026-10-03 05:03:53.803][INFO ] [Deploy         :381] - execute db_s.lite_mode result => true result type => java.lang.Boolean
+6.12.232.130 is not a valid IPv6 address.
+[2026-10-03 05:03:53.804][INFO ] [Role           :539] - cluster_id1
+[2026-10-03 05:03:53.804][INFO ] [Deploy         :381] - execute db_s.z_num result => 1 result type => java.lang.Integer
+[2026-10-03 05:03:53.804][INFO ] [Role           :552] - db_s have 1 ZONE
+[2026-10-03 05:03:53.804][INFO ] [Role           :584] - ofs_list ofs_list='z1@' has_ofs_zone false
+[2026-10-03 05:03:53.804][INFO ] [Role           :637] - ulimit -c unlimited -s 4096;cd /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0;LD_LIBRARY_PATH=./lib:/usr/local/lib:/usr/lib:/usr/lib64:/usr/local/lib64:$LD_LIBRARY_PATH /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/bin/observer --port 42036 --data-dir /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store --redo-dir /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/clog  --role=STANDBY --parameter log_restore_source=6.12.232.130:42000 --parameter enable_rpc_service=true --parameter rpc_port=42001 --parameter datafile_size='2G' --parameter log_disk_size='2G' --parameter cpu_count=4 --parameter memory_limit='8G' on 6.12.232.130
+[2026-10-03 05:03:53.874][INFO ] [Deploy         :294] - execute db_s.z1.obs0.start  result => true
+[2026-10-03 05:03:53.874][INFO ] [Deploy         :362] - execute db_s.z1.start_obs result => true [true]
+[2026-10-03 05:03:53.875][INFO ] [Deploy         :331] - execute db_s.z1.start result => true
+[2026-10-03 05:03:53.875][INFO ] [Deploy         :287] - execute db_s.z1.sleep 8
+[2026-10-03 05:04:01.875][INFO ] [Deploy         :294] - execute db_s.z1.sleep 8 result => true
+[2026-10-03 05:04:01.875][INFO ] [Deploy         :331] - execute db_s.z1.reboot  result => true
+[2026-10-03 05:04:01.876][INFO ] [Deploy         :362] - execute db_s.deploy result => true [true]
+[2026-10-03 05:04:01.876][INFO ] [Deploy         :287] - execute db_s.sleep 5
+[2026-10-03 05:04:06.876][INFO ] [Deploy         :294] - execute db_s.sleep 5 result => true
+[2026-10-03 05:04:06.876][INFO ] [Deploy         :287] - execute db_s.bootstrap
+[2026-10-03 05:04:06.877][INFO ] [Deploy         :381] - execute db_s.z_num result => 1 result type => java.lang.Integer
+[2026-10-03 05:04:06.877][INFO ] [Deploy         :381] - execute db_s.zone_names result => [Ljava.lang.String;@1b75c2e3 result type => [Ljava.lang.String;
+[2026-10-03 05:04:06.877][INFO ] [Deploy         :381] - execute db_s.z1.obs_num result => 1 result type => java.lang.Integer
+[2026-10-03 05:04:06.877][INFO ] [Deploy         :287] - execute db_s.z1.obs0.get status
+[2026-10-03 05:04:06.877][WARN ] [Deploy         :298] - execute db_s.z1.obs0.get status result => null
+[2026-10-03 05:04:06.877][INFO ] [Deploy         :381] - execute db_s.lite_mode result => true result type => java.lang.Boolean
+[2026-10-03 05:04:06.877][INFO ] [Deploy         :294] - execute db_s.bootstrap result => true
+[2026-10-03 05:04:06.877][INFO ] [Deploy         :287] - execute db_s.addserver
+[2026-10-03 05:04:06.877][INFO ] [Deploy         :381] - execute db_s.z_num result => 1 result type => java.lang.Integer
+[2026-10-03 05:04:06.877][INFO ] [Deploy         :381] - execute db_s.zone_names result => [Ljava.lang.String;@1b75c2e3 result type => [Ljava.lang.String;
+[2026-10-03 05:04:06.877][INFO ] [Deploy         :381] - execute db_s.z1.obs_num result => 1 result type => java.lang.Integer
+[2026-10-03 05:04:06.877][INFO ] [Deploy         :294] - execute db_s.addserver result => true
+[2026-10-03 05:04:06.877][INFO ] [Deploy         :287] - execute db_s.exec_init_sql
+[2026-10-03 05:04:06.877][INFO ] [Deploy         :381] - execute db_s.lite_mode result => true result type => java.lang.Boolean
+[2026-10-03 05:04:06.878][INFO ] [Deploy         :294] - execute db_s.exec_init_sql result => true
+[2026-10-03 05:04:06.878][INFO ] [Deploy         :287] - execute db_s.register_proxy
+[2026-10-03 05:04:06.878][INFO ] [Deploy         :294] - execute db_s.register_proxy result => true
+[2026-10-03 05:04:06.878][INFO ] [Deploy         :287] - execute db_s.deploy_proxy
+[2026-10-03 05:04:06.878][INFO ] [Deploy         :294] - execute db_s.deploy_proxy result => true
+[2026-10-03 05:04:06.878][INFO ] [Deploy         :287] - execute db_s.sleep 5
+[2026-10-03 05:04:11.878][INFO ] [Deploy         :294] - execute db_s.sleep 5 result => true
+[2026-10-03 05:04:11.878][INFO ] [Deploy         :331] - execute db_s.reboot_proxy result => true
+[2026-10-03 05:04:11.879][INFO ] [Deploy         :287] - execute db_s.deploy_asvr
+[2026-10-03 05:04:11.879][INFO ] [Deploy         :294] - execute db_s.deploy_asvr result => true
+[2026-10-03 05:04:11.879][INFO ] [Deploy         :287] - execute db_s.sleep 5
+[2026-10-03 05:04:16.879][INFO ] [Deploy         :294] - execute db_s.sleep 5 result => true
+[2026-10-03 05:04:16.880][INFO ] [Deploy         :331] - execute db_s.reboot_asvr result => true
+[2026-10-03 05:04:16.880][INFO ] [Deploy         :287] - execute db_s.add_asvr
+[2026-10-03 05:04:16.880][INFO ] [OBI            :1509] - There is no need to add asvr.
+[2026-10-03 05:04:16.880][INFO ] [Deploy         :294] - execute db_s.add_asvr result => true
+[2026-10-03 05:04:16.880][INFO ] [Deploy         :287] - execute db_s.prepare_agent
+[2026-10-03 05:04:16.880][INFO ] [Deploy         :294] - execute db_s.prepare_agent result => true
+[2026-10-03 05:04:16.881][INFO ] [Deploy         :331] - execute db_s.reboot result => true
+[2026-10-03 05:04:16.881][INFO ] [Command        :353] - start[1790975023506] time[33375] tag[Q_DEPLOY]
+[2026-10-03 05:04:16.881][INFO ] [Command        :536] - > LINE => 93, CMD => Q_SLEEP, CONTENT => 5
+[2026-10-03 05:04:21.881][INFO ] [Command        :353] - start[1790975056881] time[5000] tag[Q_SLEEP]
+[2026-10-03 05:04:21.882][INFO ] [Command        :536] - > LINE => 94, CMD => Q_ENABLE_ALL_RESULT_LOG, CONTENT => --enable_all_result_log
+[2026-10-03 05:04:21.882][INFO ] [Command        :353] - start[1790975061882] time[0] tag[Q_ENABLE_ALL_RESULT_LOG]
+[2026-10-03 05:04:21.882][INFO ] [Command        :536] - > LINE => 96, CMD => Q_DISABLE_QUERY_LOG, CONTENT => --disable_query_log
+[2026-10-03 05:04:21.882][INFO ] [Command        :353] - start[1790975061882] time[0] tag[Q_DISABLE_QUERY_LOG]
+[2026-10-03 05:04:21.882][INFO ] [Command        :536] - > LINE => 97, CMD => Q_DISABLE_RESULT_LOG, CONTENT => --disable_result_log
+[2026-10-03 05:04:21.882][INFO ] [Command        :353] - start[1790975061882] time[0] tag[Q_DISABLE_RESULT_LOG]
+[2026-10-03 05:04:21.883][INFO ] [Command        :536] - > LINE => 99, CMD => Q_DEPLOY, CONTENT => db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 180;
+[2026-10-03 05:04:21.883][INFO ] [DeployProcessor:93] - deploy => db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 180
+[2026-10-03 05:04:21.883][INFO ] [Deploy         :287] - execute db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 180
+[2026-10-03 05:04:21.883][INFO ] [Deploy         :287] - execute db_s.select_one_value select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY'
+[2026-10-03 05:04:21.884][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY'
+[2026-10-03 05:04:21.924][INFO ] [Deploy         :294] - execute db_s.select_one_value select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' result => 1
+[2026-10-03 05:04:21.924][INFO ] [OBI            :5345] - check success! use time = 0
+[2026-10-03 05:04:21.924][INFO ] [Deploy         :294] - execute db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 180 result => true
+[2026-10-03 05:04:21.924][INFO ] [Command        :353] - start[1790975061883] time[41] tag[Q_DEPLOY]
+[2026-10-03 05:04:21.925][INFO ] [Command        :536] - > LINE => 101, CMD => Q_LET_DEPLOY, CONTENT => $db_p_rpc_port
+[2026-10-03 05:04:21.925][INFO ] [Deploy         :287] - execute db_p.select select rpc_port from oceanbase.__all_virtual_server_stat limit 1, rpc_port, 1
+[2026-10-03 05:04:21.925][INFO ] [SQLProcessor   :2086] - execute sql => select rpc_port from oceanbase.__all_virtual_server_stat limit 1
+[2026-10-03 05:04:21.934][INFO ] [Deploy         :294] - execute db_p.select select rpc_port from oceanbase.__all_virtual_server_stat limit 1, rpc_port, 1 result => 42000
+[2026-10-03 05:04:21.934][INFO ] [Command        :353] - start[1790975061925] time[9] tag[Q_LET_DEPLOY]
+[2026-10-03 05:04:21.935][INFO ] [Command        :536] - > LINE => 102, CMD => Q_DEPLOY, CONTENT => db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:$db_p_rpc_port', 1, 30;
+[2026-10-03 05:04:21.936][INFO ] [DeployProcessor:93] - deploy => db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:42000', 1, 30
+[2026-10-03 05:04:21.936][INFO ] [Deploy         :287] - execute db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:42000', 1, 30
+[2026-10-03 05:04:21.936][INFO ] [Deploy         :287] - execute db_s.select_one_value select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:42000'
+[2026-10-03 05:04:21.936][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:42000'
+[2026-10-03 05:04:21.946][INFO ] [Deploy         :294] - execute db_s.select_one_value select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:42000' result => 1
+[2026-10-03 05:04:21.946][INFO ] [OBI            :5345] - check success! use time = 0
+[2026-10-03 05:04:21.946][INFO ] [Deploy         :294] - execute db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:42000', 1, 30 result => true
+[2026-10-03 05:04:21.946][INFO ] [Command        :353] - start[1790975061935] time[11] tag[Q_DEPLOY]
+[2026-10-03 05:04:21.947][INFO ] [Command        :536] - > LINE => 104, CMD => Q_DEPLOY, CONTENT => db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_sstable_scn and readable_scn >= $primary_sstable_scn, 1, 180;
+[2026-10-03 05:04:21.948][INFO ] [DeployProcessor:93] - deploy => db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= 1790975014524927018 and readable_scn >= 1790975014524927018, 1, 180
+[2026-10-03 05:04:21.948][INFO ] [Deploy         :287] - execute db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= 1790975014524927018 and readable_scn >= 1790975014524927018, 1, 180
+[2026-10-03 05:04:21.948][INFO ] [Deploy         :287] - execute db_s.select_one_value select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= 1790975014524927018 and readable_scn >= 1790975014524927018
+[2026-10-03 05:04:21.948][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= 1790975014524927018 and readable_scn >= 1790975014524927018
+[2026-10-03 05:04:21.957][INFO ] [Deploy         :294] - execute db_s.select_one_value select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= 1790975014524927018 and readable_scn >= 1790975014524927018 result => 1
+[2026-10-03 05:04:21.958][INFO ] [OBI            :5345] - check success! use time = 0
+[2026-10-03 05:04:21.958][INFO ] [Deploy         :294] - execute db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= 1790975014524927018 and readable_scn >= 1790975014524927018, 1, 180 result => true
+[2026-10-03 05:04:21.958][INFO ] [Command        :353] - start[1790975061947] time[10] tag[Q_DEPLOY]
+[2026-10-03 05:04:21.958][INFO ] [Command        :536] - > LINE => 105, CMD => Q_DEPLOY, CONTENT => db_s.check_until_timeout select count(*) > 0 from oceanbase.V\$OB_SSTABLES where tablet_id = $bootstrap_tablet_id and table_type in ('MAJOR', 'CO_MAJOR') and end_log_scn = $primary_sstable_scn, 1, 180;
+[2026-10-03 05:04:21.959][INFO ] [DeployProcessor:93] - deploy => db_s.check_until_timeout select count(*) > 0 from oceanbase.V$OB_SSTABLES where tablet_id = 4611686155866541377 and table_type in ('MAJOR', 'CO_MAJOR') and end_log_scn = 1790975014524927018, 1, 180
+[2026-10-03 05:04:21.959][INFO ] [Deploy         :287] - execute db_s.check_until_timeout select count(*) > 0 from oceanbase.V$OB_SSTABLES where tablet_id = 4611686155866541377 and table_type in ('MAJOR', 'CO_MAJOR') and end_log_scn = 1790975014524927018, 1, 180
+[2026-10-03 05:04:21.959][INFO ] [Deploy         :287] - execute db_s.select_one_value select count(*) > 0 from oceanbase.V$OB_SSTABLES where tablet_id = 4611686155866541377 and table_type in ('MAJOR', 'CO_MAJOR') and end_log_scn = 1790975014524927018
+[2026-10-03 05:04:21.960][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) > 0 from oceanbase.V$OB_SSTABLES where tablet_id = 4611686155866541377 and table_type in ('MAJOR', 'CO_MAJOR') and end_log_scn = 1790975014524927018
+[2026-10-03 05:04:22.06][INFO ] [Deploy         :294] - execute db_s.select_one_value select count(*) > 0 from oceanbase.V$OB_SSTABLES where tablet_id = 4611686155866541377 and table_type in ('MAJOR', 'CO_MAJOR') and end_log_scn = 1790975014524927018 result => 1
+[2026-10-03 05:04:22.06][INFO ] [OBI            :5345] - check success! use time = 0
+[2026-10-03 05:04:22.06][INFO ] [Deploy         :294] - execute db_s.check_until_timeout select count(*) > 0 from oceanbase.V$OB_SSTABLES where tablet_id = 4611686155866541377 and table_type in ('MAJOR', 'CO_MAJOR') and end_log_scn = 1790975014524927018, 1, 180 result => true
+[2026-10-03 05:04:22.06][INFO ] [Command        :353] - start[1790975061958] time[47] tag[Q_DEPLOY]
+[2026-10-03 05:04:22.06][INFO ] [Command        :536] - > LINE => 107, CMD => Q_DEPLOY, CONTENT => db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_tail_scn and readable_scn >= $primary_tail_scn, 1, 180;
+[2026-10-03 05:04:22.08][INFO ] [DeployProcessor:93] - deploy => db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= 1790975023226601011 and readable_scn >= 1790975023226601011, 1, 180
+[2026-10-03 05:04:22.08][INFO ] [Deploy         :287] - execute db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= 1790975023226601011 and readable_scn >= 1790975023226601011, 1, 180
+[2026-10-03 05:04:22.08][INFO ] [Deploy         :287] - execute db_s.select_one_value select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= 1790975023226601011 and readable_scn >= 1790975023226601011
+[2026-10-03 05:04:22.08][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= 1790975023226601011 and readable_scn >= 1790975023226601011
+[2026-10-03 05:04:22.15][INFO ] [Deploy         :294] - execute db_s.select_one_value select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= 1790975023226601011 and readable_scn >= 1790975023226601011 result => 1
+[2026-10-03 05:04:22.15][INFO ] [OBI            :5345] - check success! use time = 0
+[2026-10-03 05:04:22.15][INFO ] [Deploy         :294] - execute db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= 1790975023226601011 and readable_scn >= 1790975023226601011, 1, 180 result => true
+[2026-10-03 05:04:22.15][INFO ] [Command        :353] - start[1790975062007] time[8] tag[Q_DEPLOY]
+[2026-10-03 05:04:22.15][INFO ] [Command        :536] - > LINE => 108, CMD => Q_DEPLOY, CONTENT => db_s.check_until_timeout select count(*) from test_bootstrap_sstable_replay where id = 5 and value = 50, 1, 60;
+[2026-10-03 05:04:22.16][INFO ] [DeployProcessor:93] - deploy => db_s.check_until_timeout select count(*) from test_bootstrap_sstable_replay where id = 5 and value = 50, 1, 60
+[2026-10-03 05:04:22.16][INFO ] [Deploy         :287] - execute db_s.check_until_timeout select count(*) from test_bootstrap_sstable_replay where id = 5 and value = 50, 1, 60
+[2026-10-03 05:04:22.16][INFO ] [Deploy         :287] - execute db_s.select_one_value select count(*) from test_bootstrap_sstable_replay where id = 5 and value = 50
+[2026-10-03 05:04:22.16][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) from test_bootstrap_sstable_replay where id = 5 and value = 50
+[2026-10-03 05:04:22.47][INFO ] [Deploy         :294] - execute db_s.select_one_value select count(*) from test_bootstrap_sstable_replay where id = 5 and value = 50 result => 1
+[2026-10-03 05:04:22.47][INFO ] [OBI            :5345] - check success! use time = 0
+[2026-10-03 05:04:22.47][INFO ] [Deploy         :294] - execute db_s.check_until_timeout select count(*) from test_bootstrap_sstable_replay where id = 5 and value = 50, 1, 60 result => true
+[2026-10-03 05:04:22.47][INFO ] [Command        :353] - start[1790975062016] time[31] tag[Q_DEPLOY]
+[2026-10-03 05:04:22.47][INFO ] [Command        :536] - > LINE => 110, CMD => Q_CONNECT, CONTENT => ob_connect(conn_sys_s, db_s.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR)
+[2026-10-03 05:04:22.48][INFO ] [SQLProcessor   :1505] - conn_sys_s create a physical connection  using jdbc:mysql://6.12.232.130:42036/oceanbase?useAffectedRows=true&emulateUnsupportedPstmts=false&characterEncoding=utf8&useServerPrepStmts=true&prepStmtCacheSqlLimit=1000&enableQueryTimeouts=false&useLocalSessionState=false&useLocalTransactionState=false&rewriteBatchedStatements=true&allowMultiQueries=true&socketTimeout=1800000 user/pwd is root@sys/
+[2026-10-03 05:04:22.61][INFO ] [SQLProcessor   :1519] - connection => conn_sys_s is mysql mode.
+[2026-10-03 05:04:22.61][INFO ] [SQLProcessor   :1522] - put conn: dataid=conn_sys_s currentConn=com.mysql.cj.jdbc.ConnectionImpl@3cdf2c61 hashcode => 1021258849
+[2026-10-03 05:04:22.61][INFO ] [Command        :353] - start[1790975062047] time[13] tag[Q_CONNECT]
+[2026-10-03 05:04:22.61][INFO ] [Command        :536] - > LINE => 111, CMD => Q_CONNECTION, CONTENT => connection conn_sys_s
+[2026-10-03 05:04:22.61][INFO ] [SQLProcessor   :1128] - use connection => conn_sys_s hashcode => 1021258849
+[2026-10-03 05:04:22.62][INFO ] [SQLProcessor   :1158] - connection => conn_sys_s is mysql mode. conn=com.mysql.cj.jdbc.ConnectionImpl@3cdf2c61
+[2026-10-03 05:04:22.62][INFO ] [Command        :353] - start[1790975062061] time[1] tag[Q_CONNECTION]
+[2026-10-03 05:04:22.62][INFO ] [Command        :536] - > LINE => 113, CMD => Q_ENABLE_QUERY_LOG, CONTENT => --enable_query_log
+[2026-10-03 05:04:22.63][INFO ] [Command        :353] - start[1790975062063] time[0] tag[Q_ENABLE_QUERY_LOG]
+[2026-10-03 05:04:22.63][INFO ] [Command        :536] - > LINE => 114, CMD => Q_ENABLE_RESULT_LOG, CONTENT => --enable_result_log
+[2026-10-03 05:04:22.63][INFO ] [Command        :353] - start[1790975062063] time[0] tag[Q_ENABLE_RESULT_LOG]
+[2026-10-03 05:04:22.63][INFO ] [Command        :536] - > LINE => 116, CMD => Q_QUERY, CONTENT => select count(*) from test_bootstrap_sstable_replay;
+[2026-10-03 05:04:22.70][INFO ] [Command        :353] - start[1790975062063] time[7] tag[Q_QUERY]
+[2026-10-03 05:04:22.71][INFO ] [Command        :536] - > LINE => 117, CMD => Q_QUERY, CONTENT => select id, name, value from test_bootstrap_sstable_replay order by id;
+[2026-10-03 05:04:22.74][INFO ] [Command        :353] - start[1790975062072] time[2] tag[Q_QUERY]
+[2026-10-03 05:04:22.75][INFO ] [Command        :536] - > LINE => 119, CMD => Q_ECHO, CONTENT => Phase 2 completed: standby copied SSTable base and replayed pre-bootstrap log tail
+[2026-10-03 05:04:22.75][INFO ] [Command        :353] - start[1790975062075] time[0] tag[Q_ECHO]
+[2026-10-03 05:04:22.75][INFO ] [Command        :536] - > LINE => 124, CMD => Q_ECHO, CONTENT => ========== Phase 3: Continue replay after bootstrap ==========
+[2026-10-03 05:04:22.75][INFO ] [Command        :353] - start[1790975062075] time[0] tag[Q_ECHO]
+[2026-10-03 05:04:22.75][INFO ] [Command        :536] - > LINE => 126, CMD => Q_DISABLE_QUERY_LOG, CONTENT => --disable_query_log
+[2026-10-03 05:04:22.75][INFO ] [Command        :353] - start[1790975062075] time[0] tag[Q_DISABLE_QUERY_LOG]
+[2026-10-03 05:04:22.76][INFO ] [Command        :536] - > LINE => 127, CMD => Q_DISABLE_RESULT_LOG, CONTENT => --disable_result_log
+[2026-10-03 05:04:22.76][INFO ] [Command        :353] - start[1790975062076] time[0] tag[Q_DISABLE_RESULT_LOG]
+[2026-10-03 05:04:22.76][INFO ] [Command        :536] - > LINE => 128, CMD => Q_CONNECTION, CONTENT => connection conn_sys_p
+[2026-10-03 05:04:22.76][INFO ] [SQLProcessor   :1128] - use connection => conn_sys_p hashcode => 1360657223
+[2026-10-03 05:04:22.78][INFO ] [SQLProcessor   :1158] - connection => conn_sys_p is mysql mode. conn=com.mysql.cj.jdbc.ConnectionImpl@5119fb47
+[2026-10-03 05:04:22.79][INFO ] [Command        :353] - start[1790975062076] time[3] tag[Q_CONNECTION]
+[2026-10-03 05:04:22.79][INFO ] [Command        :536] - > LINE => 129, CMD => Q_ENABLE_QUERY_LOG, CONTENT => --enable_query_log
+[2026-10-03 05:04:22.79][INFO ] [Command        :353] - start[1790975062079] time[0] tag[Q_ENABLE_QUERY_LOG]
+[2026-10-03 05:04:22.79][INFO ] [Command        :536] - > LINE => 130, CMD => Q_ENABLE_RESULT_LOG, CONTENT => --enable_result_log
+[2026-10-03 05:04:22.79][INFO ] [Command        :353] - start[1790975062079] time[0] tag[Q_ENABLE_RESULT_LOG]
+[2026-10-03 05:04:22.80][INFO ] [Command        :536] - > LINE => 132, CMD => Q_QUERY, CONTENT => insert into test_bootstrap_sstable_replay values(6, 'after_start_6', 60);
+[2026-10-03 05:04:22.83][INFO ] [Command        :353] - start[1790975062080] time[2] tag[Q_QUERY]
+[2026-10-03 05:04:22.83][INFO ] [Command        :536] - > LINE => 133, CMD => Q_QUERY, CONTENT => update test_bootstrap_sstable_replay set value = 222 where id = 2;
+[2026-10-03 05:04:22.87][INFO ] [Command        :353] - start[1790975062083] time[4] tag[Q_QUERY]
+[2026-10-03 05:04:22.88][INFO ] [Command        :536] - > LINE => 135, CMD => Q_DISABLE_QUERY_LOG, CONTENT => --disable_query_log
+[2026-10-03 05:04:22.88][INFO ] [Command        :353] - start[1790975062088] time[0] tag[Q_DISABLE_QUERY_LOG]
+[2026-10-03 05:04:22.88][INFO ] [Command        :536] - > LINE => 136, CMD => Q_DISABLE_RESULT_LOG, CONTENT => --disable_result_log
+[2026-10-03 05:04:22.88][INFO ] [Command        :353] - start[1790975062088] time[0] tag[Q_DISABLE_RESULT_LOG]
+[2026-10-03 05:04:22.88][INFO ] [Command        :536] - > LINE => 138, CMD => Q_QUERY, CONTENT => ALTER SYSTEM MINOR FREEZE;
+[2026-10-03 05:04:22.120][INFO ] [Command        :353] - start[1790975062088] time[31] tag[Q_QUERY]
+[2026-10-03 05:04:22.121][INFO ] [Command        :536] - > LINE => 139, CMD => Q_SLEEP, CONTENT => 5
+[2026-10-03 05:04:27.121][INFO ] [Command        :353] - start[1790975062121] time[5000] tag[Q_SLEEP]
+[2026-10-03 05:04:27.121][INFO ] [Command        :536] - > LINE => 140, CMD => Q_LET_DEPLOY, CONTENT => $primary_after_scn
+[2026-10-03 05:04:27.121][INFO ] [Deploy         :287] - execute db_p.select select sync_scn from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', sync_scn, 1
+[2026-10-03 05:04:27.122][INFO ] [SQLProcessor   :2086] - execute sql => select sync_scn from oceanbase.__all_virtual_server_stat where role = 'PRIMARY'
+[2026-10-03 05:04:27.132][INFO ] [Deploy         :294] - execute db_p.select select sync_scn from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', sync_scn, 1 result => 1790975066051406000
+[2026-10-03 05:04:27.132][INFO ] [Command        :353] - start[1790975067121] time[10] tag[Q_LET_DEPLOY]
+[2026-10-03 05:04:27.133][INFO ] [Command        :536] - > LINE => 142, CMD => Q_DEPLOY, CONTENT => db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_after_scn and readable_scn >= $primary_after_scn, 1, 180;
+[2026-10-03 05:04:27.134][INFO ] [DeployProcessor:93] - deploy => db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= 1790975066051406000 and readable_scn >= 1790975066051406000, 1, 180
+[2026-10-03 05:04:27.134][INFO ] [Deploy         :287] - execute db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= 1790975066051406000 and readable_scn >= 1790975066051406000, 1, 180
+[2026-10-03 05:04:27.134][INFO ] [Deploy         :287] - execute db_s.select_one_value select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= 1790975066051406000 and readable_scn >= 1790975066051406000
+[2026-10-03 05:04:27.135][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= 1790975066051406000 and readable_scn >= 1790975066051406000
+[2026-10-03 05:04:27.144][INFO ] [Deploy         :294] - execute db_s.select_one_value select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= 1790975066051406000 and readable_scn >= 1790975066051406000 result => 0
+[2026-10-03 05:04:27.144][WARN ] [OBI            :5348] - expect => 1, actual => 0, left timeout => 180, totaltime => 180, file => 142/163, file_percent => 87
+[2026-10-03 05:04:28.144][INFO ] [Deploy         :287] - execute db_s.select_one_value select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= 1790975066051406000 and readable_scn >= 1790975066051406000
+[2026-10-03 05:04:28.145][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= 1790975066051406000 and readable_scn >= 1790975066051406000
+[2026-10-03 05:04:28.154][INFO ] [Deploy         :294] - execute db_s.select_one_value select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= 1790975066051406000 and readable_scn >= 1790975066051406000 result => 0
+[2026-10-03 05:04:28.155][WARN ] [OBI            :5348] - expect => 1, actual => 0, left timeout => 179, totaltime => 180, file => 142/163, file_percent => 87
+[2026-10-03 05:04:29.155][INFO ] [Deploy         :287] - execute db_s.select_one_value select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= 1790975066051406000 and readable_scn >= 1790975066051406000
+[2026-10-03 05:04:29.157][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= 1790975066051406000 and readable_scn >= 1790975066051406000
+[2026-10-03 05:04:29.166][INFO ] [Deploy         :294] - execute db_s.select_one_value select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= 1790975066051406000 and readable_scn >= 1790975066051406000 result => 0
+[2026-10-03 05:04:29.167][WARN ] [OBI            :5348] - expect => 1, actual => 0, left timeout => 178, totaltime => 180, file => 142/163, file_percent => 87
+[2026-10-03 05:04:30.167][INFO ] [Deploy         :287] - execute db_s.select_one_value select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= 1790975066051406000 and readable_scn >= 1790975066051406000
+[2026-10-03 05:04:30.168][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= 1790975066051406000 and readable_scn >= 1790975066051406000
+[2026-10-03 05:04:30.181][INFO ] [Deploy         :294] - execute db_s.select_one_value select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= 1790975066051406000 and readable_scn >= 1790975066051406000 result => 1
+[2026-10-03 05:04:30.181][INFO ] [OBI            :5345] - check success! use time = 3
+[2026-10-03 05:04:30.181][INFO ] [Deploy         :294] - execute db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= 1790975066051406000 and readable_scn >= 1790975066051406000, 1, 180 result => true
+[2026-10-03 05:04:30.181][INFO ] [Command        :353] - start[1790975067133] time[3048] tag[Q_DEPLOY]
+[2026-10-03 05:04:30.182][INFO ] [Command        :536] - > LINE => 143, CMD => Q_DEPLOY, CONTENT => db_s.check_until_timeout select count(*) from test_bootstrap_sstable_replay where id = 6 and value = 60, 1, 60;
+[2026-10-03 05:04:30.182][INFO ] [DeployProcessor:93] - deploy => db_s.check_until_timeout select count(*) from test_bootstrap_sstable_replay where id = 6 and value = 60, 1, 60
+[2026-10-03 05:04:30.183][INFO ] [Deploy         :287] - execute db_s.check_until_timeout select count(*) from test_bootstrap_sstable_replay where id = 6 and value = 60, 1, 60
+[2026-10-03 05:04:30.183][INFO ] [Deploy         :287] - execute db_s.select_one_value select count(*) from test_bootstrap_sstable_replay where id = 6 and value = 60
+[2026-10-03 05:04:30.183][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) from test_bootstrap_sstable_replay where id = 6 and value = 60
+[2026-10-03 05:04:30.190][INFO ] [Deploy         :294] - execute db_s.select_one_value select count(*) from test_bootstrap_sstable_replay where id = 6 and value = 60 result => 1
+[2026-10-03 05:04:30.191][INFO ] [OBI            :5345] - check success! use time = 0
+[2026-10-03 05:04:30.191][INFO ] [Deploy         :294] - execute db_s.check_until_timeout select count(*) from test_bootstrap_sstable_replay where id = 6 and value = 60, 1, 60 result => true
+[2026-10-03 05:04:30.191][INFO ] [Command        :353] - start[1790975070182] time[8] tag[Q_DEPLOY]
+[2026-10-03 05:04:30.192][INFO ] [Command        :536] - > LINE => 144, CMD => Q_DEPLOY, CONTENT => db_s.check_until_timeout select count(*) from test_bootstrap_sstable_replay where id = 2 and value = 222, 1, 60;
+[2026-10-03 05:04:30.192][INFO ] [DeployProcessor:93] - deploy => db_s.check_until_timeout select count(*) from test_bootstrap_sstable_replay where id = 2 and value = 222, 1, 60
+[2026-10-03 05:04:30.192][INFO ] [Deploy         :287] - execute db_s.check_until_timeout select count(*) from test_bootstrap_sstable_replay where id = 2 and value = 222, 1, 60
+[2026-10-03 05:04:30.192][INFO ] [Deploy         :287] - execute db_s.select_one_value select count(*) from test_bootstrap_sstable_replay where id = 2 and value = 222
+[2026-10-03 05:04:30.193][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) from test_bootstrap_sstable_replay where id = 2 and value = 222
+[2026-10-03 05:04:30.200][INFO ] [Deploy         :294] - execute db_s.select_one_value select count(*) from test_bootstrap_sstable_replay where id = 2 and value = 222 result => 1
+[2026-10-03 05:04:30.201][INFO ] [OBI            :5345] - check success! use time = 0
+[2026-10-03 05:04:30.202][INFO ] [Deploy         :294] - execute db_s.check_until_timeout select count(*) from test_bootstrap_sstable_replay where id = 2 and value = 222, 1, 60 result => true
+[2026-10-03 05:04:30.202][INFO ] [Command        :353] - start[1790975070192] time[9] tag[Q_DEPLOY]
+[2026-10-03 05:04:30.202][INFO ] [Command        :536] - > LINE => 146, CMD => Q_CONNECTION, CONTENT => connection conn_sys_s
+[2026-10-03 05:04:30.202][INFO ] [SQLProcessor   :1128] - use connection => conn_sys_s hashcode => 1021258849
+[2026-10-03 05:04:30.204][INFO ] [SQLProcessor   :1158] - connection => conn_sys_s is mysql mode. conn=com.mysql.cj.jdbc.ConnectionImpl@3cdf2c61
+[2026-10-03 05:04:30.204][INFO ] [Command        :353] - start[1790975070202] time[1] tag[Q_CONNECTION]
+[2026-10-03 05:04:30.204][INFO ] [Command        :536] - > LINE => 148, CMD => Q_ENABLE_QUERY_LOG, CONTENT => --enable_query_log
+[2026-10-03 05:04:30.204][INFO ] [Command        :353] - start[1790975070204] time[0] tag[Q_ENABLE_QUERY_LOG]
+[2026-10-03 05:04:30.205][INFO ] [Command        :536] - > LINE => 149, CMD => Q_ENABLE_RESULT_LOG, CONTENT => --enable_result_log
+[2026-10-03 05:04:30.205][INFO ] [Command        :353] - start[1790975070205] time[0] tag[Q_ENABLE_RESULT_LOG]
+[2026-10-03 05:04:30.205][INFO ] [Command        :536] - > LINE => 151, CMD => Q_QUERY, CONTENT => select count(*) from test_bootstrap_sstable_replay;
+[2026-10-03 05:04:30.208][INFO ] [Command        :353] - start[1790975070205] time[3] tag[Q_QUERY]
+[2026-10-03 05:04:30.209][INFO ] [Command        :536] - > LINE => 152, CMD => Q_QUERY, CONTENT => select id, name, value from test_bootstrap_sstable_replay order by id;
+[2026-10-03 05:04:30.212][INFO ] [Command        :353] - start[1790975070209] time[2] tag[Q_QUERY]
+[2026-10-03 05:04:30.213][INFO ] [Command        :536] - > LINE => 155, CMD => Q_QUERY, CONTENT => insert into test_bootstrap_sstable_replay values(99, 'standby_write', 990);
+[2026-10-03 05:04:30.223][INFO ] [SQLProcessor   :565] - error code =>  4688
+[2026-10-03 05:04:30.223][INFO ] [SQLProcessor   :566] - sqlstate => HY000
+[2026-10-03 05:04:30.223][INFO ] [SQLProcessor   :567] - err_msg => standby tenant is read only
+[2026-10-03 05:04:30.224][ERROR] [Result         :119] - set code
+com.etao.mytest.exception.ExecuteErrorException: set code 4688
+	at com.etao.mytest.command.Result.setCode(Result.java:118)
+	at com.etao.mytest.command.Result.setSQLException(Result.java:219)
+	at com.etao.mytest.processor.SQLProcessor.staticQuery(SQLProcessor.java:575)
+	at com.etao.mytest.processor.SQLProcessor.process(SQLProcessor.java:1951)
+	at com.etao.mytest.command.Command.execute(Command.java:706)
+	at com.etao.mytest.main.TestCase.run(TestCase.java:779)
+	at com.etao.mytest.main.MyTest.main(MyTest.java:129)
+[2026-10-03 05:04:30.224][ERROR] [SQLProcessor   :576] - execute insert into test_bootstrap_sstable_replay values(99, 'standby_write', 990) failed
+java.sql.SQLException: standby tenant is read only
+	at com.mysql.cj.jdbc.exceptions.SQLError.createSQLException(SQLError.java:130)
+	at com.mysql.cj.jdbc.exceptions.SQLExceptionsMapping.translateException(SQLExceptionsMapping.java:122)
+	at com.mysql.cj.jdbc.StatementImpl.executeInternal(StatementImpl.java:763)
+	at com.mysql.cj.jdbc.StatementImpl.execute(StatementImpl.java:648)
+	at com.etao.mytest.processor.SQLProcessor.staticQuery(SQLProcessor.java:550)
+	at com.etao.mytest.processor.SQLProcessor.process(SQLProcessor.java:1951)
+	at com.etao.mytest.command.Command.execute(Command.java:706)
+	at com.etao.mytest.main.TestCase.run(TestCase.java:779)
+	at com.etao.mytest.main.MyTest.main(MyTest.java:129)
+[2026-10-03 05:04:30.224][INFO ] [Command        :353] - start[1790975070213] time[10] tag[Q_QUERY]
+[2026-10-03 05:04:30.224][INFO ] [Command        :536] - > LINE => 157, CMD => Q_ECHO, CONTENT => Phase 3 completed: standby continued replaying logs after bootstrap
+[2026-10-03 05:04:30.225][INFO ] [Command        :353] - start[1790975070224] time[0] tag[Q_ECHO]
+[2026-10-03 05:04:30.225][INFO ] [Command        :536] - > LINE => 162, CMD => Q_ECHO, CONTENT => ========== Test Summary ==========
+[2026-10-03 05:04:30.225][INFO ] [Command        :353] - start[1790975070225] time[0] tag[Q_ECHO]
+[2026-10-03 05:04:30.225][INFO ] [Command        :536] - > LINE => 163, CMD => Q_ECHO, CONTENT => Standby SSTable bootstrap and log replay: PASSED
+[2026-10-03 05:04:30.225][INFO ] [Command        :353] - start[1790975070225] time[0] tag[Q_ECHO]
+[2026-10-03 05:04:30.230][INFO ] [TestCase       :832] - test success
+[2026-10-03 05:04:30.230][INFO ] [MyTest         :151] - cost ts 100s exitcode 0
+Shutdown hook ran!
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"case": "primary_major_compaction", "status": "PASS", "rows": [[1790975014524927018, 1790975014524927018, 1790975014524927018, "IDLE"]]}

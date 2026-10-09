@@ -1,0 +1,16 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/background-materialization-artifacts/seekdb-mds-fix", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_primary_lyu5w_r_", "pid": 267944, "port": 30075}
+{"event": "sql", "sql": "CREATE DATABASE copy_probe", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE copy_probe.t(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO copy_probe.t VALUES(1,7)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE copy_child FROM ns1", "rows": []}
+{"event": "template_mds_flushed", "tablets": ["4611686293305354853", "4611686293305344949", "4611686293305344851", "4611686293305294860", "4611686293305354948"]}
+{"event": "setup", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_standby_ztbokl1_", "pid": 268603, "port": 46395, "primary_base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_primary_lyu5w_r_"}
+{"event": "waiting_readable", "status": [2003, "Can't connect to MySQL server on '127.0.0.1' ([Errno 111] Connection refused)"]}
+{"event": "waiting_readable", "status": [2003, "Can't connect to MySQL server on '127.0.0.1' ([Errno 111] Connection refused)"]}
+{"event": "PASS", "case": "background_mds_fullcopy", "source_mds_flushed": true, "rows": [[1, 7]]}
+{"event": "stopped", "pid": 268603, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_standby_ztbokl1_/data.tar.gz", "bytes": 12672739}
+{"event": "stopped", "pid": 267944, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_primary_lyu5w_r_/data.tar.gz", "bytes": 4029249}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

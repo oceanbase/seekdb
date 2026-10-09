@@ -1,0 +1,81 @@
+{
+  "commit": "91e641c0512e927a315bb349ae7fa03e40775c36",
+  "status": "PASS",
+  "native": {
+    "exit_code": 0,
+    "startup_phases": [
+      {
+        "event": "native_kv_verified",
+        "recovered": false,
+        "typed_records": true,
+        "pin_reload": true,
+        "durable_phase": "created"
+      },
+      {
+        "event": "native_kv_verified",
+        "recovered": true,
+        "typed_records": true,
+        "pin_reload": true,
+        "durable_phase": "marked"
+      },
+      {
+        "event": "native_kv_verified",
+        "recovered": true,
+        "typed_records": true,
+        "pin_reload": true,
+        "durable_phase": "finished"
+      },
+      {
+        "event": "native_kv_verified",
+        "recovered": true,
+        "typed_records": true,
+        "pin_reload": true,
+        "durable_phase": "verified"
+      }
+    ],
+    "assertions": {
+      "event": "PASS",
+      "case": "instance_meta_native",
+      "rollback": true,
+      "cross_collection": true,
+      "duplicate_key": true,
+      "own_writes": true,
+      "snapshot": true,
+      "locked_current_read": true,
+      "sequential_put_put_scan": true,
+      "scan_reentrant_write_rejected": true,
+      "binary_value_60000": true,
+      "key_512": true,
+      "value_65536": true,
+      "binary_bounds": true,
+      "scan": true,
+      "erase": true,
+      "snapshot_across_minor": true,
+      "writer_conflict": true,
+      "typed_records": true,
+      "catalog_tree": true,
+      "lineage": true,
+      "snapshot_pin": true,
+      "gc_watermark": true,
+      "pin_reload": true,
+      "crash_recovery": true,
+      "durable_fork_drop": true
+    }
+  },
+  "standby": [
+    {
+      "case": "basic",
+      "exit_code": 0,
+      "elapsed_s": 87.25
+    },
+    {
+      "case": "namespace_fork_local",
+      "exit_code": 0,
+      "elapsed_s": 84.18
+    }
+  ],
+  "test_integration": "run_four_gates.py bootstrap-native-kv -> run_instance_meta_native_probe.py",
+  "production_files": [
+    "src/storage/instance_meta/instance_meta_store.cpp"
+  ]
+}

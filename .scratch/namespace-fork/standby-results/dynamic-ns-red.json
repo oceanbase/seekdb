@@ -1,0 +1,11 @@
+{
+  "expected_rows": [
+    [
+      1,
+      10
+    ]
+  ],
+  "exception": "(1049, 'Unknown database')",
+  "replay_scn": "1790969807391965025",
+  "primary_scn": "1790969806072975003"
+}

@@ -1,0 +1,23 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/background-materialization-artifacts/seekdb-copy-view-final", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_large_partition_fork_o_zyjg0v", "pid": 2137613, "port": 14679}
+{"event": "sql", "sql": "SET ob_query_timeout=300000000", "rows": []}
+{"event": "sql", "sql": "SET ob_trx_timeout=300000000", "rows": []}
+{"event": "sql", "sql": "CREATE DATABASE large_fork", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE large_fork.t(id INT PRIMARY KEY,v INT) PARTITION BY HASH(id) PARTITIONS 8000", "rows": []}
+{"event": "sql", "sql": "INSERT INTO large_fork.t VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE large_child_0 FROM ns1", "rows": []}
+{"event": "fork_cost", "namespace": 3, "seconds": 0.0031695403158664703, "added": {"1": 1, "2": 1, "5": 0, "6": 0, "7": 0}, "physical_delta": 0, "directory_shared": true}
+{"event": "sql", "sql": "FORK NAMESPACE large_child_1 FROM ns1", "rows": []}
+{"event": "fork_cost", "namespace": 4, "seconds": 0.003600519150495529, "added": {"1": 1, "2": 1, "5": 23, "6": 0, "7": 0}, "physical_delta": 30, "directory_shared": true}
+{"event": "sql", "sql": "FORK NAMESPACE large_child_2 FROM ns1", "rows": []}
+{"event": "fork_cost", "namespace": 5, "seconds": 0.004676375538110733, "added": {"1": 1, "2": 1, "5": 0, "6": 0, "7": 0}, "physical_delta": 0, "directory_shared": true}
+{"event": "sql", "sql": "SET ob_query_timeout=300000000", "rows": []}
+{"event": "sql", "sql": "SELECT * FROM large_fork.t WHERE id=1", "rows": [[1, 10]]}
+{"event": "sql", "sql": "UPDATE large_fork.t SET v=11 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "SELECT * FROM large_fork.t WHERE id=1", "rows": [[1, 11]]}
+{"event": "sql", "sql": "SELECT * FROM large_fork.t WHERE id=1", "rows": [[1, 10]]}
+{"event": "single_partition_cow", "changed": [200002], "seconds": 0.022669609636068344, "new_pages": 2, "physical_delta": 1}
+{"event": "PASS", "case": "large_partition_fork", "partitions": 8000, "create_seconds": 14.345774464309216, "forks": [{"namespace": 3, "seconds": 0.0031695403158664703, "added": {"1": 1, "2": 1, "5": 0, "6": 0, "7": 0}, "physical_delta": 0, "directory_shared": true}, {"namespace": 4, "seconds": 0.003600519150495529, "added": {"1": 1, "2": 1, "5": 23, "6": 0, "7": 0}, "physical_delta": 30, "directory_shared": true}, {"namespace": 5, "seconds": 0.004676375538110733, "added": {"1": 1, "2": 1, "5": 0, "6": 0, "7": 0}, "physical_delta": 0, "directory_shared": true}]}
+{"event": "stopped", "pid": 2137613, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_large_partition_fork_o_zyjg0v/data.tar.gz", "bytes": 8634813}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

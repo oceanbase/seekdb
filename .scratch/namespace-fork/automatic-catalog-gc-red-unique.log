@@ -1,0 +1,34 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/background-materialization-artifacts/seekdb-template-zero", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_automatic_catalog_gc_w002yw09", "pid": 993133, "port": 20845}
+{"event": "sql", "sql": "CREATE DATABASE gc_probe", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE gc_probe.anchor(id INT PRIMARY KEY)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO gc_probe.anchor VALUES(1)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE gc_probe.t(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO gc_probe.t VALUES(1,7)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE gc_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "UPDATE gc_probe.anchor SET id=2", "rows": []}
+{"event": "sql", "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ", "rows": []}
+{"event": "sql", "sql": "BEGIN", "rows": []}
+{"event": "sql", "sql": "SELECT * FROM gc_probe.anchor", "rows": [[2]]}
+{"event": "sql", "sql": "UPDATE gc_probe.t SET v=8", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE gc_probe.t COMMENT='gc-0'", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE gc_probe.t COMMENT='gc-1'", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE gc_probe.t COMMENT='gc-2'", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE gc_probe.t COMMENT='gc-3'", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE gc_probe.t COMMENT='gc-4'", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE gc_probe.t COMMENT='gc-5'", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE gc_probe.t COMMENT='gc-6'", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE gc_probe.t COMMENT='gc-7'", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE gc_probe.t COMMENT='gc-8'", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE gc_probe.t COMMENT='gc-9'", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE gc_probe.t COMMENT='gc-10'", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE gc_probe.t COMMENT='gc-11'", "rows": []}
+{"event": "stopped", "pid": 993133, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_automatic_catalog_gc_w002yw09/data.tar.gz", "bytes": 6459368}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File ".scratch/namespace-fork/automatic_catalog_gc_probe.py", line 82, in <module>
+    run(args.binary)
+  File ".scratch/namespace-fork/automatic_catalog_gc_probe.py", line 53, in run
+    raise AssertionError(('old source root was not automatically collected', old_root, samples))
+AssertionError: ('old source root was not automatically collected', 6746349265806842718, [1221, 1221, 1221, 1221, 1221, 1221, 1221, 1221, 1269, 1269, 1269, 1269, 1269, 1269, 1269, 1269, 1269, 1269, 1317, 1317, 1317, 1317, 1317, 1317, 1317, 1317, 1317, 1353, 1365, 1365, 1365, 1365, 1365, 1365, 1365, 1365, 1365, 1413, 1413, 1413, 1413, 1413, 1413, 1413, 1413, 1413, 1413, 1461, 1461, 1461, 1461, 1461, 1461, 1461, 1461, 1461, 1461, 1509, 1509])

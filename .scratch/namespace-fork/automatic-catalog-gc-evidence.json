@@ -1,0 +1,55 @@
+{
+  "status": "phase20_verified; fullcopy source-file race remains open",
+  "production_base": "fb12cfa8d",
+  "build": "automatic-catalog-gc-build.log",
+  "change": "Existing periodic maintenance invokes existing catalog collector; max 256 deletes per transaction, 2s deadline, writable primary after installation only.",
+  "red": {
+    "log": "automatic-catalog-gc-red-unique.log",
+    "expected_exit": 1,
+    "pages_before": 1221,
+    "pages_after": 1509,
+    "old_root_not_collected_seconds": 60
+  },
+  "green": {
+    "log": "automatic-catalog-gc-green-unique.log",
+    "exit_code": 0,
+    "pages_before": 1221,
+    "pages_after": 965,
+    "samples_to_removal": [
+      1221,
+      1221,
+      1221,
+      965
+    ],
+    "old_rr_view_correct": true,
+    "namespace_parent_drop": true,
+    "sigkill_restart": true
+  },
+  "sql_read_views": {
+    "log": "automatic-catalog-gc-read-view.log",
+    "exit_code": 0
+  },
+  "standby": [
+    {
+      "case": "namespace_fork_local",
+      "exit_code": 0,
+      "elapsed_s": 114.64
+    }
+  ],
+  "fixture_failures": [
+    {
+      "logs": [
+        "automatic-catalog-gc-red.log",
+        "automatic-catalog-gc-green.log"
+      ],
+      "reason": "The first fixture selected the shared parent/child root immediately after fork; the current parent still owned that page. Auto GC correctly retained it while reducing total pages to 741. Fixture now materializes child anchor before holding RR view, requiring a unique child root; both red and green rerun."
+    },
+    {
+      "log": "automatic-catalog-gc-standby/basic.log",
+      "reason": "Command omitted --case, started default suite. basic used original 5s bootstrap wait and failed handshake before replication. Runner and its owned descendants stopped; targeted namespace_fork_local rerun with existing template fixture passed."
+    }
+  ],
+  "gate": "run_four_gates.py direct includes automatic_catalog_gc_probe.py",
+  "delivery": "Production code only; tests/docs remain local; no PR",
+  "deferred": "No GC spill, tempfile or external sort. Fullcopy source SSTable lifetime issue not fixed by this phase."
+}

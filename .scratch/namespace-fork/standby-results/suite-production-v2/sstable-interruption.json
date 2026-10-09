@@ -1,0 +1,3 @@
+{
+  "reason": "All 359 physical tablets now merged; progress checker still used logical system IDs absent from physical report map. This is a second ID boundary; fix drafted, stopping the unchanged 1000-second wait."
+}

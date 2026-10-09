@@ -1,0 +1,18 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/background-materialization-artifacts/seekdb-copy-diagnostic", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_primary_x8vtbh5y", "pid": 260087, "port": 57673}
+{"event": "sql", "sql": "CREATE DATABASE copy_probe", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE copy_probe.t(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO copy_probe.t VALUES(1,7)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE copy_child FROM ns1", "rows": []}
+{"event": "template_mds_flushed", "tablets": ["4611686293305294955", "4611686293305344949", "4611686293305294860", "4611686293305344851", "4611686293305354948"]}
+{"event": "setup", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_standby_7yy079f3", "pid": 260844, "port": 42721, "primary_base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_primary_x8vtbh5y"}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_standby_7yy079f3/data.tar.gz", "bytes": 9750762}
+{"event": "stopped", "pid": 260087, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_primary_x8vtbh5y/data.tar.gz", "bytes": 3754466}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File ".scratch/namespace-fork/standby_background_copy_probe.py", line 62, in <module>
+    args=parser.parse_args();resource.setrlimit(resource.RLIMIT_CORE,(0,0));run(args.binary)
+  File ".scratch/namespace-fork/standby_background_copy_probe.py", line 47, in run
+    raise AssertionError(('standby full copy failed',standby.proc.returncode,str(standby.base)))
+AssertionError: ('standby full copy failed', 1, '/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_standby_7yy079f3')

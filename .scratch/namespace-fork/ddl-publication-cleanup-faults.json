@@ -1,0 +1,38 @@
+[
+  {
+    "owner": "initial",
+    "fault": "rollback",
+    "exit_code": 0,
+    "elapsed_s": 14.45
+  },
+  {
+    "owner": "initial",
+    "fault": "abort_crash",
+    "exit_code": 0,
+    "elapsed_s": 17.41
+  },
+  {
+    "owner": "initial",
+    "fault": "commit_crash",
+    "exit_code": 0,
+    "elapsed_s": 19.63
+  },
+  {
+    "owner": "child",
+    "fault": "rollback",
+    "exit_code": 0,
+    "elapsed_s": 25.08
+  },
+  {
+    "owner": "child",
+    "fault": "abort_crash",
+    "exit_code": 0,
+    "elapsed_s": 21.19
+  },
+  {
+    "owner": "child",
+    "fault": "commit_crash",
+    "exit_code": 0,
+    "elapsed_s": 16.93
+  }
+]

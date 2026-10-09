@@ -1,0 +1,57 @@
+[  1%] Built target malloc_hook
+[  2%] Built target oblib_grpc
+[  2%] Built target oblib_lib_bitmap
+[  3%] Built target oblib_rpc
+[  3%] Built target ob_standby
+[  3%] Built target generate_syspack_source
+[  3%] Built target oblib_lib_simd
+[  3%] Built target ob_data_plane
+[  4%] Built target ob_query
+[  6%] Built target ob_pl
+[ 12%] Built target restore
+[ 12%] Built target ob_standby_runtime
+[ 11%] Built target ob_sql_server_parser_objects
+[ 13%] Built target ob_malloc_object
+[ 14%] Built target ob_sql_simd
+[ 20%] Built target zstd_1_3_8_objs
+[ 20%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_fork_freeze_0_c___cxx.cxx.o
+[ 21%] Built target ob_storage_tablet_autoincrement_state
+[ 22%] Built target ob_logservice
+[ 23%] Built target sql_nio_build
+[ 23%] Built target ob_main
+[ 26%] Built target ob_share_extra
+[ 26%] Built target syspack_source
+[ 30%] Built target oblib_common
+[ 30%] Built target ob_namespace
+[ 31%] Built target zstd_1_3_8
+[ 31%] Built target ob_malloc
+[ 31%] Built target ob_sql_server_parser_static
+[ 36%] Built target compress
+[ 38%] Built target ob_sql_extra
+[ 38%] Built target ob_storage_simd
+[ 42%] Built target oblib_lib
+[ 42%] Built target oblib
+[ 54%] Built target ob_storage
+[ 55%] Built target ob_storage_static
+[ 59%] Built target ob_server
+[ 79%] Built target ob_sql
+[ 95%] Built target ob_share
+[ 95%] Built target ob_sql_static
+[ 95%] Built target ob_share_static
+In file included from /home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_fork_freeze_0_c___cxx.cxx:15:
+[1m/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp:1333:9: [0m[0;1;31merror: [0m[1mcannot assign to variable 'ret' with const-qualified type 'const int'[0m
+ 1333 |     if (OB_SUCC(ret) && owned) {[0m
+      | [0;1;32m        ^~~~~~~~~~~~
+[0m[1m/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/src/oblib/lib/utility/ob_macro_utils.h:654:79: [0m[0;1;30mnote: [0mexpanded from macro 'OB_SUCC'[0m
+  654 | #define OB_SUCC(statement) (OB_LIKELY(::oceanbase::common::OB_SUCCESS == (ret = (statement))))[0m
+      | [0;1;32m                                                                          ~~~ ^
+[0m[1m/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/src/oblib/lib/utility/ob_macro_utils.h:630:48: [0m[0;1;30mnote: [0mexpanded from macro 'OB_LIKELY'[0m
+  630 | #define OB_LIKELY(x)       __builtin_expect(!!(x),!!1)[0m
+      | [0;1;32m                                               ^
+[0m[1m/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp:1332:15: [0m[0;1;30mnote: [0mvariable 'ret' declared const here[0m
+ 1332 |     const int ret = load_kv_tablet_ownership(db, local_of(tablet.id()), owned, local_table);[0m
+      | [0;1;32m    ~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[0m1 error generated.
+make[2]: *** [src/rootserver/CMakeFiles/ob_rootserver.dir/build.make:202: src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_fork_freeze_0_c___cxx.cxx.o] Error 1
+make[1]: *** [CMakeFiles/Makefile2:1345: src/rootserver/CMakeFiles/ob_rootserver.dir/all] Error 2
+make: *** [Makefile:91: all] Error 2

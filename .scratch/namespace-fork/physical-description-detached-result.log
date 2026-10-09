@@ -1,0 +1,13 @@
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/physical-description-artifacts/seekdb-production", "base": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_detached_restart_oywnkr1b", "pid": 3132704, "port": 11545}
+{"event": "FAIL", "error": "RuntimeError('bootstrap exited (1): /data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_detached_restart_oywnkr1b')"}
+{"event": "data_archived", "path": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_detached_restart_oywnkr1b/data.tar.gz", "bytes": 2787741}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File ".scratch/namespace-fork/fork_detached_restart_probe.py", line 151, in <module>
+    run(args.binary, args.mixed_source)
+  File ".scratch/namespace-fork/fork_detached_restart_probe.py", line 32, in run
+    exp.start()
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_worker_bootstrap_prototype.py", line 28, in start
+    raise RuntimeError(f"bootstrap exited ({self.proc.returncode}): {self.base}")
+RuntimeError: bootstrap exited (1): /data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_detached_restart_oywnkr1b

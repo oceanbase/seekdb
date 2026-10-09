@@ -1,0 +1,1183 @@
+diff --git a/src/observer/namespace_worker_inprocess_prototype.ipp b/src/observer/namespace_worker_inprocess_prototype.ipp
+index 8d08e828a..b1e5e8099 100644
+--- a/src/observer/namespace_worker_inprocess_prototype.ipp
++++ b/src/observer/namespace_worker_inprocess_prototype.ipp
+@@ -29,47 +29,43 @@
+ #include <shared_mutex>
+ #include <thread>
+ namespace oceanbase { namespace observer { namespace namespace_worker_prototype {
+-class RootSchemaLifecycle final : public INamespaceSchemaLifecycle
++class NamespaceSchemaLifecycle final : public INamespaceSchemaLifecycle
+ {
+ public:
+-  int refresh() override { return OB_SUCCESS; }
+-  int fetch_version(bool published, bool core_version, int64_t &version) override
++  explicit NamespaceSchemaLifecycle(uint64_t ns, bool load_on_access = true,
++                                    bool bootstrap = false)
++      : ns_(ns), load_on_access_(load_on_access), bootstrap_(bootstrap) {}
++  void complete_bootstrap() { bootstrap_.store(false, std::memory_order_release); }
++  int refresh() override
+   {
+-    auto *service = namespace_schema_service(1);
+-    if (service == nullptr) { return OB_NOT_INIT; }
+-    return published
+-        ? service->get_published_schema_version(version, core_version)
+-        : service->get_runtime_refreshed_schema_version(version, core_version);
++    return load_on_access_ ? inprocess_refresh_schema(ns_) : OB_SUCCESS;
+   }
+-  int begin_change() override { return OB_SUCCESS; }
+-  int finish_change(int64_t) override { return OB_SUCCESS; }
+-  int publish(ObMultiVersionSchemaService &schema_service,
+-              int64_t &published_schema_version) override
+-  {
+-    return schema_service.get_runtime_refreshed_schema_version(published_schema_version);
+-  }
+-};
+-class ForkSchemaLifecycle final : public INamespaceSchemaLifecycle
+-{
+-public:
+-  explicit ForkSchemaLifecycle(uint64_t ns) : ns_(ns) {}
+-  int refresh() override { return inprocess_refresh_schema(ns_); }
+-  int fetch_version(bool, bool, int64_t &version) override
++  int fetch_version(bool published, bool core_version, int64_t &version) override
+   {
++    if (bootstrap_.load(std::memory_order_acquire)) {
++      auto *service = namespace_schema_service(ns_);
++      if (service == nullptr) { return OB_NOT_INIT; }
++      return published ? service->get_published_schema_version(version, core_version)
++          : service->get_runtime_refreshed_schema_version(version, core_version);
++    }
+     return storage::NamespaceForkKernelPrototype::namespace_schema_version(ns_, version);
+   }
+   int begin_change() override
+   {
+-    return storage::NamespaceForkKernelPrototype::begin_schema_change(ns_);
++    return bootstrap_.load(std::memory_order_acquire) ? OB_SUCCESS
++        : storage::NamespaceForkKernelPrototype::begin_schema_change(ns_);
+   }
+   int finish_change(int64_t committed_schema_version) override
+   {
+-    return storage::NamespaceForkKernelPrototype::finish_schema_change(
+-        ns_, committed_schema_version);
++    return bootstrap_.load(std::memory_order_acquire) ? OB_SUCCESS
++        : storage::NamespaceForkKernelPrototype::finish_schema_change(ns_, committed_schema_version);
+   }
+   int publish(ObMultiVersionSchemaService &schema_service,
+               int64_t &published_schema_version) override
+   {
++    if (bootstrap_.load(std::memory_order_acquire)) {
++      return schema_service.get_runtime_refreshed_schema_version(published_schema_version);
++    }
+     if (const char *delay_text = std::getenv("SEEKDB_NAMESPACE_DDL_PUBLISH_DELAY_US")) {
+       char *end = nullptr;
+       const int64_t delay_us = std::strtoll(delay_text, &end, 10);
+@@ -81,7 +77,28 @@ public:
+   }
+ private:
+   uint64_t ns_;
++  bool load_on_access_;
++  std::atomic<bool> bootstrap_;
+ };
++NamespaceSchemaLifecycle &bootstrap_schema_lifecycle()
++{
++  // Installed explicitly by instance bootstrap; normal namespaces use the
++  // same lifecycle without a bootstrap phase.
++  static NamespaceSchemaLifecycle lifecycle(1, false, true);
++  return lifecycle;
++}
++int complete_namespace_schema_bootstrap(ObMultiVersionSchemaService &service)
++{
++  bootstrap_schema_lifecycle().complete_bootstrap();
++  bool needed = false;
++  int ret = storage::NamespaceForkKernelPrototype::begin_schema_recovery(1, needed);
++  int64_t version = OB_INVALID_VERSION;
++  if (OB_SUCC(ret)) { ret = sync_namespace_schema_delta(1, service, version); }
++  if (OB_SUCC(ret) && needed) {
++    ret = storage::NamespaceForkKernelPrototype::finish_schema_recovery(1, version);
++  }
++  return ret;
++}
+ INamespaceSchemaLifecycle *namespace_schema_lifecycle(uint64_t namespace_id)
+ {
+   ns::NamespaceRuntime *runtime = nullptr;
+@@ -297,7 +314,7 @@ void register_root_namespace_storage_services(ns::NamespaceRuntime &runtime)
+   static InProcessDirectInsertService direct_insert;
+   static DirectInsertRegistry direct_insert_registry;
+   static InProcessTabletAutoincrementService tablet_autoincrement(1);
+-  static RootSchemaLifecycle schema_lifecycle;
++  auto &schema_lifecycle = bootstrap_schema_lifecycle();
+   static RootTableLockTabletRouter table_lock_tablet_router;
+   runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_SERVICE, &direct_insert);
+   runtime.set_service(ns::NamespaceRuntime::DML_SERVICE, &native_inprocess_dml);
+@@ -482,7 +499,7 @@ struct InProcessNamespaceServices {
+   InProcessRootserverLocalRuntime *local_runtime = nullptr;
+   InProcessDirectInsertService direct_insert;
+   InProcessTabletAutoincrementService tablet_autoincrement;
+-  ForkSchemaLifecycle schema_lifecycle;
++  NamespaceSchemaLifecycle schema_lifecycle;
+   ForkTableLockTabletRouter table_lock_tablet_router;
+   share::ObAutoincrementService autoincrement;
+   DirectInsertRegistry direct_insert_registry;
+@@ -800,7 +817,7 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
+                 sequence.get_sys_leader_epoch());
+     })())) {
+   } else if (FALSE_IT(stage = "baseline")) {
+-  } else if (FALSE_IT([&] {
++  } else if (OB_FAIL(([&] {
+       // Static system-table definitions are identical in every namespace;
+       // seed them locally exactly like the worker bootstrap does.
+       ObArenaAllocator allocator("NsInProcBase");
+@@ -818,48 +835,7 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
+             system_schemas, system_schema_version);
+       }
+       return seed_ret;
+-    }())) {
+-  } else if (FALSE_IT(stage = "recovery")) {
+-  } else if (FALSE_IT([&] {
+-      // A previous serving instance may have committed native all_* rows
+-      // after it marked the namespace dirty. Reconcile before publishing,
+-      // mirroring the worker bootstrap recovery block.
+-      InProcessServingScope serving(ns);
+-      IndependentStorageScope storage_scope;
+-      int recovery_ret = storage_scope.error();
+-      int64_t directory_schema_version = OB_INVALID_VERSION;
+-      int64_t local_schema_version = OB_INVALID_VERSION;
+-      int64_t published_schema_version = OB_INVALID_VERSION;
+-      bool recovery_needed = false;
+-      if (!recovery_ret) {
+-        recovery_ret = storage::NamespaceForkKernelPrototype::begin_schema_recovery(
+-            ns, recovery_needed);
+-      }
+-      if (!recovery_ret && recovery_needed) {
+-        if (OB_SUCCESS != (recovery_ret = fetch_schema_version(
+-                false, false, directory_schema_version))) {
+-        } else if (OB_SUCCESS != (recovery_ret =
+-                services->schema_service->refresh_runtime_schema_from_static_system())) {
+-        } else if (OB_SUCCESS != (recovery_ret =
+-                services->schema_service->get_runtime_refreshed_schema_version(
+-                local_schema_version))) {
+-        } else if (local_schema_version < directory_schema_version) {
+-          recovery_ret = OB_STATE_NOT_MATCH;
+-        } else if (local_schema_version > directory_schema_version) {
+-          recovery_ret = sync_namespace_schema_delta(
+-              ns, *services->schema_service, published_schema_version);
+-        } else {
+-          published_schema_version = local_schema_version;
+-        }
+-        if (!recovery_ret) {
+-          recovery_ret = storage::NamespaceForkKernelPrototype::finish_schema_recovery(
+-              ns, published_schema_version);
+-        }
+-        services->schema_loaded.store(recovery_ret == OB_SUCCESS,
+-            std::memory_order_release);
+-      }
+-      return recovery_ret;
+-    }())) {
++    })())) {
+   } else if (FALSE_IT(stage = "plan_cache")) {
+   } else if (OB_ISNULL(services->plan_cache = OB_NEW(sql::ObPlanCache,
+           ObModIds::OB_SQL_PLAN_CACHE))) {
+@@ -1015,7 +991,42 @@ int inprocess_refresh_schema(uint64_t ns)
+     if (!services.schema_loaded.load(std::memory_order_acquire)) {
+       services.schema_loading_thread = std::this_thread::get_id();
+       load_guard.unlock();
+-      ret = services.schema_service->refresh_runtime_schema_from_static_system();
++      // All runtime services are installed before this load. Recovery uses
++      // inner SQL, which needs the same fully bound runtime as normal reads.
++      // Keep schema_loaded false until both schema and directory are current.
++      IndependentStorageScope storage_scope;
++      ret = storage_scope.error();
++      bool recovery_needed = false;
++      int64_t directory_schema_version = OB_INVALID_VERSION;
++      int64_t local_schema_version = OB_INVALID_VERSION;
++      int64_t published_schema_version = OB_INVALID_VERSION;
++      if (OB_SUCC(ret)) {
++        ret = storage::NamespaceForkKernelPrototype::begin_schema_recovery(
++            ns, recovery_needed);
++      }
++      if (OB_SUCC(ret) && recovery_needed) {
++        ret = services.schema_lifecycle.fetch_version(
++            false, false, directory_schema_version);
++      }
++      if (OB_SUCC(ret)) {
++        ret = services.schema_service->refresh_runtime_schema_from_static_system();
++      }
++      if (OB_SUCC(ret) && recovery_needed) {
++        if (OB_FAIL(services.schema_service->get_runtime_refreshed_schema_version(
++                local_schema_version))) {
++        } else if (local_schema_version < directory_schema_version) {
++          ret = OB_STATE_NOT_MATCH;
++        } else if (local_schema_version > directory_schema_version) {
++          ret = sync_namespace_schema_delta(
++              ns, *services.schema_service, published_schema_version);
++        } else {
++          published_schema_version = local_schema_version;
++        }
++        if (OB_SUCC(ret)) {
++          ret = storage::NamespaceForkKernelPrototype::finish_schema_recovery(
++              ns, published_schema_version);
++        }
++      }
+       load_guard.lock();
+       services.schema_loaded.store(ret == OB_SUCCESS, std::memory_order_release);
+       services.schema_loading_thread = std::thread::id();
+diff --git a/src/observer/namespace_worker_protocol_prototype.h b/src/observer/namespace_worker_protocol_prototype.h
+index 97cf5d06d..9fcea2d97 100644
+--- a/src/observer/namespace_worker_protocol_prototype.h
++++ b/src/observer/namespace_worker_protocol_prototype.h
+@@ -249,6 +249,9 @@ int publish_namespace_schema_change(uint64_t namespace_id,
+     int64_t &published_schema_version);
+ rootserver::ObIRootserverLocalRuntime *root_namespace_ddl_runtime();
+ void register_root_namespace_storage_services(ns::NamespaceRuntime &runtime);
++// Finish bootstrap and publish/recover the initial Namespace's directory
++// before opening normal requests. All Namespaces then fence DDL and fork.
++int complete_namespace_schema_bootstrap(share::schema::ObMultiVersionSchemaService &service);
+ query::ObIRootCommandService *effective_root_command_service(
+     sql::ObSQLSessionInfo *session);
+ transaction::tablelock::ObIInnerConnectionLockRuntime *inprocess_lock_runtime(
+diff --git a/src/rootserver/fork_table/instance_namespace_metadata.cpp b/src/rootserver/fork_table/instance_namespace_metadata.cpp
+index 58bb51518..c86ab8848 100644
+--- a/src/rootserver/fork_table/instance_namespace_metadata.cpp
++++ b/src/rootserver/fork_table/instance_namespace_metadata.cpp
+@@ -378,11 +378,16 @@ std::string encode_gc_watermark(int64_t watermark)
+ int encode_exception(const InstanceExceptionRecord &record, std::string &value)
+ {
+   if (!ns::NamespaceObjectKey{record.namespace_id, record.tablet_id}.is_valid()
+-      || record.kind < 0 || record.kind > 1 || record.drop_scn < 0) { return OB_INVALID_ARGUMENT; }
++      || record.kind < 0 || record.kind > 1 || record.drop_scn < 0
++      || record.create_scn < 0
++      || (record.kind == 1 && (record.drop_scn == 0
++          || (record.was_owned && record.create_scn == 0)))) { return OB_INVALID_ARGUMENT; }
+   value = "{";
+   append_json_u64(value, "table_id", record.table_id);
+   append_json_i64(value, "kind", record.kind);
+   append_json_i64(value, "drop_scn", record.drop_scn);
++  append_json_i64(value, "was_owned", record.was_owned ? 1 : 0);
++  append_json_i64(value, "create_scn", record.create_scn);
+   value += '}';
+   return OB_SUCCESS;
+ }
+@@ -399,8 +404,15 @@ int decode_exception(uint64_t ns_id, uint64_t tablet_id,
+   if (ret == OB_SUCCESS) { ret = json_u64(*object, "table_id", decoded.table_id); }
+   if (ret == OB_SUCCESS) { ret = json_i64(*object, "kind", decoded.kind); }
+   if (ret == OB_SUCCESS) { ret = json_i64(*object, "drop_scn", decoded.drop_scn); }
++  int64_t was_owned = 0;
++  if (ret == OB_SUCCESS) { ret = json_i64(*object, "was_owned", was_owned); }
++  if (ret == OB_SUCCESS) { ret = json_i64(*object, "create_scn", decoded.create_scn); }
+   if (ret != OB_SUCCESS || decoded.kind < 0 || decoded.kind > 1
+-      || decoded.drop_scn < 0) { return OB_CHECKSUM_ERROR; }
++      || decoded.drop_scn < 0 || was_owned < 0 || was_owned > 1
++      || decoded.create_scn < 0
++      || (decoded.kind == 1 && (decoded.drop_scn == 0
++          || (was_owned == 1 && decoded.create_scn == 0)))) { return OB_CHECKSUM_ERROR; }
++  decoded.was_owned = was_owned == 1;
+   record = decoded;
+   return OB_SUCCESS;
+ }
+@@ -784,10 +796,10 @@ int InstanceNamespaceMetadata::resolve_read_tablet(uint64_t namespace_id,
+   const bool owned = ret == OB_SUCCESS;
+   const uint64_t local_storage = ns::NamespaceObjectKey{
+       namespace_id, local_tablet}.storage_id();
+-  bool exists = false;
+-  ret = probe(local_storage, exists);
++  TabletVisibility visibility = TabletVisibility::ABSENT;
++  ret = probe(local_storage, 0, visibility);
+   if (ret != OB_SUCCESS) { return ret; }
+-  if (exists || owned) {
++  if (visibility == TabletVisibility::READABLE || owned) {
+     physical_tablet = local_storage;
+     return OB_SUCCESS;
+   }
+@@ -804,11 +816,17 @@ int InstanceNamespaceMetadata::resolve_read_tablet(uint64_t namespace_id,
+         current, local_tablet}.storage_id();
+     InstanceExceptionRecord inherited;
+     int lookup = get_exception(current, local_tablet, inherited);
+-    if (lookup == OB_SUCCESS && inherited.kind == 1) { return OB_TABLET_NOT_EXIST; }
++    if (lookup == OB_SUCCESS && inherited.kind == 1
++        && inherited.drop_scn <= cap) { return OB_TABLET_NOT_EXIST; }
+     if (lookup != OB_SUCCESS && lookup != OB_ENTRY_NOT_EXIST) { return lookup; }
+-    ret = probe(candidate, exists);
++    if (lookup == OB_SUCCESS && inherited.was_owned && cap < inherited.create_scn) {
++      continue; // This copy did not exist in the inherited view.
++    }
++    ret = probe(candidate, cap, visibility);
+     if (ret != OB_SUCCESS) { return ret; }
+-    if (exists || (lookup == OB_SUCCESS && inherited.kind == 0)) {
++    if (visibility == TabletVisibility::ABSENT && lookup == OB_SUCCESS
++        && (inherited.kind == 0 || inherited.was_owned)) { return OB_SNAPSHOT_DISCARDED; }
++    if (visibility == TabletVisibility::READABLE) {
+       physical_tablet = candidate;
+       cap_scn = cap;
+       return OB_SUCCESS;
+@@ -1225,14 +1243,16 @@ int InstanceNamespaceMetadata::finish_schema_recovery(uint64_t id,
+ }
+ 
+ int InstanceNamespaceMetadata::stage_schema_delta(uint64_t id,
+-    int64_t base_schema_version, int64_t schema_version,
++    int64_t base_schema_version, int64_t schema_version, int64_t drop_scn,
+     const std::map<uint64_t, uint64_t> &previous_tablets,
+     const std::map<uint64_t, uint64_t> &current_tablets,
+     const PhysicalTabletProbe &probe,
++    const PhysicalTabletBirthProbe &birth_probe,
+     std::vector<uint64_t> &removed_owned)
+ {
+   removed_owned.clear();
+-  if (base_schema_version <= 0 || schema_version < base_schema_version || !probe) {
++  if (base_schema_version <= 0 || schema_version < base_schema_version
++      || drop_scn <= 0 || !probe || !birth_probe) {
+     return OB_INVALID_ARGUMENT;
+   }
+   InstanceNamespaceRecord record;
+@@ -1258,10 +1278,21 @@ int InstanceNamespaceMetadata::stage_schema_delta(uint64_t id,
+     if (ret == OB_ENTRY_NOT_EXIST) { ret = OB_SUCCESS; }
+     if (ret != OB_SUCCESS) { break; }
+     if (action.kind == ns::ExceptionDeltaKind::TOMBSTONE) {
+-      if (had_old && old.kind == 0) {
++      bool local_exists = false;
++      ret = probe(action.tablet_id, local_exists);
++      if (ret != OB_SUCCESS) { break; }
++      const bool was_owned = local_exists || (had_old && (old.kind == 0 || old.was_owned));
++      int64_t create_scn = had_old ? old.create_scn : 0;
++      if (was_owned && create_scn == 0) {
++        ret = birth_probe(action.tablet_id, create_scn);
++        if (ret != OB_SUCCESS) { break; }
++        if (create_scn <= 0) { ret = OB_STATE_NOT_MATCH; break; }
++      }
++      if (local_exists || (had_old && old.kind == 0)) {
+         pending_removal.push_back(action.tablet_id);
+       }
+-      ret = put_exception({id, action.tablet_id, action.table_id, 1, 0});
++      ret = put_exception({id, action.tablet_id, action.table_id, 1,
++          had_old && old.kind == 1 ? old.drop_scn : drop_scn, was_owned, create_scn});
+     } else {
+       bool local_exists = false;
+       ret = probe(action.tablet_id, local_exists);
+@@ -1367,7 +1398,15 @@ int InstanceNamespaceDirectory::ensure_root(const std::string &name,
+     // this DML path cannot turn a lock on absence into a later insert.
+     ret = metadata.get_namespace(1, root);
+     if (ret == OB_ENTRY_NOT_EXIST) {
+-      ret = metadata.initialize_snapshot_gc_watermark(gc_watermark);
++      // The freeze detector can initialize coordination before the Namespace
++      // directory. Preserve that record and its monotonic watermark.
++      int64_t stored_watermark = 0;
++      ret = metadata.get_snapshot_gc_watermark(stored_watermark);
++      if (ret == OB_ENTRY_NOT_EXIST) {
++        ret = metadata.initialize_snapshot_gc_watermark(gc_watermark);
++      } else if (ret == OB_SUCCESS && stored_watermark < gc_watermark) {
++        ret = metadata.advance_snapshot_gc_watermark(gc_watermark);
++      }
+       if (ret == OB_SUCCESS) { ret = metadata.insert_root_namespace(name, schema_version); }
+       staged = ret == OB_SUCCESS;
+     } else if (ret == OB_SUCCESS) {
+@@ -1386,10 +1425,8 @@ int InstanceNamespaceDirectory::ensure_root(const std::string &name,
+         if (ret == OB_SUCCESS && stored_watermark < gc_watermark) {
+           ret = metadata.advance_snapshot_gc_watermark(gc_watermark);
+         }
+-        if (ret == OB_SUCCESS && root.roots.schema_version < schema_version) {
+-          root.roots.schema_version = schema_version;
+-          ret = metadata.update_namespace(root);
+-        }
++        // Startup must reconcile any committed SQL DDL from this published
++        // base; advancing here would discard its missing exception delta.
+       }
+     }
+   }
+@@ -1493,80 +1530,67 @@ int InstanceNamespaceDirectory::resolve_read_tablet(uint64_t namespace_id,
+ }
+ 
+ int InstanceNamespaceDirectory::filter_unreferenced_tablets(
+-    const std::vector<uint64_t> &candidates, int64_t deadline,
++    const std::vector<uint64_t> &candidates,
++    const InstanceNamespaceMetadata::StorageTabletProbe &probe,
++    const std::map<uint64_t, uint64_t> &sources, int64_t deadline,
+     std::vector<uint64_t> &unreferenced, bool &need_retry)
+ {
+   unreferenced.clear();
+   need_retry = false;
++  if (!probe) { return OB_INVALID_ARGUMENT; }
+   storage::InstanceMetaStore::Transaction tx;
+   int ret = store_.begin(tx, deadline, true);
+-  std::unordered_map<uint64_t, InstanceNamespaceRecord> records;
+   std::vector<uint64_t> live;
++  std::unordered_set<uint64_t> locals;
++  std::unordered_set<uint64_t> referenced;
+   std::vector<uint64_t> staged;
+-  bool staged_retry = false;
+   if (ret == OB_SUCCESS) {
+     InstanceNamespaceMetadata metadata(store_, tx);
+     ret = metadata.scan_namespaces([&](const InstanceNamespaceRecord &record) {
+-      if (record.roots.state == 0) { live.push_back(record.id); }
+-      records.emplace(record.id, record);
++      // DELETING still has admitted users until its access drain completes.
++      if (record.roots.state != 2) { live.push_back(record.id); }
+       return OB_SUCCESS;
+     });
+     for (uint64_t candidate : candidates) {
+-      if (ret != OB_SUCCESS) { break; }
+-      if (!ns::NamespaceObjectKey::is_encoded(candidate)) {
+-        staged.push_back(candidate);
+-        continue;
++      if (ns::NamespaceObjectKey::is_encoded(candidate)) {
++        locals.insert(ns::NamespaceObjectKey::local_part(candidate));
+       }
+-      const uint64_t owner = ns::NamespaceObjectKey::encoded_namespace(candidate);
+-      const uint64_t local = ns::NamespaceObjectKey::local_part(candidate);
+-      std::unordered_map<uint64_t, int64_t> exceptions;
+-      bool retained = false;
+-      for (uint64_t reader : live) {
+-        if (ret != OB_SUCCESS || retained) { break; }
+-        if (reader == owner) { continue; }
+-        uint64_t current = reader;
++    }
++    // An incomplete copy can refer to a source with a different local ID.
++    // Resolve its own logical identity before following physical source edges.
++    for (const auto &source : sources) {
++      if (ns::NamespaceObjectKey::is_encoded(source.first)) {
++        locals.insert(ns::NamespaceObjectKey::local_part(source.first));
++      }
++    }
++    for (uint64_t reader : live) {
++      for (uint64_t local : locals) {
++        if (ret != OB_SUCCESS) { break; }
++        uint64_t physical = 0;
++        int64_t cap = 0;
++        ret = metadata.resolve_read_tablet(reader, local, probe, physical, cap);
++        if (ret == OB_TABLET_NOT_EXIST) { ret = OB_SUCCESS; continue; }
++        if (ret != OB_SUCCESS) { break; }
+         bool terminated = false;
+-        for (int depth = 0; depth < 64 && !terminated; ++depth) {
+-          if (current == owner) {
+-            retained = true;
+-            terminated = true;
+-          } else {
+-            auto kind = exceptions.find(current);
+-            if (kind == exceptions.end()) {
+-              InstanceExceptionRecord exception;
+-              int lookup = metadata.get_exception(current, local, exception);
+-              if (lookup == OB_ENTRY_NOT_EXIST) {
+-                kind = exceptions.emplace(current, -1).first;
+-              } else if (lookup == OB_SUCCESS) {
+-                kind = exceptions.emplace(current, exception.kind).first;
+-              } else {
+-                ret = lookup;
+-                break;
+-              }
+-            }
+-            if (kind->second == 0 || kind->second == 1) {
+-              terminated = true;
+-            } else {
+-              const auto parent = records.find(current);
+-              if (parent == records.end() || parent->second.parent_namespace == 0) {
+-                terminated = true;
+-              } else {
+-                current = parent->second.parent_namespace;
+-              }
+-            }
+-          }
++        for (int depth = 0; depth < 64; ++depth) {
++          referenced.insert(physical);
++          const auto source = sources.find(physical);
++          if (source == sources.end()) { terminated = true; break; }
++          physical = source->second;
+         }
+-        if (!terminated && ret == OB_SUCCESS) { ret = OB_SIZE_OVERFLOW; }
++        if (!terminated) { ret = OB_SIZE_OVERFLOW; }
++      }
++      if (ret != OB_SUCCESS) { break; }
++    }
++    if (ret == OB_SUCCESS) {
++      for (uint64_t candidate : candidates) {
++        if (referenced.count(candidate) == 0) { staged.push_back(candidate); }
++        else { need_retry = true; }
+       }
+-      if (ret == OB_SUCCESS && retained) { staged_retry = true; }
+-      else if (ret == OB_SUCCESS) { staged.push_back(candidate); }
+     }
+   }
+   ret = finish_directory_transaction(store_, tx, ret);
+-  if (ret == OB_SUCCESS) {
+-    unreferenced.swap(staged);
+-    need_retry = staged_retry;
+-  }
++  if (ret == OB_SUCCESS) { unreferenced.swap(staged); }
+   return ret;
+ }
+ 
+@@ -1826,10 +1850,11 @@ int InstanceNamespaceDirectory::finish_schema_recovery(uint64_t id,
+ }
+ 
+ int InstanceNamespaceDirectory::publish_schema_delta(uint64_t id,
+-    int64_t base_version, int64_t version,
++    int64_t base_version, int64_t version, int64_t drop_scn,
+     const std::map<uint64_t, uint64_t> &previous_tablets,
+     const std::map<uint64_t, uint64_t> &current_tablets,
+     const InstanceNamespaceMetadata::PhysicalTabletProbe &probe,
++    const InstanceNamespaceMetadata::PhysicalTabletBirthProbe &birth_probe,
+     int64_t deadline, std::vector<uint64_t> &removed_owned)
+ {
+   removed_owned.clear();
+@@ -1838,8 +1863,8 @@ int InstanceNamespaceDirectory::publish_schema_delta(uint64_t id,
+   std::vector<uint64_t> staged;
+   if (ret == OB_SUCCESS) {
+     InstanceNamespaceMetadata metadata(store_, tx);
+-    ret = metadata.stage_schema_delta(id, base_version, version,
+-        previous_tablets, current_tablets, probe, staged);
++    ret = metadata.stage_schema_delta(id, base_version, version, drop_scn,
++        previous_tablets, current_tablets, probe, birth_probe, staged);
+   }
+   ret = finish_directory_transaction(store_, tx, ret);
+   if (ret == OB_SUCCESS) { removed_owned.swap(staged); }
+diff --git a/src/rootserver/fork_table/instance_namespace_metadata.h b/src/rootserver/fork_table/instance_namespace_metadata.h
+index 86587fc89..e0fdc8a20 100644
+--- a/src/rootserver/fork_table/instance_namespace_metadata.h
++++ b/src/rootserver/fork_table/instance_namespace_metadata.h
+@@ -44,6 +44,8 @@ struct InstanceExceptionRecord
+   uint64_t table_id = 0;  // Raw schema table identity.
+   int64_t kind = 0;       // 0 owned, 1 tombstone.
+   int64_t drop_scn = 0;
++  bool was_owned = false; // A tombstone must not hide a lost historical copy.
++  int64_t create_scn = 0; // Logical birth of that copy, retained after physical GC.
+ };
+ 
+ struct InstanceNamespacePin
+@@ -52,6 +54,13 @@ struct InstanceNamespacePin
+   int64_t schema_version = 0;
+ };
+ 
++enum class TabletVisibility
++{
++  ABSENT,
++  READABLE,
++  OUTSIDE_SNAPSHOT
++};
++
+ // Typed access to instance metadata in one store-owned transaction. The
+ // caller keeps its Transaction alive through every operation and decides when
+ // to commit. Scan callbacks must not reenter that transaction.
+@@ -66,7 +75,8 @@ public:
+   using PinVisitor = std::function<int(const InstanceNamespacePin &)>;
+   using SnapshotAcquirer = std::function<int(int64_t &)>;
+   using PhysicalTabletProbe = std::function<int(uint64_t, bool &)>;
+-  using StorageTabletProbe = std::function<int(uint64_t, bool &)>;
++  using PhysicalTabletBirthProbe = std::function<int(uint64_t, int64_t &)>;
++  using StorageTabletProbe = std::function<int(uint64_t, int64_t, TabletVisibility &)>;
+   using NamespacePhysicalProbe = std::function<int(uint64_t, bool &)>;
+ 
+   InstanceNamespaceMetadata(storage::InstanceMetaStore &store, Transaction &transaction)
+@@ -116,10 +126,11 @@ public:
+   // Roll back the caller's transaction on error. The physical probe must not
+   // reenter this transaction.
+   int stage_schema_delta(uint64_t id, int64_t base_schema_version,
+-      int64_t schema_version,
++      int64_t schema_version, int64_t drop_scn,
+       const std::map<uint64_t, uint64_t> &previous_tablets,
+       const std::map<uint64_t, uint64_t> &current_tablets,
+       const PhysicalTabletProbe &probe,
++      const PhysicalTabletBirthProbe &birth_probe,
+       std::vector<uint64_t> &removed_owned);
+ 
+   // Repair a physical creation committed before its owned exception. The map
+@@ -159,8 +170,9 @@ public:
+   int erase_exception(uint64_t ns_id, uint64_t local_tablet);
+   int scan_exceptions(uint64_t ns_id, const ExceptionVisitor &visitor);
+ 
+-  // Resolves one namespace-local tablet to the nearest committed physical
+-  // copy. StorageTabletProbe receives an encoded physical tablet ID. A local
++  // Resolves one namespace-local tablet to the nearest historical physical
++  // copy. StorageTabletProbe receives a physical ID and the effective SCN
++  // (zero means current). Errors must not be treated as absence. A local
+   // owned record whose tablet is not yet visible resolves to its local ID so
+   // the caller can wait for tablet-manager visibility. A local tombstone stops lookup.
+   int resolve_read_tablet(uint64_t namespace_id, uint64_t local_tablet,
+@@ -252,9 +264,12 @@ public:
+   int resolve_read_tablet(uint64_t namespace_id, uint64_t local_tablet,
+       const InstanceNamespaceMetadata::StorageTabletProbe &probe,
+       int64_t deadline, uint64_t &physical_tablet, int64_t &cap_scn);
+-  // One KV snapshot decides which deleted physical tablets still have live
+-  // descendants reading through them. Unencoded candidates pass through.
++  // Use the same historical source resolution as reads in one KV snapshot.
++  // sources maps incomplete physical copies to their baseline sources. The
++  // caller fences new dependencies through the actual physical reclamation.
+   int filter_unreferenced_tablets(const std::vector<uint64_t> &candidates,
++      const InstanceNamespaceMetadata::StorageTabletProbe &probe,
++      const std::map<uint64_t, uint64_t> &sources,
+       int64_t deadline, std::vector<uint64_t> &unreferenced, bool &need_retry);
+   int list_live(int64_t deadline, std::vector<InstanceNamespaceRecord> &records);
+   int list_deleted(int64_t deadline, std::vector<InstanceNamespaceRecord> &records);
+@@ -286,10 +301,11 @@ public:
+   // The physical probe checks this Namespace's encoded tablet address and
+   // cannot reenter the KV transaction. Removed IDs become actionable only
+   // after the directory transaction commits.
+-  int publish_schema_delta(uint64_t id, int64_t base_version, int64_t version,
++  int publish_schema_delta(uint64_t id, int64_t base_version, int64_t version, int64_t drop_scn,
+       const std::map<uint64_t, uint64_t> &previous_tablets,
+       const std::map<uint64_t, uint64_t> &current_tablets,
+       const InstanceNamespaceMetadata::PhysicalTabletProbe &probe,
++      const InstanceNamespaceMetadata::PhysicalTabletBirthProbe &birth_probe,
+       int64_t deadline, std::vector<uint64_t> &removed_owned);
+   // Repairs physical creations committed before their owned rows. The caller
+   // supplies tablet->table relations from this Namespace's current schema.
+diff --git a/src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp b/src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp
+index 64176ead2..10c68f618 100644
+--- a/src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp
++++ b/src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp
+@@ -78,6 +78,32 @@ int64_t directory_deadline()
+ // ponytail: one global count, so DROP can wait for unrelated long scans/DAGs.
+ // No per-namespace registry/cache; use worker-local draining for production isolation.
+ std::atomic<int64_t> active_accesses{0};
++std::atomic<bool> physical_reclamation{false};
++std::mutex physical_reclamation_mutex;
++int acquire_access(bool &held)
++{
++  if (held) { return OB_SUCCESS; }
++  for (;;) {
++    if (physical_reclamation.load()) {
++      const int ret = THIS_WORKER.check_status();
++      if (ret != OB_SUCCESS) { return ret; }
++      // A SQL operation can open another store context after publishing its
++      // physical copy. Waiting preserves that admitted operation; returning
++      // EAGAIN here would turn a GC scheduling window into a failed write.
++      // The collector bounds its admission drain, so an operation retaining
++      // an earlier context cannot form an unbounded wait cycle.
++      ob_usleep(1000);
++      continue;
++    }
++    active_accesses.fetch_add(1);
++    if (physical_reclamation.load()) {
++      active_accesses.fetch_sub(1);
++      continue;
++    }
++    held = true;
++    return OB_SUCCESS;
++  }
++}
+ // check_table_access runs on every storage scan/DML open; a roots() SQL per
+ // open dominated branch-worker cold schema refresh. The namespace registry is
+ // only mutated by begin/finish_namespace_drop in this process, so a LIVE entry
+@@ -110,9 +136,8 @@ void remember_tablet_table(uint64_t tablet, uint64_t table) {
+   if (tablet_table_cache.size() > (1u << 20)) { tablet_table_cache.clear(); }
+   tablet_table_cache[tablet] = table;
+ }
+-// ponytail: manual GC excludes all metadata operations while marking/sweeping.
+-// One lock and nesting depth per thread, no resident page/reader registry. Use
+-// versioned reader epochs if measurements justify concurrent marking later.
++// Physical reclamation excludes lineage/exception publication. Shared nesting
++// allows materialization and DDL helpers to compose without a reader registry.
+ std::shared_timed_mutex metadata_mutex;
+ thread_local int metadata_depth = 0;
+ class MetadataReadGuard final {
+@@ -133,6 +158,41 @@ private:
+   MetadataReadGuard(const MetadataReadGuard &) = delete;
+   MetadataReadGuard &operator=(const MetadataReadGuard &) = delete;
+ };
++// Close admission before draining, then exclude publication. Acquiring the
++// metadata lock first would deadlock an admitted writer materializing a copy.
++class PhysicalReclamationGuard final
++{
++public:
++  PhysicalReclamationGuard()
++      : serial_(physical_reclamation_mutex, std::try_to_lock), held_(false),
++        closed_(false), ret_(OB_EAGAIN)
++  {
++    if (!serial_.owns_lock()) { return; }
++    physical_reclamation.store(true);
++    closed_ = true;
++    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
++    while (active_accesses.load() != 0) {
++      if (std::chrono::steady_clock::now() >= deadline) { return; }
++      ob_usleep(1000);
++    }
++    while (!metadata_mutex.try_lock_for(std::chrono::milliseconds(1))) {
++      if (std::chrono::steady_clock::now() >= deadline) { return; }
++    }
++    held_ = true;
++    ret_ = OB_SUCCESS;
++  }
++  ~PhysicalReclamationGuard()
++  {
++    if (held_) { metadata_mutex.unlock(); }
++    if (closed_) { physical_reclamation.store(false); }
++  }
++  int error() const { return ret_; }
++private:
++  std::unique_lock<std::mutex> serial_;
++  bool held_;
++  bool closed_;
++  int ret_;
++};
+ uint64_t encoded(uint64_t db, uint64_t local) {
+   return NamespaceObjectKey{db, local}.storage_id();
+ }
+@@ -201,6 +261,60 @@ int probe_physical_tablet(uint64_t id, bool &exists) {
+   return ret == OB_TABLET_NOT_EXIST || ret == OB_ENTRY_NOT_EXIST || ret == OB_EAGAIN
+       ? OB_SUCCESS : ret;
+ }
++// Absence and an unavailable historical copy are different results. In
++// particular an empty shell cannot justify choosing a more distant ancestor.
++int probe_historical_tablet(uint64_t id, int64_t cap, rootserver::TabletVisibility &visibility)
++{
++  visibility = rootserver::TabletVisibility::ABSENT;
++  ObTabletHandle handle;
++  int ret = ObTabletCreateDeleteHelper::check_and_get_tablet(
++      ObTabletMapKey(ObTabletID(id)), handle, 0, ObMDSGetTabletMode::READ_WITHOUT_CHECK,
++      transaction::ObTransVersion::MAX_TRANS_VERSION);
++  if (ret == OB_TABLET_NOT_EXIST || ret == OB_ENTRY_NOT_EXIST) { return OB_SUCCESS; }
++  if (ret != OB_SUCCESS) { return ret; }
++  if (handle.get_obj()->is_empty_shell()) { return OB_SNAPSHOT_DISCARDED; }
++  const int64_t snapshot = cap > 0 ? cap : transaction::ObTransVersion::MAX_TRANS_VERSION;
++  ret = handle.get_obj()->check_new_mds_with_cache(snapshot);
++  if (ret == OB_SUCCESS) { visibility = rootserver::TabletVisibility::READABLE; return OB_SUCCESS; }
++  if (ret == OB_TABLET_NOT_EXIST) {
++    visibility = rootserver::TabletVisibility::OUTSIDE_SNAPSHOT;
++    return OB_SUCCESS;
++  }
++  if (ret == OB_SNAPSHOT_DISCARDED) {
++    ObTabletCreateDeleteMdsUserData data;
++    mds::MdsWriter writer;
++    mds::TwoPhaseCommitState state;
++    SCN version;
++    const int status_ret = handle.get_obj()->get_latest(data, writer, state, version);
++    if (status_ret != OB_SUCCESS) { return status_ret; }
++    if (state != mds::TwoPhaseCommitState::ON_COMMIT
++        && data.create_commit_version_ == transaction::ObTransVersion::INVALID_TRANS_VERSION) {
++      return OB_EAGAIN;
++    }
++    if (data.create_commit_version_ != transaction::ObTransVersion::INVALID_TRANS_VERSION
++        && snapshot < data.create_commit_version_) {
++      visibility = rootserver::TabletVisibility::OUTSIDE_SNAPSHOT;
++      return OB_SUCCESS;
++    }
++  }
++  return ret;
++}
++int physical_tablet_birth(uint64_t id, int64_t &birth)
++{
++  birth = 0;
++  ObTabletHandle handle;
++  int ret = ObTabletCreateDeleteHelper::check_and_get_tablet(
++      ObTabletMapKey(ObTabletID(id)), handle, 0, ObMDSGetTabletMode::READ_WITHOUT_CHECK,
++      transaction::ObTransVersion::MAX_TRANS_VERSION);
++  if (ret != OB_SUCCESS) { return ret; }
++  ObTabletCreateDeleteMdsUserData data;
++  mds::MdsWriter writer;
++  mds::TwoPhaseCommitState state;
++  SCN version;
++  ret = handle.get_obj()->get_latest(data, writer, state, version);
++  if (ret == OB_SUCCESS) { birth = data.create_commit_version_; }
++  return ret;
++}
+ int schema_tablet_ids(const ObTableSchema &schema,
+                       ObIArray<ObTabletID> &tablet_ids)
+ {
+@@ -400,6 +514,9 @@ int NamespaceForkKernelPrototype::ensure_control_schema() {
+     ret = directory.ensure_root("ns1", schema_version, watermark.get_val_for_tx(),
+         ObTimeUtility::current_time() + 120 * 1000 * 1000, created);
+   }
++  if (OB_SUCC(ret)) {
++    ret = observer::namespace_worker_prototype::complete_namespace_schema_bootstrap(*schema_service);
++  }
+   if (OB_SUCC(ret) && created) {
+     uint64_t template_id = 0;
+     ret = control_namespace(ObString::make_string("ns1"),
+@@ -468,7 +585,8 @@ int NamespaceForkKernelPrototype::finish_namespace_drop(uint64_t id) {
+   return ret;
+ }
+ int NamespaceForkKernelPrototype::check_baseline_access(const ObTabletID &tablet_id, bool &held) {
+-  if (!held) { active_accesses.fetch_add(1); held = true; }
++  const int access_ret = acquire_access(held);
++  if (access_ret != OB_SUCCESS) { return access_ret; }
+   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
+   if (!is_encoded_id(tablet_id.id())) { return OB_SUCCESS; }
+   const uint64_t ns = database_of(tablet_id.id());
+@@ -482,10 +600,15 @@ int NamespaceForkKernelPrototype::check_baseline_access(const ObTabletID &tablet
+     if (state_ret != OB_SUCCESS) { return state_ret; }
+     remember_namespace_state(ns, state);
+   }
+-  if (state != 0) { return OB_ENTRY_NOT_EXIST; }
+   int ret = load_kv_exceptions(ns);
+-  if (OB_SUCC(ret) && !control_state().owned(ns, local_of(tablet_id.id()))) {
+-    ret = OB_ENTRY_NOT_EXIST;
++  if (OB_SUCC(ret) && (state != 0 || !control_state().owned(ns, local_of(tablet_id.id())))) {
++    // A retired intermediate copy may still supply descendants. Completing
++    // its baseline lets those descendants eventually release the whole chain.
++    ObArray<ObTabletID> candidate;
++    bool retained = false;
++    if (OB_FAIL(candidate.push_back(tablet_id))) {
++    } else if (OB_FAIL(protect_snapshot_tablets(candidate, retained))) {
++    } else if (!candidate.empty()) { ret = OB_ENTRY_NOT_EXIST; }
+   }
+   return ret;
+ }
+@@ -511,7 +634,10 @@ int NamespaceForkKernelPrototype::check_table_access(
+     return OB_SUCCESS;
+   }
+   if (access_mode == data_plane::ObNamespaceAccessMode::UNFENCED) {
+-    return OB_SUCCESS;
++    // Internal SQL metadata remains unfenced so physical GC can run its own
++    // control transaction. User data still participates in the read drain,
++    // including the initial Namespace's explicitly unfenced SQL context.
++    return is_inner_table(table_id) ? OB_SUCCESS : acquire_access(held);
+   }
+   if (access_mode != data_plane::ObNamespaceAccessMode::LEASED) {
+     const int ret = OB_INVALID_ARGUMENT;
+@@ -523,7 +649,7 @@ int NamespaceForkKernelPrototype::check_table_access(
+   int ret = OB_SUCCESS;
+   // Register BEFORE reading LIVE; release only after iterators/store contexts or
+   // a baseline DAG have released their inputs. New work after close cannot enter.
+-  if (!held) { active_accesses.fetch_add(1); held = true; }
++  if (OB_FAIL(acquire_access(held))) { return ret; }
+   int64_t state = 0;
+   if (cached_namespace_state(id, state)) {
+   } else {
+@@ -557,9 +683,28 @@ int NamespaceForkKernelPrototype::protect_snapshot_tablets(
+   if (store == nullptr) { return OB_NOT_INIT; }
+   rootserver::InstanceNamespaceDirectory directory(*store);
+   std::vector<uint64_t> unreferenced;
++  std::map<uint64_t, uint64_t> sources;
++  ObArray<ObTabletID> tablets;
++  int ret = all_physical_tablet_ids(tablets);
++  for (int64_t i = 0; OB_SUCC(ret) && i < tablets.count(); ++i) {
++    ObTabletHandle handle;
++    ret = ObTabletCreateDeleteHelper::check_and_get_tablet(
++        ObTabletMapKey(tablets.at(i)), handle, 0, ObMDSGetTabletMode::READ_WITHOUT_CHECK,
++        transaction::ObTransVersion::MAX_TRANS_VERSION);
++    if (ret == OB_TABLET_NOT_EXIST) { ret = OB_SUCCESS; continue; }
++    if (OB_FAIL(ret)) { break; }
++    const auto &tablet = *handle.get_obj();
++    const auto &fork = tablet.get_tablet_meta().fork_info_;
++    if (!tablet.is_empty_shell() && fork.is_valid() && !fork.is_complete()
++        && fork.get_fork_src_tablet_id().is_valid()) {
++      sources.emplace(tablets.at(i).id(), fork.get_fork_src_tablet_id().id());
++    }
++  }
+   bool retained = false;
+-  int ret = directory.filter_unreferenced_tablets(physical_ids,
+-      directory_deadline(), unreferenced, retained);
++  if (OB_SUCC(ret)) {
++    ret = directory.filter_unreferenced_tablets(physical_ids, probe_historical_tablet,
++        sources, directory_deadline(), unreferenced, retained);
++  }
+   ObArray<ObTabletID> filtered;
+   for (uint64_t id : unreferenced) {
+     if (OB_FAIL(ret)) { break; }
+@@ -570,12 +715,26 @@ int NamespaceForkKernelPrototype::protect_snapshot_tablets(
+   return ret;
+ }
+ 
++int NamespaceForkKernelPrototype::reclaim_unreferenced_tablets(
++    ObIArray<ObTabletID> &candidates, bool &need_retry,
++    const std::function<int(const ObIArray<ObTabletID> &)> &reclaim)
++{
++  if (!reclaim) { return OB_INVALID_ARGUMENT; }
++  PhysicalReclamationGuard fence;
++  int ret = fence.error();
++  if (OB_SUCC(ret)) { ret = protect_snapshot_tablets(candidates, need_retry); }
++  if (OB_SUCC(ret) && !candidates.empty()) { ret = reclaim(candidates); }
++  return ret;
++}
++
+ int NamespaceForkKernelPrototype::collect_dropped_namespace_tablets() {
+   auto *store = directory_kv_store();
+   if (store == nullptr || !ATOMIC_LOAD(&GCTX.sys_package_ready_)) { return OB_SUCCESS; }
+   static std::mutex scan_mutex;
+   static uint64_t physical_cursor = 0;
+   std::lock_guard<std::mutex> scan_guard(scan_mutex);
++  PhysicalReclamationGuard fence;
++  if (fence.error() != OB_SUCCESS) { return fence.error(); }
+   rootserver::InstanceNamespaceDirectory directory(*store);
+   std::vector<rootserver::InstanceNamespaceRecord> deleted;
+   int ret = directory.list_deleted(directory_deadline(), deleted);
+@@ -658,9 +817,16 @@ int NamespaceForkKernelPrototype::collect_dropped_namespace_tablets() {
+     }
+     std::vector<uint64_t> missing;
+     for (uint64_t local : owned) {
+-      bool exists = false;
+-      if (OB_FAIL(probe_physical_tablet(encoded(record.id, local), exists))) { break; }
+-      if (!exists) { missing.push_back(local); }
++      ObTabletHandle handle;
++      ret = ObTabletCreateDeleteHelper::check_and_get_tablet(
++          ObTabletMapKey(ObTabletID(encoded(record.id, local))), handle, 0,
++          ObMDSGetTabletMode::READ_WITHOUT_CHECK,
++          transaction::ObTransVersion::MAX_TRANS_VERSION);
++      if (ret == OB_TABLET_NOT_EXIST || ret == OB_ENTRY_NOT_EXIST) {
++        ret = OB_SUCCESS;
++        missing.push_back(local);
++      } else if (OB_FAIL(ret)) { break; }
++      else if (handle.get_obj()->is_empty_shell()) { missing.push_back(local); }
+     }
+     if (OB_SUCC(ret) && !missing.empty()) {
+       ret = directory.erase_deleted_owned(record.id, missing, directory_deadline());
+@@ -793,6 +959,8 @@ int NamespaceForkKernelPrototype::control_namespace(const ObString &source, cons
+     id = OB_INVALID_ID;
+     return collect_metadata();
+   }
++  MetadataReadGuard publication;
++  if (publication.error() != OB_SUCCESS) { return publication.error(); }
+   auto *access = share::server_service<ObAccessService>();
+   if (access == nullptr) { return OB_NOT_INIT; }
+   const int64_t begin_us = ObTimeUtility::current_time();
+@@ -887,12 +1055,14 @@ int NamespaceForkKernelPrototype::publish_schema_delta(
+     int64_t schema_version,
+     const ObIArray<const ObTableSchema *> &current_schemas,
+     const ObIArray<const ObTableSchema *> &previous_schemas) {
+-  if (namespace_id <= 1 || namespace_id >= NamespaceObjectKey::NAMESPACE_LIMIT
++  if (namespace_id == 0 || namespace_id >= NamespaceObjectKey::NAMESPACE_LIMIT
+       || base_schema_version <= 0 || schema_version < base_schema_version
+       || directory_kv_store() == nullptr) {
+     return OB_INVALID_ARGUMENT;
+   }
+   int ret = OB_SUCCESS;
++  MetadataReadGuard publication;
++  if (publication.error() != OB_SUCCESS) { return publication.error(); }
+   ObArray<ObTabletID> private_tablets;
+   std::unordered_set<uint64_t> current_table_ids;
+   std::unordered_set<uint64_t> previous_table_ids;
+@@ -926,12 +1096,19 @@ int NamespaceForkKernelPrototype::publish_schema_delta(
+     ret = collect_directory_tablets(namespace_id, current_schemas, current_tablets);
+   }
+   if (OB_SUCC(ret)) {
++    // DDL has committed, and its persistent pending marker prevents fork
++    // until this delta publishes. A later fork must therefore be beyond this
++    // deletion boundary, even though SQL and instance KV commit separately.
++    int64_t drop_scn = 0;
++    ret = observer::namespace_worker_prototype::acquire_storage_snapshot(drop_scn);
+     rootserver::InstanceNamespaceDirectory directory(*directory_kv_store());
+-    ret = directory.publish_schema_delta(namespace_id, base_schema_version,
+-        schema_version, previous_tablets, current_tablets,
++    if (OB_SUCC(ret)) { ret = directory.publish_schema_delta(namespace_id, base_schema_version,
++        schema_version, drop_scn, previous_tablets, current_tablets,
+         [&](uint64_t local_tablet, bool &exists) {
+           return probe_physical_tablet(encoded(namespace_id, local_tablet), exists);
+-        }, directory_deadline(), removed_owned);
++        }, [&](uint64_t local_tablet, int64_t &birth) {
++          return physical_tablet_birth(encoded(namespace_id, local_tablet), birth);
++        }, directory_deadline(), removed_owned); }
+   }
+   for (uint64_t local_tablet : removed_owned) {
+     if (OB_FAIL(ret)) { break; }
+@@ -1060,22 +1237,41 @@ int NamespaceForkKernelPrototype::check_ddl(const ObSimpleTableSchemaV2 &schema,
+   return OB_SUCCESS;
+ }
+ int NamespaceForkKernelPrototype::schedule_baseline(const ObTablet &tablet) {
++  return schedule_baseline_impl(tablet, 0);
++}
++int NamespaceForkKernelPrototype::schedule_baseline_impl(const ObTablet &tablet, int depth) {
++  if (depth >= 64) { return OB_SIZE_OVERFLOW; }
+   const auto &meta = tablet.get_tablet_meta();
+   if (!is_encoded_id(meta.tablet_id_.id()) || tablet.is_empty_shell()
+       || !meta.fork_info_.is_valid() || meta.fork_info_.is_complete()) { return OB_SUCCESS; }
+   if (directory_kv_store() == nullptr) { return OB_NOT_INIT; }
+   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
+   int ret = OB_SUCCESS;
++  struct BaselineAccess {
++    bool held = false;
++    ~BaselineAccess() { NamespaceForkKernelPrototype::release_access(held); }
++  } admission;
++  ret = check_baseline_access(meta.tablet_id_, admission.held);
++  if (ret == OB_ENTRY_NOT_EXIST) { return OB_SUCCESS; }
++  if (ret != OB_SUCCESS) { return ret; }
+   ObArenaAllocator allocator("NsForkBaseline");
+   ObStorageSchema *storage_schema = nullptr;
+   const uint64_t db = database_of(meta.tablet_id_.id());
+   const uint64_t local = local_of(meta.tablet_id_.id());
+   uint64_t table = OB_INVALID_ID;
+-  // The owned exception row is the proof that this tablet's physical binding
+-  // committed. A dropped namespace has no rows left and simply skips.
+-  if (OB_FAIL(load_kv_exceptions(db))) {
+-  } else if (!control_state().owned(db, local, &table)) {
+-    ret = OB_ENTRY_NOT_EXIST;
++  InstanceMetaStore::Transaction tx;
++  rootserver::InstanceExceptionRecord binding;
++  if (OB_FAIL(directory_kv_store()->begin(tx, directory_deadline(), true))) {
++  } else {
++    rootserver::InstanceNamespaceMetadata metadata(*directory_kv_store(), tx);
++    ret = metadata.get_exception(db, local, binding);
++    if (OB_SUCC(ret)) { table = binding.table_id; }
++  }
++  if (tx.is_active()) {
++    const int end_ret = OB_SUCC(ret) ? directory_kv_store()->commit(tx) : directory_kv_store()->rollback(tx);
++    if (OB_SUCC(ret)) { ret = end_ret; }
++  }
++  if (OB_FAIL(ret)) {
+   } else if (OB_FAIL(tablet.load_storage_schema(allocator, storage_schema))) {
+   } else if (OB_ISNULL(storage_schema)) {
+     ret = OB_ERR_UNEXPECTED;
+@@ -1091,6 +1287,15 @@ int NamespaceForkKernelPrototype::schedule_baseline(const ObTablet &tablet) {
+     param.dest_tablet_id_ = meta.tablet_id_; param.fork_snapshot_version_ = meta.fork_info_.get_fork_snapshot_version();
+     param.data_format_version_ = DATA_CURRENT_VERSION;
+     if (OB_FAIL(ObTabletForkUtil::check_satisfy_fork_condition(param, ready))) {
++    } else if (!ready) {
++      // A later copy cannot finish until its source has taken over its own
++      // baseline. Drive that source even if its current SQL object was dropped.
++      ObTabletHandle source;
++      ret = ObTabletCreateDeleteHelper::check_and_get_tablet(
++          ObTabletMapKey(param.source_tablet_id_), source, 0,
++          ObMDSGetTabletMode::READ_WITHOUT_CHECK,
++          transaction::ObTransVersion::MAX_TRANS_VERSION);
++      if (OB_SUCC(ret)) { ret = schedule_baseline_impl(*source.get_obj(), depth + 1); }
+     } else if (ready) {
+       ret = compaction::ObScheduleDagFunc::schedule_tablet_fork_dag(param, false);
+       if (ret == OB_EAGAIN || ret == OB_SIZE_OVERFLOW) { ret = OB_SUCCESS; }
+@@ -1114,7 +1319,7 @@ int NamespaceForkKernelPrototype::resolve_read_tablet(
+   rootserver::InstanceNamespaceDirectory directory(*store);
+   uint64_t physical = 0;
+   int ret = directory.resolve_read_tablet(database_of(tablet_id.id()),
+-      local_of(tablet_id.id()), probe_physical_tablet,
++      local_of(tablet_id.id()), probe_historical_tablet,
+       directory_deadline(), physical, cap_scn);
+   if (ret == OB_SUCCESS) { physical_tablet_id = ObTabletID(physical); }
+   return ret;
+@@ -1285,7 +1490,7 @@ int NamespaceForkKernelPrototype::ensure_tablet_impl(
+       item.schema = schema;
+       item.local_tablet = item_local;
+       const int resolve_ret = metadata.resolve_read_tablet(
+-          db, item_local, probe_physical_tablet,
++          db, item_local, probe_historical_tablet,
+           item.source_tablet, item.cap);
+       if (resolve_ret != OB_SUCCESS) { return resolve_ret; }
+       if (item.source_tablet == encoded(db, item_local)) { return OB_EAGAIN; }
+diff --git a/src/rootserver/fork_table/namespace_fork_kernel_prototype.h b/src/rootserver/fork_table/namespace_fork_kernel_prototype.h
+index 845cfec48..de844bf9d 100644
+--- a/src/rootserver/fork_table/namespace_fork_kernel_prototype.h
++++ b/src/rootserver/fork_table/namespace_fork_kernel_prototype.h
+@@ -3,6 +3,7 @@
+ #define OCEANBASE_NAMESPACE_FORK_KERNEL_PROTOTYPE_H_
+ #include "share/schema/ob_table_schema.h"
+ #include "data_plane/access/ob_namespace_access_mode.h"
++#include <functional>
+ namespace oceanbase {
+ namespace common { class ObISQLClient; }
+ namespace share { namespace schema {
+@@ -26,6 +27,10 @@ public:
+   static void release_access(bool &held);
+   static int drain_access();
+   static int protect_snapshot_tablets(common::ObIArray<common::ObTabletID> &candidates, bool &need_retry);
++  // Keeps the dependency decision valid through physical reclamation.
++  static int reclaim_unreferenced_tablets(common::ObIArray<common::ObTabletID> &candidates,
++      bool &need_retry,
++      const std::function<int(const common::ObIArray<common::ObTabletID> &)> &reclaim);
+   static int collect_dropped_namespace_tablets();
+   static int control_namespace(const common::ObString &source, const common::ObString &target,
+                                 uint64_t &namespace_id);
+@@ -83,6 +88,7 @@ public:
+       const common::ObIArray<const share::schema::ObTableSchema *> &binding_schemas);
+   static int schedule_baseline(const ObTablet &tablet);
+ private:
++  static int schedule_baseline_impl(const ObTablet &tablet, int depth);
+   static int ensure_tablet_impl(
+       const common::ObTabletID &tablet_id,
+       const share::schema::ObTableSchema *requested_schema,
+diff --git a/src/rootserver/ob_ddl_service.cpp b/src/rootserver/ob_ddl_service.cpp
+index 5eafa68e9..5461ee2b7 100755
+--- a/src/rootserver/ob_ddl_service.cpp
++++ b/src/rootserver/ob_ddl_service.cpp
+@@ -25267,10 +25267,12 @@ int ObDDLSQLTransaction::start(ObISQLClient *proxy,
+                  K(runtime_refreshed_schema_version), K(version_in_inner_table));
+       }
+     }
+-    if (OB_SUCC(ret)
+-        && OB_FAIL(observer::namespace_worker_prototype::begin_namespace_schema_change(
+-            namespace_id_))) {
+-      LOG_WARN("fail to begin namespace schema changes", KR(ret));
++    if (OB_SUCC(ret)) {
++      if (OB_FAIL(observer::namespace_worker_prototype::begin_namespace_schema_change(namespace_id_))) {
++        LOG_WARN("fail to begin namespace schema changes", KR(ret));
++      } else {
++        namespace_schema_change_started_ = true;
++      }
+     }
+   }
+   return ret;
+@@ -25379,18 +25381,24 @@ int ObDDLSQLTransaction::end(const bool commit)
+   }
+   ret = OB_SUCC(ret) ? tmp_ret : ret;
+   const bool namespace_transaction_committed = commit && OB_SUCC(ret);
+-  const int finish_schema_ret = observer::namespace_worker_prototype::finish_namespace_schema_change(
+-      namespace_id_, namespace_transaction_committed && committed_schema_version > 0
+-          ? committed_schema_version : 0);
+-  if (OB_SUCC(ret)) { ret = finish_schema_ret; }
+-  if (namespace_transaction_committed
+-      && OB_SUCC(ret)
+-      && committed_schema_version > 0) {
+-    int64_t published_schema_version = OB_INVALID_VERSION;
+-    if (OB_FAIL(observer::namespace_worker_prototype::publish_namespace_schema_change(
+-            namespace_id_, *schema_service_, published_schema_version))) {
+-      LOG_WARN("failed to publish committed namespace schema transaction",
+-          KR(ret), K(committed_schema_version));
++  // A native SQL transaction can start but fail its schema-version check or
++  // Namespace registration. Such a transaction must not release another
++  // DDL's registration during explicit rollback or destructor cleanup.
++  if (namespace_schema_change_started_) {
++    namespace_schema_change_started_ = false;
++    const int finish_schema_ret = observer::namespace_worker_prototype::finish_namespace_schema_change(
++        namespace_id_, namespace_transaction_committed && committed_schema_version > 0
++            ? committed_schema_version : 0);
++    if (OB_SUCC(ret)) { ret = finish_schema_ret; }
++    if (namespace_transaction_committed
++        && OB_SUCC(ret)
++        && committed_schema_version > 0) {
++      int64_t published_schema_version = OB_INVALID_VERSION;
++      if (OB_FAIL(observer::namespace_worker_prototype::publish_namespace_schema_change(
++              namespace_id_, *schema_service_, published_schema_version))) {
++        LOG_WARN("failed to publish committed namespace schema transaction",
++            KR(ret), K(committed_schema_version));
++      }
+     }
+   }
+   // Clear runtime_ for success or failure
+diff --git a/src/rootserver/ob_ddl_service.h b/src/rootserver/ob_ddl_service.h
+index 5ffd77e2f..bad83397f 100644
+--- a/src/rootserver/ob_ddl_service.h
++++ b/src/rootserver/ob_ddl_service.h
+@@ -2068,6 +2068,7 @@ public:
+                         
+                         start_operation_schema_version_(OB_INVALID_VERSION),
+                         namespace_id_(1),
++                        namespace_schema_change_started_(false),
+                         need_end_signal_(need_end_signal),
+                         enable_ddl_parallel_(enable_ddl_parallel),
+                         enable_check_ddl_epoch_(enable_check_ddl_epoch),
+@@ -2106,6 +2107,7 @@ private:
+   // Filter out only one 1503 DDL transaction to prevent the schema from being invalidly pushed up
+   int64_t start_operation_schema_version_;
+   uint64_t namespace_id_;
++  bool namespace_schema_change_started_;
+   
+   //no need to set end_signal while ddl end transaction
+   bool need_end_signal_;
+diff --git a/src/storage/ddl/ob_tablet_fork_task.cpp b/src/storage/ddl/ob_tablet_fork_task.cpp
+index a50d2e03f..1c94ce306 100644
+--- a/src/storage/ddl/ob_tablet_fork_task.cpp
++++ b/src/storage/ddl/ob_tablet_fork_task.cpp
+@@ -1419,8 +1419,7 @@ int ObTabletForkUtil::check_satisfy_fork_condition(
+       }
+     }
+     
+-    if (OB_SUCC(ret) && need_freeze
+-        && !NamespaceForkKernelPrototype::is_encoded_id(param.dest_tablet_id_.id())) {
++    if (OB_SUCC(ret) && need_freeze) {
+       if (OB_FAIL(ObTabletForkUtil::freeze_tablet(param.source_tablet_id_))) {
+       }
+       ob_usleep(100 * 1000L); // 100ms
+diff --git a/src/storage/tx_storage/ob_empty_shell_task.cpp b/src/storage/tx_storage/ob_empty_shell_task.cpp
+index c41fcf2ae..5eed2c113 100644
+--- a/src/storage/tx_storage/ob_empty_shell_task.cpp
++++ b/src/storage/tx_storage/ob_empty_shell_task.cpp
+@@ -69,12 +69,13 @@ void ObEmptyShellTask::runTimerTask()
+           STORAGE_LOG(WARN, "[emptytablet] tablet_empty_shell_handler get empty shell tablet ids failed", K(ret));
+         } else if (empty_shell_tablet_ids.empty()) {
+           // do nothing
+-        } else if (OB_FAIL(NamespaceForkKernelPrototype::protect_snapshot_tablets(empty_shell_tablet_ids, need_retry))) {
++        } else if (OB_FAIL(NamespaceForkKernelPrototype::reclaim_unreferenced_tablets(
++            empty_shell_tablet_ids, need_retry,
++            [&](const common::ObIArray<common::ObTabletID> &tablets) {
++              return tablet_empty_shell_handler->update_tablets_to_empty_shell(ls, tablets);
++            }))) {
+           need_retry = true;
+           STORAGE_LOG(WARN, "prototype snapshot protection unavailable; defer GC", KR(ret));
+-        } else if (OB_FAIL(tablet_empty_shell_handler->update_tablets_to_empty_shell(ls, empty_shell_tablet_ids))) {
+-          need_retry = true;
+-          STORAGE_LOG(WARN, "update tablet to empty shell failed", KR(ret));
+         }
+         if (need_retry) {
+           STORAGE_LOG(INFO, "[emptytablet] tablet become empty shell error, need retry", KR(ret), KPC(ls), K(empty_shell_tablet_ids));

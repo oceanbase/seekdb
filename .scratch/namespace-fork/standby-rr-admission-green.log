@@ -1,0 +1,6 @@
+{"case": "rc_select", "rows": [[1, 60]]}
+{"case": "explicit_rr_select", "rows": [[1, 60]]}
+{"case": "autocommit_rr_select", "rows": [[1, 60]]}
+{"case": "autocommit_serializable_select", "rows": [[1, 60]]}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

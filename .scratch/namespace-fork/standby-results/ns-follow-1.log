@@ -1,0 +1,30 @@
+{"case": "initial_restore_inherited_read_without_materialization", "namespace_id": 3, "logical_tablet": 200001}
+{"case": "dynamic_namespace_discovery"}
+{"case": "materialization_transaction_replay_with_lob"}
+{"case": "child_ddl_refresh"}
+{"case": "historical_source_after_parent_truncate_and_drop"}
+{"case": "replicated_namespace_drop_admission"}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File ".scratch/namespace-fork/standby_namespace_follow.py", line 82, in <module>
+    sql(child,'FORK NAMESPACE replica_promoted FROM replica_seed')
+  File ".scratch/namespace-fork/standby_namespace_follow.py", line 11, in sql
+    with c.cursor() as q: q.execute(text); return q.fetchall()
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/cursors.py", line 153, in execute
+    result = self._query(query)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/cursors.py", line 322, in _query
+    conn.query(q)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 575, in query
+    self._affected_rows = self._read_query_result(unbuffered=unbuffered)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 826, in _read_query_result
+    result.read()
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 1203, in read
+    first_packet = self.connection._read_packet()
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 782, in _read_packet
+    packet.raise_for_error()
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/protocol.py", line 219, in raise_for_error
+    err.raise_mysql_exception(self._data)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/err.py", line 150, in raise_mysql_exception
+    raise errorclass(errno, errval)
+pymysql.err.NotSupportedError: (1235, 'Not supported feature or function')

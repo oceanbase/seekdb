@@ -1,0 +1,158 @@
+make: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[1]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[  1%] Built target restore
+[  2%] Built target ob_malloc_object
+[  3%] Built target malloc_hook
+[  3%] Built target oblib_lib_bitmap
+[  5%] Built target oblib_rpc
+[  4%] Built target ob_sql_simd
+[  5%] Built target oblib_lib_simd
+[ 10%] Built target ob_sql_server_parser_objects
+[  7%] Built target ob_data_plane
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 16%] Built target zstd_1_3_8_objs
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 17%] Built target ob_query
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 18%] Built target oblib_grpc
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 22%] Built target oblib_common
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 22%] Built target generate_syspack_source
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 24%] Built target ob_pl
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 25%] Built target ob_storage_tablet_autoincrement_state
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 25%] Built target ob_standby_runtime
+[ 25%] Built target ob_standby
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 25%] Built target ob_namespace
+[ 25%] Built target ob_storage_simd
+[ 26%] Built target ob_logservice
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 26%] Built target sql_nio_build
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 29%] Built target ob_share_extra
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 30%] Built target ob_main
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 31%] Built target zstd_1_3_8
+[ 31%] Built target ob_malloc
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 31%] Built target ob_sql_server_parser_static
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 31%] Built target syspack_source
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 37%] Built target ob_sql_extra
+[ 38%] Built target compress
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 42%] Built target oblib_lib
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 42%] Built target oblib
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 47%] Built target ob_server
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 47%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_storage_common_0_c___cxx.cxx.o
+[ 47%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_ddl_0_c___cxx.cxx.o
+[ 48%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_services_0_c___cxx.cxx.o
+[ 48%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_common_0_c___cxx.cxx.o
+[ 48%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/ob_ddl_service.cpp.o
+[ 48%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_fork_freeze_0_c___cxx.cxx.o
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 64%] Built target ob_share
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 64%] Linking CXX static library libob_share_static.a
+[ 77%] Built target ob_storage
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 77%] Linking CXX static library libob_storage_static.a
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 96%] Built target ob_sql
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 96%] Built target ob_storage_static
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 96%] Linking CXX static library libob_sql_static.a
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 96%] Built target ob_sql_static
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[ 96%] Built target ob_share_static
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[100%] Built target ob_rootserver
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[100%] Linking CXX static library liboceanbase_static.a
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[100%] Built target oceanbase_static
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[100%] Linking CXX executable seekdb
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[100%] Built target seekdb
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Entering directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make[2]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+[100%] Built target observer
+make[1]: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'
+make: Leaving directory '/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release'

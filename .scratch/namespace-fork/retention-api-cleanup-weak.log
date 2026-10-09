@@ -1,0 +1,7 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/background-materialization-artifacts/seekdb-retention-api-native", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_weak_source_gc_8pljt3hl", "pid": 2146267, "port": 3845}
+INSTANCE_WEAK_SOURCE_GC_PASS no_view=1 weak_root=1 release=1 native_plan=1 ret=0
+{"event": "PASS", "case": "future_weak_source_gc"}
+{"event": "stopped", "pid": 2146267, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_weak_source_gc_8pljt3hl/data.tar.gz", "bytes": 5597184}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

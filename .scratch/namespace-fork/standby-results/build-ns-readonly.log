@@ -1,0 +1,217 @@
+[  5%] Built target restore
+[  7%] Built target zstd_1_3_8_objs
+[  7%] Built target oblib_lib_bitmap
+[  7%] Built target oblib_lib_simd
+[  8%] Built target ob_malloc_object
+[  9%] Built target oblib_rpc
+[ 10%] Building CXX object src/query/CMakeFiles/ob_query.dir/Unity/unity_ob_query_runtime/0_cxx.cxx.o
+[ 11%] Built target malloc_hook
+[ 12%] Built target ob_sql_simd
+[ 12%] Built target ob_data_plane
+[ 13%] Built target oblib_grpc
+[ 13%] Building CXX object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/ob_parse_simd.cpp.o
+[ 14%] Building CXX object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/ob_fast_parser.cpp.o
+[ 14%] Built target generate_syspack_source
+[ 14%] Built target ob_namespace
+[ 15%] Built target ob_storage_tablet_autoincrement_state
+[ 15%] Built target ob_standby
+[ 15%] Built target ob_storage_simd
+[ 15%] Building CXX object src/standby/CMakeFiles/ob_standby_runtime.dir/Unity/unity_ob_standby_runtime_common/0_cxx.cxx.o
+[ 16%] Built target ob_logservice
+[ 16%] Building CXX object src/pl/CMakeFiles/ob_pl.dir/Unity/unity_ob_pl_pl_common_c___cxx.cxx.o
+[ 17%] Building CXX object src/pl/CMakeFiles/ob_pl.dir/Unity/unity_ob_pl_pl_cache_c___cxx.cxx.o
+[ 17%] Building CXX object src/pl/CMakeFiles/ob_pl.dir/Unity/unity_ob_pl_pl_recompile_c___cxx.cxx.o
+[ 17%] Building CXX object src/pl/CMakeFiles/ob_pl.dir/Unity/unity_ob_pl_pl_sys_package_c___cxx.cxx.o
+[ 17%] Built target sql_nio_build
+[ 18%] Building CXX object src/observer/CMakeFiles/ob_main.dir/main.cpp.o
+[ 18%] Building CXX object src/pl/CMakeFiles/ob_pl.dir/parser/ob_pl_parser.cpp.o
+[ 22%] Built target oblib_common
+[ 23%] Built target zstd_1_3_8
+[ 23%] Built target syspack_source
+[ 26%] Built target ob_share_extra
+[ 26%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_datum_cast.cpp.o
+[ 26%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_obj_cast_runtime.cpp.o
+[ 26%] Built target ob_malloc
+[ 27%] Built target compress
+[ 31%] Built target oblib_lib
+[ 31%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_base_common_0_c___cxx.cxx.o
+[ 31%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_base_maintenance_0_c___cxx.cxx.o
+[ 32%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_query_0_c___cxx.cxx.o
+[ 32%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_storage_freeze_0_c___cxx.cxx.o
+[ 32%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_sql_mixed_0_c___cxx.cxx.o
+[ 34%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_common_1_c___cxx.cxx.o
+[ 34%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_fork_freeze_0_c___cxx.cxx.o
+[ 34%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_common_0_c___cxx.cxx.o
+[ 35%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_services_0_c___cxx.cxx.o
+[ 35%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_ddl_0_c___cxx.cxx.o
+[ 35%] Built target oblib
+[ 35%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/ddl_task/ob_ddl_redefinition_task.cpp.o
+[ 35%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/ob_ddl_service_launcher.cpp.o
+[ 36%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/ob_debug_sync_broadcaster_adapter.cpp.o
+[ 36%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/ob_lonely_table_cleaner.cpp.o
+[ 36%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/ob_ddl_service.cpp.o
+[ 36%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_storage_common_0_c___cxx.cxx.o
+[ 37%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_multi_data_source_0_c___cxx.cxx.o
+[ 37%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_ls_0_c___cxx.cxx.o
+[ 37%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_vector_index_0_c___cxx.cxx.o
+[ 37%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_lob_0_c___cxx.cxx.o
+[ 37%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_access_1_c___cxx.cxx.o
+[ 37%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_0_c___cxx.cxx.o
+[ 38%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_blocksstable_encoding2_0_c___cxx.cxx.o
+[ 39%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_mysql_0_c___cxx.cxx.o
+[ 39%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_omt_0_c___cxx.cxx.o
+[ 39%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_fts_0_c___cxx.cxx.o
+[ 39%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_common_mixed_0_c___cxx.cxx.o
+[ 40%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tmp_file_0_c___cxx.cxx.o
+[ 42%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_access_0_c___cxx.cxx.o
+[ 42%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_retrieval_0_c___cxx.cxx.o
+[ 42%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_net_0_c___cxx.cxx.o
+[ 42%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_dbms_job_0_c___cxx.cxx.o
+[ 42%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_vector_index_0_c___cxx.cxx.o
+[ 42%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_common_0_c___cxx.cxx.o
+[ 42%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_schema_0_c___cxx.cxx.o
+[ 42%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_2_c___cxx.cxx.o
+[ 42%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_ckpt_0_c___cxx.cxx.o
+[ 42%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_mysql_1_c___cxx.cxx.o
+[ 43%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_3_c___cxx.cxx.o
+[ 43%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tx_storage_0_c___cxx.cxx.o
+[ 43%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_compaction_1_c___cxx.cxx.o
+[ 43%] Building CXX object src/observer/CMakeFiles/ob_server.dir/ob_service.cpp.o
+[ 43%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_change_stream_0_c___cxx.cxx.o
+[ 44%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_blocksstable_0_c___cxx.cxx.o
+[ 44%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_ddl_0_c___cxx.cxx.o
+[ 44%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_compaction_filter_0_c___cxx.cxx.o
+[ 45%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_ddl_1_c___cxx.cxx.o
+[ 45%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tx_table_0_c___cxx.cxx.o
+[ 45%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_common_0_c___cxx.cxx.o
+[ 45%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_scheduler_0_c___cxx.cxx.o
+[ 45%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_scheduler_0_c___cxx.cxx.o
+[ 46%] Building CXX object src/observer/CMakeFiles/ob_server.dir/ob_server.cpp.o
+[ 46%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_5_c___cxx.cxx.o
+[ 46%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_ai_service_0_c___cxx.cxx.o
+[ 47%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_4_c___cxx.cxx.o
+[ 47%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_deadlock_0_c___cxx.cxx.o
+[ 47%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_truncate_info_0_c___cxx.cxx.o
+[ 48%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_memtable_mvcc_0_c___cxx.cxx.o
+[ 48%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_1_c___cxx.cxx.o
+[ 48%] Building CXX object src/observer/CMakeFiles/ob_server.dir/composition/retrieval/ob_das_legacy_tr_merge_iter.cpp.o
+[ 48%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tablet_0_c___cxx.cxx.o
+[ 48%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_allocator_0_c___cxx.cxx.o
+[ 49%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tablelock_0_c___cxx.cxx.o
+[ 49%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_blocksstable_2_c___cxx.cxx.o
+[ 49%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_common_mixed_0_c___cxx.cxx.o
+[ 49%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_meta_store_0_c___cxx.cxx.o
+[ 50%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_ddl_1_c___cxx.cxx.o
+[ 50%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_common_1_c___cxx.cxx.o
+[ 50%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_common_2_c___cxx.cxx.o
+[ 50%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_common_mixed_0_c___cxx.cxx.o
+[ 50%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_compaction_0_c___cxx.cxx.o
+[ 54%] Built target ob_sql_server_parser_objects
+[ 54%] Built target ob_query
+[ 54%] Built target ob_main
+[ 54%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_printer_0_c___cxx.cxx.o
+[ 54%] Built target ob_standby_runtime
+[ 59%] Built target ob_sql_extra
+[ 59%] Building CXX object src/share/CMakeFiles/ob_share.dir/ob_rpc_struct.cpp.o
+[ 59%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tx_2_c___cxx.cxx.o
+[ 59%] Built target ob_server
+[ 59%] Built target ob_rootserver
+[ 60%] Built target ob_pl
+[ 60%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_rewrite_0_c___cxx.cxx.o
+[ 60%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tx_1_c___cxx.cxx.o
+[ 60%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_schema_2_c___cxx.cxx.o
+[ 60%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_schema_1_c___cxx.cxx.o
+[ 60%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tx_0_c___cxx.cxx.o
+[ 61%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/engine/expr/ob_expr_in.cpp.o
+[ 61%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/engine/expr/ob_expr_array_sort.cpp.o
+[ 61%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/engine/expr/ob_expr_add.cpp.o
+[ 61%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/engine/aggregate/ob_aggregate_processor.cpp.o
+[ 62%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_tablelock_0_c___cxx.cxx.o
+[ 62%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_prepare_0_c___cxx.cxx.o
+[ 63%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_expr_0_c___cxx.cxx.o
+[ 63%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_dml_0_c___cxx.cxx.o
+[ 63%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_12_c___cxx.cxx.o
+[ 64%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_throttle_0_c___cxx.cxx.o
+[ 63%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_slog_0_c___cxx.cxx.o
+[ 64%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tablet_1_c___cxx.cxx.o
+[ 64%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/engine/expr/ob_expr_mul.cpp.o
+[ 64%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_5_c___cxx.cxx.o
+[ 64%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_14_c___cxx.cxx.o
+[ 64%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_rebase_0_c___cxx.cxx.o
+[ 65%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_0_c___cxx.cxx.o
+[ 67%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_common_1_c___cxx.cxx.o
+[ 67%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_das_1_c___cxx.cxx.o
+[ 67%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_schema_0_c___cxx.cxx.o
+[ 67%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_resource_0_c___cxx.cxx.o
+[ 67%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_cmd_1_c___cxx.cxx.o
+[ 67%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_session_0_c___cxx.cxx.o
+[ 68%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_hybrid_search_0_c___cxx.cxx.o
+[ 68%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_blocksstable_index_block_0_c___cxx.cxx.o
+[ 68%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_memtable_0_c___cxx.cxx.o
+[ 68%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_blocksstable_encoding1_0_c___cxx.cxx.o
+[ 69%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_blocksstable_1_c___cxx.cxx.o
+[ 69%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_6_c___cxx.cxx.o
+[ 70%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_11_c___cxx.cxx.o
+[ 70%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_optimizer_2_c___cxx.cxx.o
+[ 70%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_1_c___cxx.cxx.o
+[ 70%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_cmd_0_c___cxx.cxx.o
+[ 71%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_common_mixed_0_c___cxx.cxx.o
+[ 71%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_15_c___cxx.cxx.o
+[ 71%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_9_c___cxx.cxx.o
+[ 71%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_common_0_c___cxx.cxx.o
+[ 72%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_dml_0_c___cxx.cxx.o
+[ 72%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_common_0_c___cxx.cxx.o
+[ 72%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_dtl_0_c___cxx.cxx.o
+[ 73%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_1_c___cxx.cxx.o
+[ 73%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_2_c___cxx.cxx.o
+[ 73%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_executor_1_c___cxx.cxx.o
+[ 73%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_aggregate_groupby_0_c___cxx.cxx.o
+[ 73%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_7_c___cxx.cxx.o
+[ 74%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_4_c___cxx.cxx.o
+[ 75%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_cmd_0_c___cxx.cxx.o
+[ 75%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_rewrite_1_c___cxx.cxx.o
+[ 75%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_0_c___cxx.cxx.o
+[ 75%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_monitor_0_c___cxx.cxx.o
+[ 75%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_basic_0_c___cxx.cxx.o
+[ 91%] Built target ob_share
+[ 91%] Linking CXX static library libob_share_static.a
+[ 91%] Linking CXX static library libob_sql_server_parser_static.a
+[ 91%] Built target ob_sql_server_parser_static
+[ 91%] Built target ob_share_static
+[ 91%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_ddl_0_c___cxx.cxx.o
+[ 91%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_13_c___cxx.cxx.o
+[ 91%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_basic_1_c___cxx.cxx.o
+[ 91%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_optimizer_1_c___cxx.cxx.o
+[ 92%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_optimizer_stat_0_c___cxx.cxx.o
+[ 92%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_das_0_c___cxx.cxx.o
+[ 93%] Built target ob_storage
+[ 93%] Linking CXX static library libob_storage_static.a
+[ 93%] Built target ob_storage_static
+[ 93%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_join_0_c___cxx.cxx.o
+[ 93%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_code_generator_0_c___cxx.cxx.o
+[ 93%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_pdml_0_c___cxx.cxx.o
+[ 94%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_px_1_c___cxx.cxx.o
+[ 94%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_px_0_c___cxx.cxx.o
+[ 95%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_10_c___cxx.cxx.o
+[ 95%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_table_0_c___cxx.cxx.o
+[ 95%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_set_0_c___cxx.cxx.o
+[ 95%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_vector_cmp_0_c___cxx.cxx.o
+[ 95%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_vector_discrete_0_c___cxx.cxx.o
+[ 95%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_ddl_2_c___cxx.cxx.o
+[ 95%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_vector_continuous_0_c___cxx.cxx.o
+[ 96%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_optimizer_0_c___cxx.cxx.o
+[ 96%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_optimizer_stat_1_c___cxx.cxx.o
+[ 96%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_executor_0_c___cxx.cxx.o
+[ 96%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_8_c___cxx.cxx.o
+[ 97%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_plan_cache_0_c___cxx.cxx.o
+[ 97%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_3_c___cxx.cxx.o
+[ 97%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_0_c___cxx.cxx.o
+[ 97%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_dcl_0_c___cxx.cxx.o
+[100%] Built target ob_sql
+[100%] Linking CXX static library libob_sql_static.a
+[100%] Built target ob_sql_static
+[100%] Linking CXX static library liboceanbase_static.a
+[100%] Built target oceanbase_static
+[100%] Linking CXX executable seekdb
+[100%] Built target seekdb
+[100%] Built target observer

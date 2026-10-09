@@ -1,0 +1,175 @@
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_direct_v5q7cu3b", "pid": 2435420, "port": 17593}
+{"event": "sql", "sql": "CREATE DATABASE phase10", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.parent(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.parent VALUES(1,10),(2,20)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.trunc_inherited(id INT PRIMARY KEY,k INT) PARTITION BY RANGE(id) (PARTITION p0 VALUES LESS THAN (100), PARTITION p1 VALUES LESS THAN (200))", "rows": []}
+{"event": "sql", "sql": "CREATE UNIQUE INDEX idx_k ON phase10.trunc_inherited(k) GLOBAL PARTITION BY HASH(k) PARTITIONS 2", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.trunc_inherited VALUES(1,1),(2,2),(120,3)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE phase10_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM phase10.parent ORDER BY id", "rows": [[1, 10], [2, 20]]}
+{"event": "sql", "sql": "FORK NAMESPACE phase10_key_peer FROM ns1", "rows": []}
+{"event": "sql", "sql": "SELECT table_id FROM oceanbase.__all_table WHERE table_name='parent'", "rows": [[500010]]}
+{"event": "sql", "sql": "SELECT table_id FROM oceanbase.__all_table WHERE table_name='parent'", "rows": [[500010]]}
+{"event": "sql", "sql": "CREATE USER 'phase10_login_probe'@'%' IDENTIFIED BY 'ProbePass9!'", "rows": []}
+{"event": "sql", "sql": "GRANT SELECT ON phase10.* TO 'phase10_login_probe'@'%'", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM phase10.parent WHERE id=1", "rows": [[10]]}
+{"event": "sql", "sql": "CREATE USER 'phase10_login_probe'@'%' IDENTIFIED BY 'ProbePass9!'", "rows": []}
+{"event": "sql", "sql": "GRANT SELECT ON phase10.* TO 'phase10_login_probe'@'%'", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM phase10.parent WHERE id=1", "rows": [[10]]}
+{"event": "sql", "sql": "CREATE USER 'phase10_login_probe'@'%' IDENTIFIED BY 'ProbePass9!'", "rows": []}
+{"event": "sql", "sql": "GRANT SELECT ON phase10.* TO 'phase10_login_probe'@'%'", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM phase10.parent WHERE id=1", "rows": [[10]]}
+{"event": "sql", "sql": "CREATE FUNCTION phase10.owner_udf() RETURNS INT RETURN 7", "rows": []}
+{"event": "sql", "sql": "SELECT phase10.owner_udf()", "rows": [[7]]}
+{"event": "sql", "sql": "CREATE FUNCTION phase10.owner_udf() RETURNS INT RETURN 11", "rows": []}
+{"event": "sql", "sql": "SELECT phase10.owner_udf()", "rows": [[11]]}
+{"event": "sql", "sql": "CREATE FUNCTION phase10.owner_udf() RETURNS INT RETURN 13", "rows": []}
+{"event": "sql", "sql": "SELECT phase10.owner_udf()", "rows": [[13]]}
+{"event": "sql", "sql": "SELECT table_id FROM oceanbase.__all_table WHERE table_name='parent'", "rows": [[500010]]}
+{"event": "sql", "sql": "UPDATE phase10.parent SET v=11 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "UPDATE phase10.parent SET v=10 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "UPDATE phase10.parent SET v=11 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "UPDATE phase10.parent SET v=10 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM phase10.parent FORCE INDEX(owner_key_v) WHERE v=20", "rows": [[2]]}
+{"event": "sql", "sql": "SELECT id FROM phase10.parent FORCE INDEX(owner_key_v) WHERE v=20", "rows": [[2]]}
+{"event": "sql", "sql": "SELECT id FROM phase10.parent FORCE INDEX(owner_key_v) WHERE v=20", "rows": [[2]]}
+{"event": "same_logical_id_parallel_ddl", "table_id": 500010, "namespaces": 3}
+{"event": "sql", "sql": "UPDATE phase10.parent SET v=11 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "UPDATE phase10.parent SET v=21 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "SELECT stmt_count FROM oceanbase.__all_virtual_ps_stat", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_plan_cache_stat", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_plan_stat", "rows": [[237]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_sql_plan", "rows": [[427]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_plan_cache_plan_explain", "rows": [[429]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_change_stream_refresh_stat", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT stmt_count FROM oceanbase.__all_virtual_ps_stat", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_plan_cache_stat", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_plan_stat", "rows": [[118]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_sql_plan", "rows": [[209]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_plan_cache_plan_explain", "rows": [[211]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_change_stream_refresh_stat", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT stmt_count FROM oceanbase.__all_virtual_ps_stat", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_plan_cache_stat", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_plan_stat", "rows": [[117]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_sql_plan", "rows": [[208]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_plan_cache_plan_explain", "rows": [[210]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_change_stream_refresh_stat", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT stmt_count FROM oceanbase.__all_virtual_ps_stat", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT stmt_count FROM oceanbase.__all_virtual_ps_stat", "rows": [[1]]}
+{"event": "sql", "sql": "ALTER SYSTEM FLUSH PS CACHE", "rows": []}
+{"event": "sql", "sql": "SELECT stmt_count FROM oceanbase.__all_virtual_ps_stat", "rows": [[0]]}
+{"event": "sql", "sql": "SELECT stmt_count FROM oceanbase.__all_virtual_ps_stat", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT stmt_count FROM oceanbase.__all_virtual_ps_stat", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT /*sqlstat_child_only*/ v FROM phase10.parent WHERE v=11 AND id=1", "rows": [[11]]}
+{"event": "sql", "sql": "UPDATE phase10.parent SET v=10 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "UPDATE phase10.parent SET v=10 WHERE id=1", "rows": []}
+{"event": "same_logical_id_prepared_execute", "namespaces": 3}
+{"event": "sql", "sql": "INSERT INTO oceanbase.__all_scheduler_job (job_name,job,lowner,powner,cowner,next_date,`interval#`,flag,exec_env,enabled,auto_drop,end_date) VALUES ('owner_probe',991001,'root','root','root',NOW(),'null',0,'x',0,0,DATE_SUB(NOW(), INTERVAL 1 DAY))", "rows": []}
+{"event": "sql", "sql": "CALL dbms_scheduler.enable('owner_probe')", "rows": []}
+{"event": "sql", "sql": "INSERT INTO oceanbase.__all_scheduler_job (job_name,job,lowner,powner,cowner,next_date,`interval#`,flag,exec_env,enabled,auto_drop,end_date) VALUES ('owner_probe',991001,'root','root','root',NOW(),'null',0,'x',0,0,DATE_SUB(NOW(), INTERVAL 1 DAY))", "rows": []}
+{"event": "sql", "sql": "CALL dbms_scheduler.enable('owner_probe')", "rows": []}
+{"event": "sql", "sql": "INSERT INTO oceanbase.__all_scheduler_job (job_name,job,lowner,powner,cowner,next_date,`interval#`,flag,exec_env,enabled,auto_drop,end_date) VALUES ('owner_probe',991001,'root','root','root',NOW(),'null',0,'x',0,0,DATE_SUB(NOW(), INTERVAL 1 DAY))", "rows": []}
+{"event": "sql", "sql": "CALL dbms_scheduler.enable('owner_probe')", "rows": []}
+{"event": "same_logical_id_dbms_scheduler", "namespaces": 3}
+{"event": "sql", "sql": "SELECT GET_LOCK('root_gc_orphan', 0)", "rows": [[1]]}
+{"event": "sql", "sql": "INSERT INTO oceanbase.__all_detect_lock_info_v2 (task_type,obj_type,obj_id,lock_mode,owner_type,owner_id,cnt,detect_func_no,detect_func_param) SELECT task_type,obj_type,obj_id+100000,lock_mode,owner_type,4000000000,cnt,detect_func_no,detect_func_param FROM oceanbase.__all_detect_lock_info_v2 WHERE owner_id<>4000000000 LIMIT 1", "rows": []}
+{"event": "sql", "sql": "SELECT RELEASE_LOCK('root_gc_orphan')", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT GET_LOCK('child_gc_orphan', 0)", "rows": [[1]]}
+{"event": "sql", "sql": "INSERT INTO oceanbase.__all_detect_lock_info_v2 (task_type,obj_type,obj_id,lock_mode,owner_type,owner_id,cnt,detect_func_no,detect_func_param) SELECT task_type,obj_type,obj_id+100000,lock_mode,owner_type,4000000000,cnt,detect_func_no,detect_func_param FROM oceanbase.__all_detect_lock_info_v2 WHERE owner_id<>4000000000 LIMIT 1", "rows": []}
+{"event": "sql", "sql": "SELECT RELEASE_LOCK('child_gc_orphan')", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT GET_LOCK('peer_gc_orphan', 0)", "rows": [[1]]}
+{"event": "sql", "sql": "INSERT INTO oceanbase.__all_detect_lock_info_v2 (task_type,obj_type,obj_id,lock_mode,owner_type,owner_id,cnt,detect_func_no,detect_func_param) SELECT task_type,obj_type,obj_id+100000,lock_mode,owner_type,4000000000,cnt,detect_func_no,detect_func_param FROM oceanbase.__all_detect_lock_info_v2 WHERE owner_id<>4000000000 LIMIT 1", "rows": []}
+{"event": "sql", "sql": "SELECT RELEASE_LOCK('peer_gc_orphan')", "rows": [[1]]}
+{"event": "namespace_lock_gc_orphans_reclaimed", "namespaces": 3}
+{"event": "sql", "sql": "CREATE TABLE phase10.root_checksum_owner(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.root_checksum_owner VALUES(1,7),(2,9)", "rows": []}
+{"event": "sql", "sql": "CREATE INDEX idx_v ON phase10.root_checksum_owner(v)", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE phase10.root_checksum_owner MODIFY COLUMN v BIGINT", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM phase10.root_checksum_owner ORDER BY id", "rows": [[1, 7], [2, 9]]}
+{"event": "sql", "sql": "TRUNCATE TABLE phase10.parent", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM phase10.parent", "rows": [[0]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM phase10.parent", "rows": [[2]]}
+{"event": "sql", "sql": "INSERT INTO phase10.parent VALUES(3,30)", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM phase10.parent", "rows": [[3]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.records(id INT PRIMARY KEY, v VARCHAR(64), amount DECIMAL(12,2))", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.records VALUES(1,'first',12.34),(2,'second',56.78)", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.heap_rows(d DATE)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.heap_rows VALUES('2078-10-10'),('1970-11-01')", "rows": []}
+{"event": "sql", "sql": "UPDATE phase10.heap_rows SET d='1970-11-02' WHERE d='1970-11-01'", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM phase10.heap_rows", "rows": [[2]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM phase10.heap_rows WHERE d='1970-11-02'", "rows": [[1]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.join_left(a BIGINT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.join_left VALUES(32)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.join_right(b YEAR(4), KEY key_b(b))", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.join_right VALUES(1901)", "rows": []}
+{"event": "sql", "sql": "SELECT a,b FROM phase10.join_left,phase10.join_right WHERE a>b", "rows": []}
+{"event": "sql", "sql": "CREATE INDEX records_v ON phase10.records(v)", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM phase10.records FORCE INDEX(records_v) WHERE v='second'", "rows": [[2]]}
+{"event": "sql", "sql": "CREATE INDEX records_amount_expr ON phase10.records ((amount + 1))", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM phase10.records FORCE INDEX(records_amount_expr) WHERE amount + 1 = 13.34", "rows": [[1]]}
+{"event": "sql", "sql": "PREPARE owned_stmt FROM 'SELECT id FROM phase10.records WHERE id=?'", "rows": []}
+{"event": "sql", "sql": "SET @owned_id=2", "rows": []}
+{"event": "sql", "sql": "EXECUTE owned_stmt USING @owned_id", "rows": [[2]]}
+{"event": "sql", "sql": "DEALLOCATE PREPARE owned_stmt", "rows": []}
+{"event": "sql", "sql": "CALL DBMS_AI_SERVICE.CREATE_AI_MODEL('phase10_owned_model', '{\"type\":\"dense_embedding\",\"model_name\":\"phase10-embed\"}')", "rows": []}
+{"event": "sql", "sql": "SELECT MODEL_NAME FROM oceanbase.DBA_OB_AI_MODELS WHERE NAME='phase10_owned_model'", "rows": [["phase10-embed"]]}
+{"event": "sql", "sql": "SELECT MODEL_NAME FROM oceanbase.DBA_OB_AI_MODELS WHERE NAME='phase10_owned_model'", "rows": []}
+{"event": "sql", "sql": "CALL DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('phase10_owned_endpoint', '{\"ai_model_name\":\"phase10_owned_model\",\"url\":\"http://127.0.0.1:9/\",\"access_key\":\"test\",\"provider\":\"openai\"}')", "rows": []}
+{"event": "sql", "sql": "SELECT AI_MODEL_NAME FROM oceanbase.DBA_OB_AI_MODEL_ENDPOINTS WHERE ENDPOINT_NAME='phase10_owned_endpoint'", "rows": [["phase10_owned_model"]]}
+{"event": "sql", "sql": "SELECT AI_MODEL_NAME FROM oceanbase.DBA_OB_AI_MODEL_ENDPOINTS WHERE ENDPOINT_NAME='phase10_owned_endpoint'", "rows": []}
+{"event": "sql", "sql": "CALL DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('phase10_owned_endpoint')", "rows": []}
+{"event": "sql", "sql": "SELECT AI_MODEL_NAME FROM oceanbase.DBA_OB_AI_MODEL_ENDPOINTS WHERE ENDPOINT_NAME='phase10_owned_endpoint'", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM phase10.records WHERE v='first' UNION ALL SELECT id FROM phase10.records WHERE v='second' UNION ALL SELECT id FROM phase10.records WHERE v='first' UNION ALL SELECT id FROM phase10.records WHERE v='second'", "rows": [[1], [2], [1], [2]]}
+{"event": "sql", "sql": "(SELECT id FROM phase10.records WHERE id=1 ORDER BY id) UNION (SELECT id FROM phase10.records WHERE id=2 ORDER BY id) UNION ALL (SELECT id FROM phase10.records WHERE id=1 ORDER BY id) EXCEPT (SELECT id FROM phase10.records WHERE id=2 ORDER BY id)", "rows": [[1]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.unique_index_error(pk INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.unique_index_error VALUES(1,610),(2,610)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.root_unique_index_error(pk INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.root_unique_index_error VALUES(1,620),(2,620)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.ignore_rows(pk INT PRIMARY KEY, v INT, UNIQUE KEY uq_v(v))", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.ignore_rows VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "INSERT IGNORE INTO phase10.ignore_rows VALUES(2,20),(3,10),(4,40)", "rows": []}
+{"event": "sql", "sql": "SELECT pk,v FROM phase10.ignore_rows ORDER BY pk", "rows": [[1, 10], [2, 20], [4, 40]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.parts(id INT PRIMARY KEY, v INT) PARTITION BY HASH(id) PARTITIONS 4", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.parts VALUES(1,10),(2,20),(3,30),(4,40)", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*),SUM(v) FROM phase10.parts", "rows": [[4, "100"]]}
+{"event": "sql", "sql": "SELECT /*+ parallel(2) */ SUM(v) FROM phase10.parts", "rows": [["100"]]}
+{"event": "sql", "sql": "START TRANSACTION", "rows": []}
+{"event": "sql", "sql": "SELECT /*+ parallel(2) */ SUM(v) FROM phase10.parts", "rows": [["100"]]}
+{"event": "sql", "sql": "COMMIT", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.exchange_parts(id INT PRIMARY KEY, v INT) PARTITION BY RANGE(id) (PARTITION p0 VALUES LESS THAN (10), PARTITION p1 VALUES LESS THAN (MAXVALUE))", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.exchange_plain(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.exchange_parts VALUES(1,11),(11,111)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.exchange_plain VALUES(2,22)", "rows": []}
+{"event": "stopped", "pid": 2435420, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_direct_v5q7cu3b/data.tar.gz", "bytes": 4696631}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_worker_direct_prototype.py", line 20, in <module>
+    main()
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_worker_direct_prototype.py", line 16, in main
+    run_case(args.binary, "tls" if args.case == "tls" else "direct")
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_inprocess_prototype.py", line 1083, in run_case
+    {"bootstrap": bootstrap_probe, "sql": sql_probe,
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_inprocess_prototype.py", line 748, in direct_probe
+    experiment.sql(
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_fork_prototype.py", line 116, in sql
+    cur.execute(statement)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/cursors.py", line 153, in execute
+    result = self._query(query)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/cursors.py", line 322, in _query
+    conn.query(q)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 575, in query
+    self._affected_rows = self._read_query_result(unbuffered=unbuffered)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 826, in _read_query_result
+    result.read()
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 1203, in read
+    first_packet = self.connection._read_packet()
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 782, in _read_packet
+    packet.raise_for_error()
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/protocol.py", line 219, in raise_for_error
+    err.raise_mysql_exception(self._data)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/err.py", line 150, in raise_mysql_exception
+    raise errorclass(errno, errval)
+pymysql.err.NotSupportedError: (1235, 'Not supported feature or function')

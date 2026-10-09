@@ -1,0 +1,3 @@
+8000 mappings: pages=39 height=2
+wide mappings: pages=2007 height=3
+PASS batch COW: snapshots, splits, collapse, random edits, no intermediate pages, IO failures

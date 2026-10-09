@@ -1,0 +1,17 @@
+{
+  "status": "PASS",
+  "tests": [
+    "physical-gc-plan-cut.log",
+    "physical-gc-plan-formal.json",
+    "physical-gc-plan-standby/results.json"
+  ],
+  "production": "physical-gc-plan-artifacts/seekdb-production",
+  "native": "physical-gc-plan-artifacts/seekdb-native",
+  "builds": [
+    "physical-gc-plan-native-build.log (production: hook assertion rolled back all hooks)",
+    "physical-gc-plan-probe-build.log",
+    "physical-gc-plan-clean-build.log"
+  ],
+  "hook_failure": "Old cut injection required unique release_publication call; replaced by exact cut context after new release point was added. Automatic cleanup succeeded.",
+  "scope": "GC reuses published immutable physical plan; real persisted CREATE commit SCN and DELETE boundary; bounded shell batch; primary-only logical cleanup"
+}

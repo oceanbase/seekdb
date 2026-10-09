@@ -1,0 +1,34 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/source-materialization-artifacts/seekdb-native-initial", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_tablet_preparation_w8o4s3bg", "pid": 3359383, "port": 44983}
+{"event": "sql", "sql": "CREATE DATABASE preparation", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE preparation.parts(id INT PRIMARY KEY,v INT,b LONGTEXT) PARTITION BY HASH(id) PARTITIONS 32", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE preparation.vec(id INT PRIMARY KEY,v VECTOR(2048)) LOB_INROW_THRESHOLD=4096", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE preparation_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE preparation_ddl FROM ns1", "rows": []}
+{"event": "sql", "sql": "CREATE INDEX by_v ON preparation.parts(v)", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*),SUM(v) FROM preparation.parts FORCE INDEX(by_v)", "rows": [[32, "496"]]}
+{"event": "case_pass", "case": "cold_ddl_persisted_descriptions", "descriptions": {"1": 1, "3": 1, "50003": 1, "60003": 1, "100001": 1, "100002": 1, "100003": 1, "12": 1, "50012": 1, "60012": 1, "100012": 1, "4": 1, "50004": 1, "60004": 1, "100004": 1, "100005": 1, "13": 1, "50013": 1, "60013": 1, "104": 1, "50104": 1, "60104": 1, "105": 1, "50105": 1, "60105": 1, "100": 1, "50100": 1, "60100": 1, "101000": 1, "101": 1, "50101": 1, "60101": 1, "5": 1, "50005": 1, "60005": 1, "100006": 1, "1033": 1, "51033": 1, "61033": 1, "1071": 1, "51071": 1, "61071": 1, "500003": 32, "500004": 32, "500005": 32, "1070": 1, "51070": 1, "61070": 1, "102024": 1, "1060": 1, "51060": 1, "61060": 1, "102000": 1, "1032": 1, "51032": 1, "61032": 1, "102014": 1, "1025": 1, "51025": 1, "61025": 1, "102007": 1, "1058": 1, "51058": 1, "61058": 1, "102020": 1}}
+{"event": "case_pass", "case": "cold_partitioned_ddl", "partitions": 32}
+{"event": "sql", "sql": "SELECT SUM(v),SUM(LENGTH(b)) FROM preparation.parts", "rows": [["496", "384000"]]}
+{"event": "sql", "sql": "UPDATE preparation.parts SET v=v+100", "rows": []}
+{"event": "sql", "sql": "UPDATE preparation.parts SET v=v+100", "rows": []}
+{"event": "case_pass", "case": "owned_update_without_creation_preparation"}
+{"event": "sql", "sql": "CREATE INDEX by_v ON preparation.parts(v)", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*),SUM(v) FROM preparation.parts FORCE INDEX(by_v)", "rows": [[32, "6896"]]}
+{"event": "sql", "sql": "ALTER TABLE preparation.parts MODIFY v BIGINT", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*),SUM(v),SUM(LENGTH(b)) FROM preparation.parts", "rows": [[32, "6896", "384000"]]}
+{"event": "sql", "sql": "BEGIN", "rows": []}
+{"event": "sql", "sql": "UPDATE preparation.parts SET v=v+1", "rows": []}
+{"event": "sql", "sql": "SELECT SUM(v) FROM preparation.parts FORCE INDEX(by_v)", "rows": [["6928"]]}
+{"event": "sql", "sql": "DELETE FROM preparation.parts WHERE id=0", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM preparation.parts FORCE INDEX(by_v)", "rows": [[31]]}
+{"event": "sql", "sql": "ROLLBACK", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*),SUM(v) FROM preparation.parts FORCE INDEX(by_v)", "rows": [[32, "6896"]]}
+{"event": "case_pass", "case": "outrow_vector_caller_buffer", "bytes": ["8192", "8192"]}
+{"event": "case_pass", "case": "partitioned_write_ddl_outrow_vector", "partitions": 32}
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/source-materialization-artifacts/seekdb-native-initial", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_tablet_preparation_w8o4s3bg", "pid": 3360307, "port": 44983}
+{"event": "sql", "sql": "SELECT COUNT(*),SUM(v),SUM(LENGTH(b)) FROM preparation.parts", "rows": [[32, "6896", "384000"]]}
+{"event": "pass", "restart": true}
+{"event": "stopped", "pid": 3360307, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_tablet_preparation_w8o4s3bg/data.tar.gz", "bytes": 4338025}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

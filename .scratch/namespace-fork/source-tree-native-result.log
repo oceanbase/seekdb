@@ -1,0 +1,16 @@
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/source-tree-artifacts/seekdb-native", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_5c65a9ew", "pid": 3094358, "port": 21669}
+{"event": "native_kv_verified", "recovered": false, "typed_records": true, "pin_reload": true, "durable_phase": "created"}
+{"event": "crash_for_recovery", "pid": 3094358, "after_phase": "created"}
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/source-tree-artifacts/seekdb-native", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_5c65a9ew", "pid": 3095437, "port": 21669}
+{"event": "native_kv_verified", "recovered": true, "typed_records": true, "pin_reload": true, "durable_phase": "marked"}
+{"event": "crash_for_recovery", "pid": 3095437, "after_phase": "marked"}
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/source-tree-artifacts/seekdb-native", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_5c65a9ew", "pid": 3096497, "port": 21669}
+{"event": "native_kv_verified", "recovered": true, "typed_records": true, "pin_reload": true, "durable_phase": "finished"}
+{"event": "crash_for_recovery", "pid": 3096497, "after_phase": "finished"}
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/source-tree-artifacts/seekdb-native", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_5c65a9ew", "pid": 3097428, "port": 21669}
+{"event": "native_kv_verified", "recovered": true, "typed_records": true, "pin_reload": true, "durable_phase": "verified"}
+{"event": "PASS", "case": "instance_meta_native", "rollback": true, "cross_collection": true, "duplicate_key": true, "own_writes": true, "snapshot": true, "locked_current_read": true, "sequential_put_put_scan": true, "scan_reentrant_write_rejected": true, "binary_value_60000": true, "key_512": true, "value_65536": true, "binary_bounds": true, "scan": true, "erase": true, "snapshot_across_minor": true, "writer_conflict": true, "typed_records": true, "catalog_tree": true, "lineage": true, "snapshot_pin": true, "gc_watermark": true, "pin_reload": true, "crash_recovery": true, "durable_fork_drop": true}
+{"event": "stopped", "pid": 3097428, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_5c65a9ew/data.tar.gz", "bytes": 3367628}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

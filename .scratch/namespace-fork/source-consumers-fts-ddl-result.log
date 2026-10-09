@@ -1,0 +1,33 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/source-consumers-artifacts/seekdb-production", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_fts_heap_redef_fcuorm_6", "pid": 3714717, "port": 30543}
+{"event": "sql", "sql": "CREATE DATABASE fts_redef", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE fts_redef.inherited(body TEXT, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO fts_redef.inherited VALUES('alpha text',7),('beta text',8)", "rows": []}
+{"event": "sql", "sql": "CREATE FULLTEXT INDEX inherited_body ON fts_redef.inherited(body)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE fts_redef_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "INSERT INTO fts_redef.inherited VALUES('parent later',99)", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM fts_redef.inherited", "rows": [[2]]}
+{"event": "sql", "sql": "CREATE TABLE fts_redef.owned(body TEXT, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO fts_redef.owned VALUES('alpha text',7),('beta text',8)", "rows": []}
+{"event": "sql", "sql": "CREATE FULLTEXT INDEX owned_body ON fts_redef.owned(body)", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE fts_redef.owned MODIFY COLUMN v VARCHAR(20)", "rows": []}
+{"event": "ddl_state", "table": "owned", "errors": [], "active": false, "tasks": [], "ddl_errors": [[452, 7, 0, "Successful ddl", "Successful ddl"], [681, 5, 0, "Successful ddl", "Successful ddl"], [732, 5, 0, "Successful ddl", "Successful ddl"], [2388, 7, 0, "Successful ddl", "Successful ddl"], [2619, 5, 0, "Successful ddl", "Successful ddl"], [2677, 5, 0, "Successful ddl", "Successful ddl"], [4036, 1001, 0, "Successful ddl", "Successful ddl"], [4779, 7, 0, "Successful ddl", "Successful ddl"], [5027, 5, 0, "Successful ddl", "Successful ddl"], [5051, 5, 0, "Successful ddl", "Successful ddl"]], "tables": [["inherited", 500003, 200001], ["owned", 500013, 200011], ["__AUX_LOB_META_500004_", 500004, 200002], ["__AUX_LOB_META_500014_", 500014, 200012], ["__AUX_LOB_PIECE_500005_", 500005, 200003], ["__AUX_LOB_PIECE_500015_", 500015, 200013], ["__idx_500003_inherited_body", 500006, 200004], ["__idx_500003_inherited_body_fts_doc_word", 500007, 200005], ["__idx_500013_owned_body", 500016, 200014], ["__idx_500013_owned_body_fts_doc_word", 500017, 200015]]}
+{"event": "sql", "sql": "SELECT v FROM fts_redef.owned WHERE MATCH(body) AGAINST('alpha')", "rows": [["7"]]}
+{"event": "sql", "sql": "INSERT INTO fts_redef.owned VALUES('gamma text','9')", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM fts_redef.owned", "rows": [[3]]}
+{"event": "redefined", "table": "owned", "rows": [["7"]]}
+{"event": "sql", "sql": "ALTER TABLE fts_redef.inherited MODIFY COLUMN v VARCHAR(20)", "rows": []}
+{"event": "ddl_state", "table": "inherited", "errors": [], "active": false, "tasks": [], "ddl_errors": [[452, 7, 0, "Successful ddl", "Successful ddl"], [681, 5, 0, "Successful ddl", "Successful ddl"], [732, 5, 0, "Successful ddl", "Successful ddl"], [2388, 7, 0, "Successful ddl", "Successful ddl"], [2619, 5, 0, "Successful ddl", "Successful ddl"], [2677, 5, 0, "Successful ddl", "Successful ddl"], [4036, 1001, 0, "Successful ddl", "Successful ddl"], [4779, 7, 0, "Successful ddl", "Successful ddl"], [5027, 5, 0, "Successful ddl", "Successful ddl"], [5051, 5, 0, "Successful ddl", "Successful ddl"], [7307, 1001, 0, "Successful ddl", "Successful ddl"], [8084, 7, 0, "Successful ddl", "Successful ddl"], [8335, 5, 0, "Successful ddl", "Successful ddl"], [8361, 5, 0, "Successful ddl", "Successful ddl"]], "tables": [["inherited", 500018, 200016], ["owned", 500013, 200011], ["__AUX_LOB_META_500014_", 500014, 200012], ["__AUX_LOB_META_500019_", 500019, 200017], ["__AUX_LOB_PIECE_500015_", 500015, 200013], ["__AUX_LOB_PIECE_500020_", 500020, 200018], ["__idx_500013_owned_body", 500016, 200014], ["__idx_500013_owned_body_fts_doc_word", 500017, 200015], ["__idx_500018_inherited_body", 500021, 200019], ["__idx_500018_inherited_body_fts_doc_word", 500022, 200020]]}
+{"event": "sql", "sql": "SELECT v FROM fts_redef.inherited WHERE MATCH(body) AGAINST('alpha')", "rows": [["7"]]}
+{"event": "sql", "sql": "INSERT INTO fts_redef.inherited VALUES('gamma text','9')", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM fts_redef.inherited", "rows": [[3]]}
+{"event": "redefined", "table": "inherited", "rows": [["7"]]}
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/source-consumers-artifacts/seekdb-production", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_fts_heap_redef_fcuorm_6", "pid": 3717082, "port": 30543}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM fts_redef.owned", "rows": [[3]]}
+{"event": "sql", "sql": "SELECT v FROM fts_redef.owned WHERE MATCH(body) AGAINST('gamma')", "rows": [["9"]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM fts_redef.inherited", "rows": [[3]]}
+{"event": "sql", "sql": "SELECT v FROM fts_redef.inherited WHERE MATCH(body) AGAINST('gamma')", "rows": [["9"]]}
+{"event": "PASS", "case": "fts_heap_redefinition"}
+{"event": "stopped", "pid": 3717082, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_fts_heap_redef_fcuorm_6/data.tar.gz", "bytes": 3831964}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

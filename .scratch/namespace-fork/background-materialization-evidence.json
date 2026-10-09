@@ -1,0 +1,120 @@
+{
+  "status": "phase18_verified; initial-copy SSTable lifetime race remains open",
+  "production_base": "4dcb94cb5",
+  "design": "No spill/tempfile; bounded background materialization through existing native transaction/admission",
+  "unit": {
+    "log": "background-materialization-unit.log",
+    "result": "PASS"
+  },
+  "production_builds": [
+    "background-materialization-build.log",
+    "background-materialization-final-build.log",
+    "background-lock-wait-clean-build.log",
+    "background-copy-physical-build.log"
+  ],
+  "readonly_child": {
+    "log": "background-materialization-probe.log",
+    "result": "PASS",
+    "cold_takeover_seconds": 141.59,
+    "runtime_unloaded": true,
+    "parent_sources_reclaimed": true,
+    "sigkill_restart": true
+  },
+  "formal": [
+    {
+      "case": "source_roots_only_probe",
+      "exit_code": 0,
+      "elapsed_s": 10.39
+    },
+    {
+      "case": "sql_read_view_probe",
+      "exit_code": 0,
+      "elapsed_s": 12.44
+    },
+    {
+      "case": "retired_baseline_restart_probe",
+      "exit_code": 0,
+      "elapsed_s": 46.43
+    }
+  ],
+  "failures": [
+    {
+      "case": "formal runner",
+      "reason": "incorrect script filename sql_catalog_read_views_probe.py; corrected to sql_read_view_probe.py; all intended cases then ran successfully"
+    },
+    {
+      "case": "namespace_fork_local",
+      "result": "FAIL",
+      "log": "background-materialization-standby/namespace_fork_local.log",
+      "reason": "fresh standby full copy returns 4002 on background-created MDS SSTable; under diagnosis"
+    },
+    {
+      "case": "standby_background_copy_probe",
+      "result": "FAIL",
+      "log": "background-copy-minimal-red.log",
+      "reason": "Minimal fixture failed before target path: standby datafile 512M below native full-copy admission estimate (~1.5GB). Raised isolated standby datafile to 2G like the existing obtest fixture; this was not a reproduction of 4002."
+    },
+    {
+      "case": "diagnostic minimal fixture",
+      "log": "background-copy-diagnostic-red.log",
+      "reason": "same 4184 capacity gate before copy; retained"
+    },
+    {
+      "log": "background-copy-diagnostic-capacity-retry.log",
+      "reason": "Fast compaction replaced source SSTable between metadata and macro-range fetch: OB_SSTABLE_NOT_EXIST (-4735). Open; MDS snapshot fix does not solve this."
+    },
+    {
+      "log": "background-copy-diagnostic-incomplete.log",
+      "reason": "Fixture matched generic MDS startup text instead of completed MDS flush; strict completion regex added. Readability timeout retained."
+    },
+    {
+      "log": "background-copy-diagnostic-mdsgate.log",
+      "reason": "Deterministic 4002: MDS copy descriptor used data snapshot 0. Fixed by MDS end/flush SCN, matching native merger."
+    },
+    {
+      "log": "background-materialization-standby-mds-fix/namespace_fork_local.log",
+      "reason": "Child ALTER returned transient KV row lock conflict 6005; get_for_update now waits within original transaction deadline."
+    },
+    {
+      "log": "background-lock-wait-native.log",
+      "reason": "Deadline test returned OB_TRANS_TIMEOUT (-6210), omitted by original assertion. Lock handoff and fresh read had passed. Assertion corrected to accept transaction timeout; full native rerun passed."
+    },
+    {
+      "log": "background-materialization-standby-lock-wait/namespace_fork_local.log",
+      "reason": "Fresh standby child first read timed out with repeated 6231. Source LS view included physical tablet whose persisted CREATE state was NONE. Local restore get_tablet default readable-committed filter skipped SSTable build and completion; replay later committed CREATE but restore status stayed EMPTY. Physical restore access corrected to READ_WITHOUT_CHECK; rerun pending."
+    }
+  ],
+  "diagnostic_hooks": "DISABLED; all local gate hooks also disabled in production source",
+  "native": {
+    "log": "background-lock-wait-native-retry.log",
+    "result": "PASS",
+    "lock_release_handoff": true,
+    "deadline": true,
+    "sigkill_recoveries": 3
+  },
+  "mds_fullcopy": {
+    "log": "background-copy-mds-fix-probe.log",
+    "result": "PASS",
+    "scope": "Root query after fresh copy of native MDS files; child namespace coverage remains in formal suite",
+    "latest_log": "background-copy-physical-probe.log"
+  },
+  "standby": {
+    "log": "background-materialization-standby-physical-copy/namespace_fork_local.log",
+    "result": "PASS",
+    "elapsed_s": 91.54,
+    "covered": [
+      "initial copy and child read",
+      "DDL + replay",
+      "parent truncate/drop",
+      "namespace drop",
+      "promotion",
+      "fork after promotion"
+    ]
+  },
+  "retired_source_fullcopy": {
+    "log": "background-copy-retired-source-probe.log",
+    "result": "PASS",
+    "parent_dropped_before_copy": true,
+    "child_read": true
+  }
+}

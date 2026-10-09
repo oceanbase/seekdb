@@ -1,0 +1,558 @@
+diff --git a/src/namespace/catalog.cpp b/src/namespace/catalog.cpp
+index 1e80190dc..0cb000778 100644
+--- a/src/namespace/catalog.cpp
++++ b/src/namespace/catalog.cpp
+@@ -410,11 +410,12 @@ void NamespaceControlState::forget_chain_link(uint64_t namespace_id)
+ }
+ 
+ int NamespaceControlState::load_exceptions(uint64_t namespace_id,
+-    IExceptionLoader &loader)
++    IExceptionLoader &loader, bool reload)
+ {
+   std::lock_guard<std::mutex> lock(exceptions_mutex_);
+   ExceptionSet &set = exception_sets_[namespace_id];
+-  if (set.loaded) { return 0; }
++  if (set.loaded && !reload) { return 0; }
++  ExceptionSet refreshed;
+   struct RowSink final : IExceptionLoader::IRowSink {
+     explicit RowSink(ExceptionSet &set) : set_(set) {}
+     void add(const NamespaceExceptionRow &row) override {
+@@ -426,16 +427,23 @@ int NamespaceControlState::load_exceptions(uint64_t namespace_id,
+       }
+     }
+     ExceptionSet &set_;
+-  } sink(set);
++  } sink(refreshed);
+   const int error = loader.load(namespace_id, sink);
+   if (error != 0) {
+     exception_sets_.erase(namespace_id);
+   } else {
+-    set.loaded = true;
++    refreshed.loaded = true;
++    set = std::move(refreshed);
+   }
+   return error;
+ }
+ 
++void NamespaceControlState::clear_exceptions()
++{
++  std::lock_guard<std::mutex> lock(exceptions_mutex_);
++  exception_sets_.clear();
++}
++
+ bool NamespaceControlState::owned(uint64_t namespace_id,
+     uint64_t local_tablet, uint64_t *table) const
+ {
+diff --git a/src/namespace/catalog.h b/src/namespace/catalog.h
+index 5abcae353..aecad0bb2 100644
+--- a/src/namespace/catalog.h
++++ b/src/namespace/catalog.h
+@@ -160,7 +160,8 @@ public:
+   bool chain_link(uint64_t namespace_id, uint64_t &parent, int64_t &fork_cap) const;
+   void remember_chain_link(uint64_t namespace_id, uint64_t parent, int64_t fork_cap);
+   void forget_chain_link(uint64_t namespace_id);
+-  int load_exceptions(uint64_t namespace_id, IExceptionLoader &loader);
++  int load_exceptions(uint64_t namespace_id, IExceptionLoader &loader, bool reload = false);
++  void clear_exceptions();
+   bool owned(uint64_t namespace_id, uint64_t local_tablet,
+              uint64_t *table = nullptr) const;
+   bool tombstoned(uint64_t namespace_id, uint64_t local_tablet) const;
+diff --git a/src/observer/mysql/obmp_query.cpp b/src/observer/mysql/obmp_query.cpp
+index 128a4bf3c..9f8b2bea2 100644
+--- a/src/observer/mysql/obmp_query.cpp
++++ b/src/observer/mysql/obmp_query.cpp
+@@ -90,6 +90,9 @@ int ObMPQuery::process()
+         namespace_worker_prototype::in_process_session_ns(sess));
+     if (OB_SUCC(ret) && OB_FAIL(namespace_worker_prototype::refresh_session_schema(sess))) {
+       LOG_WARN("failed to refresh namespace schema", K(ret));
++      // An in-progress replicated DDL publication is retryable. The bound
++      // session remains valid, so return the error without closing its socket.
++      if (ret == OB_SCHEMA_EAGAIN) { need_disconnect = false; }
+     }
+     if (OB_SUCC(ret)) {
+       int64_t database_schema_version = 0;
+diff --git a/src/observer/namespace_inprocess_scan_engine.ipp b/src/observer/namespace_inprocess_scan_engine.ipp
+index 1cc7be7ed..e97c3a5ee 100644
+--- a/src/observer/namespace_inprocess_scan_engine.ipp
++++ b/src/observer/namespace_inprocess_scan_engine.ipp
+@@ -182,7 +182,7 @@ struct EngineScan {
+     param.tx_seq_base_ = scan.tx_seq_base_;
+     param.tx_id_ = data_plane::tx_desc_id(tx);
+     param.trans_desc_ = tx; // Native pointer from this request, never from IPC.
+-    if (!param.snapshot_.is_valid() || param.snapshot_.is_weak_read()
++    if (!param.snapshot_.is_valid()
+         || (param.snapshot_.core_.tx_id_.is_valid() && param.snapshot_.core_.tx_id_ != param.tx_id_)
+         || (!txid && read_latest)) {
+       return OB_INVALID_ARGUMENT;
+diff --git a/src/observer/namespace_template_registry.ipp b/src/observer/namespace_template_registry.ipp
+index 481d050ac..018295f7d 100644
+--- a/src/observer/namespace_template_registry.ipp
++++ b/src/observer/namespace_template_registry.ipp
+@@ -246,12 +246,17 @@ int ensure_template_namespace()
+   }
+   return ret;
+ }
+-int restore_namespace_registry() {
++int load_namespace_registry() {
++  // Keep snapshot acquisition and publication ordered when startup, a timer
++  // and client discovery overlap.
++  static std::mutex load_mutex;
++  std::lock_guard<std::mutex> load_guard(load_mutex);
+   auto *access = share::server_service<storage::ObAccessService>();
+   if (access == nullptr) { return OB_NOT_INIT; }
+   rootserver::InstanceNamespaceDirectory directory(access->instance_meta_store());
+   std::vector<rootserver::InstanceNamespaceRecord> records;
+   int ret = directory.list_live(ObTimeUtility::current_time() + 120 * 1000 * 1000, records);
++  std::vector<uint64_t> live;
+   for (const auto &record : records) {
+     if (OB_FAIL(ret)) { break; }
+     if (record.name == "__template__" || record.name == "__template_build__") {
+@@ -266,9 +271,24 @@ int restore_namespace_registry() {
+       name_buf[record.name.size()] = '\0';
+       if (ns::namespace_registry().add(record.id, name_buf) != 0) {
+         ret = OB_ERR_UNEXPECTED;
++      } else {
++        live.push_back(record.id);
++      }
++    }
++  }
++  if (OB_SUCC(ret)) {
++    std::vector<uint64_t> registered;
++    ns::namespace_registry().list_ids(registered);
++    for (uint64_t id : registered) {
++      if (std::find(live.begin(), live.end(), id) == live.end()) {
++        ns::namespace_registry().remove(id);
+       }
+     }
+   }
++  return ret;
++}
++int restore_namespace_registry() {
++  int ret = load_namespace_registry();
+   if (OB_SUCC(ret)) { ret = ensure_template_namespace(); }
+   return ret;
+ }
+diff --git a/src/observer/namespace_worker_inprocess_prototype.ipp b/src/observer/namespace_worker_inprocess_prototype.ipp
+index cdd65f38c..afbe25eab 100644
+--- a/src/observer/namespace_worker_inprocess_prototype.ipp
++++ b/src/observer/namespace_worker_inprocess_prototype.ipp
+@@ -29,6 +29,88 @@
+ #include <shared_mutex>
+ #include <thread>
+ namespace oceanbase { namespace observer { namespace namespace_worker_prototype {
++std::vector<uint64_t> &namespace_schema_load_stack()
++{
++  static thread_local std::vector<uint64_t> stack;
++  return stack;
++}
++bool namespace_schema_loading(uint64_t id)
++{
++  const auto &stack = namespace_schema_load_stack();
++  return std::find(stack.begin(), stack.end(), id) != stack.end();
++}
++class NamespaceSchemaLoadScope final
++{
++public:
++  explicit NamespaceSchemaLoadScope(uint64_t id) { namespace_schema_load_stack().push_back(id); }
++  ~NamespaceSchemaLoadScope() { namespace_schema_load_stack().pop_back(); }
++};
++// Read the published directory and SQL schema at one retained MVCC boundary.
++// Following replicas must never repair an in-progress primary publication.
++int load_committed_namespace_schema(uint64_t namespace_id,
++                                   ObMultiVersionSchemaService &schema)
++{
++  // Schema loading issues inner SQL in this same namespace. Its nested
++  // sessions use the installed static schemas while the outer load finishes.
++  if (namespace_schema_loading(namespace_id)) { return OB_SUCCESS; }
++  NamespaceSchemaLoadScope scope(namespace_id);
++  InProcessServingScope serving(namespace_id);
++  auto *access = share::server_service<storage::ObAccessService>();
++  if (access == nullptr) { return OB_NOT_INIT; }
++  auto &store = access->instance_meta_store();
++  storage::InstanceMetaStore::Transaction tx;
++  int ret = store.begin(tx, ObTimeUtility::current_time() + 30 * 1000 * 1000, true);
++  if (OB_SUCC(ret)) {
++    rootserver::InstanceNamespaceMetadata metadata(store, tx);
++    rootserver::InstanceNamespaceRecord record;
++    if (OB_FAIL(metadata.get_namespace(namespace_id, record))) {
++    } else if (record.roots.state != 0) {
++      ret = OB_ENTRY_NOT_EXIST;
++    } else if (record.roots.active_schema_changes != 0
++               || record.roots.pending_schema_version != 0) {
++      // Keep an already installed publication usable during the next DDL.
++      // In particular progress/management reads must keep serving while a
++      // table changes. A cold runtime still waits for a complete publication.
++      int64_t installed = OB_INVALID_VERSION;
++      ret = schema.get_runtime_refreshed_schema_version(installed);
++      if (OB_SUCC(ret) && (!schema.is_runtime_schema_ready()
++                          || installed < record.roots.schema_version)) {
++        ret = OB_SCHEMA_EAGAIN;
++      }
++    } else {
++      ObRefreshSchemaStatus status;
++      status.snapshot_timestamp_ = tx.snapshot_version().get_val_for_tx();
++      status.readable_schema_version_ = record.roots.schema_version;
++      ret = schema.refresh_runtime_schema_from_static_system(
++          status, record.roots.schema_version);
++    }
++    const int cleanup = store.rollback(tx);
++    if (OB_SUCC(ret)) { ret = cleanup; }
++  }
++  return ret;
++}
++int recover_namespace_schema_publication(uint64_t namespace_id,
++                                        ObMultiVersionSchemaService &schema)
++{
++  bool needed = false;
++  int ret = storage::NamespaceForkKernelPrototype::begin_schema_recovery(namespace_id, needed);
++  int64_t published = OB_INVALID_VERSION;
++  int64_t installed = OB_INVALID_VERSION;
++  if (OB_SUCC(ret) && needed) {
++    if (OB_FAIL(storage::NamespaceForkKernelPrototype::namespace_schema_version(namespace_id, published))) {
++    } else if (OB_FAIL(schema.refresh_runtime_schema_from_static_system())) {
++    } else if (OB_FAIL(schema.get_runtime_refreshed_schema_version(installed))) {
++    } else if (installed < published) {
++      ret = OB_STATE_NOT_MATCH;
++    } else if (installed > published) {
++      ret = sync_namespace_schema_delta(namespace_id, schema, installed);
++    }
++    if (OB_SUCC(ret)) {
++      ret = storage::NamespaceForkKernelPrototype::finish_schema_recovery(namespace_id, installed);
++    }
++  }
++  return ret;
++}
+ class NamespaceSchemaLifecycle final : public INamespaceSchemaLifecycle
+ {
+ public:
+@@ -38,6 +120,25 @@ public:
+   void complete_bootstrap() { bootstrap_.store(false, std::memory_order_release); }
+   int refresh() override
+   {
++    if (bootstrap_.load(std::memory_order_acquire)) { return OB_SUCCESS; }
++    if (namespace_schema_loading(ns_)) { return OB_SUCCESS; }
++    if (share::server_is_recovery_mode()) {
++      primary_recovery_pending_.store(true, std::memory_order_release);
++      auto *schema = namespace_schema_service(ns_);
++      return schema == nullptr ? OB_NOT_INIT : load_committed_namespace_schema(ns_, *schema);
++    }
++    if (primary_recovery_pending_.load(std::memory_order_acquire)) {
++      std::lock_guard<std::mutex> guard(recovery_mutex_);
++      if (primary_recovery_pending_.load(std::memory_order_acquire)) {
++        NamespaceSchemaLoadScope scope(ns_);
++        auto *schema = namespace_schema_service(ns_);
++        const int ret = schema == nullptr ? OB_NOT_INIT
++            : load_on_access_ ? inprocess_refresh_schema(ns_)
++                              : recover_namespace_schema_publication(ns_, *schema);
++        if (ret != OB_SUCCESS) { return ret; }
++        primary_recovery_pending_.store(false, std::memory_order_release);
++      }
++    }
+     return load_on_access_ ? inprocess_refresh_schema(ns_) : OB_SUCCESS;
+   }
+   int fetch_version(bool published, bool core_version, int64_t &version) override
+@@ -79,6 +180,8 @@ private:
+   uint64_t ns_;
+   bool load_on_access_;
+   std::atomic<bool> bootstrap_;
++  std::atomic<bool> primary_recovery_pending_{false};
++  std::mutex recovery_mutex_;
+ };
+ NamespaceSchemaLifecycle &bootstrap_schema_lifecycle()
+ {
+@@ -90,6 +193,9 @@ NamespaceSchemaLifecycle &bootstrap_schema_lifecycle()
+ int complete_namespace_schema_bootstrap(ObMultiVersionSchemaService &service)
+ {
+   bootstrap_schema_lifecycle().complete_bootstrap();
++  // A replica loads the publication already committed by its primary.
++  // Persistent recovery is only permitted after local writes are admitted.
++  if (!share::server_is_write_enabled()) { return OB_SUCCESS; }
+   bool needed = false;
+   int ret = storage::NamespaceForkKernelPrototype::begin_schema_recovery(1, needed);
+   int64_t version = OB_INVALID_VERSION;
+@@ -973,6 +1079,9 @@ int inprocess_refresh_schema(uint64_t ns)
+   // Service entries are retained for the lifetime of the process. Release the
+   // map lock before refresh, which can re-enter this path through storage.
+   guard.unlock();
++  if (share::server_is_recovery_mode()) {
++    return load_committed_namespace_schema(ns, *services.schema_service);
++  }
+   int ret = OB_SUCCESS;
+   if (!services.schema_loaded.load(std::memory_order_acquire)) {
+     std::unique_lock<std::mutex> load_guard(services.schema_load_mutex);
+@@ -1028,7 +1137,8 @@ int inprocess_refresh_schema(uint64_t ns)
+     }
+   }
+   bool expected = false;
+-  if (!ret && services.recovery_loaded.compare_exchange_strong(expected, true)) {
++  if (!ret && share::server_is_write_enabled()
++      && services.recovery_loaded.compare_exchange_strong(expected, true)) {
+     rootserver::ObDDLTaskContext context;
+     context.namespace_id_ = ns;
+     context.local_build_mode_ = rootserver::ObDDLTaskContext::LocalBuildMode::RESTARTABLE_SQL;
+diff --git a/src/observer/namespace_worker_protocol_prototype.h b/src/observer/namespace_worker_protocol_prototype.h
+index d1c1c0f44..b7aaeb95f 100644
+--- a/src/observer/namespace_worker_protocol_prototype.h
++++ b/src/observer/namespace_worker_protocol_prototype.h
+@@ -198,7 +198,9 @@ int build_tablet_write_defensive(const share::schema::ObTableSchema &schema,
+                                  common::ObMySQLTransaction &trans);
+ // Namespace DROP drains access leases before reclaiming physical tablets.
+ int drain_storage_namespace_access(uint64_t namespace_id);
+-// Restore committed namespace names after the system package load completes.
++// Load committed names without installing packages or creating a template.
++int load_namespace_registry();
++// Restore names and initialize the primary's namespace template.
+ int restore_namespace_registry();
+ // Publish the table-schema delta committed by a namespace-local DDL into the
+ // shared namespace directory before the SQL command is acknowledged.
+diff --git a/src/observer/ob_server.cpp b/src/observer/ob_server.cpp
+index 5773a0dd2..d29f8f8a2 100644
+--- a/src/observer/ob_server.cpp
++++ b/src/observer/ob_server.cpp
+@@ -27,6 +27,7 @@
+ #include <thread>
+ #include "observer/ob_server.h"
+ #include "observer/namespace_worker_protocol_prototype.h"
++#include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
+ #include "namespace/namespace.h"
+ #include "sql/session/ob_sql_session_info.h"
+ #include "data_plane/ddl/ob_direct_insert.h"
+@@ -156,24 +157,36 @@ public:
+ 
+   void reset_max_id_cache() override
+   {
+-    auto *service = namespace_worker_prototype::namespace_local_management_service(1);
+-    if (service != nullptr) {
+-      service->get_max_id_cache_mgr().reset();
++    storage::NamespaceForkKernelPrototype::invalidate_replayed_metadata();
++    std::vector<uint64_t> ids;
++    ns::namespace_registry().list_ids(ids);
++    for (uint64_t id : ids) {
++      auto *service = namespace_worker_prototype::namespace_local_management_service(id);
++      if (service != nullptr) { service->get_max_id_cache_mgr().reset(); }
+     }
+   }
+ 
+   int refresh_schema() override
+   {
+     int ret = OB_SUCCESS;
+-    int64_t schema_version = OB_INVALID_VERSION;
+-    share::schema::ObRefreshSchemaStatus schema_status;
+-    if (OB_FAIL(server_.home_schema_status_proxy().get_refresh_schema_status(schema_status))) {
+-      LOG_WARN("failed to get schema refresh status", KR(ret));
+-    } else if (OB_FAIL(server_.home_schema_service().get_schema_version_in_inner_table(
+-        server_.home_sql_proxy(), schema_status, schema_version))) {
+-      LOG_WARN("failed to get latest schema version", KR(ret));
+-    } else if (OB_FAIL(server_.ob_service_.submit_async_refresh_schema_task(schema_version))) {
+-      LOG_WARN("failed to submit schema refresh", KR(ret), K(schema_version));
++    if (!ATOMIC_LOAD(&GCTX.sys_package_ready_)) {
++      return OB_SUCCESS; // Startup loads the initial view before admission.
++    } else if (OB_FAIL(namespace_worker_prototype::load_namespace_registry())) {
++      LOG_WARN("failed to refresh namespace registry", KR(ret));
++    } else {
++      std::vector<uint64_t> ids;
++      ns::namespace_registry().list_ids(ids);
++      for (uint64_t id : ids) {
++        ns::NamespaceRuntime *runtime = nullptr;
++        if (ns::namespace_registry().get(id, runtime) && runtime != nullptr
++            && runtime->service(ns::NamespaceRuntime::SCHEMA_SERVICE) != nullptr) {
++          const int refresh_ret = namespace_worker_prototype::prepare_namespace_login(*runtime);
++          if (refresh_ret != OB_SUCCESS && refresh_ret != OB_SCHEMA_EAGAIN) {
++            LOG_WARN("failed to refresh namespace schema", KR(refresh_ret), K(id));
++            if (OB_SUCC(ret)) { ret = refresh_ret; }
++          }
++        }
++      }
+     }
+     return ret;
+   }
+@@ -204,6 +217,17 @@ public:
+     return server_.timezone_mgr_.start();
+   }
+ 
++  int wait_standby_metadata_ready() override
++  {
++    int ret = namespace_worker_prototype::load_namespace_registry();
++    if (OB_SUCC(ret)) {
++      ret = namespace_worker_prototype::complete_namespace_schema_bootstrap(
++          server_.home_schema_service());
++    }
++    if (OB_SUCC(ret)) { ATOMIC_STORE(&GCTX.sys_package_ready_, true); }
++    return ret;
++  }
++
+ private:
+   ObServer &server_;
+ };
+diff --git a/src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp b/src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp
+index e1d07bca9..9c490a99c 100644
+--- a/src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp
++++ b/src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp
+@@ -101,6 +101,8 @@ int exclude_active_tablets(ObIArray<ObTabletID> &candidates, bool &need_retry)
+ std::shared_mutex namespace_state_mutex;
+ std::unordered_map<uint64_t, int64_t> namespace_state_cache;
+ bool cached_namespace_state(uint64_t id, int64_t &state) {
++  // Replay does not run the primary's post-commit invalidation callbacks.
++  if (share::server_is_recovery_mode()) { return false; }
+   std::shared_lock<std::shared_mutex> lock(namespace_state_mutex);
+   const auto it = namespace_state_cache.find(id);
+   if (it == namespace_state_cache.end()) { return false; }
+@@ -108,6 +110,7 @@ bool cached_namespace_state(uint64_t id, int64_t &state) {
+   return true;
+ }
+ void remember_namespace_state(uint64_t id, int64_t state) {
++  if (share::server_is_recovery_mode()) { return; }
+   std::unique_lock<std::shared_mutex> lock(namespace_state_mutex);
+   namespace_state_cache[id] = state;
+ }
+@@ -213,7 +216,8 @@ int load_kv_exceptions(uint64_t namespace_id)
+   auto *store = directory_kv_store();
+   if (store == nullptr) { return OB_NOT_INIT; }
+   KVExceptionLoader loader(*store);
+-  return control_state().load_exceptions(namespace_id, loader);
++  return control_state().load_exceptions(namespace_id, loader,
++      share::server_is_recovery_mode());
+ }
+ int load_kv_namespace_state(uint64_t namespace_id, int64_t &state)
+ {
+@@ -494,6 +498,18 @@ int NamespaceForkKernelPrototype::ensure_control_schema() {
+   LOG_INFO("PROTOTYPE_NAMESPACE_CONTROL_SCHEMA", K(ret));
+   return ret;
+ }
++void NamespaceForkKernelPrototype::invalidate_replayed_metadata()
++{
++  {
++    std::unique_lock<std::shared_mutex> lock(namespace_state_mutex);
++    namespace_state_cache.clear();
++  }
++  {
++    std::unique_lock<std::shared_mutex> lock(tablet_table_mutex);
++    tablet_table_cache.clear();
++  }
++  control_state().clear_exceptions();
++}
+ int NamespaceForkKernelPrototype::begin_namespace_drop(const ObString &name, uint64_t &id, bool &done) {
+   done = false; id = 0;
+   auto *store = directory_kv_store();
+diff --git a/src/rootserver/fork_table/namespace_fork_kernel_prototype.h b/src/rootserver/fork_table/namespace_fork_kernel_prototype.h
+index 5c4e9b5f0..40d209496 100644
+--- a/src/rootserver/fork_table/namespace_fork_kernel_prototype.h
++++ b/src/rootserver/fork_table/namespace_fork_kernel_prototype.h
+@@ -32,6 +32,8 @@ class NamespaceForkKernelPrototype final
+ {
+ public:
+   static int ensure_control_schema();
++  // Called after replay is sealed, before publishing primary write admission.
++  static void invalidate_replayed_metadata();
+   static int begin_namespace_drop(const common::ObString &name, uint64_t &id, bool &done);
+   static int lock_namespace_drop(uint64_t id,
+                                  common::ObIArray<common::ObTabletID> &bound);
+diff --git a/src/share/schema/ob_multi_version_schema_service.cpp b/src/share/schema/ob_multi_version_schema_service.cpp
+index dc4c8c5f1..f07c6d679 100644
+--- a/src/share/schema/ob_multi_version_schema_service.cpp
++++ b/src/share/schema/ob_multi_version_schema_service.cpp
+@@ -1263,16 +1263,30 @@ int ObMultiVersionSchemaService::broadcast_runtime_schema(
+ int ObMultiVersionSchemaService::refresh_runtime_schema_from_static_system()
+ {
+   int ret = OB_SUCCESS;
+-  lib::ObMutexGuard guard(schema_refresh_mutex_);
+-  ObSchemaMgr *schema_mgr = ATOMIC_LOAD(&schema_mgr_for_cache_);
+   ObRefreshSchemaStatus status;
+   status.snapshot_timestamp_ = OB_INVALID_TIMESTAMP;
+   status.readable_schema_version_ = OB_INVALID_VERSION;
+   int64_t schema_version = OB_INVALID_VERSION;
+-  if (!check_inner_stat() || OB_ISNULL(sql_proxy_) || OB_ISNULL(schema_mgr)) {
++  if (!check_inner_stat() || OB_ISNULL(sql_proxy_)) {
+     ret = OB_ERR_UNEXPECTED;
+   } else if (OB_FAIL(get_schema_version_in_inner_table(
+                  *sql_proxy_, status, schema_version))) {
++  } else {
++    ret = refresh_runtime_schema_from_static_system(status, schema_version);
++  }
++  return ret;
++}
++
++int ObMultiVersionSchemaService::refresh_runtime_schema_from_static_system(
++    const ObRefreshSchemaStatus &status, const int64_t schema_version)
++{
++  int ret = OB_SUCCESS;
++  lib::ObMutexGuard guard(schema_refresh_mutex_);
++  ObSchemaMgr *schema_mgr = ATOMIC_LOAD(&schema_mgr_for_cache_);
++  if (!check_inner_stat() || OB_ISNULL(sql_proxy_) || OB_ISNULL(schema_mgr)) {
++    ret = OB_ERR_UNEXPECTED;
++  } else if (schema_version < 0) {
++    ret = OB_INVALID_ARGUMENT;
+   } else if (schema_mgr->get_schema_version() >= schema_version) {
+   } else if (OB_FAIL(refresh_runtime_full_schema(
+                  *sql_proxy_, status, schema_version, nullptr, true))) {
+diff --git a/src/share/schema/ob_multi_version_schema_service.h b/src/share/schema/ob_multi_version_schema_service.h
+index 81cd58160..3ee786c17 100644
+--- a/src/share/schema/ob_multi_version_schema_service.h
++++ b/src/share/schema/ob_multi_version_schema_service.h
+@@ -280,6 +280,8 @@ public:
+       const common::ObIArray<share::schema::ObTableSchema> &table_schemas,
+       int64_t schema_version = OB_CORE_SCHEMA_VERSION + 1);
+   int refresh_runtime_schema_from_static_system();
++  int refresh_runtime_schema_from_static_system(
++      const ObRefreshSchemaStatus &read_status, int64_t schema_version);
+ 
+   // new schema refresh interface
+   int refresh_and_add_schema(bool check_bootstrap = false,
+diff --git a/src/standby/standby_host.h b/src/standby/standby_host.h
+index 4abd53021..3ac8433ef 100644
+--- a/src/standby/standby_host.h
++++ b/src/standby/standby_host.h
+@@ -99,6 +99,7 @@ public:
+   virtual int bootstrap_primary() = 0;
+   virtual int report_bootstrap_telemetry() = 0;
+   virtual int wait_primary_metadata_ready() = 0;
++  virtual int wait_standby_metadata_ready() = 0;
+   virtual int start_timezone_manager() = 0;
+ };
+ 
+diff --git a/src/standby/standby_module.cpp b/src/standby/standby_module.cpp
+index 3dce2b63e..aa5fee142 100644
+--- a/src/standby/standby_module.cpp
++++ b/src/standby/standby_module.cpp
+@@ -461,7 +461,9 @@ int StandbyModule::Impl::wait_metadata_ready()
+   if (!is_inited_) {
+     ret = OB_NOT_INIT;
+   } else if (standby_profile_) {
+-    if (OB_FAIL(host_->start_timezone_manager())) {
++    if (OB_FAIL(host_->wait_standby_metadata_ready())) {
++      LOG_WARN("failed to load standby metadata", KR(ret));
++    } else if (OB_FAIL(host_->start_timezone_manager())) {
+       LOG_WARN("failed to start standby timezone manager", KR(ret));
+     }
+   } else if (OB_FAIL(host_->wait_primary_metadata_ready())) {
+diff --git a/src/storage/instance_meta/instance_meta_store.cpp b/src/storage/instance_meta/instance_meta_store.cpp
+index 544bf9617..0eea9146b 100644
+--- a/src/storage/instance_meta/instance_meta_store.cpp
++++ b/src/storage/instance_meta/instance_meta_store.cpp
+@@ -353,10 +353,10 @@ int InstanceMetaStore::scan_rows(Transaction &tx, MetaCollection collection, con
+     param.tx_lock_timeout_ = tx.deadline_;
+     param.trans_desc_ = tx.descriptor_;
+     param.tx_id_ = tx.descriptor_->get_tx_id();
+-    // KV operations are sequential within a transaction and scans prohibit
+-    // reentrant writes. Always include its latest own writes; the snapshot
+-    // still bounds visibility of other transactions.
+-    param.scan_flag_.read_latest_ = true;
++    // Include preceding writes only for a transaction with an assigned ID.
++    // Recovery readers have no write state and no append-backed transaction
++    // ID; their ordinary snapshot already bounds all visible data.
++    param.scan_flag_.read_latest_ = param.tx_id_.is_valid();
+     param.scan_flag_.scan_order_ = ObQueryFlag::Forward;
+     param.allocator_ = &allocator;
+     param.scan_allocator_ = &allocator;
+diff --git a/src/storage/instance_meta/instance_meta_store.h b/src/storage/instance_meta/instance_meta_store.h
+index 2cd1047eb..8569dc6c8 100644
+--- a/src/storage/instance_meta/instance_meta_store.h
++++ b/src/storage/instance_meta/instance_meta_store.h
+@@ -48,6 +48,7 @@ public:
+     ~Transaction(); // Rolls back an owned transaction, or detaches a borrowed one.
+     bool is_active() const { return descriptor_ != nullptr; }
+     bool is_directory_gc() const { return directory_gc_; }
++    const share::SCN &snapshot_version() const { return snapshot_.core_.version_; }
+   private:
+     friend class InstanceMetaStore;
+     InstanceMetaStore *owner_;

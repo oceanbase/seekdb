@@ -1,0 +1,14 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/physical-retention/seekdb-production", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_source_roots_only_0rnktbew", "pid": 45869, "port": 60183}
+{"event": "sql", "sql": "CREATE DATABASE root_graph", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE root_graph.t(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO root_graph.t VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE roots_b FROM ns1", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE roots_c FROM roots_b", "rows": []}
+{"event": "stopped", "pid": 45869, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_source_roots_only_0rnktbew/data.tar.gz", "bytes": 3326712}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File ".scratch/namespace-fork/source_roots_only_probe.py", line 27, in <module>
+    assert metadata(e, 3) == [] and metadata(e, 8) == [], 'obsolete snapshot/pin records remain'
+AssertionError: obsolete snapshot/pin records remain

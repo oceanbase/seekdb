@@ -1,0 +1,17 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/source-roots-only/seekdb-native", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_source_roots_only_mqinyfhf", "pid": 105621, "port": 11941}
+{"event": "sql", "sql": "CREATE DATABASE root_graph", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE root_graph.t(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO root_graph.t VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE roots_b FROM ns1", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE roots_c FROM roots_b", "rows": []}
+{"event": "sql", "sql": "TRUNCATE TABLE root_graph.t", "rows": []}
+{"event": "sql", "sql": "DROP NAMESPACE roots_b", "rows": []}
+{"event": "sql", "sql": "DROP TABLE root_graph.t", "rows": []}
+{"event": "sql", "sql": "SELECT * FROM root_graph.t", "rows": [[1, 10]]}
+{"event": "sql", "sql": "UPDATE root_graph.t SET v=11", "rows": []}
+{"event": "sql", "sql": "SELECT * FROM root_graph.t", "rows": [[1, 11]]}
+{"event": "PASS", "case": "shared_capped_roots_without_lineage", "obsolete_collections": [], "parent_deleted": true, "descendant_read_write": true}
+{"event": "stopped", "pid": 105621, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_source_roots_only_mqinyfhf/data.tar.gz", "bytes": 3192554}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

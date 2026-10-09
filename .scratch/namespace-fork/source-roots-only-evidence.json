@@ -1,0 +1,21 @@
+{
+  "status": "PASS",
+  "commit": "cbe17577a",
+  "production": "source-roots-only-artifacts/seekdb-production",
+  "native": "source-roots-only-artifacts/seekdb-native",
+  "tests": [
+    "source-roots-only-unit.log",
+    "source-roots-only-native.log",
+    "source-roots-only-formal.json",
+    "source-roots-only-standby/results.json"
+  ],
+  "red": "source-roots-only-red.log",
+  "scope": "removed persisted snapshot/pin rows and ancestor reference counts; watermark row lock retained",
+  "remaining": [
+    "bounded spill",
+    "GC publication fence",
+    "readonly background materialization",
+    "template takeover/nonlogin",
+    "standby local completion/fullcopy"
+  ]
+}

@@ -1,0 +1,7 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/atomic-physical-drop-artifacts/seekdb-native-admission", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_reader_admission_0b287lm7", "pid": 3970523, "port": 35383}
+{"event": "native_kv_verified", "recovered": false, "typed_records": true, "pin_reload": true, "durable_phase": "created"}
+{"event": "PASS", "case": "reader_admission", "pending_reader_retains_min": true, "released_view_expired": true}
+{"event": "stopped", "pid": 3970523, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_reader_admission_0b287lm7/data.tar.gz", "bytes": 3658004}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

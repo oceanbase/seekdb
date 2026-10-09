@@ -1,0 +1,260 @@
+{
+  "base_commit": "6f9e7f62e4ddecc3b0e4d2845e9a9bbe8261136d",
+  "goal_complete": false,
+  "sources": [
+    {
+      "path": "src/namespace/catalog.cpp",
+      "bytes": 23726,
+      "sha256": "8c444a75c0667028330cba98552fa4e6e1b9e9cd4114cd8c4dfa08801057d834"
+    },
+    {
+      "path": "src/namespace/catalog.h",
+      "bytes": 10765,
+      "sha256": "29c5b11fc4474fbd0a8eff74fa94d3cb6d36de8ea69e07740bd730d9b63ba3ba"
+    },
+    {
+      "path": "src/observer/namespace_inprocess_scan_engine.ipp",
+      "bytes": 16764,
+      "sha256": "3f48413277623a88dbb6a90a7a65520c530d5b23eae6e4ac06d107e90935dbbb"
+    },
+    {
+      "path": "src/observer/namespace_inprocess_write_state.ipp",
+      "bytes": 28559,
+      "sha256": "aae537d08058d3c06c9bf421457bf47184ff22969a74e5fe8f4daf5972fe7fb6"
+    },
+    {
+      "path": "src/observer/namespace_worker_gateway_prototype.ipp",
+      "bytes": 40735,
+      "sha256": "4c58128299efd91f4f8ffd2751623c574c7629e6f7bfe1122e8662bc18c1e1d3"
+    },
+    {
+      "path": "src/observer/namespace_worker_inprocess_prototype.ipp",
+      "bytes": 56084,
+      "sha256": "544a8db134325dfaaa2d0f3120c91dfef3ab2b86f5ac5be8c5f20149e5f8f51e"
+    },
+    {
+      "path": "src/observer/namespace_worker_protocol_prototype.h",
+      "bytes": 16240,
+      "sha256": "7ddaeead080e3b4cdbdd085e2c45c63955f51aa0a9bad72577aefd7cd62223c7"
+    },
+    {
+      "path": "src/rootserver/fork_table/instance_namespace_metadata.cpp",
+      "bytes": 79264,
+      "sha256": "5263ef6920f1594733ca864508fa530a0c14c10c53f16bee4e3833ddb89d247b"
+    },
+    {
+      "path": "src/rootserver/fork_table/instance_namespace_metadata.h",
+      "bytes": 17057,
+      "sha256": "7cce5f25d412b11d840da421489663d939399f5b939345490c3dae24e5501069"
+    },
+    {
+      "path": "src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp",
+      "bytes": 79170,
+      "sha256": "76e0e27dca4bac2e9c9444ddb30bb026212a37a2e8b9a6536480ed073b316836"
+    },
+    {
+      "path": "src/rootserver/fork_table/namespace_fork_kernel_prototype.h",
+      "bytes": 7369,
+      "sha256": "cc94d53d990c9b279ffa34c00baec4662cfdb0b6b15a89c290392a98e5c1d321"
+    },
+    {
+      "path": "src/rootserver/fork_table/namespace_schema_publication.cpp",
+      "bytes": 14205,
+      "sha256": "c8fb9b5f17bbc6a46c79fcfc695d7155569a34d92ff89a2570e1eba626ee5fa3"
+    },
+    {
+      "path": "src/rootserver/fork_table/namespace_tablet_access.cpp",
+      "bytes": 4191,
+      "sha256": "d3c99d735c92510571f5a646376eb096808afa32d2ed7de996fa94856296f4ac"
+    },
+    {
+      "path": "src/rootserver/fork_table/namespace_tablet_access.h",
+      "bytes": 2780,
+      "sha256": "ca0b7ed07f77133a626343d58ca7b8d32a0e256bcb537103371f3868aae172ee"
+    },
+    {
+      "path": "src/sql/das/iter/ob_das_scan_iter.cpp",
+      "bytes": 11497,
+      "sha256": "d3a3077c6bd7d63ae0b914468ad67403c4f6271b37f094a2241fded86d7c8a0e"
+    },
+    {
+      "path": "src/sql/das/ob_das_context.h",
+      "bytes": 11286,
+      "sha256": "08776dba5350e68824ca04b9dfc40aa72f55a2ce24d24ea9dd07401dafdf00cc"
+    },
+    {
+      "path": "src/sql/engine/dml/ob_table_insert_up_op.cpp",
+      "bytes": 58491,
+      "sha256": "c2d5060e66ebb81d7a2d5a7c3ac04839aa38f4849873889277018eef491ee951"
+    },
+    {
+      "path": "src/sql/engine/dml/ob_table_replace_op.cpp",
+      "bytes": 36712,
+      "sha256": "4fb76cc52bcd780f06521124fa67bfa0538d822b924590222467edfb8938ac27"
+    },
+    {
+      "path": "src/sql/ob_sql_trans_control.cpp",
+      "bytes": 49233,
+      "sha256": "65bc076640fe92de0909614c2ade897cb1f31d98008665ca2d14496cf897c54d"
+    },
+    {
+      "path": "src/sql/ob_sql_trans_control.h",
+      "bytes": 13218,
+      "sha256": "2f496f3bdc44bf5bd4a5aacacf3593b2a7d4c60525a66e4e9a777810bac2823e"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": ".scratch/namespace-fork/sql-read-view-artifacts/seekdb-strict",
+      "bytes": 1386391488,
+      "sha256": "43ae92117987fbd57d02ebdaf808d496af02609808183c0a0c8ca49fb1542442"
+    },
+    {
+      "path": ".scratch/namespace-fork/sql-read-view-artifacts/seekdb-production",
+      "bytes": 1386304504,
+      "sha256": "ccfcc649fe60fcbb2bf409de72cead7a68dd9a00e6c040ff7ff46a85eef7061e"
+    }
+  ],
+  "logs": [
+    {
+      "path": ".scratch/namespace-fork/sql-read-view-unit-result.log",
+      "bytes": 392,
+      "sha256": "b09be6bb2558f0aac971e40e623691ab141a27f59feff892642a6de60620f2a3"
+    },
+    {
+      "path": ".scratch/namespace-fork/sql-read-view-strict-result.log",
+      "bytes": 4952,
+      "sha256": "db1c47bb7ff32e902999bfa78290cc6ffaa1e14df07028379a2652f0d3cc6635"
+    },
+    {
+      "path": ".scratch/namespace-fork/sql-read-view-native-result.log",
+      "bytes": 1635,
+      "sha256": "74ddf26694f6c9dd8ffb19a1f2d807450ce2c27f05ac058f70f70bea5acff8aa"
+    },
+    {
+      "path": ".scratch/namespace-fork/sql-read-view-preparation-result.log",
+      "bytes": 3252,
+      "sha256": "14478e34ef310c1c84a29c7381978a87070b1cb25b16b24c9a3b7a3f3171b6dd"
+    },
+    {
+      "path": ".scratch/namespace-fork/sql-read-view-ddl-result.log",
+      "bytes": 3192,
+      "sha256": "09f871176021b83bd06556dbd849f9fc9f0b9c6fc39b8a111c4a61a866789543"
+    },
+    {
+      "path": ".scratch/namespace-fork/sql-read-view-fts-result.log",
+      "bytes": 3008,
+      "sha256": "59741ca9c7af8c47ccf0decfb4c08dc5629c9cad54fa8f3a7c68100653e3ab8e"
+    },
+    {
+      "path": ".scratch/namespace-fork/sql-read-view-detached-result.log",
+      "bytes": 6891,
+      "sha256": "b5f8b2322e3d0fde769391b6787e4f2d267d378f98eef21771c45023f1bc1bdd"
+    },
+    {
+      "path": ".scratch/namespace-fork/sql-read-view-production-result.log",
+      "bytes": 4895,
+      "sha256": "0ebdd5e4853ae135aeeee975f3b427ed257a869bce4db4e08f8e3342b4a189d4"
+    },
+    {
+      "path": ".scratch/namespace-fork/sql-read-view-production-shared-result.log",
+      "bytes": 7337,
+      "sha256": "0c17d8cd22823014eba2a11279382f8f64be57a44694a4971a03ba3226d368c4"
+    },
+    {
+      "path": ".scratch/namespace-fork/sql-read-view-production-build.log",
+      "bytes": 1695,
+      "sha256": "a8a7c3ea845d7bbf1660cc7d5377e6f1b97492e6af4e6b7f48a98f9808fc8c1a"
+    },
+    {
+      "path": ".scratch/namespace-fork/sql-read-view-standby-updated-results/results.json",
+      "bytes": 175,
+      "sha256": "9adbf1fee5b3154cfdad762dbe1382bfe98ad9f0fde1061d3a1cf6fe9b9f8769"
+    },
+    {
+      "path": ".scratch/namespace-fork/sql-read-view-standby-updated-results/namespace_fork_local.log",
+      "bytes": 52702,
+      "sha256": "fa5feed25b12b4d20fe5870a22030605bb5e856a4182e722a90e09607d43aaae"
+    },
+    {
+      "path": ".scratch/namespace-fork/sql-read-view-standby-updated-results/publication_child.log",
+      "bytes": 50679,
+      "sha256": "f5f8da72357358ebb994601ba96e7bd9645f7b7e24eb1ac0e7b668d96d4e2519"
+    },
+    {
+      "path": ".scratch/namespace-fork/sql-read-view-delayed-missing-result.log",
+      "bytes": 5057,
+      "sha256": "424d80e63348bfc3134a4ec7e1215e7a9964b786f1931d621b067c7243511ef5"
+    },
+    {
+      "path": ".scratch/namespace-fork/sql-read-view-routine-baseline-result.log",
+      "bytes": 3027,
+      "sha256": "7fd9b8d77a931d38f8b9bb39cffabf2b10a0afc29a2063d94a21c7a31bc3c82f"
+    },
+    {
+      "path": ".scratch/namespace-fork/sql-read-view-routine-before-result.log",
+      "bytes": 3030,
+      "sha256": "214000b2dc368170ca0f27a07e1c892565382276b548f2b745ab8bd3e4123143"
+    },
+    {
+      "path": ".scratch/namespace-fork/sql-read-view-standby-result.log",
+      "bytes": 138,
+      "sha256": "19e7d14b9ec5b42bc7ff22c924510a6ccbeaa598c89731190696606153b15743"
+    },
+    {
+      "path": ".scratch/namespace-fork/sql-read-view-standby-failure/bootstrap-register-4002.log",
+      "bytes": 5875350,
+      "sha256": "e6e3fb2b6b79c64b24e2913bce0f868d7fa1123138a65d32001487207888ad7c"
+    }
+  ],
+  "local_tests": [
+    {
+      "path": ".scratch/namespace-fork/sql_read_view_probe.py",
+      "bytes": 6316,
+      "sha256": "bb59b53a7c8d88be04d877c72e25c232d1e23ed21d7fc44cbaf92f61770c9282"
+    },
+    {
+      "path": ".scratch/namespace-fork/sql_read_view_routine_probe.py",
+      "bytes": 1158,
+      "sha256": "4962a99423d7212ac090579a964d33747fb0075002289e64d6873a25962dd823"
+    },
+    {
+      "path": ".scratch/namespace-fork/sql_read_view_probe_injection.py",
+      "bytes": 2586,
+      "sha256": "f864d6a01520b5b62c6ddac5bb8f726872f65675e1bf2575789fadefade63c50"
+    },
+    {
+      "path": ".scratch/namespace-fork/catalog_read_view_probe.ipp",
+      "bytes": 5537,
+      "sha256": "1101f8f2ee39698860002110902d49aa502304239e7264436134377b879749b9"
+    },
+    {
+      "path": ".scratch/namespace-fork/catalog_batch_probe.cpp",
+      "bytes": 17152,
+      "sha256": "c2a56f6200647a132948f62672dd7379efa99518ec7540db8d54f41c089839c1"
+    },
+    {
+      "path": ".scratch/namespace-fork/run_four_gates.py",
+      "bytes": 6216,
+      "sha256": "47bac39fe875504167416a9c035970fd075db5689aad073f2b2eb84d64f2f414"
+    },
+    {
+      "path": ".scratch/namespace-fork/standby_publication_failover_probe.py",
+      "bytes": 5442,
+      "sha256": "f8e19f1e161e64caa280e10c41c0c90a42554d402d439af413300055c4de203c"
+    }
+  ],
+  "remaining": [
+    "standby old-root page MVCC retention before enabling automatic catalog GC",
+    "viewless non-SQL source consumers and legacy state removal",
+    "precise physical/SCN GC",
+    "budgeted background takeover",
+    "template initialization",
+    "full replica/fullcopy/promotion acceptance",
+    "unclassified bootstrap MDS registration 4002"
+  ],
+  "commit": "0f90666f1e4253ef9969ea2a24455e7b63cfb0f6",
+  "remote_tracking_commit": "0f90666f1e4253ef9969ea2a24455e7b63cfb0f6",
+  "production_code_only": true,
+  "temporary_hooks_removed": true
+}

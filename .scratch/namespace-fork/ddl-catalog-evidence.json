@@ -1,0 +1,256 @@
+{
+  "commit": "faf305a4433b6ca41a9c86be65a88b5b6a7624ea",
+  "remote_tracking_sha": "faf305a4433b6ca41a9c86be65a88b5b6a7624ea",
+  "push_verified": true,
+  "goal_complete": false,
+  "sources": [
+    {
+      "path": "src/namespace/catalog.cpp",
+      "bytes": 21823,
+      "sha256": "b0ec78dbb2e61c5f93e69e7ca606f57d0b33e91f59d11cdc24bb8483dffb79e7"
+    },
+    {
+      "path": "src/namespace/catalog.h",
+      "bytes": 9414,
+      "sha256": "1aec1d6d13650122930a6beeb4723d30262ce7435a8e4044340bf5ca7cd2ea15"
+    },
+    {
+      "path": "src/observer/namespace_worker_inprocess_prototype.ipp",
+      "bytes": 55358,
+      "sha256": "d5b3b3df6f243c15c3b2d649a50d5ed3eacbea58e003264d92378aa43d6c03c4"
+    },
+    {
+      "path": "src/observer/namespace_worker_protocol_prototype.h",
+      "bytes": 15488,
+      "sha256": "28ce23d7e5fa213430c75f34443db88b1f4f30c6916a83b8080fd6b11035a915"
+    },
+    {
+      "path": "src/rootserver/fork_table/instance_namespace_metadata.cpp",
+      "bytes": 75721,
+      "sha256": "147721909a622d19e36e584964b96db6060730df1612cd6751231403b80204fd"
+    },
+    {
+      "path": "src/rootserver/fork_table/instance_namespace_metadata.h",
+      "bytes": 16418,
+      "sha256": "9a939811a5c4f4c8e25a8bcbae5fd931b4ae9e6e779efd6ce126c2fd15745eb9"
+    },
+    {
+      "path": "src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp",
+      "bytes": 74681,
+      "sha256": "2a9b64e35ad3ec7c1ad81525eb6739422b66e08beb10feb2f11d60d381d8c557"
+    },
+    {
+      "path": "src/rootserver/fork_table/namespace_fork_kernel_prototype.h",
+      "bytes": 6972,
+      "sha256": "2e570c249c06d15f110b4094e1725f00286a48e40c514d5f4a62e11e908a2f7f"
+    },
+    {
+      "path": "src/rootserver/fork_table/namespace_schema_publication.cpp",
+      "bytes": 13880,
+      "sha256": "d18d5b239d9b2ccf653ddb900ff50ab5465e1becd32e36a1985fc88e80212ac4"
+    },
+    {
+      "path": "src/rootserver/fork_table/namespace_schema_publication.h",
+      "bytes": 1503,
+      "sha256": "3591421db784b884cbeb6bd6373c68169dcbd78efe4462b48fe072395778f007"
+    },
+    {
+      "path": "src/rootserver/ob_ddl_service.cpp",
+      "bytes": 1354311,
+      "sha256": "e5fba68fb9b44b14199c1c63085a19cff3eee769ac752309d77a7d42301b80b7"
+    },
+    {
+      "path": "src/rootserver/rootserver_source_inventory.bzl",
+      "bytes": 8793,
+      "sha256": "68a01e99a9a87d58e21f082b44572471e084fa851724b999e4dd98c548c71b78"
+    },
+    {
+      "path": "src/storage/tablet/ob_tablet.cpp",
+      "bytes": 241320,
+      "sha256": "d333de5d407da9a2ea47b9753922820d33435bb6b5a01523607a4eba32eaf84e"
+    },
+    {
+      "path": "src/storage/tablet/ob_tablet_create_delete_mds_user_data.cpp",
+      "bytes": 5883,
+      "sha256": "bbecf36e1cd2e9da9e92b3a7003122fa8aa3087fbd059fca2445da19a44502ba"
+    },
+    {
+      "path": "src/storage/tablet/ob_tablet_create_delete_mds_user_data.h",
+      "bytes": 3846,
+      "sha256": "8b7d59c98f5ab32bdccf160326c50193ce35097e7bd34e4128db414361ace7f9"
+    },
+    {
+      "path": "src/storage/tablet/ob_tablet_create_mds_helper.cpp",
+      "bytes": 44334,
+      "sha256": "965c0c234c6c1246856339905eb06800c6aca71c96425367eca0ecfbfee29a58"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": ".scratch/namespace-fork/ddl-catalog-artifacts/seekdb-native",
+      "bytes": 1386538320,
+      "sha256": "86ceeee74a8ed4a211c59c3dc83f5322165bf493030d0d4b2a61b6eff3385109"
+    },
+    {
+      "path": ".scratch/namespace-fork/ddl-catalog-artifacts/seekdb-production",
+      "bytes": 1386448744,
+      "sha256": "8bb0fa7b30925c06b707428a2624e840fc5be87636a5ac312f08d0b4f65fc57a"
+    }
+  ],
+  "logs": [
+    {
+      "path": ".scratch/namespace-fork/catalog-source-codec-result.log",
+      "bytes": 315,
+      "sha256": "6808b9622363dfa2ea4ed3678520325ad8451e0bdb9f36d56bdddfb68c17dedc"
+    },
+    {
+      "path": ".scratch/namespace-fork/creation-identity-result.log",
+      "bytes": 14586,
+      "sha256": "259b00b1c804421a0797d6d0da2888f3bb6c3bd45f328ae48882549a928fb19b"
+    },
+    {
+      "path": ".scratch/namespace-fork/ddl-catalog-startup-result.log",
+      "bytes": 2436,
+      "sha256": "338006722097db6323e665416e73d36ae841b64af2a6f0b58aed0ac2bde81bea"
+    },
+    {
+      "path": ".scratch/namespace-fork/ddl-catalog-startup-fixed-result.log",
+      "bytes": 1293,
+      "sha256": "b6313d30c740a1d0466ae995c9602b2895bff3fff6b9bc4fbc755adfa4977b51"
+    },
+    {
+      "path": ".scratch/namespace-fork/ddl-catalog-schema-result.log",
+      "bytes": 4748,
+      "sha256": "8f6b669f37d67e1c00b8657cb85a08bf03f0d7442bdf0d0525713afbb1d18db0"
+    },
+    {
+      "path": ".scratch/namespace-fork/ddl-catalog-schema-fixed-result.log",
+      "bytes": 4858,
+      "sha256": "176a93831b4cd18360c395bdb3d57dcab1d7c92bd733595d9cc73a6a181e222f"
+    },
+    {
+      "path": ".scratch/namespace-fork/ddl-catalog-schema-final-result.log",
+      "bytes": 2996,
+      "sha256": "3ff366fb5dc2762956c2afb3330551623f9f215a184ac6bb6cc68d5b3452f6f4"
+    },
+    {
+      "path": ".scratch/namespace-fork/ddl-catalog-materialization-result.log",
+      "bytes": 1350,
+      "sha256": "43b68293f3320a017eba465e446ef4a1deb958777d630b2d4e2baf36df5df877"
+    },
+    {
+      "path": ".scratch/namespace-fork/ddl-catalog-materialization-retry-result.log",
+      "bytes": 18750,
+      "sha256": "f47b5eb64f496f61a3148ae8ee7e189be1720ee7ce32199e695d20ca385d688b"
+    },
+    {
+      "path": ".scratch/namespace-fork/ddl-catalog-partitioned-result.log",
+      "bytes": 3240,
+      "sha256": "57352d86f65632c21d3335ca6fad41758053a661f2189257c5983d144af5cf0e"
+    },
+    {
+      "path": ".scratch/namespace-fork/ddl-catalog-production-build.log",
+      "bytes": 1907,
+      "sha256": "aeb3881b3af70c8766087fa2134de7a7d773bfc3f1133ec5eb729ab63c134d6f"
+    },
+    {
+      "path": ".scratch/namespace-fork/ddl-catalog-production-schema-result.log",
+      "bytes": 3185,
+      "sha256": "93291e77f280cebbc1adc986c301ad4c5c52321a196a011cf39d96ff09879cbb"
+    },
+    {
+      "path": ".scratch/namespace-fork/ddl-catalog-production-shared-result.log",
+      "bytes": 7315,
+      "sha256": "80f982d1781dc7e045f5fad8a44b7e62a77d0c4cd1f62d52a3307972032117af"
+    },
+    {
+      "path": ".scratch/namespace-fork/ddl-catalog-final-initial-rollback-result.log",
+      "bytes": 2040,
+      "sha256": "781d6f4edc00647c6baea92436911db0bd263eb16ecd4ca9b339f4547ed110cf"
+    },
+    {
+      "path": ".scratch/namespace-fork/ddl-catalog-final-initial-abort_crash-result.log",
+      "bytes": 2383,
+      "sha256": "43f3663d24517650b559a7f690e279047c46d9a08461edf84d220cdc0067b6de"
+    },
+    {
+      "path": ".scratch/namespace-fork/ddl-catalog-final-initial-commit_crash-result.log",
+      "bytes": 2310,
+      "sha256": "c5f9b9224017866f872d36301f013979141a09a4e9b17fe873d1f5aa5e7ea291"
+    },
+    {
+      "path": ".scratch/namespace-fork/ddl-catalog-final-child-rollback-result.log",
+      "bytes": 4846,
+      "sha256": "7fddb0b55b4905f4586deffb0eb2b55b90537dc76da80de81f5b94766da0ab1c"
+    },
+    {
+      "path": ".scratch/namespace-fork/ddl-catalog-final-child-abort_crash-result.log",
+      "bytes": 5187,
+      "sha256": "21cecd85ddfad9949f0a666a6782e37c31da0042ff0044d2356579ca1a6f0018"
+    },
+    {
+      "path": ".scratch/namespace-fork/ddl-catalog-final-child-commit_crash-result.log",
+      "bytes": 2457,
+      "sha256": "ba49b297546f5865e56f75dedc9ded5eaa06924c31c3382ccff985a97b5e2155"
+    }
+  ],
+  "local_tests": [
+    {
+      "path": ".scratch/namespace-fork/catalog_batch_probe.cpp",
+      "bytes": 15236,
+      "sha256": "f6544d48671e7bf7a2855cd1ab61fbd85bbda0d5e8454ebd060c30442a9f31cf"
+    },
+    {
+      "path": ".scratch/namespace-fork/catalog_batch_probe.py",
+      "bytes": 842,
+      "sha256": "7c353b9215b0c79c66a31ca699adf36e36011512fcd61735a9da8babcbf23b27"
+    },
+    {
+      "path": ".scratch/namespace-fork/creation_identity_native_probe.ipp",
+      "bytes": 4448,
+      "sha256": "c430c8179d32fccb98328cdb8b3ee7201e49e8cadd1aae56b1b0fbcbf7f6c921"
+    },
+    {
+      "path": ".scratch/namespace-fork/creation_identity_probe_injection.py",
+      "bytes": 1798,
+      "sha256": "192150f205e75820c56ae29faef37ac08f4fb37c8e3f257c1e05a68f618f95d5"
+    },
+    {
+      "path": ".scratch/namespace-fork/ddl_catalog_atomic_probe.py",
+      "bytes": 9027,
+      "sha256": "899006a4d3f477fa7b237dc3667f57708a4ec9527d247fdb22c6c5ab02387cfa"
+    },
+    {
+      "path": ".scratch/namespace-fork/ddl_catalog_schema_probe.py",
+      "bytes": 5479,
+      "sha256": "cd74e9d5813558ca892dd7c8005e5b685e67c93a49900b7c8107069055e4e841"
+    },
+    {
+      "path": ".scratch/namespace-fork/ddl_catalog_fault_injection.py",
+      "bytes": 1851,
+      "sha256": "618a2f55dde450743a54231845ab41088c07a7cc3046248a901bea0f354d9aeb"
+    },
+    {
+      "path": ".scratch/namespace-fork/shared_transaction_probe.py",
+      "bytes": 14291,
+      "sha256": "5153787ed41bc4507c7d634ce8e71bf3e2c7a533ff8f259eea4cc9d3a6013b5a"
+    },
+    {
+      "path": ".scratch/namespace-fork/gate_probe_injection.py",
+      "bytes": 1021,
+      "sha256": "f580d5adf5362346b73ed4f643ecc4f44ba64d48549371c88f560715dfd2a3d5"
+    },
+    {
+      "path": ".scratch/namespace-fork/run_four_gates.py",
+      "bytes": 5997,
+      "sha256": "64943c696c17c8e494fc59e9537f014cdd1c21b4406830720b9e92b0654bc38f"
+    }
+  ],
+  "limitations": [
+    "Read routing still uses exception/parent chain; transitional dual writes are not final architecture.",
+    "Persistent active/pending/recovery DDL registration remains; concurrent begin registration can return6005.",
+    "Precise physical GC, readonly background takeover, template independence and standby/fullcopy acceptance remain.",
+    "Native artifact has identity/shared/DDL hooks only, not the entire four-gate hook suite.",
+    "Preexisting MDS infinite-timeout overflow reproduced; focused retry succeeded without modifying it."
+  ]
+}

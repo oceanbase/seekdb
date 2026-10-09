@@ -1,0 +1,20 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/background-materialization-artifacts/seekdb-template-zero", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_template_baseline_mdpnfsou", "pid": 400887, "port": 60447}
+{"event": "startup", "seconds": 15.59}
+{"event": "template_verified", "namespace": 2, "tablets": 358, "nonlogin": true, "runtime_unloaded": true}
+{"event": "sql", "sql": "CREATE DATABASE template_must_not_include", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE template_must_not_include.t(id INT PRIMARY KEY)", "rows": []}
+{"event": "sql", "sql": "CREATE NAMESPACE from_template", "rows": []}
+{"event": "sql", "sql": "SHOW DATABASES LIKE 'template_must_not_include'", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE test.t(id INT PRIMARY KEY)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO test.t VALUES(1)", "rows": []}
+{"event": "sql", "sql": "SELECT * FROM test.t", "rows": [[1]]}
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/background-materialization-artifacts/seekdb-template-zero", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_template_baseline_mdpnfsou", "pid": 401521, "port": 60447}
+{"event": "template_verified", "namespace": 2, "tablets": 358, "nonlogin": true, "runtime_unloaded": true}
+{"event": "sql", "sql": "CREATE NAMESPACE after_restart", "rows": []}
+{"event": "sql", "sql": "SHOW DATABASES LIKE 'template_must_not_include'", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_table", "rows": [[618]]}
+{"event": "PASS", "case": "template_initial_baseline", "all_bindings_owned": true, "nonlogin": true, "sql_runtime_unloaded": true, "empty_namespace": true, "sigkill_restart": true}
+{"event": "stopped", "pid": 401521, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_template_baseline_mdpnfsou/data.tar.gz", "bytes": 5666952}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

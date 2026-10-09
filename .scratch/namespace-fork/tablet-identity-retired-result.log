@@ -1,0 +1,22 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/tablet-identity-artifacts/seekdb-production", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_retired_baseline_restart_h3s93ti2", "pid": 3837324, "port": 37353}
+{"event": "sql", "sql": "CREATE DATABASE retired", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE retired.t(id INT PRIMARY KEY,v INT,body LONGTEXT,KEY iv(v))", "rows": []}
+{"event": "sql", "sql": "INSERT INTO retired.t VALUES(1,10,REPEAT('retained',10000)),(2,20,REPEAT('second',10000))", "rows": []}
+{"event": "sql", "sql": "SELECT table_name,table_id,tablet_id FROM oceanbase.__all_table WHERE database_id=(SELECT database_id FROM oceanbase.__all_database WHERE database_name='retired') AND tablet_id>0", "rows": [["t", 500003, 200001], ["__AUX_LOB_META_500005_", 500005, 200003], ["__AUX_LOB_PIECE_500006_", 500006, 200004], ["__idx_500003_iv", 500004, 200002]]}
+{"event": "sql", "sql": "FORK NAMESPACE retired_parent FROM ns1", "rows": []}
+{"event": "sql", "sql": "UPDATE retired.t SET v=v+1", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE retired_child FROM retired_parent", "rows": []}
+{"event": "sql", "sql": "UPDATE retired.t SET v=v+1", "rows": []}
+{"event": "sql", "sql": "DROP NAMESPACE retired_parent", "rows": []}
+{"event": "sql", "sql": "DROP TABLE retired.t", "rows": []}
+{"event": "retired_sources_before_restart", "physical": [[4611686155866541377, 3, 1, 0], [4611686155866541378, 3, 1, 0], [4611686155866541379, 3, 1, 0], [4611686155866541380, 3, 1, 0], [4611686430744448321, 1, 1, 0], [4611686430744448322, 1, 1, 0], [4611686430744448323, 1, 1, 0], [4611686430744448324, 1, 1, 0]], "schemas": [["t", 500003, 200001], ["__AUX_LOB_META_500005_", 500005, 200003], ["__AUX_LOB_PIECE_500006_", 500006, 200004], ["__idx_500003_iv", 500004, 200002]]}
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/tablet-identity-artifacts/seekdb-production", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_retired_baseline_restart_h3s93ti2", "pid": 3837790, "port": 37353}
+{"event": "sql", "sql": "ALTER SYSTEM SET ob_compaction_schedule_interval='3s'", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "sql", "sql": "UPDATE retired.t SET v=v+10 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM retired.t WHERE id=1", "rows": [[22]]}
+{"event": "PASS", "case": "retired_baseline_restart", "intermediate_namespace_deleted": true, "source_table_dropped": true, "sources_reclaimed": true}
+{"event": "stopped", "pid": 3837790, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_retired_baseline_restart_h3s93ti2/data.tar.gz", "bytes": 3404295}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

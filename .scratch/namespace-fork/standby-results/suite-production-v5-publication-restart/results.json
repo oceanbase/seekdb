@@ -1,0 +1,12 @@
+[
+  {
+    "case": "publication_restart_initial",
+    "exit_code": 0,
+    "elapsed_s": 91.79
+  },
+  {
+    "case": "publication_restart_child",
+    "exit_code": 0,
+    "elapsed_s": 94.59
+  }
+]

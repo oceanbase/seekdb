@@ -1,0 +1,47 @@
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_bootstrap_l3qyohyh", "pid": 2928453, "port": 65489}
+{"event": "sql", "sql": "SELECT 1", "rows": [[1]]}
+{"event": "sql", "sql": "CREATE DATABASE legacy_template_user", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE legacy_template_user.secret(id INT PRIMARY KEY)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO legacy_template_user.secret VALUES(42)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE test.legacy_template_rows(id INT PRIMARY KEY)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO test.legacy_template_rows VALUES(9)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE mysql.legacy_template_rows(id INT PRIMARY KEY)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO mysql.legacy_template_rows VALUES(8)", "rows": []}
+{"event": "sql", "sql": "CREATE VIEW mysql.legacy_template_view AS SELECT id FROM mysql.legacy_template_rows", "rows": []}
+{"event": "sql", "sql": "CREATE PROCEDURE mysql.legacy_template_proc() SELECT 11", "rows": []}
+{"event": "sql", "sql": "CREATE USER 'legacy_template_login'@'%' IDENTIFIED BY 'test-pass'", "rows": []}
+{"event": "sql", "sql": "CREATE ROLE legacy_template_role", "rows": []}
+{"event": "stopped", "pid": 2928453, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_bootstrap_l3qyohyh/data.tar.gz", "bytes": 3267092}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_worker_bootstrap_prototype.py", line 52, in <module>
+    main()
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_worker_bootstrap_prototype.py", line 48, in main
+    run_case(args.binary, "bootstrap")
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_inprocess_prototype.py", line 1083, in run_case
+    {"bootstrap": bootstrap_probe, "sql": sql_probe,
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_inprocess_prototype.py", line 226, in bootstrap_probe
+    legacy_template_probe(experiment)
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_inprocess_prototype.py", line 85, in legacy_template_probe
+    experiment.sql("DELETE FROM __fork_proto_meta.namespaces WHERE name='__template__'")
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_fork_prototype.py", line 116, in sql
+    cur.execute(statement)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/cursors.py", line 153, in execute
+    result = self._query(query)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/cursors.py", line 322, in _query
+    conn.query(q)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 575, in query
+    self._affected_rows = self._read_query_result(unbuffered=unbuffered)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 826, in _read_query_result
+    result.read()
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 1203, in read
+    first_packet = self.connection._read_packet()
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 782, in _read_packet
+    packet.raise_for_error()
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/protocol.py", line 219, in raise_for_error
+    err.raise_mysql_exception(self._data)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/err.py", line 150, in raise_mysql_exception
+    raise errorclass(errno, errval)
+pymysql.err.ProgrammingError: (1146, "Table '__fork_proto_meta.namespaces' doesn't exist")

@@ -1,0 +1,3 @@
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"case": "primary_major_compaction", "status": "FAIL", "rows": [[1790971900038007018, 1790971900038007018, 1, "COMPACTING"]], "tablets": [[49401, 1, 0], [49402, 1, 0], [49403, 1, 0], [49404, 1, 0], [4611686155866341377, 1, 0], [4611686155866341379, 1, 0]]}

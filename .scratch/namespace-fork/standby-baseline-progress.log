@@ -1,0 +1,24 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/background-materialization-artifacts/seekdb-baseline-progress-native", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_baseline_progress_primary_p70l158b", "pid": 2157213, "port": 64057}
+{"event": "sql", "sql": "CREATE DATABASE slow_copy", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE slow_copy.t(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO slow_copy.t VALUES(1,7)", "rows": []}
+{"event": "setup", "pid": 2159516, "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_baseline_progress_standby_1tmhs2zk", "port": 36277}
+{"event": "sql", "sql": "FORK NAMESPACE slow_baseline FROM ns1", "rows": []}
+{"event": "sql", "sql": "UPDATE slow_copy.t SET v=8", "rows": []}
+{"event": "sql", "sql": "DROP TABLE slow_copy.t", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "primary_complete_standby_incomplete", "source": 4611686155866541377, "child": 4611686430744448321, "source_retained_on_standby": true}
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/background-materialization-artifacts/seekdb-baseline-progress-native", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_baseline_progress_primary_p70l158b", "pid": 2161012, "port": 64057}
+{"event": "setup", "pid": 2161239, "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_baseline_progress_standby_1tmhs2zk", "port": 36277}
+{"event": "both_restarted_while_standby_incomplete", "source_retained": true}
+{"event": "sql", "sql": "ALTER SYSTEM SWITCHOVER TO STANDBY", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM SWITCHOVER TO PRIMARY", "rows": []}
+{"event": "sql", "sql": "INSERT INTO slow_copy.t VALUES(2,9)", "rows": []}
+{"event": "sql", "sql": "SELECT * FROM slow_copy.t ORDER BY id", "rows": [[1, 8], [2, 9]]}
+{"event": "PASS", "case": "independent_replica_baseline", "primary_first": true, "both_crash_restarted": true, "local_gc": true, "promoted_write": true}
+{"event": "stopped", "pid": 2161239, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_baseline_progress_standby_1tmhs2zk/data.tar.gz", "bytes": 18352737}
+{"event": "stopped", "pid": 2161012, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_baseline_progress_primary_p70l158b/data.tar.gz", "bytes": 7918569}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

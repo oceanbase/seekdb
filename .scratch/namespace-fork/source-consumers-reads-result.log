@@ -1,0 +1,28 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/source-consumers-artifacts/seekdb-production", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_access_reads_i95t_w40", "pid": 3712437, "port": 15479}
+{"event": "sql", "sql": "CREATE DATABASE access_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE access_repro.parts(id INT PRIMARY KEY,v INT) PARTITION BY HASH(id) PARTITIONS 4", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_repro.parts VALUES(1,10),(2,20),(3,30),(4,40)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE access_repro.docs(id INT PRIMARY KEY,body LONGTEXT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_repro.docs VALUES(1,CONCAT('alpha ',REPEAT('word ',2200))),(2,'beta text')", "rows": []}
+{"event": "sql", "sql": "CREATE FULLTEXT INDEX body_ft ON access_repro.docs(body)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE access_reads FROM ns1", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_repro.parts VALUES(5,50)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_repro.docs VALUES(3,'alpha later')", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*),SUM(v),MIN(v),MAX(v) FROM access_repro.parts", "rows": [[4, "100", 10, 40]]}
+{"event": "sql", "sql": "SELECT id,v FROM access_repro.parts ORDER BY id", "rows": [[1, 10], [2, 20], [3, 30], [4, 40]]}
+{"event": "sql", "sql": "SELECT id FROM access_repro.docs WHERE MATCH(body) AGAINST('alpha')", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT id,LENGTH(body) FROM access_repro.docs ORDER BY id", "rows": [[1, 11006], [2, 9]]}
+{"event": "case_pass", "case": "cold_reads_without_materialization"}
+{"event": "sql", "sql": "UPDATE access_repro.docs SET body='gamma child' WHERE id=1", "rows": []}
+{"event": "sql", "sql": "DELETE FROM access_repro.docs WHERE id=2", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM access_repro.docs WHERE MATCH(body) AGAINST('gamma')", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT id FROM access_repro.docs WHERE MATCH(body) AGAINST('alpha')", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM access_repro.docs WHERE MATCH(body) AGAINST('beta')", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM access_repro.docs WHERE MATCH(body) AGAINST('alpha') ORDER BY id", "rows": [[1], [3]]}
+{"event": "sql", "sql": "SELECT id FROM access_repro.docs WHERE MATCH(body) AGAINST('beta')", "rows": [[2]]}
+{"event": "case_pass", "case": "inherited_fulltext_update_delete"}
+{"event": "pass"}
+{"event": "stopped", "pid": 3712437, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_access_reads_i95t_w40/data.tar.gz", "bytes": 3463561}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

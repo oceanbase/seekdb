@@ -1,0 +1,12 @@
+[
+  {
+    "case": "basic",
+    "exit_code": 255,
+    "elapsed_s": 27.42
+  },
+  {
+    "case": "cascade_standby",
+    "exit_code": 255,
+    "elapsed_s": 28.51
+  }
+]

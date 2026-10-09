@@ -1,0 +1,136 @@
+{
+  "commit": "ed722ba2a17a33adf37a0ed18afa73178ed1c112",
+  "origin_tracking_commit": "ed722ba2a17a33adf37a0ed18afa73178ed1c112",
+  "pushed": true,
+  "scope": "Physical creation descriptors and chunked immutable objects; full source graph goal remains incomplete",
+  "files": {
+    ".scratch/namespace-fork/physical-description-copy-red-result.log": {
+      "bytes": 1564,
+      "sha256": "755ed29b177b6d54d476f5721416481a8946e0a3fbb2ea1e0a04edb9b35610ab"
+    },
+    ".scratch/namespace-fork/table-descriptor-native-result.log": {
+      "bytes": 2921,
+      "sha256": "7e09b5b2ed87d7319c380e7740c6e44e0942f2b7ce0651702ef14083dde7cd70"
+    },
+    ".scratch/namespace-fork/table-descriptor-fault-result.log": {
+      "bytes": 12803,
+      "sha256": "defe27dfa9a2fe2539bb93ddf155e98ec270f90cf0862e48c3149dd83661c236"
+    },
+    ".scratch/namespace-fork/table-descriptor-preparation-result.log": {
+      "bytes": 3310,
+      "sha256": "67f5ff91f5a262117b06a2e38d0b570b4329266a21f411cbfd72e5416ad0be9b"
+    },
+    ".scratch/namespace-fork/table-descriptor-detached-result.log": {
+      "bytes": 6947,
+      "sha256": "a23a401e888db8fcb525bbe574fdf0cc6beeb7bb2872ef03d1cd1fb699ed89c5"
+    },
+    ".scratch/namespace-fork/table-descriptor-catalog-result.log": {
+      "bytes": 291,
+      "sha256": "494abc9e653654512be1907cac97a11a47ddf6ef24b5b7a4d55a10efceba6101"
+    },
+    ".scratch/namespace-fork/table-descriptor-production-build.log": {
+      "bytes": 10691,
+      "sha256": "93d6766f52f492f04941407b8d11bc254b7de48cef0a831fb961cb2d7b1b467f"
+    },
+    ".scratch/namespace-fork/physical-description-artifacts/seekdb-table-descriptor-production": {
+      "bytes": 1385977504,
+      "sha256": "cdecd1adccbbf1e01450dd17b7c97e066685bf55a96f0beec7279adee02842e5"
+    },
+    ".scratch/namespace-fork/physical-description-artifacts/seekdb-table-descriptor-native": {
+      "bytes": 1386718344,
+      "sha256": "2f24624d570d26ac50f1111c4b47cf447271522dde625b7cc72e29805985ca74"
+    },
+    "src/namespace/catalog.cpp": {
+      "bytes": 20715,
+      "sha256": "e11a24ee04f50f93872e88820ed2a1f1c76c5c65046a3fcfea40b755bd7b43f3"
+    },
+    "src/namespace/catalog.h": {
+      "bytes": 8743,
+      "sha256": "49bc724b521e241097ae140c8b5dd7348f5555ef65ca7582f135521291220443"
+    },
+    "src/rootserver/fork_table/instance_namespace_metadata.cpp": {
+      "bytes": 74692,
+      "sha256": "32ed6ab3c168f2ed7ac5cd2cbe98b0bd605062210dd7b8bd2a46021fc94495e0"
+    },
+    "src/rootserver/fork_table/instance_namespace_metadata.h": {
+      "bytes": 16270,
+      "sha256": "4244bd9468551a61fa2e3d1dad6abfb024614e95694e72bc06dc858791e8885a"
+    },
+    "src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp": {
+      "bytes": 73218,
+      "sha256": "bef9d8eb88454414137a72c2506a6b5034ea7001971ddd94efb7fa4b885c5a51"
+    },
+    "src/rootserver/fork_table/table_creation_descriptor.cpp": {
+      "bytes": 4485,
+      "sha256": "c93f8f81a0dcda6a68aa9cb836da970a8f369abf384420cca78e32fc5498e626"
+    },
+    "src/rootserver/fork_table/table_creation_descriptor.h": {
+      "bytes": 1749,
+      "sha256": "264e93925ba1ffa3f8262c195a8281f57aad2d7e10561ee940655d10ee2b9185"
+    },
+    "src/rootserver/ob_tablet_creator.cpp": {
+      "bytes": 16397,
+      "sha256": "2b3d53a7e27c910017bcd4c163d415c2250364be148a41c58c3e2d5c641470dd"
+    },
+    "src/rootserver/ob_tablet_creator.h": {
+      "bytes": 5343,
+      "sha256": "761e31b79b12562b9e018d553b0302902d03d5aec788450265189a2ee3438464"
+    },
+    "src/rootserver/rootserver_source_inventory.bzl": {
+      "bytes": 8719,
+      "sha256": "56321507fd9816415f7c03d14c5b19e9fc5b543120f3f01ceca542637c4aca64"
+    },
+    "src/storage/ob_storage_schema.cpp": {
+      "bytes": 40900,
+      "sha256": "b3d681c2f9b36dc0b7a5e09345dbea38be9d53e780fbc7b8189b0448ae2c5f13"
+    },
+    ".scratch/namespace-fork/catalog_batch_probe.cpp": {
+      "bytes": 12632,
+      "sha256": "2de6ca3a1c135cc432456053c250b0c4e51e0e28643da3010d3d474efea31e76"
+    },
+    ".scratch/namespace-fork/catalog_batch_probe.py": {
+      "bytes": 842,
+      "sha256": "7c353b9215b0c79c66a31ca699adf36e36011512fcd61735a9da8babcbf23b27"
+    },
+    ".scratch/namespace-fork/instance_namespace_metadata_probe.ipp": {
+      "bytes": 29019,
+      "sha256": "50c53521deef8276549287c41faadcc7cda5c39b301e5a1f71ddb233e20e86d4"
+    },
+    ".scratch/namespace-fork/tablet_binding_native_probe.ipp": {
+      "bytes": 6691,
+      "sha256": "a889c66efa4ce46d286b966a14ecd36881624237fd76c0195e7d2b3278b730d7"
+    },
+    ".scratch/namespace-fork/run_instance_meta_native_probe.py": {
+      "bytes": 5454,
+      "sha256": "afac9099b5a4873e9111fe4ce120777219d4207f1f25c1fd8d7a490ab90740b9"
+    },
+    ".scratch/namespace-fork/run_four_gates.py": {
+      "bytes": 5836,
+      "sha256": "cce48336a7bc9ec9ab5387915bc57c9872536090195f6123e16cef9363e66b39"
+    },
+    ".scratch/namespace-fork/gate_probe_injection.py": {
+      "bytes": 936,
+      "sha256": "d8248297332ff1eed0a387c69e3bb420736781861fc5fa94423df14d2746bf4f"
+    }
+  },
+  "known_todo": "MDS infinite timeout addition overflow; recorded, not changed",
+  "not_implemented": [
+    "DDL graph publication",
+    "source graph routing",
+    "physical generation identity",
+    "precise physical GC",
+    "readonly background materialization",
+    "template takeover",
+    "standby source graph validation"
+  ],
+  "tests_not_run": [
+    "full mysqltest",
+    "sysbench",
+    "full four gates"
+  ],
+  "probe_binary_hooks": [
+    "native_probe_injection",
+    "shared_transaction_fault_injection"
+  ],
+  "full_gate_hook_driver": "gate_probe_injection.py adds preparation counters as well"
+}

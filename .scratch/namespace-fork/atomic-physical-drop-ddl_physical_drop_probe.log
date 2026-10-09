@@ -1,0 +1,12 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/atomic-physical-drop-artifacts/seekdb-production", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_physical_drop_ucarembz", "pid": 3946547, "port": 44279}
+{"event": "sql", "sql": "FORK NAMESPACE ddl_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "CREATE DATABASE ddl_db", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE ddl_db.t(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO ddl_db.t VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "SELECT tablet_id FROM oceanbase.__all_table WHERE table_name='t'", "rows": [[200001]]}
+{"event": "sql", "sql": "DROP TABLE ddl_db.t", "rows": []}
+{"event": "PASS", "case": "ddl_physical_drop", "tablet": 4611686430744448321, "storage": [[3, 1, 1]]}
+{"event": "stopped", "pid": 3946547, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_physical_drop_ucarembz/data.tar.gz", "bytes": 3400603}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

@@ -1,0 +1,18 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/background-materialization-artifacts/seekdb-copy-view", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_primary_q6baj7co", "pid": 2116947, "port": 29361}
+{"event": "sql", "sql": "CREATE DATABASE copy_probe", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE copy_probe.t(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO copy_probe.t VALUES(1,7)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE copy_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "DROP TABLE copy_probe.t", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "template_mds_flushed", "tablets": ["4611686293305295894", "4611686293305295920", "4611686293305345928", "4611686293305396858", "4611686293305394851"]}
+{"event": "setup", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_standby_h6n477mf", "pid": 2117540, "port": 45469, "primary_base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_primary_q6baj7co"}
+{"event": "waiting_readable", "status": [2003, "Can't connect to MySQL server on '127.0.0.1' ([Errno 111] Connection refused)"]}
+{"event": "waiting_readable", "status": [2003, "Can't connect to MySQL server on '127.0.0.1' ([Errno 111] Connection refused)"]}
+{"event": "PASS", "case": "background_mds_fullcopy", "source_mds_flushed": true, "rows": [[1, 7]], "child_read": true, "parent_dropped_before_copy": true, "parent_dropped_during_copy": false, "compaction_interval": "3s"}
+{"event": "stopped", "pid": 2117540, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_standby_h6n477mf/data.tar.gz", "bytes": 17279454}
+{"event": "stopped", "pid": 2116947, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_primary_q6baj7co/data.tar.gz", "bytes": 8107011}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

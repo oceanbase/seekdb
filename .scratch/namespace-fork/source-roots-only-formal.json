@@ -1,0 +1,17 @@
+[
+  {
+    "case": "source_roots_only_probe",
+    "code": 0,
+    "seconds": 10.9
+  },
+  {
+    "case": "sql_read_view_probe",
+    "code": 0,
+    "seconds": 12.72
+  },
+  {
+    "case": "retired_baseline_restart_probe",
+    "code": 0,
+    "seconds": 39.61
+  }
+]

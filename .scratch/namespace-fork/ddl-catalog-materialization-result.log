@@ -1,0 +1,12 @@
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_1pn9hs7h", "pid": 3278047, "port": 29585}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_1pn9hs7h/data.tar.gz", "bytes": 2786711}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File ".scratch/namespace-fork/shared_transaction_probe.py", line 273, in <module>
+    run(args.binary, args.faults, args.case, args.flush_redo)
+  File ".scratch/namespace-fork/shared_transaction_probe.py", line 86, in run
+    experiment.start()
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_worker_bootstrap_prototype.py", line 28, in start
+    raise RuntimeError(f"bootstrap exited ({self.proc.returncode}): {self.base}")
+RuntimeError: bootstrap exited (1): /data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_1pn9hs7h

@@ -1,0 +1,15 @@
+Atomically materialize namespace tablets in one native transaction
+
+Borrow the internal SQL connection transaction for InstanceMetaStore writes,
+retain KV snapshot and GC protection until its owner ends, and publish the
+entire main/LOB binding unit and owned entries with one commit. Remove the
+materialization-only owned repair and preserve separate DDL publication.
+
+Make aborted physical creations retryable through native GC, retaining object
+identity for empty-shell conversion. Finish undecided replay transactions via
+a durable abort before local transaction activation; otherwise logged CREATE
+MDS remains permanently pending after a crash.
+
+Validated release build and local SQL/KV ownership, rollback, redo, crash,
+uncertain-commit and creation-contention regressions. Tests and documentation
+remain local as requested.

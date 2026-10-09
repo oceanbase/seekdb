@@ -1,0 +1,56 @@
+{
+  "status": "PASS",
+  "production": "physical-retention-artifacts/seekdb-production",
+  "native": "physical-retention-artifacts/seekdb-native",
+  "tests": {
+    "unit": "physical-retention-plan-unit.log",
+    "cut": "physical-retention-final-cut.log",
+    "mvcc": "physical-retention-mvcc-source-compaction.log",
+    "formal": "physical-retention-formal.json",
+    "retired": "physical-retention-retired.log",
+    "standby": "physical-retention-standby/results.json",
+    "native": "physical-retention-native-lookup-retry.log"
+  },
+  "failures": [
+    {
+      "log": "physical-retention-integration-build.log",
+      "reason": "missing create identity argument at macro call, fixed"
+    },
+    {
+      "log": "physical-retention-mvcc.log",
+      "reason": "local harness schedule below config minimum, fixed"
+    },
+    {
+      "log": "physical-retention-mvcc-retry.log",
+      "reason": "local harness SQL used wrong virtual column name, fixed"
+    },
+    {
+      "log": "physical-retention-full-native.log",
+      "reason": "durable fixture published nonexistent tablet 82; changed to COW rewrite of real inherited source; rerun pending"
+    },
+    {
+      "log": "physical-retention-native-fixture-retry.log",
+      "reason": "test passed INT64_MAX outside SCN domain; corrected to real cut SCN"
+    },
+    {
+      "log": "physical-retention-native-scn-retry.log",
+      "reason": "test rejected valid zero retention boundary during bootstrap; corrected to upper-bound and incarnation checks; rerun pending"
+    }
+  ],
+  "remaining": [
+    "bounded spill workset",
+    "physical existence GC short fence",
+    "readonly background materialization",
+    "template takeover and nonlogin",
+    "obsolete pin and lineage removal",
+    "standby local takeover and fullcopy validation"
+  ],
+  "commit": "98b9c1527",
+  "native_recovery_phases": [
+    "created",
+    "marked",
+    "finished",
+    "verified"
+  ],
+  "production_build": "physical-retention-release-build.log"
+}

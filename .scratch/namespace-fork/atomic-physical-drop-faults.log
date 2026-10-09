@@ -1,0 +1,6 @@
+{"owner": "initial", "fault": "rollback", "exit_code": 0, "elapsed_s": 13.01}
+{"owner": "initial", "fault": "abort_crash", "exit_code": 0, "elapsed_s": 17.46}
+{"owner": "initial", "fault": "commit_crash", "exit_code": 0, "elapsed_s": 15.95}
+{"owner": "child", "fault": "rollback", "exit_code": 0, "elapsed_s": 13.47}
+{"owner": "child", "fault": "abort_crash", "exit_code": 0, "elapsed_s": 18.45}
+{"owner": "child", "fault": "commit_crash", "exit_code": 0, "elapsed_s": 18.23}

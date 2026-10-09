@@ -1,0 +1,12 @@
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_empty_shell_horizon_qiklzl74", "pid": 4049100, "port": 21973}
+{"event": "sql", "sql": "CREATE DATABASE horizon", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE horizon.t(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO horizon.t VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "SELECT tablet_id FROM oceanbase.__all_table WHERE table_name='t'", "rows": [[200001]]}
+{"event": "sql", "sql": "DROP TABLE horizon.t", "rows": []}
+{"event": "horizon_held", "tablet": 4611686155866541377, "seconds": 12}
+{"event": "PASS", "case": "empty_shell_horizon", "tablet": 4611686155866541377, "released": [[3, 1, 1]]}
+{"event": "stopped", "pid": 4049100, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_empty_shell_horizon_qiklzl74/data.tar.gz", "bytes": 3330212}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

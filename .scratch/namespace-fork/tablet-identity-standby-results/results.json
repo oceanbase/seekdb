@@ -1,0 +1,12 @@
+[
+  {
+    "case": "namespace_fork_local",
+    "exit_code": 0,
+    "elapsed_s": 99.17
+  },
+  {
+    "case": "publication_child",
+    "exit_code": 0,
+    "elapsed_s": 93.94
+  }
+]

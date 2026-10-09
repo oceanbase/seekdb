@@ -1,0 +1,17 @@
+[
+  {
+    "case": "sql_read_view_probe",
+    "code": 0,
+    "seconds": 12.79
+  },
+  {
+    "case": "fork_parent_truncate_probe",
+    "code": 0,
+    "seconds": 11.11
+  },
+  {
+    "case": "ddl_physical_drop_probe",
+    "code": 0,
+    "seconds": 12.29
+  }
+]

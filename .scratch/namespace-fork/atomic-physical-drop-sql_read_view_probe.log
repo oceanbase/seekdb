@@ -1,0 +1,52 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/atomic-physical-drop-artifacts/seekdb-production", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_sql_read_view_5bu442v4", "pid": 3952251, "port": 57453}
+{"event": "sql", "sql": "CREATE DATABASE views", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE views.anchor(id INT PRIMARY KEY)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO views.anchor VALUES(1)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE views.t(id INT PRIMARY KEY,v INT,b LONGTEXT) PARTITION BY HASH(id) PARTITIONS 8", "rows": []}
+{"event": "sql", "sql": "INSERT INTO views.t VALUES(1,10,REPEAT('a',12000)),(2,20,REPEAT('b',14000))", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE view_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ", "rows": []}
+{"event": "sql", "sql": "BEGIN", "rows": []}
+{"event": "sql", "sql": "SELECT * FROM views.anchor", "rows": [[1]]}
+{"event": "sql", "sql": "UPDATE views.t SET v=11 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM views.t ORDER BY id", "rows": [[1, 10, 12000], [2, 20, 14000]]}
+{"event": "sql", "sql": "UPDATE views.t SET v=23 WHERE id=2", "rows": []}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM views.t ORDER BY id", "rows": [[1, 10, 12000], [2, 23, 14000]]}
+{"event": "sql", "sql": "SELECT /*+ PARALLEL(4) */ SUM(v) FROM views.t", "rows": [["33"]]}
+{"event": "sql", "sql": "ROLLBACK", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM views.t ORDER BY id", "rows": [[1, 11], [2, 20]]}
+{"event": "case_pass", "case": "rr_late_other_materialization_own_write_rollback_px"}
+{"event": "sql", "sql": "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED", "rows": []}
+{"event": "sql", "sql": "BEGIN", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM views.t WHERE id=1", "rows": [[11]]}
+{"event": "sql", "sql": "UPDATE views.t SET v=12 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM views.t WHERE id=1", "rows": [[12]]}
+{"event": "sql", "sql": "COMMIT", "rows": []}
+{"event": "case_pass", "case": "rc_refresh_after_rr_reuse"}
+{"event": "sql", "sql": "FORK NAMESPACE view_cold FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ", "rows": []}
+{"event": "sql", "sql": "BEGIN", "rows": []}
+{"event": "sql", "sql": "SELECT * FROM views.anchor", "rows": [[1]]}
+{"event": "sql", "sql": "TRUNCATE TABLE views.t", "rows": []}
+{"event": "sql", "sql": "INSERT INTO views.t VALUES(3,30,'new-parent')", "rows": []}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM views.t ORDER BY id", "rows": [[1, 10, 12000], [2, 20, 14000]]}
+{"event": "sql", "sql": "UPDATE views.t SET v=15,b=REPEAT('z',16000) WHERE id=1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM views.t ORDER BY id", "rows": [[1, 15, 16000], [2, 20, 14000]]}
+{"event": "sql", "sql": "COMMIT", "rows": []}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM views.t ORDER BY id", "rows": [[1, 15, 16000], [2, 20, 14000]]}
+{"event": "case_pass", "case": "rr_late_parent_truncate_first_own_materialization_lob"}
+{"event": "sql", "sql": "CREATE TABLE views.fk_parent(id INT PRIMARY KEY)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE views.fk_child(id INT PRIMARY KEY, p INT, CONSTRAINT fk_view FOREIGN KEY(p) REFERENCES views.fk_parent(id))", "rows": []}
+{"event": "sql", "sql": "INSERT INTO views.fk_parent VALUES(1)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE view_delayed FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED", "rows": []}
+{"event": "sql", "sql": "INSERT INTO views.fk_child VALUES(1,1)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO views.fk_child VALUES(1,1) ON DUPLICATE KEY UPDATE p=VALUES(p)", "rows": []}
+{"event": "sql", "sql": "REPLACE INTO views.fk_child VALUES(1,1)", "rows": []}
+{"event": "sql", "sql": "SELECT * FROM views.fk_child", "rows": [[1, 1]]}
+{"event": "case_pass", "case": "delayed_fk_upsert_replace", "procedures": false}
+{"event": "PASS", "case": "sql_read_view", "rr": true, "rc": true, "px": true, "own_writes": true, "parent_truncate": true}
+{"event": "stopped", "pid": 3952251, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_sql_read_view_5bu442v4/data.tar.gz", "bytes": 3370813}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

@@ -1,0 +1,12 @@
+fix(standby): follow namespace metadata and recover promoted services
+
+Load replica namespaces without writable bootstrap work and refresh SQL
+schemas at the directory publication snapshot. Keep retryable refresh errors
+on the same client connection, and recover pending publication after promotion.
+
+Read mutable replayed ownership from committed metadata, invalidate caches
+at promotion, and reset ID allocation for every activated namespace.
+
+Translate physical tablet IDs at checksum validation boundaries, including
+system-table identity and batched index checks, while preserving logical
+schema IDs and namespace-blind storage interfaces.

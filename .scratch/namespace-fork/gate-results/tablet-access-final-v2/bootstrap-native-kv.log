@@ -1,0 +1,28 @@
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-probe-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_4dze5pjl", "pid": 2438274, "port": 8695}
+{"event": "native_kv_verified", "recovered": false, "typed_records": true, "pin_reload": true, "durable_phase": "created"}
+{"event": "crash_for_recovery", "pid": 2438274, "after_phase": "created"}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-probe-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_4dze5pjl", "pid": 2443619, "port": 8695}
+{"event": "native_kv_verified", "recovered": true, "typed_records": true, "pin_reload": true, "durable_phase": "marked"}
+{"event": "crash_for_recovery", "pid": 2443619, "after_phase": "marked"}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-probe-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_4dze5pjl", "pid": 2444905, "port": 8695}
+{"event": "native_kv_verified", "recovered": true, "typed_records": true, "pin_reload": true, "durable_phase": "finished"}
+{"event": "crash_for_recovery", "pid": 2444905, "after_phase": "finished"}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-probe-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_4dze5pjl", "pid": 2445970, "port": 8695}
+{"event": "native_kv_verified", "recovered": true, "typed_records": true, "pin_reload": true, "durable_phase": "verified"}
+{"event": "PASS", "case": "instance_meta_native", "rollback": true, "cross_collection": true, "duplicate_key": true, "own_writes": true, "snapshot": true, "locked_current_read": true, "binary_value_60000": true, "key_512": true, "value_65536": true, "binary_bounds": true, "scan": true, "erase": true, "snapshot_across_minor": true, "writer_conflict": true, "typed_records": true, "catalog_tree": true, "lineage": true, "snapshot_pin": true, "gc_watermark": true, "pin_reload": true, "crash_recovery": true, "durable_fork_drop": true}
+{"event": "stopped", "pid": 2445970, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_4dze5pjl/data.tar.gz", "bytes": 3329513}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-probe-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_v_q_d169", "pid": 2447175, "port": 10253}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_v_q_d169/data.tar.gz", "bytes": 2786083}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/shared_transaction_probe.py", line 258, in <module>
+    run(args.binary, args.faults, args.case, args.flush_redo)
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/shared_transaction_probe.py", line 76, in run
+    experiment.start()
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_worker_bootstrap_prototype.py", line 28, in start
+    raise RuntimeError(f"bootstrap exited ({self.proc.returncode}): {self.base}")
+RuntimeError: bootstrap exited (1): /data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_v_q_d169

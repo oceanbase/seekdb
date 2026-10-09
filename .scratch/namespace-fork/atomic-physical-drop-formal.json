@@ -1,0 +1,41 @@
+[
+  {
+    "case": "ddl_catalog_schema_probe.py",
+    "extra": [],
+    "exit_code": 0,
+    "elapsed_s": 17.74
+  },
+  {
+    "case": "ddl_physical_drop_probe.py",
+    "extra": [],
+    "exit_code": 0,
+    "elapsed_s": 23.06
+  },
+  {
+    "case": "fork_parent_truncate_probe.py",
+    "extra": [
+      "--materialize-parent",
+      "--write-child"
+    ],
+    "exit_code": 0,
+    "elapsed_s": 17.6
+  },
+  {
+    "case": "retired_baseline_restart_probe.py",
+    "extra": [],
+    "exit_code": 0,
+    "elapsed_s": 42.12
+  },
+  {
+    "case": "shared_transaction_probe.py",
+    "extra": [],
+    "exit_code": 0,
+    "elapsed_s": 18.36
+  },
+  {
+    "case": "sql_read_view_probe.py",
+    "extra": [],
+    "exit_code": 0,
+    "elapsed_s": 13.91
+  }
+]

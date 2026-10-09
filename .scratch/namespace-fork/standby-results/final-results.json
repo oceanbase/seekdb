@@ -1,0 +1,98 @@
+{
+  "status": "PASS",
+  "original_standby_cases": 8,
+  "extended_namespace_cases": 5,
+  "cases": [
+    {
+      "case": "basic",
+      "exit_code": 0,
+      "elapsed_s": 86.98,
+      "binary": "production-v3",
+      "log": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/standby-results/suite-production-v3-normal/basic.log"
+    },
+    {
+      "case": "cascade_standby",
+      "exit_code": 0,
+      "elapsed_s": 189.73,
+      "binary": "production-v3",
+      "log": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/standby-results/suite-production-v3-normal/cascade_standby.log"
+    },
+    {
+      "case": "one_primary_multi_standby",
+      "exit_code": 0,
+      "elapsed_s": 141.07,
+      "binary": "production-v3",
+      "log": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/standby-results/suite-production-v3-normal/one_primary_multi_standby.log"
+    },
+    {
+      "case": "standby_restart",
+      "exit_code": 0,
+      "elapsed_s": 134.25,
+      "binary": "production-v3",
+      "log": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/standby-results/suite-production-v3-normal/standby_restart.log"
+    },
+    {
+      "case": "standby_sstable_replay",
+      "exit_code": 0,
+      "elapsed_s": 101.31,
+      "binary": "production-v5",
+      "log": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/standby-results/suite-production-v5-final/standby_sstable_replay.log"
+    },
+    {
+      "case": "switchover_roundtrip",
+      "exit_code": 0,
+      "elapsed_s": 157.31,
+      "binary": "production-v5",
+      "log": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/standby-results/suite-production-v5-final/switchover_roundtrip.log"
+    },
+    {
+      "case": "failover_switchover_reentry",
+      "exit_code": 0,
+      "elapsed_s": 110.44,
+      "binary": "production-v3",
+      "log": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/standby-results/suite-production-v3-normal/failover_switchover_reentry.log"
+    },
+    {
+      "case": "tls_standby",
+      "exit_code": 0,
+      "elapsed_s": 112.17,
+      "binary": "production-v3",
+      "log": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/standby-results/suite-production-v3-normal/tls_standby.log"
+    },
+    {
+      "case": "namespace_fork_local",
+      "exit_code": 0,
+      "elapsed_s": 110.48,
+      "binary": "production-v3",
+      "log": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/standby-results/suite-production-v3-normal/namespace_fork_local.log"
+    },
+    {
+      "case": "publication_initial",
+      "exit_code": 0,
+      "elapsed_s": 90.61,
+      "binary": "production-v3",
+      "log": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/standby-results/suite-production-v3-normal/publication_initial.log"
+    },
+    {
+      "case": "publication_child",
+      "exit_code": 0,
+      "elapsed_s": 85.32,
+      "binary": "production-v3",
+      "log": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/standby-results/suite-production-v3-normal/publication_child.log"
+    },
+    {
+      "case": "publication_restart_initial",
+      "exit_code": 0,
+      "elapsed_s": 91.79,
+      "binary": "production-v5",
+      "log": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/standby-results/suite-production-v5-publication-restart/publication_restart_initial.log"
+    },
+    {
+      "case": "publication_restart_child",
+      "exit_code": 0,
+      "elapsed_s": 94.59,
+      "binary": "production-v5",
+      "log": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/standby-results/suite-production-v5-publication-restart/publication_restart_child.log"
+    }
+  ]
+}

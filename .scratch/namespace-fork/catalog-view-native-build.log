@@ -1,0 +1,204 @@
+[  1%] Built target restore
+[  2%] Built target ob_data_plane
+[  2%] Built target oblib_rpc
+[  3%] Built target oblib_grpc
+[  3%] Built target oblib_lib_simd
+[  4%] Built target malloc_hook
+[ 10%] Built target zstd_1_3_8_objs
+[ 11%] Built target ob_malloc_object
+[ 11%] Built target oblib_lib_bitmap
+[ 12%] Built target ob_query
+[ 16%] Built target oblib_common
+[ 17%] Built target ob_sql_simd
+[ 17%] Built target generate_syspack_source
+[ 17%] Built target ob_standby
+[ 22%] Built target ob_sql_server_parser_objects
+[ 22%] Building CXX object src/namespace/CMakeFiles/ob_namespace.dir/catalog.cpp.o
+[ 22%] Building CXX object src/pl/CMakeFiles/ob_pl.dir/Unity/unity_ob_pl_pl_sys_package_c___cxx.cxx.o
+[ 22%] Building CXX object src/namespace/CMakeFiles/ob_namespace.dir/namespace.cpp.o
+[ 23%] Built target ob_logservice
+[ 24%] Built target ob_storage_tablet_autoincrement_state
+[ 24%] Built target ob_storage_simd
+[ 24%] Building CXX object src/standby/CMakeFiles/ob_standby_runtime.dir/Unity/unity_ob_standby_runtime_common/0_cxx.cxx.o
+[ 24%] Built target sql_nio_build
+[ 24%] Built target ob_malloc
+[ 24%] Built target ob_sql_server_parser_static
+[ 25%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs_compilation/ob_datum_funcs_compilation_1.cpp.o
+[ 25%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs_compilation/ob_datum_funcs_compilation_3.cpp.o
+[ 27%] Built target zstd_1_3_8
+[ 27%] Building CXX object src/observer/CMakeFiles/ob_main.dir/main.cpp.o
+[ 27%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs_compilation/ob_datum_funcs_compilation_4.cpp.o
+[ 27%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs_compilation/ob_datum_funcs_compilation_2.cpp.o
+[ 27%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs_compilation/ob_datum_funcs_compilation_0.cpp.o
+[ 27%] Built target syspack_source
+[ 28%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs_compilation/ob_datum_funcs_compilation_5.cpp.o
+[ 28%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs_compilation/ob_datum_funcs_compilation_7.cpp.o
+[ 29%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_str_datum_funcs_compilation/ob_str_datum_funcs_compilation_0.cpp.o
+[ 29%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_str_datum_funcs_compilation/ob_str_datum_funcs_compilation_2.cpp.o
+[ 29%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_str_datum_funcs_compilation/ob_str_datum_funcs_compilation_1.cpp.o
+[ 29%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs_compilation/ob_datum_funcs_compilation_6.cpp.o
+[ 35%] Built target ob_sql_extra
+[ 36%] Built target compress
+[ 36%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_base_maintenance_0_c___cxx.cxx.o
+[ 36%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_storage_common_0_c___cxx.cxx.o
+[ 37%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_query_0_c___cxx.cxx.o
+[ 38%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_common_1_c___cxx.cxx.o
+[ 38%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_storage_freeze_0_c___cxx.cxx.o
+[ 38%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_ddl_0_c___cxx.cxx.o
+[ 38%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_fork_freeze_0_c___cxx.cxx.o
+[ 38%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/ddl_task/ob_ddl_redefinition_task.cpp.o
+[ 38%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_common_0_c___cxx.cxx.o
+[ 38%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/ob_lonely_table_cleaner.cpp.o
+[ 39%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_services_0_c___cxx.cxx.o
+[ 39%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/ob_ddl_service.cpp.o
+[ 43%] Built target oblib_lib
+[ 43%] Built target oblib
+[ 43%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_schema_1_c___cxx.cxx.o
+[ 43%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_schema_0_c___cxx.cxx.o
+[ 43%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_vector_index_0_c___cxx.cxx.o
+[ 43%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_0_c___cxx.cxx.o
+[ 43%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_ai_service_0_c___cxx.cxx.o
+[ 43%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_omt_0_c___cxx.cxx.o
+[ 44%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_net_0_c___cxx.cxx.o
+[ 44%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_2_c___cxx.cxx.o
+[ 45%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_mysql_0_c___cxx.cxx.o
+[ 45%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_mysql_1_c___cxx.cxx.o
+[ 45%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_dbms_job_0_c___cxx.cxx.o
+[ 46%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_3_c___cxx.cxx.o
+[ 46%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_common_mixed_0_c___cxx.cxx.o
+[ 46%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_schema_0_c___cxx.cxx.o
+[ 46%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_1_c___cxx.cxx.o
+[ 46%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_common_0_c___cxx.cxx.o
+[ 47%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_4_c___cxx.cxx.o
+[ 47%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_change_stream_0_c___cxx.cxx.o
+[ 47%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_scheduler_0_c___cxx.cxx.o
+[ 47%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_5_c___cxx.cxx.o
+[ 48%] Building CXX object src/observer/CMakeFiles/ob_server.dir/ob_server.cpp.o
+[ 48%] Building CXX object src/observer/CMakeFiles/ob_server.dir/composition/retrieval/ob_das_legacy_tr_merge_iter.cpp.o
+[ 48%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_access_1_c___cxx.cxx.o
+[ 48%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_lob_0_c___cxx.cxx.o
+[ 48%] Building CXX object src/observer/CMakeFiles/ob_server.dir/ob_service.cpp.o
+[ 49%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_blocksstable_encoding2_0_c___cxx.cxx.o
+[ 49%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_fts_0_c___cxx.cxx.o
+[ 49%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_ls_0_c___cxx.cxx.o
+[ 50%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_multi_data_source_0_c___cxx.cxx.o
+[ 51%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_memtable_mvcc_0_c___cxx.cxx.o
+[ 51%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_ckpt_0_c___cxx.cxx.o
+[ 51%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_retrieval_0_c___cxx.cxx.o
+[ 51%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tx_table_0_c___cxx.cxx.o
+[ 51%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_vector_index_0_c___cxx.cxx.o
+[ 52%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_ddl_0_c___cxx.cxx.o
+[ 52%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_ddl_1_c___cxx.cxx.o
+[ 52%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_compaction_1_c___cxx.cxx.o
+[ 53%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_blocksstable_0_c___cxx.cxx.o
+[ 53%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_common_0_c___cxx.cxx.o
+[ 53%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_truncate_info_0_c___cxx.cxx.o
+[ 53%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_scheduler_0_c___cxx.cxx.o
+[ 53%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tx_storage_0_c___cxx.cxx.o
+[ 53%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_meta_store_0_c___cxx.cxx.o
+[ 54%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_access_0_c___cxx.cxx.o
+[ 54%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tablet_0_c___cxx.cxx.o
+[ 54%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_compaction_filter_0_c___cxx.cxx.o
+[ 54%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_allocator_0_c___cxx.cxx.o
+[ 55%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tablelock_0_c___cxx.cxx.o
+[ 55%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_blocksstable_2_c___cxx.cxx.o
+[ 56%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_ddl_1_c___cxx.cxx.o
+[ 56%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_compaction_0_c___cxx.cxx.o
+[ 56%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_common_mixed_0_c___cxx.cxx.o
+[ 57%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_optimizer_0_c___cxx.cxx.o
+[ 57%] Built target ob_namespace
+[ 58%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_px_0_c___cxx.cxx.o
+[ 58%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_code_generator_0_c___cxx.cxx.o
+[ 58%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_pdml_0_c___cxx.cxx.o
+In file included from /home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_fork_freeze_0_c___cxx.cxx:15:
+In file included from /home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp:524:
+[1m/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/catalog_read_view_probe.ipp:40:23: [0m[0;1;31merror: [0m[1mmember access into incomplete type 'oceanbase::transaction::ObTransService'[0m
+   40 |       int rc = service->get_read_snapshot_version(deadline(), snapshot);[0m
+      | [0;1;32m                      ^
+[0m[1m/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/src/data_plane/api/data_plane/transaction/ob_tx_read_snapshot.h:32:7: [0m[0;1;30mnote: [0mforward declaration of 'oceanbase::transaction::ObTransService'[0m
+   32 | class ObTransService;[0m
+      | [0;1;32m      ^
+[0mIn file included from /home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_fork_freeze_0_c___cxx.cxx:15:
+In file included from /home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp:524:
+[1m/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/catalog_read_view_probe.ipp:38:58: [0m[0;1;31merror: [0m[1mno viable conversion from '(lambda at /home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/catalog_read_view_probe.ipp:38:58)' to 'const storage::InstanceMetaStore::SnapshotAcquirer' (aka 'const function<int (share::SCN &)>')[0m
+   38 |     ret = directory.acquire_read_view(owner, deadline(), [&](SCN &snapshot) {[0m
+      | [0;1;32m                                                         ^~~~~~~~~~~~~~~~~~~~
+[0m   39 |       auto *service = share::server_service<transaction::ObTransService>();[0m
+      | [0;1;32m      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[0m   40 |       int rc = service->get_read_snapshot_version(deadline(), snapshot);[0m
+      | [0;1;32m      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[0m   41 |       // Publish a newer root after the selected S but before the root read.[0m
+      | [0;1;32m      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[0m   42 |       // The view must still select version 42 from the native MVCC table.[0m
+      | [0;1;32m      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[0m   43 |       if (rc == OB_SUCCESS) {[0m
+      | [0;1;32m      ~~~~~~~~~~~~~~~~~~~~~~~
+[0m   44 |         rc = write([&](rootserver::InstanceNamespaceMetadata &metadata) {[0m
+      | [0;1;32m        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[0m   45 |           return metadata.stage_catalog_delta(owner, 42, 43, {}, changes(next_physical, 72));[0m
+      | [0;1;32m          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[0m   46 |         });[0m
+      | [0;1;32m        ~~~
+[0m   47 |       }[0m
+      | [0;1;32m      ~
+[0m   48 |       return rc;[0m
+      | [0;1;32m      ~~~~~~~~~~
+[0m   49 |     }, view);[0m
+      | [0;1;32m    ~
+[0m[1m/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/deps/3rd/usr/local/oceanbase/devtools/lib/gcc/x86_64-redhat-linux/12/../../../../include/c++/12/bits/std_function.h:375:7: [0m[0;1;30mnote: [0mcandidate constructor not viable: no known conversion from '(lambda at /home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/catalog_read_view_probe.ipp:38:58)' to 'nullptr_t' (aka 'std::nullptr_t') for 1st argument[0m
+  375 |       function(nullptr_t) noexcept[0m
+      | [0;1;32m      ^        ~~~~~~~~~
+[0m[1m/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/deps/3rd/usr/local/oceanbase/devtools/lib/gcc/x86_64-redhat-linux/12/../../../../include/c++/12/bits/std_function.h:386:7: [0m[0;1;30mnote: [0mcandidate constructor not viable: no known conversion from '(lambda at /home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/catalog_read_view_probe.ipp:38:58)' to 'const function<int (SCN &)> &' for 1st argument[0m
+  386 |       function(const function& __x)[0m
+      | [0;1;32m      ^        ~~~~~~~~~~~~~~~~~~~
+[0m[1m/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/deps/3rd/usr/local/oceanbase/devtools/lib/gcc/x86_64-redhat-linux/12/../../../../include/c++/12/bits/std_function.h:404:7: [0m[0;1;30mnote: [0mcandidate constructor not viable: no known conversion from '(lambda at /home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/catalog_read_view_probe.ipp:38:58)' to 'function<int (SCN &)> &&' for 1st argument[0m
+  404 |       function(function&& __x) noexcept[0m
+      | [0;1;32m      ^        ~~~~~~~~~~~~~~
+[0m[1m/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/deps/3rd/usr/local/oceanbase/devtools/lib/gcc/x86_64-redhat-linux/12/../../../../include/c++/12/bits/std_function.h:435:2: [0m[0;1;30mnote: [0mcandidate template ignored: requirement '_Callable<(lambda at /home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/catalog_read_view_probe.ipp:38:58), (lambda at /home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/catalog_read_view_probe.ipp:38:58), std::__invoke_result<(lambda at /home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/catalog_read_view_probe.ipp:38:58) &, oceanbase::share::SCN &>>::value' was not satisfied [with _Functor = (lambda at /home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/catalog_read_view_probe.ipp:38:58)][0m
+  435 |         function(_Functor&& __f)[0m
+      | [0;1;32m        ^
+[0m[1m/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/src/rootserver/fork_table/instance_namespace_metadata.h:285:59: [0m[0;1;30mnote: [0mpassing argument to parameter 'acquire' here[0m
+  285 |       const storage::InstanceMetaStore::SnapshotAcquirer &acquire,[0m
+      | [0;1;32m                                                          ^
+[0m[ 58%] Built target ob_share_extra
+2 errors generated.
+make[2]: *** [src/rootserver/CMakeFiles/ob_rootserver.dir/build.make:202: src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_fork_freeze_0_c___cxx.cxx.o] Error 1
+make[2]: *** Waiting for unfinished jobs....
+[ 58%] Built target ob_main
+[ 60%] Built target ob_pl
+[ 60%] Built target ob_standby_runtime
+[ 60%] Built target ob_server
+[ 60%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tx_2_c___cxx.cxx.o
+[ 77%] Built target ob_share
+[ 77%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tx_1_c___cxx.cxx.o
+make[1]: *** [CMakeFiles/Makefile2:1345: src/rootserver/CMakeFiles/ob_rootserver.dir/all] Error 2
+make[1]: *** Waiting for unfinished jobs....
+[ 77%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tx_0_c___cxx.cxx.o
+[ 77%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_das_1_c___cxx.cxx.o
+[ 77%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_cmd_1_c___cxx.cxx.o
+[ 77%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_session_0_c___cxx.cxx.o
+[ 78%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_tablelock_0_c___cxx.cxx.o
+[ 78%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_optimizer_2_c___cxx.cxx.o
+[ 79%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_rebase_0_c___cxx.cxx.o
+[ 80%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_common_1_c___cxx.cxx.o
+[ 80%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_throttle_0_c___cxx.cxx.o
+[ 79%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tablet_1_c___cxx.cxx.o
+[ 80%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_slog_0_c___cxx.cxx.o
+[ 82%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_11_c___cxx.cxx.o
+[ 82%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_4_c___cxx.cxx.o
+[ 82%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_cmd_0_c___cxx.cxx.o
+[ 83%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_dml_0_c___cxx.cxx.o
+[ 83%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_basic_0_c___cxx.cxx.o
+[ 83%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_common_0_c___cxx.cxx.o
+[ 83%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_memtable_0_c___cxx.cxx.o
+[ 83%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_blocksstable_encoding1_0_c___cxx.cxx.o
+[ 84%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_blocksstable_1_c___cxx.cxx.o
+[ 84%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_blocksstable_index_block_0_c___cxx.cxx.o
+[ 85%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_0_c___cxx.cxx.o
+[ 85%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_monitor_0_c___cxx.cxx.o
+[ 85%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_das_0_c___cxx.cxx.o
+[ 85%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_optimizer_1_c___cxx.cxx.o
+[ 87%] Built target ob_storage
+[ 88%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_optimizer_stat_0_c___cxx.cxx.o
+[ 98%] Built target ob_sql
+make: *** [Makefile:91: all] Error 2

@@ -1,0 +1,81 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/sql-read-view-artifacts/seekdb-instrumented", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_sql_read_view_bcey6e37", "pid": 3507529, "port": 11075}
+{"event": "sql", "sql": "CREATE DATABASE views", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE views.anchor(id INT PRIMARY KEY)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO views.anchor VALUES(1)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE views.t(id INT PRIMARY KEY,v INT,b LONGTEXT) PARTITION BY HASH(id) PARTITIONS 8", "rows": []}
+{"event": "sql", "sql": "INSERT INTO views.t VALUES(1,10,REPEAT('a',12000)),(2,20,REPEAT('b',14000))", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE view_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ", "rows": []}
+{"event": "sql", "sql": "BEGIN", "rows": []}
+{"event": "sql", "sql": "SELECT * FROM views.anchor", "rows": [[1]]}
+{"event": "sql", "sql": "UPDATE views.t SET v=11 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM views.t ORDER BY id", "rows": [[1, 10, 12000], [2, 20, 14000]]}
+{"event": "sql", "sql": "UPDATE views.t SET v=23 WHERE id=2", "rows": []}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM views.t ORDER BY id", "rows": [[1, 10, 12000], [2, 23, 14000]]}
+{"event": "sql", "sql": "SELECT /*+ PARALLEL(4) */ SUM(v) FROM views.t", "rows": [["33"]]}
+{"event": "sql", "sql": "ROLLBACK", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM views.t ORDER BY id", "rows": [[1, 11], [2, 20]]}
+{"event": "case_pass", "case": "rr_late_other_materialization_own_write_rollback_px"}
+{"event": "sql", "sql": "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED", "rows": []}
+{"event": "sql", "sql": "BEGIN", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM views.t WHERE id=1", "rows": [[11]]}
+{"event": "sql", "sql": "UPDATE views.t SET v=12 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM views.t WHERE id=1", "rows": [[12]]}
+{"event": "sql", "sql": "COMMIT", "rows": []}
+{"event": "case_pass", "case": "rc_refresh_after_rr_reuse"}
+{"event": "sql", "sql": "FORK NAMESPACE view_cold FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ", "rows": []}
+{"event": "sql", "sql": "BEGIN", "rows": []}
+{"event": "sql", "sql": "SELECT * FROM views.anchor", "rows": [[1]]}
+{"event": "sql", "sql": "TRUNCATE TABLE views.t", "rows": []}
+{"event": "sql", "sql": "INSERT INTO views.t VALUES(3,30,'new-parent')", "rows": []}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM views.t ORDER BY id", "rows": [[1, 10, 12000], [2, 20, 14000]]}
+{"event": "sql", "sql": "UPDATE views.t SET v=15,b=REPEAT('z',16000) WHERE id=1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM views.t ORDER BY id", "rows": [[1, 15, 16000], [2, 20, 14000]]}
+{"event": "sql", "sql": "COMMIT", "rows": []}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM views.t ORDER BY id", "rows": [[1, 15, 16000], [2, 20, 14000]]}
+{"event": "case_pass", "case": "rr_late_parent_truncate_first_own_materialization_lob"}
+{"event": "sql", "sql": "CREATE TABLE views.fk_parent(id INT PRIMARY KEY)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE views.fk_child(id INT PRIMARY KEY, p INT, CONSTRAINT fk_view FOREIGN KEY(p) REFERENCES views.fk_parent(id))", "rows": []}
+{"event": "sql", "sql": "INSERT INTO views.fk_parent VALUES(1)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE view_delayed FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED", "rows": []}
+{"event": "sql", "sql": "INSERT INTO views.fk_child VALUES(1,1)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO views.fk_child VALUES(1,1) ON DUPLICATE KEY UPDATE p=VALUES(p)", "rows": []}
+{"event": "sql", "sql": "REPLACE INTO views.fk_child VALUES(1,1)", "rows": []}
+{"event": "sql", "sql": "SELECT * FROM views.fk_child", "rows": [[1, 1]]}
+{"event": "stopped", "pid": 3507529, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_sql_read_view_bcey6e37/data.tar.gz", "bytes": 3494328}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 789, in _read_bytes
+    data = self._rfile.read(num_bytes)
+  File "/usr/lib64/python3.8/socket.py", line 669, in readinto
+    return self._sock.recv_into(b)
+socket.timeout: timed out
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File ".scratch/namespace-fork/sql_read_view_probe.py", line 96, in <module>
+    run(args.binary, args.instrumented)
+  File ".scratch/namespace-fork/sql_read_view_probe.py", line 67, in run
+    experiment.sql('CREATE PROCEDURE views.read_nested() BEGIN SELECT SUM(id) FROM views.fk_parent; SELECT SUM(p) FROM views.fk_child; END', child)
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_fork_prototype.py", line 116, in sql
+    cur.execute(statement)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/cursors.py", line 153, in execute
+    result = self._query(query)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/cursors.py", line 322, in _query
+    conn.query(q)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 575, in query
+    self._affected_rows = self._read_query_result(unbuffered=unbuffered)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 826, in _read_query_result
+    result.read()
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 1203, in read
+    first_packet = self.connection._read_packet()
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 751, in _read_packet
+    packet_header = self._read_bytes(4)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 795, in _read_bytes
+    raise err.OperationalError(
+pymysql.err.OperationalError: (2013, 'Lost connection to MySQL server during query (timed out)')

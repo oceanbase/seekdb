@@ -1,0 +1,1042 @@
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_access_concurrency_oqtr6v9g", "pid": 2429334, "port": 60825}
+{"event": "sql", "sql": "CREATE DATABASE access_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE access_repro.t(id BIGINT AUTO_INCREMENT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_repro.t VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE access_race_0 FROM ns1", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_repro.t VALUES(30,30)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_repro.t VALUES(20,20)", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM access_repro.t ORDER BY id", "rows": [[1, 10], [20, 20], [30, 30]]}
+{"event": "sql", "sql": "SELECT id,v FROM access_repro.t", "rows": [[1, 10]]}
+{"event": "case_pass", "case": "cold_concurrent_insert", "iteration": 0}
+{"event": "sql", "sql": "DROP NAMESPACE access_race_0", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE access_race_1 FROM ns1", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_repro.t VALUES(20,20)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_repro.t VALUES(30,30)", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM access_repro.t ORDER BY id", "rows": [[1, 10], [20, 20], [30, 30]]}
+{"event": "sql", "sql": "SELECT id,v FROM access_repro.t", "rows": [[1, 10]]}
+{"event": "case_pass", "case": "cold_concurrent_insert", "iteration": 1}
+{"event": "sql", "sql": "DROP NAMESPACE access_race_1", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE access_race_2 FROM ns1", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_repro.t VALUES(30,30)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_repro.t VALUES(20,20)", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM access_repro.t ORDER BY id", "rows": [[1, 10], [20, 20], [30, 30]]}
+{"event": "sql", "sql": "SELECT id,v FROM access_repro.t", "rows": [[1, 10]]}
+{"event": "case_pass", "case": "cold_concurrent_insert", "iteration": 2}
+{"event": "sql", "sql": "DROP NAMESPACE access_race_2", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE access_race_3 FROM ns1", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_repro.t VALUES(20,20)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_repro.t VALUES(30,30)", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM access_repro.t ORDER BY id", "rows": [[1, 10], [20, 20], [30, 30]]}
+{"event": "sql", "sql": "SELECT id,v FROM access_repro.t", "rows": [[1, 10]]}
+{"event": "case_pass", "case": "cold_concurrent_insert", "iteration": 3}
+{"event": "sql", "sql": "DROP NAMESPACE access_race_3", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE access_race_4 FROM ns1", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_repro.t VALUES(30,30)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_repro.t VALUES(20,20)", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM access_repro.t ORDER BY id", "rows": [[1, 10], [20, 20], [30, 30]]}
+{"event": "sql", "sql": "SELECT id,v FROM access_repro.t", "rows": [[1, 10]]}
+{"event": "case_pass", "case": "cold_concurrent_insert", "iteration": 4}
+{"event": "sql", "sql": "DROP NAMESPACE access_race_4", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE access_race_5 FROM ns1", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_repro.t VALUES(20,20)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_repro.t VALUES(30,30)", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM access_repro.t ORDER BY id", "rows": [[1, 10], [20, 20], [30, 30]]}
+{"event": "sql", "sql": "SELECT id,v FROM access_repro.t", "rows": [[1, 10]]}
+{"event": "case_pass", "case": "cold_concurrent_insert", "iteration": 5}
+{"event": "sql", "sql": "DROP NAMESPACE access_race_5", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE access_race_6 FROM ns1", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_repro.t VALUES(20,20)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_repro.t VALUES(30,30)", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM access_repro.t ORDER BY id", "rows": [[1, 10], [20, 20], [30, 30]]}
+{"event": "sql", "sql": "SELECT id,v FROM access_repro.t", "rows": [[1, 10]]}
+{"event": "case_pass", "case": "cold_concurrent_insert", "iteration": 6}
+{"event": "sql", "sql": "DROP NAMESPACE access_race_6", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE access_race_7 FROM ns1", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_repro.t VALUES(30,30)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_repro.t VALUES(20,20)", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM access_repro.t ORDER BY id", "rows": [[1, 10], [20, 20], [30, 30]]}
+{"event": "sql", "sql": "SELECT id,v FROM access_repro.t", "rows": [[1, 10]]}
+{"event": "case_pass", "case": "cold_concurrent_insert", "iteration": 7}
+{"event": "sql", "sql": "DROP NAMESPACE access_race_7", "rows": []}
+{"event": "pass", "rounds": 8}
+{"event": "stopped", "pid": 2429334, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_access_concurrency_oqtr6v9g/data.tar.gz", "bytes": 3293489}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_access_reads_15sunfgh", "pid": 2429942, "port": 28949}
+{"event": "sql", "sql": "CREATE DATABASE access_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE access_repro.parts(id INT PRIMARY KEY,v INT) PARTITION BY HASH(id) PARTITIONS 4", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_repro.parts VALUES(1,10),(2,20),(3,30),(4,40)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE access_repro.docs(id INT PRIMARY KEY,body LONGTEXT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_repro.docs VALUES(1,CONCAT('alpha ',REPEAT('word ',2200))),(2,'beta text')", "rows": []}
+{"event": "sql", "sql": "CREATE FULLTEXT INDEX body_ft ON access_repro.docs(body)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE access_reads FROM ns1", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_repro.parts VALUES(5,50)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_repro.docs VALUES(3,'alpha later')", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*),SUM(v),MIN(v),MAX(v) FROM access_repro.parts", "rows": [[4, "100", 10, 40]]}
+{"event": "sql", "sql": "SELECT id,v FROM access_repro.parts ORDER BY id", "rows": [[1, 10], [2, 20], [3, 30], [4, 40]]}
+{"event": "sql", "sql": "SELECT id FROM access_repro.docs WHERE MATCH(body) AGAINST('alpha')", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT id,LENGTH(body) FROM access_repro.docs ORDER BY id", "rows": [[1, 11006], [2, 9]]}
+{"event": "case_pass", "case": "cold_reads_without_materialization"}
+{"event": "sql", "sql": "UPDATE access_repro.docs SET body='gamma child' WHERE id=1", "rows": []}
+{"event": "sql", "sql": "DELETE FROM access_repro.docs WHERE id=2", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM access_repro.docs WHERE MATCH(body) AGAINST('gamma')", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT id FROM access_repro.docs WHERE MATCH(body) AGAINST('alpha')", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM access_repro.docs WHERE MATCH(body) AGAINST('beta')", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM access_repro.docs WHERE MATCH(body) AGAINST('alpha') ORDER BY id", "rows": [[1], [3]]}
+{"event": "sql", "sql": "SELECT id FROM access_repro.docs WHERE MATCH(body) AGAINST('beta')", "rows": [[2]]}
+{"event": "case_pass", "case": "inherited_fulltext_update_delete"}
+{"event": "pass"}
+{"event": "stopped", "pid": 2429942, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_access_reads_15sunfgh/data.tar.gz", "bytes": 3358969}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_access_indexes_zr4g4th_", "pid": 2431193, "port": 62385}
+{"event": "sql", "sql": "CREATE DATABASE access_indexes", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE access_indexes.base(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_indexes.base VALUES(1,10),(2,20)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE access_indexes.docs(body LONGTEXT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_indexes.docs VALUES('alpha text'),('beta text')", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE access_indexes.vectors(id INT PRIMARY KEY, v VECTOR(2048))", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE access_indexes FROM ns1", "rows": []}
+{"event": "sql", "sql": "UPDATE access_indexes.base SET v=99 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_indexes.docs VALUES('alpha later')", "rows": []}
+{"event": "sql", "sql": "CREATE INDEX by_v ON access_indexes.base(v)", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM access_indexes.base FORCE INDEX(by_v) ORDER BY id", "rows": [[1, 10], [2, 20]]}
+{"event": "sql", "sql": "CREATE FULLTEXT INDEX body_ft ON access_indexes.docs(body)", "rows": []}
+{"event": "sql", "sql": "SELECT body FROM access_indexes.docs WHERE MATCH(body) AGAINST('alpha')", "rows": [["alpha text"]]}
+{"event": "sql", "sql": "CREATE VECTOR INDEX by_vector ON access_indexes.vectors(v) WITH(distance=l2,type=ivf_flat,nlist=1,sample_per_nlist=1)", "rows": []}
+{"event": "case_pass", "case": "cold_inherited_index_build", "normal": true, "fulltext": true, "vector_2048": true}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_access_indexes_zr4g4th_", "pid": 2434617, "port": 62385}
+{"event": "sql", "sql": "SELECT id,v FROM access_indexes.base FORCE INDEX(by_v) ORDER BY id", "rows": [[1, 10], [2, 20]]}
+{"event": "sql", "sql": "SELECT body FROM access_indexes.docs WHERE MATCH(body) AGAINST('alpha')", "rows": [["alpha text"]]}
+{"event": "sql", "sql": "SELECT v FROM access_indexes.base WHERE id=1", "rows": [[99]]}
+{"event": "pass", "restart": true}
+{"event": "stopped", "pid": 2434617, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_access_indexes_zr4g4th_/data.tar.gz", "bytes": 3414304}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_truncate_global_inherited_59nolxq3", "pid": 2434866, "port": 22481}
+{"event": "sql", "sql": "ALTER SYSTEM SET _ob_enable_truncate_partition_preserve_global_index=true", "rows": []}
+{"event": "sql", "sql": "CREATE DATABASE phase10", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.trunc_global(id INT PRIMARY KEY,k INT,c VARCHAR(20)) PARTITION BY RANGE(id) (PARTITION p0 VALUES LESS THAN (100), PARTITION p1 VALUES LESS THAN (200))", "rows": []}
+{"event": "sql", "sql": "CREATE UNIQUE INDEX idx_k ON phase10.trunc_global(k) GLOBAL PARTITION BY HASH(k) PARTITIONS 2", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.trunc_global VALUES(1,1,'a'),(2,2,'b'),(120,3,'c')", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE phase10_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "SELECT id,k FROM phase10.trunc_global FORCE INDEX(idx_k) ORDER BY id", "rows": [[1, 1], [2, 2], [120, 3]]}
+{"event": "sql", "sql": "ALTER TABLE phase10.trunc_global TRUNCATE PARTITION p0", "rows": []}
+{"event": "sql", "sql": "SELECT id,k FROM phase10.trunc_global FORCE INDEX(idx_k) ORDER BY id", "rows": [[120, 3]]}
+{"event": "sql", "sql": "SELECT id,k FROM phase10.trunc_global FORCE INDEX(idx_k) ORDER BY id", "rows": [[1, 1], [2, 2], [120, 3]]}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_truncate_global_inherited_59nolxq3", "pid": 2435207, "port": 22481}
+{"event": "sql", "sql": "SELECT id,k FROM phase10.trunc_global FORCE INDEX(idx_k) ORDER BY id", "rows": [[120, 3]]}
+{"event": "sql", "sql": "SELECT id,k FROM phase10.trunc_global FORCE INDEX(idx_k) ORDER BY id", "rows": [[1, 1], [2, 2], [120, 3]]}
+{"event": "PASS", "case": "truncate_global_index_inherited"}
+{"event": "stopped", "pid": 2435207, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_truncate_global_inherited_59nolxq3/data.tar.gz", "bytes": 3112588}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_fts_heap_redef_bdqe7r_e", "pid": 2435403, "port": 63177}
+{"event": "sql", "sql": "CREATE DATABASE fts_redef", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE fts_redef.inherited(body TEXT, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO fts_redef.inherited VALUES('alpha text',7),('beta text',8)", "rows": []}
+{"event": "sql", "sql": "CREATE FULLTEXT INDEX inherited_body ON fts_redef.inherited(body)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE fts_redef_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "INSERT INTO fts_redef.inherited VALUES('parent later',99)", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM fts_redef.inherited", "rows": [[2]]}
+{"event": "sql", "sql": "CREATE TABLE fts_redef.owned(body TEXT, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO fts_redef.owned VALUES('alpha text',7),('beta text',8)", "rows": []}
+{"event": "sql", "sql": "CREATE FULLTEXT INDEX owned_body ON fts_redef.owned(body)", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE fts_redef.owned MODIFY COLUMN v VARCHAR(20)", "rows": []}
+{"event": "ddl_state", "table": "owned", "errors": [], "active": false, "tasks": [], "ddl_errors": [[1541, 7, 0, "Successful ddl", "Successful ddl"], [1603, 5, 0, "Successful ddl", "Successful ddl"], [1637, 5, 0, "Successful ddl", "Successful ddl"], [2272, 7, 0, "Successful ddl", "Successful ddl"], [2339, 5, 0, "Successful ddl", "Successful ddl"], [2374, 5, 0, "Successful ddl", "Successful ddl"], [2865, 1001, 0, "Successful ddl", "Successful ddl"], [3110, 7, 0, "Successful ddl", "Successful ddl"], [3191, 5, 0, "Successful ddl", "Successful ddl"], [3205, 5, 0, "Successful ddl", "Successful ddl"]], "tables": [["inherited", 500003, 200001], ["owned", 500013, 200011], ["__AUX_LOB_META_500004_", 500004, 200002], ["__AUX_LOB_META_500014_", 500014, 200012], ["__AUX_LOB_PIECE_500005_", 500005, 200003], ["__AUX_LOB_PIECE_500015_", 500015, 200013], ["__idx_500003_inherited_body", 500006, 200004], ["__idx_500003_inherited_body_fts_doc_word", 500007, 200005], ["__idx_500013_owned_body", 500016, 200014], ["__idx_500013_owned_body_fts_doc_word", 500017, 200015]]}
+{"event": "sql", "sql": "SELECT v FROM fts_redef.owned WHERE MATCH(body) AGAINST('alpha')", "rows": [["7"]]}
+{"event": "sql", "sql": "INSERT INTO fts_redef.owned VALUES('gamma text','9')", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM fts_redef.owned", "rows": [[3]]}
+{"event": "redefined", "table": "owned", "rows": [["7"]]}
+{"event": "sql", "sql": "ALTER TABLE fts_redef.inherited MODIFY COLUMN v VARCHAR(20)", "rows": []}
+{"event": "ddl_state", "table": "inherited", "errors": [], "active": false, "tasks": [], "ddl_errors": [[1541, 7, 0, "Successful ddl", "Successful ddl"], [1603, 5, 0, "Successful ddl", "Successful ddl"], [1637, 5, 0, "Successful ddl", "Successful ddl"], [2272, 7, 0, "Successful ddl", "Successful ddl"], [2339, 5, 0, "Successful ddl", "Successful ddl"], [2374, 5, 0, "Successful ddl", "Successful ddl"], [2865, 1001, 0, "Successful ddl", "Successful ddl"], [3110, 7, 0, "Successful ddl", "Successful ddl"], [3191, 5, 0, "Successful ddl", "Successful ddl"], [3205, 5, 0, "Successful ddl", "Successful ddl"], [4056, 1001, 0, "Successful ddl", "Successful ddl"], [4322, 7, 0, "Successful ddl", "Successful ddl"], [4393, 5, 0, "Successful ddl", "Successful ddl"], [4408, 5, 0, "Successful ddl", "Successful ddl"]], "tables": [["inherited", 500018, 200016], ["owned", 500013, 200011], ["__AUX_LOB_META_500014_", 500014, 200012], ["__AUX_LOB_META_500019_", 500019, 200017], ["__AUX_LOB_PIECE_500015_", 500015, 200013], ["__AUX_LOB_PIECE_500020_", 500020, 200018], ["__idx_500013_owned_body", 500016, 200014], ["__idx_500013_owned_body_fts_doc_word", 500017, 200015], ["__idx_500018_inherited_body", 500021, 200019], ["__idx_500018_inherited_body_fts_doc_word", 500022, 200020]]}
+{"event": "sql", "sql": "SELECT v FROM fts_redef.inherited WHERE MATCH(body) AGAINST('alpha')", "rows": [["7"]]}
+{"event": "sql", "sql": "INSERT INTO fts_redef.inherited VALUES('gamma text','9')", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM fts_redef.inherited", "rows": [[3]]}
+{"event": "redefined", "table": "inherited", "rows": [["7"]]}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_fts_heap_redef_bdqe7r_e", "pid": 2437355, "port": 63177}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM fts_redef.owned", "rows": [[3]]}
+{"event": "sql", "sql": "SELECT v FROM fts_redef.owned WHERE MATCH(body) AGAINST('gamma')", "rows": [["9"]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM fts_redef.inherited", "rows": [[3]]}
+{"event": "sql", "sql": "SELECT v FROM fts_redef.inherited WHERE MATCH(body) AGAINST('gamma')", "rows": [["9"]]}
+{"event": "PASS", "case": "fts_heap_redefinition"}
+{"event": "stopped", "pid": 2437355, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_fts_heap_redef_bdqe7r_e/data.tar.gz", "bytes": 3610043}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_fts_columns_njysd8gc", "pid": 2437595, "port": 37559}
+{"event": "sql", "sql": "CREATE NAMESPACE fts_columns", "rows": []}
+{"event": "sql", "sql": "CREATE DATABASE phase10", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.t0(id INT PRIMARY KEY,body TEXT,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.t0 VALUES(1,'alpha text',7),(2,'beta text',8)", "rows": []}
+{"event": "sql", "sql": "CREATE FULLTEXT INDEX body_ft ON phase10.t0(body)", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE phase10.t0 DROP COLUMN v, ADD COLUMN w INT DEFAULT 4", "rows": []}
+{"event": "sql", "sql": "SELECT id,w FROM phase10.t0 WHERE MATCH(body) AGAINST('alpha')", "rows": [[1, 4]]}
+{"event": "sql", "sql": "DROP TABLE phase10.t0", "rows": []}
+{"event": "case_pass", "iteration": 0}
+{"event": "sql", "sql": "CREATE TABLE phase10.t1(id INT PRIMARY KEY,body TEXT,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.t1 VALUES(1,'alpha text',7),(2,'beta text',8)", "rows": []}
+{"event": "sql", "sql": "CREATE FULLTEXT INDEX body_ft ON phase10.t1(body)", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE phase10.t1 DROP COLUMN v, ADD COLUMN w INT DEFAULT 4", "rows": []}
+{"event": "sql", "sql": "SELECT id,w FROM phase10.t1 WHERE MATCH(body) AGAINST('alpha')", "rows": [[1, 4]]}
+{"event": "sql", "sql": "DROP TABLE phase10.t1", "rows": []}
+{"event": "case_pass", "iteration": 1}
+{"event": "sql", "sql": "CREATE TABLE phase10.t2(id INT PRIMARY KEY,body TEXT,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.t2 VALUES(1,'alpha text',7),(2,'beta text',8)", "rows": []}
+{"event": "sql", "sql": "CREATE FULLTEXT INDEX body_ft ON phase10.t2(body)", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE phase10.t2 DROP COLUMN v, ADD COLUMN w INT DEFAULT 4", "rows": []}
+{"event": "sql", "sql": "SELECT id,w FROM phase10.t2 WHERE MATCH(body) AGAINST('alpha')", "rows": [[1, 4]]}
+{"event": "sql", "sql": "DROP TABLE phase10.t2", "rows": []}
+{"event": "case_pass", "iteration": 2}
+{"event": "sql", "sql": "CREATE TABLE phase10.t3(id INT PRIMARY KEY,body TEXT,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.t3 VALUES(1,'alpha text',7),(2,'beta text',8)", "rows": []}
+{"event": "sql", "sql": "CREATE FULLTEXT INDEX body_ft ON phase10.t3(body)", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE phase10.t3 DROP COLUMN v, ADD COLUMN w INT DEFAULT 4", "rows": []}
+{"event": "sql", "sql": "SELECT id,w FROM phase10.t3 WHERE MATCH(body) AGAINST('alpha')", "rows": [[1, 4]]}
+{"event": "sql", "sql": "DROP TABLE phase10.t3", "rows": []}
+{"event": "case_pass", "iteration": 3}
+{"event": "sql", "sql": "CREATE TABLE phase10.t4(id INT PRIMARY KEY,body TEXT,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.t4 VALUES(1,'alpha text',7),(2,'beta text',8)", "rows": []}
+{"event": "sql", "sql": "CREATE FULLTEXT INDEX body_ft ON phase10.t4(body)", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE phase10.t4 DROP COLUMN v, ADD COLUMN w INT DEFAULT 4", "rows": []}
+{"event": "sql", "sql": "SELECT id,w FROM phase10.t4 WHERE MATCH(body) AGAINST('alpha')", "rows": [[1, 4]]}
+{"event": "sql", "sql": "DROP TABLE phase10.t4", "rows": []}
+{"event": "case_pass", "iteration": 4}
+{"event": "pass"}
+{"event": "stopped", "pid": 2437595, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_fts_columns_njysd8gc/data.tar.gz", "bytes": 4437875}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_fork_table_b621yafr", "pid": 2439075, "port": 35663}
+{"event": "sql", "sql": "CREATE DATABASE shared", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE shared.base(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO shared.base VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE ft_inherited FROM ns1", "rows": []}
+{"event": "sql", "sql": "UPDATE shared.base SET v=99 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "CREATE NAMESPACE ft_child", "rows": []}
+{"event": "sql", "sql": "CREATE DATABASE ft", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE ft.src(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO ft.src VALUES(1,10),(2,20)", "rows": []}
+{"event": "sql", "sql": "FORK TABLE ft.src TO ft.dst", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM ft.dst ORDER BY id", "rows": [[1, 10], [2, 20]]}
+{"event": "sql", "sql": "CREATE TABLE ft.auto(id BIGINT PRIMARY KEY AUTO_INCREMENT, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO ft.auto(v) VALUES(30),(40)", "rows": []}
+{"event": "sql", "sql": "FORK TABLE ft.auto TO ft.auto_copy", "rows": []}
+{"event": "sql", "sql": "INSERT INTO ft.auto_copy(v) VALUES(50)", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM ft.auto_copy WHERE v=50", "rows": [[3]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM ft.auto", "rows": [[2]]}
+{"event": "sql", "sql": "SELECT v FROM shared.base WHERE id=1", "rows": [[10]]}
+{"event": "sql", "sql": "FORK TABLE shared.base TO shared.copy", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM shared.copy WHERE id=1", "rows": [[10]]}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_fork_table_b621yafr", "pid": 2440474, "port": 35663}
+{"event": "sql", "sql": "SELECT v FROM shared.copy WHERE id=1", "rows": [[10]]}
+{"event": "sql", "sql": "SELECT v FROM shared.base WHERE id=1", "rows": [[99]]}
+{"event": "PASS", "case": "inprocess_fork_table", "inherited": true, "restart": true}
+{"event": "stopped", "pid": 2440474, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_fork_table_b621yafr/data.tar.gz", "bytes": 3314371}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_37bitfck", "pid": 2443378, "port": 36243}
+{"event": "sql", "sql": "CREATE DATABASE nstrunc_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id BIGINT AUTO_INCREMENT PRIMARY KEY,v INT,b LONGTEXT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(10,REPEAT('p',10000))", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE success FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=30000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "atomic_state", "namespace": 3, "committed": false, "owned": [], "mappings": [], "physical": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=11,b=REPEAT('c',12000) WHERE id=1", "rows": []}
+{"event": "atomic_state", "namespace": 3, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611686430744448321], [4611686430744448322], [4611686430744448323]], "physical": [[4611686430744448321, 1, 1, 0], [4611686430744448322, 1, 1, 0], [4611686430744448323, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000, "c"]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(12,'sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000001]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(13,'next sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000002]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000], [1000001, 12, 8], [1000002, 13, 13]]}
+{"event": "case_pass", "case": "success", "lob_binding": true, "sequence": true}
+{"event": "sql", "sql": "FORK NAMESPACE concurrent_copy FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=30000000", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=30000000", "rows": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=v+1 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=11,b=REPEAT('c',12000) WHERE id=1", "rows": []}
+{"event": "atomic_state", "namespace": 4, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611686568183401793], [4611686568183401794], [4611686568183401795]], "physical": [[4611686568183401793, 1, 1, 0], [4611686568183401794, 1, 1, 0], [4611686568183401795, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM nstrunc_repro.t1", "rows": [[1, 11, 12000]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "case_pass", "case": "concurrent_creation", "rows": [[1, 11, 12000]]}
+{"event": "sql", "sql": "FORK NAMESPACE locked_creation FROM ns1", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(30,30,REPEAT('b',11000))", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(20,20,REPEAT('a',11000))", "rows": []}
+{"event": "atomic_state", "namespace": 5, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611686705622355265], [4611686705622355266], [4611686705622355267]], "physical": [[4611686705622355265, 1, 1, 0], [4611686705622355266, 1, 1, 0], [4611686705622355267, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10], [20, 20], [30, 30]]}
+{"event": "case_pass", "case": "concurrent_insert_and_stale_snapshot", "faults": false}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_37bitfck", "pid": 2443995, "port": 36243}
+{"event": "atomic_state", "namespace": 4, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611686568183401793], [4611686568183401794], [4611686568183401795]], "physical": [[4611686568183401793, 1, 1, 0], [4611686568183401794, 1, 1, 0], [4611686568183401795, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM nstrunc_repro.t1", "rows": [[1, 11, 12000]]}
+{"event": "PASS", "case": "shared_transaction", "faults": false, "atomic_lob_unit": true, "rollback": null, "crash_recovery": true, "concurrent_creation": true}
+{"event": "stopped", "pid": 2443995, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_37bitfck/data.tar.gz", "bytes": 3284702}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_kv_startup_30s_lipjvytx", "pid": 2444286, "port": 48755}
+{"event": "sql", "sql": "SELECT 1", "rows": [[1]]}
+{"event": "sql", "sql": "CREATE DATABASE kvsmoke", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE kvsmoke.t(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO kvsmoke.t VALUES (1, 42)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE kvsmoke_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM kvsmoke.t WHERE id=1", "rows": [[42]]}
+{"event": "sql", "sql": "UPDATE kvsmoke.t SET v=43 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM kvsmoke.t WHERE id=1", "rows": [[43]]}
+{"event": "child_physical", "tablet": 4611686430744448321, "row": [4611686430744448321, 1, 1, 0]}
+{"event": "sql", "sql": "DROP NAMESPACE kvsmoke_child", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM kvsmoke.t WHERE id=1", "rows": [[42]]}
+{"event": "gc_complete", "tablet": 4611686430744448321, "rows": [[4611686430744448321, 3, 1, 1]]}
+{"event": "PASS", "elapsed_limit_s": 30}
+{"event": "stopped", "pid": 2444286, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_kv_startup_30s_lipjvytx/data.tar.gz", "bytes": 3276673}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_exchange_mapping_182wymep", "pid": 2445063, "port": 39839}
+{"event": "sql", "sql": "FORK NAMESPACE exchange_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "CREATE DATABASE x", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE x.parts(id INT PRIMARY KEY, v INT) PARTITION BY RANGE(id) (PARTITION p0 VALUES LESS THAN (10), PARTITION p1 VALUES LESS THAN (MAXVALUE))", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE x.plain(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO x.parts VALUES(1,11),(11,111)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO x.plain VALUES(2,22)", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE x.parts EXCHANGE PARTITION p0 WITH TABLE x.plain WITHOUT VALIDATION", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM x.parts ORDER BY id", "rows": [[2, 22], [11, 111]]}
+{"event": "sql", "sql": "SELECT id,v FROM x.plain", "rows": [[1, 11]]}
+{"event": "PASS", "case": "exchange_mapping"}
+{"event": "stopped", "pid": 2445063, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_exchange_mapping_182wymep/data.tar.gz", "bytes": 3112257}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_physical_drop_8__legj7", "pid": 2445427, "port": 3813}
+{"event": "sql", "sql": "FORK NAMESPACE ddl_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "CREATE DATABASE ddl_db", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE ddl_db.t(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO ddl_db.t VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "SELECT tablet_id FROM oceanbase.__all_table WHERE table_name='t'", "rows": [[200001]]}
+{"event": "sql", "sql": "DROP TABLE ddl_db.t", "rows": []}
+{"event": "PASS", "case": "ddl_physical_drop", "tablet": 4611686430744448321, "storage": [[3, 1, 1]]}
+{"event": "stopped", "pid": 2445427, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_physical_drop_8__legj7/data.tar.gz", "bytes": 3286060}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_parent_truncate_npntg7lr", "pid": 2445825, "port": 3569}
+{"event": "sql", "sql": "CREATE DATABASE nstrunc_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE trunc_parent_1 FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=10000000", "rows": []}
+{"event": "parent_recyclebin", "iteration": 1, "value": [[0]]}
+{"event": "sql", "sql": "FORK NAMESPACE trunc_child_1 FROM trunc_parent_1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=10000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "before_truncate", "iteration": 1, "parent_namespace": 3, "child_namespace": 4, "old_logical_tablet": 200001, "physical": [[4611686155866541377, 1, 1, 0]], "materialize_parent": false, "materialize_child": false, "prime_parent_schema": false}
+{"event": "sql", "sql": "TRUNCATE TABLE nstrunc_repro.t1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "after_truncate", "iteration": 1, "old_logical_tablet": 200001, "new_parent_tablet": 200002, "physical": [[4611686155866541377, 1, 1, 0], [4611686430744448322, 1, 1, 0]], "exceptions": [[{"namespace_id": "3", "tablet_id": "200001"}, {"table_id": 500003, "kind": 1, "drop_scn": 1790954218763070004, "was_owned": 0, "create_scn": 0}], [{"namespace_id": "3", "tablet_id": "200002"}, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]]}
+{"event": "sql", "sql": "SET ob_query_timeout=2000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "descendant_result", "iteration": 1, "expected": [[1, 10]], "actual": [[1, 10]], "error": null, "elapsed_s": 0.001, "passed": true}
+{"event": "PASS", "case": "fork_parent_truncate", "results": [true], "materialize_parent": false, "materialize_child": false, "prime_parent_schema": false}
+{"event": "stopped", "pid": 2445825, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_parent_truncate_npntg7lr/data.tar.gz", "bytes": 3279886}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_parent_truncate_j5etnxf9", "pid": 2446257, "port": 48775}
+{"event": "sql", "sql": "CREATE DATABASE nstrunc_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE trunc_parent_1 FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=10000000", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE nstrunc_repro.t1 COMMENT='parent metadata ddl'", "rows": []}
+{"event": "parent_recyclebin", "iteration": 1, "value": [[0]]}
+{"event": "sql", "sql": "FORK NAMESPACE trunc_child_1 FROM trunc_parent_1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=10000000", "rows": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=v+1", "rows": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=v-1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "before_truncate", "iteration": 1, "parent_namespace": 3, "child_namespace": 4, "old_logical_tablet": 200001, "physical": [[4611686155866541377, 1, 1, 0], [4611686568183401793, 1, 1, 0]], "materialize_parent": false, "materialize_child": true, "prime_parent_schema": true}
+{"event": "sql", "sql": "TRUNCATE TABLE nstrunc_repro.t1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "after_truncate", "iteration": 1, "old_logical_tablet": 200001, "new_parent_tablet": 200002, "physical": [[4611686155866541377, 1, 1, 0], [4611686430744448322, 1, 1, 0], [4611686568183401793, 1, 1, 0]], "exceptions": [[{"namespace_id": "3", "tablet_id": "200001"}, {"table_id": 500003, "kind": 1, "drop_scn": 1790954228444723010, "was_owned": 0, "create_scn": 0}], [{"namespace_id": "3", "tablet_id": "200002"}, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [{"namespace_id": "4", "tablet_id": "200001"}, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]]}
+{"event": "sql", "sql": "SET ob_query_timeout=2000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "descendant_result", "iteration": 1, "expected": [[1, 10]], "actual": [[1, 10]], "error": null, "elapsed_s": 0.0, "passed": true}
+{"event": "PASS", "case": "fork_parent_truncate", "results": [true], "materialize_parent": false, "materialize_child": true, "prime_parent_schema": true}
+{"event": "stopped", "pid": 2446257, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_parent_truncate_j5etnxf9/data.tar.gz", "bytes": 3106068}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_parent_truncate_1xqrsa6d", "pid": 2446643, "port": 48893}
+{"event": "sql", "sql": "CREATE DATABASE nstrunc_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE trunc_parent_1 FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=10000000", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE nstrunc_repro.t1 COMMENT='parent metadata ddl'", "rows": []}
+{"event": "parent_recyclebin", "iteration": 1, "value": [[0]]}
+{"event": "sql", "sql": "FORK NAMESPACE trunc_child_1 FROM trunc_parent_1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=10000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "before_truncate", "iteration": 1, "parent_namespace": 3, "child_namespace": 4, "old_logical_tablet": 200001, "physical": [[4611686155866541377, 1, 1, 0]], "materialize_parent": false, "materialize_child": false, "prime_parent_schema": true}
+{"event": "sql", "sql": "TRUNCATE TABLE nstrunc_repro.t1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "after_truncate", "iteration": 1, "old_logical_tablet": 200001, "new_parent_tablet": 200002, "physical": [[4611686155866541377, 1, 1, 0], [4611686430744448322, 1, 1, 0]], "exceptions": [[{"namespace_id": "3", "tablet_id": "200001"}, {"table_id": 500003, "kind": 1, "drop_scn": 1790954238230320046, "was_owned": 0, "create_scn": 0}], [{"namespace_id": "3", "tablet_id": "200002"}, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]]}
+{"event": "sql", "sql": "SET ob_query_timeout=2000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "descendant_result", "iteration": 1, "expected": [[1, 10]], "actual": [[1, 10]], "error": null, "elapsed_s": 0.001, "passed": true}
+{"event": "PASS", "case": "fork_parent_truncate", "results": [true], "materialize_parent": false, "materialize_child": false, "prime_parent_schema": true}
+{"event": "stopped", "pid": 2446643, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_parent_truncate_1xqrsa6d/data.tar.gz", "bytes": 3283967}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_parent_truncate_652csg3u", "pid": 2447007, "port": 62351}
+{"event": "sql", "sql": "CREATE DATABASE nstrunc_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE trunc_parent_1 FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=10000000", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE nstrunc_repro.t1 COMMENT='parent metadata ddl'", "rows": []}
+{"event": "parent_recyclebin", "iteration": 1, "value": [[0]]}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=20", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE trunc_child_1 FROM trunc_parent_1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=10000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "before_truncate", "iteration": 1, "parent_namespace": 3, "child_namespace": 4, "old_logical_tablet": 200001, "physical": [[4611686155866541377, 1, 1, 0], [4611686430744448321, 1, 1, 0]], "materialize_parent": true, "materialize_child": false, "prime_parent_schema": true}
+{"event": "sql", "sql": "TRUNCATE TABLE nstrunc_repro.t1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "after_truncate", "iteration": 1, "old_logical_tablet": 200001, "new_parent_tablet": 200002, "physical": [[4611686155866541377, 1, 1, 0], [4611686430744448321, 3, 1, 0], [4611686430744448322, 1, 1, 0]], "exceptions": [[{"namespace_id": "3", "tablet_id": "200001"}, {"table_id": 500003, "kind": 1, "drop_scn": 1790954247841489010, "was_owned": 1, "create_scn": 1790954247287922031}], [{"namespace_id": "3", "tablet_id": "200002"}, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]]}
+{"event": "sql", "sql": "SET ob_query_timeout=2000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "descendant_result", "iteration": 1, "expected": [[1, 20]], "actual": [[1, 20]], "error": null, "elapsed_s": 0.001, "passed": true}
+{"event": "PASS", "case": "fork_parent_truncate", "results": [true], "materialize_parent": true, "materialize_child": false, "prime_parent_schema": true}
+{"event": "stopped", "pid": 2447007, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_parent_truncate_652csg3u/data.tar.gz", "bytes": 3282920}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_parent_truncate_v6vvnbzx", "pid": 2447439, "port": 47523}
+{"event": "sql", "sql": "CREATE DATABASE nstrunc_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE trunc_parent_1 FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=10000000", "rows": []}
+{"event": "parent_recyclebin", "iteration": 1, "value": [[0]]}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=20", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE trunc_child_1 FROM trunc_parent_1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=10000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "before_truncate", "iteration": 1, "parent_namespace": 3, "child_namespace": 4, "old_logical_tablet": 200001, "physical": [[4611686155866541377, 1, 1, 0], [4611686430744448321, 1, 1, 0]], "materialize_parent": true, "materialize_child": false, "prime_parent_schema": false}
+{"event": "sql", "sql": "TRUNCATE TABLE nstrunc_repro.t1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "after_truncate", "iteration": 1, "old_logical_tablet": 200001, "new_parent_tablet": 200002, "physical": [[4611686155866541377, 1, 1, 0], [4611686430744448321, 3, 1, 0], [4611686430744448322, 1, 1, 0]], "exceptions": [[{"namespace_id": "3", "tablet_id": "200001"}, {"table_id": 500003, "kind": 1, "drop_scn": 1790954257497083010, "was_owned": 1, "create_scn": 1790954256842575036}], [{"namespace_id": "3", "tablet_id": "200002"}, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]]}
+{"event": "sql", "sql": "SET ob_query_timeout=2000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "descendant_result", "iteration": 1, "expected": [[1, 20]], "actual": [[1, 20]], "error": null, "elapsed_s": 0.001, "passed": true}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=v+100", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 120]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 120]]}
+{"event": "first_write_after_truncate", "rows": [[1, 120]]}
+{"event": "PASS", "case": "fork_parent_truncate", "results": [true], "materialize_parent": true, "materialize_child": false, "prime_parent_schema": false}
+{"event": "stopped", "pid": 2447439, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_parent_truncate_v6vvnbzx/data.tar.gz", "bytes": 3281694}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_parent_truncate_d4lw7bje", "pid": 2448077, "port": 56405}
+{"event": "sql", "sql": "CREATE DATABASE nstrunc_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE trunc_parent_1 FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=10000000", "rows": []}
+{"event": "parent_recyclebin", "iteration": 1, "value": [[0]]}
+{"event": "sql", "sql": "FORK NAMESPACE trunc_child_1 FROM trunc_parent_1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=10000000", "rows": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=30", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 30]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "before_truncate", "iteration": 1, "parent_namespace": 3, "child_namespace": 4, "old_logical_tablet": 200001, "physical": [[4611686155866541377, 1, 1, 0], [4611686430744448321, 1, 1, 0]], "materialize_parent": false, "materialize_child": false, "prime_parent_schema": false}
+{"event": "sql", "sql": "TRUNCATE TABLE nstrunc_repro.t1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "after_truncate", "iteration": 1, "old_logical_tablet": 200001, "new_parent_tablet": 200002, "physical": [[4611686155866541377, 1, 1, 0], [4611686430744448321, 3, 1, 0], [4611686430744448322, 1, 1, 0]], "exceptions": [[{"namespace_id": "3", "tablet_id": "200001"}, {"table_id": 500003, "kind": 1, "drop_scn": 1790954267453866020, "was_owned": 1, "create_scn": 1790954266759464022}], [{"namespace_id": "3", "tablet_id": "200002"}, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]]}
+{"event": "sql", "sql": "SET ob_query_timeout=2000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "descendant_result", "iteration": 1, "expected": [[1, 10]], "actual": [[1, 10]], "error": null, "elapsed_s": 0.001, "passed": true}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=v+100", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 110]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 110]]}
+{"event": "first_write_after_truncate", "rows": [[1, 110]]}
+{"event": "PASS", "case": "fork_parent_truncate", "results": [true], "materialize_parent": false, "materialize_child": false, "prime_parent_schema": false}
+{"event": "stopped", "pid": 2448077, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_parent_truncate_d4lw7bje/data.tar.gz", "bytes": 3103742}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_historical_gc_z_w1tmax", "pid": 2448418, "port": 59211}
+{"event": "sql", "sql": "CREATE DATABASE nstrunc_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE history_b FROM ns1", "rows": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=20", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE history_c FROM history_b", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "sql", "sql": "TRUNCATE TABLE nstrunc_repro.t1", "rows": []}
+{"event": "sql", "sql": "DROP NAMESPACE history_b", "rows": []}
+{"event": "sql", "sql": "DROP TABLE nstrunc_repro.t1", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(1,99)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE history_new FROM ns1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 99]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "deleted_source_readable", "physical": [[4611686155866541377, 3, 1, 0], [4611686430744448321, 3, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "retained_through_gc", "physical": [[4611686155866541377, 3, 1, 0], [4611686430744448321, 3, 1, 0]]}
+{"event": "restart", "old_returncode": -9}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_historical_gc_z_w1tmax", "pid": 2450095, "port": 59211}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "retained_through_restart", "physical": [[4611686155866541377, 3, 1, 0], [4611686430744448321, 3, 1, 0]]}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=v+100", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 120]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 99]]}
+{"event": "first_write_from_deleted_source", "physical": [[4611686155866541377, 3, 1, 0], [4611686430744448321, 3, 1, 0], [4611686568183401793, 1, 1, 0]]}
+{"event": "sql", "sql": "DROP NAMESPACE history_c", "rows": []}
+{"event": "last_dependency_released_to_shells", "physical": [[4611686155866541377, 3, 1, 1], [4611686430744448321, 3, 1, 1], [4611686568183401793, 3, 1, 1]]}
+{"event": "PASS", "case": "historical_gc_restart_release", "physical": [], "all_old_tablets_removed": true, "retired_pins_removed": true}
+{"event": "stopped", "pid": 2450095, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_historical_gc_z_w1tmax/data.tar.gz", "bytes": 3323451}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_historical_gc_s2lgt3v9", "pid": 2450635, "port": 6271}
+{"event": "sql", "sql": "CREATE DATABASE nstrunc_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE history_b FROM ns1", "rows": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=20", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE history_c FROM history_b", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "sql", "sql": "TRUNCATE TABLE nstrunc_repro.t1", "rows": []}
+{"event": "sql", "sql": "DROP NAMESPACE history_b", "rows": []}
+{"event": "sql", "sql": "DROP TABLE nstrunc_repro.t1", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(1,99)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE history_new FROM ns1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 99]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "deleted_source_readable", "physical": [[4611686155866541377, 3, 1, 0], [4611686430744448321, 3, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "retained_through_gc", "physical": [[4611686155866541377, 3, 1, 0], [4611686430744448321, 3, 1, 0]]}
+{"event": "restart", "old_returncode": -9}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_historical_gc_s2lgt3v9", "pid": 2451211, "port": 6271}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 20]]}
+{"event": "retained_through_restart", "physical": [[4611686155866541377, 3, 1, 0], [4611686430744448321, 3, 1, 0]]}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=v+100", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 120]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 99]]}
+{"event": "first_write_from_deleted_source", "physical": [[4611686155866541377, 3, 1, 0], [4611686430744448321, 3, 1, 0], [4611686568183401793, 1, 1, 0]]}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 120]]}
+{"event": "baseline_completed_sources_reclaimed", "physical": [[4611686430744448321, 3, 1, 1], [4611686568183401793, 1, 1, 0]]}
+{"event": "sql", "sql": "DROP NAMESPACE history_c", "rows": []}
+{"event": "last_dependency_released_to_shells", "physical": [[4611686568183401793, 3, 1, 1]]}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_historical_gc_s2lgt3v9", "pid": 2452588, "port": 6271}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 99]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 99]]}
+{"event": "release_survived_restart", "physical": [], "retired_snapshots": [1790954305193376031, 1790954305384809011]}
+{"event": "PASS", "case": "historical_gc_restart_release", "physical": [], "all_old_tablets_removed": true, "retired_pins_removed": true}
+{"event": "stopped", "pid": 2452588, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_historical_gc_s2lgt3v9/data.tar.gz", "bytes": 4008192}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_historical_concurrency_jnm1vc8t", "pid": 2453004, "port": 6357}
+{"event": "sql", "sql": "ALTER SYSTEM SET debug_sync_timeout='60s'", "rows": []}
+{"event": "sql", "sql": "CREATE DATABASE nstrunc_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE race_b FROM ns1", "rows": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=20", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE race_c FROM race_b", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=30000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 20]]}
+{"event": "sql", "sql": "TRUNCATE TABLE nstrunc_repro.t1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=30000000", "rows": []}
+{"event": "sql", "sql": "SET ob_global_debug_sync='AFTER_UPDATE_TABLET_TO_LS signal history_mat_ready wait_for history_mat_release timeout 20000000 execute 1'", "rows": []}
+{"event": "sql", "sql": "SET ob_global_debug_sync='now wait_for history_mat_ready timeout 10000000'", "rows": []}
+{"event": "fork_rejected_unpublished_copy", "error": "(6005, 'Try lock row conflict')"}
+{"event": "fork_and_gc_respected_materialization_boundary", "source": [[4611686430744448321, 3, 1, 0]], "fork_requested_retry": true}
+{"event": "sql", "sql": "SET ob_global_debug_sync='now signal history_mat_release'", "rows": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=120", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE race_d FROM race_c", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 120]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 120]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 10]]}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=300", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 300]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 120]]}
+{"event": "PASS", "case": "historical_materialize_fork_gc_interleaving", "fork_rows": [[1, 120]]}
+{"event": "stopped", "pid": 2453004, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_historical_concurrency_jnm1vc8t/data.tar.gz", "bytes": 3310511}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_publish_recovery_initial_57srmh69", "pid": 2453606, "port": 37521}
+{"event": "sql", "sql": "CREATE DATABASE nstrunc_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE publish_old FROM ns1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 10]]}
+{"event": "sql", "sql": "SET ob_query_timeout=10000000", "rows": []}
+{"event": "publication_state", "state": [0, 0, 1790954368404896]}
+{"event": "publication_state", "state": [0, 1790954370675472, 1790954368404896]}
+{"event": "native_ddl_committed_before_delta", "owner": "initial", "metadata": {"name": "ns1", "source": 0, "catalog_page": 0, "catalog_cap": 0, "directory_page": 0, "directory_cap": 0, "snapshot": 0, "schema_version": 1790954368404896, "snapshot_ref": 0, "parent_ref": 0, "ref_count": 0, "state": 0, "active_schema_changes": 0, "pending_schema_version": 1790954370675472, "parent_namespace": 0, "fork_cap": 0}}
+{"event": "fork_waiting_for_pending_ddl"}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_publish_recovery_initial_57srmh69", "pid": 2454132, "port": 37521}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 10]]}
+{"event": "descendant_read_before_owner_login", "inherited": 10}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE publish_new FROM ns1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=v+100", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 110]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": []}
+{"event": "PASS", "case": "ddl_publish_crash_recovery", "owner": "initial", "inherited": 10, "first_write": 110, "no_phantom_fork_or_pin": true, "tombstone": {"table_id": 500003, "kind": 1, "drop_scn": 1790954378980285351, "was_owned": 1, "create_scn": 1790954368425123017}}
+{"event": "stopped", "pid": 2454132, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_publish_recovery_initial_57srmh69/data.tar.gz", "bytes": 3281084}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_publish_recovery_child_dc90w0lw", "pid": 2455142, "port": 15663}
+{"event": "sql", "sql": "CREATE DATABASE nstrunc_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE publish_owner FROM ns1", "rows": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=20", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE publish_old FROM publish_owner", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 20]]}
+{"event": "sql", "sql": "SET ob_query_timeout=10000000", "rows": []}
+{"event": "publication_state", "state": [0, 0, 1790954388164216]}
+{"event": "publication_state", "state": [0, 1790954390620368, 1790954388164216]}
+{"event": "native_ddl_committed_before_delta", "owner": "child", "metadata": {"name": "publish_owner", "source": 0, "catalog_page": 0, "catalog_cap": 1790954390220920042, "directory_page": 0, "directory_cap": 1790954390220920042, "snapshot": 1790954390220920042, "schema_version": 1790954388164216, "snapshot_ref": 1790954390220920042, "parent_ref": 0, "ref_count": 0, "state": 0, "active_schema_changes": 0, "pending_schema_version": 1790954390620368, "parent_namespace": 1, "fork_cap": 1790954390220920042}}
+{"event": "fork_waiting_for_pending_ddl"}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_publish_recovery_child_dc90w0lw", "pid": 2458981, "port": 15663}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 20]]}
+{"event": "descendant_read_before_owner_login", "inherited": 20}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE publish_new FROM publish_owner", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=v+100", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 120]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": []}
+{"event": "PASS", "case": "ddl_publish_crash_recovery", "owner": "child", "inherited": 20, "first_write": 120, "no_phantom_fork_or_pin": true, "tombstone": {"table_id": 500003, "kind": 1, "drop_scn": 1790954398629621754, "was_owned": 1, "create_scn": 1790954390220920042}}
+{"event": "stopped", "pid": 2458981, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_publish_recovery_child_dc90w0lw/data.tar.gz", "bytes": 3286279}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_direct_yi1li57m", "pid": 2459208, "port": 8953}
+{"event": "sql", "sql": "CREATE DATABASE phase10", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.parent(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.parent VALUES(1,10),(2,20)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.trunc_inherited(id INT PRIMARY KEY,k INT) PARTITION BY RANGE(id) (PARTITION p0 VALUES LESS THAN (100), PARTITION p1 VALUES LESS THAN (200))", "rows": []}
+{"event": "sql", "sql": "CREATE UNIQUE INDEX idx_k ON phase10.trunc_inherited(k) GLOBAL PARTITION BY HASH(k) PARTITIONS 2", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.trunc_inherited VALUES(1,1),(2,2),(120,3)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE phase10_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM phase10.parent ORDER BY id", "rows": [[1, 10], [2, 20]]}
+{"event": "sql", "sql": "FORK NAMESPACE phase10_key_peer FROM ns1", "rows": []}
+{"event": "sql", "sql": "SELECT table_id FROM oceanbase.__all_table WHERE table_name='parent'", "rows": [[500003]]}
+{"event": "sql", "sql": "SELECT table_id FROM oceanbase.__all_table WHERE table_name='parent'", "rows": [[500003]]}
+{"event": "sql", "sql": "CREATE USER 'phase10_login_probe'@'%' IDENTIFIED BY 'ProbePass9!'", "rows": []}
+{"event": "sql", "sql": "GRANT SELECT ON phase10.* TO 'phase10_login_probe'@'%'", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM phase10.parent WHERE id=1", "rows": [[10]]}
+{"event": "sql", "sql": "CREATE USER 'phase10_login_probe'@'%' IDENTIFIED BY 'ProbePass9!'", "rows": []}
+{"event": "sql", "sql": "GRANT SELECT ON phase10.* TO 'phase10_login_probe'@'%'", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM phase10.parent WHERE id=1", "rows": [[10]]}
+{"event": "sql", "sql": "CREATE USER 'phase10_login_probe'@'%' IDENTIFIED BY 'ProbePass9!'", "rows": []}
+{"event": "sql", "sql": "GRANT SELECT ON phase10.* TO 'phase10_login_probe'@'%'", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM phase10.parent WHERE id=1", "rows": [[10]]}
+{"event": "sql", "sql": "CREATE FUNCTION phase10.owner_udf() RETURNS INT RETURN 7", "rows": []}
+{"event": "sql", "sql": "SELECT phase10.owner_udf()", "rows": [[7]]}
+{"event": "sql", "sql": "CREATE FUNCTION phase10.owner_udf() RETURNS INT RETURN 11", "rows": []}
+{"event": "sql", "sql": "SELECT phase10.owner_udf()", "rows": [[11]]}
+{"event": "sql", "sql": "CREATE FUNCTION phase10.owner_udf() RETURNS INT RETURN 13", "rows": []}
+{"event": "sql", "sql": "SELECT phase10.owner_udf()", "rows": [[13]]}
+{"event": "sql", "sql": "SELECT table_id FROM oceanbase.__all_table WHERE table_name='parent'", "rows": [[500003]]}
+{"event": "sql", "sql": "UPDATE phase10.parent SET v=11 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "UPDATE phase10.parent SET v=10 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "UPDATE phase10.parent SET v=11 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "UPDATE phase10.parent SET v=10 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM phase10.parent FORCE INDEX(owner_key_v) WHERE v=20", "rows": [[2]]}
+{"event": "sql", "sql": "SELECT id FROM phase10.parent FORCE INDEX(owner_key_v) WHERE v=20", "rows": [[2]]}
+{"event": "sql", "sql": "SELECT id FROM phase10.parent FORCE INDEX(owner_key_v) WHERE v=20", "rows": [[2]]}
+{"event": "same_logical_id_parallel_ddl", "table_id": 500003, "namespaces": 3}
+{"event": "sql", "sql": "UPDATE phase10.parent SET v=11 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "UPDATE phase10.parent SET v=21 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "SELECT stmt_count FROM oceanbase.__all_virtual_ps_stat", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_plan_cache_stat", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_plan_stat", "rows": [[197]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_sql_plan", "rows": [[353]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_plan_cache_plan_explain", "rows": [[355]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_change_stream_refresh_stat", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT stmt_count FROM oceanbase.__all_virtual_ps_stat", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_plan_cache_stat", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_plan_stat", "rows": [[118]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_sql_plan", "rows": [[209]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_plan_cache_plan_explain", "rows": [[211]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_change_stream_refresh_stat", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT stmt_count FROM oceanbase.__all_virtual_ps_stat", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_plan_cache_stat", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_plan_stat", "rows": [[117]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_sql_plan", "rows": [[208]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_plan_cache_plan_explain", "rows": [[210]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_virtual_change_stream_refresh_stat", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT stmt_count FROM oceanbase.__all_virtual_ps_stat", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT stmt_count FROM oceanbase.__all_virtual_ps_stat", "rows": [[1]]}
+{"event": "sql", "sql": "ALTER SYSTEM FLUSH PS CACHE", "rows": []}
+{"event": "sql", "sql": "SELECT stmt_count FROM oceanbase.__all_virtual_ps_stat", "rows": [[0]]}
+{"event": "sql", "sql": "SELECT stmt_count FROM oceanbase.__all_virtual_ps_stat", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT stmt_count FROM oceanbase.__all_virtual_ps_stat", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT /*sqlstat_child_only*/ v FROM phase10.parent WHERE v=11 AND id=1", "rows": [[11]]}
+{"event": "sql", "sql": "UPDATE phase10.parent SET v=10 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "UPDATE phase10.parent SET v=10 WHERE id=1", "rows": []}
+{"event": "same_logical_id_prepared_execute", "namespaces": 3}
+{"event": "sql", "sql": "INSERT INTO oceanbase.__all_scheduler_job (job_name,job,lowner,powner,cowner,next_date,`interval#`,flag,exec_env,enabled,auto_drop,end_date) VALUES ('owner_probe',991001,'root','root','root',NOW(),'null',0,'x',0,0,DATE_SUB(NOW(), INTERVAL 1 DAY))", "rows": []}
+{"event": "sql", "sql": "CALL dbms_scheduler.enable('owner_probe')", "rows": []}
+{"event": "sql", "sql": "INSERT INTO oceanbase.__all_scheduler_job (job_name,job,lowner,powner,cowner,next_date,`interval#`,flag,exec_env,enabled,auto_drop,end_date) VALUES ('owner_probe',991001,'root','root','root',NOW(),'null',0,'x',0,0,DATE_SUB(NOW(), INTERVAL 1 DAY))", "rows": []}
+{"event": "sql", "sql": "CALL dbms_scheduler.enable('owner_probe')", "rows": []}
+{"event": "sql", "sql": "INSERT INTO oceanbase.__all_scheduler_job (job_name,job,lowner,powner,cowner,next_date,`interval#`,flag,exec_env,enabled,auto_drop,end_date) VALUES ('owner_probe',991001,'root','root','root',NOW(),'null',0,'x',0,0,DATE_SUB(NOW(), INTERVAL 1 DAY))", "rows": []}
+{"event": "sql", "sql": "CALL dbms_scheduler.enable('owner_probe')", "rows": []}
+{"event": "same_logical_id_dbms_scheduler", "namespaces": 3}
+{"event": "sql", "sql": "SELECT GET_LOCK('root_gc_orphan', 0)", "rows": [[1]]}
+{"event": "sql", "sql": "INSERT INTO oceanbase.__all_detect_lock_info_v2 (task_type,obj_type,obj_id,lock_mode,owner_type,owner_id,cnt,detect_func_no,detect_func_param) SELECT task_type,obj_type,obj_id+100000,lock_mode,owner_type,4000000000,cnt,detect_func_no,detect_func_param FROM oceanbase.__all_detect_lock_info_v2 WHERE owner_id<>4000000000 LIMIT 1", "rows": []}
+{"event": "sql", "sql": "SELECT RELEASE_LOCK('root_gc_orphan')", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT GET_LOCK('child_gc_orphan', 0)", "rows": [[1]]}
+{"event": "sql", "sql": "INSERT INTO oceanbase.__all_detect_lock_info_v2 (task_type,obj_type,obj_id,lock_mode,owner_type,owner_id,cnt,detect_func_no,detect_func_param) SELECT task_type,obj_type,obj_id+100000,lock_mode,owner_type,4000000000,cnt,detect_func_no,detect_func_param FROM oceanbase.__all_detect_lock_info_v2 WHERE owner_id<>4000000000 LIMIT 1", "rows": []}
+{"event": "sql", "sql": "SELECT RELEASE_LOCK('child_gc_orphan')", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT GET_LOCK('peer_gc_orphan', 0)", "rows": [[1]]}
+{"event": "sql", "sql": "INSERT INTO oceanbase.__all_detect_lock_info_v2 (task_type,obj_type,obj_id,lock_mode,owner_type,owner_id,cnt,detect_func_no,detect_func_param) SELECT task_type,obj_type,obj_id+100000,lock_mode,owner_type,4000000000,cnt,detect_func_no,detect_func_param FROM oceanbase.__all_detect_lock_info_v2 WHERE owner_id<>4000000000 LIMIT 1", "rows": []}
+{"event": "sql", "sql": "SELECT RELEASE_LOCK('peer_gc_orphan')", "rows": [[1]]}
+{"event": "namespace_lock_gc_orphans_reclaimed", "namespaces": 3}
+{"event": "sql", "sql": "CREATE TABLE phase10.root_checksum_owner(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.root_checksum_owner VALUES(1,7),(2,9)", "rows": []}
+{"event": "sql", "sql": "CREATE INDEX idx_v ON phase10.root_checksum_owner(v)", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE phase10.root_checksum_owner MODIFY COLUMN v BIGINT", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM phase10.root_checksum_owner ORDER BY id", "rows": [[1, 7], [2, 9]]}
+{"event": "sql", "sql": "TRUNCATE TABLE phase10.parent", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM phase10.parent", "rows": [[0]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM phase10.parent", "rows": [[2]]}
+{"event": "sql", "sql": "INSERT INTO phase10.parent VALUES(3,30)", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM phase10.parent", "rows": [[3]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.records(id INT PRIMARY KEY, v VARCHAR(64), amount DECIMAL(12,2))", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.records VALUES(1,'first',12.34),(2,'second',56.78)", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.heap_rows(d DATE)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.heap_rows VALUES('2078-10-10'),('1970-11-01')", "rows": []}
+{"event": "sql", "sql": "UPDATE phase10.heap_rows SET d='1970-11-02' WHERE d='1970-11-01'", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM phase10.heap_rows", "rows": [[2]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM phase10.heap_rows WHERE d='1970-11-02'", "rows": [[1]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.join_left(a BIGINT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.join_left VALUES(32)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.join_right(b YEAR(4), KEY key_b(b))", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.join_right VALUES(1901)", "rows": []}
+{"event": "sql", "sql": "SELECT a,b FROM phase10.join_left,phase10.join_right WHERE a>b", "rows": []}
+{"event": "sql", "sql": "CREATE INDEX records_v ON phase10.records(v)", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM phase10.records FORCE INDEX(records_v) WHERE v='second'", "rows": [[2]]}
+{"event": "sql", "sql": "CREATE INDEX records_amount_expr ON phase10.records ((amount + 1))", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM phase10.records FORCE INDEX(records_amount_expr) WHERE amount + 1 = 13.34", "rows": [[1]]}
+{"event": "sql", "sql": "PREPARE owned_stmt FROM 'SELECT id FROM phase10.records WHERE id=?'", "rows": []}
+{"event": "sql", "sql": "SET @owned_id=2", "rows": []}
+{"event": "sql", "sql": "EXECUTE owned_stmt USING @owned_id", "rows": [[2]]}
+{"event": "sql", "sql": "DEALLOCATE PREPARE owned_stmt", "rows": []}
+{"event": "sql", "sql": "CALL DBMS_AI_SERVICE.CREATE_AI_MODEL('phase10_owned_model', '{\"type\":\"dense_embedding\",\"model_name\":\"phase10-embed\"}')", "rows": []}
+{"event": "sql", "sql": "SELECT MODEL_NAME FROM oceanbase.DBA_OB_AI_MODELS WHERE NAME='phase10_owned_model'", "rows": [["phase10-embed"]]}
+{"event": "sql", "sql": "SELECT MODEL_NAME FROM oceanbase.DBA_OB_AI_MODELS WHERE NAME='phase10_owned_model'", "rows": []}
+{"event": "sql", "sql": "CALL DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('phase10_owned_endpoint', '{\"ai_model_name\":\"phase10_owned_model\",\"url\":\"http://127.0.0.1:9/\",\"access_key\":\"test\",\"provider\":\"openai\"}')", "rows": []}
+{"event": "sql", "sql": "SELECT AI_MODEL_NAME FROM oceanbase.DBA_OB_AI_MODEL_ENDPOINTS WHERE ENDPOINT_NAME='phase10_owned_endpoint'", "rows": [["phase10_owned_model"]]}
+{"event": "sql", "sql": "SELECT AI_MODEL_NAME FROM oceanbase.DBA_OB_AI_MODEL_ENDPOINTS WHERE ENDPOINT_NAME='phase10_owned_endpoint'", "rows": []}
+{"event": "sql", "sql": "CALL DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('phase10_owned_endpoint')", "rows": []}
+{"event": "sql", "sql": "SELECT AI_MODEL_NAME FROM oceanbase.DBA_OB_AI_MODEL_ENDPOINTS WHERE ENDPOINT_NAME='phase10_owned_endpoint'", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM phase10.records WHERE v='first' UNION ALL SELECT id FROM phase10.records WHERE v='second' UNION ALL SELECT id FROM phase10.records WHERE v='first' UNION ALL SELECT id FROM phase10.records WHERE v='second'", "rows": [[1], [2], [1], [2]]}
+{"event": "sql", "sql": "(SELECT id FROM phase10.records WHERE id=1 ORDER BY id) UNION (SELECT id FROM phase10.records WHERE id=2 ORDER BY id) UNION ALL (SELECT id FROM phase10.records WHERE id=1 ORDER BY id) EXCEPT (SELECT id FROM phase10.records WHERE id=2 ORDER BY id)", "rows": [[1]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.unique_index_error(pk INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.unique_index_error VALUES(1,610),(2,610)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.root_unique_index_error(pk INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.root_unique_index_error VALUES(1,620),(2,620)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.ignore_rows(pk INT PRIMARY KEY, v INT, UNIQUE KEY uq_v(v))", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.ignore_rows VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "INSERT IGNORE INTO phase10.ignore_rows VALUES(2,20),(3,10),(4,40)", "rows": []}
+{"event": "sql", "sql": "SELECT pk,v FROM phase10.ignore_rows ORDER BY pk", "rows": [[1, 10], [2, 20], [4, 40]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.parts(id INT PRIMARY KEY, v INT) PARTITION BY HASH(id) PARTITIONS 4", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.parts VALUES(1,10),(2,20),(3,30),(4,40)", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*),SUM(v) FROM phase10.parts", "rows": [[4, "100"]]}
+{"event": "sql", "sql": "SELECT /*+ parallel(2) */ SUM(v) FROM phase10.parts", "rows": [["100"]]}
+{"event": "sql", "sql": "START TRANSACTION", "rows": []}
+{"event": "sql", "sql": "SELECT /*+ parallel(2) */ SUM(v) FROM phase10.parts", "rows": [["100"]]}
+{"event": "sql", "sql": "COMMIT", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.exchange_parts(id INT PRIMARY KEY, v INT) PARTITION BY RANGE(id) (PARTITION p0 VALUES LESS THAN (10), PARTITION p1 VALUES LESS THAN (MAXVALUE))", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.exchange_plain(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.exchange_parts VALUES(1,11),(11,111)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.exchange_plain VALUES(2,22)", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE phase10.exchange_parts EXCHANGE PARTITION p0 WITH TABLE phase10.exchange_plain WITHOUT VALIDATION", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM phase10.exchange_parts ORDER BY id", "rows": [[2, 22], [11, 111]]}
+{"event": "sql", "sql": "SELECT id,v FROM phase10.exchange_plain ORDER BY id", "rows": [[1, 11]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.generated_parts(c1 INT,c2 VARCHAR(20),c3 INT GENERATED ALWAYS AS (LENGTH(c4)),c4 VARCHAR(20)) PARTITION BY KEY(c3,c4) PARTITIONS 2", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.generated_parts(c1,c2,c4) VALUES(1,'x','ab')", "rows": []}
+{"event": "sql", "sql": "CREATE INDEX generated_parts_c2 ON phase10.generated_parts(c2)", "rows": []}
+{"event": "sql", "sql": "SELECT c1,c2,c3,c4 FROM phase10.generated_parts FORCE INDEX(generated_parts_c2)", "rows": [[1, "x", 2, "ab"]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.empty_index_parts(c1 INT,c2 VARCHAR(20),c3 CHAR(50),INDEX idx(c2(5)),INDEX idx2(c2(7)))", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE phase10.empty_index_parts ADD INDEX idx3(c3(20))", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.empty_index_parts VALUES(1,'first','third')", "rows": []}
+{"event": "sql", "sql": "SELECT c1 FROM phase10.empty_index_parts FORCE INDEX(idx3) WHERE c3='third'", "rows": [[1]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.blobs(id INT PRIMARY KEY, payload MEDIUMBLOB)", "rows": []}
+{"event": "sql", "sql": "SELECT payload FROM phase10.blobs", "rows": [["b'namespace-blob'"]]}
+{"event": "sql", "sql": "SELECT LENGTH(payload),SUBSTR(payload,7999,4),SUBSTR(payload,-1,1) FROM phase10.blobs WHERE id=2", "rows": [[16000, "b'AABB'", "b'B'"]]}
+{"event": "sql", "sql": "SELECT SUBSTR(payload,7999,4),SUBSTR(payload,-1,1) FROM phase10.blobs WHERE id=2", "rows": [["b'AACC'", "b'C'"]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.utf8_lob(id INT PRIMARY KEY, payload MEDIUMTEXT)", "rows": []}
+{"event": "sql", "sql": "SELECT SUBSTR(payload,7999,4),SUBSTR(payload,-1,1) FROM phase10.utf8_lob WHERE id=1", "rows": [["界界山山", "山"]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.runtime_ddl(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "CREATE UNIQUE INDEX runtime_v ON phase10.runtime_ddl(v)", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE phase10.runtime_ddl MODIFY COLUMN v BIGINT", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*),SUM(v) FROM phase10.runtime_ddl", "rows": [[200, "220100"]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.rename_a(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.rename_a VALUES(1,8)", "rows": []}
+{"event": "sql", "sql": "CREATE INDEX rename_v ON phase10.rename_a(v)", "rows": []}
+{"event": "sql", "sql": "RENAME TABLE phase10.rename_a TO phase10.rename_tmp, phase10.rename_tmp TO phase10.rename_b", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM phase10.rename_b FORCE INDEX(rename_v) WHERE v=8", "rows": [[1]]}
+{"event": "sql", "sql": "SHOW TABLES FROM phase10", "rows": [["blobs"], ["empty_index_parts"], ["exchange_parts"], ["exchange_plain"], ["generated_parts"], ["heap_rows"], ["ignore_rows"], ["join_left"], ["join_right"], ["parent"], ["parts"], ["records"], ["rename_b"], ["runtime_ddl"], ["trunc_inherited"], ["unique_index_error"], ["utf8_lob"]]}
+{"event": "sql", "sql": "ALTER TABLE phase10.records ADD COLUMN revision INT DEFAULT 7", "rows": []}
+{"event": "sql", "sql": "SELECT revision FROM phase10.records WHERE id=1", "rows": [[7]]}
+{"event": "sql", "sql": "DROP INDEX records_v ON phase10.records", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM phase10.records", "rows": [[2]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.fulltext_rows(id INT PRIMARY KEY, body TEXT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.fulltext_rows VALUES(1,'alpha word'),(2,'beta word')", "rows": []}
+{"event": "sql", "sql": "CREATE FULLTEXT INDEX fulltext_body ON phase10.fulltext_rows(body)", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM phase10.fulltext_rows WHERE MATCH(body) AGAINST('alpha')", "rows": [[1]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.fulltext_heap(body TEXT, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.fulltext_heap VALUES('alpha text',7),('beta text',8)", "rows": []}
+{"event": "sql", "sql": "CREATE FULLTEXT INDEX heap_body ON phase10.fulltext_heap(body)", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE phase10.fulltext_heap MODIFY COLUMN v VARCHAR(20)", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM phase10.fulltext_heap WHERE MATCH(body) AGAINST('alpha')", "rows": [["7"]]}
+{"event": "sql", "sql": "INSERT INTO phase10.fulltext_heap VALUES('gamma text','9')", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM phase10.fulltext_heap", "rows": [[3]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.ik_rows(id INT PRIMARY KEY, body TEXT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.ik_rows VALUES(1,'alpha word'),(2,'beta word')", "rows": []}
+{"event": "sql", "sql": "CREATE FULLTEXT INDEX ik_body ON phase10.ik_rows(body) WITH PARSER ik", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM phase10.ik_rows WHERE MATCH(body) AGAINST('alpha')", "rows": [[1]]}
+{"event": "sql", "sql": "ALTER SYSTEM SET vector_index_optimize_duty_time='[00:00:00,23:59:59]'", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.ivf_rows(id INT PRIMARY KEY, embedding VECTOR(3))", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.ivf_rows VALUES (1,'[1,0,0]'),(2,'[2,0,0]'),(3,'[3,0,0]'),(4,'[4,0,0]'),(5,'[5,0,0]'),(6,'[6,0,0]')", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=120000000", "rows": []}
+{"event": "sql", "sql": "CREATE VECTOR INDEX ivf_embedding ON phase10.ivf_rows(embedding) WITH (distance=l2,type=ivf_flat,nlist=2,sample_per_nlist=3)", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM phase10.ivf_rows ORDER BY l2_distance(embedding,[0,0,0]) APPROXIMATE LIMIT 1", "rows": [[1]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.ivf_pq_rows(id INT PRIMARY KEY, embedding VECTOR(4))", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.ivf_pq_rows VALUES (1,'[1,1,1,1]'),(2,'[2,2,2,2]'),(3,'[3,3,3,3]'),(4,'[4,4,4,4]'),(5,'[5,5,5,5]'),(6,'[6,6,6,6]'),(7,'[7,7,7,7]'),(8,'[8,8,8,8]'),(9,'[9,9,9,9]'),(10,'[10,10,10,10]'),(11,'[11,11,11,11]'),(12,'[12,12,12,12]'),(13,'[13,13,13,13]'),(14,'[14,14,14,14]'),(15,'[15,15,15,15]'),(16,'[16,16,16,16]'),(17,'[17,17,17,17]'),(18,'[18,18,18,18]'),(19,'[19,19,19,19]'),(20,'[20,20,20,20]')", "rows": []}
+{"event": "sql", "sql": "CREATE VECTOR INDEX pq_embedding ON phase10.ivf_pq_rows(embedding) WITH (distance=l2,type=ivf_pq,nlist=2,sample_per_nlist=5,m=2)", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM phase10.ivf_pq_rows ORDER BY l2_distance(embedding,[0,0,0,0]) APPROXIMATE LIMIT 1", "rows": [[9]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.ivf_sq8_rows(id INT PRIMARY KEY, embedding VECTOR(4))", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.ivf_sq8_rows VALUES (1,'[1,1,1,1]'),(2,'[2,2,2,2]'),(3,'[3,3,3,3]'),(4,'[4,4,4,4]'),(5,'[5,5,5,5]'),(6,'[6,6,6,6]'),(7,'[7,7,7,7]'),(8,'[8,8,8,8]'),(9,'[9,9,9,9]'),(10,'[10,10,10,10]'),(11,'[11,11,11,11]'),(12,'[12,12,12,12]'),(13,'[13,13,13,13]'),(14,'[14,14,14,14]'),(15,'[15,15,15,15]'),(16,'[16,16,16,16]'),(17,'[17,17,17,17]'),(18,'[18,18,18,18]'),(19,'[19,19,19,19]'),(20,'[20,20,20,20]')", "rows": []}
+{"event": "sql", "sql": "CREATE VECTOR INDEX sq8_embedding ON phase10.ivf_sq8_rows(embedding) WITH (distance=l2,type=ivf_sq8,nlist=2,sample_per_nlist=5)", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM phase10.ivf_sq8_rows ORDER BY l2_distance(embedding,[0,0,0,0]) APPROXIMATE LIMIT 1", "rows": [[1]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.empty_hnsw(id INT PRIMARY KEY, embedding VECTOR(3))", "rows": []}
+{"event": "sql", "sql": "CREATE VECTOR INDEX empty_embedding ON phase10.empty_hnsw(embedding) WITH (distance=l2,type=hnsw,lib=vsag)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.empty_hnsw VALUES(1,'[1,0,0]')", "rows": []}
+{"event": "sql", "sql": "CALL dbms_vector.refresh_index('phase10.empty_embedding','phase10.empty_hnsw',NULL,10000,NULL)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.ivf_inherited_rows(id INT PRIMARY KEY, embedding VECTOR(4))", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.ivf_inherited_rows VALUES (1,'[1,0,0,0]'),(2,'[2,0,0,0]'),(3,'[3,0,0,0]'),(4,'[4,0,0,0]'),(5,'[5,0,0,0]'),(6,'[6,0,0,0]')", "rows": []}
+{"event": "sql", "sql": "CREATE VECTOR INDEX inherited_embedding ON phase10.ivf_inherited_rows(embedding) WITH (distance=l2,type=ivf_flat,nlist=2,sample_per_nlist=5)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE phase10_ivf_inherited FROM ns1", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM phase10.ivf_inherited_rows", "rows": [[6]]}
+{"event": "sql", "sql": "INSERT INTO phase10.ivf_inherited_rows VALUES(100,'[0,0,0,0]')", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM phase10.ivf_inherited_rows", "rows": [[6]]}
+{"event": "sql", "sql": "SELECT id FROM phase10.ivf_inherited_rows ORDER BY l2_distance(embedding,[0,0,0,0]) APPROXIMATE LIMIT 1", "rows": [[1]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.drop_pk(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.drop_pk VALUES(1,11),(2,22)", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE phase10.drop_pk DROP PRIMARY KEY", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*),SUM(v) FROM phase10.drop_pk", "rows": [[2, "33"]]}
+{"event": "sql", "sql": "SHOW CREATE TABLE phase10.drop_pk", "rows": [["drop_pk", "CREATE TABLE `drop_pk` (\n  `id` int(11) NOT NULL,\n  `v` int(11) DEFAULT NULL\n) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0"]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.checked(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.checked VALUES(1,11),(2,22)", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE phase10.checked ADD CONSTRAINT positive_v CHECK (v > 0)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.checked_invalid(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.checked_invalid VALUES(1,-1)", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM phase10.checked_invalid", "rows": [[1, -1]]}
+{"event": "sql", "sql": "UPDATE phase10.checked_invalid SET v=1 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE phase10.checked_invalid ADD CONSTRAINT positive_existing CHECK (v > 0)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.redef_ref(id INT PRIMARY KEY)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.redef_ref VALUES(1),(2)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.redef_deps(id INT PRIMARY KEY, ref_id INT, payload INT, CONSTRAINT redef_positive CHECK(ref_id>0), CONSTRAINT redef_fk FOREIGN KEY(ref_id) REFERENCES phase10.redef_ref(id))", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.redef_deps VALUES(1,1,7),(2,2,8)", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE phase10.redef_deps MODIFY COLUMN payload VARCHAR(20)", "rows": []}
+{"event": "sql", "sql": "SELECT id,ref_id,payload FROM phase10.redef_deps ORDER BY id", "rows": [[1, 1, "7"], [2, 2, "8"]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.redef_fts_pk(id INT PRIMARY KEY, body TEXT, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.redef_fts_pk VALUES(1,'alpha text',7),(2,'beta text',8)", "rows": []}
+{"event": "sql", "sql": "CREATE FULLTEXT INDEX body_ft ON phase10.redef_fts_pk(body)", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE phase10.redef_fts_pk MODIFY COLUMN v VARCHAR(20)", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM phase10.redef_fts_pk WHERE MATCH(body) AGAINST('alpha')", "rows": [[1, "7"]]}
+{"event": "sql", "sql": "INSERT INTO phase10.redef_fts_pk VALUES(3,'gamma text','9')", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM phase10.redef_fts_pk WHERE MATCH(body) AGAINST('gamma')", "rows": [[3, "9"]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.redef_fts_col(id INT PRIMARY KEY, body TEXT, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.redef_fts_col VALUES(1,'alpha text',7),(2,'beta text',8)", "rows": []}
+{"event": "sql", "sql": "CREATE FULLTEXT INDEX body_ft ON phase10.redef_fts_col(body)", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE phase10.redef_fts_col DROP COLUMN v, ADD COLUMN w INT DEFAULT 4", "rows": []}
+{"event": "sql", "sql": "SELECT id,w FROM phase10.redef_fts_col WHERE MATCH(body) AGAINST('alpha')", "rows": [[1, 4]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.part_local(id INT PRIMARY KEY, k INT) PARTITION BY HASH(id) PARTITIONS 2", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.part_local VALUES(1,11),(2,22),(3,33)", "rows": []}
+{"event": "sql", "sql": "CREATE INDEX idx_k_local ON phase10.part_local(k) LOCAL", "rows": []}
+{"event": "sql", "sql": "SELECT id,k FROM phase10.part_local FORCE INDEX(idx_k_local) WHERE k >= 22 ORDER BY k", "rows": [[2, 22], [3, 33]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.repartition(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.repartition VALUES(1,11),(2,22)", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE phase10.repartition PARTITION BY HASH(id) PARTITIONS 3", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*),SUM(v) FROM phase10.repartition", "rows": [[2, "33"]]}
+{"event": "sql", "sql": "ALTER SYSTEM SET _ob_enable_truncate_partition_preserve_global_index=true", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.trunc_global(id INT PRIMARY KEY,k INT,c VARCHAR(20)) PARTITION BY RANGE(id) (PARTITION p0 VALUES LESS THAN (100), PARTITION p1 VALUES LESS THAN (200))", "rows": []}
+{"event": "sql", "sql": "CREATE UNIQUE INDEX idx_k ON phase10.trunc_global(k) GLOBAL PARTITION BY HASH(k) PARTITIONS 2", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.trunc_global VALUES(1,1,'a'),(2,2,'b'),(120,3,'c')", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE phase10.trunc_global TRUNCATE PARTITION p0", "rows": []}
+{"event": "sql", "sql": "SELECT id,k FROM phase10.trunc_global FORCE INDEX(idx_k) ORDER BY id", "rows": [[120, 3]]}
+{"event": "sql", "sql": "INSERT INTO phase10.trunc_global VALUES(5,5,'new')", "rows": []}
+{"event": "sql", "sql": "SELECT id,k FROM phase10.trunc_global FORCE INDEX(idx_k) ORDER BY id", "rows": [[5, 5], [120, 3]]}
+{"event": "sql", "sql": "SELECT id,k FROM phase10.trunc_inherited FORCE INDEX(idx_k) ORDER BY id", "rows": [[1, 1], [2, 2], [120, 3]]}
+{"event": "sql", "sql": "ALTER TABLE phase10.trunc_inherited TRUNCATE PARTITION p0", "rows": []}
+{"event": "sql", "sql": "SELECT id,k FROM phase10.trunc_inherited FORCE INDEX(idx_k) ORDER BY id", "rows": [[120, 3]]}
+{"event": "sql", "sql": "INSERT INTO phase10.trunc_inherited VALUES(5,5)", "rows": []}
+{"event": "sql", "sql": "SELECT id,k FROM phase10.trunc_inherited FORCE INDEX(idx_k) ORDER BY id", "rows": [[5, 5], [120, 3]]}
+{"event": "sql", "sql": "SELECT id,k FROM phase10.trunc_inherited FORCE INDEX(idx_k) ORDER BY id", "rows": [[1, 1], [2, 2], [120, 3]]}
+{"event": "sql", "sql": "ALTER SYSTEM SET _ob_enable_truncate_partition_preserve_global_index=false", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.auto_owned(id BIGINT PRIMARY KEY AUTO_INCREMENT, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.auto_owned(v) VALUES(30)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.auto_owned(id,v) VALUES(10,40)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.auto_owned(v) VALUES(50)", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM phase10.auto_owned ORDER BY id", "rows": [[1, 30], [10, 40], [11, 50]]}
+{"event": "sql", "sql": "ALTER TABLE phase10.auto_owned AUTO_INCREMENT=100", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.auto_owned(v) VALUES(60)", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM phase10.auto_owned WHERE v=60", "rows": [[100]]}
+{"event": "sql", "sql": "ALTER TABLE phase10.auto_owned AUTO_INCREMENT=2", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.auto_owned(v) VALUES(65)", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM phase10.auto_owned WHERE v=65", "rows": [[101]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.fork_src(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.fork_src VALUES(1,11),(2,22)", "rows": []}
+{"event": "sql", "sql": "FORK TABLE phase10.fork_src TO phase10.fork_dst", "rows": []}
+{"event": "sql", "sql": "UPDATE phase10.fork_src SET v=99 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM phase10.fork_dst ORDER BY id", "rows": [[1, 11], [2, 22]]}
+{"event": "sql", "sql": "CREATE TABLE phase10.ckm_parent(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.ckm_parent VALUES(1,11)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.ckm_child(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.ckm_child VALUES(1,22)", "rows": []}
+{"event": "sql", "sql": "SELECT table_id FROM oceanbase.__all_table WHERE table_name='ckm_parent'", "rows": [[500184]]}
+{"event": "sql", "sql": "SELECT table_id FROM oceanbase.__all_table WHERE table_name='ckm_child'", "rows": [[500185]]}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_direct_yi1li57m", "pid": 2463319, "port": 8953}
+{"event": "sql", "sql": "SELECT COUNT(*),SUM(v) FROM phase10.drop_pk", "rows": [[2, "33"]]}
+{"event": "sql", "sql": "SHOW CREATE TABLE phase10.drop_pk", "rows": [["drop_pk", "CREATE TABLE `drop_pk` (\n  `id` int(11) NOT NULL,\n  `v` int(11) DEFAULT NULL\n) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0"]]}
+{"event": "sql", "sql": "SELECT COUNT(*),SUM(v) FROM phase10.repartition", "rows": [[2, "33"]]}
+{"event": "sql", "sql": "SELECT id,v FROM phase10.redef_fts_pk WHERE MATCH(body) AGAINST('alpha')", "rows": [[1, "7"]]}
+{"event": "sql", "sql": "SELECT id,v FROM phase10.redef_fts_pk WHERE MATCH(body) AGAINST('gamma')", "rows": [[3, "9"]]}
+{"event": "sql", "sql": "SELECT id,w FROM phase10.redef_fts_col WHERE MATCH(body) AGAINST('alpha')", "rows": [[1, 4]]}
+{"event": "sql", "sql": "SELECT id,k FROM phase10.part_local FORCE INDEX(idx_k_local) WHERE k >= 22 ORDER BY k", "rows": [[2, 22], [3, 33]]}
+{"event": "sql", "sql": "SELECT id,k FROM phase10.trunc_global FORCE INDEX(idx_k) ORDER BY id", "rows": [[5, 5], [120, 3]]}
+{"event": "sql", "sql": "SELECT id,k FROM phase10.trunc_inherited FORCE INDEX(idx_k) ORDER BY id", "rows": [[5, 5], [120, 3]]}
+{"event": "sql", "sql": "SELECT id,k FROM phase10.trunc_inherited FORCE INDEX(idx_k) ORDER BY id", "rows": [[1, 1], [2, 2], [120, 3]]}
+{"event": "sql", "sql": "SELECT COUNT(*),SUM(v) FROM phase10.checked", "rows": [[2, "33"]]}
+{"event": "sql", "sql": "SELECT id,v FROM phase10.checked_invalid", "rows": [[1, 1]]}
+{"event": "sql", "sql": "SELECT id,ref_id,payload FROM phase10.redef_deps ORDER BY id", "rows": [[1, 1, "7"], [2, 2, "8"]]}
+{"event": "sql", "sql": "INSERT INTO phase10.auto_owned(v) VALUES(70)", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM phase10.auto_owned WHERE v=70", "rows": [[1000101]]}
+{"event": "sql", "sql": "SELECT id,v FROM phase10.fork_dst ORDER BY id", "rows": [[1, 11], [2, 22]]}
+{"event": "sql", "sql": "SELECT v FROM phase10.fork_src WHERE id=1", "rows": [[99]]}
+{"event": "sql", "sql": "SELECT data_table_id FROM oceanbase.__all_virtual_column_checksum_error_info WHERE data_table_id=500184", "rows": [[500184]]}
+{"event": "sql", "sql": "SELECT data_table_id FROM oceanbase.__all_virtual_column_checksum_error_info WHERE data_table_id=500185", "rows": [[500185]]}
+{"event": "sql", "sql": "CREATE INDEX idx_ckm_child ON phase10.ckm_child(v)", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM phase10.ckm_child FORCE INDEX(idx_ckm_child) WHERE v=22", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT id,v FROM phase10.exchange_parts ORDER BY id", "rows": [[2, 22], [11, 111]]}
+{"event": "sql", "sql": "SELECT id,v FROM phase10.exchange_plain ORDER BY id", "rows": [[1, 11]]}
+{"event": "sql", "sql": "SELECT id FROM phase10.fulltext_rows WHERE MATCH(body) AGAINST('beta')", "rows": [[2]]}
+{"event": "sql", "sql": "SELECT v FROM phase10.fulltext_heap WHERE MATCH(body) AGAINST('alpha')", "rows": [["7"]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM phase10.fulltext_heap", "rows": [[3]]}
+{"event": "sql", "sql": "SELECT id FROM phase10.ik_rows WHERE MATCH(body) AGAINST('beta')", "rows": [[2]]}
+{"event": "sql", "sql": "SELECT id FROM phase10.ivf_rows ORDER BY l2_distance(embedding,[0,0,0]) APPROXIMATE LIMIT 1", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT id FROM phase10.ivf_pq_rows ORDER BY l2_distance(embedding,[0,0,0,0]) APPROXIMATE LIMIT 1", "rows": [[9]]}
+{"event": "sql", "sql": "SELECT id FROM phase10.ivf_sq8_rows ORDER BY l2_distance(embedding,[0,0,0,0]) APPROXIMATE LIMIT 1", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM phase10.empty_hnsw", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT SUBSTR(payload,7999,4) FROM phase10.utf8_lob WHERE id=1", "rows": [["界界山山"]]}
+{"event": "sql", "sql": "DROP INDEX ivf_embedding ON phase10.ivf_rows", "rows": []}
+{"event": "sql", "sql": "DROP INDEX pq_embedding ON phase10.ivf_pq_rows", "rows": []}
+{"event": "sql", "sql": "DROP INDEX sq8_embedding ON phase10.ivf_sq8_rows", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM phase10.ivf_rows", "rows": [[6]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM phase10.ivf_pq_rows", "rows": [[20]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM phase10.ivf_sq8_rows", "rows": [[20]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM phase10.ivf_inherited_rows", "rows": [[6]]}
+{"event": "sql", "sql": "SELECT id FROM phase10.ivf_inherited_rows ORDER BY l2_distance(embedding,[0,0,0,0]) APPROXIMATE LIMIT 1", "rows": [[1]]}
+{"event": "sql", "sql": "FORK NAMESPACE phase10_drop_source FROM ns1", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.drop_source_rows(id INT PRIMARY KEY)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.drop_source_rows VALUES(7)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE phase10_drop_child FROM phase10_drop_source", "rows": []}
+{"event": "sql", "sql": "DROP NAMESPACE phase10_drop_source", "rows": []}
+{"event": "sql", "sql": "CREATE NAMESPACE phase10_drop_source", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM phase10.drop_source_rows", "rows": [[7]]}
+{"event": "sql", "sql": "FORK TABLE phase10.drop_source_rows TO phase10.drop_source_copy", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM phase10.drop_source_copy", "rows": [[7]]}
+{"event": "sql", "sql": "SHOW DATABASES", "rows": [["information_schema"], ["mysql"], ["oceanbase"], ["test"]]}
+{"event": "sql", "sql": "CREATE NAMESPACE phase10_cache_cycle_0", "rows": []}
+{"event": "sql", "sql": "SELECT 1", "rows": [[1]]}
+{"event": "sql", "sql": "DROP NAMESPACE phase10_cache_cycle_0", "rows": []}
+{"event": "sql", "sql": "CREATE NAMESPACE phase10_cache_cycle_1", "rows": []}
+{"event": "sql", "sql": "SELECT 1", "rows": [[1]]}
+{"event": "sql", "sql": "DROP NAMESPACE phase10_cache_cycle_1", "rows": []}
+{"event": "sql", "sql": "CREATE NAMESPACE phase10_cache_cycle_2", "rows": []}
+{"event": "sql", "sql": "SELECT 1", "rows": [[1]]}
+{"event": "sql", "sql": "DROP NAMESPACE phase10_cache_cycle_2", "rows": []}
+{"event": "sql", "sql": "CREATE NAMESPACE phase10_cache_cycle_3", "rows": []}
+{"event": "sql", "sql": "SELECT 1", "rows": [[1]]}
+{"event": "sql", "sql": "DROP NAMESPACE phase10_cache_cycle_3", "rows": []}
+{"event": "sql", "sql": "CREATE NAMESPACE phase10_cache_cycle_4", "rows": []}
+{"event": "sql", "sql": "SELECT 1", "rows": [[1]]}
+{"event": "sql", "sql": "DROP NAMESPACE phase10_cache_cycle_4", "rows": []}
+{"event": "sql", "sql": "CREATE NAMESPACE phase10_cache_cycle_5", "rows": []}
+{"event": "sql", "sql": "SELECT 1", "rows": [[1]]}
+{"event": "sql", "sql": "DROP NAMESPACE phase10_cache_cycle_5", "rows": []}
+{"event": "sql", "sql": "CREATE NAMESPACE phase10_cache_cycle_6", "rows": []}
+{"event": "sql", "sql": "SELECT 1", "rows": [[1]]}
+{"event": "sql", "sql": "DROP NAMESPACE phase10_cache_cycle_6", "rows": []}
+{"event": "sql", "sql": "CREATE NAMESPACE phase10_cache_cycle_7", "rows": []}
+{"event": "sql", "sql": "SELECT 1", "rows": [[1]]}
+{"event": "sql", "sql": "DROP NAMESPACE phase10_cache_cycle_7", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.drop_pk_recovery(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.drop_pk_recovery VALUES(1,11)", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM phase10.drop_pk_recovery", "rows": [[262144]]}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-production-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_direct_yi1li57m", "pid": 2463793, "port": 8953}
+{"event": "sql", "sql": "SELECT COUNT(*),SUM(v),MIN(id),MAX(id) FROM phase10.drop_pk_recovery", "rows": [[262144, "2883584", 1, 262144]]}
+{"event": "sql", "sql": "SHOW CREATE TABLE phase10.drop_pk_recovery", "rows": [["drop_pk_recovery", "CREATE TABLE `drop_pk_recovery` (\n  `id` int(11) NOT NULL,\n  `v` int(11) DEFAULT NULL\n) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0"]]}
+{"event": "interrupted_drop_primary_recovery", "task_id": 1005486, "rows": 262144, "execution_id": 2, "delayed_schema_recovery": true}
+{"event": "PASS", "case": "inprocess_direct", "ddl": true, "partition": true, "index": true, "lob": true, "fulltext": true, "ivf": true, "ivf_pq": true, "ivf_sq8": true, "empty_hnsw": true, "source_drop": true, "ddl_redefinition": true, "check_constraint": true, "auto_increment": true, "fork_table": true, "cache_lifecycle": true, "interrupted_heap_recovery": true, "restart": true}
+{"event": "stopped", "pid": 2463793, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_direct_yi1li57m/data.tar.gz", "bytes": 10774024}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

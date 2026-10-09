@@ -1,0 +1,8 @@
+{"event": "setup", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_template_initial_failure_ok0jfxqb", "pid": 414198, "attempt": 0}
+{"event": "failure_rejected", "attempt": 0, "no_repair": true, "no_admission": true}
+{"event": "setup", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_template_initial_failure_ok0jfxqb", "pid": 414887, "attempt": 1}
+{"event": "failure_rejected", "attempt": 1, "no_repair": true, "no_admission": true}
+{"event": "PASS", "case": "template_initial_failure_no_repair", "restart": true}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_template_initial_failure_ok0jfxqb/data.tar.gz", "bytes": 3316884}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

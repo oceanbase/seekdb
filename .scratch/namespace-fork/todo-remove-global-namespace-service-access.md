@@ -1,0 +1,33 @@
+# TODO：清除 Namespace 服务的全局入口（本地，不提交）
+
+2026-09-30：当前七类开放问题和整体设计建议分别见 [主要问题清单](current-major-architecture-problems.md) 与 [架构重构方案](design-namespace-architecture-rebuild.md)。Namespace 目录已切到实例 KV，旧 `__fork_proto_meta` SQL 控制库已删除；文中尚待处理的共享向量任务表属于其他数据，不与已完成的目录切换混同。
+
+原则：已由 `NamespaceRuntime` 持有的服务，请求从 session / execution context 取得；后台任务在创建时携带 owner，并在执行时使用 owner 的服务。共享物理资源可以留在进程层，但其接口必须明确目标 Namespace 或明确是跨 Namespace 元数据。正常请求和异步执行不得通过全局入口默认取根服务，也不得在缺少 owner 时回退到根。最终根 Namespace 也采用同一套服务所有权和生命周期，不保留服务类的全局单例。
+
+## 已确认的清理项
+
+- [x] **Schema 服务全局入口**：`ObGlobalContext::schema_service_`、`GSCHEMASERVICE`、`ObMultiVersionSchemaService::get_instance()`、`ObSchemaRuntimeService::get_schema_service()` 和 `ObServer::schema_service_` 均已删除；Namespace 1 Runtime 持有根 Schema 实例。登录白名单与 UDF 通过 session owner 取 Schema；change stream 从启动组合处注入当前根 Schema，插件从批次上下文取它。`resolve_tablet_schema(physical_tablet_id, ...)` 仍是按物理 tablet 路由 owner 的共享接口。进程级向量服务无用的根 Schema 字段也已删除。根 Schema 实例现持有共享的 `ObSchemaStatusProxy`；`ObServer` 字段及 `GCTX.schema_status_proxy_` 全局入口已移除，子空间从明确的根 Schema 服务取得该控制表状态代理。编译 `/tmp/seekdb-ns-root-services-owned-final-build2.log`、根加两个子空间非 root 登录与不同返回值同名 UDF、综合 direct 四件套及重启 `/tmp/seekdb-ns-root-services-owned-final-direct.log` 均通过。新状态代理改动另见 `/tmp/seekdb-ns-root-schema-status-owned-build.log` 与 `/tmp/seekdb-ns-root-schema-status-owned-direct.log`。change stream/向量调度跨 Namespace 的 owner 传播仍列在后续架构 TODO，不能以本项完成替代。
+- [ ] **SQL proxy 所有权与批次 owner**：`GCTX.sql_proxy_` 与根 `ObServer::sql_proxy_` 字段、公开 getter 和进程级 `server_service<ObMySQLProxy>` 别名均已删除；Namespace 1 Runtime 独立持有根 SQL proxy。根 Schema、时区、启动服务从明确的根 Runtime 取它；DDL redo 限速状态查询从任务参数携带所属 Namespace 的 proxy，不再默认查根。根 DDL 专用 proxy 也已从 `ObServer` 字段移入 Namespace 1 Runtime 的 `DDL_SQL_PROXY`，子空间在同一槽登记自身已有的 DDL proxy；包含重启的 direct 回归 `/tmp/seekdb-ns-root-ddl-proxy-owned-direct.log` 通过。根 SQL proxy 编译 `/tmp/seekdb-ns-root-sql-proxy-owned-build3.log`、bootstrap `/tmp/seekdb-ns-root-sql-proxy-bootstrap-green.log`、根与两个子空间 direct 及重启 `/tmp/seekdb-ns-root-sql-proxy-owned-direct2.log` 均通过。逐个调用点继续确定数据归属：操作当前 Namespace 的表时使用 owner 的 proxy；操作 `__fork_proto_meta.namespaces/pages/snapshots` 等明确存放在 Namespace 1 的控制表时，显式取 Namespace 1 的 `SQL_PROXY`。`VECTOR_TASK_SQL_PROXY` 当前指向 Namespace 1 的共享调度任务表，也应以明确的表归属说明并审查调用方。change stream 需要先按事务/批次分 owner，再将其 DML 事务从固定根 proxy 改成批次 owner proxy；向量调度器同理，不能只把旧全局指针换成 `namespace_sql_proxy(1)`。
+- [x] **Root command / DDL 服务所有权**：DDL task 由自身 `ObDDLTaskContext` 持有 owner，新任务与恢复任务均绑定所属 Namespace 的 `ROOT_COMMAND_SERVICE`。根实例现由 Namespace 1 Runtime 创建、停止及销毁；`ObServer::local_management_service_` 字段和公开 getter 已删除，虚拟表工厂也不再保存未使用的根管理服务引用。根与两个子空间同逻辑 ID 并发 DDL、全文/向量索引和重启通过：`/tmp/seekdb-ns-root-command-runtime-owned-direct-retry.log`。首次 bootstrap 仍遇已知偶发 `-4002`，重跑通过，未归因于此改动。
+- [x] **Plan cache / PS cache 所有权**：`PLAN_CACHE`、`PS_CACHE` 已分别注册到 Namespace。MySQL binary prepare/execute/fetch、内层 SQL 统计、缓存虚拟表、SQLSTAT、`ALTER SYSTEM FLUSH PS CACHE` 均按会话所属空间取缓存；SQLSTAT 对进程级会话管理器的遍历只采集同一 Runtime 的活跃会话。`ObSql` 的根缓存字段和公开 getter、`ObServer` 的根缓存字段/公开 getter、进程级 `server_service<ObPlanCache/ObPsCache>()` 别名已清理；根缓存由 Namespace 1 Runtime 创建、停止和销毁。根与两个子空间相同逻辑 table ID 的 binary prepared SELECT、虚拟表、PS flush 隔离、SQLSTAT 隔离、重启已纳入本地 direct 四件套并通过：`/tmp/seekdb-ns-root-cache-owned-direct.log`。
+- [x] **自增服务入口**：`AUTOINCREMENT_SERVICE` 已按 Namespace 注册，SQL 和 DDL 通过 owner 上下文取得；根实例由 Namespace 1 的 Runtime 创建与销毁，不再有 `ObServer` 根字段。静态复核无 `ObAutoincrementService::get_instance()` 调用；DDL/自增综合四件套含重启通过：`/tmp/seekdb-ns-root-autoinc-stat-owned-cases.log`。`ObTabletAutoincrementService` 是另一项物理存储服务，另按服务槽审计。
+- [x] **统计服务入口**：`OPT_STAT_MANAGER`、`OPT_STAT_MONITOR_MANAGER` 按 Namespace 注册；根 `OPT_STAT_MANAGER` 由 Namespace 1 Runtime 创建与销毁，计划缓存也归相同 Namespace。静态复核无 `ObOptStatManager::get_instance()` 或 `server_service<ObOptStatMonitorManager>()` 调用。相同逻辑 table ID 的根与两个子空间统计隔离、重启通过：`/tmp/seekdb-ns-root-autoinc-stat-owned-cases.log`。
+
+## 完成判据
+
+已完成的正常路径清理：DDL helper 不再通过与 `ObMultiVersionSchemaService::get_instance()` 比较来区分根和子空间；并行 DDL 的 latest guard 使用传入 schema 服务自己的 proxy，根与两个子空间同逻辑 ID 并发建索引、完整 direct 四件套和重启通过（`/tmp/seekdb-ns-unified-ddl-schema-guard-direct.log`）。DOC_ID、VEC_VID 表达式缺少 session 时也不再回退到进程级 tablet 自增服务（`/tmp/seekdb-ns-doc-vec-id-no-root-fallback-direct.log`）。
+
+- [ ] 对 `NamespaceRuntime::ServiceSlot` 全表复核：`SCHEMA_SERVICE`、`SQL_PROXY`、`ROOT_COMMAND_SERVICE`、`PLAN_CACHE`、`PS_CACHE`、`AUTOINCREMENT_SERVICE`、`OPT_STAT_MANAGER`、`OPT_STAT_MONITOR_MANAGER` 之外的槽也检查是否有绕过 owner 的进程入口；共享适配器按物理对象 owner 路由。尤其检查 `TRANSACTION_SERVICE`、`TABLET_SCAN`、`DML_SERVICE`、`RANGE_SERVICE`、`VIRTUAL_TABLE_SCAN_SERVICE` 和 `VECTOR_TASK_SQL_PROXY`。此项是待审计范围，不把所有进程级对象一概视为错误。
+
+  2026-09-28 静态审计进展：SQL 层普通 DML、范围操作、事务、LOB 读取和虚拟表扫描均经会话 Runtime 槽取得。`namespace_inprocess_write_state.ipp`、`namespace_inprocess_scan_engine.ipp`、`namespace_worker_inprocess_prototype.ipp` 中的进程 `server_service` 调用位于已按 Namespace 路由到物理 tablet/存储上下文后的共享适配器。`ob_das_scan_iter.cpp` 的进程 tablet scanner 分支也先把 Namespace tablet ID 转为物理 ID。`VIRTUAL_TABLE_SCAN_SERVICE` 曾漏出 `has_request_services()` 就绪表；该函数现遍历 `ServiceSlot` 全部槽位，避免再维护一份易遗漏的列表。进程级向量调度器仍直取 LOB read、root schema 和 shared task proxy；change stream 仍以 root schema 判定 async 索引并用 `GCTX.sql_proxy_` 开批事务。这些属于未完成的跨 Namespace 后台任务设计，不能仅换成 `namespace_*(1)` 宣称完成。
+  `DBMS_SCHEDULER` 与 `TABLE_LOCK_SERVICE` 的请求入口也从会话 Runtime 取服务，服务由各 Runtime 持有；`SCHEMA_LIFECYCLE` 和 `TABLE_LOCK_TABLET_ROUTER` 的适配器通过显式 Namespace Runtime 取服务。进程级 `ObTransService` 在 `ObInnerSQLConnection` 释放物理事务描述符、存储 RPC 和共享事务适配器中仍有调用，需按每个入口验证资源归属，不能只根据类型名称删除。
+- [ ] 删除通用的根服务全局别名后，正常请求和异步任务中不再出现无 owner 的服务查找；静态搜索覆盖 `GCTX.schema_service_`、`GCTX.sql_proxy_`、`GSCHEMASERVICE`、相应 `get_instance()` 与 `server_service<T>()`。启动/bootstrap 需要根服务时从 Namespace 1 的 runtime 显式传入；完成根服务所有权统一后删除对应全局单例和根专用公开 getter。
+- [ ] 用根 Namespace 和至少两个子 Namespace 的相同逻辑 schema/table ID 验证缓存、DDL、异步任务和元数据写入互不串用；重启后后台任务仍按持久化 owner 恢复。
+
+## 验证中发现的存储前置问题
+
+- 2026-09-28：根与 fork 子 Namespace 对同一个继承表（逻辑 table ID 均为 `500010`）同时创建索引时，子空间在 `CREATE_TABLET_NEW_MDS` 持续返回 `OB_ERR_PARALLEL_DDL_CONFLICT(-5827)`，直到客户端 40 秒超时。`route_tablet_mds` 将 `data_tablet_id_` 路由到子空间物理 ID，而存储 `check_pure_aux_tablets_info` 要求该物理原表 tablet 已存在；继承态原表尚只指向父空间 tablet。先在子空间更新该表使原表 tablet 物化，再进行相同逻辑 ID 的并发建索引，已通过。证据：`/tmp/seekdb-ns-owner-ddl-key-collision-direct.log` 与 `/tmp/seekdb-ns-owner-ddl-key-materialized-direct.log`。后续需在 Namespace/DDL 边界处理继承态辅助 tablet 创建，不让存储层感知 Namespace；并单独复核 root 与两个子空间的并发 DDL。
+
+## 独立测试环境观察
+
+- 新实例 bootstrap 偶发 `OB_INVALID_ARGUMENT(-4002)`：`CREATE_SYS_TABLE_PARTITIONS` 的 MDS 快照读取失败，随后 `__all_global_stat` 写入出现重复键。`/tmp/seekdb-ns-prepared-three-space-direct.log` 在启动阶段失败，同一二进制重跑 `/tmp/seekdb-ns-prepared-three-space-direct-retry.log` 通过；根/子锁 GC 复现也曾首次启动失败、重跑通过。尚未确认与本目标代码的因果关系，不把偶发通过视作修复。

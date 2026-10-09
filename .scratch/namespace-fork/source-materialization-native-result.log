@@ -1,0 +1,32 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/source-materialization-artifacts/seekdb-native-initial", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_0oxgonhg", "pid": 3337826, "port": 19031}
+{"event": "stopped", "pid": 3337826, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_0oxgonhg/data.tar.gz", "bytes": 3380398}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_worker_bootstrap_prototype.py", line 30, in start
+    self.connection = pymysql.connect(host="127.0.0.1", port=self.port, user="root", password="",
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 365, in __init__
+    self.connect()
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 680, in connect
+    self._get_server_information()
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 1099, in _get_server_information
+    packet = self._read_packet()
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 751, in _read_packet
+    packet_header = self._read_bytes(4)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 805, in _read_bytes
+    raise err.OperationalError(
+pymysql.err.OperationalError: (2013, 'Lost connection to MySQL server during query')
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File ".scratch/namespace-fork/run_instance_meta_native_probe.py", line 112, in <module>
+    main()
+  File ".scratch/namespace-fork/run_instance_meta_native_probe.py", line 90, in main
+    experiment.start()
+  File ".scratch/namespace-fork/run_instance_meta_native_probe.py", line 73, in start
+    super().start()
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_worker_bootstrap_prototype.py", line 35, in start
+    time.sleep(.5)
+KeyboardInterrupt

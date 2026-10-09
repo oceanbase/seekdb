@@ -1,0 +1,15 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/background-materialization-artifacts/seekdb-native", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_mj0yykqc", "pid": 294279, "port": 42639}
+{"event": "FAIL", "evidence": ["INSTANCE_META_PROBE_FAIL line=197 assertion=ret == common::OB_TIMEOUT || ret == common::OB_ERR_EXCLUSIVE_LOCK_CONFLICT ret=-6210"]}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_mj0yykqc/data.tar.gz", "bytes": 3484633}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File ".scratch/namespace-fork/run_instance_meta_native_probe.py", line 114, in <module>
+    main()
+  File ".scratch/namespace-fork/run_instance_meta_native_probe.py", line 92, in main
+    experiment.start()
+  File ".scratch/namespace-fork/run_instance_meta_native_probe.py", line 75, in start
+    super().start()
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_worker_bootstrap_prototype.py", line 28, in start
+    raise RuntimeError(f"bootstrap exited ({self.proc.returncode}): {self.base}")
+RuntimeError: bootstrap exited (-9): /data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_mj0yykqc

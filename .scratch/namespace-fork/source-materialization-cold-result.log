@@ -1,0 +1,17 @@
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_cold_materialization_b4jo64h0", "pid": 3341285, "port": 20031}
+{"event": "sql", "sql": "CREATE DATABASE nstrunc_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id INT PRIMARY KEY,b LONGTEXT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(1,REPEAT('x',12000))", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE cold_source_0 FROM ns1", "rows": []}
+{"event": "sql", "sql": "SELECT id,LENGTH(b) FROM nstrunc_repro.t1", "rows": [[1, 12000]]}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET b=REPEAT('y',14000)", "rows": []}
+{"event": "sql", "sql": "SELECT id,LENGTH(b) FROM nstrunc_repro.t1", "rows": [[1, 14000]]}
+{"event": "sql", "sql": "FORK NAMESPACE cold_source_1 FROM ns1", "rows": []}
+{"event": "sql", "sql": "SELECT id,LENGTH(b) FROM nstrunc_repro.t1", "rows": [[1, 12000]]}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET b=REPEAT('y',14000)", "rows": []}
+{"event": "sql", "sql": "SELECT id,LENGTH(b) FROM nstrunc_repro.t1", "rows": [[1, 14000]]}
+{"event": "PASS", "case": "cold_catalog_materialization", "runtime_slots_loaded": 0, "wrong_incarnation_rejected": true, "main_lob_atomic": true}
+{"event": "stopped", "pid": 3341285, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_cold_materialization_b4jo64h0/data.tar.gz", "bytes": 3329090}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

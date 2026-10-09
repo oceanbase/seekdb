@@ -1,0 +1,14 @@
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File ".scratch/namespace-fork/shared_transaction_probe.py", line 273, in <module>
+    run(args.binary, args.faults, args.case, args.flush_redo)
+  File ".scratch/namespace-fork/shared_transaction_probe.py", line 86, in run
+    experiment.start()
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_worker_bootstrap_prototype.py", line 22, in start
+    self.proc = subprocess.Popen(command, env=env, stdout=self.output, stderr=subprocess.STDOUT)
+  File "/usr/lib64/python3.8/subprocess.py", line 858, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+  File "/usr/lib64/python3.8/subprocess.py", line 1720, in _execute_child
+    raise child_exception_type(errno_num, err_msg, err_filename)
+OSError: [Errno 26] Text file busy: '/data/1/nijia.nj/test/namespace_fork_build_artifacts/source-materialization-artifacts/seekdb-production'

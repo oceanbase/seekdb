@@ -1,0 +1,62 @@
+{
+  "baseline": "50557ddbe3f3956afa2b71addbfcf15d380738d6",
+  "production_diff_sha256": "989b1ea70e61d60889a957a3e08cb6164c62a6a5d5544c94ff8db3531aee1ab9",
+  "production_files": [
+    "src/namespace/catalog.cpp",
+    "src/namespace/catalog.h",
+    "src/observer/namespace_worker_gateway_prototype.ipp",
+    "src/observer/namespace_worker_protocol_prototype.h",
+    "src/observer/ob_inner_sql_connection.cpp",
+    "src/query/api/query/session/ob_inner_sql_connection_access.h",
+    "src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp",
+    "src/storage/instance_meta/instance_meta_store.cpp",
+    "src/storage/instance_meta/instance_meta_store.h",
+    "src/storage/ls/ob_ls_tablet_service.cpp",
+    "src/storage/ls/ob_ls_tablet_service.h",
+    "src/storage/ls/ob_ls_tx_service.cpp",
+    "src/storage/tablet/ob_tablet_create_mds_helper.cpp",
+    "src/storage/tablet/ob_tablet_create_mds_helper.h",
+    "src/storage/tx/ob_trans_ctx_mgr_v4.cpp",
+    "src/storage/tx/ob_trans_ctx_mgr_v4.h",
+    "src/storage/tx/ob_tx_ctx.cpp",
+    "src/storage/tx/ob_tx_ctx.h",
+    "src/storage/tx_storage/ob_empty_shell_task.cpp",
+    "src/storage/tx_storage/ob_empty_shell_task.h"
+  ],
+  "production_binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+  "probe_binary": "/data/1/tmp/seekdb-shared-tx/seekdb-probe-final",
+  "gates": {
+    "bootstrap-native-kv": {
+      "status": "passed",
+      "log": ".scratch/namespace-fork/gate-results/shared-transaction-final/bootstrap-native-kv.log",
+      "sha256": "f286dda89fa86efecb5b1b60d2fd9b8a115609a604f337b1cd693f7c4e59760e"
+    },
+    "bootstrap": {
+      "status": "passed",
+      "log": ".scratch/namespace-fork/gate-results/shared-transaction-final/bootstrap.log",
+      "sha256": "6eeced76f4d1a8c5331afbe3fd0214fd86904ae45cbd7d081d0620b2d3fb47b8"
+    },
+    "sql": {
+      "status": "passed",
+      "log": ".scratch/namespace-fork/gate-results/shared-transaction-final/sql.log",
+      "sha256": "58502b03d6b38b8cfa48809084f57d08c9c80b5b776624948c1e20a95e5b968f"
+    },
+    "tls": {
+      "status": "passed",
+      "log": ".scratch/namespace-fork/gate-results/shared-transaction-final/tls.log",
+      "sha256": "8557f46eb268d6aa1b3d2ce1f0ea6fec33a5180c6eb99e70be2fc95b536d1485"
+    },
+    "direct": {
+      "status": "passed",
+      "log": ".scratch/namespace-fork/gate-results/shared-transaction-final-resume/direct.log",
+      "sha256": "5f8998c8baf0d3f346e5eb3137d9679f3905aec56b5184337b81fedc7fb076ae",
+      "prior_segment": ".scratch/namespace-fork/gate-results/shared-transaction-final/direct.log"
+    }
+  },
+  "status": "complete",
+  "known_unrelated_failure": "Fresh bootstrap MDS deadline overflow (-9223372036854775807), existing TODO. Initial direct log retained; resumed direct suite passed.",
+  "commit": "a9bf8740a85b8b83319f76ec4bb9562ae2ec83cd",
+  "remote": "origin",
+  "branch": "codex/namespace-worker-proxy-v20",
+  "remote_sha_verified": "a9bf8740a85b8b83319f76ec4bb9562ae2ec83cd"
+}

@@ -1,0 +1,11 @@
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-preparation/seekdb-production-v4", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_tls_wdv7p03o", "pid": 2876312, "port": 41901}
+{"event": "sql", "sql": "CREATE DATABASE phase10", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.secure(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.secure VALUES(1,42)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE phase10_tls_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM phase10.secure WHERE id=1", "rows": [[42]]}
+{"event": "PASS", "case": "inprocess_tls", "protocol": "TLSv1.3", "child_login": true}
+{"event": "stopped", "pid": 2876312, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_tls_wdv7p03o/data.tar.gz", "bytes": 3277322}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

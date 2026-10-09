@@ -1,0 +1,69 @@
+{"event": "setup", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_kv_startup_30s_59p3e1i_", "pid": 3747037, "port": 63499}
+{"event": "sql", "sql": "SELECT 1", "rows": [[1]]}
+{"event": "sql", "sql": "CREATE DATABASE kvsmoke", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE kvsmoke.t(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO kvsmoke.t VALUES (1, 42)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE kvsmoke_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM kvsmoke.t WHERE id=1", "rows": [[42]]}
+{"event": "PASS", "elapsed_limit_s": 30}
+{"event": "stopped", "pid": 3747037, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_kv_startup_30s_59p3e1i_/data.tar.gz", "bytes": 3266679}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_bootstrap_3yahtf9j", "pid": 3747376, "port": 9171}
+{"event": "sql", "sql": "SELECT 1", "rows": [[1]]}
+{"event": "sql", "sql": "CREATE DATABASE legacy_template_user", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE legacy_template_user.secret(id INT PRIMARY KEY)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO legacy_template_user.secret VALUES(42)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE test.legacy_template_rows(id INT PRIMARY KEY)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO test.legacy_template_rows VALUES(9)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE mysql.legacy_template_rows(id INT PRIMARY KEY)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO mysql.legacy_template_rows VALUES(8)", "rows": []}
+{"event": "sql", "sql": "CREATE VIEW mysql.legacy_template_view AS SELECT id FROM mysql.legacy_template_rows", "rows": []}
+{"event": "sql", "sql": "CREATE PROCEDURE mysql.legacy_template_proc() SELECT 11", "rows": []}
+{"event": "sql", "sql": "CREATE USER 'legacy_template_login'@'%' IDENTIFIED BY 'test-pass'", "rows": []}
+{"event": "sql", "sql": "CREATE ROLE legacy_template_role", "rows": []}
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_bootstrap_3yahtf9j", "pid": 3747691, "port": 9171}
+{"event": "sql", "sql": "SELECT id FROM legacy_template_user.secret", "rows": [[42]]}
+{"event": "sql", "sql": "SELECT id FROM test.legacy_template_rows", "rows": [[9]]}
+{"event": "sql", "sql": "SELECT id FROM mysql.legacy_template_view", "rows": [[8]]}
+{"event": "sql", "sql": "SELECT routine_name FROM oceanbase.__all_routine WHERE routine_name='legacy_template_proc'", "rows": [["legacy_template_proc"]]}
+{"event": "sql", "sql": "SELECT user_name FROM oceanbase.__all_user WHERE user_name='legacy_template_login'", "rows": [["legacy_template_login"]]}
+{"event": "sql", "sql": "SELECT user_name FROM oceanbase.__all_user WHERE user_name='legacy_template_role'", "rows": [["legacy_template_role"]]}
+{"event": "sql", "sql": "CREATE NAMESPACE phase10_migrated", "rows": []}
+{"event": "sql", "sql": "SELECT DATABASE()", "rows": [["test"]]}
+{"event": "sql", "sql": "SHOW DATABASES", "rows": [["information_schema"], ["mysql"], ["oceanbase"], ["test"]]}
+{"event": "sql", "sql": "SHOW TABLES FROM test", "rows": []}
+{"event": "sql", "sql": "SHOW TABLES FROM mysql", "rows": [["columns_priv"], ["db"], ["default_roles"], ["proc"], ["procs_priv"], ["role_edges"], ["time_zone_name"], ["time_zone_transition"], ["time_zone_transition_type"], ["user"]]}
+{"event": "sql", "sql": "SELECT routine_name FROM oceanbase.__all_routine WHERE routine_name='legacy_template_proc'", "rows": []}
+{"event": "sql", "sql": "SELECT user_name FROM oceanbase.__all_user WHERE user_name='legacy_template_login'", "rows": []}
+{"event": "sql", "sql": "SELECT user_name FROM oceanbase.__all_user WHERE user_name='legacy_template_role'", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE test.owned(id INT PRIMARY KEY)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO test.owned VALUES(7)", "rows": []}
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_bootstrap_3yahtf9j", "pid": 3747935, "port": 9171}
+{"event": "sql", "sql": "SELECT id FROM owned", "rows": [[7]]}
+{"event": "sql", "sql": "SHOW TABLES FROM test", "rows": [["owned"]]}
+{"event": "sql", "sql": "SHOW TABLES FROM mysql", "rows": [["columns_priv"], ["db"], ["default_roles"], ["proc"], ["procs_priv"], ["role_edges"], ["time_zone_name"], ["time_zone_transition"], ["time_zone_transition_type"], ["user"]]}
+{"event": "sql", "sql": "SELECT routine_name FROM oceanbase.__all_routine WHERE routine_name='legacy_template_proc'", "rows": []}
+{"event": "sql", "sql": "CREATE DATABASE phase10", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.parent(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.parent VALUES(1,10),(2,20)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE phase10_child FROM ns1", "rows": []}
+{"event": "stopped", "pid": 3747935, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_bootstrap_3yahtf9j/data.tar.gz", "bytes": 3114309}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_worker_bootstrap_prototype.py", line 52, in <module>
+    main()
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_worker_bootstrap_prototype.py", line 48, in main
+    run_case(args.binary, "bootstrap")
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_inprocess_prototype.py", line 1073, in run_case
+    {"bootstrap": bootstrap_probe, "sql": sql_probe,
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_inprocess_prototype.py", line 228, in bootstrap_probe
+    with setup_branch(experiment) as child:
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_inprocess_prototype.py", line 73, in setup_branch
+    experiment.namespace_ids["phase10_child"] = last_registered_namespace_id(experiment)
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_inprocess_prototype.py", line 42, in last_registered_namespace_id
+    assert matches, "fork registration missing from server log"
+AssertionError: fork registration missing from server log

@@ -1,0 +1,9 @@
+Bind SQL snapshots to namespace catalog read views
+
+Hold RC statement and RR transaction roots through scan lifetimes and share
+live views with parallel workers. Route ordinary scans through immutable
+sources; require explicit views outside bootstrap, including delayed FK
+and upsert snapshots. Preserve own writes after later materialization.
+
+Limit schema source deltas to table DDL operations so routine privilege
+IDs cannot remove unrelated core table bindings.

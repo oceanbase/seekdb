@@ -1,0 +1,18 @@
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File ".scratch/namespace-fork/standby_background_copy_probe.py", line 125, in <module>
+    resource.setrlimit(resource.RLIMIT_CORE,(0,0));run(args.binary,args.drop_parent,args.compaction_interval,args.drop_during_copy,args.cancel_copy)
+  File ".scratch/namespace-fork/standby_background_copy_probe.py", line 15, in run
+    primary=BootstrapExperiment(binary,'background_copy_primary',prototype=6)
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_fork_prototype.py", line 24, in __init__
+    self.binary = str(Path(binary).resolve(strict=True))
+  File "/usr/lib64/python3.8/pathlib.py", line 1181, in resolve
+    s = self._flavour.resolve(self, strict=strict)
+  File "/usr/lib64/python3.8/pathlib.py", line 363, in resolve
+    return _resolve(base, str(path)) or sep
+  File "/usr/lib64/python3.8/pathlib.py", line 347, in _resolve
+    target = accessor.readlink(newpath)
+  File "/usr/lib64/python3.8/pathlib.py", line 452, in readlink
+    return os.readlink(path)
+FileNotFoundError: [Errno 2] No such file or directory: '/data/1/nijia.nj/test/namespace_fork_build_artifacts/background-materialization-artifacts/seekdb-copy-view'

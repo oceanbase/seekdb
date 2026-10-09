@@ -1,0 +1,75 @@
+{
+  "status": "verified",
+  "production_base": "00e421a8f",
+  "binary": "background-materialization-artifacts/seekdb-template-zero",
+  "production_builds": [
+    "template-baseline-build.log",
+    "template-baseline-schema-zero-build.log",
+    "template-baseline-final-build.log"
+  ],
+  "tests": {
+    "template-baseline-schema-zero-probe.log": {
+      "result": "PASS",
+      "initial_seconds": 15.59,
+      "template_tablets": 358,
+      "all_sources_owned": true,
+      "runtime_unloaded": true,
+      "nonlogin": true,
+      "sigkill_restart": true,
+      "empty_namespace": true
+    },
+    "template-login-unit.log": {
+      "result": "PASS",
+      "asan_ubsan": true
+    },
+    "template-initial-failure-probe.log": {
+      "result": "PASS",
+      "initial_failure_and_restart_no_repair": true,
+      "no_admission": true
+    },
+    "template-native-probe.log": {
+      "result": "PASS",
+      "false_login_attribute_roundtrip": true,
+      "ordinary_fork_allows_login": true,
+      "sigkill_recoveries": 3
+    },
+    "template-baseline-standby-final/namespace_fork_local.log": {
+      "result": "PASS",
+      "elapsed_s": 116.24,
+      "promotion_and_fork": true
+    },
+    "template-background-fast-copy-probe.log": {
+      "result": "PASS",
+      "interval": "3s",
+      "scope": "single execution, not proof of source file lifetime protection"
+    }
+  },
+  "failures": [
+    {
+      "log": "template-baseline-red.log",
+      "reason": "Old production revision does not persist allow_login; expected regression failure."
+    },
+    {
+      "log": "template-baseline-probe.log",
+      "reason": "Valid bootstrap storage schema version 0 rejected by native fork parameter >0; changed to >=0 matching ObStorageSchema. Test process stopped after confirmed failure."
+    },
+    {
+      "case": "local gate hook enable",
+      "reason": "Cold materialization and physical GC hook function anchors changed with explicit login argument. Two enable attempts failed, hooks automatically removed, builds did not run. Updated local anchors; native build succeeded."
+    },
+    {
+      "log": "template-baseline-standby/namespace_fork_local.log",
+      "reason": "obtest primary reboot waits a fixed 5s before init SQL, but full template takeover still in progress; connection rejected during startup."
+    },
+    {
+      "log": "template-baseline-standby-ready/namespace_fork_local.log",
+      "reason": "OBI.set(reboot=...) did not override the Java public reboot field; deployment still used 5s. Local fixture now spells out the original deployment steps with a 30s startup allowance."
+    },
+    {
+      "log": "template-baseline-standby-wait/namespace_fork_local.log",
+      "reason": "Primary/standby deployment succeeded; new local fixture lacked its empty expected result file. Added local result, reran full case successfully."
+    }
+  ],
+  "scope": "No repair/migration chain, temporary GC files or task journal. Production code only in commit.",
+  "remaining": "Source SSTable lifetime across initial copy RPCs is unresolved, despite the fast-copy run passing."
+}

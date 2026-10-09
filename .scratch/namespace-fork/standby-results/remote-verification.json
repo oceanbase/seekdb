@@ -1,0 +1,31 @@
+{
+  "commit": "a04ffaf18480f4a9a0aa94805e5e1b6d13e03db8",
+  "remote_commit": "a04ffaf18480f4a9a0aa94805e5e1b6d13e03db8",
+  "branch": "codex/namespace-worker-proxy-v20",
+  "source_matches_tested_binary": true,
+  "committed_files": [
+    "src/namespace/catalog.cpp",
+    "src/namespace/catalog.h",
+    "src/namespace/namespace.cpp",
+    "src/namespace/namespace.h",
+    "src/observer/mysql/obmp_query.cpp",
+    "src/observer/mysql/obsm_conn_callback.cpp",
+    "src/observer/namespace_inprocess_scan_engine.ipp",
+    "src/observer/namespace_template_registry.ipp",
+    "src/observer/namespace_worker_inprocess_prototype.ipp",
+    "src/observer/namespace_worker_protocol_prototype.h",
+    "src/observer/ob_server.cpp",
+    "src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp",
+    "src/rootserver/fork_table/namespace_fork_kernel_prototype.h",
+    "src/rootserver/freeze/ob_checksum_validator.cpp",
+    "src/rootserver/freeze/ob_checksum_validator.h",
+    "src/rootserver/freeze/ob_major_merge_progress_checker.cpp",
+    "src/share/schema/ob_multi_version_schema_service.cpp",
+    "src/share/schema/ob_multi_version_schema_service.h",
+    "src/standby/standby_host.h",
+    "src/standby/standby_module.cpp",
+    "src/storage/instance_meta/instance_meta_store.cpp",
+    "src/storage/instance_meta/instance_meta_store.h"
+  ],
+  "code_only": true
+}

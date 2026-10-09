@@ -1,0 +1,29 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/source-consumers-artifacts/seekdb-production", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_fork_table_ucwggwr0", "pid": 3720557, "port": 51509}
+{"event": "sql", "sql": "CREATE DATABASE shared", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE shared.base(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO shared.base VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE ft_inherited FROM ns1", "rows": []}
+{"event": "sql", "sql": "UPDATE shared.base SET v=99 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "CREATE NAMESPACE ft_child", "rows": []}
+{"event": "sql", "sql": "CREATE DATABASE ft", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE ft.src(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO ft.src VALUES(1,10),(2,20)", "rows": []}
+{"event": "sql", "sql": "FORK TABLE ft.src TO ft.dst", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM ft.dst ORDER BY id", "rows": [[1, 10], [2, 20]]}
+{"event": "sql", "sql": "CREATE TABLE ft.auto(id BIGINT PRIMARY KEY AUTO_INCREMENT, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO ft.auto(v) VALUES(30),(40)", "rows": []}
+{"event": "sql", "sql": "FORK TABLE ft.auto TO ft.auto_copy", "rows": []}
+{"event": "sql", "sql": "INSERT INTO ft.auto_copy(v) VALUES(50)", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM ft.auto_copy WHERE v=50", "rows": [[3]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM ft.auto", "rows": [[2]]}
+{"event": "sql", "sql": "SELECT v FROM shared.base WHERE id=1", "rows": [[10]]}
+{"event": "sql", "sql": "FORK TABLE shared.base TO shared.copy", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM shared.copy WHERE id=1", "rows": [[10]]}
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/source-consumers-artifacts/seekdb-production", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_fork_table_ucwggwr0", "pid": 3721376, "port": 51509}
+{"event": "sql", "sql": "SELECT v FROM shared.copy WHERE id=1", "rows": [[10]]}
+{"event": "sql", "sql": "SELECT v FROM shared.base WHERE id=1", "rows": [[99]]}
+{"event": "PASS", "case": "inprocess_fork_table", "inherited": true, "restart": true}
+{"event": "stopped", "pid": 3721376, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_fork_table_ucwggwr0/data.tar.gz", "bytes": 3369496}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

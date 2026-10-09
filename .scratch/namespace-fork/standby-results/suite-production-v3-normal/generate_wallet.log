@@ -1,0 +1,6 @@
+Generating wallet in ./wallet (IP: 6.12.232.130)...
+Done:
+  ./wallet/ca.pem
+  ./wallet/cert.pem  (SAN: IP:6.12.232.130, IP:127.0.0.1)
+  ./wallet/key.pem
+wallet/cert.pem: OK

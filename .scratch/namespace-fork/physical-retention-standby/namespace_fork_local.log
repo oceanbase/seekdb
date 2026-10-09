@@ -1,0 +1,408 @@
+Run case stanby/namespace_setup_local
+[2026-10-08 19:28:49.477][INFO ] [MyTest         :78] - print args => [-use_ob_connector, true, -result_file, r/stanby/namespace_setup_local.result, -test_file, t/stanby/namespace_setup_local.test]
+[-use_ob_connector, true, -result_file, r/stanby/namespace_setup_local.result, -test_file, t/stanby/namespace_setup_local.test]
+[2026-10-08 19:28:49.479][INFO ] [MyTest         :81] - start case => t/stanby/namespace_setup_local.test
+[2026-10-08 19:28:49.484][INFO ] [MyTest         :84] - use data id => obtest_nijia.nj_6.12.232.130
+[2026-10-08 19:28:49.638][INFO ] [TestCase       :107] - initilize deploy processor
+[2026-10-08 19:28:49.661][INFO ] [DeployConfig   :590] - config port and dataid. port_base=>1124, obs_port=>1124, mysql_port=>1159, data_id=>obtest_nijia.nj_6.12.232.130_0, port_offset=>0
+[2026-10-08 19:28:49.714][INFO ] [DeployConfig   :577] - config port and dataid. port_base=>42000, obs_port=>42000, mysql_port=>42035, data_id=>obtest_nijia.nj_6.12.232.130_042000
+[2026-10-08 19:28:49.720][INFO ] [OfsProcessor   :53] - ofs_deployer: null/hap.py
+[2026-10-08 19:28:49.722][INFO ] [OfsCreateTenantProcessor:32] - ofsshell: null/../../bin/ofsshell
+[2026-10-08 19:28:49.722][INFO ] [TestCase       :761] - Read file => t/stanby/namespace_setup_local.test
+[2026-10-08 19:28:49.723][INFO ] [TestCase       :721] - Finish read case: file_lines => 12, lineNo => 12
+[2026-10-08 19:28:49.737][INFO ] [Command        :536] - > LINE => 1, CMD => Q_DISABLE_ALL_RESULT_LOG, CONTENT => --disable_all_result_log
+[2026-10-08 19:28:49.741][INFO ] [Command        :353] - start[1791458929739] time[1] tag[Q_DISABLE_ALL_RESULT_LOG]
+[2026-10-08 19:28:49.749][INFO ] [Command        :536] - > LINE => 2, CMD => Q_DEPLOY, CONTENT => db_p=OBI(cluster=1,proxy_num=0,role=primary);
+[2026-10-08 19:28:49.756][INFO ] [DeployProcessor:78] - OBI define => db_p=OBI(cluster=1,proxy_num=0,role=primary)
+[2026-10-08 19:28:49.801][INFO ] [Deploy         :381] - execute db_p.z_num result => 1 result type => java.lang.Integer
+[2026-10-08 19:28:49.901][INFO ] [Deploy         :464] - assign rpc port. observer=>db_p.z1.obs0, rpc_port=>42000
+[2026-10-08 19:28:49.901][INFO ] [Deploy         :471] - assign mysql port. observer=>db_p.z1.obs0, mysql_port=>42035
+[2026-10-08 19:28:49.902][INFO ] [Deploy         :478] - assign backup io rpc port. observer=>db_p.z1.obs0, obesi_port=>42070
+[2026-10-08 19:28:49.908][INFO ] [OBLog          :99] - config.ob_version='.'
+[2026-10-08 19:28:49.908][INFO ] [OBLog          :100] - config.oblog_version='default'
+[2026-10-08 19:28:49.909][INFO ] [OBLog          :117] - set oblog version='.'
+[2026-10-08 19:28:49.909][INFO ] [OBLog          :126] - set oblog work_dir=''
+[2026-10-08 19:28:49.909][INFO ] [OBLog          :148] - oblog.is_obcdc_exist: false
+[2026-10-08 19:28:49.909][INFO ] [OBLog          :149] - oblog.exec: oblog/oblog_tailf
+[2026-10-08 19:28:49.910][INFO ] [OBLog          :150] - oblog.configFile: oblog/liboblog.conf
+[2026-10-08 19:28:49.910][INFO ] [OBLog          :151] - oblog.dataFile: oblog/data.log
+[2026-10-08 19:28:49.910][INFO ] [OBLog          :152] - oblog.envCon: LD_LIBRARY_PATH=oblog:$LD_LIBRARY_PATH
+[2026-10-08 19:28:49.910][INFO ] [OBLog          :153] - oblog.startCmdHead: ulimit -c unlimited; LD_LIBRARY_PATH=oblog:$LD_LIBRARY_PATH oblog/oblog_tailf
+[2026-10-08 19:28:49.910][INFO ] [OBLog          :154] - oblog.defaultStartCmd: ulimit -c unlimited; LD_LIBRARY_PATH=oblog:$LD_LIBRARY_PATH oblog/oblog_tailf  -f oblog/liboblog.conf -D oblog/data.log -H oblog/heartbeat.log -d
+[2026-10-08 19:28:50.282][INFO ] [Deploy         :1128] - start observer version is lite mode: true
+[2026-10-08 19:28:50.283][INFO ] [Command        :353] - start[1791458929750] time[532] tag[Q_DEPLOY]
+[2026-10-08 19:28:50.285][INFO ] [Command        :536] - > LINE => 3, CMD => Q_DEPLOY, CONTENT => db_p.reboot;
+[2026-10-08 19:28:50.285][INFO ] [DeployProcessor:93] - deploy => db_p.reboot
+[2026-10-08 19:28:50.286][INFO ] [Deploy         :287] - execute db_p.reset
+[2026-10-08 19:28:50.286][INFO ] [Deploy         :381] - execute db_p.lite_mode result => true result type => java.lang.Boolean
+[2026-10-08 19:28:50.286][INFO ] [Deploy         :294] - execute db_p.reset result => true
+[2026-10-08 19:28:50.287][INFO ] [Deploy         :287] - execute db_p.clean_asvr
+[2026-10-08 19:28:50.287][INFO ] [Deploy         :294] - execute db_p.clean_asvr result => true
+[2026-10-08 19:28:50.293][INFO ] [Deploy         :287] - execute db_p.z1.obs0.force_stop_asvr
+[2026-10-08 19:28:50.294][INFO ] [Role           :1228] - pkill -9 -u nijia.nj -f '^/data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.asvr0/bin/observer' on 6.12.232.130
+[2026-10-08 19:28:50.329][INFO ] [Role           :1230] - pkill asvr result is => 1
+[2026-10-08 19:28:50.330][INFO ] [Deploy         :294] - execute db_p.z1.obs0.force_stop_asvr result => true
+[2026-10-08 19:28:50.330][INFO ] [Deploy         :287] - execute db_p.z1.obs0.rmdir_asvr
+[2026-10-08 19:28:50.331][INFO ] [Role           :1237] - try to remove asvr dir server  => db_p.z1.obs0
+[2026-10-08 19:28:50.341][INFO ] [Role           :1264] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.asvr0 , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:28:50.342][INFO ] [Deploy         :294] - execute db_p.z1.obs0.rmdir_asvr result => true
+[2026-10-08 19:28:50.342][INFO ] [Deploy         :331] - execute db_p.z1.obs0.clean_asvr  result => true
+[2026-10-08 19:28:50.344][INFO ] [Deploy         :362] - execute db_p.z1.clean_asvr  result => true [true]
+[2026-10-08 19:28:50.344][INFO ] [Deploy         :362] - execute db_p.clean_asvr_everywhere result => true [true]
+[2026-10-08 19:28:50.345][INFO ] [Deploy         :331] - execute db_p.clean_all_asvr result => true
+[2026-10-08 19:28:50.346][INFO ] [Deploy         :287] - execute db_p.deploy_logservice
+[2026-10-08 19:28:50.346][INFO ] [Deploy         :294] - execute db_p.deploy_logservice result => true
+[2026-10-08 19:28:50.346][INFO ] [Deploy         :287] - execute db_p.bootstrap_logservice
+[2026-10-08 19:28:50.347][INFO ] [Deploy         :294] - execute db_p.bootstrap_logservice result => true
+[2026-10-08 19:28:50.347][INFO ] [Deploy         :331] - execute db_p.reboot_logservice result => true
+[2026-10-08 19:28:50.349][INFO ] [Deploy         :287] - execute db_p.z1.check_local_bin
+[2026-10-08 19:28:50.357][INFO ] [Deploy         :294] - execute db_p.z1.check_local_bin result => true
+[2026-10-08 19:28:50.357][INFO ] [Deploy         :287] - execute db_p.z1.check_ssh
+[2026-10-08 19:28:50.358][INFO ] [Deploy         :294] - execute db_p.z1.check_ssh result => true
+[2026-10-08 19:28:50.359][INFO ] [Deploy         :287] - execute db_p.z1.obs0.check_dir 
+[2026-10-08 19:28:50.371][INFO ] [Deploy         :294] - execute db_p.z1.obs0.check_dir  result => true
+[2026-10-08 19:28:50.400][INFO ] [Deploy         :362] - execute db_p.z1.check_dir result => true [true]
+[2026-10-08 19:28:50.405][INFO ] [Deploy         :287] - execute db_p.z1.obs0.force_stop 
+[2026-10-08 19:28:50.406][INFO ] [Role           :1307] - pkill -9 -u nijia.nj -f '^/data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/bin/observer|^/data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/bin/obesi' on 6.12.232.130
+[2026-10-08 19:28:50.451][INFO ] [Role           :1309] - pkill result is => 1
+[2026-10-08 19:28:50.451][INFO ] [Role           :1142] - wait stop /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/bin/observer on 6.12.232.130
+[2026-10-08 19:28:50.452][INFO ] [Role           :1190] - ps uxf | grep "/data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/bin/observer" | grep -v grep
+[2026-10-08 19:28:50.504][INFO ] [Role           :1154] - check port on 6.12.232.130
+[2026-10-08 19:28:50.506][INFO ] [RemoteShell    :143] - netstat -lpnt 2>/dev/null | grep '0.0.0.0:42000 ' | awk -F ' ' '{print $7}'
+[2026-10-08 19:28:50.544][INFO ] [RemoteShell    :143] - netstat -lpnt 2>/dev/null | grep '0.0.0.0:42035 ' | awk -F ' ' '{print $7}'
+[2026-10-08 19:28:50.642][INFO ] [Role           :1164] - stop obs0 took 2 s
+[2026-10-08 19:28:50.642][INFO ] [Deploy         :294] - execute db_p.z1.obs0.force_stop  result => true
+[2026-10-08 19:28:50.643][INFO ] [Deploy         :362] - execute db_p.z1.force_stop result => true [true]
+[2026-10-08 19:28:50.644][INFO ] [Deploy         :362] - execute db_p.z1.force_stop_logstore result => true []
+[2026-10-08 19:28:50.644][INFO ] [Deploy         :331] - execute db_p.z1.force_stop_all result => true
+[2026-10-08 19:28:50.645][INFO ] [Deploy         :287] - execute db_p.z1.obs0.rmdir 
+[2026-10-08 19:28:50.645][INFO ] [Deploy         :381] - execute db_p.lite_mode result => true result type => java.lang.Boolean
+[2026-10-08 19:28:50.647][INFO ] [Role           :1395] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_p.z1.obs0.nijia.nj/sstable /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store/slog /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_p.z1.obs0.nijia.nj/sort_dir , on => 6.12.232.130
+[2026-10-08 19:28:50.656][INFO ] [Role           :1397] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_p.z1.obs0.nijia.nj/sstable /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store/slog /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_p.z1.obs0.nijia.nj/sort_dir , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:28:50.675][INFO ] [Role           :1402] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/log , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:28:50.683][INFO ] [Role           :1407] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/admin , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:28:50.694][INFO ] [Role           :1412] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/wallet , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:28:50.706][INFO ] [Role           :1417] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/etc/observer.c*nf*.bin* /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/etc/seekdb.c*nf*.bin* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:28:50.715][INFO ] [Role           :1423] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/etc/observer.data_version.bin* /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/etc/seekdb.data_version.bin* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:28:50.729][INFO ] [Role           :1429] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/etc2/observer.c*nf*.bin* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:28:50.741][INFO ] [Role           :1434] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/etc3/observer.c*nf*.bin* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:28:50.746][INFO ] [Role           :1439] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/run/observer.pid /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/run/seekdb.pid , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:28:50.759][INFO ] [Role           :1444] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/clog_shm , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:28:50.764][INFO ] [Role           :1449] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/ilog_shm , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:28:50.771][INFO ] [Role           :1454] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/manifest* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:28:50.787][INFO ] [Role           :1467] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/core* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:28:50.798][INFO ] [Role           :1504] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/ /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_p.z1.obs0.nijia.nj/ , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:28:51.51][INFO ] [Role           :1510] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0 , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:28:51.57][INFO ] [Deploy         :294] - execute db_p.z1.obs0.rmdir  result => true
+[2026-10-08 19:28:51.58][INFO ] [Deploy         :362] - execute db_p.z1.rmdir result => true [true]
+[2026-10-08 19:28:51.59][INFO ] [Deploy         :331] - execute db_p.z1.cleanup result => true
+[2026-10-08 19:28:51.59][INFO ] [Deploy         :362] - execute db_p.z1.cleanup_logstore result => true []
+[2026-10-08 19:28:51.59][INFO ] [Deploy         :331] - execute db_p.z1.cleanup_all result => true
+[2026-10-08 19:28:51.59][INFO ] [Deploy         :287] - execute db_p.z1.genconf
+[2026-10-08 19:28:51.60][INFO ] [Deploy         :294] - execute db_p.z1.genconf result => true
+[2026-10-08 19:28:51.61][INFO ] [Deploy         :287] - execute db_p.z1.obs0.mkdir 
+[2026-10-08 19:28:51.62][INFO ] [Role           :1768] - mkdir -p /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/;mkdir -p /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store/clog /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store/ilog /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store/slog /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_p.z1.obs0.nijia.nj/sort_dir /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_p.z1.obs0.nijia.nj/sstable;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_p.z1.obs0.nijia.nj/sstable /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store/clog /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store/ilog /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store/slog /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_p.z1.obs0.nijia.nj/sort_dir /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/ on 6.12.232.130
+[2026-10-08 19:28:51.80][INFO ] [Deploy         :294] - execute db_p.z1.obs0.mkdir  result => true
+[2026-10-08 19:28:51.81][INFO ] [Deploy         :362] - execute db_p.z1.mkdir_obs result => true [true]
+[2026-10-08 19:28:51.82][INFO ] [Deploy         :362] - execute db_p.z1.mkdir_logstore result => true []
+[2026-10-08 19:28:51.82][INFO ] [Deploy         :331] - execute db_p.z1.mkdir result => true
+[2026-10-08 19:28:51.83][INFO ] [Deploy         :287] - execute db_p.z1.obs0.rsync 
+[2026-10-08 19:28:51.84][INFO ] [Role           :1648] - sync server finish, time = 0
+[2026-10-08 19:28:51.84][INFO ] [Role           :1563] - rsync server => db_p.z1.obs0 version if specified => .
+[2026-10-08 19:28:51.91][INFO ] [Role           :1635] - check disk dir ==> './admin' exist
+[2026-10-08 19:28:51.97][WARN ] [Role           :1638] - check disk dir ==> './plugin_dir' not exist
+[2026-10-08 19:28:51.103][INFO ] [Role           :1635] - check disk dir ==> './wallet' exist
+[2026-10-08 19:28:51.103][INFO ] [Role           :1590] - transfer cmd to =>  rsync -WrptgoDRLv --timeout=600 bin etc lib  admin  wallet /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0
+[2026-10-08 19:29:01.213][INFO ] [Role           :1604] - rsync cmd =>  rsync -WrptgoDRLv --timeout=600 bin etc lib  admin  wallet /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0
+[2026-10-08 19:29:01.214][INFO ] [Deploy         :294] - execute db_p.z1.obs0.rsync  result => true
+[2026-10-08 19:29:01.218][INFO ] [Deploy         :362] - execute db_p.z1.rsync_obs result => true [true]
+[2026-10-08 19:29:01.219][INFO ] [Deploy         :362] - execute db_p.z1.rsync_logstore result => true []
+[2026-10-08 19:29:01.219][INFO ] [Deploy         :331] - execute db_p.z1.rsync result => true
+[2026-10-08 19:29:01.221][INFO ] [Deploy         :362] - execute db_p.z1.start_logstore result => true []
+[2026-10-08 19:29:01.224][INFO ] [Deploy         :287] - execute db_p.z1.sleep 5
+[2026-10-08 19:29:06.225][INFO ] [Deploy         :294] - execute db_p.z1.sleep 5 result => true
+[2026-10-08 19:29:06.227][INFO ] [Deploy         :287] - execute db_p.z1.obs0.start 
+[2026-10-08 19:29:06.227][INFO ] [Deploy         :381] - execute db_p.lite_mode result => true result type => java.lang.Boolean
+[2026-10-08 19:29:06.228][INFO ] [Deploy         :381] - execute db_p.lite_mode result => true result type => java.lang.Boolean
+6.12.232.130 is not a valid IPv6 address.
+[2026-10-08 19:29:06.233][INFO ] [Role           :539] - cluster_id1
+[2026-10-08 19:29:06.234][INFO ] [Deploy         :381] - execute db_p.z_num result => 1 result type => java.lang.Integer
+[2026-10-08 19:29:06.235][INFO ] [Role           :552] - db_p have 1 ZONE
+[2026-10-08 19:29:06.235][INFO ] [Role           :584] - ofs_list ofs_list='z1@' has_ofs_zone false
+[2026-10-08 19:29:06.236][INFO ] [Role           :637] - ulimit -c unlimited -s 4096;cd /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0;LD_LIBRARY_PATH=./lib:/usr/local/lib:/usr/lib:/usr/lib64:/usr/local/lib64:$LD_LIBRARY_PATH /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/bin/observer --port 42035 --data-dir /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store --redo-dir /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/clog  --role=PRIMARY --parameter enable_rpc_service=true --parameter rpc_port=42000 --parameter datafile_size='2G' --parameter log_disk_size='2G' --parameter cpu_count=4 --parameter memory_limit='8G' on 6.12.232.130
+[2026-10-08 19:29:06.306][INFO ] [Deploy         :294] - execute db_p.z1.obs0.start  result => true
+[2026-10-08 19:29:06.307][INFO ] [Deploy         :362] - execute db_p.z1.start_obs result => true [true]
+[2026-10-08 19:29:06.308][INFO ] [Deploy         :331] - execute db_p.z1.start result => true
+[2026-10-08 19:29:06.308][INFO ] [Deploy         :287] - execute db_p.z1.sleep 8
+[2026-10-08 19:29:14.308][INFO ] [Deploy         :294] - execute db_p.z1.sleep 8 result => true
+[2026-10-08 19:29:14.309][INFO ] [Deploy         :331] - execute db_p.z1.reboot  result => true
+[2026-10-08 19:29:14.309][INFO ] [Deploy         :362] - execute db_p.deploy result => true [true]
+[2026-10-08 19:29:14.310][INFO ] [Deploy         :287] - execute db_p.sleep 5
+[2026-10-08 19:29:19.310][INFO ] [Deploy         :294] - execute db_p.sleep 5 result => true
+[2026-10-08 19:29:19.311][INFO ] [Deploy         :287] - execute db_p.bootstrap
+[2026-10-08 19:29:19.311][INFO ] [Deploy         :381] - execute db_p.z_num result => 1 result type => java.lang.Integer
+[2026-10-08 19:29:19.312][INFO ] [Deploy         :381] - execute db_p.zone_names result => [Ljava.lang.String;@23ceabc1 result type => [Ljava.lang.String;
+[2026-10-08 19:29:19.312][INFO ] [Deploy         :381] - execute db_p.z1.obs_num result => 1 result type => java.lang.Integer
+[2026-10-08 19:29:19.312][INFO ] [Deploy         :287] - execute db_p.z1.obs0.get status
+[2026-10-08 19:29:19.313][WARN ] [Deploy         :298] - execute db_p.z1.obs0.get status result => null
+[2026-10-08 19:29:19.313][INFO ] [Deploy         :381] - execute db_p.lite_mode result => true result type => java.lang.Boolean
+[2026-10-08 19:29:19.313][INFO ] [Deploy         :294] - execute db_p.bootstrap result => true
+[2026-10-08 19:29:19.313][INFO ] [Deploy         :287] - execute db_p.addserver
+[2026-10-08 19:29:19.314][INFO ] [Deploy         :381] - execute db_p.z_num result => 1 result type => java.lang.Integer
+[2026-10-08 19:29:19.315][INFO ] [Deploy         :381] - execute db_p.zone_names result => [Ljava.lang.String;@23ceabc1 result type => [Ljava.lang.String;
+[2026-10-08 19:29:19.316][INFO ] [Deploy         :381] - execute db_p.z1.obs_num result => 1 result type => java.lang.Integer
+[2026-10-08 19:29:19.316][INFO ] [Deploy         :294] - execute db_p.addserver result => true
+[2026-10-08 19:29:19.316][INFO ] [Deploy         :287] - execute db_p.exec_init_sql
+[2026-10-08 19:29:19.316][INFO ] [Deploy         :381] - execute db_p.lite_mode result => true result type => java.lang.Boolean
+[2026-10-08 19:29:19.317][INFO ] [Deploy         :287] - execute db_p.z1.obs0.mysql_tenant_root create user 'admin' IDENTIFIED BY 'admin';use oceanbase;grant all on *.* to 'admin' WITH GRANT OPTION;create database if not exists test;
+[2026-10-08 19:29:19.318][INFO ] [Role           :3182] - sql =>create user 'admin' IDENTIFIED BY 'admin';use oceanbase;grant all on *.* to 'admin' WITH GRANT OPTION;create database if not exists test;
+ will be executed with connection[z1.obs0]root@sys:@6.12.232.130:42035
+[2026-10-08 19:29:19.443][INFO ] [Deploy         :294] - execute db_p.z1.obs0.mysql_tenant_root create user 'admin' IDENTIFIED BY 'admin';use oceanbase;grant all on *.* to 'admin' WITH GRANT OPTION;create database if not exists test; result => true
+[2026-10-08 19:29:19.444][INFO ] [Deploy         :381] - execute db_p.lite_mode result => true result type => java.lang.Boolean
+[2026-10-08 19:29:19.444][INFO ] [Deploy         :381] - execute db_p.lite_mode result => true result type => java.lang.Boolean
+[2026-10-08 19:29:19.445][INFO ] [Deploy         :287] - execute db_p.z1.obs0.mysql_tenant_root create user 'proxyro' IDENTIFIED BY '3u^0kCdpE';grant select on oceanbase.* to 'proxyro' WITH GRANT OPTION;
+[2026-10-08 19:29:19.445][INFO ] [Role           :3182] - sql =>create user 'proxyro' IDENTIFIED BY '3u^0kCdpE';grant select on oceanbase.* to 'proxyro' WITH GRANT OPTION;
+ will be executed with connection[z1.obs0]root@sys:@6.12.232.130:42035
+[2026-10-08 19:29:19.519][INFO ] [Deploy         :294] - execute db_p.z1.obs0.mysql_tenant_root create user 'proxyro' IDENTIFIED BY '3u^0kCdpE';grant select on oceanbase.* to 'proxyro' WITH GRANT OPTION; result => true
+[2026-10-08 19:29:19.519][INFO ] [Deploy         :287] - execute db_p.z1.obs0.mysql_tenant_root create user 'sysslaveuser' IDENTIFIED BY 'sysslaveuser';grant select on *.* to 'sysslaveuser' WITH GRANT OPTION;
+[2026-10-08 19:29:19.520][INFO ] [Role           :3182] - sql =>create user 'sysslaveuser' IDENTIFIED BY 'sysslaveuser';grant select on *.* to 'sysslaveuser' WITH GRANT OPTION;
+ will be executed with connection[z1.obs0]root@sys:@6.12.232.130:42035
+[2026-10-08 19:29:19.592][INFO ] [Deploy         :294] - execute db_p.z1.obs0.mysql_tenant_root create user 'sysslaveuser' IDENTIFIED BY 'sysslaveuser';grant select on *.* to 'sysslaveuser' WITH GRANT OPTION; result => true
+[2026-10-08 19:29:19.593][INFO ] [Deploy         :294] - execute db_p.exec_init_sql result => true
+[2026-10-08 19:29:19.594][INFO ] [Deploy         :287] - execute db_p.register_proxy
+[2026-10-08 19:29:19.594][INFO ] [Deploy         :294] - execute db_p.register_proxy result => true
+[2026-10-08 19:29:19.594][INFO ] [Deploy         :287] - execute db_p.deploy_proxy
+[2026-10-08 19:29:19.594][INFO ] [Deploy         :294] - execute db_p.deploy_proxy result => true
+[2026-10-08 19:29:19.595][INFO ] [Deploy         :287] - execute db_p.sleep 5
+[2026-10-08 19:29:24.595][INFO ] [Deploy         :294] - execute db_p.sleep 5 result => true
+[2026-10-08 19:29:24.595][INFO ] [Deploy         :331] - execute db_p.reboot_proxy result => true
+[2026-10-08 19:29:24.596][INFO ] [Deploy         :287] - execute db_p.deploy_asvr
+[2026-10-08 19:29:24.596][INFO ] [Deploy         :294] - execute db_p.deploy_asvr result => true
+[2026-10-08 19:29:24.596][INFO ] [Deploy         :287] - execute db_p.sleep 5
+[2026-10-08 19:29:29.597][INFO ] [Deploy         :294] - execute db_p.sleep 5 result => true
+[2026-10-08 19:29:29.597][INFO ] [Deploy         :331] - execute db_p.reboot_asvr result => true
+[2026-10-08 19:29:29.597][INFO ] [Deploy         :287] - execute db_p.add_asvr
+[2026-10-08 19:29:29.598][INFO ] [OBI            :1509] - There is no need to add asvr.
+[2026-10-08 19:29:29.598][INFO ] [Deploy         :294] - execute db_p.add_asvr result => true
+[2026-10-08 19:29:29.598][INFO ] [Deploy         :287] - execute db_p.prepare_agent
+[2026-10-08 19:29:29.598][INFO ] [Deploy         :294] - execute db_p.prepare_agent result => true
+[2026-10-08 19:29:29.598][INFO ] [Deploy         :331] - execute db_p.reboot result => true
+[2026-10-08 19:29:29.598][INFO ] [Command        :353] - start[1791458930285] time[39313] tag[Q_DEPLOY]
+[2026-10-08 19:29:29.599][INFO ] [Command        :536] - > LINE => 4, CMD => Q_CONNECT, CONTENT => ob_connect(ns_setup, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR)
+Loading class `com.mysql.jdbc.Driver'. This is deprecated. The new driver class is `com.mysql.cj.jdbc.Driver'. The driver is automatically registered via the SPI and manual loading of the driver class is generally unnecessary.
+[2026-10-08 19:29:29.724][INFO ] [SQLProcessor   :1505] - ns_setup create a physical connection  using jdbc:mysql://6.12.232.130:42035/oceanbase?useAffectedRows=true&emulateUnsupportedPstmts=false&characterEncoding=utf8&useServerPrepStmts=true&prepStmtCacheSqlLimit=1000&enableQueryTimeouts=false&useLocalSessionState=false&useLocalTransactionState=false&rewriteBatchedStatements=true&allowMultiQueries=true&socketTimeout=1800000 user/pwd is root@sys/
+[2026-10-08 19:29:29.942][INFO ] [SQLProcessor   :1519] - connection => ns_setup is mysql mode.
+[2026-10-08 19:29:29.942][INFO ] [SQLProcessor   :1522] - put conn: dataid=ns_setup currentConn=com.mysql.cj.jdbc.ConnectionImpl@9353778 hashcode => 154482552
+[2026-10-08 19:29:29.942][INFO ] [Command        :353] - start[1791458969599] time[343] tag[Q_CONNECT]
+[2026-10-08 19:29:29.942][INFO ] [Command        :536] - > LINE => 5, CMD => Q_CONNECTION, CONTENT => connection ns_setup
+[2026-10-08 19:29:29.943][INFO ] [SQLProcessor   :1128] - use connection => ns_setup hashcode => 154482552
+[2026-10-08 19:29:29.945][INFO ] [SQLProcessor   :1158] - connection => ns_setup is mysql mode. conn=com.mysql.cj.jdbc.ConnectionImpl@9353778
+[2026-10-08 19:29:29.945][INFO ] [Command        :353] - start[1791458969942] time[2] tag[Q_CONNECTION]
+[2026-10-08 19:29:29.946][INFO ] [Command        :536] - > LINE => 6, CMD => Q_QUERY, CONTENT => create database replica_ns;
+[2026-10-08 19:29:30.04][INFO ] [Command        :353] - start[1791458969946] time[58] tag[Q_QUERY]
+[2026-10-08 19:29:30.05][INFO ] [Command        :536] - > LINE => 7, CMD => Q_QUERY, CONTENT => create table replica_ns.t(id int primary key,v int,note longtext);
+[2026-10-08 19:29:30.236][INFO ] [Command        :353] - start[1791458970006] time[230] tag[Q_QUERY]
+[2026-10-08 19:29:30.236][INFO ] [Command        :536] - > LINE => 8, CMD => Q_QUERY, CONTENT => insert into replica_ns.t values(1,10,repeat('baseline',2048));
+[2026-10-08 19:29:30.276][INFO ] [Command        :353] - start[1791458970237] time[39] tag[Q_QUERY]
+[2026-10-08 19:29:30.277][INFO ] [Command        :536] - > LINE => 9, CMD => Q_EVAL, CONTENT => FORK NAMESPACE replica_seed FROM ns1;
+[2026-10-08 19:29:30.277][INFO ] [Command        :771] - eval => FORK NAMESPACE replica_seed FROM ns1;
+[2026-10-08 19:29:30.283][INFO ] [Command        :353] - start[1791458970277] time[5] tag[Q_EVAL]
+[2026-10-08 19:29:30.283][INFO ] [Command        :536] - > LINE => 10, CMD => Q_DEPLOY, CONTENT => db_s=OBI(cluster=1,proxy_num=0,primary=db_p);
+[2026-10-08 19:29:30.284][INFO ] [DeployProcessor:78] - OBI define => db_s=OBI(cluster=1,proxy_num=0,primary=db_p)
+[2026-10-08 19:29:30.284][INFO ] [Deploy         :381] - execute db_s.z_num result => 1 result type => java.lang.Integer
+[2026-10-08 19:29:30.285][INFO ] [Deploy         :464] - assign rpc port. observer=>db_s.z1.obs0, rpc_port=>42001
+[2026-10-08 19:29:30.285][INFO ] [Deploy         :471] - assign mysql port. observer=>db_s.z1.obs0, mysql_port=>42036
+[2026-10-08 19:29:30.285][INFO ] [Deploy         :478] - assign backup io rpc port. observer=>db_s.z1.obs0, obesi_port=>42071
+[2026-10-08 19:29:30.286][INFO ] [OBLog          :99] - config.ob_version='.'
+[2026-10-08 19:29:30.286][INFO ] [OBLog          :100] - config.oblog_version='default'
+[2026-10-08 19:29:30.286][INFO ] [OBLog          :117] - set oblog version='.'
+[2026-10-08 19:29:30.286][INFO ] [OBLog          :126] - set oblog work_dir=''
+[2026-10-08 19:29:30.286][INFO ] [OBLog          :148] - oblog.is_obcdc_exist: false
+[2026-10-08 19:29:30.286][INFO ] [OBLog          :149] - oblog.exec: oblog/oblog_tailf
+[2026-10-08 19:29:30.286][INFO ] [OBLog          :150] - oblog.configFile: oblog/liboblog.conf
+[2026-10-08 19:29:30.286][INFO ] [OBLog          :151] - oblog.dataFile: oblog/data.log
+[2026-10-08 19:29:30.287][INFO ] [OBLog          :152] - oblog.envCon: LD_LIBRARY_PATH=oblog:$LD_LIBRARY_PATH
+[2026-10-08 19:29:30.287][INFO ] [OBLog          :153] - oblog.startCmdHead: ulimit -c unlimited; LD_LIBRARY_PATH=oblog:$LD_LIBRARY_PATH oblog/oblog_tailf
+[2026-10-08 19:29:30.287][INFO ] [OBLog          :154] - oblog.defaultStartCmd: ulimit -c unlimited; LD_LIBRARY_PATH=oblog:$LD_LIBRARY_PATH oblog/oblog_tailf  -f oblog/liboblog.conf -D oblog/data.log -H oblog/heartbeat.log -d
+[2026-10-08 19:29:30.610][INFO ] [Deploy         :1128] - start observer version is lite mode: true
+[2026-10-08 19:29:30.610][INFO ] [Command        :353] - start[1791458970283] time[327] tag[Q_DEPLOY]
+[2026-10-08 19:29:30.611][INFO ] [Command        :536] - > LINE => 11, CMD => Q_DEPLOY, CONTENT => db_s.reboot;
+[2026-10-08 19:29:30.612][INFO ] [DeployProcessor:93] - deploy => db_s.reboot
+[2026-10-08 19:29:30.612][INFO ] [Deploy         :287] - execute db_s.reset
+[2026-10-08 19:29:30.612][INFO ] [Deploy         :381] - execute db_s.lite_mode result => true result type => java.lang.Boolean
+[2026-10-08 19:29:30.612][INFO ] [Deploy         :294] - execute db_s.reset result => true
+[2026-10-08 19:29:30.612][INFO ] [Deploy         :287] - execute db_s.clean_asvr
+[2026-10-08 19:29:30.614][INFO ] [Deploy         :294] - execute db_s.clean_asvr result => true
+[2026-10-08 19:29:30.615][INFO ] [Deploy         :287] - execute db_s.z1.obs0.force_stop_asvr
+[2026-10-08 19:29:30.616][INFO ] [Role           :1228] - pkill -9 -u nijia.nj -f '^/data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.asvr0/bin/observer' on 6.12.232.130
+[2026-10-08 19:29:30.654][INFO ] [Role           :1230] - pkill asvr result is => 1
+[2026-10-08 19:29:30.655][INFO ] [Deploy         :294] - execute db_s.z1.obs0.force_stop_asvr result => true
+[2026-10-08 19:29:30.656][INFO ] [Deploy         :287] - execute db_s.z1.obs0.rmdir_asvr
+[2026-10-08 19:29:30.656][INFO ] [Role           :1237] - try to remove asvr dir server  => db_s.z1.obs0
+[2026-10-08 19:29:30.664][INFO ] [Role           :1264] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.asvr0 , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:29:30.665][INFO ] [Deploy         :294] - execute db_s.z1.obs0.rmdir_asvr result => true
+[2026-10-08 19:29:30.665][INFO ] [Deploy         :331] - execute db_s.z1.obs0.clean_asvr  result => true
+[2026-10-08 19:29:30.666][INFO ] [Deploy         :362] - execute db_s.z1.clean_asvr  result => true [true]
+[2026-10-08 19:29:30.667][INFO ] [Deploy         :362] - execute db_s.clean_asvr_everywhere result => true [true]
+[2026-10-08 19:29:30.667][INFO ] [Deploy         :331] - execute db_s.clean_all_asvr result => true
+[2026-10-08 19:29:30.667][INFO ] [Deploy         :287] - execute db_s.deploy_logservice
+[2026-10-08 19:29:30.668][INFO ] [Deploy         :294] - execute db_s.deploy_logservice result => true
+[2026-10-08 19:29:30.668][INFO ] [Deploy         :287] - execute db_s.bootstrap_logservice
+[2026-10-08 19:29:30.668][INFO ] [Deploy         :294] - execute db_s.bootstrap_logservice result => true
+[2026-10-08 19:29:30.668][INFO ] [Deploy         :331] - execute db_s.reboot_logservice result => true
+[2026-10-08 19:29:30.672][INFO ] [Deploy         :287] - execute db_s.z1.check_local_bin
+[2026-10-08 19:29:30.683][INFO ] [Deploy         :294] - execute db_s.z1.check_local_bin result => true
+[2026-10-08 19:29:30.683][INFO ] [Deploy         :287] - execute db_s.z1.check_ssh
+[2026-10-08 19:29:30.683][INFO ] [Deploy         :294] - execute db_s.z1.check_ssh result => true
+[2026-10-08 19:29:30.684][INFO ] [Deploy         :287] - execute db_s.z1.obs0.check_dir 
+[2026-10-08 19:29:30.703][INFO ] [Deploy         :294] - execute db_s.z1.obs0.check_dir  result => true
+[2026-10-08 19:29:30.704][INFO ] [Deploy         :362] - execute db_s.z1.check_dir result => true [true]
+[2026-10-08 19:29:30.705][INFO ] [Deploy         :287] - execute db_s.z1.obs0.force_stop 
+[2026-10-08 19:29:30.707][INFO ] [Role           :1307] - pkill -9 -u nijia.nj -f '^/data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/bin/observer|^/data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/bin/obesi' on 6.12.232.130
+[2026-10-08 19:29:30.726][INFO ] [Role           :1309] - pkill result is => 1
+[2026-10-08 19:29:30.728][INFO ] [Role           :1142] - wait stop /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/bin/observer on 6.12.232.130
+[2026-10-08 19:29:30.729][INFO ] [Role           :1190] - ps uxf | grep "/data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/bin/observer" | grep -v grep
+[2026-10-08 19:29:30.829][INFO ] [Role           :1154] - check port on 6.12.232.130
+[2026-10-08 19:29:30.831][INFO ] [RemoteShell    :143] - netstat -lpnt 2>/dev/null | grep '0.0.0.0:42001 ' | awk -F ' ' '{print $7}'
+[2026-10-08 19:29:30.877][INFO ] [RemoteShell    :143] - netstat -lpnt 2>/dev/null | grep '0.0.0.0:42036 ' | awk -F ' ' '{print $7}'
+[2026-10-08 19:29:30.918][INFO ] [Role           :1164] - stop obs0 took 2 s
+[2026-10-08 19:29:30.919][INFO ] [Deploy         :294] - execute db_s.z1.obs0.force_stop  result => true
+[2026-10-08 19:29:30.920][INFO ] [Deploy         :362] - execute db_s.z1.force_stop result => true [true]
+[2026-10-08 19:29:30.920][INFO ] [Deploy         :362] - execute db_s.z1.force_stop_logstore result => true []
+[2026-10-08 19:29:30.921][INFO ] [Deploy         :331] - execute db_s.z1.force_stop_all result => true
+[2026-10-08 19:29:30.921][INFO ] [Deploy         :287] - execute db_s.z1.obs0.rmdir 
+[2026-10-08 19:29:30.921][INFO ] [Deploy         :381] - execute db_s.lite_mode result => true result type => java.lang.Boolean
+[2026-10-08 19:29:30.922][INFO ] [Role           :1395] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_s.z1.obs0.nijia.nj/sstable /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store/slog /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_s.z1.obs0.nijia.nj/sort_dir , on => 6.12.232.130
+[2026-10-08 19:29:30.931][INFO ] [Role           :1397] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_s.z1.obs0.nijia.nj/sstable /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store/slog /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_s.z1.obs0.nijia.nj/sort_dir , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:29:30.944][INFO ] [Role           :1402] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/log , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:29:30.966][INFO ] [Role           :1407] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/admin , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:29:30.979][INFO ] [Role           :1412] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/wallet , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:29:30.996][INFO ] [Role           :1417] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/etc/observer.c*nf*.bin* /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/etc/seekdb.c*nf*.bin* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:29:31.06][INFO ] [Role           :1423] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/etc/observer.data_version.bin* /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/etc/seekdb.data_version.bin* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:29:31.16][INFO ] [Role           :1429] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/etc2/observer.c*nf*.bin* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:29:31.24][INFO ] [Role           :1434] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/etc3/observer.c*nf*.bin* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:29:31.29][INFO ] [Role           :1439] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/run/observer.pid /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/run/seekdb.pid , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:29:31.35][INFO ] [Role           :1444] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/clog_shm , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:29:31.40][INFO ] [Role           :1449] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/ilog_shm , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:29:31.46][INFO ] [Role           :1454] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/manifest* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:29:31.64][INFO ] [Role           :1467] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/core* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:29:31.76][INFO ] [Role           :1504] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/ /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_s.z1.obs0.nijia.nj/ , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:29:31.314][INFO ] [Role           :1510] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0 , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-08 19:29:31.322][INFO ] [Deploy         :294] - execute db_s.z1.obs0.rmdir  result => true
+[2026-10-08 19:29:31.322][INFO ] [Deploy         :362] - execute db_s.z1.rmdir result => true [true]
+[2026-10-08 19:29:31.323][INFO ] [Deploy         :331] - execute db_s.z1.cleanup result => true
+[2026-10-08 19:29:31.323][INFO ] [Deploy         :362] - execute db_s.z1.cleanup_logstore result => true []
+[2026-10-08 19:29:31.323][INFO ] [Deploy         :331] - execute db_s.z1.cleanup_all result => true
+[2026-10-08 19:29:31.323][INFO ] [Deploy         :287] - execute db_s.z1.genconf
+[2026-10-08 19:29:31.323][INFO ] [Deploy         :294] - execute db_s.z1.genconf result => true
+[2026-10-08 19:29:31.324][INFO ] [Deploy         :287] - execute db_s.z1.obs0.mkdir 
+[2026-10-08 19:29:31.324][INFO ] [Role           :1768] - mkdir -p /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/;mkdir -p /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store/clog /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store/ilog /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store/slog /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_s.z1.obs0.nijia.nj/sort_dir /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_s.z1.obs0.nijia.nj/sstable;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_s.z1.obs0.nijia.nj/sstable /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store/clog /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store/ilog /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store/slog /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_s.z1.obs0.nijia.nj/sort_dir /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/ on 6.12.232.130
+[2026-10-08 19:29:31.351][INFO ] [Deploy         :294] - execute db_s.z1.obs0.mkdir  result => true
+[2026-10-08 19:29:31.352][INFO ] [Deploy         :362] - execute db_s.z1.mkdir_obs result => true [true]
+[2026-10-08 19:29:31.353][INFO ] [Deploy         :362] - execute db_s.z1.mkdir_logstore result => true []
+[2026-10-08 19:29:31.353][INFO ] [Deploy         :331] - execute db_s.z1.mkdir result => true
+[2026-10-08 19:29:31.354][INFO ] [Deploy         :287] - execute db_s.z1.obs0.rsync 
+[2026-10-08 19:29:31.354][INFO ] [Role           :1648] - sync server finish, time = 0
+[2026-10-08 19:29:31.354][INFO ] [Role           :1563] - rsync server => db_s.z1.obs0 version if specified => .
+[2026-10-08 19:29:31.364][INFO ] [Role           :1635] - check disk dir ==> './admin' exist
+[2026-10-08 19:29:31.369][WARN ] [Role           :1638] - check disk dir ==> './plugin_dir' not exist
+[2026-10-08 19:29:31.381][INFO ] [Role           :1635] - check disk dir ==> './wallet' exist
+[2026-10-08 19:29:31.381][INFO ] [Role           :1590] - transfer cmd to =>  rsync -WrptgoDRLv --timeout=600 bin etc lib  admin  wallet /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0
+[2026-10-08 19:29:41.169][INFO ] [Role           :1604] - rsync cmd =>  rsync -WrptgoDRLv --timeout=600 bin etc lib  admin  wallet /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0
+[2026-10-08 19:29:41.170][INFO ] [Deploy         :294] - execute db_s.z1.obs0.rsync  result => true
+[2026-10-08 19:29:41.170][INFO ] [Deploy         :362] - execute db_s.z1.rsync_obs result => true [true]
+[2026-10-08 19:29:41.171][INFO ] [Deploy         :362] - execute db_s.z1.rsync_logstore result => true []
+[2026-10-08 19:29:41.171][INFO ] [Deploy         :331] - execute db_s.z1.rsync result => true
+[2026-10-08 19:29:41.171][INFO ] [Deploy         :362] - execute db_s.z1.start_logstore result => true []
+[2026-10-08 19:29:41.171][INFO ] [Deploy         :287] - execute db_s.z1.sleep 5
+[2026-10-08 19:29:46.172][INFO ] [Deploy         :294] - execute db_s.z1.sleep 5 result => true
+[2026-10-08 19:29:46.175][INFO ] [Deploy         :287] - execute db_s.z1.obs0.start 
+[2026-10-08 19:29:46.175][INFO ] [Deploy         :381] - execute db_s.lite_mode result => true result type => java.lang.Boolean
+[2026-10-08 19:29:46.176][INFO ] [Deploy         :381] - execute db_s.lite_mode result => true result type => java.lang.Boolean
+6.12.232.130 is not a valid IPv6 address.
+[2026-10-08 19:29:46.177][INFO ] [Role           :539] - cluster_id1
+[2026-10-08 19:29:46.177][INFO ] [Deploy         :381] - execute db_s.z_num result => 1 result type => java.lang.Integer
+[2026-10-08 19:29:46.177][INFO ] [Role           :552] - db_s have 1 ZONE
+[2026-10-08 19:29:46.177][INFO ] [Role           :584] - ofs_list ofs_list='z1@' has_ofs_zone false
+[2026-10-08 19:29:46.178][INFO ] [Role           :637] - ulimit -c unlimited -s 4096;cd /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0;LD_LIBRARY_PATH=./lib:/usr/local/lib:/usr/lib:/usr/lib64:/usr/local/lib64:$LD_LIBRARY_PATH /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/bin/observer --port 42036 --data-dir /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store --redo-dir /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/clog  --role=STANDBY --parameter log_restore_source=6.12.232.130:42000 --parameter enable_rpc_service=true --parameter rpc_port=42001 --parameter datafile_size='2G' --parameter log_disk_size='2G' --parameter cpu_count=4 --parameter memory_limit='8G' on 6.12.232.130
+[2026-10-08 19:29:46.307][INFO ] [Deploy         :294] - execute db_s.z1.obs0.start  result => true
+[2026-10-08 19:29:46.308][INFO ] [Deploy         :362] - execute db_s.z1.start_obs result => true [true]
+[2026-10-08 19:29:46.309][INFO ] [Deploy         :331] - execute db_s.z1.start result => true
+[2026-10-08 19:29:46.309][INFO ] [Deploy         :287] - execute db_s.z1.sleep 8
+[2026-10-08 19:29:54.310][INFO ] [Deploy         :294] - execute db_s.z1.sleep 8 result => true
+[2026-10-08 19:29:54.310][INFO ] [Deploy         :331] - execute db_s.z1.reboot  result => true
+[2026-10-08 19:29:54.311][INFO ] [Deploy         :362] - execute db_s.deploy result => true [true]
+[2026-10-08 19:29:54.311][INFO ] [Deploy         :287] - execute db_s.sleep 5
+[2026-10-08 19:29:59.311][INFO ] [Deploy         :294] - execute db_s.sleep 5 result => true
+[2026-10-08 19:29:59.312][INFO ] [Deploy         :287] - execute db_s.bootstrap
+[2026-10-08 19:29:59.312][INFO ] [Deploy         :381] - execute db_s.z_num result => 1 result type => java.lang.Integer
+[2026-10-08 19:29:59.312][INFO ] [Deploy         :381] - execute db_s.zone_names result => [Ljava.lang.String;@1afd44cb result type => [Ljava.lang.String;
+[2026-10-08 19:29:59.312][INFO ] [Deploy         :381] - execute db_s.z1.obs_num result => 1 result type => java.lang.Integer
+[2026-10-08 19:29:59.313][INFO ] [Deploy         :287] - execute db_s.z1.obs0.get status
+[2026-10-08 19:29:59.313][WARN ] [Deploy         :298] - execute db_s.z1.obs0.get status result => null
+[2026-10-08 19:29:59.313][INFO ] [Deploy         :381] - execute db_s.lite_mode result => true result type => java.lang.Boolean
+[2026-10-08 19:29:59.313][INFO ] [Deploy         :294] - execute db_s.bootstrap result => true
+[2026-10-08 19:29:59.313][INFO ] [Deploy         :287] - execute db_s.addserver
+[2026-10-08 19:29:59.313][INFO ] [Deploy         :381] - execute db_s.z_num result => 1 result type => java.lang.Integer
+[2026-10-08 19:29:59.313][INFO ] [Deploy         :381] - execute db_s.zone_names result => [Ljava.lang.String;@1afd44cb result type => [Ljava.lang.String;
+[2026-10-08 19:29:59.314][INFO ] [Deploy         :381] - execute db_s.z1.obs_num result => 1 result type => java.lang.Integer
+[2026-10-08 19:29:59.314][INFO ] [Deploy         :294] - execute db_s.addserver result => true
+[2026-10-08 19:29:59.314][INFO ] [Deploy         :287] - execute db_s.exec_init_sql
+[2026-10-08 19:29:59.314][INFO ] [Deploy         :381] - execute db_s.lite_mode result => true result type => java.lang.Boolean
+[2026-10-08 19:29:59.314][INFO ] [Deploy         :294] - execute db_s.exec_init_sql result => true
+[2026-10-08 19:29:59.314][INFO ] [Deploy         :287] - execute db_s.register_proxy
+[2026-10-08 19:29:59.314][INFO ] [Deploy         :294] - execute db_s.register_proxy result => true
+[2026-10-08 19:29:59.315][INFO ] [Deploy         :287] - execute db_s.deploy_proxy
+[2026-10-08 19:29:59.315][INFO ] [Deploy         :294] - execute db_s.deploy_proxy result => true
+[2026-10-08 19:29:59.315][INFO ] [Deploy         :287] - execute db_s.sleep 5
+[2026-10-08 19:30:04.315][INFO ] [Deploy         :294] - execute db_s.sleep 5 result => true
+[2026-10-08 19:30:04.316][INFO ] [Deploy         :331] - execute db_s.reboot_proxy result => true
+[2026-10-08 19:30:04.316][INFO ] [Deploy         :287] - execute db_s.deploy_asvr
+[2026-10-08 19:30:04.316][INFO ] [Deploy         :294] - execute db_s.deploy_asvr result => true
+[2026-10-08 19:30:04.316][INFO ] [Deploy         :287] - execute db_s.sleep 5
+[2026-10-08 19:30:09.316][INFO ] [Deploy         :294] - execute db_s.sleep 5 result => true
+[2026-10-08 19:30:09.317][INFO ] [Deploy         :331] - execute db_s.reboot_asvr result => true
+[2026-10-08 19:30:09.317][INFO ] [Deploy         :287] - execute db_s.add_asvr
+[2026-10-08 19:30:09.317][INFO ] [OBI            :1509] - There is no need to add asvr.
+[2026-10-08 19:30:09.317][INFO ] [Deploy         :294] - execute db_s.add_asvr result => true
+[2026-10-08 19:30:09.317][INFO ] [Deploy         :287] - execute db_s.prepare_agent
+[2026-10-08 19:30:09.317][INFO ] [Deploy         :294] - execute db_s.prepare_agent result => true
+[2026-10-08 19:30:09.317][INFO ] [Deploy         :331] - execute db_s.reboot result => true
+[2026-10-08 19:30:09.317][INFO ] [Command        :353] - start[1791458970611] time[38706] tag[Q_DEPLOY]
+[2026-10-08 19:30:09.318][INFO ] [Command        :536] - > LINE => 12, CMD => Q_SLEEP, CONTENT => 3
+[2026-10-08 19:30:12.318][INFO ] [Command        :353] - start[1791459009318] time[3000] tag[Q_SLEEP]
+[2026-10-08 19:30:12.328][INFO ] [TestCase       :832] - test success
+[2026-10-08 19:30:12.335][INFO ] [MyTest         :151] - cost ts 82s exitcode 0
+Shutdown hook ran!
+{"iteration": 0, "seconds": 0.2503884620964527, "result": [["STANDBY", 1791459012947915022]]}
+{"iteration": 1, "seconds": 0.10525302961468697, "result": [["STANDBY", 1791459013527857046]]}
+{"iteration": 2, "seconds": 0.1706230342388153, "result": [["STANDBY", 1791459013934309016]]}
+{"iteration": 3, "seconds": 0.060082707554101944, "result": [["STANDBY", 1791459014435861010]]}
+{"iteration": 4, "seconds": 0.06041155755519867, "result": [["STANDBY", 1791459014813307022]]}
+{"iteration": 5, "seconds": 0.069697555154562, "result": [["STANDBY", 1791459015205969046]]}
+{"iteration": 6, "seconds": 0.06515330448746681, "result": [["STANDBY", 1791459015579577019]]}
+{"iteration": 7, "seconds": 0.0639360062777996, "result": [["STANDBY", 1791459015904963067]]}
+{"iteration": 8, "seconds": 0.06241118907928467, "result": [["STANDBY", 1791459016189863069]]}
+{"iteration": 9, "seconds": 0.18213144317269325, "result": [["STANDBY", 1791459016719184006]]}
+{"iteration": 10, "seconds": 0.12619667872786522, "result": [["STANDBY", 1791459017152065170]]}
+{"iteration": 11, "seconds": 0.06498173624277115, "result": [["STANDBY", 1791459017485143099]]}
+{"iteration": 12, "seconds": 0.07063937559723854, "result": [["STANDBY", 1791459017828403016]]}
+{"iteration": 13, "seconds": 0.22379513457417488, "result": [["STANDBY", 1791459018120314129]]}
+{"iteration": 14, "seconds": 0.06977416202425957, "result": [["STANDBY", 1791459018763608067]]}
+{"iteration": 15, "seconds": 0.16486220806837082, "result": [["STANDBY", 1791459019075806107]]}
+{"iteration": 16, "seconds": 0.1726473607122898, "result": [["STANDBY", 1791459019538873079]]}
+{"iteration": 17, "seconds": 0.09544514492154121, "result": [["STANDBY", 1791459020023721014]]}
+{"iteration": 18, "seconds": 0.06379890441894531, "result": [["STANDBY", 1791459020464828046]]}
+{"iteration": 19, "seconds": 0.05824831500649452, "result": [["STANDBY", 1791459020794496028]]}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"case": "initial_restore_inherited_read_without_materialization", "namespace_id": 3, "logical_tablet": 200001}
+{"case": "dynamic_namespace_discovery"}
+{"case": "materialization_transaction_replay_with_lob"}
+{"case": "child_ddl_refresh"}
+{"case": "historical_source_after_parent_truncate_and_drop"}
+{"case": "replicated_namespace_drop_admission"}
+{"case": "promotion_lazy_schema_recovery_and_writes"}
+{"case": "fork_after_promotion"}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

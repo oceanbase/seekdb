@@ -1,0 +1,61 @@
+{
+  "base_commit": "0f90666f1e4253ef9969ea2a24455e7b63cfb0f6",
+  "production_sources": {
+    "src/namespace/catalog.cpp": "1ded1cd4c09230a2f4b2dee6d8ae515cdfbb85ba4160916282ff5e02c0a8cc66",
+    "src/namespace/catalog.h": "f821fd437b669518b384edcb656e1392bde0afe33111e7a686cd05844068d643",
+    "src/rootserver/fork_table/instance_namespace_metadata.cpp": "93bc822caf31879f2af453ce47ec5b3e87d9c341d8fd6d22889b0cdfae4f5214",
+    "src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp": "9ec25807365f8a55922067099e4d5124e8401780f2c76f29f6b8c5572296f325",
+    "src/storage/instance_meta/instance_meta_store.cpp": "f6c9094050c556183f9854758706280d028c277308ea2f3546a477fe5efe318f",
+    "src/storage/instance_meta/instance_meta_store.h": "efe23704903f0d59e994e59dc4b19171dbec4bdbcecfcef95b5163e18eca1790",
+    "src/storage/tx/ob_tx_api.cpp": "fe6864026662ca313294d2c7895865a4e0376b06e24c908631a0b792361dbf02"
+  },
+  "artifacts": {
+    "catalog-mvcc-red-result.log": "3a56091b14b586fdb7642f9d4b164c0623668784b4d0a054a1e898a541fcf619",
+    "catalog-mvcc-native-result.log": "d6847ab38dce591c4a19bde0e4188f69d15e2396e0790e867c790a768c162279",
+    "catalog-mvcc-unit-result.log": "b09be6bb2558f0aac971e40e623691ab141a27f59feff892642a6de60620f2a3",
+    "catalog-mvcc-horizon-native-result.log": "a7882682d400acf1fb15c223c48ee69fade264173a8a759d535996d0b9d726ee",
+    "catalog-mvcc-horizon-build.log": "322be76b44db358f17afb95461814f613e00cc1b04c8ff1bd5f4b4347d5055e3",
+    "catalog-mvcc-production-build.log": "f1c13cf9e63b1a9665a0406ec0bf55e8f4b24f9dac3d0ab3a53b9d4fe4ba1609",
+    "catalog-mvcc-production-sql-result.log": "cd7a9ae4e611565e8ee12e0af8e2bb407bda44e415a2ba15d46b27eac8947ef8",
+    "standby-rr-admission-red.log": "5bb072ac978ef4b07d7cd86ab1f1fcb4a88598924af3230a98fa5201a7bfa0df",
+    "standby-rr-admission-green.log": "9405a730d7402abbd0ea063d10ec9ae6fdea24fb126178c7ac258c0f9f7dae99",
+    "catalog-mvcc-standby-failure/catalog_read_view.log": "e65a0e0b4769afa85cc13fa0a5c822cc1481fd435b2521a9cfa3dec97b215e93",
+    "catalog-mvcc-standby-failure/rr-admission.log": "610abf137401f6f05524ac636668c65eb8a21afd9e5f5388d77cd386152612d2",
+    "catalog-mvcc-standby-fixed-results/results.json": "e475b4c867285f2b35aa93048bb22ae448ac3e4b40e173f99dd69423c6eb7fe9",
+    "catalog-mvcc-standby-fixed-results/catalog_read_view.log": "2f54943aeec13c9bcfe0c34ef35359b6e847c2634a4dab2c357d6e6145a6b322",
+    "catalog-mvcc-production-standby-results/results.json": "8be9b2f8daa90d82401f37ea3337daf1580d94eea9bc021cfd20b009f9263bf6",
+    "catalog-mvcc-production-standby-results/publication_child.log": "932ea7aff745c702d5d71eaf6a67ae8386ffd3eb7b305a7d505e49e12aa58f02",
+    "catalog_read_view_probe.ipp": "c3b50f5825eea0dbd48689bd8170e762a552cd0da4387624dd34dd7587576d60",
+    "catalog_batch_probe.cpp": "14b683098c6a8839324f4da5776b7595d41ef356f457e0ce4f99adba42bb2ce5",
+    "standby_catalog_view_probe.py": "a7d0c7cf4b5294f46f65c5fc0226b5559fe1ae949172ef9190e028dbcd62cb8a",
+    "standby_rr_admission_probe.py": "eb9122dab480468a9ac93f1a5dd430d43d95d82f2883bd21b24acec51687029f",
+    "run_four_gates.py": "0e3ec347bdea2f585030b03c8cd814a7ebad7136a6d452d52270f496ba0c55a7",
+    "native_probe_injection.py": "6d5999d37ec6679fff10c9bd82a14fd638b869c3b370d932cda242f50dd7ac6d",
+    "gate_probe_injection.py": "e0a7612fcd57b06b2b45bd92d6e936fa43d722269c14c2a455fab290a7faa4e8",
+    "catalog_gc_probe_injection.py": "de0de7bf5378df7d1701424f0f8ba85d099beacf9edbf46a021625d04102d049",
+    "sql_read_view_probe_injection.py": "dd1f8bc4bb68d72354debcfed522c21df13e6ba85febad5050ac50bcd84e2ce5",
+    "shared_transaction_native_probe.ipp": "d735db34e4a6c161fac093f822d07bf606f175e23e98ed7851c38b258ba5f4de"
+  },
+  "binaries": {
+    "seekdb-red": "edb777a64e786c69f3819373541084a925b58d936a13a66630d01e6c75fde6ee",
+    "seekdb-horizon": "6a2976624e8066ee4b01c2d75692eb9e69b1ca6e1a6a2eec048cc1f1c6815b0d",
+    "seekdb-production": "a35e6e1e95f54019fda3443c5fee015697d61e5b7da5c674fc5d122a701797d7"
+  },
+  "results": {
+    "kv_lease_and_weak_horizon": "PASS",
+    "asan_ubsan_catalog_lifetime": "PASS",
+    "replica_old_page_delete_late_read": "PASS",
+    "rr_autocommit_admission": "red reproduced without GC; fixed RR and SERIAL PASS",
+    "production_sql_views": "PASS",
+    "production_child_publication_failover": "PASS"
+  },
+  "limitations": [
+    "No forced KV minor compaction in the replayed page deletion test; native retention watermark and real historical read both verified.",
+    "Physical identity/SCN retention plan and automatic page GC not implemented.",
+    "Older bootstrap MDS 4002 remains unlocalized; no claim it is fixed.",
+    "Full goal remains incomplete; no full mysqltest/sysbench run.",
+    "Full native multi-fixture gate was not rerun; its borrowed-transaction assertion was updated to allow independently advancing weak-read horizon while remaining bounded by the attached snapshot."
+  ],
+  "commit": "ded01f924327a8dd351283be0160415fe99be57d",
+  "remote_tracking": "ded01f924327a8dd351283be0160415fe99be57d"
+}

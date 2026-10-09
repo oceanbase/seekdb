@@ -1,0 +1,47 @@
+[
+  {
+    "case": "basic",
+    "exit_code": 0,
+    "elapsed_s": 85.54
+  },
+  {
+    "case": "cascade_standby",
+    "exit_code": 255,
+    "elapsed_s": 250.36
+  },
+  {
+    "case": "one_primary_multi_standby",
+    "exit_code": 0,
+    "elapsed_s": 132.59
+  },
+  {
+    "case": "standby_restart",
+    "exit_code": 0,
+    "elapsed_s": 134.08
+  },
+  {
+    "case": "standby_sstable_replay",
+    "exit_code": 143,
+    "elapsed_s": 590.33
+  },
+  {
+    "case": "switchover_roundtrip",
+    "exit_code": 143,
+    "elapsed_s": 162.46
+  },
+  {
+    "case": "failover_switchover_reentry",
+    "exit_code": 0,
+    "elapsed_s": 107.36
+  },
+  {
+    "case": "tls_standby",
+    "exit_code": 0,
+    "elapsed_s": 111.2
+  },
+  {
+    "case": "namespace_fork_local",
+    "exit_code": 0,
+    "elapsed_s": 86.05
+  }
+]

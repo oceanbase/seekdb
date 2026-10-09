@@ -1,0 +1,15 @@
+{
+  "data_root": "/data/1/nijia.nj/test/namespace_standby_20261003_v1",
+  "project": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork",
+  "port_base": 42000,
+  "cases": [
+    "basic.test",
+    "cascade_standby.test",
+    "failover_switchover_reentry.test",
+    "one_primary_multi_standby.test",
+    "standby_restart.test",
+    "standby_sstable_replay.test",
+    "switchover_roundtrip.test",
+    "tls_standby.test"
+  ]
+}

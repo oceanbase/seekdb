@@ -1,0 +1,14 @@
+Make tablet preparation lazy and scope access protection
+
+Borrow pinned logical schemas and prepare main/LOB tablet bindings only when
+materialization actually creates storage. Reuse binding preparation within
+metadata batches and DDL dispatch rounds, avoiding full schema copies.
+
+Allow LOB readers to fill a caller-owned buffer and use it for outrow vector
+conversion. Carry the SQL session runtime into DAS and bind the session before
+DML schema preparation, including PX execution.
+
+Replace the process-wide access drain with requesting-namespace and physical
+source counts. Register resolution dependencies under the publication guard,
+retain them through native iterator/baseline lifetimes, and skip busy GC
+candidates without blocking unrelated namespace deletion.

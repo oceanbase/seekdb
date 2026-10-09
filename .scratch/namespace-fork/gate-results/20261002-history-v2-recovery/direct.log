@@ -1,0 +1,50 @@
+{"event": "setup", "binary": "/data/1/tmp/seekdb-ns-artifacts/seekdb-history-production-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_publish_recovery_initial_r_x2g695", "pid": 3929976, "port": 34553}
+{"event": "sql", "sql": "CREATE DATABASE nstrunc_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE publish_old FROM ns1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 10]]}
+{"event": "sql", "sql": "SET ob_query_timeout=10000000", "rows": []}
+{"event": "publication_state", "state": [0, 0, 1790884071128912]}
+{"event": "publication_state", "state": [0, 1790884073407456, 1790884071128912]}
+{"event": "native_ddl_committed_before_delta", "owner": "initial", "metadata": {"name": "ns1", "source": 0, "catalog_page": 0, "catalog_cap": 0, "directory_page": 0, "directory_cap": 0, "snapshot": 0, "schema_version": 1790884071128912, "snapshot_ref": 0, "parent_ref": 0, "ref_count": 0, "state": 0, "active_schema_changes": 0, "pending_schema_version": 1790884073407456, "parent_namespace": 0, "fork_cap": 0}}
+{"event": "fork_waiting_for_pending_ddl"}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-ns-artifacts/seekdb-history-production-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_publish_recovery_initial_r_x2g695", "pid": 3930451, "port": 34553}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 10]]}
+{"event": "sql", "sql": "FORK NAMESPACE publish_new FROM ns1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=v+100", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 110]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": []}
+{"event": "PASS", "case": "ddl_publish_crash_recovery", "owner": "initial", "inherited": 10, "first_write": 110, "no_phantom_fork_or_pin": true, "tombstone": {"table_id": 500003, "kind": 1, "drop_scn": 1790884082102667041, "was_owned": 1, "create_scn": 1790884071148594016}}
+{"event": "stopped", "pid": 3930451, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_publish_recovery_initial_r_x2g695/data.tar.gz", "bytes": 3278933}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/data/1/tmp/seekdb-ns-artifacts/seekdb-history-production-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_publish_recovery_child_8fr8z01n", "pid": 3930697, "port": 57045}
+{"event": "sql", "sql": "CREATE DATABASE nstrunc_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE publish_owner FROM ns1", "rows": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=20", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE publish_old FROM publish_owner", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 20]]}
+{"event": "sql", "sql": "SET ob_query_timeout=10000000", "rows": []}
+{"event": "publication_state", "state": [0, 0, 1790884089150832]}
+{"event": "publication_state", "state": [0, 1790884091649448, 1790884089150832]}
+{"event": "native_ddl_committed_before_delta", "owner": "child", "metadata": {"name": "publish_owner", "source": 0, "catalog_page": 0, "catalog_cap": 1790884091229884033, "directory_page": 0, "directory_cap": 1790884091229884033, "snapshot": 1790884091229884033, "schema_version": 1790884089150832, "snapshot_ref": 1790884091229884033, "parent_ref": 0, "ref_count": 0, "state": 0, "active_schema_changes": 0, "pending_schema_version": 1790884091649448, "parent_namespace": 1, "fork_cap": 1790884091229884033}}
+{"event": "fork_waiting_for_pending_ddl"}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-ns-artifacts/seekdb-history-production-v2", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_publish_recovery_child_8fr8z01n", "pid": 3932344, "port": 57045}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 20]]}
+{"event": "stopped", "pid": 3932344, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_publish_recovery_child_8fr8z01n/data.tar.gz", "bytes": 3286489}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/fork_ddl_publish_recovery_probe.py", line 127, in <module>
+    run(args.binary, args.owner)
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/fork_ddl_publish_recovery_probe.py", line 101, in run
+    assert owner_state['active_schema_changes'] == owner_state['pending_schema_version'] == 0, owner_state
+AssertionError: {'name': 'publish_owner', 'source': 0, 'catalog_page': 0, 'catalog_cap': 1790884091229884033, 'directory_page': 0, 'directory_cap': 1790884091229884033, 'snapshot': 1790884091229884033, 'schema_version': 1790884089150832, 'snapshot_ref': 1790884091229884033, 'parent_ref': 0, 'ref_count': 0, 'state': 0, 'active_schema_changes': 0, 'pending_schema_version': 9223372036854775807, 'parent_namespace': 1, 'fork_cap': 1790884091229884033}

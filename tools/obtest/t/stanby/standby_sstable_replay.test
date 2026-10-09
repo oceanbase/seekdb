@@ -58,7 +58,9 @@ while($__i__ > 0)
 
 db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN, 1, 30;
 let $primary_sstable_scn = deploy_get_value(db_p.select select LAST_SCN from oceanbase.DBA_OB_MAJOR_COMPACTION, LAST_SCN, 1);
-let $bootstrap_tablet_id = deploy_get_value(db_p.select select tablet_id from oceanbase.__all_table where table_name = 'test_bootstrap_sstable_replay' limit 1, tablet_id, 1);
+# This fixture runs in Namespace 1. SQL schema IDs remain logical;
+# V$OB_SSTABLES exposes the physical address in the shared storage engine.
+let $bootstrap_tablet_id = deploy_get_value(db_p.select select ((1 << 62) | (1 << 37) | tablet_id) as tablet_id from oceanbase.__all_table where table_name = 'test_bootstrap_sstable_replay' limit 1, tablet_id, 1);
 db_p.check_until_timeout select count(*) > 0 from oceanbase.V\$OB_SSTABLES where tablet_id = $bootstrap_tablet_id and table_type in ('MAJOR', 'CO_MAJOR') and end_log_scn = $primary_sstable_scn, 1, 120;
 
 --enable_query_log

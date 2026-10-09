@@ -1,0 +1,27 @@
+{"event": "setup", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_kv_startup_30s_7f5i0qwm", "pid": 3711029, "port": 58609}
+{"event": "sql", "sql": "SELECT 1", "rows": [[1]]}
+{"event": "sql", "sql": "CREATE DATABASE kvsmoke", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE kvsmoke.t(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO kvsmoke.t VALUES (1, 42)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE kvsmoke_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM kvsmoke.t WHERE id=1", "rows": [[42]]}
+{"event": "PASS", "elapsed_limit_s": 30}
+{"event": "stopped", "pid": 3711029, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_kv_startup_30s_7f5i0qwm/data.tar.gz", "bytes": 3266268}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_bootstrap_djt3t9w1", "pid": 3711370, "port": 56051}
+{"event": "stopped", "pid": 3711370, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_bootstrap_djt3t9w1/data.tar.gz", "bytes": 3297006}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_worker_bootstrap_prototype.py", line 52, in <module>
+    main()
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_worker_bootstrap_prototype.py", line 48, in main
+    run_case(args.binary, "bootstrap")
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_inprocess_prototype.py", line 1072, in run_case
+    experiment.start()
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_worker_bootstrap_prototype.py", line 37, in start
+    raise TimeoutError((str(self.base), last_error))
+TimeoutError: ('/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_bootstrap_djt3t9w1', OperationalError(2013, 'Lost connection to MySQL server during query'))

@@ -1,0 +1,7 @@
+Usage: ./copy.sh [-l] [oceanbase_dev_dir]
+Usage: -l means only copy local bin, ship copy  8877 files
+Usage: -n name means compile, copy and run case name, ship copy  8877 files
+Usage: -j set compile concurrency
+only copy local bins
+libtool: install: cp /home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/tools/obtest/../../build_release/src/observer/seekdb /home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/tools/obtest/bin/observer
+do not get ob_admin anymore

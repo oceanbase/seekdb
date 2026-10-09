@@ -1,0 +1,44 @@
+{
+  "baseline": "a73ae2b0c066963a43bfdd6fb76ab7c89f0a8a5d",
+  "production_binary": "/data/1/tmp/seekdb-tablet-preparation/seekdb-production-v4",
+  "production_sha256": "c137225798554488b3c7de5a54133fe72266a87370d5c4e140e3eb983c240702",
+  "probe_binary": "/data/1/tmp/seekdb-tablet-preparation/seekdb-probe-v3",
+  "probe_sha256": "76f84e52bef7399bc7a9949c25c42f725eec34100f281d55c52f2bceb493888f",
+  "source_manifest": "tablet-preparation-production-v4.json",
+  "gates": {
+    "bootstrap": {
+      "result": "PASS",
+      "log": "gate-results/tablet-preparation-final-v4/bootstrap.log"
+    },
+    "sql": {
+      "result": "PASS",
+      "log": "gate-results/tablet-preparation-final-v4/sql.log"
+    },
+    "tls": {
+      "result": "PASS",
+      "log": "gate-results/tablet-preparation-final-v4/tls.log"
+    },
+    "bootstrap-native-kv": {
+      "result": "PASS",
+      "log": "gate-results/tablet-preparation-final-v4/bootstrap-native-kv.log"
+    },
+    "direct": {
+      "result": "PASS",
+      "log": "gate-results/tablet-preparation-final-v4-retry/direct.log"
+    }
+  },
+  "instrumented": {
+    "result": "PASS",
+    "log": "/tmp/seekdb-tablet-preparation-instrumented-3.log"
+  },
+  "known_preexisting_failure": "bootstrap MDS relative timeout addition can overflow INT64_MAX; retained as separate TODO",
+  "production_files": 26,
+  "committed_tests_or_docs": false,
+  "pr_created": false,
+  "commit": "a11059085249f624c0a69ad7bce5543f954f62ab",
+  "branch": "codex/namespace-worker-proxy-v20",
+  "production_final_probe": {
+    "result": "PASS",
+    "log": "/tmp/seekdb-tablet-preparation-production-final.log"
+  }
+}

@@ -1,0 +1,316 @@
+{
+  "bootstrap-native-kv": {
+    "sha256": "c8ef3054bb5df6fdf09b8bf7d87ae4a0059de7939fee3782c0465fc9c8304a17",
+    "events": [
+      {
+        "event": "native_kv_verified",
+        "recovered": false,
+        "typed_records": true,
+        "pin_reload": true,
+        "durable_phase": "created"
+      },
+      {
+        "event": "native_kv_verified",
+        "recovered": true,
+        "typed_records": true,
+        "pin_reload": true,
+        "durable_phase": "marked"
+      },
+      {
+        "event": "native_kv_verified",
+        "recovered": true,
+        "typed_records": true,
+        "pin_reload": true,
+        "durable_phase": "finished"
+      },
+      {
+        "event": "native_kv_verified",
+        "recovered": true,
+        "typed_records": true,
+        "pin_reload": true,
+        "durable_phase": "verified"
+      },
+      {
+        "event": "PASS",
+        "case": "instance_meta_native",
+        "rollback": true,
+        "cross_collection": true,
+        "duplicate_key": true,
+        "own_writes": true,
+        "snapshot": true,
+        "locked_current_read": true,
+        "binary_value_60000": true,
+        "key_512": true,
+        "value_65536": true,
+        "binary_bounds": true,
+        "scan": true,
+        "erase": true,
+        "snapshot_across_minor": true,
+        "writer_conflict": true,
+        "typed_records": true,
+        "catalog_tree": true,
+        "lineage": true,
+        "snapshot_pin": true,
+        "gc_watermark": true,
+        "pin_reload": true,
+        "crash_recovery": true,
+        "durable_fork_drop": true
+      }
+    ]
+  },
+  "bootstrap": {
+    "sha256": "776e7b3535f7532a7df1b5a1928c0d07d7e80b350ff0c4d5eb1b23f78cb05384",
+    "events": [
+      {
+        "event": "PASS",
+        "elapsed_limit_s": 30
+      },
+      {
+        "event": "PASS",
+        "case": "inprocess_bootstrap",
+        "one_process": true,
+        "child_login": true,
+        "inherited_read": true,
+        "empty_namespace": true,
+        "template_restart": true
+      }
+    ]
+  },
+  "sql": {
+    "sha256": "83f4568bc8c9ae3ef25e1fe215f15762dadb65956143df93e6fa539ec571a6eb",
+    "events": [
+      {
+        "event": "PASS",
+        "case": "inprocess_sql",
+        "transactions": true,
+        "index": true,
+        "nested_fork": true,
+        "restart": true
+      }
+    ]
+  },
+  "direct": {
+    "sha256": "82074e09782586b8c5e517135037262b87bfdd8bcbd4b9cf2a01cde4ab1d6b87",
+    "events": [
+      {
+        "event": "PASS",
+        "elapsed_limit_s": 30
+      },
+      {
+        "event": "PASS",
+        "case": "exchange_mapping"
+      },
+      {
+        "event": "PASS",
+        "case": "ddl_physical_drop",
+        "tablet": 4611686430744448321,
+        "storage": [
+          [
+            3,
+            1,
+            1
+          ]
+        ]
+      },
+      {
+        "event": "PASS",
+        "case": "fork_parent_truncate",
+        "results": [
+          true
+        ],
+        "materialize_parent": false,
+        "materialize_child": false,
+        "prime_parent_schema": false
+      },
+      {
+        "event": "PASS",
+        "case": "fork_parent_truncate",
+        "results": [
+          true
+        ],
+        "materialize_parent": false,
+        "materialize_child": true,
+        "prime_parent_schema": true
+      },
+      {
+        "event": "PASS",
+        "case": "fork_parent_truncate",
+        "results": [
+          true
+        ],
+        "materialize_parent": false,
+        "materialize_child": false,
+        "prime_parent_schema": true
+      },
+      {
+        "event": "PASS",
+        "case": "fork_parent_truncate",
+        "results": [
+          true
+        ],
+        "materialize_parent": true,
+        "materialize_child": false,
+        "prime_parent_schema": true
+      },
+      {
+        "event": "PASS",
+        "case": "fork_parent_truncate",
+        "results": [
+          true
+        ],
+        "materialize_parent": true,
+        "materialize_child": false,
+        "prime_parent_schema": false
+      },
+      {
+        "event": "PASS",
+        "case": "fork_parent_truncate",
+        "results": [
+          true
+        ],
+        "materialize_parent": false,
+        "materialize_child": false,
+        "prime_parent_schema": false
+      },
+      {
+        "event": "PASS",
+        "case": "historical_gc_restart_release",
+        "physical": [],
+        "all_old_tablets_removed": true,
+        "retired_pins_removed": true
+      },
+      {
+        "event": "release_survived_restart",
+        "physical": [],
+        "retired_snapshots": [
+          1790886040480441031,
+          1790886040651514005
+        ]
+      },
+      {
+        "event": "PASS",
+        "case": "historical_gc_restart_release",
+        "physical": [],
+        "all_old_tablets_removed": true,
+        "retired_pins_removed": true
+      },
+      {
+        "event": "fork_and_gc_respected_materialization_boundary",
+        "source": [
+          [
+            4611686430744448321,
+            3,
+            1,
+            0
+          ]
+        ],
+        "fork_requested_retry": true
+      },
+      {
+        "event": "PASS",
+        "case": "historical_materialize_fork_gc_interleaving",
+        "fork_rows": [
+          [
+            1,
+            120
+          ]
+        ]
+      },
+      {
+        "event": "descendant_read_before_owner_login",
+        "inherited": 10
+      },
+      {
+        "event": "PASS",
+        "case": "ddl_publish_crash_recovery",
+        "owner": "initial",
+        "inherited": 10,
+        "first_write": 110,
+        "no_phantom_fork_or_pin": true,
+        "tombstone": {
+          "table_id": 500003,
+          "kind": 1,
+          "drop_scn": 1790886113481692441,
+          "was_owned": 1,
+          "create_scn": 1790886103144055017
+        }
+      },
+      {
+        "event": "descendant_read_before_owner_login",
+        "inherited": 20
+      },
+      {
+        "event": "PASS",
+        "case": "ddl_publish_crash_recovery",
+        "owner": "child",
+        "inherited": 20,
+        "first_write": 120,
+        "no_phantom_fork_or_pin": true,
+        "tombstone": {
+          "table_id": 500003,
+          "kind": 1,
+          "drop_scn": 1790886133845726145,
+          "was_owned": 1,
+          "create_scn": 1790886125491976008
+        }
+      },
+      {
+        "event": "PASS",
+        "case": "inprocess_direct",
+        "ddl": true,
+        "partition": true,
+        "index": true,
+        "lob": true,
+        "fulltext": true,
+        "ivf": true,
+        "ivf_pq": true,
+        "ivf_sq8": true,
+        "empty_hnsw": true,
+        "source_drop": true,
+        "ddl_redefinition": true,
+        "check_constraint": true,
+        "auto_increment": true,
+        "fork_table": true,
+        "cache_lifecycle": true,
+        "interrupted_heap_recovery": true,
+        "restart": true
+      }
+    ]
+  },
+  "tls": {
+    "sha256": "2547c2dc1b864c61f44ca037ec13ce7c0a9e4ab2531f90af0d6e297a4542be7b",
+    "events": [
+      {
+        "event": "PASS",
+        "case": "inprocess_tls",
+        "protocol": "TLSv1.3",
+        "child_login": true
+      }
+    ]
+  },
+  "source": {
+    "base": "f2b9c159abe566d20e6efc0fcd4ecf1ee05b761e",
+    "diff_sha256": "dccd161b13a6afc02f9320b297d7de7ce559a589e78cf57c88241aa165ad247b",
+    "files": [
+      "src/observer/namespace_worker_inprocess_prototype.ipp",
+      "src/observer/namespace_worker_protocol_prototype.h",
+      "src/rootserver/fork_table/instance_namespace_metadata.cpp",
+      "src/rootserver/fork_table/instance_namespace_metadata.h",
+      "src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp",
+      "src/rootserver/fork_table/namespace_fork_kernel_prototype.h",
+      "src/rootserver/ob_ddl_service.cpp",
+      "src/rootserver/ob_ddl_service.h",
+      "src/storage/ddl/ob_tablet_fork_task.cpp",
+      "src/storage/tx_storage/ob_empty_shell_task.cpp"
+    ]
+  },
+  "delivery": {
+    "commit": "50557ddbe3f3956afa2b71addbfcf15d380738d6",
+    "remote_commit": "50557ddbe3f3956afa2b71addbfcf15d380738d6",
+    "branch": "codex/namespace-worker-proxy-v20",
+    "code_only": true,
+    "pr_created": false
+  },
+  "production_binary_sha256": "f42338fa16bcfc94dc4dffecb1b25977608c8f79e7227718085fedc56cfd2e35",
+  "native_binary_sha256": "1a7de2d47d60cc9e826c22381a8d50506107da24ccc2ca33e4af2fa932adfc0f"
+}

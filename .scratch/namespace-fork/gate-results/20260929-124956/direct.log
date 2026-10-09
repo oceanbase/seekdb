@@ -1,0 +1,59 @@
+{"event": "setup", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_kv_startup_30s_wer5zf6q", "pid": 3752151, "port": 42455}
+{"event": "sql", "sql": "SELECT 1", "rows": [[1]]}
+{"event": "sql", "sql": "CREATE DATABASE kvsmoke", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE kvsmoke.t(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO kvsmoke.t VALUES (1, 42)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE kvsmoke_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM kvsmoke.t WHERE id=1", "rows": [[42]]}
+{"event": "sql", "sql": "UPDATE kvsmoke.t SET v=43 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM kvsmoke.t WHERE id=1", "rows": [[43]]}
+{"event": "child_physical", "tablet": 4611686430744448321, "row": [4611686430744448321, 1, 1, 0]}
+{"event": "sql", "sql": "DROP NAMESPACE kvsmoke_child", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM kvsmoke.t WHERE id=1", "rows": [[42]]}
+{"event": "gc_complete", "tablet": 4611686430744448321, "rows": [[4611686430744448321, 3, 1, 1]]}
+{"event": "PASS", "elapsed_limit_s": 30}
+{"event": "stopped", "pid": 3752151, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_kv_startup_30s_wer5zf6q/data.tar.gz", "bytes": 3274286}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_exchange_mapping_bim706ll", "pid": 3752706, "port": 12995}
+{"event": "sql", "sql": "FORK NAMESPACE exchange_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "CREATE DATABASE x", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE x.parts(id INT PRIMARY KEY, v INT) PARTITION BY RANGE(id) (PARTITION p0 VALUES LESS THAN (10), PARTITION p1 VALUES LESS THAN (MAXVALUE))", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE x.plain(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO x.parts VALUES(1,11),(11,111)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO x.plain VALUES(2,22)", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE x.parts EXCHANGE PARTITION p0 WITH TABLE x.plain WITHOUT VALIDATION", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM x.parts ORDER BY id", "rows": [[2, 22], [11, 111]]}
+{"event": "sql", "sql": "SELECT id,v FROM x.plain", "rows": [[1, 11]]}
+{"event": "PASS", "case": "exchange_mapping"}
+{"event": "stopped", "pid": 3752706, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_exchange_mapping_bim706ll/data.tar.gz", "bytes": 3289093}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_physical_drop_nfhh1h3l", "pid": 3753025, "port": 11551}
+{"event": "sql", "sql": "FORK NAMESPACE ddl_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "CREATE DATABASE ddl_db", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE ddl_db.t(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO ddl_db.t VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "SELECT tablet_id FROM oceanbase.__all_table WHERE table_name='t'", "rows": [[200001]]}
+{"event": "sql", "sql": "DROP TABLE ddl_db.t", "rows": []}
+{"event": "PASS", "case": "ddl_physical_drop", "tablet": 4611686430744448321, "storage": [[3, 1, 1]]}
+{"event": "stopped", "pid": 3753025, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_physical_drop_nfhh1h3l/data.tar.gz", "bytes": 3285224}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_direct_oiq56y_s", "pid": 3753474, "port": 11241}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_direct_oiq56y_s/data.tar.gz", "bytes": 1763670}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_worker_direct_prototype.py", line 20, in <module>
+    main()
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_worker_direct_prototype.py", line 16, in main
+    run_case(args.binary, "tls" if args.case == "tls" else "direct")
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_inprocess_prototype.py", line 1072, in run_case
+    experiment.start()
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_worker_bootstrap_prototype.py", line 28, in start
+    raise RuntimeError(f"bootstrap exited ({self.proc.returncode}): {self.base}")
+RuntimeError: bootstrap exited (1): /data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_direct_oiq56y_s

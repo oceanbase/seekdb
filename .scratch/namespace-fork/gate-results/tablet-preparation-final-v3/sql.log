@@ -1,0 +1,67 @@
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-preparation/seekdb-production-v3", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_sql_f3j1b8f9", "pid": 2852863, "port": 60517}
+{"event": "sql", "sql": "CREATE DATABASE phase10", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.parent(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.parent VALUES(1,10),(2,20)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE phase10_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM phase10.parent ORDER BY id", "rows": [[1, 10], [2, 20]]}
+{"event": "sql", "sql": "SELECT CURRENT_SCN()", "rows": [[1790964737165499000]]}
+{"event": "sql", "sql": "SELECT variable_value FROM INFORMATION_SCHEMA.GLOBAL_VARIABLES WHERE variable_name='optimizer_switch'", "rows": [[""]]}
+{"event": "sql", "sql": "SHOW VARIABLES LIKE 'optimizer_dynamic_sampling'", "rows": [["optimizer_dynamic_sampling", "1"]]}
+{"event": "sql", "sql": "SHOW GLOBAL VARIABLES LIKE 'optimizer_dynamic_sampling'", "rows": [["optimizer_dynamic_sampling", "1"]]}
+{"event": "sql", "sql": "SET optimizer_switch = (SELECT variable_value FROM INFORMATION_SCHEMA.GLOBAL_VARIABLES WHERE variable_name='optimizer_switch')", "rows": []}
+{"event": "sql", "sql": "CREATE NAMESPACE phase10_fresh", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.owned(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.owned VALUES(1,11),(2,22)", "rows": []}
+{"event": "sql", "sql": "CREATE USER 'phase10_revoke_probe'@'%' IDENTIFIED BY 'ProbePass9!'", "rows": []}
+{"event": "sql", "sql": "GRANT SUPER ON *.* TO 'phase10_revoke_probe'@'%'", "rows": []}
+{"event": "sql", "sql": "REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'phase10_revoke_probe'@'%'", "rows": []}
+{"event": "sql", "sql": "SET NAMES utf8mb4", "rows": []}
+{"event": "sql", "sql": "SELECT CURRENT_USER()", "rows": [["root@%"]]}
+{"event": "sql", "sql": "CREATE VIEW phase10.owned_view AS SELECT id,v FROM phase10.owned", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM phase10.owned_view WHERE id=2", "rows": [[22]]}
+{"event": "sql", "sql": "CREATE OR REPLACE VIEW phase10.owned_view AS SELECT id,v+1 AS next_v FROM phase10.owned", "rows": []}
+{"event": "sql", "sql": "SELECT next_v FROM phase10.owned_view WHERE id=2", "rows": [[23]]}
+{"event": "sql", "sql": "CREATE INDEX owned_v ON phase10.owned(v)", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM phase10.owned FORCE INDEX(owned_v) WHERE v=22", "rows": [[2]]}
+{"event": "sql", "sql": "BEGIN", "rows": []}
+{"event": "sql", "sql": "UPDATE phase10.owned SET v=99 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM phase10.owned WHERE id=1", "rows": [[11]]}
+{"event": "sql", "sql": "ROLLBACK", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM phase10.owned WHERE id=1", "rows": [[11]]}
+{"event": "sql", "sql": "CREATE PROCEDURE phase10.count_owned(OUT n INT) BEGIN SELECT COUNT(*) INTO n FROM phase10.owned; END", "rows": []}
+{"event": "sql", "sql": "SET @owned_count=0", "rows": []}
+{"event": "sql", "sql": "CALL phase10.count_owned(@owned_count)", "rows": []}
+{"event": "sql", "sql": "SELECT @owned_count", "rows": [[2]]}
+{"event": "sql", "sql": "CREATE PROCEDURE phase10.sum_owned(INOUT total INT) BEGIN DECLARE done INT DEFAULT 0; DECLARE value INT; DECLARE cur CURSOR FOR SELECT v FROM phase10.owned FOR UPDATE; DECLARE CONTINUE HANDLER FOR NOT FOUND SET done=1; OPEN cur; loop1: LOOP FETCH cur INTO value; IF done THEN LEAVE loop1; END IF; SET total=total+value; END LOOP; CLOSE cur; END", "rows": []}
+{"event": "sql", "sql": "SET @owned_total=0", "rows": []}
+{"event": "sql", "sql": "BEGIN", "rows": []}
+{"event": "sql", "sql": "CALL phase10.sum_owned(@owned_total)", "rows": []}
+{"event": "sql", "sql": "SELECT @owned_total", "rows": [[33]]}
+{"event": "sql", "sql": "COMMIT", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.ds_left(a INT PRIMARY KEY)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.ds_right(a INT PRIMARY KEY)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.parent VALUES(3,30)", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM phase10.parent", "rows": [[2]]}
+{"event": "sql", "sql": "UPDATE phase10.parent SET v=30 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM phase10.parent WHERE id=1", "rows": [[10]]}
+{"event": "sql", "sql": "FORK NAMESPACE phase10_grandchild FROM phase10_child", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM phase10.parent WHERE id=1", "rows": [[30]]}
+{"event": "sql", "sql": "SELECT SUM(v) FROM phase10.owned", "rows": [["33"]]}
+{"event": "sql", "sql": "SHOW DATABASES", "rows": [["information_schema"], ["mysql"], ["oceanbase"], ["test"]]}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-preparation/seekdb-production-v3", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_sql_f3j1b8f9", "pid": 2853469, "port": 60517}
+{"event": "sql", "sql": "SELECT SUM(v) FROM phase10.owned", "rows": [["33"]]}
+{"event": "sql", "sql": "SELECT v FROM phase10.parent WHERE id=1", "rows": [[30]]}
+{"event": "sql", "sql": "SHOW DATABASES", "rows": [["information_schema"], ["mysql"], ["oceanbase"], ["test"]]}
+{"event": "sql", "sql": "ALTER TABLE phase10.parent ADD COLUMN note INT DEFAULT 7", "rows": []}
+{"event": "sql", "sql": "PREPARE ns_ps FROM 'SELECT * FROM phase10.parent WHERE id=1'", "rows": []}
+{"event": "sql", "sql": "PREPARE ns_ps FROM 'SELECT * FROM phase10.parent WHERE id=1'", "rows": []}
+{"event": "sql", "sql": "EXECUTE ns_ps", "rows": [[1, 30]]}
+{"event": "sql", "sql": "EXECUTE ns_ps", "rows": [[1, 30, 7]]}
+{"event": "sql", "sql": "DEALLOCATE PREPARE ns_ps", "rows": []}
+{"event": "sql", "sql": "DEALLOCATE PREPARE ns_ps", "rows": []}
+{"event": "inprocess_sql_latency", "parent_us": 130.642, "child_us": 101.357}
+{"event": "PASS", "case": "inprocess_sql", "transactions": true, "index": true, "nested_fork": true, "restart": true}
+{"event": "stopped", "pid": 2853469, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_sql_f3j1b8f9/data.tar.gz", "bytes": 3399790}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

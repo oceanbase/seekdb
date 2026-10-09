@@ -1,0 +1,36 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/source-gc-artifacts/seekdb-production", "base": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_detached_restart_e9ybvrbx", "pid": 3771398, "port": 45285}
+{"event": "sql", "sql": "CREATE DATABASE detach_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE detach_repro.plain(id INT PRIMARY KEY,v INT,KEY idx_v(v))", "rows": []}
+{"event": "sql", "sql": "INSERT INTO detach_repro.plain VALUES(1,10),(2,20),(3,30),(4,40),(5,50),(6,60),(7,70),(8,80)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE detach_repro.lob(id INT PRIMARY KEY,v INT, body LONGTEXT,KEY idx_v(v))", "rows": []}
+{"event": "sql", "sql": "INSERT INTO detach_repro.lob VALUES(1,10,REPEAT('payload-1-',4096)),(2,20,REPEAT('payload-2-',4096)),(3,30,REPEAT('payload-3-',4096)),(4,40,REPEAT('payload-4-',4096)),(5,50,REPEAT('payload-5-',4096)),(6,60,REPEAT('payload-6-',4096)),(7,70,REPEAT('payload-7-',4096)),(8,80,REPEAT('payload-8-',4096))", "rows": []}
+{"event": "sql", "sql": "SELECT table_name,table_id,tablet_id FROM oceanbase.__all_table WHERE database_id=(SELECT database_id FROM oceanbase.__all_database WHERE database_name='detach_repro') AND tablet_id>0 ORDER BY table_id", "rows": [["plain", 500003, 200001], ["__idx_500003_idx_v", 500004, 200002], ["lob", 500005, 200003], ["__idx_500005_idx_v", 500006, 200004], ["__AUX_LOB_META_500007_", 500007, 200005], ["__AUX_LOB_PIECE_500008_", 500008, 200006]]}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "source_dumped", "sstables": [[4611686155866541377, "MAJOR"], [4611686155866541377, "MINI"], [4611686155866541377, "DDL_MEM_MINI_SSTABLE"], [4611686155866541379, "MAJOR"], [4611686155866541379, "MINI"], [4611686155866541379, "DDL_MEM_MINI_SSTABLE"]]}
+{"event": "sql", "sql": "UPDATE detach_repro.plain SET v=800 WHERE id=8", "rows": []}
+{"event": "sql", "sql": "UPDATE detach_repro.lob SET v=800 WHERE id=8", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE detach_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "UPDATE detach_repro.plain SET v=8000 WHERE id=8", "rows": []}
+{"event": "sql", "sql": "UPDATE detach_repro.lob SET v=8000 WHERE id=8", "rows": []}
+{"event": "sql", "sql": "UPDATE detach_repro.plain SET v=v+1", "rows": []}
+{"event": "sql", "sql": "UPDATE detach_repro.lob SET v=v+1", "rows": []}
+{"event": "sql", "sql": "UPDATE detach_repro.lob SET body=REPEAT('child-replacement-',4096) WHERE id=2", "rows": []}
+{"event": "child_materialized", "schemas": [["plain", 500003, 200001], ["__idx_500003_idx_v", 500004, 200002], ["lob", 500005, 200003], ["__idx_500005_idx_v", 500006, 200004], ["__AUX_LOB_META_500007_", 500007, 200005], ["__AUX_LOB_PIECE_500008_", 500008, 200006]], "physical": [[4611686155866541377, 1, 1, 0], [4611686155866541378, 1, 1, 0], [4611686155866541379, 1, 1, 0], [4611686155866541380, 1, 1, 0], [4611686155866541381, 1, 1, 0], [4611686155866541382, 1, 1, 0], [4611686430744448321, 1, 1, 0], [4611686430744448322, 1, 1, 0], [4611686430744448323, 1, 1, 0], [4611686430744448324, 1, 1, 0], [4611686430744448325, 1, 1, 0], [4611686430744448326, 1, 1, 0]]}
+{"event": "sql", "sql": "DROP TABLE detach_repro.plain", "rows": []}
+{"event": "sql", "sql": "DROP TABLE detach_repro.lob", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "source_gc_progress", "physical": [[4611686155866541377, 3, 1, 0], [4611686155866541378, 3, 1, 0], [4611686155866541379, 3, 1, 0], [4611686155866541380, 3, 1, 0], [4611686155866541381, 3, 1, 0], [4611686155866541382, 3, 1, 0]]}
+{"event": "source_gc_progress", "physical": [[4611686155866541377, 3, 1, 0], [4611686155866541378, 3, 1, 0], [4611686155866541379, 3, 1, 0], [4611686155866541380, 3, 1, 0], [4611686155866541381, 3, 1, 1], [4611686155866541382, 3, 1, 1]]}
+{"event": "source_gc_progress", "physical": [[4611686155866541377, 3, 1, 0], [4611686155866541378, 3, 1, 0], [4611686155866541379, 3, 1, 0], [4611686155866541380, 3, 1, 0]]}
+{"event": "source_gc_progress", "physical": [[4611686155866541377, 3, 1, 1], [4611686155866541378, 3, 1, 1], [4611686155866541379, 3, 1, 1], [4611686155866541380, 3, 1, 1]]}
+{"event": "source_gc_progress", "physical": []}
+{"event": "rewrite_path_observed", "count": 4, "evidence": ["[2026-10-08 17:02:40.438387] INFO  [STORAGE] process (ob_tablet_fork_task.cpp:968) [3771730][T1_DDL_FORK_TAB][YB427F000001-00065D507E43FB7D-0-0] [lt=66] fork rewrite: successfully created sstable(sstable_->get_key()={tablet_id:{id:4611686155866541380}, slice_range:{start_slice_idx:0, end_slice_idx:0}, table_type:\"MINI\", scn_range:{start_scn:{val:1791450153172788001, v:0}, end_scn:{val:1791450156496463004, v:0}}}, param_->dest_tablet_id_={id:4611686430744448324}, max_end_scn={val:1791450155766537025, v:0}, param_->fork_snapshot_version_=1791450155766537025)", "[2026-10-08 17:02:40.440872] INFO  [STORAGE] process (ob_tablet_fork_task.cpp:968) [3771727][T1_DDL_FORK_TAB][YB427F000001-00065D507E43FB7E-0-0] [lt=173] fork rewrite: successfully created sstable(sstable_->get_key()={tablet_id:{id:4611686155866541378}, slice_range:{start_slice_idx:0, end_slice_idx:0}, table_type:\"MINI\", scn_range:{start_scn:{val:1791450153172788001, v:0}, end_scn:{val:1791450156496463004, v:0}}}, param_->dest_tablet_id_={id:4611686430744448322}, max_end_scn={val:1791450155766537025, v:0}, param_->fork_snapshot_version_=1791450155766537025)"]}
+{"event": "sources_absent_child_alive", "physical": [], "child_physical": [[4611686430744448321, 1, 1, 0], [4611686430744448322, 1, 1, 0], [4611686430744448323, 1, 1, 0], [4611686430744448324, 1, 1, 0], [4611686430744448325, 1, 1, 0], [4611686430744448326, 1, 1, 0]], "retained_pin": [{"snapshot_id": "1791450155766537025"}]}
+{"event": "crash_after_source_reclamation", "returncode": -9}
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/source-gc-artifacts/seekdb-production", "base": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_detached_restart_e9ybvrbx", "pid": 3772389, "port": 45285}
+{"event": "sql", "sql": "UPDATE detach_repro.lob SET body=CONCAT(body,'-after-restart') WHERE id=1", "rows": []}
+{"event": "PASS", "case": "detached_child_restart_plain_index_lob", "physical_sources": [], "child_alive": true, "post_restart_write": true, "pin_retained": true, "mixed_source": true}
+{"event": "stopped", "pid": 3772389, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_detached_restart_e9ybvrbx/data.tar.gz", "bytes": 4331101}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

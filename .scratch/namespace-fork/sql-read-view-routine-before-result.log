@@ -1,0 +1,39 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/sql-read-view-artifacts/seekdb-instrumented", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_sql_view_routine_jgnyfofo", "pid": 3514336, "port": 40865}
+{"event": "sql", "sql": "CREATE DATABASE routines", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE routines.t(id INT PRIMARY KEY)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO routines.t VALUES(1)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE routine_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=10000000", "rows": []}
+{"event": "stopped", "pid": 3514336, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_sql_view_routine_jgnyfofo/data.tar.gz", "bytes": 3406403}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 789, in _read_bytes
+    data = self._rfile.read(num_bytes)
+  File "/usr/lib64/python3.8/socket.py", line 669, in readinto
+    return self._sock.recv_into(b)
+socket.timeout: timed out
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File ".scratch/namespace-fork/sql_read_view_routine_probe.py", line 13, in <module>
+    e.sql('CREATE PROCEDURE routines.p() BEGIN SELECT SUM(id) FROM routines.t; SELECT COUNT(*) FROM routines.t; END',c)
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_fork_prototype.py", line 116, in sql
+    cur.execute(statement)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/cursors.py", line 153, in execute
+    result = self._query(query)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/cursors.py", line 322, in _query
+    conn.query(q)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 575, in query
+    self._affected_rows = self._read_query_result(unbuffered=unbuffered)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 826, in _read_query_result
+    result.read()
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 1203, in read
+    first_packet = self.connection._read_packet()
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 751, in _read_packet
+    packet_header = self._read_bytes(4)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 795, in _read_bytes
+    raise err.OperationalError(
+pymysql.err.OperationalError: (2013, 'Lost connection to MySQL server during query (timed out)')

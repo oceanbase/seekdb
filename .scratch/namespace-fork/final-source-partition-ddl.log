@@ -1,0 +1,29 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/background-materialization-artifacts/seekdb-copy-view-final", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_catalog_schema_vbf45l8l", "pid": 2142809, "port": 62993}
+{"event": "sql", "sql": "CREATE DATABASE catalog_ddl", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE catalog_ddl.t(id INT PRIMARY KEY,v INT,b LONGTEXT) PARTITION BY HASH(id) PARTITIONS 8", "rows": []}
+{"event": "sql", "sql": "INSERT INTO catalog_ddl.t VALUES(1,10,REPEAT('x',12000))", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE catalog_owner FROM ns1", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE catalog_old FROM catalog_owner", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE catalog_ddl.t COMMENT='cold description change'", "rows": []}
+{"event": "case_pass", "statement": "ALTER TABLE catalog_ddl.t COMMENT='cold description change'", "tablets": 24}
+{"event": "sql", "sql": "ALTER TABLE catalog_ddl.t ADD COLUMN extra INT DEFAULT 7", "rows": []}
+{"event": "case_pass", "statement": "ALTER TABLE catalog_ddl.t ADD COLUMN extra INT DEFAULT 7", "tablets": 24}
+{"event": "sql", "sql": "CREATE INDEX by_v ON catalog_ddl.t(v)", "rows": []}
+{"event": "case_pass", "statement": "CREATE INDEX by_v ON catalog_ddl.t(v)", "tablets": 32}
+{"event": "sql", "sql": "DROP INDEX by_v ON catalog_ddl.t", "rows": []}
+{"event": "case_pass", "statement": "DROP INDEX by_v ON catalog_ddl.t", "tablets": 24}
+{"event": "sql", "sql": "TRUNCATE TABLE catalog_ddl.t", "rows": []}
+{"event": "case_pass", "statement": "TRUNCATE TABLE catalog_ddl.t", "tablets": 24}
+{"event": "sql", "sql": "DROP TABLE catalog_ddl.t", "rows": []}
+{"event": "case_pass", "statement": "DROP TABLE catalog_ddl.t", "tablets": 0}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM catalog_ddl.t", "rows": [[1, 10, 12000]]}
+{"event": "sql", "sql": "CREATE TABLE catalog_ddl.parallel_1(id INT PRIMARY KEY,b LONGTEXT)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE catalog_ddl.parallel_2(id INT PRIMARY KEY,b LONGTEXT)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE catalog_ddl.parallel_3(id INT PRIMARY KEY,b LONGTEXT)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE catalog_ddl.parallel_0(id INT PRIMARY KEY,b LONGTEXT)", "rows": []}
+{"event": "sql", "sql": "DROP DATABASE catalog_ddl", "rows": []}
+{"event": "PASS", "case": "ddl_catalog_schema", "partitioned": true, "lob_bindings": true, "parallel_ddl": 4, "parent_view_retained": true}
+{"event": "stopped", "pid": 2142809, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_catalog_schema_vbf45l8l/data.tar.gz", "bytes": 6328189}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

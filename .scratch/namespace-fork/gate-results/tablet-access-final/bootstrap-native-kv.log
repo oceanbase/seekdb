@@ -1,0 +1,268 @@
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-probe-final", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_1vzxgsjo", "pid": 2400707, "port": 52229}
+{"event": "native_kv_verified", "recovered": false, "typed_records": true, "pin_reload": true, "durable_phase": "created"}
+{"event": "crash_for_recovery", "pid": 2400707, "after_phase": "created"}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-probe-final", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_1vzxgsjo", "pid": 2402199, "port": 52229}
+{"event": "native_kv_verified", "recovered": true, "typed_records": true, "pin_reload": true, "durable_phase": "marked"}
+{"event": "crash_for_recovery", "pid": 2402199, "after_phase": "marked"}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-probe-final", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_1vzxgsjo", "pid": 2403204, "port": 52229}
+{"event": "native_kv_verified", "recovered": true, "typed_records": true, "pin_reload": true, "durable_phase": "finished"}
+{"event": "crash_for_recovery", "pid": 2403204, "after_phase": "finished"}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-probe-final", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_1vzxgsjo", "pid": 2405565, "port": 52229}
+{"event": "native_kv_verified", "recovered": true, "typed_records": true, "pin_reload": true, "durable_phase": "verified"}
+{"event": "PASS", "case": "instance_meta_native", "rollback": true, "cross_collection": true, "duplicate_key": true, "own_writes": true, "snapshot": true, "locked_current_read": true, "binary_value_60000": true, "key_512": true, "value_65536": true, "binary_bounds": true, "scan": true, "erase": true, "snapshot_across_minor": true, "writer_conflict": true, "typed_records": true, "catalog_tree": true, "lineage": true, "snapshot_pin": true, "gc_watermark": true, "pin_reload": true, "crash_recovery": true, "durable_fork_drop": true}
+{"event": "stopped", "pid": 2405565, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_1vzxgsjo/data.tar.gz", "bytes": 3342838}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-probe-final", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_cba8uxnw", "pid": 2407977, "port": 28379}
+{"event": "sql", "sql": "CREATE DATABASE nstrunc_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id BIGINT AUTO_INCREMENT PRIMARY KEY,v INT,b LONGTEXT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(10,REPEAT('p',10000))", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE success FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=30000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "atomic_state", "namespace": 3, "committed": false, "owned": [], "mappings": [], "physical": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=11,b=REPEAT('c',12000) WHERE id=1", "rows": []}
+{"event": "atomic_state", "namespace": 3, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611686430744448321], [4611686430744448322], [4611686430744448323]], "physical": [[4611686430744448321, 1, 1, 0], [4611686430744448322, 1, 1, 0], [4611686430744448323, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000, "c"]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(12,'sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000001]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(13,'next sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000002]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000], [1000001, 12, 8], [1000002, 13, 13]]}
+{"event": "case_pass", "case": "success", "lob_binding": true, "sequence": true}
+{"event": "sql", "sql": "FORK NAMESPACE rollback_create FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=30000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "atomic_state", "namespace": 4, "committed": false, "owned": [], "mappings": [], "physical": []}
+{"event": "expected_failure", "case": "rollback_create", "error": [4016, "Internal error"]}
+{"event": "controlled_boundary", "state": "4 after_create fail"}
+{"event": "atomic_state", "namespace": 4, "committed": false, "owned": [], "mappings": [], "physical": [[4611686568183401793, 5, 0, 0], [4611686568183401794, 5, 0, 0], [4611686568183401795, 5, 0, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=11,b=REPEAT('c',12000) WHERE id=1", "rows": []}
+{"event": "atomic_state", "namespace": 4, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611686568183401793], [4611686568183401794], [4611686568183401795]], "physical": [[4611686568183401793, 1, 1, 0], [4611686568183401794, 1, 1, 0], [4611686568183401795, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000, "c"]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(12,'sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000001]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(13,'next sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000002]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000], [1000001, 12, 8], [1000002, 13, 13]]}
+{"event": "case_pass", "case": "rollback_create", "lob_binding": true, "sequence": true}
+{"event": "sql", "sql": "FORK NAMESPACE rollback_owned FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=30000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "atomic_state", "namespace": 5, "committed": false, "owned": [], "mappings": [], "physical": []}
+{"event": "expected_failure", "case": "rollback_owned", "error": [4016, "Internal error"]}
+{"event": "controlled_boundary", "state": "5 after_owned fail"}
+{"event": "atomic_state", "namespace": 5, "committed": false, "owned": [], "mappings": [], "physical": [[4611686705622355265, 5, 0, 0], [4611686705622355266, 5, 0, 0], [4611686705622355267, 5, 0, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=11,b=REPEAT('c',12000) WHERE id=1", "rows": []}
+{"event": "atomic_state", "namespace": 5, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611686705622355265], [4611686705622355266], [4611686705622355267]], "physical": [[4611686705622355265, 1, 1, 0], [4611686705622355266, 1, 1, 0], [4611686705622355267, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000, "c"]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(12,'sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000001]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(13,'next sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000002]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000], [1000001, 12, 8], [1000002, 13, 13]]}
+{"event": "case_pass", "case": "rollback_owned", "lob_binding": true, "sequence": true}
+{"event": "sql", "sql": "FORK NAMESPACE crash_create FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=30000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "atomic_state", "namespace": 6, "committed": false, "owned": [], "mappings": [], "physical": []}
+{"event": "controlled_boundary", "state": "6 after_create pause"}
+{"event": "atomic_state", "namespace": 6, "committed": false, "owned": [], "mappings": [], "physical": [[4611686843061308737, 1, 0, 0], [4611686843061308738, 1, 0, 0], [4611686843061308739, 1, 0, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "read_during_create", "stage": "after_create", "inherited_rows": true, "lob": true}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-probe-final", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_cba8uxnw", "pid": 2411247, "port": 28379}
+{"event": "atomic_state", "namespace": 6, "committed": false, "owned": [], "mappings": [], "physical": []}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=11,b=REPEAT('c',12000) WHERE id=1", "rows": []}
+{"event": "atomic_state", "namespace": 6, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611686843061308737], [4611686843061308738], [4611686843061308739]], "physical": [[4611686843061308737, 1, 1, 0], [4611686843061308738, 1, 1, 0], [4611686843061308739, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000, "c"]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(12,'sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000001]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(13,'next sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000002]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000], [1000001, 12, 8], [1000002, 13, 13]]}
+{"event": "case_pass", "case": "crash_create", "lob_binding": true, "sequence": true}
+{"event": "sql", "sql": "FORK NAMESPACE crash_owned FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=30000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "atomic_state", "namespace": 7, "committed": false, "owned": [], "mappings": [], "physical": []}
+{"event": "controlled_boundary", "state": "7 after_owned pause"}
+{"event": "atomic_state", "namespace": 7, "committed": false, "owned": [], "mappings": [], "physical": [[4611686980500262209, 1, 0, 0], [4611686980500262210, 1, 0, 0], [4611686980500262211, 1, 0, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "read_during_create", "stage": "after_owned", "inherited_rows": true, "lob": true}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-probe-final", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_cba8uxnw", "pid": 2411606, "port": 28379}
+{"event": "atomic_state", "namespace": 7, "committed": false, "owned": [], "mappings": [], "physical": []}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=11,b=REPEAT('c',12000) WHERE id=1", "rows": []}
+{"event": "atomic_state", "namespace": 7, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611686980500262209], [4611686980500262210], [4611686980500262211]], "physical": [[4611686980500262209, 1, 1, 0], [4611686980500262210, 1, 1, 0], [4611686980500262211, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000, "c"]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(12,'sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000001]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(13,'next sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000002]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000], [1000001, 12, 8], [1000002, 13, 13]]}
+{"event": "case_pass", "case": "crash_owned", "lob_binding": true, "sequence": true}
+{"event": "sql", "sql": "FORK NAMESPACE crash_committed FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=30000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "atomic_state", "namespace": 8, "committed": false, "owned": [], "mappings": [], "physical": []}
+{"event": "controlled_boundary", "state": "8 after_commit pause"}
+{"event": "atomic_state", "namespace": 8, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611687117939215681], [4611687117939215682], [4611687117939215683]], "physical": [[4611687117939215681, 1, 1, 0], [4611687117939215682, 1, 1, 0], [4611687117939215683, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "read_during_create", "stage": "after_commit", "inherited_rows": true, "lob": true}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-probe-final", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_cba8uxnw", "pid": 2411914, "port": 28379}
+{"event": "atomic_state", "namespace": 8, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611687117939215681], [4611687117939215682], [4611687117939215683]], "physical": [[4611687117939215681, 1, 1, 0], [4611687117939215682, 1, 1, 0], [4611687117939215683, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=11,b=REPEAT('c',12000) WHERE id=1", "rows": []}
+{"event": "atomic_state", "namespace": 8, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611687117939215681], [4611687117939215682], [4611687117939215683]], "physical": [[4611687117939215681, 1, 1, 0], [4611687117939215682, 1, 1, 0], [4611687117939215683, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000, "c"]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(12,'sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000001]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(13,'next sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000002]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000], [1000001, 12, 8], [1000002, 13, 13]]}
+{"event": "case_pass", "case": "crash_committed", "lob_binding": true, "sequence": true}
+{"event": "sql", "sql": "FORK NAMESPACE unknown_commit FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=30000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "atomic_state", "namespace": 9, "committed": false, "owned": [], "mappings": [], "physical": []}
+{"event": "expected_failure", "case": "unknown_commit", "error": [4012, "Timeout, query has reached the maximum query timeout: 30000000(us), maybe you can adjust the session variable ob_query_timeout or query_timeout hint, and try again."]}
+{"event": "controlled_boundary", "state": "9 after_commit unknown"}
+{"event": "atomic_state", "namespace": 9, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611687255378169153], [4611687255378169154], [4611687255378169155]], "physical": [[4611687255378169153, 1, 1, 0], [4611687255378169154, 1, 1, 0], [4611687255378169155, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=11,b=REPEAT('c',12000) WHERE id=1", "rows": []}
+{"event": "atomic_state", "namespace": 9, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611687255378169153], [4611687255378169154], [4611687255378169155]], "physical": [[4611687255378169153, 1, 1, 0], [4611687255378169154, 1, 1, 0], [4611687255378169155, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000, "c"]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(12,'sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000001]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(13,'next sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000002]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000], [1000001, 12, 8], [1000002, 13, 13]]}
+{"event": "case_pass", "case": "unknown_commit", "lob_binding": true, "sequence": true}
+{"event": "sql", "sql": "FORK NAMESPACE concurrent_copy FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=30000000", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=30000000", "rows": []}
+{"event": "controlled_boundary", "state": "10 after_owned pause"}
+{"event": "atomic_state", "namespace": 10, "committed": false, "owned": [], "mappings": [], "physical": [[4611687392817122625, 1, 0, 0], [4611687392817122626, 1, 0, 0], [4611687392817122627, 1, 0, 0]]}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=11,b=REPEAT('c',12000) WHERE id=1", "rows": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=v+1 WHERE id=1", "rows": []}
+{"event": "atomic_state", "namespace": 10, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611687392817122625], [4611687392817122626], [4611687392817122627]], "physical": [[4611687392817122625, 1, 1, 0], [4611687392817122626, 1, 1, 0], [4611687392817122627, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM nstrunc_repro.t1", "rows": [[1, 12, 12000]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "case_pass", "case": "concurrent_creation", "rows": [[1, 12, 12000]]}
+{"event": "sql", "sql": "FORK NAMESPACE locked_creation FROM ns1", "rows": []}
+{"event": "controlled_boundary", "state": "11 before_lock pause_once"}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(30,30,REPEAT('b',11000))", "rows": []}
+{"event": "atomic_state", "namespace": 11, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611687530256076097], [4611687530256076098], [4611687530256076099]], "physical": [[4611687530256076097, 1, 1, 0], [4611687530256076098, 1, 1, 0], [4611687530256076099, 1, 1, 0]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(20,20,REPEAT('a',11000))", "rows": []}
+{"event": "atomic_state", "namespace": 11, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611687530256076097], [4611687530256076098], [4611687530256076099]], "physical": [[4611687530256076097, 1, 1, 0], [4611687530256076098, 1, 1, 0], [4611687530256076099, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10], [20, 20], [30, 30]]}
+{"event": "case_pass", "case": "concurrent_insert_and_stale_snapshot", "faults": true}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-probe-final", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_cba8uxnw", "pid": 2412323, "port": 28379}
+{"event": "atomic_state", "namespace": 10, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611687392817122625], [4611687392817122626], [4611687392817122627]], "physical": [[4611687392817122625, 1, 1, 0], [4611687392817122626, 1, 1, 0], [4611687392817122627, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM nstrunc_repro.t1", "rows": [[1, 12, 12000]]}
+{"event": "PASS", "case": "shared_transaction", "faults": true, "atomic_lob_unit": true, "rollback": true, "crash_recovery": true, "concurrent_creation": true}
+{"event": "stopped", "pid": 2412323, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_cba8uxnw/data.tar.gz", "bytes": 3340501}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-probe-final", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_2cq3344z", "pid": 2412641, "port": 42303}
+{"event": "sql", "sql": "CREATE DATABASE nstrunc_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id BIGINT AUTO_INCREMENT PRIMARY KEY,v INT,b LONGTEXT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(10,REPEAT('p',10000))", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE rollback_create FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=30000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "atomic_state", "namespace": 3, "committed": false, "owned": [], "mappings": [], "physical": []}
+{"event": "expected_failure", "case": "rollback_create", "error": [4016, "Internal error"]}
+{"event": "controlled_boundary", "state": "3 after_create fail"}
+{"event": "atomic_state", "namespace": 3, "committed": false, "owned": [], "mappings": [], "physical": [[4611686430744448321, 5, 0, 0], [4611686430744448322, 5, 0, 0], [4611686430744448323, 5, 0, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=11,b=REPEAT('c',12000) WHERE id=1", "rows": []}
+{"event": "atomic_state", "namespace": 3, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611686430744448321], [4611686430744448322], [4611686430744448323]], "physical": [[4611686430744448321, 1, 1, 0], [4611686430744448322, 1, 1, 0], [4611686430744448323, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000, "c"]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(12,'sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000001]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(13,'next sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000002]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000], [1000001, 12, 8], [1000002, 13, 13]]}
+{"event": "case_pass", "case": "rollback_create", "lob_binding": true, "sequence": true}
+{"event": "sql", "sql": "FORK NAMESPACE rollback_owned FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=30000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "atomic_state", "namespace": 4, "committed": false, "owned": [], "mappings": [], "physical": []}
+{"event": "expected_failure", "case": "rollback_owned", "error": [4016, "Internal error"]}
+{"event": "controlled_boundary", "state": "4 after_owned fail"}
+{"event": "atomic_state", "namespace": 4, "committed": false, "owned": [], "mappings": [], "physical": [[4611686568183401793, 5, 0, 0], [4611686568183401794, 5, 0, 0], [4611686568183401795, 5, 0, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=11,b=REPEAT('c',12000) WHERE id=1", "rows": []}
+{"event": "atomic_state", "namespace": 4, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611686568183401793], [4611686568183401794], [4611686568183401795]], "physical": [[4611686568183401793, 1, 1, 0], [4611686568183401794, 1, 1, 0], [4611686568183401795, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000, "c"]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(12,'sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000001]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(13,'next sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000002]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000], [1000001, 12, 8], [1000002, 13, 13]]}
+{"event": "case_pass", "case": "rollback_owned", "lob_binding": true, "sequence": true}
+{"event": "sql", "sql": "FORK NAMESPACE crash_create FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=30000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "atomic_state", "namespace": 5, "committed": false, "owned": [], "mappings": [], "physical": []}
+{"event": "controlled_boundary", "state": "5 after_create pause"}
+{"event": "atomic_state", "namespace": 5, "committed": false, "owned": [], "mappings": [], "physical": [[4611686705622355265, 1, 0, 0], [4611686705622355266, 1, 0, 0], [4611686705622355267, 1, 0, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "read_during_create", "stage": "after_create", "inherited_rows": true, "lob": true}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-probe-final", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_2cq3344z", "pid": 2413455, "port": 42303}
+{"event": "atomic_state", "namespace": 5, "committed": false, "owned": [], "mappings": [], "physical": [[4611686705622355265, 5, 0, 0], [4611686705622355266, 5, 0, 0], [4611686705622355267, 5, 0, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=11,b=REPEAT('c',12000) WHERE id=1", "rows": []}
+{"event": "atomic_state", "namespace": 5, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611686705622355265], [4611686705622355266], [4611686705622355267]], "physical": [[4611686705622355265, 1, 1, 0], [4611686705622355266, 1, 1, 0], [4611686705622355267, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000, "c"]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(12,'sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000001]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(13,'next sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000002]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000], [1000001, 12, 8], [1000002, 13, 13]]}
+{"event": "case_pass", "case": "crash_create", "lob_binding": true, "sequence": true}
+{"event": "sql", "sql": "FORK NAMESPACE crash_owned FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=30000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "atomic_state", "namespace": 6, "committed": false, "owned": [], "mappings": [], "physical": []}
+{"event": "controlled_boundary", "state": "6 after_owned pause"}
+{"event": "atomic_state", "namespace": 6, "committed": false, "owned": [], "mappings": [], "physical": [[4611686843061308737, 1, 0, 0], [4611686843061308738, 1, 0, 0], [4611686843061308739, 1, 0, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "read_during_create", "stage": "after_owned", "inherited_rows": true, "lob": true}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-probe-final", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_2cq3344z", "pid": 2414000, "port": 42303}
+{"event": "atomic_state", "namespace": 6, "committed": false, "owned": [], "mappings": [], "physical": [[4611686843061308737, 5, 0, 0], [4611686843061308738, 5, 0, 0], [4611686843061308739, 5, 0, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=11,b=REPEAT('c',12000) WHERE id=1", "rows": []}
+{"event": "atomic_state", "namespace": 6, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611686843061308737], [4611686843061308738], [4611686843061308739]], "physical": [[4611686843061308737, 1, 1, 0], [4611686843061308738, 1, 1, 0], [4611686843061308739, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000, "c"]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(12,'sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000001]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(13,'next sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000002]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000], [1000001, 12, 8], [1000002, 13, 13]]}
+{"event": "case_pass", "case": "crash_owned", "lob_binding": true, "sequence": true}
+{"event": "setup", "binary": "/data/1/tmp/seekdb-tablet-access/seekdb-probe-final", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_2cq3344z", "pid": 2414476, "port": 42303}
+{"event": "atomic_state", "namespace": 6, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611686843061308737], [4611686843061308738], [4611686843061308739]], "physical": [[4611686843061308737, 1, 1, 0], [4611686843061308738, 1, 1, 0], [4611686843061308739, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000], [1000001, 12, 8], [1000002, 13, 13]]}
+{"event": "PASS", "case": "shared_transaction_selected", "selected": ["rollback_create", "rollback_owned", "crash_create", "crash_owned"], "flushed_redo": true, "recovered_committed_retry": true}
+{"event": "stopped", "pid": 2414476, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_2cq3344z/data.tar.gz", "bytes": 3311368}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

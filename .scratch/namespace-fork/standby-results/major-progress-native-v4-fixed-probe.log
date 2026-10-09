@@ -1,0 +1,15 @@
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/standby-artifacts/seekdb-native-v4", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_pb9ii22c", "pid": 3259024, "port": 30239}
+{"event": "sql", "sql": "create database major_probe", "rows": []}
+{"event": "sql", "sql": "create table major_probe.t(id int primary key,v int)", "rows": []}
+{"event": "sql", "sql": "insert into major_probe.t values(1,10),(2,20),(3,30)", "rows": []}
+{"event": "sql", "sql": "alter system set ob_compaction_schedule_interval='3s'", "rows": []}
+{"event": "sql", "sql": "alter system minor freeze", "rows": []}
+{"event": "sql", "sql": "alter system major freeze", "rows": []}
+{"event": "stopped", "pid": 3259024, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_pb9ii22c/data.tar.gz", "bytes": 5724224}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File ".scratch/namespace-fork/primary_major_namespace_probe.py", line 27, in <module>
+    raise AssertionError(rows)
+AssertionError: ((1790974011931133005, 1790974011931133005, 1),)

@@ -1,0 +1,1421 @@
+Run case stanby/switchover_roundtrip
+[2026-10-03 04:20:43.317][INFO ] [MyTest         :78] - print args => [-use_ob_connector, true, -result_file, r/stanby/switchover_roundtrip.result, -test_file, t/stanby/switchover_roundtrip.test]
+[-use_ob_connector, true, -result_file, r/stanby/switchover_roundtrip.result, -test_file, t/stanby/switchover_roundtrip.test]
+[2026-10-03 04:20:43.319][INFO ] [MyTest         :81] - start case => t/stanby/switchover_roundtrip.test
+[2026-10-03 04:20:43.324][INFO ] [MyTest         :84] - use data id => obtest_nijia.nj_6.12.232.130
+[2026-10-03 04:20:43.400][INFO ] [TestCase       :107] - initilize deploy processor
+[2026-10-03 04:20:43.413][INFO ] [DeployConfig   :590] - config port and dataid. port_base=>1124, obs_port=>1124, mysql_port=>1159, data_id=>obtest_nijia.nj_6.12.232.130_0, port_offset=>0
+[2026-10-03 04:20:43.461][INFO ] [DeployConfig   :577] - config port and dataid. port_base=>42000, obs_port=>42000, mysql_port=>42035, data_id=>obtest_nijia.nj_6.12.232.130_042000
+[2026-10-03 04:20:43.466][INFO ] [OfsProcessor   :53] - ofs_deployer: null/hap.py
+[2026-10-03 04:20:43.467][INFO ] [OfsCreateTenantProcessor:32] - ofsshell: null/../../bin/ofsshell
+[2026-10-03 04:20:43.468][INFO ] [TestCase       :761] - Read file => t/stanby/switchover_roundtrip.test
+[2026-10-03 04:20:43.469][INFO ] [TestCase       :721] - Finish read case: file_lines => 418, lineNo => 216
+[2026-10-03 04:20:43.479][INFO ] [Command        :536] - > LINE => 30, CMD => Q_DEPLOY, CONTENT => db_p=OBI(cluster=1,proxy_num=0,role=primary);
+[2026-10-03 04:20:43.484][INFO ] [DeployProcessor:78] - OBI define => db_p=OBI(cluster=1,proxy_num=0,role=primary)
+[2026-10-03 04:20:43.505][INFO ] [Deploy         :381] - execute db_p.z_num result => 1 result type => java.lang.Integer
+[2026-10-03 04:20:43.589][INFO ] [Deploy         :464] - assign rpc port. observer=>db_p.z1.obs0, rpc_port=>42000
+[2026-10-03 04:20:43.590][INFO ] [Deploy         :471] - assign mysql port. observer=>db_p.z1.obs0, mysql_port=>42035
+[2026-10-03 04:20:43.590][INFO ] [Deploy         :478] - assign backup io rpc port. observer=>db_p.z1.obs0, obesi_port=>42070
+[2026-10-03 04:20:43.596][INFO ] [OBLog          :99] - config.ob_version='.'
+[2026-10-03 04:20:43.596][INFO ] [OBLog          :100] - config.oblog_version='default'
+[2026-10-03 04:20:43.596][INFO ] [OBLog          :117] - set oblog version='.'
+[2026-10-03 04:20:43.596][INFO ] [OBLog          :126] - set oblog work_dir=''
+[2026-10-03 04:20:43.597][INFO ] [OBLog          :148] - oblog.is_obcdc_exist: false
+[2026-10-03 04:20:43.597][INFO ] [OBLog          :149] - oblog.exec: oblog/oblog_tailf
+[2026-10-03 04:20:43.597][INFO ] [OBLog          :150] - oblog.configFile: oblog/liboblog.conf
+[2026-10-03 04:20:43.597][INFO ] [OBLog          :151] - oblog.dataFile: oblog/data.log
+[2026-10-03 04:20:43.598][INFO ] [OBLog          :152] - oblog.envCon: LD_LIBRARY_PATH=oblog:$LD_LIBRARY_PATH
+[2026-10-03 04:20:43.598][INFO ] [OBLog          :153] - oblog.startCmdHead: ulimit -c unlimited; LD_LIBRARY_PATH=oblog:$LD_LIBRARY_PATH oblog/oblog_tailf
+[2026-10-03 04:20:43.598][INFO ] [OBLog          :154] - oblog.defaultStartCmd: ulimit -c unlimited; LD_LIBRARY_PATH=oblog:$LD_LIBRARY_PATH oblog/oblog_tailf  -f oblog/liboblog.conf -D oblog/data.log -H oblog/heartbeat.log -d
+[2026-10-03 04:20:44.00][INFO ] [Deploy         :1128] - start observer version is lite mode: true
+[2026-10-03 04:20:44.01][INFO ] [Command        :353] - start[1790972443480] time[520] tag[Q_DEPLOY]
+[2026-10-03 04:20:44.03][INFO ] [Command        :536] - > LINE => 31, CMD => Q_DEPLOY, CONTENT => db_p.reboot;
+[2026-10-03 04:20:44.03][INFO ] [DeployProcessor:93] - deploy => db_p.reboot
+[2026-10-03 04:20:44.04][INFO ] [Deploy         :287] - execute db_p.reset
+[2026-10-03 04:20:44.04][INFO ] [Deploy         :381] - execute db_p.lite_mode result => true result type => java.lang.Boolean
+[2026-10-03 04:20:44.04][INFO ] [Deploy         :294] - execute db_p.reset result => true
+[2026-10-03 04:20:44.04][INFO ] [Deploy         :287] - execute db_p.clean_asvr
+[2026-10-03 04:20:44.05][INFO ] [Deploy         :294] - execute db_p.clean_asvr result => true
+[2026-10-03 04:20:44.14][INFO ] [Deploy         :287] - execute db_p.z1.obs0.force_stop_asvr
+[2026-10-03 04:20:44.15][INFO ] [Role           :1228] - pkill -9 -u nijia.nj -f '^/data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.asvr0/bin/observer' on 6.12.232.130
+[2026-10-03 04:20:44.65][INFO ] [Role           :1230] - pkill asvr result is => 1
+[2026-10-03 04:20:44.65][INFO ] [Deploy         :294] - execute db_p.z1.obs0.force_stop_asvr result => true
+[2026-10-03 04:20:44.65][INFO ] [Deploy         :287] - execute db_p.z1.obs0.rmdir_asvr
+[2026-10-03 04:20:44.66][INFO ] [Role           :1237] - try to remove asvr dir server  => db_p.z1.obs0
+[2026-10-03 04:20:44.71][INFO ] [Role           :1264] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.asvr0 , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:20:44.71][INFO ] [Deploy         :294] - execute db_p.z1.obs0.rmdir_asvr result => true
+[2026-10-03 04:20:44.72][INFO ] [Deploy         :331] - execute db_p.z1.obs0.clean_asvr  result => true
+[2026-10-03 04:20:44.72][INFO ] [Deploy         :362] - execute db_p.z1.clean_asvr  result => true [true]
+[2026-10-03 04:20:44.72][INFO ] [Deploy         :362] - execute db_p.clean_asvr_everywhere result => true [true]
+[2026-10-03 04:20:44.73][INFO ] [Deploy         :331] - execute db_p.clean_all_asvr result => true
+[2026-10-03 04:20:44.73][INFO ] [Deploy         :287] - execute db_p.deploy_logservice
+[2026-10-03 04:20:44.73][INFO ] [Deploy         :294] - execute db_p.deploy_logservice result => true
+[2026-10-03 04:20:44.74][INFO ] [Deploy         :287] - execute db_p.bootstrap_logservice
+[2026-10-03 04:20:44.74][INFO ] [Deploy         :294] - execute db_p.bootstrap_logservice result => true
+[2026-10-03 04:20:44.74][INFO ] [Deploy         :331] - execute db_p.reboot_logservice result => true
+[2026-10-03 04:20:44.75][INFO ] [Deploy         :287] - execute db_p.z1.check_local_bin
+[2026-10-03 04:20:44.81][INFO ] [Deploy         :294] - execute db_p.z1.check_local_bin result => true
+[2026-10-03 04:20:44.81][INFO ] [Deploy         :287] - execute db_p.z1.check_ssh
+[2026-10-03 04:20:44.81][INFO ] [Deploy         :294] - execute db_p.z1.check_ssh result => true
+[2026-10-03 04:20:44.83][INFO ] [Deploy         :287] - execute db_p.z1.obs0.check_dir 
+[2026-10-03 04:20:44.90][INFO ] [Deploy         :294] - execute db_p.z1.obs0.check_dir  result => true
+[2026-10-03 04:20:44.90][INFO ] [Deploy         :362] - execute db_p.z1.check_dir result => true [true]
+[2026-10-03 04:20:44.91][INFO ] [Deploy         :287] - execute db_p.z1.obs0.force_stop 
+[2026-10-03 04:20:44.107][INFO ] [Role           :1307] - pkill -9 -u nijia.nj -f '^/data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/bin/observer|^/data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/bin/obesi' on 6.12.232.130
+[2026-10-03 04:20:44.125][INFO ] [Role           :1309] - pkill result is => 1
+[2026-10-03 04:20:44.126][INFO ] [Role           :1142] - wait stop /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/bin/observer on 6.12.232.130
+[2026-10-03 04:20:44.127][INFO ] [Role           :1190] - ps uxf | grep "/data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/bin/observer" | grep -v grep
+[2026-10-03 04:20:44.162][INFO ] [Role           :1154] - check port on 6.12.232.130
+[2026-10-03 04:20:44.163][INFO ] [RemoteShell    :143] - netstat -lpnt 2>/dev/null | grep '0.0.0.0:42000 ' | awk -F ' ' '{print $7}'
+[2026-10-03 04:20:44.190][INFO ] [RemoteShell    :143] - netstat -lpnt 2>/dev/null | grep '0.0.0.0:42035 ' | awk -F ' ' '{print $7}'
+[2026-10-03 04:20:44.217][INFO ] [Role           :1164] - stop obs0 took 2 s
+[2026-10-03 04:20:44.218][INFO ] [Deploy         :294] - execute db_p.z1.obs0.force_stop  result => true
+[2026-10-03 04:20:44.218][INFO ] [Deploy         :362] - execute db_p.z1.force_stop result => true [true]
+[2026-10-03 04:20:44.219][INFO ] [Deploy         :362] - execute db_p.z1.force_stop_logstore result => true []
+[2026-10-03 04:20:44.219][INFO ] [Deploy         :331] - execute db_p.z1.force_stop_all result => true
+[2026-10-03 04:20:44.220][INFO ] [Deploy         :287] - execute db_p.z1.obs0.rmdir 
+[2026-10-03 04:20:44.220][INFO ] [Deploy         :381] - execute db_p.lite_mode result => true result type => java.lang.Boolean
+[2026-10-03 04:20:44.222][INFO ] [Role           :1395] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_p.z1.obs0.nijia.nj/sstable /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store/slog /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_p.z1.obs0.nijia.nj/sort_dir , on => 6.12.232.130
+[2026-10-03 04:20:44.227][INFO ] [Role           :1397] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_p.z1.obs0.nijia.nj/sstable /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store/slog /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_p.z1.obs0.nijia.nj/sort_dir , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:20:44.247][INFO ] [Role           :1402] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/log , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:20:44.254][INFO ] [Role           :1407] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/admin , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:20:44.260][INFO ] [Role           :1412] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/wallet , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:20:44.265][INFO ] [Role           :1417] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/etc/observer.c*nf*.bin* /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/etc/seekdb.c*nf*.bin* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:20:44.269][INFO ] [Role           :1423] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/etc/observer.data_version.bin* /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/etc/seekdb.data_version.bin* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:20:44.273][INFO ] [Role           :1429] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/etc2/observer.c*nf*.bin* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:20:44.277][INFO ] [Role           :1434] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/etc3/observer.c*nf*.bin* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:20:44.281][INFO ] [Role           :1439] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/run/observer.pid /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/run/seekdb.pid , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:20:44.286][INFO ] [Role           :1444] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/clog_shm , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:20:44.290][INFO ] [Role           :1449] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/ilog_shm , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:20:44.293][INFO ] [Role           :1454] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/manifest* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:20:44.302][INFO ] [Role           :1467] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/core* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:20:44.307][INFO ] [Role           :1504] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/ /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_p.z1.obs0.nijia.nj/ , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:20:44.663][INFO ] [Role           :1510] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0 , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:20:44.669][INFO ] [Deploy         :294] - execute db_p.z1.obs0.rmdir  result => true
+[2026-10-03 04:20:44.670][INFO ] [Deploy         :362] - execute db_p.z1.rmdir result => true [true]
+[2026-10-03 04:20:44.670][INFO ] [Deploy         :331] - execute db_p.z1.cleanup result => true
+[2026-10-03 04:20:44.671][INFO ] [Deploy         :362] - execute db_p.z1.cleanup_logstore result => true []
+[2026-10-03 04:20:44.672][INFO ] [Deploy         :331] - execute db_p.z1.cleanup_all result => true
+[2026-10-03 04:20:44.672][INFO ] [Deploy         :287] - execute db_p.z1.genconf
+[2026-10-03 04:20:44.672][INFO ] [Deploy         :294] - execute db_p.z1.genconf result => true
+[2026-10-03 04:20:44.674][INFO ] [Deploy         :287] - execute db_p.z1.obs0.mkdir 
+[2026-10-03 04:20:44.675][INFO ] [Role           :1768] - mkdir -p /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/;mkdir -p /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store/clog /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store/ilog /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store/slog /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_p.z1.obs0.nijia.nj/sort_dir /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_p.z1.obs0.nijia.nj/sstable;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_p.z1.obs0.nijia.nj/sstable /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store/clog /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store/ilog /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_p.z1.obs0.nijia.nj/store/slog /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_p.z1.obs0.nijia.nj/sort_dir /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/ on 6.12.232.130
+[2026-10-03 04:20:44.693][INFO ] [Deploy         :294] - execute db_p.z1.obs0.mkdir  result => true
+[2026-10-03 04:20:44.693][INFO ] [Deploy         :362] - execute db_p.z1.mkdir_obs result => true [true]
+[2026-10-03 04:20:44.694][INFO ] [Deploy         :362] - execute db_p.z1.mkdir_logstore result => true []
+[2026-10-03 04:20:44.694][INFO ] [Deploy         :331] - execute db_p.z1.mkdir result => true
+[2026-10-03 04:20:44.696][INFO ] [Deploy         :287] - execute db_p.z1.obs0.rsync 
+[2026-10-03 04:20:44.697][INFO ] [Role           :1648] - sync server finish, time = 0
+[2026-10-03 04:20:44.697][INFO ] [Role           :1563] - rsync server => db_p.z1.obs0 version if specified => .
+[2026-10-03 04:20:44.704][INFO ] [Role           :1635] - check disk dir ==> './admin' exist
+[2026-10-03 04:20:44.715][WARN ] [Role           :1638] - check disk dir ==> './plugin_dir' not exist
+[2026-10-03 04:20:44.721][INFO ] [Role           :1635] - check disk dir ==> './wallet' exist
+[2026-10-03 04:20:44.721][INFO ] [Role           :1590] - transfer cmd to =>  rsync -WrptgoDRLv --timeout=600 bin etc lib  admin  wallet /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0
+[2026-10-03 04:20:49.724][INFO ] [Role           :1604] - rsync cmd =>  rsync -WrptgoDRLv --timeout=600 bin etc lib  admin  wallet /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0
+[2026-10-03 04:20:49.724][INFO ] [Deploy         :294] - execute db_p.z1.obs0.rsync  result => true
+[2026-10-03 04:20:49.725][INFO ] [Deploy         :362] - execute db_p.z1.rsync_obs result => true [true]
+[2026-10-03 04:20:49.726][INFO ] [Deploy         :362] - execute db_p.z1.rsync_logstore result => true []
+[2026-10-03 04:20:49.726][INFO ] [Deploy         :331] - execute db_p.z1.rsync result => true
+[2026-10-03 04:20:49.727][INFO ] [Deploy         :362] - execute db_p.z1.start_logstore result => true []
+[2026-10-03 04:20:49.727][INFO ] [Deploy         :287] - execute db_p.z1.sleep 5
+[2026-10-03 04:20:54.728][INFO ] [Deploy         :294] - execute db_p.z1.sleep 5 result => true
+[2026-10-03 04:20:54.730][INFO ] [Deploy         :287] - execute db_p.z1.obs0.start 
+[2026-10-03 04:20:54.731][INFO ] [Deploy         :381] - execute db_p.lite_mode result => true result type => java.lang.Boolean
+[2026-10-03 04:20:54.732][INFO ] [Deploy         :381] - execute db_p.lite_mode result => true result type => java.lang.Boolean
+6.12.232.130 is not a valid IPv6 address.
+[2026-10-03 04:20:54.746][INFO ] [Role           :539] - cluster_id1
+[2026-10-03 04:20:54.746][INFO ] [Deploy         :381] - execute db_p.z_num result => 1 result type => java.lang.Integer
+[2026-10-03 04:20:54.746][INFO ] [Role           :552] - db_p have 1 ZONE
+[2026-10-03 04:20:54.747][INFO ] [Role           :584] - ofs_list ofs_list='z1@' has_ofs_zone false
+[2026-10-03 04:20:54.747][INFO ] [Role           :637] - ulimit -c unlimited -s 4096;cd /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0;LD_LIBRARY_PATH=./lib:/usr/local/lib:/usr/lib:/usr/lib64:/usr/local/lib64:$LD_LIBRARY_PATH /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/bin/observer --port 42035 --data-dir /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store --redo-dir /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_p.z1.obs0/store/clog  --role=PRIMARY --parameter enable_rpc_service=true --parameter rpc_port=42000 --parameter datafile_size='2G' --parameter log_disk_size='2G' --parameter cpu_count=4 --parameter memory_limit='8G' on 6.12.232.130
+[2026-10-03 04:20:54.828][INFO ] [Deploy         :294] - execute db_p.z1.obs0.start  result => true
+[2026-10-03 04:20:54.833][INFO ] [Deploy         :362] - execute db_p.z1.start_obs result => true [true]
+[2026-10-03 04:20:54.834][INFO ] [Deploy         :331] - execute db_p.z1.start result => true
+[2026-10-03 04:20:54.834][INFO ] [Deploy         :287] - execute db_p.z1.sleep 8
+[2026-10-03 04:21:02.834][INFO ] [Deploy         :294] - execute db_p.z1.sleep 8 result => true
+[2026-10-03 04:21:02.835][INFO ] [Deploy         :331] - execute db_p.z1.reboot  result => true
+[2026-10-03 04:21:02.835][INFO ] [Deploy         :362] - execute db_p.deploy result => true [true]
+[2026-10-03 04:21:02.836][INFO ] [Deploy         :287] - execute db_p.sleep 5
+[2026-10-03 04:21:07.836][INFO ] [Deploy         :294] - execute db_p.sleep 5 result => true
+[2026-10-03 04:21:07.837][INFO ] [Deploy         :287] - execute db_p.bootstrap
+[2026-10-03 04:21:07.837][INFO ] [Deploy         :381] - execute db_p.z_num result => 1 result type => java.lang.Integer
+[2026-10-03 04:21:07.837][INFO ] [Deploy         :381] - execute db_p.zone_names result => [Ljava.lang.String;@215be6bb result type => [Ljava.lang.String;
+[2026-10-03 04:21:07.838][INFO ] [Deploy         :381] - execute db_p.z1.obs_num result => 1 result type => java.lang.Integer
+[2026-10-03 04:21:07.838][INFO ] [Deploy         :287] - execute db_p.z1.obs0.get status
+[2026-10-03 04:21:07.838][WARN ] [Deploy         :298] - execute db_p.z1.obs0.get status result => null
+[2026-10-03 04:21:07.839][INFO ] [Deploy         :381] - execute db_p.lite_mode result => true result type => java.lang.Boolean
+[2026-10-03 04:21:07.839][INFO ] [Deploy         :294] - execute db_p.bootstrap result => true
+[2026-10-03 04:21:07.839][INFO ] [Deploy         :287] - execute db_p.addserver
+[2026-10-03 04:21:07.839][INFO ] [Deploy         :381] - execute db_p.z_num result => 1 result type => java.lang.Integer
+[2026-10-03 04:21:07.840][INFO ] [Deploy         :381] - execute db_p.zone_names result => [Ljava.lang.String;@215be6bb result type => [Ljava.lang.String;
+[2026-10-03 04:21:07.840][INFO ] [Deploy         :381] - execute db_p.z1.obs_num result => 1 result type => java.lang.Integer
+[2026-10-03 04:21:07.841][INFO ] [Deploy         :294] - execute db_p.addserver result => true
+[2026-10-03 04:21:07.841][INFO ] [Deploy         :287] - execute db_p.exec_init_sql
+[2026-10-03 04:21:07.841][INFO ] [Deploy         :381] - execute db_p.lite_mode result => true result type => java.lang.Boolean
+[2026-10-03 04:21:07.842][INFO ] [Deploy         :287] - execute db_p.z1.obs0.mysql_tenant_root create user 'admin' IDENTIFIED BY 'admin';use oceanbase;grant all on *.* to 'admin' WITH GRANT OPTION;create database if not exists test;
+[2026-10-03 04:21:07.842][INFO ] [Role           :3182] - sql =>create user 'admin' IDENTIFIED BY 'admin';use oceanbase;grant all on *.* to 'admin' WITH GRANT OPTION;create database if not exists test;
+ will be executed with connection[z1.obs0]root@sys:@6.12.232.130:42035
+[2026-10-03 04:21:07.940][INFO ] [Deploy         :294] - execute db_p.z1.obs0.mysql_tenant_root create user 'admin' IDENTIFIED BY 'admin';use oceanbase;grant all on *.* to 'admin' WITH GRANT OPTION;create database if not exists test; result => true
+[2026-10-03 04:21:07.941][INFO ] [Deploy         :381] - execute db_p.lite_mode result => true result type => java.lang.Boolean
+[2026-10-03 04:21:07.941][INFO ] [Deploy         :381] - execute db_p.lite_mode result => true result type => java.lang.Boolean
+[2026-10-03 04:21:07.942][INFO ] [Deploy         :287] - execute db_p.z1.obs0.mysql_tenant_root create user 'proxyro' IDENTIFIED BY '3u^0kCdpE';grant select on oceanbase.* to 'proxyro' WITH GRANT OPTION;
+[2026-10-03 04:21:07.943][INFO ] [Role           :3182] - sql =>create user 'proxyro' IDENTIFIED BY '3u^0kCdpE';grant select on oceanbase.* to 'proxyro' WITH GRANT OPTION;
+ will be executed with connection[z1.obs0]root@sys:@6.12.232.130:42035
+[2026-10-03 04:21:08.04][INFO ] [Deploy         :294] - execute db_p.z1.obs0.mysql_tenant_root create user 'proxyro' IDENTIFIED BY '3u^0kCdpE';grant select on oceanbase.* to 'proxyro' WITH GRANT OPTION; result => true
+[2026-10-03 04:21:08.05][INFO ] [Deploy         :287] - execute db_p.z1.obs0.mysql_tenant_root create user 'sysslaveuser' IDENTIFIED BY 'sysslaveuser';grant select on *.* to 'sysslaveuser' WITH GRANT OPTION;
+[2026-10-03 04:21:08.05][INFO ] [Role           :3182] - sql =>create user 'sysslaveuser' IDENTIFIED BY 'sysslaveuser';grant select on *.* to 'sysslaveuser' WITH GRANT OPTION;
+ will be executed with connection[z1.obs0]root@sys:@6.12.232.130:42035
+[2026-10-03 04:21:08.80][INFO ] [Deploy         :294] - execute db_p.z1.obs0.mysql_tenant_root create user 'sysslaveuser' IDENTIFIED BY 'sysslaveuser';grant select on *.* to 'sysslaveuser' WITH GRANT OPTION; result => true
+[2026-10-03 04:21:08.81][INFO ] [Deploy         :294] - execute db_p.exec_init_sql result => true
+[2026-10-03 04:21:08.82][INFO ] [Deploy         :287] - execute db_p.register_proxy
+[2026-10-03 04:21:08.82][INFO ] [Deploy         :294] - execute db_p.register_proxy result => true
+[2026-10-03 04:21:08.82][INFO ] [Deploy         :287] - execute db_p.deploy_proxy
+[2026-10-03 04:21:08.82][INFO ] [Deploy         :294] - execute db_p.deploy_proxy result => true
+[2026-10-03 04:21:08.82][INFO ] [Deploy         :287] - execute db_p.sleep 5
+[2026-10-03 04:21:13.83][INFO ] [Deploy         :294] - execute db_p.sleep 5 result => true
+[2026-10-03 04:21:13.83][INFO ] [Deploy         :331] - execute db_p.reboot_proxy result => true
+[2026-10-03 04:21:13.83][INFO ] [Deploy         :287] - execute db_p.deploy_asvr
+[2026-10-03 04:21:13.84][INFO ] [Deploy         :294] - execute db_p.deploy_asvr result => true
+[2026-10-03 04:21:13.84][INFO ] [Deploy         :287] - execute db_p.sleep 5
+[2026-10-03 04:21:18.84][INFO ] [Deploy         :294] - execute db_p.sleep 5 result => true
+[2026-10-03 04:21:18.85][INFO ] [Deploy         :331] - execute db_p.reboot_asvr result => true
+[2026-10-03 04:21:18.85][INFO ] [Deploy         :287] - execute db_p.add_asvr
+[2026-10-03 04:21:18.85][INFO ] [OBI            :1509] - There is no need to add asvr.
+[2026-10-03 04:21:18.85][INFO ] [Deploy         :294] - execute db_p.add_asvr result => true
+[2026-10-03 04:21:18.85][INFO ] [Deploy         :287] - execute db_p.prepare_agent
+[2026-10-03 04:21:18.86][INFO ] [Deploy         :294] - execute db_p.prepare_agent result => true
+[2026-10-03 04:21:18.86][INFO ] [Deploy         :331] - execute db_p.reboot result => true
+[2026-10-03 04:21:18.86][INFO ] [Command        :353] - start[1790972444003] time[34083] tag[Q_DEPLOY]
+[2026-10-03 04:21:18.87][INFO ] [Command        :536] - > LINE => 33, CMD => Q_DEPLOY, CONTENT => db_s=OBI(cluster=1,proxy_num=0,primary=db_p);
+[2026-10-03 04:21:18.87][INFO ] [DeployProcessor:78] - OBI define => db_s=OBI(cluster=1,proxy_num=0,primary=db_p)
+[2026-10-03 04:21:18.88][INFO ] [Deploy         :381] - execute db_s.z_num result => 1 result type => java.lang.Integer
+[2026-10-03 04:21:18.89][INFO ] [Deploy         :464] - assign rpc port. observer=>db_s.z1.obs0, rpc_port=>42001
+[2026-10-03 04:21:18.89][INFO ] [Deploy         :471] - assign mysql port. observer=>db_s.z1.obs0, mysql_port=>42036
+[2026-10-03 04:21:18.89][INFO ] [Deploy         :478] - assign backup io rpc port. observer=>db_s.z1.obs0, obesi_port=>42071
+[2026-10-03 04:21:18.90][INFO ] [OBLog          :99] - config.ob_version='.'
+[2026-10-03 04:21:18.90][INFO ] [OBLog          :100] - config.oblog_version='default'
+[2026-10-03 04:21:18.90][INFO ] [OBLog          :117] - set oblog version='.'
+[2026-10-03 04:21:18.90][INFO ] [OBLog          :126] - set oblog work_dir=''
+[2026-10-03 04:21:18.90][INFO ] [OBLog          :148] - oblog.is_obcdc_exist: false
+[2026-10-03 04:21:18.90][INFO ] [OBLog          :149] - oblog.exec: oblog/oblog_tailf
+[2026-10-03 04:21:18.91][INFO ] [OBLog          :150] - oblog.configFile: oblog/liboblog.conf
+[2026-10-03 04:21:18.91][INFO ] [OBLog          :151] - oblog.dataFile: oblog/data.log
+[2026-10-03 04:21:18.91][INFO ] [OBLog          :152] - oblog.envCon: LD_LIBRARY_PATH=oblog:$LD_LIBRARY_PATH
+[2026-10-03 04:21:18.91][INFO ] [OBLog          :153] - oblog.startCmdHead: ulimit -c unlimited; LD_LIBRARY_PATH=oblog:$LD_LIBRARY_PATH oblog/oblog_tailf
+[2026-10-03 04:21:18.91][INFO ] [OBLog          :154] - oblog.defaultStartCmd: ulimit -c unlimited; LD_LIBRARY_PATH=oblog:$LD_LIBRARY_PATH oblog/oblog_tailf  -f oblog/liboblog.conf -D oblog/data.log -H oblog/heartbeat.log -d
+[2026-10-03 04:21:18.351][INFO ] [Deploy         :1128] - start observer version is lite mode: true
+[2026-10-03 04:21:18.351][INFO ] [Command        :353] - start[1790972478087] time[264] tag[Q_DEPLOY]
+[2026-10-03 04:21:18.352][INFO ] [Command        :536] - > LINE => 34, CMD => Q_DEPLOY, CONTENT => db_s.reboot;
+[2026-10-03 04:21:18.352][INFO ] [DeployProcessor:93] - deploy => db_s.reboot
+[2026-10-03 04:21:18.353][INFO ] [Deploy         :287] - execute db_s.reset
+[2026-10-03 04:21:18.353][INFO ] [Deploy         :381] - execute db_s.lite_mode result => true result type => java.lang.Boolean
+[2026-10-03 04:21:18.353][INFO ] [Deploy         :294] - execute db_s.reset result => true
+[2026-10-03 04:21:18.354][INFO ] [Deploy         :287] - execute db_s.clean_asvr
+[2026-10-03 04:21:18.354][INFO ] [Deploy         :294] - execute db_s.clean_asvr result => true
+[2026-10-03 04:21:18.357][INFO ] [Deploy         :287] - execute db_s.z1.obs0.force_stop_asvr
+[2026-10-03 04:21:18.357][INFO ] [Role           :1228] - pkill -9 -u nijia.nj -f '^/data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.asvr0/bin/observer' on 6.12.232.130
+[2026-10-03 04:21:18.375][INFO ] [Role           :1230] - pkill asvr result is => 1
+[2026-10-03 04:21:18.376][INFO ] [Deploy         :294] - execute db_s.z1.obs0.force_stop_asvr result => true
+[2026-10-03 04:21:18.376][INFO ] [Deploy         :287] - execute db_s.z1.obs0.rmdir_asvr
+[2026-10-03 04:21:18.376][INFO ] [Role           :1237] - try to remove asvr dir server  => db_s.z1.obs0
+[2026-10-03 04:21:18.380][INFO ] [Role           :1264] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.asvr0 , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:21:18.380][INFO ] [Deploy         :294] - execute db_s.z1.obs0.rmdir_asvr result => true
+[2026-10-03 04:21:18.380][INFO ] [Deploy         :331] - execute db_s.z1.obs0.clean_asvr  result => true
+[2026-10-03 04:21:18.381][INFO ] [Deploy         :362] - execute db_s.z1.clean_asvr  result => true [true]
+[2026-10-03 04:21:18.381][INFO ] [Deploy         :362] - execute db_s.clean_asvr_everywhere result => true [true]
+[2026-10-03 04:21:18.381][INFO ] [Deploy         :331] - execute db_s.clean_all_asvr result => true
+[2026-10-03 04:21:18.382][INFO ] [Deploy         :287] - execute db_s.deploy_logservice
+[2026-10-03 04:21:18.382][INFO ] [Deploy         :294] - execute db_s.deploy_logservice result => true
+[2026-10-03 04:21:18.382][INFO ] [Deploy         :287] - execute db_s.bootstrap_logservice
+[2026-10-03 04:21:18.382][INFO ] [Deploy         :294] - execute db_s.bootstrap_logservice result => true
+[2026-10-03 04:21:18.382][INFO ] [Deploy         :331] - execute db_s.reboot_logservice result => true
+[2026-10-03 04:21:18.383][INFO ] [Deploy         :287] - execute db_s.z1.check_local_bin
+[2026-10-03 04:21:18.387][INFO ] [Deploy         :294] - execute db_s.z1.check_local_bin result => true
+[2026-10-03 04:21:18.388][INFO ] [Deploy         :287] - execute db_s.z1.check_ssh
+[2026-10-03 04:21:18.388][INFO ] [Deploy         :294] - execute db_s.z1.check_ssh result => true
+[2026-10-03 04:21:18.388][INFO ] [Deploy         :287] - execute db_s.z1.obs0.check_dir 
+[2026-10-03 04:21:18.395][INFO ] [Deploy         :294] - execute db_s.z1.obs0.check_dir  result => true
+[2026-10-03 04:21:18.396][INFO ] [Deploy         :362] - execute db_s.z1.check_dir result => true [true]
+[2026-10-03 04:21:18.396][INFO ] [Deploy         :287] - execute db_s.z1.obs0.force_stop 
+[2026-10-03 04:21:18.397][INFO ] [Role           :1307] - pkill -9 -u nijia.nj -f '^/data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/bin/observer|^/data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/bin/obesi' on 6.12.232.130
+[2026-10-03 04:21:18.410][INFO ] [Role           :1309] - pkill result is => 1
+[2026-10-03 04:21:18.411][INFO ] [Role           :1142] - wait stop /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/bin/observer on 6.12.232.130
+[2026-10-03 04:21:18.412][INFO ] [Role           :1190] - ps uxf | grep "/data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/bin/observer" | grep -v grep
+[2026-10-03 04:21:18.445][INFO ] [Role           :1154] - check port on 6.12.232.130
+[2026-10-03 04:21:18.446][INFO ] [RemoteShell    :143] - netstat -lpnt 2>/dev/null | grep '0.0.0.0:42001 ' | awk -F ' ' '{print $7}'
+[2026-10-03 04:21:18.471][INFO ] [RemoteShell    :143] - netstat -lpnt 2>/dev/null | grep '0.0.0.0:42036 ' | awk -F ' ' '{print $7}'
+[2026-10-03 04:21:18.495][INFO ] [Role           :1164] - stop obs0 took 2 s
+[2026-10-03 04:21:18.496][INFO ] [Deploy         :294] - execute db_s.z1.obs0.force_stop  result => true
+[2026-10-03 04:21:18.496][INFO ] [Deploy         :362] - execute db_s.z1.force_stop result => true [true]
+[2026-10-03 04:21:18.499][INFO ] [Deploy         :362] - execute db_s.z1.force_stop_logstore result => true []
+[2026-10-03 04:21:18.499][INFO ] [Deploy         :331] - execute db_s.z1.force_stop_all result => true
+[2026-10-03 04:21:18.500][INFO ] [Deploy         :287] - execute db_s.z1.obs0.rmdir 
+[2026-10-03 04:21:18.501][INFO ] [Deploy         :381] - execute db_s.lite_mode result => true result type => java.lang.Boolean
+[2026-10-03 04:21:18.502][INFO ] [Role           :1395] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_s.z1.obs0.nijia.nj/sstable /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store/slog /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_s.z1.obs0.nijia.nj/sort_dir , on => 6.12.232.130
+[2026-10-03 04:21:18.509][INFO ] [Role           :1397] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_s.z1.obs0.nijia.nj/sstable /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store/slog /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_s.z1.obs0.nijia.nj/sort_dir , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:21:18.530][INFO ] [Role           :1402] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/log , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:21:18.536][INFO ] [Role           :1407] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/admin , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:21:18.541][INFO ] [Role           :1412] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/wallet , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:21:18.547][INFO ] [Role           :1417] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/etc/observer.c*nf*.bin* /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/etc/seekdb.c*nf*.bin* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:21:18.551][INFO ] [Role           :1423] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/etc/observer.data_version.bin* /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/etc/seekdb.data_version.bin* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:21:18.556][INFO ] [Role           :1429] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/etc2/observer.c*nf*.bin* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:21:18.560][INFO ] [Role           :1434] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/etc3/observer.c*nf*.bin* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:21:18.563][INFO ] [Role           :1439] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/run/observer.pid /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/run/seekdb.pid , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:21:18.568][INFO ] [Role           :1444] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/clog_shm , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:21:18.572][INFO ] [Role           :1449] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/ilog_shm , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:21:18.576][INFO ] [Role           :1454] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/manifest* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:21:18.584][INFO ] [Role           :1467] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/core* , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:21:18.588][INFO ] [Role           :1504] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/ /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_s.z1.obs0.nijia.nj/ , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:21:18.790][INFO ] [Role           :1510] - rm -fr /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0 , on => 6.12.232.130 rc => 0 stdout => null
+[2026-10-03 04:21:18.794][INFO ] [Deploy         :294] - execute db_s.z1.obs0.rmdir  result => true
+[2026-10-03 04:21:18.795][INFO ] [Deploy         :362] - execute db_s.z1.rmdir result => true [true]
+[2026-10-03 04:21:18.795][INFO ] [Deploy         :331] - execute db_s.z1.cleanup result => true
+[2026-10-03 04:21:18.796][INFO ] [Deploy         :362] - execute db_s.z1.cleanup_logstore result => true []
+[2026-10-03 04:21:18.796][INFO ] [Deploy         :331] - execute db_s.z1.cleanup_all result => true
+[2026-10-03 04:21:18.796][INFO ] [Deploy         :287] - execute db_s.z1.genconf
+[2026-10-03 04:21:18.796][INFO ] [Deploy         :294] - execute db_s.z1.genconf result => true
+[2026-10-03 04:21:18.797][INFO ] [Deploy         :287] - execute db_s.z1.obs0.mkdir 
+[2026-10-03 04:21:18.798][INFO ] [Role           :1768] - mkdir -p /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/;mkdir -p /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store/clog /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store/ilog /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store/slog /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_s.z1.obs0.nijia.nj/sort_dir /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_s.z1.obs0.nijia.nj/sstable;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_s.z1.obs0.nijia.nj/sstable /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store/clog /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store/ilog /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/clog/db_s.z1.obs0.nijia.nj/store/slog /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/;ln -sf /data/1/nijia.nj/test/namespace_standby_20261003_v1/data/db_s.z1.obs0.nijia.nj/sort_dir /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/ on 6.12.232.130
+[2026-10-03 04:21:18.813][INFO ] [Deploy         :294] - execute db_s.z1.obs0.mkdir  result => true
+[2026-10-03 04:21:18.814][INFO ] [Deploy         :362] - execute db_s.z1.mkdir_obs result => true [true]
+[2026-10-03 04:21:18.814][INFO ] [Deploy         :362] - execute db_s.z1.mkdir_logstore result => true []
+[2026-10-03 04:21:18.814][INFO ] [Deploy         :331] - execute db_s.z1.mkdir result => true
+[2026-10-03 04:21:18.815][INFO ] [Deploy         :287] - execute db_s.z1.obs0.rsync 
+[2026-10-03 04:21:18.827][INFO ] [Role           :1648] - sync server finish, time = 12
+[2026-10-03 04:21:18.827][INFO ] [Role           :1563] - rsync server => db_s.z1.obs0 version if specified => .
+[2026-10-03 04:21:18.833][INFO ] [Role           :1635] - check disk dir ==> './admin' exist
+[2026-10-03 04:21:18.838][WARN ] [Role           :1638] - check disk dir ==> './plugin_dir' not exist
+[2026-10-03 04:21:18.842][INFO ] [Role           :1635] - check disk dir ==> './wallet' exist
+[2026-10-03 04:21:18.843][INFO ] [Role           :1590] - transfer cmd to =>  rsync -WrptgoDRLv --timeout=600 bin etc lib  admin  wallet /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0
+[2026-10-03 04:21:27.659][INFO ] [Role           :1604] - rsync cmd =>  rsync -WrptgoDRLv --timeout=600 bin etc lib  admin  wallet /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0
+[2026-10-03 04:21:27.659][INFO ] [Deploy         :294] - execute db_s.z1.obs0.rsync  result => true
+[2026-10-03 04:21:27.659][INFO ] [Deploy         :362] - execute db_s.z1.rsync_obs result => true [true]
+[2026-10-03 04:21:27.660][INFO ] [Deploy         :362] - execute db_s.z1.rsync_logstore result => true []
+[2026-10-03 04:21:27.660][INFO ] [Deploy         :331] - execute db_s.z1.rsync result => true
+[2026-10-03 04:21:27.660][INFO ] [Deploy         :362] - execute db_s.z1.start_logstore result => true []
+[2026-10-03 04:21:27.661][INFO ] [Deploy         :287] - execute db_s.z1.sleep 5
+[2026-10-03 04:21:32.661][INFO ] [Deploy         :294] - execute db_s.z1.sleep 5 result => true
+[2026-10-03 04:21:32.662][INFO ] [Deploy         :287] - execute db_s.z1.obs0.start 
+[2026-10-03 04:21:32.662][INFO ] [Deploy         :381] - execute db_s.lite_mode result => true result type => java.lang.Boolean
+[2026-10-03 04:21:32.663][INFO ] [Deploy         :381] - execute db_s.lite_mode result => true result type => java.lang.Boolean
+6.12.232.130 is not a valid IPv6 address.
+[2026-10-03 04:21:32.664][INFO ] [Role           :539] - cluster_id1
+[2026-10-03 04:21:32.665][INFO ] [Deploy         :381] - execute db_s.z_num result => 1 result type => java.lang.Integer
+[2026-10-03 04:21:32.665][INFO ] [Role           :552] - db_s have 1 ZONE
+[2026-10-03 04:21:32.665][INFO ] [Role           :584] - ofs_list ofs_list='z1@' has_ofs_zone false
+[2026-10-03 04:21:32.665][INFO ] [Role           :637] - ulimit -c unlimited -s 4096;cd /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0;LD_LIBRARY_PATH=./lib:/usr/local/lib:/usr/lib:/usr/lib64:/usr/local/lib64:$LD_LIBRARY_PATH /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/bin/observer --port 42036 --data-dir /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store --redo-dir /data/1/nijia.nj/test/namespace_standby_20261003_v1/work/db_s.z1.obs0/store/clog  --role=STANDBY --parameter log_restore_source=6.12.232.130:42000 --parameter enable_rpc_service=true --parameter rpc_port=42001 --parameter datafile_size='2G' --parameter log_disk_size='2G' --parameter cpu_count=4 --parameter memory_limit='8G' on 6.12.232.130
+[2026-10-03 04:21:32.744][INFO ] [Deploy         :294] - execute db_s.z1.obs0.start  result => true
+[2026-10-03 04:21:32.744][INFO ] [Deploy         :362] - execute db_s.z1.start_obs result => true [true]
+[2026-10-03 04:21:32.745][INFO ] [Deploy         :331] - execute db_s.z1.start result => true
+[2026-10-03 04:21:32.745][INFO ] [Deploy         :287] - execute db_s.z1.sleep 8
+[2026-10-03 04:21:40.745][INFO ] [Deploy         :294] - execute db_s.z1.sleep 8 result => true
+[2026-10-03 04:21:40.745][INFO ] [Deploy         :331] - execute db_s.z1.reboot  result => true
+[2026-10-03 04:21:40.746][INFO ] [Deploy         :362] - execute db_s.deploy result => true [true]
+[2026-10-03 04:21:40.746][INFO ] [Deploy         :287] - execute db_s.sleep 5
+[2026-10-03 04:21:45.746][INFO ] [Deploy         :294] - execute db_s.sleep 5 result => true
+[2026-10-03 04:21:45.746][INFO ] [Deploy         :287] - execute db_s.bootstrap
+[2026-10-03 04:21:45.747][INFO ] [Deploy         :381] - execute db_s.z_num result => 1 result type => java.lang.Integer
+[2026-10-03 04:21:45.747][INFO ] [Deploy         :381] - execute db_s.zone_names result => [Ljava.lang.String;@3bfdc050 result type => [Ljava.lang.String;
+[2026-10-03 04:21:45.747][INFO ] [Deploy         :381] - execute db_s.z1.obs_num result => 1 result type => java.lang.Integer
+[2026-10-03 04:21:45.747][INFO ] [Deploy         :287] - execute db_s.z1.obs0.get status
+[2026-10-03 04:21:45.747][WARN ] [Deploy         :298] - execute db_s.z1.obs0.get status result => null
+[2026-10-03 04:21:45.747][INFO ] [Deploy         :381] - execute db_s.lite_mode result => true result type => java.lang.Boolean
+[2026-10-03 04:21:45.747][INFO ] [Deploy         :294] - execute db_s.bootstrap result => true
+[2026-10-03 04:21:45.748][INFO ] [Deploy         :287] - execute db_s.addserver
+[2026-10-03 04:21:45.748][INFO ] [Deploy         :381] - execute db_s.z_num result => 1 result type => java.lang.Integer
+[2026-10-03 04:21:45.748][INFO ] [Deploy         :381] - execute db_s.zone_names result => [Ljava.lang.String;@3bfdc050 result type => [Ljava.lang.String;
+[2026-10-03 04:21:45.748][INFO ] [Deploy         :381] - execute db_s.z1.obs_num result => 1 result type => java.lang.Integer
+[2026-10-03 04:21:45.748][INFO ] [Deploy         :294] - execute db_s.addserver result => true
+[2026-10-03 04:21:45.748][INFO ] [Deploy         :287] - execute db_s.exec_init_sql
+[2026-10-03 04:21:45.748][INFO ] [Deploy         :381] - execute db_s.lite_mode result => true result type => java.lang.Boolean
+[2026-10-03 04:21:45.748][INFO ] [Deploy         :294] - execute db_s.exec_init_sql result => true
+[2026-10-03 04:21:45.748][INFO ] [Deploy         :287] - execute db_s.register_proxy
+[2026-10-03 04:21:45.748][INFO ] [Deploy         :294] - execute db_s.register_proxy result => true
+[2026-10-03 04:21:45.748][INFO ] [Deploy         :287] - execute db_s.deploy_proxy
+[2026-10-03 04:21:45.749][INFO ] [Deploy         :294] - execute db_s.deploy_proxy result => true
+[2026-10-03 04:21:45.749][INFO ] [Deploy         :287] - execute db_s.sleep 5
+[2026-10-03 04:21:50.749][INFO ] [Deploy         :294] - execute db_s.sleep 5 result => true
+[2026-10-03 04:21:50.749][INFO ] [Deploy         :331] - execute db_s.reboot_proxy result => true
+[2026-10-03 04:21:50.749][INFO ] [Deploy         :287] - execute db_s.deploy_asvr
+[2026-10-03 04:21:50.750][INFO ] [Deploy         :294] - execute db_s.deploy_asvr result => true
+[2026-10-03 04:21:50.750][INFO ] [Deploy         :287] - execute db_s.sleep 5
+[2026-10-03 04:21:55.750][INFO ] [Deploy         :294] - execute db_s.sleep 5 result => true
+[2026-10-03 04:21:55.751][INFO ] [Deploy         :331] - execute db_s.reboot_asvr result => true
+[2026-10-03 04:21:55.751][INFO ] [Deploy         :287] - execute db_s.add_asvr
+[2026-10-03 04:21:55.751][INFO ] [OBI            :1509] - There is no need to add asvr.
+[2026-10-03 04:21:55.751][INFO ] [Deploy         :294] - execute db_s.add_asvr result => true
+[2026-10-03 04:21:55.751][INFO ] [Deploy         :287] - execute db_s.prepare_agent
+[2026-10-03 04:21:55.752][INFO ] [Deploy         :294] - execute db_s.prepare_agent result => true
+[2026-10-03 04:21:55.752][INFO ] [Deploy         :331] - execute db_s.reboot result => true
+[2026-10-03 04:21:55.752][INFO ] [Command        :353] - start[1790972478352] time[37399] tag[Q_DEPLOY]
+[2026-10-03 04:21:55.752][INFO ] [Command        :536] - > LINE => 37, CMD => Q_SLEEP, CONTENT => 5
+[2026-10-03 04:22:00.754][INFO ] [Command        :353] - start[1790972515753] time[5001] tag[Q_SLEEP]
+[2026-10-03 04:22:00.755][INFO ] [Command        :536] - > LINE => 42, CMD => Q_ECHO, CONTENT => ========== Initialization: Set log_restore_source for db_p ==========
+[2026-10-03 04:22:00.755][INFO ] [Command        :353] - start[1790972520755] time[0] tag[Q_ECHO]
+[2026-10-03 04:22:00.756][INFO ] [Command        :536] - > LINE => 44, CMD => Q_DISABLE_QUERY_LOG, CONTENT => --disable_query_log
+[2026-10-03 04:22:00.756][INFO ] [Command        :353] - start[1790972520756] time[0] tag[Q_DISABLE_QUERY_LOG]
+[2026-10-03 04:22:00.756][INFO ] [Command        :536] - > LINE => 45, CMD => Q_DISABLE_RESULT_LOG, CONTENT => --disable_result_log
+[2026-10-03 04:22:00.757][INFO ] [Command        :353] - start[1790972520757] time[0] tag[Q_DISABLE_RESULT_LOG]
+[2026-10-03 04:22:00.757][INFO ] [Command        :536] - > LINE => 48, CMD => Q_DEPLOY, CONTENT => db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 30;
+[2026-10-03 04:22:00.758][INFO ] [DeployProcessor:93] - deploy => db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 30
+[2026-10-03 04:22:00.758][INFO ] [Deploy         :287] - execute db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 30
+[2026-10-03 04:22:00.758][INFO ] [Deploy         :287] - execute db_p.select_one_value select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY'
+Loading class `com.mysql.jdbc.Driver'. This is deprecated. The new driver class is `com.mysql.cj.jdbc.Driver'. The driver is automatically registered via the SPI and manual loading of the driver class is generally unnecessary.
+[2026-10-03 04:22:00.916][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY'
+[2026-10-03 04:22:01.414][INFO ] [Deploy         :294] - execute db_p.select_one_value select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' result => 1
+[2026-10-03 04:22:01.414][INFO ] [OBI            :5345] - check success! use time = 0
+[2026-10-03 04:22:01.414][INFO ] [Deploy         :294] - execute db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 30 result => true
+[2026-10-03 04:22:01.414][INFO ] [Command        :353] - start[1790972520757] time[656] tag[Q_DEPLOY]
+[2026-10-03 04:22:01.415][INFO ] [Command        :536] - > LINE => 51, CMD => Q_DEPLOY, CONTENT => db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30;
+[2026-10-03 04:22:01.415][INFO ] [DeployProcessor:93] - deploy => db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30
+[2026-10-03 04:22:01.415][INFO ] [Deploy         :287] - execute db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30
+[2026-10-03 04:22:01.416][INFO ] [Deploy         :287] - execute db_s.select_one_value select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY'
+[2026-10-03 04:22:01.416][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY'
+[2026-10-03 04:22:01.459][INFO ] [Deploy         :294] - execute db_s.select_one_value select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' result => 1
+[2026-10-03 04:22:01.459][INFO ] [OBI            :5345] - check success! use time = 0
+[2026-10-03 04:22:01.459][INFO ] [Deploy         :294] - execute db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30 result => true
+[2026-10-03 04:22:01.459][INFO ] [Command        :353] - start[1790972521415] time[44] tag[Q_DEPLOY]
+[2026-10-03 04:22:01.460][INFO ] [Command        :536] - > LINE => 53, CMD => Q_DEPLOY, CONTENT => db_p.mysql alter system set ob_compaction_schedule_interval = '3s';
+[2026-10-03 04:22:01.461][INFO ] [DeployProcessor:93] - deploy => db_p.mysql alter system set ob_compaction_schedule_interval = '3s'
+[2026-10-03 04:22:01.461][INFO ] [Deploy         :287] - execute db_p.mysql alter system set ob_compaction_schedule_interval = '3s'
+[2026-10-03 04:22:01.461][INFO ] [Deploy         :287] - execute db_p.z1.obs0.mysql alter system set ob_compaction_schedule_interval = '3s'
+[2026-10-03 04:22:01.461][INFO ] [Role           :3236] - sql =>alter system set ob_compaction_schedule_interval = '3s'
+ will be executed with connection[z1.obs0]admin:admin@6.12.232.130:42035
+[2026-10-03 04:22:01.490][INFO ] [Deploy         :294] - execute db_p.z1.obs0.mysql alter system set ob_compaction_schedule_interval = '3s' result => true
+[2026-10-03 04:22:01.490][INFO ] [Deploy         :294] - execute db_p.mysql alter system set ob_compaction_schedule_interval = '3s' result => true
+[2026-10-03 04:22:01.490][INFO ] [Command        :353] - start[1790972521460] time[30] tag[Q_DEPLOY]
+[2026-10-03 04:22:01.491][INFO ] [Command        :536] - > LINE => 54, CMD => Q_DEPLOY, CONTENT => db_s.mysql alter system set ob_compaction_schedule_interval = '3s';
+[2026-10-03 04:22:01.492][INFO ] [DeployProcessor:93] - deploy => db_s.mysql alter system set ob_compaction_schedule_interval = '3s'
+[2026-10-03 04:22:01.492][INFO ] [Deploy         :287] - execute db_s.mysql alter system set ob_compaction_schedule_interval = '3s'
+[2026-10-03 04:22:01.492][INFO ] [Deploy         :287] - execute db_s.z1.obs0.mysql alter system set ob_compaction_schedule_interval = '3s'
+[2026-10-03 04:22:01.493][INFO ] [Role           :3236] - sql =>alter system set ob_compaction_schedule_interval = '3s'
+ will be executed with connection[z1.obs0]admin:admin@6.12.232.130:42036
+[2026-10-03 04:22:01.521][INFO ] [Deploy         :294] - execute db_s.z1.obs0.mysql alter system set ob_compaction_schedule_interval = '3s' result => true
+[2026-10-03 04:22:01.521][INFO ] [Deploy         :294] - execute db_s.mysql alter system set ob_compaction_schedule_interval = '3s' result => true
+[2026-10-03 04:22:01.521][INFO ] [Command        :353] - start[1790972521491] time[30] tag[Q_DEPLOY]
+[2026-10-03 04:22:01.522][INFO ] [Command        :536] - > LINE => 57, CMD => Q_LET_DEPLOY, CONTENT => $db_s_svr_ip
+[2026-10-03 04:22:01.522][INFO ] [Deploy         :287] - execute db_s.select select svr_ip from oceanbase.__all_virtual_server_stat limit 1, svr_ip, 1
+[2026-10-03 04:22:01.523][INFO ] [SQLProcessor   :2086] - execute sql => select svr_ip from oceanbase.__all_virtual_server_stat limit 1
+[2026-10-03 04:22:01.534][INFO ] [Deploy         :294] - execute db_s.select select svr_ip from oceanbase.__all_virtual_server_stat limit 1, svr_ip, 1 result => 127.0.0.1
+[2026-10-03 04:22:01.535][INFO ] [Command        :353] - start[1790972521522] time[12] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:01.535][INFO ] [Command        :536] - > LINE => 58, CMD => Q_LET_DEPLOY, CONTENT => $db_s_rpc_port
+[2026-10-03 04:22:01.535][INFO ] [Deploy         :287] - execute db_s.select select rpc_port from oceanbase.__all_virtual_server_stat limit 1, rpc_port, 1
+[2026-10-03 04:22:01.536][INFO ] [SQLProcessor   :2086] - execute sql => select rpc_port from oceanbase.__all_virtual_server_stat limit 1
+[2026-10-03 04:22:01.546][INFO ] [Deploy         :294] - execute db_s.select select rpc_port from oceanbase.__all_virtual_server_stat limit 1, rpc_port, 1 result => 42001
+[2026-10-03 04:22:01.546][INFO ] [Command        :353] - start[1790972521535] time[10] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:01.546][INFO ] [Command        :536] - > LINE => 62, CMD => Q_CONNECT, CONTENT => ob_connect(conn_sys_p_init, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR)
+[2026-10-03 04:22:01.549][INFO ] [SQLProcessor   :1505] - conn_sys_p_init create a physical connection  using jdbc:mysql://6.12.232.130:42035/oceanbase?useAffectedRows=true&emulateUnsupportedPstmts=false&characterEncoding=utf8&useServerPrepStmts=true&prepStmtCacheSqlLimit=1000&enableQueryTimeouts=false&useLocalSessionState=false&useLocalTransactionState=false&rewriteBatchedStatements=true&allowMultiQueries=true&socketTimeout=1800000 user/pwd is root@sys/
+[2026-10-03 04:22:01.568][INFO ] [SQLProcessor   :1519] - connection => conn_sys_p_init is mysql mode.
+[2026-10-03 04:22:01.568][INFO ] [SQLProcessor   :1522] - put conn: dataid=conn_sys_p_init currentConn=com.mysql.cj.jdbc.ConnectionImpl@2d7275fc hashcode => 762476028
+[2026-10-03 04:22:01.568][INFO ] [Command        :353] - start[1790972521546] time[21] tag[Q_CONNECT]
+[2026-10-03 04:22:01.568][INFO ] [Command        :536] - > LINE => 63, CMD => Q_CONNECTION, CONTENT => connection conn_sys_p_init
+[2026-10-03 04:22:01.569][INFO ] [SQLProcessor   :1128] - use connection => conn_sys_p_init hashcode => 762476028
+[2026-10-03 04:22:01.571][INFO ] [SQLProcessor   :1158] - connection => conn_sys_p_init is mysql mode. conn=com.mysql.cj.jdbc.ConnectionImpl@2d7275fc
+[2026-10-03 04:22:01.571][INFO ] [Command        :353] - start[1790972521568] time[2] tag[Q_CONNECTION]
+[2026-10-03 04:22:01.571][INFO ] [Command        :536] - > LINE => 64, CMD => Q_EVAL, CONTENT => alter system set log_restore_source = '$db_s_svr_ip:$db_s_rpc_port';
+[2026-10-03 04:22:01.575][INFO ] [Command        :771] - eval => alter system set log_restore_source = '127.0.0.1:42001';
+[2026-10-03 04:22:01.585][INFO ] [Command        :353] - start[1790972521571] time[13] tag[Q_EVAL]
+[2026-10-03 04:22:01.585][INFO ] [Command        :536] - > LINE => 67, CMD => Q_DEPLOY, CONTENT => db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%$db_s_svr_ip%', 1, 30;
+[2026-10-03 04:22:01.586][INFO ] [DeployProcessor:93] - deploy => db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%127.0.0.1%', 1, 30
+[2026-10-03 04:22:01.587][INFO ] [Deploy         :287] - execute db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%127.0.0.1%', 1, 30
+[2026-10-03 04:22:01.587][INFO ] [Deploy         :287] - execute db_p.select_one_value select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%127.0.0.1%'
+[2026-10-03 04:22:01.587][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%127.0.0.1%'
+[2026-10-03 04:22:01.597][INFO ] [Deploy         :294] - execute db_p.select_one_value select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%127.0.0.1%' result => 1
+[2026-10-03 04:22:01.598][INFO ] [OBI            :5345] - check success! use time = 0
+[2026-10-03 04:22:01.598][INFO ] [Deploy         :294] - execute db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%127.0.0.1%', 1, 30 result => true
+[2026-10-03 04:22:01.598][INFO ] [Command        :353] - start[1790972521586] time[12] tag[Q_DEPLOY]
+[2026-10-03 04:22:01.598][INFO ] [Command        :536] - > LINE => 69, CMD => Q_ENABLE_QUERY_LOG, CONTENT => --enable_query_log
+[2026-10-03 04:22:01.598][INFO ] [Command        :353] - start[1790972521598] time[0] tag[Q_ENABLE_QUERY_LOG]
+[2026-10-03 04:22:01.599][INFO ] [Command        :536] - > LINE => 70, CMD => Q_ENABLE_RESULT_LOG, CONTENT => --enable_result_log
+[2026-10-03 04:22:01.599][INFO ] [Command        :353] - start[1790972521599] time[0] tag[Q_ENABLE_RESULT_LOG]
+[2026-10-03 04:22:01.599][INFO ] [Command        :536] - > LINE => 72, CMD => Q_ECHO, CONTENT => Initialization completed: log_restore_source set for db_p
+[2026-10-03 04:22:01.599][INFO ] [Command        :353] - start[1790972521599] time[0] tag[Q_ECHO]
+[2026-10-03 04:22:01.599][INFO ] [Command        :536] - > LINE => 77, CMD => Q_ECHO, CONTENT => ========== Phase 1: Initial Primary Operations ==========
+[2026-10-03 04:22:01.600][INFO ] [Command        :353] - start[1790972521599] time[0] tag[Q_ECHO]
+[2026-10-03 04:22:01.600][INFO ] [Command        :536] - > LINE => 79, CMD => Q_DISABLE_QUERY_LOG, CONTENT => --disable_query_log
+[2026-10-03 04:22:01.600][INFO ] [Command        :353] - start[1790972521600] time[0] tag[Q_DISABLE_QUERY_LOG]
+[2026-10-03 04:22:01.600][INFO ] [Command        :536] - > LINE => 80, CMD => Q_DISABLE_RESULT_LOG, CONTENT => --disable_result_log
+[2026-10-03 04:22:01.601][INFO ] [Command        :353] - start[1790972521601] time[0] tag[Q_DISABLE_RESULT_LOG]
+[2026-10-03 04:22:01.601][INFO ] [Command        :536] - > LINE => 81, CMD => Q_CONNECT, CONTENT => ob_connect(conn_sys_p, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR)
+[2026-10-03 04:22:01.601][INFO ] [SQLProcessor   :1505] - conn_sys_p create a physical connection  using jdbc:mysql://6.12.232.130:42035/oceanbase?useAffectedRows=true&emulateUnsupportedPstmts=false&characterEncoding=utf8&useServerPrepStmts=true&prepStmtCacheSqlLimit=1000&enableQueryTimeouts=false&useLocalSessionState=false&useLocalTransactionState=false&rewriteBatchedStatements=true&allowMultiQueries=true&socketTimeout=1800000 user/pwd is root@sys/
+[2026-10-03 04:22:01.609][INFO ] [SQLProcessor   :1519] - connection => conn_sys_p is mysql mode.
+[2026-10-03 04:22:01.609][INFO ] [SQLProcessor   :1522] - put conn: dataid=conn_sys_p currentConn=com.mysql.cj.jdbc.ConnectionImpl@49e53c76 hashcode => 1239759990
+[2026-10-03 04:22:01.609][INFO ] [Command        :353] - start[1790972521601] time[8] tag[Q_CONNECT]
+[2026-10-03 04:22:01.609][INFO ] [Command        :536] - > LINE => 82, CMD => Q_CONNECTION, CONTENT => connection conn_sys_p
+[2026-10-03 04:22:01.610][INFO ] [SQLProcessor   :1128] - use connection => conn_sys_p hashcode => 1239759990
+[2026-10-03 04:22:01.611][INFO ] [SQLProcessor   :1158] - connection => conn_sys_p is mysql mode. conn=com.mysql.cj.jdbc.ConnectionImpl@49e53c76
+[2026-10-03 04:22:01.611][INFO ] [Command        :353] - start[1790972521609] time[1] tag[Q_CONNECTION]
+[2026-10-03 04:22:01.612][INFO ] [Command        :536] - > LINE => 83, CMD => Q_ENABLE_QUERY_LOG, CONTENT => --enable_query_log
+[2026-10-03 04:22:01.612][INFO ] [Command        :353] - start[1790972521612] time[0] tag[Q_ENABLE_QUERY_LOG]
+[2026-10-03 04:22:01.612][INFO ] [Command        :536] - > LINE => 84, CMD => Q_ENABLE_RESULT_LOG, CONTENT => --enable_result_log
+[2026-10-03 04:22:01.612][INFO ] [Command        :353] - start[1790972521612] time[0] tag[Q_ENABLE_RESULT_LOG]
+[2026-10-03 04:22:01.612][INFO ] [Command        :536] - > LINE => 87, CMD => Q_LET, CONTENT => $switchover_step
+[2026-10-03 04:22:01.613][INFO ] [Command        :353] - start[1790972521613] time[0] tag[Q_LET]
+[2026-10-03 04:22:01.613][INFO ] [Command        :536] - > LINE => 88, CMD => Q_SOURCE, CONTENT => t/stanby/include/switchover_workloads.inc
+[2026-10-03 04:22:01.613][INFO ] [TestCase       :761] - Read file => t/stanby/include/switchover_workloads.inc
+[2026-10-03 04:22:01.613][INFO ] [TestCase       :721] - Finish read case: file_lines => 18, lineNo => 8
+[2026-10-03 04:22:01.614][INFO ] [Command        :536] - > LINE => 11, CMD => Q_ECHO, CONTENT => --- ddl ---
+[2026-10-03 04:22:01.614][INFO ] [Command        :353] - start[1790972521614] time[0] tag[Q_ECHO]
+[2026-10-03 04:22:01.614][INFO ] [Command        :536] - > LINE => 12, CMD => Q_SOURCE, CONTENT => t/stanby/include/switchover_roundtrip_ddl.inc
+[2026-10-03 04:22:01.615][INFO ] [TestCase       :761] - Read file => t/stanby/include/switchover_roundtrip_ddl.inc
+[2026-10-03 04:22:01.615][INFO ] [TestCase       :721] - Finish read case: file_lines => 81, lineNo => 52
+[2026-10-03 04:22:01.616][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 1
+[2026-10-03 04:22:02.08][INFO ] [Command        :536] - > LINE => 0, CMD => Q_QUERY, CONTENT => create table if not exists test_switchover_ddl(id int primary key, name varchar(100), value int, create_time timestamp default current_timestamp);
+[2026-10-03 04:22:02.146][INFO ] [Command        :353] - start[1790972522009] time[137] tag[Q_QUERY]
+[2026-10-03 04:22:02.146][INFO ] [Command        :536] - > LINE => 0, CMD => Q_QUERY, CONTENT => insert into test_switchover_ddl values(1, 'test1', 100, current_timestamp);
+[2026-10-03 04:22:02.153][INFO ] [Command        :353] - start[1790972522146] time[6] tag[Q_QUERY]
+[2026-10-03 04:22:02.153][INFO ] [Command        :536] - > LINE => 0, CMD => Q_QUERY, CONTENT => insert into test_switchover_ddl values(2, 'test2', 200, current_timestamp);
+[2026-10-03 04:22:02.157][INFO ] [Command        :353] - start[1790972522154] time[3] tag[Q_QUERY]
+[2026-10-03 04:22:02.158][INFO ] [Command        :536] - > LINE => 0, CMD => Q_QUERY, CONTENT => insert into test_switchover_ddl values(3, 'test3', 300, current_timestamp);
+[2026-10-03 04:22:02.161][INFO ] [Command        :353] - start[1790972522158] time[3] tag[Q_QUERY]
+[2026-10-03 04:22:02.161][INFO ] [Command        :353] - start[1790972521616] time[545] tag[Q_IF]
+[2026-10-03 04:22:02.161][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 2
+[2026-10-03 04:22:02.175][INFO ] [Command        :353] - start[1790972522162] time[13] tag[Q_IF]
+[2026-10-03 04:22:02.175][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 3
+[2026-10-03 04:22:02.185][INFO ] [Command        :353] - start[1790972522175] time[10] tag[Q_IF]
+[2026-10-03 04:22:02.186][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 4
+[2026-10-03 04:22:02.194][INFO ] [Command        :353] - start[1790972522186] time[8] tag[Q_IF]
+[2026-10-03 04:22:02.195][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 5
+[2026-10-03 04:22:02.204][INFO ] [Command        :353] - start[1790972522195] time[8] tag[Q_IF]
+[2026-10-03 04:22:02.204][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 6
+[2026-10-03 04:22:02.213][INFO ] [Command        :353] - start[1790972522204] time[8] tag[Q_IF]
+[2026-10-03 04:22:02.213][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 7
+[2026-10-03 04:22:02.221][INFO ] [Command        :353] - start[1790972522213] time[7] tag[Q_IF]
+[2026-10-03 04:22:02.221][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 8
+[2026-10-03 04:22:02.235][INFO ] [Command        :353] - start[1790972522221] time[13] tag[Q_IF]
+[2026-10-03 04:22:02.235][INFO ] [Command        :353] - start[1790972521615] time[620] tag[Q_SOURCE]
+[2026-10-03 04:22:02.236][INFO ] [Command        :536] - > LINE => 13, CMD => Q_ECHO, CONTENT => --- fulltext ---
+[2026-10-03 04:22:02.236][INFO ] [Command        :353] - start[1790972522236] time[0] tag[Q_ECHO]
+[2026-10-03 04:22:02.237][INFO ] [Command        :536] - > LINE => 14, CMD => Q_SOURCE, CONTENT => t/stanby/include/switchover_roundtrip_fulltext.inc
+[2026-10-03 04:22:02.237][INFO ] [TestCase       :761] - Read file => t/stanby/include/switchover_roundtrip_fulltext.inc
+[2026-10-03 04:22:02.238][INFO ] [TestCase       :721] - Finish read case: file_lines => 66, lineNo => 38
+[2026-10-03 04:22:02.238][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 1
+[2026-10-03 04:22:02.246][INFO ] [Command        :536] - > LINE => 0, CMD => Q_QUERY, CONTENT => create table test_switchover_fts(id int primary key, title varchar(200), content text, fulltext index fts_idx(title, content));
+[2026-10-03 04:22:02.372][INFO ] [Command        :353] - start[1790972522246] time[125] tag[Q_QUERY]
+[2026-10-03 04:22:02.373][INFO ] [Command        :536] - > LINE => 0, CMD => Q_QUERY, CONTENT => insert into test_switchover_fts values(1, 'OceanBase Database', 'OceanBase is a distributed relational database');
+[2026-10-03 04:22:02.384][INFO ] [Command        :353] - start[1790972522373] time[11] tag[Q_QUERY]
+[2026-10-03 04:22:02.385][INFO ] [Command        :536] - > LINE => 0, CMD => Q_QUERY, CONTENT => insert into test_switchover_fts values(2, 'Cloud Computing', 'Cloud computing provides scalable resources');
+[2026-10-03 04:22:02.389][INFO ] [Command        :353] - start[1790972522385] time[3] tag[Q_QUERY]
+[2026-10-03 04:22:02.389][INFO ] [Command        :536] - > LINE => 0, CMD => Q_QUERY, CONTENT => insert into test_switchover_fts values(3, 'Data Security', 'Data security protects sensitive information');
+[2026-10-03 04:22:02.393][INFO ] [Command        :353] - start[1790972522389] time[3] tag[Q_QUERY]
+[2026-10-03 04:22:02.393][INFO ] [Command        :353] - start[1790972522238] time[154] tag[Q_IF]
+[2026-10-03 04:22:02.393][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 2
+[2026-10-03 04:22:02.400][INFO ] [Command        :353] - start[1790972522393] time[6] tag[Q_IF]
+[2026-10-03 04:22:02.400][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 3
+[2026-10-03 04:22:02.405][INFO ] [Command        :353] - start[1790972522400] time[5] tag[Q_IF]
+[2026-10-03 04:22:02.406][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 4
+[2026-10-03 04:22:02.410][INFO ] [Command        :353] - start[1790972522406] time[4] tag[Q_IF]
+[2026-10-03 04:22:02.410][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 5
+[2026-10-03 04:22:02.414][INFO ] [Command        :353] - start[1790972522410] time[4] tag[Q_IF]
+[2026-10-03 04:22:02.415][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 6
+[2026-10-03 04:22:02.418][INFO ] [Command        :353] - start[1790972522415] time[3] tag[Q_IF]
+[2026-10-03 04:22:02.419][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 7
+[2026-10-03 04:22:02.422][INFO ] [Command        :353] - start[1790972522419] time[3] tag[Q_IF]
+[2026-10-03 04:22:02.423][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 8
+[2026-10-03 04:22:02.431][INFO ] [Command        :353] - start[1790972522423] time[7] tag[Q_IF]
+[2026-10-03 04:22:02.431][INFO ] [Command        :353] - start[1790972522237] time[193] tag[Q_SOURCE]
+[2026-10-03 04:22:02.431][INFO ] [Command        :536] - > LINE => 15, CMD => Q_ECHO, CONTENT => --- vector ---
+[2026-10-03 04:22:02.431][INFO ] [Command        :353] - start[1790972522431] time[0] tag[Q_ECHO]
+[2026-10-03 04:22:02.432][INFO ] [Command        :536] - > LINE => 16, CMD => Q_SOURCE, CONTENT => t/stanby/include/switchover_roundtrip_vector.inc
+[2026-10-03 04:22:02.432][INFO ] [TestCase       :761] - Read file => t/stanby/include/switchover_roundtrip_vector.inc
+[2026-10-03 04:22:02.432][INFO ] [TestCase       :721] - Finish read case: file_lines => 86, lineNo => 53
+[2026-10-03 04:22:02.432][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 1
+[2026-10-03 04:22:02.436][INFO ] [Command        :536] - > LINE => 0, CMD => Q_QUERY, CONTENT => create table test_switchover_vec(id int primary key, name varchar(100), embedding vector(3));
+[2026-10-03 04:22:02.521][INFO ] [Command        :353] - start[1790972522436] time[84] tag[Q_QUERY]
+[2026-10-03 04:22:02.521][INFO ] [Command        :536] - > LINE => 0, CMD => Q_QUERY, CONTENT => create vector index vec_idx_switchover on test_switchover_vec(embedding) with (distance=l2, type=hnsw, lib=vsag);
+[2026-10-03 04:22:03.510][INFO ] [Command        :353] - start[1790972522521] time[988] tag[Q_QUERY]
+[2026-10-03 04:22:03.511][INFO ] [Command        :536] - > LINE => 0, CMD => Q_QUERY, CONTENT => insert into test_switchover_vec values(1, 'vec_1', '[1.0, 2.0, 3.0]');
+[2026-10-03 04:22:03.520][INFO ] [Command        :353] - start[1790972523511] time[9] tag[Q_QUERY]
+[2026-10-03 04:22:03.521][INFO ] [Command        :536] - > LINE => 0, CMD => Q_QUERY, CONTENT => insert into test_switchover_vec values(2, 'vec_2', '[4.0, 5.0, 6.0]');
+[2026-10-03 04:22:03.525][INFO ] [Command        :353] - start[1790972523521] time[4] tag[Q_QUERY]
+[2026-10-03 04:22:03.525][INFO ] [Command        :536] - > LINE => 0, CMD => Q_QUERY, CONTENT => insert into test_switchover_vec values(3, 'vec_3', '[7.0, 8.0, 9.0]');
+[2026-10-03 04:22:03.528][INFO ] [Command        :353] - start[1790972523526] time[2] tag[Q_QUERY]
+[2026-10-03 04:22:03.529][INFO ] [Command        :353] - start[1790972522432] time[1096] tag[Q_IF]
+[2026-10-03 04:22:03.529][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 2
+[2026-10-03 04:22:03.539][INFO ] [Command        :353] - start[1790972523529] time[10] tag[Q_IF]
+[2026-10-03 04:22:03.540][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 3
+[2026-10-03 04:22:03.547][INFO ] [Command        :353] - start[1790972523540] time[7] tag[Q_IF]
+[2026-10-03 04:22:03.548][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 4
+[2026-10-03 04:22:03.555][INFO ] [Command        :353] - start[1790972523548] time[6] tag[Q_IF]
+[2026-10-03 04:22:03.555][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 5
+[2026-10-03 04:22:03.560][INFO ] [Command        :353] - start[1790972523555] time[4] tag[Q_IF]
+[2026-10-03 04:22:03.560][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 6
+[2026-10-03 04:22:03.566][INFO ] [Command        :353] - start[1790972523560] time[5] tag[Q_IF]
+[2026-10-03 04:22:03.566][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 7
+[2026-10-03 04:22:03.571][INFO ] [Command        :353] - start[1790972523566] time[5] tag[Q_IF]
+[2026-10-03 04:22:03.572][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 8
+[2026-10-03 04:22:03.577][INFO ] [Command        :353] - start[1790972523572] time[4] tag[Q_IF]
+[2026-10-03 04:22:03.577][INFO ] [Command        :353] - start[1790972522432] time[1145] tag[Q_SOURCE]
+[2026-10-03 04:22:03.577][INFO ] [Command        :536] - > LINE => 17, CMD => Q_ECHO, CONTENT => --- fork_table ---
+[2026-10-03 04:22:03.578][INFO ] [Command        :353] - start[1790972523577] time[0] tag[Q_ECHO]
+[2026-10-03 04:22:03.578][INFO ] [Command        :536] - > LINE => 18, CMD => Q_SOURCE, CONTENT => t/stanby/include/switchover_roundtrip_fork_table.inc
+[2026-10-03 04:22:03.578][INFO ] [TestCase       :761] - Read file => t/stanby/include/switchover_roundtrip_fork_table.inc
+[2026-10-03 04:22:03.579][INFO ] [TestCase       :721] - Finish read case: file_lines => 89, lineNo => 54
+[2026-10-03 04:22:03.579][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 1
+[2026-10-03 04:22:03.583][INFO ] [Command        :536] - > LINE => 0, CMD => Q_QUERY, CONTENT => create table test_switchover_fork_src(c1 int primary key, c2 varchar(100), c3 int);
+[2026-10-03 04:22:03.623][INFO ] [Command        :353] - start[1790972523583] time[39] tag[Q_QUERY]
+[2026-10-03 04:22:03.623][INFO ] [Command        :536] - > LINE => 0, CMD => Q_QUERY, CONTENT => insert into test_switchover_fork_src values(1, 'src_1', 100);
+[2026-10-03 04:22:03.629][INFO ] [Command        :353] - start[1790972523623] time[5] tag[Q_QUERY]
+[2026-10-03 04:22:03.629][INFO ] [Command        :536] - > LINE => 0, CMD => Q_QUERY, CONTENT => insert into test_switchover_fork_src values(2, 'src_2', 200);
+[2026-10-03 04:22:03.633][INFO ] [Command        :353] - start[1790972523629] time[3] tag[Q_QUERY]
+[2026-10-03 04:22:03.634][INFO ] [Command        :536] - > LINE => 0, CMD => Q_QUERY, CONTENT => insert into test_switchover_fork_src values(3, 'src_3', 300);
+[2026-10-03 04:22:03.638][INFO ] [Command        :353] - start[1790972523634] time[4] tag[Q_QUERY]
+[2026-10-03 04:22:03.640][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEPLOY, CONTENT => db_p.mysql fork table oceanbase.test_switchover_fork_src to oceanbase.test_switchover_fork_dst;
+[2026-10-03 04:22:03.640][INFO ] [DeployProcessor:93] - deploy => db_p.mysql fork table oceanbase.test_switchover_fork_src to oceanbase.test_switchover_fork_dst
+[2026-10-03 04:22:03.641][INFO ] [Deploy         :287] - execute db_p.mysql fork table oceanbase.test_switchover_fork_src to oceanbase.test_switchover_fork_dst
+[2026-10-03 04:22:03.641][INFO ] [Deploy         :287] - execute db_p.z1.obs0.mysql fork table oceanbase.test_switchover_fork_src to oceanbase.test_switchover_fork_dst
+[2026-10-03 04:22:03.642][INFO ] [Role           :3236] - sql =>fork table oceanbase.test_switchover_fork_src to oceanbase.test_switchover_fork_dst
+ will be executed with connection[z1.obs0]admin:admin@6.12.232.130:42035
+[2026-10-03 04:22:03.692][INFO ] [Deploy         :294] - execute db_p.z1.obs0.mysql fork table oceanbase.test_switchover_fork_src to oceanbase.test_switchover_fork_dst result => true
+[2026-10-03 04:22:03.692][INFO ] [Deploy         :294] - execute db_p.mysql fork table oceanbase.test_switchover_fork_src to oceanbase.test_switchover_fork_dst result => true
+[2026-10-03 04:22:03.692][INFO ] [Command        :353] - start[1790972523640] time[52] tag[Q_DEPLOY]
+[2026-10-03 04:22:03.694][INFO ] [Command        :536] - > LINE => 0, CMD => Q_QUERY, CONTENT => select count(*) from test_switchover_fork_dst;
+[2026-10-03 04:22:03.701][INFO ] [Command        :353] - start[1790972523694] time[7] tag[Q_QUERY]
+[2026-10-03 04:22:03.701][INFO ] [Command        :353] - start[1790972523579] time[121] tag[Q_IF]
+[2026-10-03 04:22:03.701][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 2
+[2026-10-03 04:22:03.707][INFO ] [Command        :353] - start[1790972523701] time[5] tag[Q_IF]
+[2026-10-03 04:22:03.707][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 3
+[2026-10-03 04:22:03.712][INFO ] [Command        :353] - start[1790972523708] time[4] tag[Q_IF]
+[2026-10-03 04:22:03.712][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 4
+[2026-10-03 04:22:03.717][INFO ] [Command        :353] - start[1790972523712] time[4] tag[Q_IF]
+[2026-10-03 04:22:03.717][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 5
+[2026-10-03 04:22:03.722][INFO ] [Command        :353] - start[1790972523718] time[4] tag[Q_IF]
+[2026-10-03 04:22:03.722][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 6
+[2026-10-03 04:22:03.726][INFO ] [Command        :353] - start[1790972523722] time[4] tag[Q_IF]
+[2026-10-03 04:22:03.727][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 7
+[2026-10-03 04:22:03.731][INFO ] [Command        :353] - start[1790972523727] time[4] tag[Q_IF]
+[2026-10-03 04:22:03.731][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $switchover_step == 8
+[2026-10-03 04:22:03.735][INFO ] [Command        :353] - start[1790972523731] time[4] tag[Q_IF]
+[2026-10-03 04:22:03.736][INFO ] [Command        :353] - start[1790972523578] time[157] tag[Q_SOURCE]
+[2026-10-03 04:22:03.736][INFO ] [Command        :353] - start[1790972521613] time[2122] tag[Q_SOURCE]
+[2026-10-03 04:22:03.736][INFO ] [Command        :536] - > LINE => 90, CMD => Q_DISABLE_QUERY_LOG, CONTENT => --disable_query_log
+[2026-10-03 04:22:03.736][INFO ] [Command        :353] - start[1790972523736] time[0] tag[Q_DISABLE_QUERY_LOG]
+[2026-10-03 04:22:03.736][INFO ] [Command        :536] - > LINE => 91, CMD => Q_DISABLE_RESULT_LOG, CONTENT => --disable_result_log
+[2026-10-03 04:22:03.736][INFO ] [Command        :353] - start[1790972523736] time[0] tag[Q_DISABLE_RESULT_LOG]
+[2026-10-03 04:22:03.737][INFO ] [Command        :536] - > LINE => 94, CMD => Q_QUERY, CONTENT => ALTER SYSTEM MINOR FREEZE;
+[2026-10-03 04:22:03.746][INFO ] [Command        :353] - start[1790972523737] time[9] tag[Q_QUERY]
+[2026-10-03 04:22:03.747][INFO ] [Command        :536] - > LINE => 95, CMD => Q_SLEEP, CONTENT => 5
+[2026-10-03 04:22:08.747][INFO ] [Command        :353] - start[1790972523747] time[5000] tag[Q_SLEEP]
+[2026-10-03 04:22:08.748][INFO ] [Command        :536] - > LINE => 98, CMD => Q_QUERY, CONTENT => ALTER SYSTEM MAJOR FREEZE;
+[2026-10-03 04:22:08.765][INFO ] [Command        :353] - start[1790972528748] time[17] tag[Q_QUERY]
+[2026-10-03 04:22:08.766][INFO ] [Command        :536] - > LINE => 101, CMD => Q_DEPLOY, CONTENT => db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN, 1, 100;
+[2026-10-03 04:22:08.767][INFO ] [DeployProcessor:93] - deploy => db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN, 1, 100
+[2026-10-03 04:22:08.767][INFO ] [Deploy         :287] - execute db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN, 1, 100
+[2026-10-03 04:22:08.767][INFO ] [Deploy         :287] - execute db_p.select_one_value select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN
+[2026-10-03 04:22:08.768][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN
+[2026-10-03 04:22:08.816][INFO ] [Deploy         :294] - execute db_p.select_one_value select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN result => 0
+[2026-10-03 04:22:08.816][WARN ] [OBI            :5348] - expect => 1, actual => 0, left timeout => 100, totaltime => 100, file => 101/418, file_percent => 24
+[2026-10-03 04:22:09.816][INFO ] [Deploy         :287] - execute db_p.select_one_value select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN
+[2026-10-03 04:22:09.817][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN
+[2026-10-03 04:22:09.830][INFO ] [Deploy         :294] - execute db_p.select_one_value select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN result => 1
+[2026-10-03 04:22:09.830][INFO ] [OBI            :5345] - check success! use time = 1
+[2026-10-03 04:22:09.830][INFO ] [Deploy         :294] - execute db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN, 1, 100 result => true
+[2026-10-03 04:22:09.830][INFO ] [Command        :353] - start[1790972528766] time[1064] tag[Q_DEPLOY]
+[2026-10-03 04:22:09.830][INFO ] [Command        :536] - > LINE => 103, CMD => Q_LET, CONTENT => $__i__
+[2026-10-03 04:22:09.831][INFO ] [Command        :353] - start[1790972529830] time[0] tag[Q_LET]
+[2026-10-03 04:22:09.831][INFO ] [Command        :536] - > LINE => 103, CMD => Q_WHILE, CONTENT => $__i__ > 0
+[2026-10-03 04:22:09.838][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:10.838][INFO ] [Command        :353] - start[1790972529838] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:10.838][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:10.838][INFO ] [Command        :353] - start[1790972530838] time[0] tag[Q_DEC]
+[2026-10-03 04:22:10.839][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:10.839][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:10.840][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:10.850][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:10.851][INFO ] [Command        :353] - start[1790972530839] time[11] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:10.851][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:10.858][INFO ] [Command        :353] - start[1790972530851] time[7] tag[Q_IF]
+[2026-10-03 04:22:10.865][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:11.865][INFO ] [Command        :353] - start[1790972530865] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:11.865][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:11.865][INFO ] [Command        :353] - start[1790972531865] time[0] tag[Q_DEC]
+[2026-10-03 04:22:11.866][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:11.866][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:11.866][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:11.873][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:11.873][INFO ] [Command        :353] - start[1790972531866] time[7] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:11.874][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:11.880][INFO ] [Command        :353] - start[1790972531874] time[6] tag[Q_IF]
+[2026-10-03 04:22:11.886][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:12.887][INFO ] [Command        :353] - start[1790972531886] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:12.887][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:12.887][INFO ] [Command        :353] - start[1790972532887] time[0] tag[Q_DEC]
+[2026-10-03 04:22:12.887][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:12.888][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:12.888][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:12.895][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:12.896][INFO ] [Command        :353] - start[1790972532888] time[8] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:12.896][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:12.902][INFO ] [Command        :353] - start[1790972532896] time[5] tag[Q_IF]
+[2026-10-03 04:22:12.906][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:13.907][INFO ] [Command        :353] - start[1790972532906] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:13.907][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:13.907][INFO ] [Command        :353] - start[1790972533907] time[0] tag[Q_DEC]
+[2026-10-03 04:22:13.908][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:13.908][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:13.908][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:13.920][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:13.924][INFO ] [Command        :353] - start[1790972533908] time[16] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:13.924][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:13.947][INFO ] [Command        :353] - start[1790972533924] time[22] tag[Q_IF]
+[2026-10-03 04:22:13.951][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:14.951][INFO ] [Command        :353] - start[1790972533951] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:14.951][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:14.952][INFO ] [Command        :353] - start[1790972534952] time[0] tag[Q_DEC]
+[2026-10-03 04:22:14.952][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:14.952][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:14.957][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:14.965][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:14.966][INFO ] [Command        :353] - start[1790972534952] time[13] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:14.966][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:14.971][INFO ] [Command        :353] - start[1790972534966] time[5] tag[Q_IF]
+[2026-10-03 04:22:14.979][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:15.980][INFO ] [Command        :353] - start[1790972534980] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:15.980][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:15.980][INFO ] [Command        :353] - start[1790972535980] time[0] tag[Q_DEC]
+[2026-10-03 04:22:15.981][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:15.981][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:15.981][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:15.991][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:15.991][INFO ] [Command        :353] - start[1790972535981] time[10] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:15.991][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:15.996][INFO ] [Command        :353] - start[1790972535992] time[4] tag[Q_IF]
+[2026-10-03 04:22:16.00][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:17.00][INFO ] [Command        :353] - start[1790972536000] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:17.01][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:17.01][INFO ] [Command        :353] - start[1790972537001] time[0] tag[Q_DEC]
+[2026-10-03 04:22:17.01][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:17.01][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:17.02][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:17.09][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:17.10][INFO ] [Command        :353] - start[1790972537001] time[8] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:17.10][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:17.14][INFO ] [Command        :353] - start[1790972537010] time[4] tag[Q_IF]
+[2026-10-03 04:22:17.18][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:18.18][INFO ] [Command        :353] - start[1790972537018] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:18.18][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:18.18][INFO ] [Command        :353] - start[1790972538018] time[0] tag[Q_DEC]
+[2026-10-03 04:22:18.19][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:18.19][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:18.19][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:18.28][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:18.28][INFO ] [Command        :353] - start[1790972538019] time[9] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:18.28][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:18.33][INFO ] [Command        :353] - start[1790972538028] time[4] tag[Q_IF]
+[2026-10-03 04:22:18.37][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:19.37][INFO ] [Command        :353] - start[1790972538037] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:19.37][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:19.37][INFO ] [Command        :353] - start[1790972539037] time[0] tag[Q_DEC]
+[2026-10-03 04:22:19.38][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:19.38][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:19.38][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:19.45][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:19.45][INFO ] [Command        :353] - start[1790972539038] time[7] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:19.46][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:19.50][INFO ] [Command        :353] - start[1790972539046] time[4] tag[Q_IF]
+[2026-10-03 04:22:19.54][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:20.55][INFO ] [Command        :353] - start[1790972539054] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:20.55][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:20.55][INFO ] [Command        :353] - start[1790972540055] time[0] tag[Q_DEC]
+[2026-10-03 04:22:20.55][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:20.56][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:20.56][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:20.65][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:20.65][INFO ] [Command        :353] - start[1790972540056] time[9] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:20.66][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:20.72][INFO ] [Command        :353] - start[1790972540066] time[5] tag[Q_IF]
+[2026-10-03 04:22:20.76][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:21.76][INFO ] [Command        :353] - start[1790972540076] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:21.77][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:21.77][INFO ] [Command        :353] - start[1790972541077] time[0] tag[Q_DEC]
+[2026-10-03 04:22:21.77][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:21.77][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:21.78][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:21.85][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:21.86][INFO ] [Command        :353] - start[1790972541077] time[8] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:21.86][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:21.90][INFO ] [Command        :353] - start[1790972541086] time[4] tag[Q_IF]
+[2026-10-03 04:22:21.94][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:22.94][INFO ] [Command        :353] - start[1790972541094] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:22.94][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:22.95][INFO ] [Command        :353] - start[1790972542095] time[0] tag[Q_DEC]
+[2026-10-03 04:22:22.95][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:22.95][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:22.95][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:22.103][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:22.104][INFO ] [Command        :353] - start[1790972542095] time[8] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:22.104][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:22.109][INFO ] [Command        :353] - start[1790972542104] time[4] tag[Q_IF]
+[2026-10-03 04:22:22.112][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:23.113][INFO ] [Command        :353] - start[1790972542112] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:23.113][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:23.113][INFO ] [Command        :353] - start[1790972543113] time[0] tag[Q_DEC]
+[2026-10-03 04:22:23.113][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:23.114][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:23.114][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:23.122][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:23.122][INFO ] [Command        :353] - start[1790972543114] time[8] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:23.123][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:23.127][INFO ] [Command        :353] - start[1790972543123] time[3] tag[Q_IF]
+[2026-10-03 04:22:23.130][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:24.130][INFO ] [Command        :353] - start[1790972543130] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:24.131][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:24.131][INFO ] [Command        :353] - start[1790972544131] time[0] tag[Q_DEC]
+[2026-10-03 04:22:24.131][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:24.131][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:24.132][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:24.138][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:24.139][INFO ] [Command        :353] - start[1790972544131] time[7] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:24.139][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:24.143][INFO ] [Command        :353] - start[1790972544139] time[4] tag[Q_IF]
+[2026-10-03 04:22:24.147][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:25.147][INFO ] [Command        :353] - start[1790972544147] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:25.147][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:25.147][INFO ] [Command        :353] - start[1790972545147] time[0] tag[Q_DEC]
+[2026-10-03 04:22:25.148][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:25.148][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:25.148][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:25.156][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:25.157][INFO ] [Command        :353] - start[1790972545148] time[9] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:25.157][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:25.164][INFO ] [Command        :353] - start[1790972545158] time[6] tag[Q_IF]
+[2026-10-03 04:22:25.170][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:26.170][INFO ] [Command        :353] - start[1790972545170] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:26.171][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:26.171][INFO ] [Command        :353] - start[1790972546171] time[0] tag[Q_DEC]
+[2026-10-03 04:22:26.171][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:26.171][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:26.172][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:26.179][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:26.180][INFO ] [Command        :353] - start[1790972546171] time[8] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:26.180][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:26.187][INFO ] [Command        :353] - start[1790972546180] time[6] tag[Q_IF]
+[2026-10-03 04:22:26.190][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:27.190][INFO ] [Command        :353] - start[1790972546190] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:27.191][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:27.191][INFO ] [Command        :353] - start[1790972547191] time[0] tag[Q_DEC]
+[2026-10-03 04:22:27.191][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:27.191][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:27.192][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:27.203][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:27.203][INFO ] [Command        :353] - start[1790972547191] time[12] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:27.204][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:27.208][INFO ] [Command        :353] - start[1790972547204] time[4] tag[Q_IF]
+[2026-10-03 04:22:27.211][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:28.211][INFO ] [Command        :353] - start[1790972547211] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:28.211][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:28.211][INFO ] [Command        :353] - start[1790972548211] time[0] tag[Q_DEC]
+[2026-10-03 04:22:28.212][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:28.212][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:28.212][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:28.219][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:28.219][INFO ] [Command        :353] - start[1790972548212] time[7] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:28.219][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:28.223][INFO ] [Command        :353] - start[1790972548219] time[3] tag[Q_IF]
+[2026-10-03 04:22:28.226][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:29.226][INFO ] [Command        :353] - start[1790972548226] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:29.227][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:29.227][INFO ] [Command        :353] - start[1790972549227] time[0] tag[Q_DEC]
+[2026-10-03 04:22:29.227][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:29.228][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:29.228][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:29.238][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:29.239][INFO ] [Command        :353] - start[1790972549227] time[11] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:29.239][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:29.245][INFO ] [Command        :353] - start[1790972549239] time[5] tag[Q_IF]
+[2026-10-03 04:22:29.249][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:30.249][INFO ] [Command        :353] - start[1790972549249] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:30.250][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:30.250][INFO ] [Command        :353] - start[1790972550250] time[0] tag[Q_DEC]
+[2026-10-03 04:22:30.251][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:30.251][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:30.251][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:30.259][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:30.259][INFO ] [Command        :353] - start[1790972550251] time[8] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:30.259][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:30.264][INFO ] [Command        :353] - start[1790972550259] time[5] tag[Q_IF]
+[2026-10-03 04:22:30.268][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:31.268][INFO ] [Command        :353] - start[1790972550268] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:31.269][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:31.269][INFO ] [Command        :353] - start[1790972551269] time[0] tag[Q_DEC]
+[2026-10-03 04:22:31.269][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:31.269][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:31.269][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:31.276][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:31.277][INFO ] [Command        :353] - start[1790972551269] time[7] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:31.277][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:31.283][INFO ] [Command        :353] - start[1790972551277] time[6] tag[Q_IF]
+[2026-10-03 04:22:31.287][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:32.287][INFO ] [Command        :353] - start[1790972551287] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:32.288][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:32.288][INFO ] [Command        :353] - start[1790972552288] time[0] tag[Q_DEC]
+[2026-10-03 04:22:32.288][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:32.289][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:32.289][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:32.298][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:32.298][INFO ] [Command        :353] - start[1790972552288] time[9] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:32.298][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:32.304][INFO ] [Command        :353] - start[1790972552298] time[5] tag[Q_IF]
+[2026-10-03 04:22:32.308][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:33.308][INFO ] [Command        :353] - start[1790972552308] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:33.309][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:33.309][INFO ] [Command        :353] - start[1790972553309] time[0] tag[Q_DEC]
+[2026-10-03 04:22:33.309][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:33.309][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:33.310][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:33.318][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:33.318][INFO ] [Command        :353] - start[1790972553309] time[8] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:33.318][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:33.323][INFO ] [Command        :353] - start[1790972553318] time[4] tag[Q_IF]
+[2026-10-03 04:22:33.327][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:34.328][INFO ] [Command        :353] - start[1790972553327] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:34.328][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:34.328][INFO ] [Command        :353] - start[1790972554328] time[0] tag[Q_DEC]
+[2026-10-03 04:22:34.328][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:34.328][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:34.329][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:34.335][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:34.335][INFO ] [Command        :353] - start[1790972554328] time[6] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:34.336][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:34.340][INFO ] [Command        :353] - start[1790972554336] time[4] tag[Q_IF]
+[2026-10-03 04:22:34.343][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:35.344][INFO ] [Command        :353] - start[1790972554343] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:35.344][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:35.344][INFO ] [Command        :353] - start[1790972555344] time[0] tag[Q_DEC]
+[2026-10-03 04:22:35.345][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:35.345][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:35.345][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:35.352][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:35.353][INFO ] [Command        :353] - start[1790972555345] time[7] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:35.353][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:35.357][INFO ] [Command        :353] - start[1790972555353] time[4] tag[Q_IF]
+[2026-10-03 04:22:35.361][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:36.361][INFO ] [Command        :353] - start[1790972555361] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:36.361][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:36.361][INFO ] [Command        :353] - start[1790972556361] time[0] tag[Q_DEC]
+[2026-10-03 04:22:36.362][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:36.362][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:36.362][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:36.370][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:36.371][INFO ] [Command        :353] - start[1790972556362] time[9] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:36.371][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:36.376][INFO ] [Command        :353] - start[1790972556371] time[4] tag[Q_IF]
+[2026-10-03 04:22:36.379][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:37.380][INFO ] [Command        :353] - start[1790972556379] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:37.380][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:37.380][INFO ] [Command        :353] - start[1790972557380] time[0] tag[Q_DEC]
+[2026-10-03 04:22:37.381][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:37.381][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:37.381][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:37.390][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:37.390][INFO ] [Command        :353] - start[1790972557381] time[9] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:37.390][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:37.397][INFO ] [Command        :353] - start[1790972557390] time[6] tag[Q_IF]
+[2026-10-03 04:22:37.401][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:38.401][INFO ] [Command        :353] - start[1790972557401] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:38.401][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:38.401][INFO ] [Command        :353] - start[1790972558401] time[0] tag[Q_DEC]
+[2026-10-03 04:22:38.402][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:38.402][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:38.402][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:38.410][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:38.411][INFO ] [Command        :353] - start[1790972558402] time[8] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:38.411][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:38.416][INFO ] [Command        :353] - start[1790972558411] time[5] tag[Q_IF]
+[2026-10-03 04:22:38.420][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:39.421][INFO ] [Command        :353] - start[1790972558420] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:39.421][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:39.421][INFO ] [Command        :353] - start[1790972559421] time[0] tag[Q_DEC]
+[2026-10-03 04:22:39.422][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:39.422][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:39.422][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:39.430][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:39.430][INFO ] [Command        :353] - start[1790972559422] time[8] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:39.431][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:39.435][INFO ] [Command        :353] - start[1790972559431] time[4] tag[Q_IF]
+[2026-10-03 04:22:39.440][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:40.440][INFO ] [Command        :353] - start[1790972559440] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:40.441][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:40.441][INFO ] [Command        :353] - start[1790972560441] time[0] tag[Q_DEC]
+[2026-10-03 04:22:40.441][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:40.441][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:40.441][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:40.449][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:40.449][INFO ] [Command        :353] - start[1790972560441] time[7] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:40.449][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:40.454][INFO ] [Command        :353] - start[1790972560449] time[4] tag[Q_IF]
+[2026-10-03 04:22:40.457][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:41.457][INFO ] [Command        :353] - start[1790972560457] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:41.458][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:41.458][INFO ] [Command        :353] - start[1790972561458] time[0] tag[Q_DEC]
+[2026-10-03 04:22:41.458][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:41.458][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:41.459][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:41.466][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:41.466][INFO ] [Command        :353] - start[1790972561458] time[8] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:41.467][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:41.472][INFO ] [Command        :353] - start[1790972561467] time[4] tag[Q_IF]
+[2026-10-03 04:22:41.477][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:42.477][INFO ] [Command        :353] - start[1790972561477] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:42.478][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:42.478][INFO ] [Command        :353] - start[1790972562478] time[0] tag[Q_DEC]
+[2026-10-03 04:22:42.479][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:42.479][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:42.479][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:42.487][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:42.487][INFO ] [Command        :353] - start[1790972562479] time[8] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:42.487][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:42.492][INFO ] [Command        :353] - start[1790972562487] time[4] tag[Q_IF]
+[2026-10-03 04:22:42.495][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:43.495][INFO ] [Command        :353] - start[1790972562495] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:43.495][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:43.496][INFO ] [Command        :353] - start[1790972563496] time[0] tag[Q_DEC]
+[2026-10-03 04:22:43.496][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:43.496][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:43.496][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:43.504][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:43.505][INFO ] [Command        :353] - start[1790972563496] time[8] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:43.505][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:43.509][INFO ] [Command        :353] - start[1790972563505] time[4] tag[Q_IF]
+[2026-10-03 04:22:43.512][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:44.512][INFO ] [Command        :353] - start[1790972563512] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:44.513][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:44.513][INFO ] [Command        :353] - start[1790972564513] time[0] tag[Q_DEC]
+[2026-10-03 04:22:44.513][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:44.513][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:44.513][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:44.520][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:44.520][INFO ] [Command        :353] - start[1790972564513] time[7] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:44.521][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:44.525][INFO ] [Command        :353] - start[1790972564521] time[4] tag[Q_IF]
+[2026-10-03 04:22:44.528][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:45.528][INFO ] [Command        :353] - start[1790972564528] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:45.529][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:45.529][INFO ] [Command        :353] - start[1790972565529] time[0] tag[Q_DEC]
+[2026-10-03 04:22:45.529][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:45.529][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:45.530][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:45.536][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:45.537][INFO ] [Command        :353] - start[1790972565529] time[7] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:45.537][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:45.542][INFO ] [Command        :353] - start[1790972565537] time[4] tag[Q_IF]
+[2026-10-03 04:22:45.545][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:46.545][INFO ] [Command        :353] - start[1790972565545] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:46.546][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:46.546][INFO ] [Command        :353] - start[1790972566546] time[0] tag[Q_DEC]
+[2026-10-03 04:22:46.546][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:46.547][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:46.547][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:46.558][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:46.558][INFO ] [Command        :353] - start[1790972566547] time[11] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:46.558][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:46.562][INFO ] [Command        :353] - start[1790972566558] time[4] tag[Q_IF]
+[2026-10-03 04:22:46.566][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:47.566][INFO ] [Command        :353] - start[1790972566566] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:47.567][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:47.567][INFO ] [Command        :353] - start[1790972567567] time[0] tag[Q_DEC]
+[2026-10-03 04:22:47.567][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:47.567][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:47.568][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:47.574][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:47.575][INFO ] [Command        :353] - start[1790972567567] time[7] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:47.575][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:47.579][INFO ] [Command        :353] - start[1790972567575] time[4] tag[Q_IF]
+[2026-10-03 04:22:47.583][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:48.583][INFO ] [Command        :353] - start[1790972567583] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:48.583][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:48.584][INFO ] [Command        :353] - start[1790972568583] time[0] tag[Q_DEC]
+[2026-10-03 04:22:48.584][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:48.584][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:48.584][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:48.593][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:48.593][INFO ] [Command        :353] - start[1790972568584] time[8] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:48.593][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:48.598][INFO ] [Command        :353] - start[1790972568593] time[5] tag[Q_IF]
+[2026-10-03 04:22:48.602][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:49.602][INFO ] [Command        :353] - start[1790972568602] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:49.603][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:49.603][INFO ] [Command        :353] - start[1790972569603] time[0] tag[Q_DEC]
+[2026-10-03 04:22:49.603][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:49.603][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:49.604][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:49.611][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:49.611][INFO ] [Command        :353] - start[1790972569603] time[7] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:49.611][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:49.616][INFO ] [Command        :353] - start[1790972569611] time[5] tag[Q_IF]
+[2026-10-03 04:22:49.620][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:50.620][INFO ] [Command        :353] - start[1790972569620] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:50.621][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:50.621][INFO ] [Command        :353] - start[1790972570621] time[0] tag[Q_DEC]
+[2026-10-03 04:22:50.621][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:50.621][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:50.622][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:50.628][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:50.629][INFO ] [Command        :353] - start[1790972570621] time[7] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:50.629][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:50.632][INFO ] [Command        :353] - start[1790972570629] time[3] tag[Q_IF]
+[2026-10-03 04:22:50.635][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:51.636][INFO ] [Command        :353] - start[1790972570635] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:51.636][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:51.636][INFO ] [Command        :353] - start[1790972571636] time[0] tag[Q_DEC]
+[2026-10-03 04:22:51.637][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:51.637][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:51.637][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:51.644][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:51.644][INFO ] [Command        :353] - start[1790972571637] time[7] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:51.645][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:51.649][INFO ] [Command        :353] - start[1790972571645] time[4] tag[Q_IF]
+[2026-10-03 04:22:51.653][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:52.654][INFO ] [Command        :353] - start[1790972571653] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:52.654][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:52.654][INFO ] [Command        :353] - start[1790972572654] time[0] tag[Q_DEC]
+[2026-10-03 04:22:52.655][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:52.655][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:52.655][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:52.663][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:52.663][INFO ] [Command        :353] - start[1790972572655] time[8] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:52.663][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:52.669][INFO ] [Command        :353] - start[1790972572663] time[5] tag[Q_IF]
+[2026-10-03 04:22:52.672][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:53.672][INFO ] [Command        :353] - start[1790972572672] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:53.673][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:53.673][INFO ] [Command        :353] - start[1790972573673] time[0] tag[Q_DEC]
+[2026-10-03 04:22:53.673][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:53.673][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:53.674][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:53.683][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:53.683][INFO ] [Command        :353] - start[1790972573673] time[9] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:53.686][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:53.707][INFO ] [Command        :353] - start[1790972573687] time[19] tag[Q_IF]
+[2026-10-03 04:22:53.721][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:54.721][INFO ] [Command        :353] - start[1790972573721] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:54.722][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:54.722][INFO ] [Command        :353] - start[1790972574722] time[0] tag[Q_DEC]
+[2026-10-03 04:22:54.722][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:54.723][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:54.723][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:54.730][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:54.730][INFO ] [Command        :353] - start[1790972574722] time[7] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:54.731][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:54.735][INFO ] [Command        :353] - start[1790972574731] time[4] tag[Q_IF]
+[2026-10-03 04:22:54.738][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:55.738][INFO ] [Command        :353] - start[1790972574738] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:55.739][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:55.739][INFO ] [Command        :353] - start[1790972575739] time[0] tag[Q_DEC]
+[2026-10-03 04:22:55.739][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:55.739][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:55.739][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:55.746][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:55.746][INFO ] [Command        :353] - start[1790972575739] time[6] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:55.746][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:55.750][INFO ] [Command        :353] - start[1790972575746] time[3] tag[Q_IF]
+[2026-10-03 04:22:55.752][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:56.753][INFO ] [Command        :353] - start[1790972575753] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:56.753][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:56.753][INFO ] [Command        :353] - start[1790972576753] time[0] tag[Q_DEC]
+[2026-10-03 04:22:56.753][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:56.753][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:56.754][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:56.760][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:56.760][INFO ] [Command        :353] - start[1790972576753] time[6] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:56.761][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:56.765][INFO ] [Command        :353] - start[1790972576761] time[3] tag[Q_IF]
+[2026-10-03 04:22:56.768][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:57.769][INFO ] [Command        :353] - start[1790972576768] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:57.769][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:57.769][INFO ] [Command        :353] - start[1790972577769] time[0] tag[Q_DEC]
+[2026-10-03 04:22:57.769][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:57.770][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:57.771][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:57.779][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:57.779][INFO ] [Command        :353] - start[1790972577769] time[9] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:57.780][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:57.784][INFO ] [Command        :353] - start[1790972577780] time[4] tag[Q_IF]
+[2026-10-03 04:22:57.788][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:58.788][INFO ] [Command        :353] - start[1790972577788] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:58.789][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:58.789][INFO ] [Command        :353] - start[1790972578789] time[0] tag[Q_DEC]
+[2026-10-03 04:22:58.789][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:58.790][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:58.790][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:58.799][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:58.799][INFO ] [Command        :353] - start[1790972578790] time[9] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:58.799][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:58.810][INFO ] [Command        :353] - start[1790972578799] time[10] tag[Q_IF]
+[2026-10-03 04:22:58.815][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:22:59.815][INFO ] [Command        :353] - start[1790972578815] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:22:59.815][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:22:59.816][INFO ] [Command        :353] - start[1790972579816] time[0] tag[Q_DEC]
+[2026-10-03 04:22:59.816][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:22:59.816][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:22:59.816][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:22:59.824][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:22:59.824][INFO ] [Command        :353] - start[1790972579816] time[7] tag[Q_LET_DEPLOY]
+[2026-10-03 04:22:59.824][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:22:59.829][INFO ] [Command        :353] - start[1790972579824] time[4] tag[Q_IF]
+[2026-10-03 04:22:59.831][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:23:00.832][INFO ] [Command        :353] - start[1790972579831] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:23:00.832][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:23:00.832][INFO ] [Command        :353] - start[1790972580832] time[0] tag[Q_DEC]
+[2026-10-03 04:23:00.832][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:23:00.832][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:23:00.833][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:23:00.840][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:23:00.840][INFO ] [Command        :353] - start[1790972580832] time[7] tag[Q_LET_DEPLOY]
+[2026-10-03 04:23:00.840][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:23:00.844][INFO ] [Command        :353] - start[1790972580840] time[3] tag[Q_IF]
+[2026-10-03 04:23:00.847][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:23:01.847][INFO ] [Command        :353] - start[1790972580847] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:23:01.848][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:23:01.848][INFO ] [Command        :353] - start[1790972581848] time[0] tag[Q_DEC]
+[2026-10-03 04:23:01.848][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:23:01.848][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:23:01.849][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:23:01.857][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:23:01.857][INFO ] [Command        :353] - start[1790972581848] time[9] tag[Q_LET_DEPLOY]
+[2026-10-03 04:23:01.857][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:23:01.862][INFO ] [Command        :353] - start[1790972581857] time[4] tag[Q_IF]
+[2026-10-03 04:23:01.864][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:23:02.865][INFO ] [Command        :353] - start[1790972581864] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:23:02.865][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:23:02.865][INFO ] [Command        :353] - start[1790972582865] time[0] tag[Q_DEC]
+[2026-10-03 04:23:02.866][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:23:02.866][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:23:02.867][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:23:02.877][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:23:02.877][INFO ] [Command        :353] - start[1790972582866] time[11] tag[Q_LET_DEPLOY]
+[2026-10-03 04:23:02.878][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:23:02.883][INFO ] [Command        :353] - start[1790972582878] time[4] tag[Q_IF]
+[2026-10-03 04:23:02.887][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:23:03.887][INFO ] [Command        :353] - start[1790972582887] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:23:03.887][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:23:03.888][INFO ] [Command        :353] - start[1790972583888] time[0] tag[Q_DEC]
+[2026-10-03 04:23:03.888][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:23:03.888][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:23:03.889][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:23:03.896][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:23:03.896][INFO ] [Command        :353] - start[1790972583888] time[7] tag[Q_LET_DEPLOY]
+[2026-10-03 04:23:03.896][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:23:03.900][INFO ] [Command        :353] - start[1790972583896] time[4] tag[Q_IF]
+[2026-10-03 04:23:03.904][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:23:04.904][INFO ] [Command        :353] - start[1790972583904] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:23:04.904][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:23:04.905][INFO ] [Command        :353] - start[1790972584904] time[0] tag[Q_DEC]
+[2026-10-03 04:23:04.905][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:23:04.905][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:23:04.905][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:23:04.917][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:23:04.917][INFO ] [Command        :353] - start[1790972584905] time[12] tag[Q_LET_DEPLOY]
+[2026-10-03 04:23:04.917][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:23:04.922][INFO ] [Command        :353] - start[1790972584918] time[4] tag[Q_IF]
+[2026-10-03 04:23:04.925][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:23:05.925][INFO ] [Command        :353] - start[1790972584925] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:23:05.926][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:23:05.926][INFO ] [Command        :353] - start[1790972585926] time[0] tag[Q_DEC]
+[2026-10-03 04:23:05.926][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:23:05.927][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:23:05.927][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:23:05.935][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:23:05.935][INFO ] [Command        :353] - start[1790972585926] time[8] tag[Q_LET_DEPLOY]
+[2026-10-03 04:23:05.935][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:23:05.940][INFO ] [Command        :353] - start[1790972585935] time[4] tag[Q_IF]
+[2026-10-03 04:23:05.944][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:23:06.944][INFO ] [Command        :353] - start[1790972585944] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:23:06.944][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:23:06.945][INFO ] [Command        :353] - start[1790972586945] time[0] tag[Q_DEC]
+[2026-10-03 04:23:06.945][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:23:06.945][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:23:06.946][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:23:06.954][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:23:06.954][INFO ] [Command        :353] - start[1790972586945] time[8] tag[Q_LET_DEPLOY]
+[2026-10-03 04:23:06.954][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:23:06.958][INFO ] [Command        :353] - start[1790972586954] time[3] tag[Q_IF]
+[2026-10-03 04:23:06.961][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:23:07.962][INFO ] [Command        :353] - start[1790972586962] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:23:07.962][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:23:07.962][INFO ] [Command        :353] - start[1790972587962] time[0] tag[Q_DEC]
+[2026-10-03 04:23:07.963][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:23:07.963][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:23:07.963][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:23:07.971][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:23:07.971][INFO ] [Command        :353] - start[1790972587963] time[8] tag[Q_LET_DEPLOY]
+[2026-10-03 04:23:07.971][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:23:07.975][INFO ] [Command        :353] - start[1790972587971] time[3] tag[Q_IF]
+[2026-10-03 04:23:07.978][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:23:08.978][INFO ] [Command        :353] - start[1790972587978] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:23:08.978][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:23:08.979][INFO ] [Command        :353] - start[1790972588979] time[0] tag[Q_DEC]
+[2026-10-03 04:23:08.979][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:23:08.979][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:23:08.979][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:23:08.987][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:23:08.987][INFO ] [Command        :353] - start[1790972588979] time[7] tag[Q_LET_DEPLOY]
+[2026-10-03 04:23:08.987][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:23:08.992][INFO ] [Command        :353] - start[1790972588987] time[4] tag[Q_IF]
+[2026-10-03 04:23:08.995][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:23:09.995][INFO ] [Command        :353] - start[1790972588995] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:23:09.996][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:23:09.996][INFO ] [Command        :353] - start[1790972589996] time[0] tag[Q_DEC]
+[2026-10-03 04:23:09.996][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:23:09.996][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:23:09.996][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:23:10.03][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:23:10.03][INFO ] [Command        :353] - start[1790972589996] time[7] tag[Q_LET_DEPLOY]
+[2026-10-03 04:23:10.04][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:23:10.07][INFO ] [Command        :353] - start[1790972590004] time[3] tag[Q_IF]
+[2026-10-03 04:23:10.10][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:23:11.10][INFO ] [Command        :353] - start[1790972590010] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:23:11.11][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:23:11.11][INFO ] [Command        :353] - start[1790972591011] time[0] tag[Q_DEC]
+[2026-10-03 04:23:11.11][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:23:11.12][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:23:11.12][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:23:11.21][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:23:11.22][INFO ] [Command        :353] - start[1790972591011] time[10] tag[Q_LET_DEPLOY]
+[2026-10-03 04:23:11.22][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:23:11.26][INFO ] [Command        :353] - start[1790972591022] time[4] tag[Q_IF]
+[2026-10-03 04:23:11.30][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:23:12.31][INFO ] [Command        :353] - start[1790972591030] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:23:12.31][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:23:12.31][INFO ] [Command        :353] - start[1790972592031] time[0] tag[Q_DEC]
+[2026-10-03 04:23:12.31][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:23:12.32][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:23:12.32][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:23:12.39][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:23:12.40][INFO ] [Command        :353] - start[1790972592032] time[8] tag[Q_LET_DEPLOY]
+[2026-10-03 04:23:12.40][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:23:12.43][INFO ] [Command        :353] - start[1790972592040] time[3] tag[Q_IF]
+[2026-10-03 04:23:12.46][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:23:13.47][INFO ] [Command        :353] - start[1790972592046] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:23:13.47][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:23:13.47][INFO ] [Command        :353] - start[1790972593047] time[0] tag[Q_DEC]
+[2026-10-03 04:23:13.47][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:23:13.47][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:23:13.48][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:23:13.55][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:23:13.56][INFO ] [Command        :353] - start[1790972593047] time[8] tag[Q_LET_DEPLOY]
+[2026-10-03 04:23:13.56][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:23:13.61][INFO ] [Command        :353] - start[1790972593056] time[5] tag[Q_IF]
+[2026-10-03 04:23:13.64][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:23:14.64][INFO ] [Command        :353] - start[1790972593064] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:23:14.65][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:23:14.65][INFO ] [Command        :353] - start[1790972594065] time[0] tag[Q_DEC]
+[2026-10-03 04:23:14.65][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:23:14.65][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:23:14.66][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:23:14.73][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:23:14.73][INFO ] [Command        :353] - start[1790972594065] time[7] tag[Q_LET_DEPLOY]
+[2026-10-03 04:23:14.74][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:23:14.78][INFO ] [Command        :353] - start[1790972594074] time[4] tag[Q_IF]
+[2026-10-03 04:23:14.83][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:23:15.83][INFO ] [Command        :353] - start[1790972594083] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:23:15.83][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:23:15.83][INFO ] [Command        :353] - start[1790972595083] time[0] tag[Q_DEC]
+[2026-10-03 04:23:15.84][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:23:15.84][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:23:15.84][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:23:15.91][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:23:15.92][INFO ] [Command        :353] - start[1790972595084] time[7] tag[Q_LET_DEPLOY]
+[2026-10-03 04:23:15.92][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:23:15.96][INFO ] [Command        :353] - start[1790972595092] time[4] tag[Q_IF]
+[2026-10-03 04:23:15.99][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:23:16.99][INFO ] [Command        :353] - start[1790972595099] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:23:16.100][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:23:16.100][INFO ] [Command        :353] - start[1790972596100] time[0] tag[Q_DEC]
+[2026-10-03 04:23:16.100][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:23:16.100][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:23:16.101][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:23:16.108][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:23:16.108][INFO ] [Command        :353] - start[1790972596100] time[7] tag[Q_LET_DEPLOY]
+[2026-10-03 04:23:16.109][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:23:16.113][INFO ] [Command        :353] - start[1790972596109] time[4] tag[Q_IF]
+[2026-10-03 04:23:16.116][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:23:17.117][INFO ] [Command        :353] - start[1790972596116] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:23:17.121][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:23:17.121][INFO ] [Command        :353] - start[1790972597121] time[0] tag[Q_DEC]
+[2026-10-03 04:23:17.121][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:23:17.121][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:23:17.126][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:23:17.137][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:23:17.137][INFO ] [Command        :353] - start[1790972597121] time[15] tag[Q_LET_DEPLOY]
+[2026-10-03 04:23:17.137][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:23:17.143][INFO ] [Command        :353] - start[1790972597138] time[5] tag[Q_IF]
+[2026-10-03 04:23:17.145][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:23:18.146][INFO ] [Command        :353] - start[1790972597146] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:23:18.146][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:23:18.146][INFO ] [Command        :353] - start[1790972598146] time[0] tag[Q_DEC]
+[2026-10-03 04:23:18.147][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:23:18.147][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:23:18.147][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:23:18.155][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:23:18.155][INFO ] [Command        :353] - start[1790972598147] time[8] tag[Q_LET_DEPLOY]
+[2026-10-03 04:23:18.156][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:23:18.161][INFO ] [Command        :353] - start[1790972598156] time[5] tag[Q_IF]
+[2026-10-03 04:23:18.164][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:23:19.165][INFO ] [Command        :353] - start[1790972598164] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:23:19.165][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:23:19.165][INFO ] [Command        :353] - start[1790972599165] time[0] tag[Q_DEC]
+[2026-10-03 04:23:19.166][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:23:19.166][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:23:19.166][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:23:19.179][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:23:19.179][INFO ] [Command        :353] - start[1790972599166] time[13] tag[Q_LET_DEPLOY]
+[2026-10-03 04:23:19.180][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:23:19.183][INFO ] [Command        :353] - start[1790972599180] time[3] tag[Q_IF]
+[2026-10-03 04:23:19.186][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:23:20.186][INFO ] [Command        :353] - start[1790972599186] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:23:20.187][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:23:20.187][INFO ] [Command        :353] - start[1790972600187] time[0] tag[Q_DEC]
+[2026-10-03 04:23:20.187][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:23:20.187][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:23:20.188][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:23:20.194][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:23:20.194][INFO ] [Command        :353] - start[1790972600187] time[6] tag[Q_LET_DEPLOY]
+[2026-10-03 04:23:20.194][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:23:20.198][INFO ] [Command        :353] - start[1790972600194] time[3] tag[Q_IF]
+[2026-10-03 04:23:20.201][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:23:21.201][INFO ] [Command        :353] - start[1790972600201] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:23:21.202][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:23:21.202][INFO ] [Command        :353] - start[1790972601202] time[0] tag[Q_DEC]
+[2026-10-03 04:23:21.202][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:23:21.202][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:23:21.202][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:23:21.214][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:23:21.214][INFO ] [Command        :353] - start[1790972601202] time[11] tag[Q_LET_DEPLOY]
+[2026-10-03 04:23:21.214][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:23:21.217][INFO ] [Command        :353] - start[1790972601214] time[2] tag[Q_IF]
+[2026-10-03 04:23:21.219][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:23:22.220][INFO ] [Command        :353] - start[1790972601219] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:23:22.220][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:23:22.220][INFO ] [Command        :353] - start[1790972602220] time[0] tag[Q_DEC]
+[2026-10-03 04:23:22.220][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:23:22.220][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:23:22.221][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:23:22.227][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:23:22.228][INFO ] [Command        :353] - start[1790972602220] time[7] tag[Q_LET_DEPLOY]
+[2026-10-03 04:23:22.228][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:23:22.232][INFO ] [Command        :353] - start[1790972602228] time[3] tag[Q_IF]
+[2026-10-03 04:23:22.234][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:23:23.235][INFO ] [Command        :353] - start[1790972602234] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:23:23.235][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:23:23.235][INFO ] [Command        :353] - start[1790972603235] time[0] tag[Q_DEC]
+[2026-10-03 04:23:23.235][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:23:23.236][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:23:23.236][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:23:23.242][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:23:23.243][INFO ] [Command        :353] - start[1790972603236] time[6] tag[Q_LET_DEPLOY]
+[2026-10-03 04:23:23.243][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:23:23.246][INFO ] [Command        :353] - start[1790972603243] time[3] tag[Q_IF]
+[2026-10-03 04:23:23.249][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+[2026-10-03 04:23:24.249][INFO ] [Command        :353] - start[1790972603249] time[1000] tag[Q_SLEEP]
+[2026-10-03 04:23:24.249][INFO ] [Command        :536] - > LINE => 0, CMD => Q_DEC, CONTENT => $__i__
+[2026-10-03 04:23:24.250][INFO ] [Command        :353] - start[1790972604250] time[0] tag[Q_DEC]
+[2026-10-03 04:23:24.250][INFO ] [Command        :536] - > LINE => 0, CMD => Q_LET_DEPLOY, CONTENT => $__not_finish_tenant_cnt__
+[2026-10-03 04:23:24.250][INFO ] [Deploy         :287] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1
+[2026-10-03 04:23:24.250][INFO ] [SQLProcessor   :2086] - execute sql => select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn
+[2026-10-03 04:23:24.258][INFO ] [Deploy         :294] - execute db_p.select select count(*) as cnt from oceanbase.DBA_OB_MAJOR_COMPACTION where frozen_scn != last_scn, cnt, 1 result => 1
+[2026-10-03 04:23:24.258][INFO ] [Command        :353] - start[1790972604250] time[8] tag[Q_LET_DEPLOY]
+[2026-10-03 04:23:24.258][INFO ] [Command        :536] - > LINE => 0, CMD => Q_IF, CONTENT => $__not_finish_tenant_cnt__ == 0
+[2026-10-03 04:23:24.263][INFO ] [Command        :353] - start[1790972604258] time[4] tag[Q_IF]
+[2026-10-03 04:23:24.266][INFO ] [Command        :536] - > LINE => 0, CMD => Q_SLEEP, CONTENT => 1
+Shutdown hook ran!

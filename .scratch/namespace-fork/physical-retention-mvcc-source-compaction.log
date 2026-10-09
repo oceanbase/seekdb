@@ -1,0 +1,74 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/physical-retention/seekdb-integrated", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_retention_mvcc_194xo2xo", "pid": 4157215, "port": 43753}
+{"event": "sql", "sql": "CREATE DATABASE retention_mvcc", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE retention_mvcc.source(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO retention_mvcc.source VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "SELECT tablet_id FROM oceanbase.__all_table WHERE table_name='source'", "rows": [[200001]]}
+{"event": "sql", "sql": "FORK NAMESPACE retained_reader FROM ns1", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE retention_mvcc.unrelated(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO retention_mvcc.unrelated VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "SELECT tablet_id FROM oceanbase.__all_table WHERE table_name='unrelated'", "rows": [[200002]]}
+{"event": "sql", "sql": "UPDATE retention_mvcc.source SET v=100", "rows": []}
+{"event": "sql", "sql": "UPDATE retention_mvcc.unrelated SET v=100", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "sql", "sql": "UPDATE retention_mvcc.source SET v=101", "rows": []}
+{"event": "sql", "sql": "UPDATE retention_mvcc.unrelated SET v=101", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "sql", "sql": "UPDATE retention_mvcc.source SET v=102", "rows": []}
+{"event": "sql", "sql": "UPDATE retention_mvcc.unrelated SET v=102", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "sql", "sql": "UPDATE retention_mvcc.source SET v=103", "rows": []}
+{"event": "sql", "sql": "UPDATE retention_mvcc.unrelated SET v=103", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "sql", "sql": "UPDATE retention_mvcc.source SET v=104", "rows": []}
+{"event": "sql", "sql": "UPDATE retention_mvcc.unrelated SET v=104", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "sql", "sql": "UPDATE retention_mvcc.source SET v=105", "rows": []}
+{"event": "sql", "sql": "UPDATE retention_mvcc.unrelated SET v=105", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM MAJOR FREEZE", "rows": []}
+{"event": "retention_progress", "fork": 1791459180807662040, "physical": {"4611686155866541377": [1, 1791459176804022001], "4611686155866541378": [1, 1791459176804022001]}}
+{"event": "sql", "sql": "UPDATE retention_mvcc.source SET v=v+1", "rows": []}
+{"event": "sql", "sql": "UPDATE retention_mvcc.unrelated SET v=v+1", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "retention_progress", "fork": 1791459180807662040, "physical": {"4611686155866541377": [1, 1791459182180144011], "4611686155866541378": [1, 1791459182180144011]}}
+{"event": "sql", "sql": "UPDATE retention_mvcc.source SET v=v+1", "rows": []}
+{"event": "sql", "sql": "UPDATE retention_mvcc.unrelated SET v=v+1", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "retention_progress", "fork": 1791459180807662040, "physical": {"4611686155866541377": [1, 1791459187283083056], "4611686155866541378": [1, 1791459187283083056]}}
+{"event": "sql", "sql": "UPDATE retention_mvcc.source SET v=v+1", "rows": []}
+{"event": "sql", "sql": "UPDATE retention_mvcc.unrelated SET v=v+1", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "retention_progress", "fork": 1791459180807662040, "physical": {"4611686155866541377": [1, 1791459192339795005], "4611686155866541378": [1, 1791459192339795005]}}
+{"event": "sql", "sql": "UPDATE retention_mvcc.source SET v=v+1", "rows": []}
+{"event": "sql", "sql": "UPDATE retention_mvcc.unrelated SET v=v+1", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "retention_progress", "fork": 1791459180807662040, "physical": {"4611686155866541377": [1, 1791459197374484028], "4611686155866541378": [1, 1791459197374484028]}}
+{"event": "sql", "sql": "UPDATE retention_mvcc.source SET v=v+1", "rows": []}
+{"event": "sql", "sql": "UPDATE retention_mvcc.unrelated SET v=v+1", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "retention_progress", "fork": 1791459180807662040, "physical": {"4611686155866541377": [1, 1791459202459769017], "4611686155866541378": [1, 1791459202459769017]}}
+{"event": "sql", "sql": "UPDATE retention_mvcc.source SET v=v+1", "rows": []}
+{"event": "sql", "sql": "UPDATE retention_mvcc.unrelated SET v=v+1", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "retention_progress", "fork": 1791459180807662040, "physical": {"4611686155866541377": [1, 1791459207503079028], "4611686155866541378": [1, 1791459207503079028]}}
+{"event": "sql", "sql": "UPDATE retention_mvcc.source SET v=v+1", "rows": []}
+{"event": "sql", "sql": "UPDATE retention_mvcc.unrelated SET v=v+1", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "retention_progress", "fork": 1791459180807662040, "physical": {"4611686155866541377": [1, 1791459212543254017], "4611686155866541378": [1, 1791459212543254017]}}
+{"event": "sql", "sql": "UPDATE retention_mvcc.source SET v=v+1", "rows": []}
+{"event": "sql", "sql": "UPDATE retention_mvcc.unrelated SET v=v+1", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "retention_progress", "fork": 1791459180807662040, "physical": {"4611686155866541377": [1, 1791459217594644011], "4611686155866541378": [1, 1791459217594644011]}}
+{"event": "sql", "sql": "UPDATE retention_mvcc.source SET v=v+1", "rows": []}
+{"event": "sql", "sql": "UPDATE retention_mvcc.unrelated SET v=v+1", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "retention_progress", "fork": 1791459180807662040, "physical": {"4611686155866541377": [1, 1791459222638982015], "4611686155866541378": [1, 1791459222638982015]}}
+{"event": "sql", "sql": "UPDATE retention_mvcc.source SET v=v+1", "rows": []}
+{"event": "sql", "sql": "UPDATE retention_mvcc.unrelated SET v=v+1", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "retention_progress", "fork": 1791459180807662040, "physical": {"4611686155866541377": [1791459180807662040, 1791459227682765004], "4611686155866541378": [1791459218070481000, 1791459227682765004]}}
+{"event": "PASS", "case": "physical_retention_mvcc", "fork": 1791459180807662040, "source": [1791459180807662040, 1791459227682765004], "unrelated": [1791459218070481000, 1791459227682765004], "undo_retention": 0}
+{"event": "stopped", "pid": 4157215, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_retention_mvcc_194xo2xo/data.tar.gz", "bytes": 6204758}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

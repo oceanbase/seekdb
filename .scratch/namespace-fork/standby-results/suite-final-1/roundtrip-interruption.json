@@ -1,0 +1,3 @@
+{
+  "reason": "Same primary major-compaction failure as standby_sstable_replay. Fix compiled, this old-binary 1000-second wait is stopped and the unchanged case will be rerun with it."
+}

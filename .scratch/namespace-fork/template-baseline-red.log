@@ -1,0 +1,14 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/background-materialization-artifacts/seekdb-physical-copy", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_template_baseline_68uow8r7", "pid": 379339, "port": 21675}
+{"event": "startup", "seconds": 8.05}
+{"event": "stopped", "pid": 379339, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_template_baseline_68uow8r7/data.tar.gz", "bytes": 3318555}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File ".scratch/namespace-fork/template_baseline_probe.py", line 55, in <module>
+    resource.setrlimit(resource.RLIMIT_CORE,(0,0));run(a.binary)
+  File ".scratch/namespace-fork/template_baseline_probe.py", line 34, in run
+    verify()
+  File ".scratch/namespace-fork/template_baseline_probe.py", line 19, in verify
+    assert state['allow_login']==0,state
+KeyError: 'allow_login'

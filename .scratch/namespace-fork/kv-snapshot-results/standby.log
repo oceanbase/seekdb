@@ -1,0 +1,2 @@
+{"case": "basic", "exit_code": 0, "elapsed_s": 87.25}
+{"case": "namespace_fork_local", "exit_code": 0, "elapsed_s": 84.18}

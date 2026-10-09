@@ -1,0 +1,22 @@
+[
+  {
+    "case": "standby_sstable_replay",
+    "exit_code": 0,
+    "elapsed_s": 101.31
+  },
+  {
+    "case": "switchover_roundtrip",
+    "exit_code": 0,
+    "elapsed_s": 157.31
+  },
+  {
+    "case": "publication_restart_initial",
+    "exit_code": 1,
+    "elapsed_s": 89.0
+  },
+  {
+    "case": "publication_restart_child",
+    "exit_code": 1,
+    "elapsed_s": 89.51
+  }
+]

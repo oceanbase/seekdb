@@ -1,0 +1,50 @@
+{
+  "base_commit": "a11059085249f624c0a69ad7bce5543f954f62ab",
+  "production_binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/standby-artifacts/seekdb-production-v5",
+  "production_source_diff": "code-production-v5.diff",
+  "native_binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/standby-artifacts/seekdb-native-v5",
+  "native_hooks": [
+    "native_probe_injection.py",
+    "preparation_probe_injection.py",
+    "shared_transaction_fault_injection.py"
+  ],
+  "production_gates": {
+    "bootstrap": "../gate-results/standby-production-v2/bootstrap.log",
+    "sql": "../gate-results/standby-production-v2/sql.log",
+    "direct_existing_cases": "../gate-results/standby-production-v2/direct.log",
+    "tls": "../gate-results/standby-production-v2/tls.log",
+    "native": "../gate-results/standby-native-v5/bootstrap-native-kv.log",
+    "major_progress": "major-progress-production-v5.log"
+  },
+  "pending": [],
+  "note": "Production v2/v3 and v5 differ only in the major-compaction checksum address conversion; normal Namespace paths are identical. The final major cases must use v5. Generated version.cpp embeds a stale configured git string; binary identity comes from source diff and SHA256 manifest.",
+  "native_gate_status": "PASS",
+  "normal_standby_cases": {
+    "suite": "suite-production-v3-normal/results.json",
+    "passed": [
+      "basic",
+      "cascade_standby",
+      "one_primary_multi_standby",
+      "standby_restart",
+      "failover_switchover_reentry",
+      "tls_standby",
+      "namespace_fork_local",
+      "publication_initial",
+      "publication_child"
+    ],
+    "failed_harness_only": [
+      "publication_restart_initial",
+      "publication_restart_child"
+    ]
+  },
+  "equivalence_verified": [
+    "src/rootserver/freeze/ob_checksum_validator.cpp",
+    "src/rootserver/freeze/ob_checksum_validator.h",
+    "src/rootserver/freeze/ob_major_merge_progress_checker.cpp"
+  ],
+  "status": "PASS",
+  "results": "final-results.json",
+  "final_commit": "a04ffaf18480f4a9a0aa94805e5e1b6d13e03db8",
+  "remote_commit": "a04ffaf18480f4a9a0aa94805e5e1b6d13e03db8",
+  "code_only_commit": true
+}

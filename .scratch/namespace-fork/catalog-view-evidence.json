@@ -1,0 +1,146 @@
+{
+  "base_commit": "bf1fe91500673386c7b458fed77090cf21b10a04",
+  "goal_complete": false,
+  "sql_read_path_integrated": false,
+  "sources": [
+    {
+      "path": "src/namespace/catalog.cpp",
+      "bytes": 22919,
+      "sha256": "29c491202847f78efceb00a83ade93ad548ced0af7a0584e29f68b2b4760033f"
+    },
+    {
+      "path": "src/namespace/catalog.h",
+      "bytes": 10544,
+      "sha256": "8aa8cdc8d578c43f7d58ec8e136c204df2c250dcaf434cb85c1c1c7ea0251a1a"
+    },
+    {
+      "path": "src/namespace/namespace.cpp",
+      "bytes": 5859,
+      "sha256": "f4e879a96026a3059db97258207176fe7c2fe473eb162d53e5e09c52023ff623"
+    },
+    {
+      "path": "src/namespace/namespace.h",
+      "bytes": 6525,
+      "sha256": "29632b1fcaad3b90c831443db41f412f242bedf3e97f3df81a6300ac28874c6f"
+    },
+    {
+      "path": "src/rootserver/fork_table/instance_namespace_metadata.cpp",
+      "bytes": 78860,
+      "sha256": "17db451c255380804cd036a4aec42dc172b5ec031dfe2ee843526c9615fa2409"
+    },
+    {
+      "path": "src/rootserver/fork_table/instance_namespace_metadata.h",
+      "bytes": 16995,
+      "sha256": "537175e2c680db6dc040f9ae6b5416bfd935c2125a29f9d808a073f2a8e3ee12"
+    },
+    {
+      "path": "src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp",
+      "bytes": 75764,
+      "sha256": "8d04ab195d7caed1641e51a60787e0bffdf99589c339d852b49627fdddaa7f89"
+    },
+    {
+      "path": "src/rootserver/fork_table/namespace_fork_kernel_prototype.h",
+      "bytes": 7222,
+      "sha256": "c67c417d99ce96f4902bf742bcb73dd399d0519559fbc42a1aaf204646cba9ef"
+    },
+    {
+      "path": "src/storage/instance_meta/instance_meta_store.cpp",
+      "bytes": 21443,
+      "sha256": "40a2240e1a99fe5972c5ff1e468f90329e64c1e08731cdbace112a383cfb8d04"
+    },
+    {
+      "path": "src/storage/instance_meta/instance_meta_store.h",
+      "bytes": 6414,
+      "sha256": "6c621fdda024762ea5dbb60049967196c1008c9c87d1918e434dc340d0deb5f9"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": ".scratch/namespace-fork/catalog-view-artifacts/seekdb-native",
+      "bytes": 1386916584,
+      "sha256": "959ecf4b09a91ad01f9f68bbf28eb641b73d59458333e974b90c7dc103539fb1"
+    },
+    {
+      "path": ".scratch/namespace-fork/catalog-view-artifacts/seekdb-production",
+      "bytes": 1386189328,
+      "sha256": "b5dc1b1e6aa6c0d7b9c60dfb48b81dacb1c4dfcb411de60ea5d8ccb178490c85"
+    }
+  ],
+  "tests": [
+    {
+      "path": ".scratch/namespace-fork/catalog_read_view_probe.ipp",
+      "bytes": 5210,
+      "sha256": "f184b97e8e11e62df0830e6ebd50e79569b2912e91ac77319221d9a280efdaa2"
+    },
+    {
+      "path": ".scratch/namespace-fork/catalog_batch_probe.cpp",
+      "bytes": 16857,
+      "sha256": "1766e122b4e27a776b78684fdae99645ad966a622cda64783bfbc4653009ddd9"
+    },
+    {
+      "path": ".scratch/namespace-fork/catalog_batch_probe.py",
+      "bytes": 842,
+      "sha256": "7c353b9215b0c79c66a31ca699adf36e36011512fcd61735a9da8babcbf23b27"
+    },
+    {
+      "path": ".scratch/namespace-fork/native_probe_injection.py",
+      "bytes": 5596,
+      "sha256": "d9ee28e159873df043244610ea5a8776f2b2999fa723f6e7fb8fcab5551d9a93"
+    },
+    {
+      "path": ".scratch/namespace-fork/run_instance_meta_native_probe.py",
+      "bytes": 5612,
+      "sha256": "8326919075e95cdc62dfed09e30620b1e55c696bb6c875f2892bb7b8bd3fcffb"
+    },
+    {
+      "path": ".scratch/namespace-fork/run_four_gates.py",
+      "bytes": 6080,
+      "sha256": "e8612c59566589328aee29d92f5184cb02d6a374c813a12b5ce8b0eb19db2f2d"
+    }
+  ],
+  "logs": [
+    {
+      "path": ".scratch/namespace-fork/catalog-view-native-build.log",
+      "bytes": 21473,
+      "sha256": "78fda95325b0bd1ca9bcadc3806a20d95a66ceede0b0f4a7cb5cb409a56dbc5c"
+    },
+    {
+      "path": ".scratch/namespace-fork/catalog-view-native-final-build.log",
+      "bytes": 7008,
+      "sha256": "972e0d92dacd6cc74079b931d010906c345e803d1a94dc00a80c28a313322e16"
+    },
+    {
+      "path": ".scratch/namespace-fork/catalog-view-native-fixed-build.log",
+      "bytes": 7093,
+      "sha256": "da607295a77356b5aaf5bf7db2b037df279bef4f8a929cdd477a7feb463ffae3"
+    },
+    {
+      "path": ".scratch/namespace-fork/catalog-view-native-result.log",
+      "bytes": 2817,
+      "sha256": "f11b5377a78589c06a2f995b80caa0086b40519b44b9419e047f7dda8eb8df51"
+    },
+    {
+      "path": ".scratch/namespace-fork/catalog-view-production-build.log",
+      "bytes": 10691,
+      "sha256": "62ea27ab1cfe5438a8f7be0ede56ceb31b0daf52ba72d5a463e3efaf2c639cfc"
+    },
+    {
+      "path": ".scratch/namespace-fork/catalog-view-production-detached-result.log",
+      "bytes": 6723,
+      "sha256": "6707344ce324084b75e46386de2b52c82972766356bfd5a8bf5ce54bc2812dcc"
+    },
+    {
+      "path": ".scratch/namespace-fork/catalog-view-production-startup-result.log",
+      "bytes": 755,
+      "sha256": "6f388c82ecbfda26c0833586d2769803bb61089a3093a52d7438b9b4cd390642"
+    },
+    {
+      "path": ".scratch/namespace-fork/catalog-view-unit-result.log",
+      "bytes": 392,
+      "sha256": "b09be6bb2558f0aac971e40e623691ab141a27f59feff892642a6de60620f2a3"
+    }
+  ],
+  "commit": "6f9e7f62e4ddecc3b0e4d2845e9a9bbe8261136d",
+  "remote_tracking_sha": "6f9e7f62e4ddecc3b0e4d2845e9a9bbe8261136d",
+  "push_verified": true
+}

@@ -1,0 +1,46 @@
+[  1%] Built target ob_malloc_object
+[  2%] Built target restore
+[  2%] Built target oblib_lib_bitmap
+[  3%] Built target oblib_rpc
+[  3%] Built target ob_data_plane
+[  4%] Built target malloc_hook
+[  5%] Built target ob_sql_simd
+[ 11%] Built target zstd_1_3_8_objs
+[ 12%] Built target oblib_grpc
+[ 17%] Built target ob_sql_server_parser_objects
+[ 18%] Built target ob_query
+[ 18%] Built target oblib_lib_simd
+[ 22%] Built target oblib_common
+[ 22%] Built target generate_syspack_source
+[ 24%] Built target ob_pl
+[ 25%] Built target ob_storage_tablet_autoincrement_state
+[ 25%] Built target ob_standby_runtime
+[ 25%] Built target ob_standby
+[ 25%] Built target ob_storage_simd
+[ 25%] Built target ob_namespace
+[ 25%] Built target sql_nio_build
+[ 26%] Built target ob_logservice
+[ 26%] Built target ob_sql_server_parser_static
+[ 27%] Built target zstd_1_3_8
+[ 27%] Built target ob_malloc
+[ 30%] Built target ob_share_extra
+[ 30%] Built target syspack_source
+[ 31%] Built target ob_main
+[ 32%] Built target compress
+[ 38%] Built target ob_sql_extra
+[ 42%] Built target ob_rootserver
+[ 46%] Built target oblib_lib
+[ 46%] Built target oblib
+[ 58%] Built target ob_storage
+[ 59%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_mysql_0_c___cxx.cxx.o
+[ 59%] Built target ob_storage_static
+[ 76%] Built target ob_share
+[ 76%] Built target ob_share_static
+[ 95%] Built target ob_sql
+[ 95%] Built target ob_sql_static
+[100%] Built target ob_server
+[100%] Linking CXX static library liboceanbase_static.a
+[100%] Built target oceanbase_static
+[100%] Linking CXX executable seekdb
+[100%] Built target seekdb
+[100%] Built target observer

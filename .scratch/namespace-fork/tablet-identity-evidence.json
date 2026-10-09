@@ -1,0 +1,36 @@
+{
+  "sources": {
+    "src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp": "5d0a4f19c87d6e84062fca50f5e24cac2bc2c4b8d61cb43bc9dbfda6e812f016",
+    "src/storage/tablet/ob_tablet.cpp": "6f407a29ff19afe06db234f3bb016251799dc03aabbd0de7aa8915dda9f345ab",
+    "src/storage/tablet/ob_tablet_meta.cpp": "c84cd3ea0cb4a696a185f1b64a24718bcac74acb690b24a351f4d2ad4ab44631",
+    "src/storage/tablet/ob_tablet_meta.h": "1a5eebc235bf4cbfcafc94f2b247e20ee3371012765e0f2c1c23cb5fe5054f50"
+  },
+  "binaries": {
+    "seekdb-before-mds": "5110cb751bd34c71be1f7a529e11f3c9c1fde4bedd20804b86b0dfd92b17266a",
+    "seekdb-native": "354978ee32f7e495442d41d80a517585f9d2c3a072036728dd0816931bf3fb77",
+    "seekdb-production": "879fc6bbb46b42dd63cf5fa73dd8f6ff9cb0211f6506b4da7062fa8b80eb74ef"
+  },
+  "passed": {
+    "before_mds": [
+      "32 partition DDL/LOB/outrow vector/restart",
+      "namespace_fork_local",
+      "publication_child failover"
+    ],
+    "native": [
+      "creation identity copy and persisted roundtrip",
+      "MDS raw scan INT64_MAX/near-INT64_MAX/finite duration",
+      "catalog roots MVCC/physical reachability/cycle rejection"
+    ],
+    "production": [
+      "retired intermediate namespace and root table deletion; restart; takeover; real source reclamation; continued writes",
+      "RR/RC/PX/own writes/parent truncate/FK/upsert/replace"
+    ]
+  },
+  "failure_logs": [
+    "tablet-identity-build.log",
+    "tablet-identity-fixed-build.log",
+    "tablet-identity-retired-invalid-interval.log",
+    "tablet-identity-retired-mds-overflow.log",
+    "tablet-identity-mds-overflow-evidence.log"
+  ]
+}

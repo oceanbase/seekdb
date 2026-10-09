@@ -1,0 +1,11 @@
+{"event": "setup", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_kv_startup_30s_z535it9r", "pid": 3589004, "port": 25189}
+{"event": "stopped", "pid": 3589004, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_kv_startup_30s_z535it9r/data.tar.gz", "bytes": 3266987}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File ".scratch/namespace-fork/quick_startup_probe.py", line 107, in <module>
+    main()
+  File ".scratch/namespace-fork/quick_startup_probe.py", line 54, in main
+    raise TimeoutError(f'not ready in {args.seconds}s; last={last_error}')
+TimeoutError: not ready in 30s; last=OperationalError

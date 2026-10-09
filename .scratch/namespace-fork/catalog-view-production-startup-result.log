@@ -1,0 +1,7 @@
+{"event": "setup", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_kv_startup_30s_nx8sd5sa", "pid": 3435273, "port": 8851}
+{"event": "sql", "sql": "SELECT 1", "rows": [[1]]}
+{"event": "PASS", "elapsed_limit_s": 30}
+{"event": "stopped", "pid": 3435273, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_kv_startup_30s_nx8sd5sa/data.tar.gz", "bytes": 3309486}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

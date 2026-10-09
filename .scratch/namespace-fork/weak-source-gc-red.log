@@ -1,0 +1,7 @@
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_weak_source_gc_lcq6mnyl", "pid": 4038227, "port": 57843}
+WEAK_SOURCE_GC_GAP freed=1 retry=0 snapshot=1791456248132816016
+INSTANCE_WEAK_SOURCE_GC_FAIL no_view=1 weak_root=1 release=1 ret=-4016
+{"event": "EXPECTED_FAILURE", "case": "future_weak_source_gc", "evidence": ["WEAK_SOURCE_GC_GAP freed=1 retry=0 snapshot=1791456248132816016", "INSTANCE_WEAK_SOURCE_GC_FAIL no_view=1 weak_root=1 release=1 ret=-4016"]}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_weak_source_gc_lcq6mnyl/data.tar.gz", "bytes": 3085478}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

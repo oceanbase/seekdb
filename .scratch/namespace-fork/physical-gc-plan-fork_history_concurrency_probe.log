@@ -1,0 +1,31 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/physical-gc-plan/seekdb-production", "base": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_historical_concurrency_j_3pu739", "pid": 154192, "port": 48105}
+{"event": "sql", "sql": "ALTER SYSTEM SET debug_sync_timeout='60s'", "rows": []}
+{"event": "sql", "sql": "CREATE DATABASE nstrunc_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE race_b FROM ns1", "rows": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=20", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE race_c FROM race_b", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=30000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 20]]}
+{"event": "sql", "sql": "TRUNCATE TABLE nstrunc_repro.t1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=30000000", "rows": []}
+{"event": "sql", "sql": "SET ob_global_debug_sync='AFTER_UPDATE_TABLET_TO_LS signal history_mat_ready wait_for history_mat_release timeout 20000000 execute 1'", "rows": []}
+{"event": "sql", "sql": "SET ob_global_debug_sync='now wait_for history_mat_ready timeout 10000000'", "rows": []}
+{"event": "fork_rejected_unpublished_copy", "error": "(6005, 'Try lock row conflict')"}
+{"event": "fork_and_gc_respected_materialization_boundary", "source": [[4611686430744448321, 3, 1, 0]], "fork_requested_retry": true}
+{"event": "sql", "sql": "SET ob_global_debug_sync='now signal history_mat_release'", "rows": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=120", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE race_d FROM race_c", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 120]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 120]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 10]]}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=300", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 300]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 120]]}
+{"event": "PASS", "case": "historical_materialize_fork_gc_interleaving", "fork_rows": [[1, 120]]}
+{"event": "stopped", "pid": 154192, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_historical_concurrency_j_3pu739/data.tar.gz", "bytes": 3401633}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

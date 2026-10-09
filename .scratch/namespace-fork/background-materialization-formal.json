@@ -1,0 +1,17 @@
+[
+  {
+    "case": "source_roots_only_probe",
+    "exit_code": 0,
+    "elapsed_s": 10.39
+  },
+  {
+    "case": "sql_read_view_probe",
+    "exit_code": 0,
+    "elapsed_s": 12.44
+  },
+  {
+    "case": "retired_baseline_restart_probe",
+    "exit_code": 0,
+    "elapsed_s": 46.43
+  }
+]

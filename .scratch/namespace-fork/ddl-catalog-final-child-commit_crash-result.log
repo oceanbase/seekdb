@@ -1,0 +1,22 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/ddl-catalog-artifacts/seekdb-native", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_catalog_child_commit_crash_gkxpg202", "pid": 3286661, "port": 58723}
+{"event": "sql", "sql": "CREATE DATABASE nstrunc_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE atomic_owner FROM ns1", "rows": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=20", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE atomic_old FROM atomic_owner", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 20]]}
+{"event": "atomic_boundary", "owner": "child", "fault": "commit_crash", "schema_before": 1791438901915976, "schema_visible": 1791438902729776, "old_tablet": 200001, "visible_tablet": 200002, "source_count": 359}
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/ddl-catalog-artifacts/seekdb-native", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_catalog_child_commit_crash_gkxpg202", "pid": 3287567, "port": 58723}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 20]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 20]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(2,30)", "rows": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=v+100", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 120]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[2, 30]]}
+{"event": "PASS", "case": "atomic_ddl_catalog", "owner": "child", "fault": "commit_crash"}
+{"event": "stopped", "pid": 3287567, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_catalog_child_commit_crash_gkxpg202/data.tar.gz", "bytes": 3401498}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

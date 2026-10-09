@@ -1,0 +1,225 @@
+{
+  "base_commit": "faf305a4433b6ca41a9c86be65a88b5b6a7624ea",
+  "goal_complete": false,
+  "sources": [
+    {
+      "path": "src/observer/namespace_inprocess_transaction_services.ipp",
+      "bytes": 19202,
+      "sha256": "ba89098f1d2d5578214e4ba38082f842f21b7e5af2f81dfb2e7a7b4de4872eec"
+    },
+    {
+      "path": "src/observer/namespace_inprocess_write_state.ipp",
+      "bytes": 28475,
+      "sha256": "2a563424e0628cbd49cb5c1291fbc9cb78c3b51d59744177fd5bbef2e8379bfa"
+    },
+    {
+      "path": "src/observer/namespace_worker_write_prototype.ipp",
+      "bytes": 40529,
+      "sha256": "509655f835c2066bb3fba477b2b9d4a8826dda197c2d2a65b980a7aacab25db8"
+    },
+    {
+      "path": "src/rootserver/fork_table/instance_namespace_metadata.cpp",
+      "bytes": 76552,
+      "sha256": "025cd6094a62759939a0ced60b40afc3e4e4291a1da2eb668f72f09d1ba927d3"
+    },
+    {
+      "path": "src/rootserver/fork_table/instance_namespace_metadata.h",
+      "bytes": 16543,
+      "sha256": "7a7bccd8223b3086501c36362f278d4a85aed03815c095093fcb0a32f67618ae"
+    },
+    {
+      "path": "src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp",
+      "bytes": 75256,
+      "sha256": "d3b96e7f416d4b0b4d5d600ef57816dc35cd3a975e617f560af11ffc531bafde"
+    },
+    {
+      "path": "src/rootserver/fork_table/namespace_fork_kernel_prototype.h",
+      "bytes": 6803,
+      "sha256": "e1a721243d0d54fbef168c3698e5e1b5933c11b07c9bb3314333529e804bc822"
+    },
+    {
+      "path": "src/rootserver/fork_table/namespace_tablet_access.cpp",
+      "bytes": 3995,
+      "sha256": "0fa6109b6754d5b40b6d87fb803355670e803cbc4b487b1d2d756219353cbe0c"
+    },
+    {
+      "path": "src/rootserver/fork_table/namespace_tablet_access.h",
+      "bytes": 2612,
+      "sha256": "366c4e319959c9c17b18f5b726cf428b365eda9a03941bc71756731cef1d3e94"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": ".scratch/namespace-fork/source-materialization-artifacts/seekdb-native-initial",
+      "bytes": 1386688144,
+      "sha256": "09ed87d73b28738c9af6d2bd748479a42c5d309b26547dbecc2897c616b2d195"
+    },
+    {
+      "path": ".scratch/namespace-fork/source-materialization-artifacts/seekdb-native",
+      "bytes": 1386708856,
+      "sha256": "ff2d70d7794fb93ce23327901e2a8a98145db4756d1159fe890d8bb9edb5db8e"
+    },
+    {
+      "path": ".scratch/namespace-fork/source-materialization-artifacts/seekdb-production",
+      "bytes": 1385986392,
+      "sha256": "428ef562f7e19c1b2728523d5644e7362c0a3c7a94b22f179f0012ad3645bf3f"
+    }
+  ],
+  "tests": [
+    {
+      "path": ".scratch/namespace-fork/cold_materialization_probe.py",
+      "bytes": 2571,
+      "sha256": "77216cd2a7a2d1116be809e15a7c852cc5b53fd3c0b4f9d9a179665056089ab8"
+    },
+    {
+      "path": ".scratch/namespace-fork/cold_materialization_probe.ipp",
+      "bytes": 3461,
+      "sha256": "8d7805922bf6e6b82f744b691bc77c98204add95f9cfb84406e406c325c3deb8"
+    },
+    {
+      "path": ".scratch/namespace-fork/cold_materialization_probe_injection.py",
+      "bytes": 1307,
+      "sha256": "88acf6754b5cd930306ef19d29e13ad7ef151823866b864c17e161a52dd49856"
+    },
+    {
+      "path": ".scratch/namespace-fork/fixture_catalog_bootstrap.ipp",
+      "bytes": 1650,
+      "sha256": "4f5fd0f8147c9bd6c9e0debb3980fe37796b4279c8b23785f919ff97e88955e8"
+    },
+    {
+      "path": ".scratch/namespace-fork/native_probe_injection.py",
+      "bytes": 5337,
+      "sha256": "98762aa8dca3eb4478d3860d591c4db977c4d7b5ae7d88816e4b4fdce9c5a17e"
+    },
+    {
+      "path": ".scratch/namespace-fork/tablet_binding_native_probe.ipp",
+      "bytes": 8138,
+      "sha256": "0fc4a9520f3c4b33b6c7f8e2d5ea81924e6c779f8cc9abae0a83e86506615268"
+    },
+    {
+      "path": ".scratch/namespace-fork/tablet_preparation_probe.py",
+      "bytes": 6403,
+      "sha256": "ce308201c69781db675ad1a39b625c0cdf61b8f6309854db64ace460c61947da"
+    },
+    {
+      "path": ".scratch/namespace-fork/preparation_probe_injection.py",
+      "bytes": 1791,
+      "sha256": "4d876465f6af9ad38f253b7da90da4463ef280a7f3d7d4e846fdb9379ecbfdeb"
+    },
+    {
+      "path": ".scratch/namespace-fork/shared_transaction_probe.py",
+      "bytes": 14291,
+      "sha256": "5153787ed41bc4507c7d634ce8e71bf3e2c7a533ff8f259eea4cc9d3a6013b5a"
+    },
+    {
+      "path": ".scratch/namespace-fork/shared_transaction_fault_injection.py",
+      "bytes": 3032,
+      "sha256": "f9a92f40b6cdd24b35cb5abce902e76cd10e137bebe48afd26ea2721cc578620"
+    },
+    {
+      "path": ".scratch/namespace-fork/gate_probe_injection.py",
+      "bytes": 1064,
+      "sha256": "624cd31851c59173626fc0a164a193bbe641d0295a37cc0e304f280986652c8a"
+    },
+    {
+      "path": ".scratch/namespace-fork/run_four_gates.py",
+      "bytes": 6080,
+      "sha256": "e8612c59566589328aee29d92f5184cb02d6a374c813a12b5ce8b0eb19db2f2d"
+    },
+    {
+      "path": ".scratch/namespace-fork/run_instance_meta_native_probe.py",
+      "bytes": 5470,
+      "sha256": "4786bbae47d1f7a0e02708e51fc669fcab8ec6eb101836480f241d26566ef2f3"
+    }
+  ],
+  "logs": [
+    {
+      "path": ".scratch/namespace-fork/source-materialization-build.log",
+      "bytes": 8142,
+      "sha256": "75c696618ccc9c87295bcd3d263d4a5cd2c1ac8b4137c5123e1ff53bc58584c4"
+    },
+    {
+      "path": ".scratch/namespace-fork/source-materialization-cold-build.log",
+      "bytes": 1695,
+      "sha256": "100364a82f38e441e4441e16cbda114ceaa48fc758fe466c714a11296772d144"
+    },
+    {
+      "path": ".scratch/namespace-fork/source-materialization-cold-result.log",
+      "bytes": 1876,
+      "sha256": "29fec3a3714bb9b09af465f50548d865acc64ddcadd408ffdfdd75c1c4d394f9"
+    },
+    {
+      "path": ".scratch/namespace-fork/source-materialization-detached-result.log",
+      "bytes": 6671,
+      "sha256": "9dca0c31be4baaf66fb625dbb8ead2c90f2e9e3fa75eaea7a2113d16d2ba750c"
+    },
+    {
+      "path": ".scratch/namespace-fork/source-materialization-fault-result.log",
+      "bytes": 30892,
+      "sha256": "351869aab33d35ada9f35368c8c357f5477096f591da260dded8705988506016"
+    },
+    {
+      "path": ".scratch/namespace-fork/source-materialization-fixture-build.log",
+      "bytes": 1695,
+      "sha256": "c8551f86b85237e888cf22bd0cc135e3b3c8344d6e094d8216cf2978bc68b1f2"
+    },
+    {
+      "path": ".scratch/namespace-fork/source-materialization-native-build.log",
+      "bytes": 10746,
+      "sha256": "081630c124eb229b100235ea1935c08a06416e9cf3c4730528afe01e68176a88"
+    },
+    {
+      "path": ".scratch/namespace-fork/source-materialization-native-fixed-result.log",
+      "bytes": 2861,
+      "sha256": "56d9f50b5eadf3e0ccc2858908f0a1b2bcf0c1bf1a4397bf0941b8fb6451b991"
+    },
+    {
+      "path": ".scratch/namespace-fork/source-materialization-native-result.log",
+      "bytes": 2500,
+      "sha256": "a4bd0f4f4236242c50a04a32c2a4376cd05842c3880b1a42861c349b4abef9b5"
+    },
+    {
+      "path": ".scratch/namespace-fork/source-materialization-preparation-result.log",
+      "bytes": 4299,
+      "sha256": "4e5597a2e0c946121686e5afad434ddcfa21d086ca7ddc2bed4ae80ab8e094f4"
+    },
+    {
+      "path": ".scratch/namespace-fork/source-materialization-production-build.log",
+      "bytes": 10691,
+      "sha256": "6e87c7be4e59ed8716f84464f399916ddf85f25dd5a81db2784370c958406f71"
+    },
+    {
+      "path": ".scratch/namespace-fork/source-materialization-production-schema-result.log",
+      "bytes": 3016,
+      "sha256": "f73fd1141ae4b8574190b9c28abceb06fdae5f1bbb7369dba570c44ec9281b5c"
+    },
+    {
+      "path": ".scratch/namespace-fork/source-materialization-production-shared-final-result.log",
+      "bytes": 1370,
+      "sha256": "654a9da5716e7253c824ccf683c5b334681918ed08ffb736dbbc899e4d03e676"
+    },
+    {
+      "path": ".scratch/namespace-fork/source-materialization-production-shared-result.log",
+      "bytes": 1291,
+      "sha256": "a404514e7eee64af79fe7b2c7349e412d5691260b55142506e45263a3c4828f5"
+    },
+    {
+      "path": ".scratch/namespace-fork/source-materialization-production-shared-retry-result.log",
+      "bytes": 7355,
+      "sha256": "772a4a24056cc651a9521513ad00608421010810d2e0e69f9b7bc04f5b408b49"
+    },
+    {
+      "path": ".scratch/namespace-fork/source-materialization-schema-result.log",
+      "bytes": 3138,
+      "sha256": "81797dc2af120c4e9322e8e03eaa7705c1f3b2c73473e1d838e30329d3215ea5"
+    },
+    {
+      "path": ".scratch/namespace-fork/source-materialization-startup-result.log",
+      "bytes": 1293,
+      "sha256": "9ca8ab25c3d79d54d7235514e7e708ba2978f9175a046f7dff7d49617fc34c30"
+    }
+  ],
+  "commit": "bf1fe91500673386c7b458fed77090cf21b10a04",
+  "remote_tracking_sha": "bf1fe91500673386c7b458fed77090cf21b10a04",
+  "push_verified": true
+}

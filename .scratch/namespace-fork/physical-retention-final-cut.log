@@ -1,0 +1,20 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/physical-retention/seekdb-native", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_retention_cut_s6wmwpar", "pid": 4183157, "port": 35239}
+{"event": "sql", "sql": "CREATE DATABASE retention_cut", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE retention_cut.t(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO retention_cut.t VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "SELECT tablet_id FROM oceanbase.__all_table WHERE table_name='t'", "rows": [[200001]]}
+{"event": "sql", "sql": "FORK NAMESPACE cut_parent FROM ns1", "rows": []}
+{"event": "sql", "sql": "UPDATE retention_cut.t SET v=20", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE cut_child FROM cut_parent", "rows": []}
+{"event": "sql", "sql": "DROP NAMESPACE cut_parent", "rows": []}
+{"event": "sql", "sql": "DROP TABLE retention_cut.t", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM retention_cut.t", "rows": [[20]]}
+{"event": "physical_plan", "origin": [266, 1791459789491598042], "intermediate": [530, 1791459790973492006], "caps": {"ns1": 0, "__template__": 1791459788891472002, "cut_parent": 1791459789491598042, "cut_child": 1791459790973492006}, "entries": 360}
+{"event": "sql", "sql": "SELECT v FROM retention_cut.t", "rows": [[20]]}
+{"event": "sql", "sql": "UPDATE retention_cut.t SET v=30", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM retention_cut.t", "rows": [[30]]}
+{"event": "PASS", "case": "physical_retention_cut", "native_edges": true, "cut_immutable": true, "publication_seconds": 0.12528915330767632}
+{"event": "stopped", "pid": 4183157, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_retention_cut_s6wmwpar/data.tar.gz", "bytes": 3339864}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

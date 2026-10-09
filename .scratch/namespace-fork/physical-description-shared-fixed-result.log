@@ -1,0 +1,41 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/physical-description-artifacts/seekdb-production-fixed", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_62rvbbfi", "pid": 3164853, "port": 57485}
+{"event": "sql", "sql": "CREATE DATABASE nstrunc_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id BIGINT AUTO_INCREMENT PRIMARY KEY,v INT,b LONGTEXT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(10,REPEAT('p',10000))", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE success FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=30000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "atomic_state", "namespace": 3, "committed": false, "owned": [], "mappings": [], "physical": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=11,b=REPEAT('c',12000) WHERE id=1", "rows": []}
+{"event": "atomic_state", "namespace": 3, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611686430744448321], [4611686430744448322], [4611686430744448323]], "physical": [[4611686430744448321, 1, 1, 0], [4611686430744448322, 1, 1, 0], [4611686430744448323, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000, "c"]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(12,'sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000001]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(13,'next sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000002]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000], [1000001, 12, 8], [1000002, 13, 13]]}
+{"event": "case_pass", "case": "success", "lob_binding": true, "sequence": true}
+{"event": "sql", "sql": "FORK NAMESPACE concurrent_copy FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=30000000", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=30000000", "rows": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=v+1 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=v+1,b=REPEAT('c',12000) WHERE id=1", "rows": []}
+{"event": "atomic_state", "namespace": 4, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611686568183401793], [4611686568183401794], [4611686568183401795]], "physical": [[4611686568183401793, 1, 1, 0], [4611686568183401794, 1, 1, 0], [4611686568183401795, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM nstrunc_repro.t1", "rows": [[1, 12, 12000]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "case_pass", "case": "concurrent_creation", "rows": [[1, 12, 12000]]}
+{"event": "sql", "sql": "FORK NAMESPACE locked_creation FROM ns1", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(30,30,REPEAT('b',11000))", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(20,20,REPEAT('a',11000))", "rows": []}
+{"event": "atomic_state", "namespace": 5, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611686705622355265], [4611686705622355266], [4611686705622355267]], "physical": [[4611686705622355265, 1, 1, 0], [4611686705622355266, 1, 1, 0], [4611686705622355267, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10], [20, 20], [30, 30]]}
+{"event": "case_pass", "case": "concurrent_insert_and_stale_snapshot", "faults": false}
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/physical-description-artifacts/seekdb-production-fixed", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_62rvbbfi", "pid": 3165441, "port": 57485}
+{"event": "atomic_state", "namespace": 4, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611686568183401793], [4611686568183401794], [4611686568183401795]], "physical": [[4611686568183401793, 1, 1, 0], [4611686568183401794, 1, 1, 0], [4611686568183401795, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM nstrunc_repro.t1", "rows": [[1, 12, 12000]]}
+{"event": "PASS", "case": "shared_transaction", "faults": false, "atomic_lob_unit": true, "rollback": null, "crash_recovery": true, "concurrent_creation": true}
+{"event": "stopped", "pid": 3165441, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_62rvbbfi/data.tar.gz", "bytes": 3287062}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

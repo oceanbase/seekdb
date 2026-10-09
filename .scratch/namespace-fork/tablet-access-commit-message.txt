@@ -1,0 +1,16 @@
+Centralize namespace tablet access and materialization preparation
+
+Use shared TabletAccess and TabletBinding for logical scans, writes,
+metadata changes, estimates, ranges, FTS/LOB and background probes.
+Remove Native/Fork write policies and early index/truncate materialization.
+Keep Namespace admission, source resolution and creation out of physical
+AccessService parameters and lifetime guards.
+
+Classify uncommitted CREATE state using MDS state instead of an invalid SCN
+comparison, and wait for native CREATE publication within the read deadline.
+Recognize all new tablets across a CREATE batch before preparing existing
+bindings, including hidden main tablets and LOBs in separate groups.
+
+Focused regressions and the local four gates cover cold reads, concurrent
+creation, inherited DDL/indexes, rollback/redo/crash recovery and history GC.
+Tests, fault hooks and documentation remain local; no PR is created.

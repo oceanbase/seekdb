@@ -1,0 +1,23 @@
+--disable_all_result_log
+db_p=OBI(cluster=1,proxy_num=0,role=primary);
+db_p.reset;
+db_p.clean_all_asvr;
+db_p.reboot_logservice;
+db_p.deploy;
+db_p.sleep 30;
+db_p.bootstrap;
+db_p.addserver;
+db_p.exec_init_sql;
+db_p.reboot_proxy;
+db_p.reboot_asvr;
+db_p.add_asvr;
+db_p.prepare_agent;
+ob_connect(ns_setup, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection ns_setup;
+create database replica_ns;
+create table replica_ns.t(id int primary key,v int,note longtext);
+insert into replica_ns.t values(1,10,repeat('baseline',2048));
+eval FORK NAMESPACE replica_seed FROM ns1;
+db_s=OBI(cluster=1,proxy_num=0,primary=db_p);
+db_s.reboot;
+sleep 3;

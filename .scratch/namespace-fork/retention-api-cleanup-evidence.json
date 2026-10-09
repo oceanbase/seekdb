@@ -1,0 +1,28 @@
+{
+  "status": "PASS",
+  "production_change": "remove unused filter_unreferenced_tablets (93 lines)",
+  "passed": [
+    "large-partition-fork.log",
+    "retention-api-cleanup-unit.log",
+    "retention-api-cleanup-weak.log",
+    "final-source-index.log",
+    "final-source-ivf-pq.log",
+    "final-source-partition-ddl.log",
+    "retention-api-cleanup-native-retry.log",
+    "standby-baseline-progress.log",
+    "final-source-family-takeover.log",
+    "retention-api-cleanup-clean-build.log"
+  ],
+  "fixture_failures": [
+    {
+      "log": "retention-api-cleanup-native.log",
+      "reason": "durable fixture assumed inherited cap after background had materialized real child; now validates cap against actual physical owner and creation identity"
+    }
+  ],
+  "hooks": "All local hooks disabled in production source",
+  "build": "retention-api-cleanup-clean-build.log",
+  "native_artifact": "background-materialization-artifacts/seekdb-baseline-progress-native",
+  "production_artifact": "background-materialization-artifacts/seekdb-retention-api-final",
+  "commit": "c3f18b084",
+  "pushed": true
+}

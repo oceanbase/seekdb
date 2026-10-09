@@ -1,0 +1,8 @@
+8000 mappings: pages=39 height=2
+wide mappings: pages=2007 height=3
+random batches verified=50
+random batches verified=100
+random batches verified=150
+random batches verified=200
+PASS view holders: shared lifetime, concurrent collection, registry shutdown
+PASS batch COW: snapshots, splits, collapse, random edits, no intermediate pages, IO failures, object manifests, typed physical sources

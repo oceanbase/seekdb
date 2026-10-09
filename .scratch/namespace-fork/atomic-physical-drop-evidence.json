@@ -1,0 +1,122 @@
+{
+  "stage": "12 atomic physical DDL drop; remove persistent exceptions and redundant encoded SQL mappings",
+  "binary_sha256": {
+    "seekdb-production": "ab1ccd1aed8a3b8f1aa263edfbc3dbea95ea0c27d3dc386ddc5d96c5fe495e04",
+    "seekdb-native": "b7302237314f3045a140876d557a988259b734fbb6bd5ce93095ac379bbc05bd",
+    "seekdb-native-diagnostic": "9f69b24ac9b5056beb02c54b3905f5b1f2780ec6b2842c904902e9c2ec101985",
+    "seekdb-native-admission": "4b8d3c69d9cd35d56eaa84eedf300e543a51489c427492c6673ec868656eb456"
+  },
+  "formal": [
+    {
+      "case": "ddl_catalog_schema_probe.py",
+      "extra": [],
+      "exit_code": 0,
+      "elapsed_s": 17.74
+    },
+    {
+      "case": "ddl_physical_drop_probe.py",
+      "extra": [],
+      "exit_code": 0,
+      "elapsed_s": 23.06
+    },
+    {
+      "case": "fork_parent_truncate_probe.py",
+      "extra": [
+        "--materialize-parent",
+        "--write-child"
+      ],
+      "exit_code": 0,
+      "elapsed_s": 17.6
+    },
+    {
+      "case": "retired_baseline_restart_probe.py",
+      "extra": [],
+      "exit_code": 0,
+      "elapsed_s": 42.12
+    },
+    {
+      "case": "shared_transaction_probe.py",
+      "extra": [],
+      "exit_code": 0,
+      "elapsed_s": 18.36
+    },
+    {
+      "case": "sql_read_view_probe.py",
+      "extra": [],
+      "exit_code": 0,
+      "elapsed_s": 13.91
+    }
+  ],
+  "ddl_faults": [
+    {
+      "owner": "initial",
+      "fault": "rollback",
+      "exit_code": 0,
+      "elapsed_s": 13.01
+    },
+    {
+      "owner": "initial",
+      "fault": "abort_crash",
+      "exit_code": 0,
+      "elapsed_s": 17.46
+    },
+    {
+      "owner": "initial",
+      "fault": "commit_crash",
+      "exit_code": 0,
+      "elapsed_s": 15.95
+    },
+    {
+      "owner": "child",
+      "fault": "rollback",
+      "exit_code": 0,
+      "elapsed_s": 13.47
+    },
+    {
+      "owner": "child",
+      "fault": "abort_crash",
+      "exit_code": 0,
+      "elapsed_s": 18.45
+    },
+    {
+      "owner": "child",
+      "fault": "commit_crash",
+      "exit_code": 0,
+      "elapsed_s": 18.23
+    }
+  ],
+  "materialization_faults": "PASS atomic-physical-drop-materialization-faults-retry.log",
+  "native": "PASS atomic-physical-drop-native-diagnostic.log (install and 3 SIGKILL restarts)",
+  "reader_admission": "PASS atomic-physical-drop-native-admission.log (deterministic real KV admission window)",
+  "standby_first": [
+    {
+      "case": "namespace_fork_local",
+      "exit_code": 255,
+      "elapsed_s": 38.45
+    },
+    {
+      "case": "publication_child",
+      "exit_code": 0,
+      "elapsed_s": 109.64
+    }
+  ],
+  "standby_retry": [
+    {
+      "case": "namespace_fork_local",
+      "exit_code": 0,
+      "elapsed_s": 100.6
+    }
+  ],
+  "failures": [
+    "Initial compile removed shared key_id helper; restored. atomic-physical-drop-build.log",
+    "First materialization fault invocation omitted --faults; no cases selected. atomic-physical-drop-materialization-faults.log",
+    "First standalone native fixture view assertion -4016 had no line detail; diagnostic rerun all phases passed. Exact first-failure cause not confirmed. A separate incorrect lower-bound assertion was identified and replaced by deterministic admission test.",
+    "First standby setup failed during primary handshake, before replication; server logs overwritten by next case. No attribution to historical 4002. Original case passed retry; runner now preserves failure tails."
+  ],
+  "final_formal_build": "PASS atomic-physical-drop-final-build.log",
+  "limits": [
+    "No full mysqltest/sysbench or full four-gate suite run. Targeted gate cases exercised.",
+    "Global pins, precise retention cut/plan, runtime-free background takeover and template lifecycle remain goal work."
+  ],
+  "final_formal_binary_sha256": "ab1ccd1aed8a3b8f1aa263edfbc3dbea95ea0c27d3dc386ddc5d96c5fe495e04"
+}

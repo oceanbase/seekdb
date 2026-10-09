@@ -1,0 +1,10 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/instance_meta_native_artifacts_md7bm_ye/seekdb", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_js6k7nwf", "pid": 2155016, "port": 65021}
+{"event": "native_kv_verified", "recovered": false}
+{"event": "crash_for_recovery", "pid": 2155016}
+{"event": "setup", "binary": "/data/1/nijia.nj/test/instance_meta_native_artifacts_md7bm_ye/seekdb", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_js6k7nwf", "pid": 2157020, "port": 65021}
+{"event": "native_kv_verified", "recovered": true}
+{"event": "PASS", "case": "instance_meta_native", "rollback": true, "cross_collection": true, "duplicate_key": true, "own_writes": true, "snapshot": true, "locked_current_read": true, "binary_value_60000": true, "key_512": true, "value_65536": true, "binary_bounds": true, "scan": true, "erase": true, "snapshot_across_minor": true, "writer_conflict": true, "crash_recovery": true}
+{"event": "stopped", "pid": 2157020, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_js6k7nwf/data.tar.gz", "bytes": 3300592}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

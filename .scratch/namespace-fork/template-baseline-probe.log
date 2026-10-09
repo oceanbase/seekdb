@@ -1,0 +1,12 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/background-materialization-artifacts/seekdb-template", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_template_baseline_lpfll2tw", "pid": 379998, "port": 57469}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_template_baseline_lpfll2tw/data.tar.gz", "bytes": 3700854}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File ".scratch/namespace-fork/template_baseline_probe.py", line 55, in <module>
+    resource.setrlimit(resource.RLIMIT_CORE,(0,0));run(a.binary)
+  File ".scratch/namespace-fork/template_baseline_probe.py", line 12, in run
+    start=time.monotonic();e.start()
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_worker_bootstrap_prototype.py", line 28, in start
+    raise RuntimeError(f"bootstrap exited ({self.proc.returncode}): {self.base}")
+RuntimeError: bootstrap exited (-9): /data/1/nijia.nj/test/namespace_fork_PROTOTYPE_template_baseline_lpfll2tw

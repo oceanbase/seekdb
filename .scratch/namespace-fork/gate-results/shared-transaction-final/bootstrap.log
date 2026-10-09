@@ -1,0 +1,89 @@
+{"event": "setup", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_kv_startup_30s_7l6v4v45", "pid": 1968770, "port": 5417}
+{"event": "sql", "sql": "SELECT 1", "rows": [[1]]}
+{"event": "sql", "sql": "CREATE DATABASE kvsmoke", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE kvsmoke.t(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO kvsmoke.t VALUES (1, 42)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE kvsmoke_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM kvsmoke.t WHERE id=1", "rows": [[42]]}
+{"event": "PASS", "elapsed_limit_s": 30}
+{"event": "stopped", "pid": 1968770, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_kv_startup_30s_7l6v4v45/data.tar.gz", "bytes": 3271209}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_bootstrap_7keg2qf0", "pid": 1970593, "port": 53093}
+{"event": "sql", "sql": "SELECT 1", "rows": [[1]]}
+{"event": "sql", "sql": "CREATE DATABASE legacy_template_user", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE legacy_template_user.secret(id INT PRIMARY KEY)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO legacy_template_user.secret VALUES(42)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE test.legacy_template_rows(id INT PRIMARY KEY)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO test.legacy_template_rows VALUES(9)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE mysql.legacy_template_rows(id INT PRIMARY KEY)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO mysql.legacy_template_rows VALUES(8)", "rows": []}
+{"event": "sql", "sql": "CREATE VIEW mysql.legacy_template_view AS SELECT id FROM mysql.legacy_template_rows", "rows": []}
+{"event": "sql", "sql": "CREATE PROCEDURE mysql.legacy_template_proc() SELECT 11", "rows": []}
+{"event": "sql", "sql": "CREATE USER 'legacy_template_login'@'%' IDENTIFIED BY 'test-pass'", "rows": []}
+{"event": "sql", "sql": "CREATE ROLE legacy_template_role", "rows": []}
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_bootstrap_7keg2qf0", "pid": 1971188, "port": 53093}
+{"event": "sql", "sql": "SELECT id FROM legacy_template_user.secret", "rows": [[42]]}
+{"event": "sql", "sql": "SELECT id FROM test.legacy_template_rows", "rows": [[9]]}
+{"event": "sql", "sql": "SELECT id FROM mysql.legacy_template_view", "rows": [[8]]}
+{"event": "sql", "sql": "SELECT routine_name FROM oceanbase.__all_routine WHERE routine_name='legacy_template_proc'", "rows": [["legacy_template_proc"]]}
+{"event": "sql", "sql": "SELECT user_name FROM oceanbase.__all_user WHERE user_name='legacy_template_login'", "rows": [["legacy_template_login"]]}
+{"event": "sql", "sql": "SELECT user_name FROM oceanbase.__all_user WHERE user_name='legacy_template_role'", "rows": [["legacy_template_role"]]}
+{"event": "sql", "sql": "CREATE NAMESPACE phase10_migrated", "rows": []}
+{"event": "sql", "sql": "SELECT DATABASE()", "rows": [["test"]]}
+{"event": "sql", "sql": "SHOW DATABASES", "rows": [["information_schema"], ["mysql"], ["oceanbase"], ["test"]]}
+{"event": "sql", "sql": "SHOW TABLES FROM test", "rows": []}
+{"event": "sql", "sql": "SHOW TABLES FROM mysql", "rows": [["columns_priv"], ["db"], ["default_roles"], ["proc"], ["procs_priv"], ["role_edges"], ["time_zone_name"], ["time_zone_transition"], ["time_zone_transition_type"], ["user"]]}
+{"event": "sql", "sql": "SELECT routine_name FROM oceanbase.__all_routine WHERE routine_name='legacy_template_proc'", "rows": []}
+{"event": "sql", "sql": "SELECT user_name FROM oceanbase.__all_user WHERE user_name='legacy_template_login'", "rows": []}
+{"event": "sql", "sql": "SELECT user_name FROM oceanbase.__all_user WHERE user_name='legacy_template_role'", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE test.owned(id INT PRIMARY KEY)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO test.owned VALUES(7)", "rows": []}
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_bootstrap_7keg2qf0", "pid": 1971424, "port": 53093}
+{"event": "sql", "sql": "SELECT id FROM owned", "rows": [[7]]}
+{"event": "sql", "sql": "SHOW TABLES FROM test", "rows": [["owned"]]}
+{"event": "sql", "sql": "SHOW TABLES FROM mysql", "rows": [["columns_priv"], ["db"], ["default_roles"], ["proc"], ["procs_priv"], ["role_edges"], ["time_zone_name"], ["time_zone_transition"], ["time_zone_transition_type"], ["user"]]}
+{"event": "sql", "sql": "SELECT routine_name FROM oceanbase.__all_routine WHERE routine_name='legacy_template_proc'", "rows": []}
+{"event": "sql", "sql": "CREATE DATABASE phase10", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE phase10.parent(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO phase10.parent VALUES(1,10),(2,20)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE phase10_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM phase10.parent ORDER BY id", "rows": [[1, 10], [2, 20]]}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM oceanbase.__all_database", "rows": [[8]]}
+{"event": "sql", "sql": "CREATE NAMESPACE phase10_empty", "rows": []}
+{"event": "namespace_create_latency", "seconds": 0.006}
+{"event": "sql", "sql": "SELECT DATABASE()", "rows": [["test"]]}
+{"event": "sql", "sql": "SHOW WARNINGS", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE warning_probe(c1 INT PRIMARY KEY, c2 INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO warning_probe VALUES(1,8),(2,7)", "rows": []}
+{"event": "sql", "sql": "SELECT 1 AS c1, 2 AS c2 FROM warning_probe GROUP BY c1", "rows": [[1, 2], [1, 2]]}
+{"event": "sql", "sql": "SHOW WARNINGS", "rows": [["Warning", 1052, "Column 'c1' in group statement is ambiguous"]]}
+{"event": "sql", "sql": "SHOW DATABASES", "rows": [["information_schema"], ["mysql"], ["oceanbase"], ["test"]]}
+{"event": "sql", "sql": "SHOW TABLES FROM test", "rows": [["warning_probe"]]}
+{"event": "sql", "sql": "CREATE DATABASE fresh", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE fresh.t(id INT PRIMARY KEY)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO fresh.t VALUES(1)", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM fresh.t", "rows": [[1]]}
+{"event": "sql", "sql": "CREATE VIEW fresh.v AS SELECT id FROM fresh.t", "rows": []}
+{"event": "sql", "sql": "SELECT id FROM fresh.v", "rows": [[1]]}
+{"event": "sql", "sql": "SHOW COLUMNS FROM fresh.v", "rows": [["id", "int(11)", "NO", "", "NULL", ""]]}
+{"event": "sql", "sql": "CREATE TABLE fresh.using_hash_t(c1 INT, PRIMARY KEY USING HASH (c1))", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE fresh.using_btree_t(c1 INT, PRIMARY KEY USING BTREE (c1))", "rows": []}
+{"event": "sql", "sql": "SELECT t.table_name,t.index_using_type FROM oceanbase.__all_table t JOIN oceanbase.__all_database d ON t.database_id=d.database_id WHERE d.database_name='fresh' AND t.table_name IN ('using_hash_t','using_btree_t') ORDER BY t.table_name", "rows": [["using_btree_t", 0], ["using_hash_t", 1]]}
+{"event": "sql", "sql": "SHOW COLUMNS FROM fresh.t", "rows": [["id", "int(11)", "NO", "PRI", null, ""]]}
+{"event": "sql", "sql": "SHOW INDEX FROM fresh.t", "rows": [["t", 0, "PRIMARY", 1, "id", "A", null, null, null, "", "BTREE", "available", "", "YES", null]]}
+{"event": "sql", "sql": "SHOW CREATE TABLE fresh.t", "rows": [["t", "CREATE TABLE `t` (\n  `id` int(11) NOT NULL,\n  PRIMARY KEY (`id`)\n) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0"]]}
+{"event": "sql", "sql": "SHOW TABLES FROM fresh", "rows": [["t"], ["using_btree_t"], ["using_hash_t"], ["v"]]}
+{"event": "sql", "sql": "SHOW COLLATION LIKE 'utf8mb4_general_ci'", "rows": [["utf8mb4_general_ci", "utf8mb4", 45, "Yes", "Yes", 1]]}
+{"event": "sql", "sql": "SHOW CHARACTER SET LIKE 'utf8mb4'", "rows": [["utf8mb4", "UTF-8 Unicode", "utf8mb4_general_ci", 4]]}
+{"event": "sql", "sql": "SELECT DATABASE()", "rows": [["fresh"]]}
+{"event": "sql", "sql": "SELECT id FROM t", "rows": [[1]]}
+{"event": "sql", "sql": "SELECT DATABASE()", "rows": [["mysql"]]}
+{"event": "sql", "sql": "SELECT id FROM t", "rows": [[1]]}
+{"event": "bootstrap_checks", "one_process": true, "child_login": true, "inherited_read": true, "empty_namespace": true}
+{"event": "PASS", "case": "inprocess_bootstrap", "one_process": true, "child_login": true, "inherited_read": true, "empty_namespace": true, "template_restart": true}
+{"event": "stopped", "pid": 1971424, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_inprocess_bootstrap_7keg2qf0/data.tar.gz", "bytes": 3325168}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

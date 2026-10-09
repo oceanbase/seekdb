@@ -1,0 +1,4 @@
+{
+  "reason": "Primary major freeze remained incomplete for over eight minutes; focused progress assertion failed and debugger proved system tablets return OB_TABLE_IS_DELETED. Ending the 1000-second wait to diagnose and rerun after fix.",
+  "pid": 3153797
+}

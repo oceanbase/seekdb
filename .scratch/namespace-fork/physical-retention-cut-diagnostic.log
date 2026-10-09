@@ -1,0 +1,39 @@
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_retention_cut_ao27zii9", "pid": 4111077, "port": 20233}
+{"event": "sql", "sql": "CREATE DATABASE retention_cut", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE retention_cut.t(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO retention_cut.t VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "SELECT tablet_id FROM oceanbase.__all_table WHERE table_name='t'", "rows": [[200001]]}
+{"event": "sql", "sql": "FORK NAMESPACE cut_parent FROM ns1", "rows": []}
+{"event": "sql", "sql": "UPDATE retention_cut.t SET v=20", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE cut_child FROM cut_parent", "rows": []}
+{"event": "sql", "sql": "DROP NAMESPACE cut_parent", "rows": []}
+{"event": "sql", "sql": "DROP TABLE retention_cut.t", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM retention_cut.t", "rows": [[20]]}
+{"event": "stopped", "pid": 4111077, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_retention_cut_ao27zii9/data.tar.gz", "bytes": 3330715}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File ".scratch/namespace-fork/physical_retention_cut_probe.py", line 49, in <module>
+    plan=collect()
+  File ".scratch/namespace-fork/physical_retention_cut_probe.py", line 45, in collect
+    exp.sql('FORK NAMESPACE retention_probe FROM ns1',conn,log=False)
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_fork_prototype.py", line 116, in sql
+    cur.execute(statement)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/cursors.py", line 153, in execute
+    result = self._query(query)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/cursors.py", line 322, in _query
+    conn.query(q)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 575, in query
+    self._affected_rows = self._read_query_result(unbuffered=unbuffered)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 826, in _read_query_result
+    result.read()
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 1203, in read
+    first_packet = self.connection._read_packet()
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py", line 782, in _read_packet
+    packet.raise_for_error()
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/protocol.py", line 219, in raise_for_error
+    err.raise_mysql_exception(self._data)
+  File "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/err.py", line 150, in raise_mysql_exception
+    raise errorclass(errno, errval)
+pymysql.err.OperationalError: (4018, 'Entry not exist')

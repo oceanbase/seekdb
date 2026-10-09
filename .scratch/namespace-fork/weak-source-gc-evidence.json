@@ -1,0 +1,29 @@
+{
+  "production_sha256": "df3a7387af679599297a46a5b33c3945907a2b6090399c69318f346e08bff74a",
+  "red": "weak-source-gc-red.log",
+  "green": "weak-source-gc-green.log",
+  "native_shell": "empty-shell-horizon.log",
+  "formal": [
+    {
+      "case": "ddl_physical_drop_probe",
+      "code": 0,
+      "seconds": 11.83
+    },
+    {
+      "case": "sql_read_view_probe",
+      "code": 0,
+      "seconds": 10.97
+    }
+  ],
+  "retired": "weak-source-gc-retired.log",
+  "standby": [
+    {
+      "case": "namespace_fork_local",
+      "exit_code": 0,
+      "elapsed_s": 99.7
+    }
+  ],
+  "build": "weak-source-gc-final-build.log",
+  "hooks_removed": true,
+  "global_pin_removed": false
+}

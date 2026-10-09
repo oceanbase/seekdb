@@ -1,0 +1,26 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/background-materialization-artifacts/seekdb-copy-pause", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_primary_qgm_etfb", "pid": 2083560, "port": 7175}
+{"event": "sql", "sql": "CREATE DATABASE copy_probe", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE copy_probe.t(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO copy_probe.t VALUES(1,7)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE copy_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "template_mds_flushed", "tablets": ["4611686293305345966", "4611686293305355965", "4611686293305295966", "4611686293305295972", "4611686293305355966"]}
+{"event": "setup", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_standby_97x7es9q", "pid": 2084339, "port": 33045, "primary_base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_primary_qgm_etfb"}
+{"event": "paused_after_sstable_metadata", "physical": 4611686155866541377}
+{"event": "sql", "sql": "UPDATE copy_probe.t SET v=7", "rows": []}
+{"event": "sql", "sql": "DROP TABLE copy_probe.t", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "waiting_source_reclaimed", "physical": [[4611686155866541377, 3, 1, 0]]}
+{"event": "source_reclaimed_while_copy_paused", "physical": 4611686155866541377, "state": [[4611686155866541377, 3, 1, 1]]}
+{"event": "waiting_readable", "status": [2003, "Can't connect to MySQL server on '127.0.0.1' ([Errno 111] Connection refused)"]}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_standby_97x7es9q/data.tar.gz", "bytes": 10799939}
+{"event": "stopped", "pid": 2083560, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_primary_qgm_etfb/data.tar.gz", "bytes": 8864343}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File ".scratch/namespace-fork/standby_background_copy_probe.py", line 112, in <module>
+    resource.setrlimit(resource.RLIMIT_CORE,(0,0));run(args.binary,args.drop_parent,args.compaction_interval,args.drop_during_copy)
+  File ".scratch/namespace-fork/standby_background_copy_probe.py", line 84, in run
+    raise AssertionError(('standby full copy failed',standby.proc.returncode,str(standby.base)))
+AssertionError: ('standby full copy failed', 1, '/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_standby_97x7es9q')

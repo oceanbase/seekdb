@@ -1,0 +1,34 @@
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/standby-artifacts/seekdb-native-v3", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_wezbz3bb", "pid": 3214311, "port": 28241}
+{"event": "native_kv_verified", "recovered": false, "typed_records": true, "pin_reload": true, "durable_phase": "created"}
+{"event": "crash_for_recovery", "pid": 3214311, "after_phase": "created"}
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/standby-artifacts/seekdb-native-v3", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_wezbz3bb", "pid": 3216826, "port": 28241}
+{"event": "native_kv_verified", "recovered": true, "typed_records": true, "pin_reload": true, "durable_phase": "marked"}
+{"event": "crash_for_recovery", "pid": 3216826, "after_phase": "marked"}
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/standby-artifacts/seekdb-native-v3", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_wezbz3bb", "pid": 3218440, "port": 28241}
+{"event": "native_kv_verified", "recovered": true, "typed_records": true, "pin_reload": true, "durable_phase": "finished"}
+{"event": "crash_for_recovery", "pid": 3218440, "after_phase": "finished"}
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/standby-artifacts/seekdb-native-v3", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_wezbz3bb", "pid": 3219908, "port": 28241}
+{"event": "native_kv_verified", "recovered": true, "typed_records": true, "pin_reload": true, "durable_phase": "verified"}
+{"event": "PASS", "case": "instance_meta_native", "rollback": true, "cross_collection": true, "duplicate_key": true, "own_writes": true, "snapshot": true, "locked_current_read": true, "binary_value_60000": true, "key_512": true, "value_65536": true, "binary_bounds": true, "scan": true, "erase": true, "snapshot_across_minor": true, "writer_conflict": true, "typed_records": true, "catalog_tree": true, "lineage": true, "snapshot_pin": true, "gc_watermark": true, "pin_reload": true, "crash_recovery": true, "durable_fork_drop": true}
+{"event": "stopped", "pid": 3219908, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_instance_meta_native_wezbz3bb/data.tar.gz", "bytes": 3337915}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/standby-artifacts/seekdb-native-v3", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_tablet_preparation_hcard0jm", "pid": 3220947, "port": 38413}
+{"event": "sql", "sql": "CREATE DATABASE preparation", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE preparation.parts(id INT PRIMARY KEY,v INT,b LONGTEXT) PARTITION BY HASH(id) PARTITIONS 32", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE preparation.vec(id INT PRIMARY KEY,v VECTOR(2048)) LOB_INROW_THRESHOLD=4096", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE preparation_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE preparation_ddl FROM ns1", "rows": []}
+{"event": "sql", "sql": "CREATE INDEX by_v ON preparation.parts(v)", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*),SUM(v) FROM preparation.parts FORCE INDEX(by_v)", "rows": [[32, "496"]]}
+{"event": "stopped", "pid": 3220947, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_tablet_preparation_hcard0jm/data.tar.gz", "bytes": 3510679}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/tablet_preparation_probe.py", line 94, in <module>
+    run(args.binary, args.serial, args.instrumented)
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/tablet_preparation_probe.py", line 37, in run
+    assert bindings and all(count == 1 for count in bindings.values()), bindings
+AssertionError: Counter()

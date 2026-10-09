@@ -1,0 +1,5 @@
+{
+  "case": "standby_sstable_replay",
+  "status": "interrupted",
+  "reason": "Actual validation path uses ObChecksumValidator; progress-checker get_tablet_ids is unused. All359 tablets merged, validator still probes raw IDs."
+}

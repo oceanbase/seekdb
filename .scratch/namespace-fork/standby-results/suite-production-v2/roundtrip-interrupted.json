@@ -1,0 +1,5 @@
+{
+  "case": "switchover_roundtrip",
+  "status": "interrupted",
+  "reason": "Old binary lacks the proven physical-ID progress-checker fix; rerun full suite using production-v3."
+}

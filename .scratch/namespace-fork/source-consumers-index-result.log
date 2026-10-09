@@ -1,0 +1,34 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/source-consumers-artifacts/seekdb-production", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_access_indexes_qu2lox4g", "pid": 3712442, "port": 43209}
+{"event": "sql", "sql": "CREATE DATABASE access_indexes", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE access_indexes.base(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_indexes.base VALUES(1,10),(2,20)", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE access_indexes.docs(body LONGTEXT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_indexes.docs VALUES('alpha text'),('beta text')", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE access_indexes.vectors(id INT PRIMARY KEY, v VECTOR(2048))", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE access_indexes FROM ns1", "rows": []}
+{"event": "sql", "sql": "UPDATE access_indexes.base SET v=99 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_indexes.docs VALUES('alpha later')", "rows": []}
+{"event": "sql", "sql": "CREATE INDEX by_v ON access_indexes.base(v)", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM access_indexes.base FORCE INDEX(by_v) ORDER BY id", "rows": [[1, 10], [2, 20]]}
+{"event": "sql", "sql": "CREATE FULLTEXT INDEX body_ft ON access_indexes.docs(body)", "rows": []}
+{"event": "sql", "sql": "SELECT body FROM access_indexes.docs WHERE MATCH(body) AGAINST('alpha')", "rows": [["alpha text"]]}
+{"event": "sql", "sql": "UPDATE /*+ PARALLEL(2) */ access_indexes.docs SET body='gamma text' WHERE body='alpha text'", "rows": []}
+{"event": "sql", "sql": "SELECT body FROM access_indexes.docs WHERE MATCH(body) AGAINST('alpha')", "rows": []}
+{"event": "sql", "sql": "SELECT body FROM access_indexes.docs WHERE MATCH(body) AGAINST('gamma')", "rows": [["gamma text"]]}
+{"event": "sql", "sql": "DELETE /*+ PARALLEL(2) */ FROM access_indexes.docs WHERE body='beta text'", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM access_indexes.docs", "rows": [[1]]}
+{"event": "sql", "sql": "UPDATE access_indexes.docs SET body='alpha text'", "rows": []}
+{"event": "sql", "sql": "INSERT INTO access_indexes.docs VALUES('beta text')", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM access_indexes.docs", "rows": [[3]]}
+{"event": "case_pass", "case": "explicit_das_fulltext_context"}
+{"event": "sql", "sql": "CREATE VECTOR INDEX by_vector ON access_indexes.vectors(v) WITH(distance=l2,type=ivf_flat,nlist=1,sample_per_nlist=1)", "rows": []}
+{"event": "case_pass", "case": "cold_inherited_index_build", "normal": true, "fulltext": true, "vector_2048": true}
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/source-consumers-artifacts/seekdb-production", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_access_indexes_qu2lox4g", "pid": 3713309, "port": 43209}
+{"event": "sql", "sql": "SELECT id,v FROM access_indexes.base FORCE INDEX(by_v) ORDER BY id", "rows": [[1, 10], [2, 20]]}
+{"event": "sql", "sql": "SELECT body FROM access_indexes.docs WHERE MATCH(body) AGAINST('alpha')", "rows": [["alpha text"]]}
+{"event": "sql", "sql": "SELECT v FROM access_indexes.base WHERE id=1", "rows": [[99]]}
+{"event": "pass", "restart": true}
+{"event": "stopped", "pid": 3713309, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_access_indexes_qu2lox4g/data.tar.gz", "bytes": 3656716}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

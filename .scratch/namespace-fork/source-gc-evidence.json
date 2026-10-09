@@ -1,0 +1,28 @@
+{
+  "sources": {
+    "src/rootserver/fork_table/instance_namespace_metadata.cpp": "f4daef7eb075a0e0df27a47edcd61e9cde0c1aaa52a8c4611bf287df7a7076fd",
+    "src/rootserver/fork_table/instance_namespace_metadata.h": "37c9caf5ced755990bb7ef4a98efcc1bf1315435c464ebc4f6141f15bc2140ec",
+    "src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp": "4bb74c450d26a3c9321626cc8b478151b1c2de917fed3c06e48cf361ff696d36"
+  },
+  "passed": [
+    "native source_graph_gc; retained historical view; corrupt physical cycle rejected",
+    "formal SQL RR/RC/PX/own-writes/FK/upsert/replace",
+    "detached child source physically reclaimed; restart; ordinary and mixed memtable/SSTable",
+    "namespace_fork_local primary/standby"
+  ],
+  "standby": [
+    {
+      "case": "namespace_fork_local",
+      "exit_code": 0,
+      "elapsed_s": 99.04
+    }
+  ],
+  "not_done": [
+    "SCN retention plan",
+    "remove global pins",
+    "old ownership consumers",
+    "automatic page GC",
+    "background readonly materialization",
+    "template takeover"
+  ]
+}

@@ -1,0 +1,1209 @@
+diff --git a/src/namespace/catalog.cpp b/src/namespace/catalog.cpp
+index 5ca1ab4e4..1e80190dc 100644
+--- a/src/namespace/catalog.cpp
++++ b/src/namespace/catalog.cpp
+@@ -462,9 +462,11 @@ void NamespaceControlState::apply_owned(uint64_t namespace_id,
+ {
+   std::lock_guard<std::mutex> lock(exceptions_mutex_);
+   const auto it = exception_sets_.find(namespace_id);
+-  if (it != exception_sets_.end() && it->second.loaded) {
++  // Physical IDs are not reused after a committed DROP. A delayed creator's
++  // cache publication must not revive a tombstone loaded after that DROP.
++  if (it != exception_sets_.end() && it->second.loaded
++      && it->second.tombstoned.count(local_tablet) == 0) {
+     it->second.owned[local_tablet] = table;
+-    it->second.tombstoned.erase(local_tablet);
+   }
+ }
+ 
+diff --git a/src/namespace/catalog.h b/src/namespace/catalog.h
+index 1ec517e36..5abcae353 100644
+--- a/src/namespace/catalog.h
++++ b/src/namespace/catalog.h
+@@ -153,8 +153,8 @@ public:
+ 
+ // One namespace's immutable lineage links and committed tablet exceptions.
+ // Registry owns this state so there is still only one process-wide namespace
+-// authority. Loading holds the same lock as post-commit updates: a load cannot
+-// publish a snapshot that misses a committed exception row.
++// authority. Loading, post-commit insertions and invalidation share a lock,
++// so an older load cannot republish a snapshot after its invalidation.
+ class NamespaceControlState final {
+ public:
+   bool chain_link(uint64_t namespace_id, uint64_t &parent, int64_t &fork_cap) const;
+diff --git a/src/observer/namespace_worker_gateway_prototype.ipp b/src/observer/namespace_worker_gateway_prototype.ipp
+index 15eda11aa..23ef0280c 100644
+--- a/src/observer/namespace_worker_gateway_prototype.ipp
++++ b/src/observer/namespace_worker_gateway_prototype.ipp
+@@ -352,6 +352,30 @@ int call_in_process_tx_state(char operation, transaction::ObTxDesc &view,
+   THIS_WORKER.set_timeout_ts(old_timeout);
+   return ret;
+ }
++int with_native_transaction(sql::ObSQLSessionInfo &session,
++    const std::function<int(ObTxDesc &)> &operation)
++{
++  StorageSessionScope scope(&session, false);
++  InProcessStorage *ctx = in_process_storage;
++  ObTxDesc *view = session.get_tx_desc();
++  if (scope.error() != OB_SUCCESS) { return scope.error(); }
++  if (!operation || ctx == nullptr || !ctx->initialized || ctx->sql_session != &session
++      || !ctx->writes || !ctx->writes->tx || !ctx->writes->writes.empty()
++      || view == nullptr || ctx->writes->tx->get_tx_id() != view->get_tx_id()) {
++    return OB_INVALID_ARGUMENT;
++  }
++  const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
++  auto *old_session = THIS_WORKER.get_session();
++  THIS_WORKER.set_session(&ctx->session);
++  const int ret = operation(*ctx->writes->tx);
++  // Even a failed operation can change write/abort state. SQL must observe
++  // that state when it subsequently rolls back or commits this transaction.
++  const int sync_ret = view->sync_serialized_state_from(*ctx->writes->tx);
++  THIS_WORKER.set_session(old_session);
++  THIS_WORKER.set_timeout_ts(old_timeout);
++  return ret == OB_SUCCESS ? sync_ret : ret;
++}
++
+ int call_in_process_tx_read_snapshot(ObTxDesc &view,
+     ObTxIsolationLevel isolation, int64_t deadline, ObTxReadSnapshot &snapshot)
+ {
+diff --git a/src/observer/namespace_worker_protocol_prototype.h b/src/observer/namespace_worker_protocol_prototype.h
+index 9fcea2d97..d1c1c0f44 100644
+--- a/src/observer/namespace_worker_protocol_prototype.h
++++ b/src/observer/namespace_worker_protocol_prototype.h
+@@ -13,6 +13,7 @@
+ #include <string>
+ #include <vector>
+ namespace oceanbase { namespace sql { class ObSQLSessionInfo; } }
++namespace oceanbase { namespace transaction { class ObTxDesc; } }
+ namespace oceanbase { namespace sql { class ObBasicSessionInfo; } }
+ namespace oceanbase { namespace sql { class ObPlanCache; } }
+ namespace oceanbase { namespace common { class ObITabletScan; } }
+@@ -38,6 +39,8 @@ namespace oceanbase { namespace share { namespace schema { class ObPrivMgr; } }
+ namespace oceanbase { namespace share { namespace schema { class ObMultiVersionSchemaService; } } }
+ namespace oceanbase { namespace share { namespace schema { class ObTableSchema; } } }
+ namespace oceanbase { namespace observer { namespace namespace_worker_prototype {
++int with_native_transaction(sql::ObSQLSessionInfo &session,
++    const std::function<int(transaction::ObTxDesc &)> &operation);
+ class INamespaceSchemaLifecycle
+ {
+ public:
+diff --git a/src/observer/ob_inner_sql_connection.cpp b/src/observer/ob_inner_sql_connection.cpp
+index bde4216ab..130d87f9b 100644
+--- a/src/observer/ob_inner_sql_connection.cpp
++++ b/src/observer/ob_inner_sql_connection.cpp
+@@ -1628,6 +1628,18 @@ sql::ObSQLSessionInfo *ObInnerSQLConnectionAccess::get_session(
+                                       : &native_connection->get_session();
+ }
+ 
++int ObInnerSQLConnectionAccess::with_native_transaction(
++    common::sqlclient::ObISQLConnection *connection,
++    const std::function<int(transaction::ObTxDesc &)> &operation)
++{
++  auto *native = static_cast<observer::ObInnerSQLConnection *>(connection);
++  if (native == nullptr || !native->is_in_trans() || !operation) {
++    return common::OB_INVALID_ARGUMENT;
++  }
++  return observer::namespace_worker_prototype::with_native_transaction(
++      native->get_session(), operation);
++}
++
+ int ObInnerSQLConnectionAccess::lock_obj(
+     const transaction::tablelock::ObLockObjRequest &request,
+     common::sqlclient::ObISQLConnection *connection)
+diff --git a/src/query/api/query/session/ob_inner_sql_connection_access.h b/src/query/api/query/session/ob_inner_sql_connection_access.h
+index 472235e52..8e320cad6 100644
+--- a/src/query/api/query/session/ob_inner_sql_connection_access.h
++++ b/src/query/api/query/session/ob_inner_sql_connection_access.h
+@@ -18,6 +18,7 @@
+ #define OCEANBASE_QUERY_API_SESSION_OB_INNER_SQL_CONNECTION_ACCESS_H_
+ 
+ #include <stdint.h>
++#include <functional>
+ #include "common/mysqlclient/ob_isql_connection.h"
+ #include "storage/tablelock/ob_lock_inner_connection_util.h"
+ 
+@@ -36,6 +37,7 @@ class ObSQLSessionInfo;
+ }
+ namespace transaction
+ {
++class ObTxDesc;
+ enum class ObTxDataSourceType : int64_t;
+ struct ObRegisterMdsFlag;
+ namespace tablelock
+@@ -63,6 +65,13 @@ public:
+   static sql::ObSQLSessionInfo *get_session(
+       common::sqlclient::ObISQLConnection *connection);
+ 
++  // Execute sequential native operations in this connection's transaction.
++  // The callback must not end/release/reuse the transaction. Restores the
++  // storage session and synchronizes the SQL transaction view before return.
++  static int with_native_transaction(
++      common::sqlclient::ObISQLConnection *connection,
++      const std::function<int(transaction::ObTxDesc &)> &operation);
++
+   static int lock_obj(
+       const transaction::tablelock::ObLockObjRequest &request,
+       common::sqlclient::ObISQLConnection *connection);
+diff --git a/src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp b/src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp
+index 10c68f618..aede66d79 100644
+--- a/src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp
++++ b/src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp
+@@ -1376,258 +1376,250 @@ int NamespaceForkKernelPrototype::ensure_tablet_impl(
+     failure_stage = stage;
+     return step_ret;
+   };
+-  ObMySQLTransaction trans;
+   InstanceMetaStore::Transaction directory_tx;
++  ObMySQLTransaction trans;
+   rootserver::InstanceNamespaceMetadata metadata(*directory_kv_store(), directory_tx);
+   bool already = false;
+-  bool physical_already = false;
+-  bool repaired_owned = false;
+-  // The directory row lock joins concurrent creators. The physical transaction
+-  // commits first; a later retry can repair an owned row after a crash.
+-  if (OB_FAIL(materialize_step("directory_transaction",
+-      directory_kv_store()->begin(directory_tx, directory_deadline())))) {
++  const int64_t deadline = directory_deadline();
++  // CREATE MDS, mappings and owned rows share the connection's native
++  // transaction. Its namespace row lock serializes the entire binding unit.
++  if (OB_FAIL(materialize_step("transaction", trans.start(directory_sql_proxy())))) {
+   } else {
+-    rootserver::InstanceNamespaceRecord record;
+-    if (OB_FAIL(materialize_step("roots", metadata.get_namespace(db, record, true)))) {
+-    } else if (record.roots.state != 0) {
+-      ret = OB_OP_NOT_ALLOW;
+-    } else {
+-      root = record.roots;
+-    }
+-  }
+-  if (OB_FAIL(ret)) {
+-  } else if (OB_FAIL(materialize_step("recheck", [&]() -> int {
+-      // A concurrent materializer may have committed while this request waited
+-      // on the namespace row lock; re-check inside it before creating anything.
+-      bool exists = false;
+-      int result = probe_physical_tablet(tablet_id.id(), exists);
+-      if (result == OB_SUCCESS) {
+-        physical_already = exists;
+-        already = exists || control_state().owned(db, local);
+-      }
+-      return result;
+-  }()))) {
+-  }
+-  if (OB_SUCC(ret) && physical_already && !control_state().owned(db, local)
+-      && supplied_schema != nullptr && binding_schemas != nullptr) {
+-    failure_stage = "repair_owned";
+-    ObArray<ObTabletID> schema_tablets;
+-    bool matches = false;
+-    if (OB_FAIL(schema_tablet_ids(*supplied_schema, schema_tablets))) {
+-    } else {
+-      for (int64_t i = 0; i < schema_tablets.count(); ++i) {
+-        if (schema_tablets.at(i).id() == tablet_id.id()) { matches = true; }
+-      }
+-      if (!matches) { ret = OB_INVALID_ARGUMENT; }
+-    }
+-    rootserver::InstanceExceptionRecord old;
+-    if (OB_SUCC(ret)) { ret = metadata.get_exception(db, local, old, true); }
+-    if (ret == OB_ENTRY_NOT_EXIST) {
+-      ret = metadata.put_exception({db, local,
+-          local_of(supplied_schema->get_table_id()), 0, 0});
+-      repaired_owned = ret == OB_SUCCESS;
+-    } else if (OB_SUCC(ret) && old.kind != 0) {
+-      ret = OB_STATE_NOT_MATCH;
+-    }
+-  }
+-  if (OB_SUCC(ret) && !already) {
+-    failure_stage = "schema";
+-    const bool supplied = supplied_schema != nullptr && binding_schemas != nullptr;
+-    const ObTableSchema *requested_schema = supplied_schema;
+-    if (!supplied) {
+-      // The namespace worker is the schema authority and always supplies the
+-      // binding schemas on this path; physical creation without one is not
+-      // representable here.
+-      ret = OB_NOT_SUPPORTED;
+-    }
+-    auto supplied_by_table = [&](uint64_t table_id) -> const ObTableSchema * {
+-      const uint64_t local_table_id = local_of(table_id);
+-      for (int64_t i = 0; binding_schemas && i < binding_schemas->count(); ++i) {
+-        const ObTableSchema *schema = binding_schemas->at(i);
+-        if (schema != nullptr && local_of(schema->get_table_id()) == local_table_id) {
+-          return schema;
++    ret = query::ObInnerSQLConnectionAccess::with_native_transaction(
++        trans.get_connection(), [&](transaction::ObTxDesc &native) -> int {
++      if (OB_FAIL(materialize_step("directory_transaction",
++          directory_kv_store()->attach(directory_tx, native, deadline)))) {
++      } else {
++        rootserver::InstanceNamespaceRecord record;
++        if (OB_FAIL(materialize_step("roots", metadata.get_namespace(db, record, true)))) {
++        } else if (record.roots.state != 0) {
++          ret = OB_OP_NOT_ALLOW;
++        } else {
++          root = record.roots;
+         }
+       }
+-      return nullptr;
+-    };
+-    uint64_t requested_local_tablet = local;
+-    if (OB_SUCC(ret)) {
+-      ObArray<ObTabletID> requested_tablets;
+-      bool contains_requested_tablet = false;
+-      if (schema_tablet_ids(*requested_schema, requested_tablets) != OB_SUCCESS) {
+-        ret = OB_INVALID_ARGUMENT;
+-      }
+-      for (int64_t i = 0; OB_SUCC(ret) && i < requested_tablets.count(); ++i) {
+-        const uint64_t id = requested_tablets.at(i).id();
+-        if (!is_encoded_id(id) || database_of(id) != db) {
+-          ret = OB_INVALID_ARGUMENT;
+-        } else if (local_of(id) == local) {
+-          contains_requested_tablet = true;
++      if (OB_SUCC(ret)) {
++        failure_stage = "recheck";
++        // A creator may have committed while we waited on the namespace row.
++        // Locked reads acquire a fresh snapshot; neither the cache nor the
++        // snapshot pinned at attach may describe that creator's commit.
++        rootserver::InstanceExceptionRecord owned;
++        ret = metadata.get_exception(db, local, owned, true);
++        if (ret == OB_ENTRY_NOT_EXIST) {
++          ret = probe_physical_tablet(tablet_id.id(), already);
++          // Other DDL can create tablets before its schema delta publishes.
++          // That publication owns their directory registration, not this path.
++        } else if (OB_SUCC(ret)) {
++          if (owned.kind != 0) { ret = OB_TABLET_NOT_EXIST; }
++          else { already = true; }
+         }
+       }
+-      if (OB_SUCC(ret) && !contains_requested_tablet) { ret = OB_INVALID_ARGUMENT; }
+-    }
+-    const ObTableSchema *accessed_schema = requested_schema;
+-    if (OB_SUCC(ret) && requested_schema->is_aux_lob_table()) {
+-      // An LOB main tablet and both auxiliaries are one storage binding unit.
+-      // Canonicalize an auxiliary first access to the main schema so no partial
+-      // materialization can make that unit impossible to bind later.
+-      const uint64_t main_table = local_of(requested_schema->get_data_table_id());
+-      requested_schema = supplied_by_table(main_table);
+-      if (requested_schema == nullptr || requested_schema->is_aux_lob_table()) {
+-        ret = OB_INVALID_ARGUMENT;
+-      } else {
+-        uint64_t main_tablet = OB_INVALID_ID;
+-        if (OB_FAIL(corresponding_tablet_id(
+-                *accessed_schema, local, *requested_schema, main_tablet))) {
+-        } else {
+-          requested_local_tablet = local_of(main_tablet);
++      if (OB_SUCC(ret) && !already) {
++        failure_stage = "schema";
++        const bool supplied = supplied_schema != nullptr && binding_schemas != nullptr;
++        const ObTableSchema *requested_schema = supplied_schema;
++        if (!supplied) {
++          // The namespace worker is the schema authority and always supplies the
++          // binding schemas on this path; physical creation without one is not
++          // representable here.
++          ret = OB_NOT_SUPPORTED;
+         }
+-      }
+-    }
+-    auto append_item = [&](const ObTableSchema *schema, uint64_t item_local) -> int {
+-      MaterializeItem item;
+-      item.schema = schema;
+-      item.local_tablet = item_local;
+-      const int resolve_ret = metadata.resolve_read_tablet(
+-          db, item_local, probe_historical_tablet,
+-          item.source_tablet, item.cap);
+-      if (resolve_ret != OB_SUCCESS) { return resolve_ret; }
+-      if (item.source_tablet == encoded(db, item_local)) { return OB_EAGAIN; }
+-      // The cap of every hop is a fork snapshot of this namespace's chain, so
+-      // it can never exceed this namespace's own fork snapshot.
+-      if (item.cap <= 0 || item.cap > root.snapshot) { return OB_STATE_NOT_MATCH; }
+-      items.push_back(item);
+-      return OB_SUCCESS;
+-    };
+-    if (OB_SUCC(ret)) {
+-      failure_stage = "append";
+-      ret = append_item(requested_schema, requested_local_tablet);
+-    }
+-    const uint64_t auxiliary_tables[] = {
+-      OB_SUCC(ret) ? requested_schema->get_aux_lob_meta_tid() : OB_INVALID_ID,
+-      OB_SUCC(ret) ? requested_schema->get_aux_lob_piece_tid() : OB_INVALID_ID
+-    };
+-    for (uint64_t auxiliary_table : auxiliary_tables) {
+-      if (OB_SUCC(ret) && auxiliary_table != OB_INVALID_ID) {
+-        const ObTableSchema *auxiliary_schema = supplied_by_table(auxiliary_table);
+-        if (auxiliary_schema == nullptr) {
+-          ret = OB_INVALID_ARGUMENT;
+-        } else if (!auxiliary_schema->is_aux_lob_table()) {
+-          ret = OB_STATE_NOT_MATCH;
+-        } else {
+-          uint64_t auxiliary_tablet = OB_INVALID_ID;
+-          if (OB_FAIL(corresponding_tablet_id(
+-                  *requested_schema, requested_local_tablet,
+-                  *auxiliary_schema, auxiliary_tablet))) {
++        auto supplied_by_table = [&](uint64_t table_id) -> const ObTableSchema * {
++          const uint64_t local_table_id = local_of(table_id);
++          for (int64_t i = 0; binding_schemas && i < binding_schemas->count(); ++i) {
++            const ObTableSchema *schema = binding_schemas->at(i);
++            if (schema != nullptr && local_of(schema->get_table_id()) == local_table_id) {
++              return schema;
++            }
++          }
++          return nullptr;
++        };
++        uint64_t requested_local_tablet = local;
++        if (OB_SUCC(ret)) {
++          ObArray<ObTabletID> requested_tablets;
++          bool contains_requested_tablet = false;
++          if (schema_tablet_ids(*requested_schema, requested_tablets) != OB_SUCCESS) {
++            ret = OB_INVALID_ARGUMENT;
++          }
++          for (int64_t i = 0; OB_SUCC(ret) && i < requested_tablets.count(); ++i) {
++            const uint64_t id = requested_tablets.at(i).id();
++            if (!is_encoded_id(id) || database_of(id) != db) {
++              ret = OB_INVALID_ARGUMENT;
++            } else if (local_of(id) == local) {
++              contains_requested_tablet = true;
++            }
++          }
++          if (OB_SUCC(ret) && !contains_requested_tablet) { ret = OB_INVALID_ARGUMENT; }
++        }
++        const ObTableSchema *accessed_schema = requested_schema;
++        if (OB_SUCC(ret) && requested_schema->is_aux_lob_table()) {
++          // An LOB main tablet and both auxiliaries are one storage binding unit.
++          // Canonicalize an auxiliary first access to the main schema so no partial
++          // materialization can make that unit impossible to bind later.
++          const uint64_t main_table = local_of(requested_schema->get_data_table_id());
++          requested_schema = supplied_by_table(main_table);
++          if (requested_schema == nullptr || requested_schema->is_aux_lob_table()) {
++            ret = OB_INVALID_ARGUMENT;
+           } else {
+-            ret = append_item(auxiliary_schema, local_of(auxiliary_tablet));
++            uint64_t main_tablet = OB_INVALID_ID;
++            if (OB_FAIL(corresponding_tablet_id(
++                    *accessed_schema, local, *requested_schema, main_tablet))) {
++            } else {
++              requested_local_tablet = local_of(main_tablet);
++            }
+           }
+         }
+-      }
+-    }
+-    auto *freeze = share::server_service<ObFreezeInfoMgr>();
+-    if (OB_SUCC(ret) && !freeze) {
+-      ret = OB_STATE_NOT_MATCH;
+-    }
+-    for (const auto &item : items) {
+-      if (OB_FAIL(ret)) { break; }
+-      failure_stage = "snapshot_pin";
+-      // The resolved cap is exactly the fork snapshot id of the chain hop
+-      // below the source, so its snapshot row is a point query away.
+-      Roots inherited;
+-      rootserver::InstanceNamespacePin pin;
+-      if (OB_FAIL(metadata.get_snapshot(uint64_t(item.cap), inherited))) {
+-      } else if (OB_FAIL(metadata.get_pin(uint64_t(item.cap), pin))) {
+-      } else {
+-        ObStorageSnapshotInfo reserved;
+-        if (pin.schema_version != inherited.schema_version) {
++        auto append_item = [&](const ObTableSchema *schema, uint64_t item_local) -> int {
++          MaterializeItem item;
++          item.schema = schema;
++          item.local_tablet = item_local;
++          const int resolve_ret = metadata.resolve_read_tablet(
++              db, item_local, probe_historical_tablet,
++              item.source_tablet, item.cap);
++          if (resolve_ret != OB_SUCCESS) { return resolve_ret; }
++          if (item.source_tablet == encoded(db, item_local)) { return OB_EAGAIN; }
++          // The cap of every hop is a fork snapshot of this namespace's chain, so
++          // it can never exceed this namespace's own fork snapshot.
++          if (item.cap <= 0 || item.cap > root.snapshot) { return OB_STATE_NOT_MATCH; }
++          items.push_back(item);
++          return OB_SUCCESS;
++        };
++        if (OB_SUCC(ret)) {
++          failure_stage = "append";
++          ret = append_item(requested_schema, requested_local_tablet);
++        }
++        const uint64_t auxiliary_tables[] = {
++          OB_SUCC(ret) ? requested_schema->get_aux_lob_meta_tid() : OB_INVALID_ID,
++          OB_SUCC(ret) ? requested_schema->get_aux_lob_piece_tid() : OB_INVALID_ID
++        };
++        for (uint64_t auxiliary_table : auxiliary_tables) {
++          if (OB_SUCC(ret) && auxiliary_table != OB_INVALID_ID) {
++            const ObTableSchema *auxiliary_schema = supplied_by_table(auxiliary_table);
++            if (auxiliary_schema == nullptr) {
++              ret = OB_INVALID_ARGUMENT;
++            } else if (!auxiliary_schema->is_aux_lob_table()) {
++              ret = OB_STATE_NOT_MATCH;
++            } else {
++              uint64_t auxiliary_tablet = OB_INVALID_ID;
++              if (OB_FAIL(corresponding_tablet_id(
++                      *requested_schema, requested_local_tablet,
++                      *auxiliary_schema, auxiliary_tablet))) {
++              } else {
++                ret = append_item(auxiliary_schema, local_of(auxiliary_tablet));
++              }
++            }
++          }
++        }
++        auto *freeze = share::server_service<ObFreezeInfoMgr>();
++        if (OB_SUCC(ret) && !freeze) {
+           ret = OB_STATE_NOT_MATCH;
+-        } else if (OB_FAIL(freeze->get_min_reserved_snapshot(
+-                       ObTabletID(item.source_tablet), item.cap, reserved))) {
+-        } else if (reserved.snapshot_ > item.cap) {
+-          ret = OB_SNAPSHOT_DISCARDED;
+         }
+-      }
+-    }
+-    if (OB_SUCC(ret)) {
+-      failure_stage = "tablet_create";
+-      if (OB_FAIL(trans.start(directory_sql_proxy()))) {
+-      }
+-    }
+-    if (OB_SUCC(ret)) {
+-      rootserver::ObTabletCreator creator(SCN::min_scn(), trans);
+-      rootserver::ObTabletCreatorArg arg;
+-      ObArray<ObTabletID> ids;
+-      ObArray<const ObTableSchema *> definitions;
+-      ObArray<bool> empty_major;
+-      ObArray<int64_t> logical_birth;
+-      ObArray<ObForkTabletInfo> fork_infos;
+-      ObArray<ObTabletTablePair> mappings;
+-      ObArray<ObTabletID> source_ids;
+-      ObArray<int64_t> source_snapshot_versions;
+-      for (const auto &item : items) {
+-        ObForkTabletInfo fork;
+-        fork.set_fork_snapshot_version(item.cap);
+-        fork.set_fork_src_tablet_id(ObTabletID(item.source_tablet));
+-        const ObTabletID destination(encoded(db, item.local_tablet));
+-        if (OB_FAIL(ids.push_back(destination)) || OB_FAIL(definitions.push_back(item.schema))
+-            || OB_FAIL(empty_major.push_back(false)) || OB_FAIL(logical_birth.push_back(item.cap))
+-            || OB_FAIL(fork_infos.push_back(fork))
+-            || OB_FAIL(source_ids.push_back(ObTabletID(item.source_tablet)))
+-            || OB_FAIL(source_snapshot_versions.push_back(item.cap))
+-            || OB_FAIL(mappings.push_back(ObTabletTablePair(destination, item.schema->get_table_id())))) {
+-          break;
++        for (const auto &item : items) {
++          if (OB_FAIL(ret)) { break; }
++          failure_stage = "snapshot_pin";
++          // The resolved cap is exactly the fork snapshot id of the chain hop
++          // below the source, so its snapshot row is a point query away.
++          Roots inherited;
++          rootserver::InstanceNamespacePin pin;
++          if (OB_FAIL(metadata.get_snapshot(uint64_t(item.cap), inherited))) {
++          } else if (OB_FAIL(metadata.get_pin(uint64_t(item.cap), pin))) {
++          } else {
++            ObStorageSnapshotInfo reserved;
++            if (pin.schema_version != inherited.schema_version) {
++              ret = OB_STATE_NOT_MATCH;
++            } else if (OB_FAIL(freeze->get_min_reserved_snapshot(
++                           ObTabletID(item.source_tablet), item.cap, reserved))) {
++            } else if (reserved.snapshot_ > item.cap) {
++              ret = OB_SNAPSHOT_DISCARDED;
++            }
++          }
+         }
+       }
+-      const ObTabletID data_tablet(encoded(db, items.front().local_tablet));
+-      auto copy_physical_sequences = [&]() {
+-        observer::namespace_worker_prototype::PhysicalTabletMdsScope physical_mds(true);
+-        return ObTabletAutoincrementService::get_instance().copy_sequences_for_fork(
+-            source_ids, ids, source_snapshot_versions, trans);
+-      };
+-      if (OB_FAIL(ret)) {
+-      } else if (OB_FAIL(arg.init(ids, data_tablet, definitions, false, DATA_CURRENT_VERSION,
+-                                 empty_major, logical_birth, fork_infos))) {
+-      } else if (OB_FAIL(creator.init(false))) {
+-      } else if (OB_FAIL(creator.add_create_tablet_arg(arg))) {
+-      } else if (FALSE_IT(creator.set_materialization_for_prototype())) {
+-      } else if (OB_FAIL(creator.execute())) {
+-      } else if (OB_FAIL(copy_physical_sequences())) {
+-      } else if (OB_FAIL(ObTabletMappingTableOperator::batch_update(trans, mappings))) {
+-      } else {
+-        // The physical binding unit is staged in this transaction. Its commit
+-        // precedes the separate KV owned-record commit below.
+-        DEBUG_SYNC(AFTER_UPDATE_TABLET_TO_LS);
+-        ret = THIS_WORKER.check_status();
+-        LOG_INFO("PROTOTYPE_V2_STORAGE_MATERIALIZE", K(tablet_id), "tablet_count", items.size(),
+-            "input_snapshot", items.front().cap, "namespace_snapshot", root.snapshot,
+-            "entry_layer", "ObAccessService", K(ret));
++      return ret;
++    });
++  }
++  if (OB_SUCC(ret) && !already) {
++    failure_stage = "tablet_create";
++    rootserver::ObTabletCreator creator(SCN::min_scn(), trans);
++    rootserver::ObTabletCreatorArg arg;
++    ObArray<ObTabletID> ids;
++    ObArray<const ObTableSchema *> definitions;
++    ObArray<bool> empty_major;
++    ObArray<int64_t> logical_birth;
++    ObArray<ObForkTabletInfo> fork_infos;
++    ObArray<ObTabletTablePair> mappings;
++    ObArray<ObTabletID> source_ids;
++    ObArray<int64_t> source_snapshot_versions;
++    for (const auto &item : items) {
++      ObForkTabletInfo fork;
++      fork.set_fork_snapshot_version(item.cap);
++      fork.set_fork_src_tablet_id(ObTabletID(item.source_tablet));
++      const ObTabletID destination(encoded(db, item.local_tablet));
++      if (OB_FAIL(ids.push_back(destination)) || OB_FAIL(definitions.push_back(item.schema))
++          || OB_FAIL(empty_major.push_back(false)) || OB_FAIL(logical_birth.push_back(item.cap))
++          || OB_FAIL(fork_infos.push_back(fork))
++          || OB_FAIL(source_ids.push_back(ObTabletID(item.source_tablet)))
++          || OB_FAIL(source_snapshot_versions.push_back(item.cap))
++          || OB_FAIL(mappings.push_back(ObTabletTablePair(destination, item.schema->get_table_id())))) {
++        break;
+       }
+     }
++    const ObTabletID data_tablet(encoded(db, items.front().local_tablet));
++    auto copy_physical_sequences = [&]() {
++      observer::namespace_worker_prototype::PhysicalTabletMdsScope physical_mds(true);
++      return ObTabletAutoincrementService::get_instance().copy_sequences_for_fork(
++          source_ids, ids, source_snapshot_versions, trans);
++    };
++    if (OB_FAIL(ret)) {
++    } else if (OB_FAIL(arg.init(ids, data_tablet, definitions, false, DATA_CURRENT_VERSION,
++                               empty_major, logical_birth, fork_infos))) {
++    } else if (OB_FAIL(creator.init(false))) {
++    } else if (OB_FAIL(creator.add_create_tablet_arg(arg))) {
++    } else if (FALSE_IT(creator.set_materialization_for_prototype())) {
++    } else if (OB_FAIL(creator.execute())) {
++    } else if (OB_FAIL(copy_physical_sequences())) {
++    } else if (OB_FAIL(ObTabletMappingTableOperator::batch_update(trans, mappings))) {
++    } else {
++      // The physical binding unit is staged; owned rows join this same
++      // transaction before it can commit.
++      DEBUG_SYNC(AFTER_UPDATE_TABLET_TO_LS);
++      ret = THIS_WORKER.check_status();
++      LOG_INFO("PROTOTYPE_V2_STORAGE_MATERIALIZE", K(tablet_id), "tablet_count", items.size(),
++          "input_snapshot", items.front().cap, "namespace_snapshot", root.snapshot,
++          "entry_layer", "ObAccessService", K(ret));
++    }
+   }
+-  if (trans.is_started()) { int end = trans.end(ret == OB_SUCCESS); if (ret == OB_SUCCESS) { ret = end; } }
+   if (OB_SUCC(ret) && !already) {
+     failure_stage = "exceptions";
+-    for (const auto &item : items) {
+-      if (OB_FAIL(ret)) { break; }
+-      ret = metadata.put_exception({db, item.local_tablet,
+-          local_of(item.schema->get_table_id()), 0, 0});
+-    }
++    ret = query::ObInnerSQLConnectionAccess::with_native_transaction(
++        trans.get_connection(), [&](transaction::ObTxDesc &) -> int {
++      for (const auto &item : items) {
++        if (OB_FAIL(ret)) { break; }
++        ret = metadata.put_exception({db, item.local_tablet,
++            local_of(item.schema->get_table_id()), 0, 0});
++      }
++      return ret;
++    });
+   }
+-  if (directory_tx.is_active()) {
+-    const int end = ret == OB_SUCCESS
+-        ? directory_kv_store()->commit(directory_tx)
+-        : directory_kv_store()->rollback(directory_tx);
++  // End explicitly even for KV failures: the SQL wrapper's destructor cannot
++  // infer those errors. Keep KV reader/GC protection until the owner finishes.
++  if (trans.is_started()) {
++    if (OB_SUCC(ret)) { failure_stage = "commit"; }
++    const int end = trans.end(ret == OB_SUCCESS);
+     if (ret == OB_SUCCESS) { ret = end; }
+   }
++  if (directory_tx.is_active()) {
++    const int detach_ret = directory_kv_store()->detach(directory_tx);
++    if (ret == OB_SUCCESS) { ret = detach_ret; }
++  }
+   if (ret == OB_SUCCESS && !already) {
+     for (const auto &item : items) {
+       control_state().apply_owned(db, item.local_tablet, local_of(item.schema->get_table_id()));
+     }
+-  }
+-  if (ret == OB_SUCCESS && repaired_owned) {
+-    control_state().apply_owned(db, local, local_of(supplied_schema->get_table_id()));
++  } else {
++    // Commit may have succeeded even when its response was lost. A later
++    // access must reload authoritative rows instead of repairing absence.
++    control_state().drop_exceptions(db);
+   }
+   if (ret != OB_SUCCESS) {
+     const MaterializeItem *item = items.empty() ? nullptr : &items.front();
+diff --git a/src/storage/instance_meta/instance_meta_store.cpp b/src/storage/instance_meta/instance_meta_store.cpp
+index ce68eecd3..544bf9617 100644
+--- a/src/storage/instance_meta/instance_meta_store.cpp
++++ b/src/storage/instance_meta/instance_meta_store.cpp
+@@ -54,14 +54,14 @@ struct InstanceMetaStore::State
+ InstanceMetaStore::Transaction::Transaction()
+   : owner_(nullptr), descriptor_(nullptr), snapshot_(), deadline_(0),
+     read_only_(false), scanning_(false), directory_guard_(false),
+-    directory_gc_(false), previous_(nullptr), next_(nullptr)
++    directory_gc_(false), borrowed_(false), previous_(nullptr), next_(nullptr)
+ {}
+ 
+ InstanceMetaStore::Transaction::~Transaction()
+ {
+   if (descriptor_ != nullptr) {
+-    const int ret = owner_->rollback(*this);
+-    if (OB_SUCCESS != ret) { LOG_WARN("instance metadata rollback failed", K(ret)); }
++    const int ret = borrowed_ ? owner_->detach(*this) : owner_->rollback(*this);
++    if (OB_SUCCESS != ret) { LOG_WARN("instance metadata transaction cleanup failed", K(ret)); }
+   }
+ }
+ 
+@@ -148,8 +148,17 @@ int InstanceMetaStore::begin_directory_gc(Transaction &tx, const int64_t deadlin
+   return begin_impl(tx, deadline, false, true);
+ }
+ 
++int InstanceMetaStore::attach(Transaction &tx, ObTxDesc &descriptor, const int64_t deadline)
++{
++  if (!descriptor.is_in_tx() || descriptor.is_shadow()
++      || !descriptor.is_RC_isolevel()) {
++    return OB_INVALID_ARGUMENT;
++  }
++  return begin_impl(tx, deadline, descriptor.is_rdonly(), false, &descriptor);
++}
++
+ int InstanceMetaStore::begin_impl(Transaction &tx, const int64_t deadline,
+-                                  const bool read_only, const bool directory_gc)
++    const bool read_only, const bool directory_gc, ObTxDesc *borrowed)
+ {
+   int ret = OB_SUCCESS;
+   if (state_ == nullptr) {
+@@ -189,9 +198,11 @@ int InstanceMetaStore::begin_impl(Transaction &tx, const int64_t deadline,
+     param.access_mode_ = read_only ? ObTxAccessMode::RD_ONLY : ObTxAccessMode::RW;
+     param.isolation_ = ObTxIsolationLevel::RC;
+     param.timeout_us_ = deadline - ObTimeUtility::current_time();
+-    if (OB_FAIL(transactions_.acquire_tx(tx.descriptor_))) {
++    tx.descriptor_ = borrowed;
++    if (borrowed == nullptr && OB_FAIL(transactions_.acquire_tx(tx.descriptor_))) {
+       release_directory_guard(tx);
+     } else {
++      tx.borrowed_ = borrowed != nullptr;
+       tx.owner_ = this;
+       tx.deadline_ = deadline;
+       tx.read_only_ = read_only;
+@@ -204,7 +215,7 @@ int InstanceMetaStore::begin_impl(Transaction &tx, const int64_t deadline,
+         state_->transactions = &tx;
+       }
+       ObTxReadSnapshot snapshot;
+-      if (OB_FAIL(transactions_.start_tx(*tx.descriptor_, param))) {
++      if (!tx.borrowed_ && OB_FAIL(transactions_.start_tx(*tx.descriptor_, param))) {
+       } else if (OB_FAIL(transactions_.get_read_snapshot(*tx.descriptor_, param.isolation_,
+                                                         deadline, snapshot))) {
+       } else {
+@@ -212,7 +223,7 @@ int InstanceMetaStore::begin_impl(Transaction &tx, const int64_t deadline,
+         ret = tx.snapshot_.assign(snapshot);
+       }
+       if (OB_FAIL(ret)) {
+-        const int cleanup_ret = rollback(tx);
++        const int cleanup_ret = tx.borrowed_ ? detach(tx) : rollback(tx);
+         if (cleanup_ret != OB_SUCCESS) { LOG_WARN("failed to close metadata transaction", K(cleanup_ret)); }
+       }
+     }
+@@ -237,28 +248,45 @@ void InstanceMetaStore::release_directory_guard(Transaction &tx)
+ int InstanceMetaStore::end(Transaction &tx, const bool do_commit)
+ {
+   int ret = OB_SUCCESS;
+-  if (tx.owner_ != this || !tx.is_active() || tx.scanning_) {
++  if (tx.owner_ != this || !tx.is_active() || tx.scanning_ || tx.borrowed_) {
+     ret = OB_INVALID_ARGUMENT;
+   } else {
+     ret = do_commit ? transactions_.commit_tx(*tx.descriptor_, tx.deadline_)
+                     : transactions_.rollback_tx(*tx.descriptor_);
+     const int release_ret = transactions_.release_tx(*tx.descriptor_);
+     if (ret == OB_SUCCESS) { ret = release_ret; }
+-    {
+-      std::lock_guard<std::mutex> guard(state_->transactions_mutex);
+-      if (tx.previous_ != nullptr) { tx.previous_->next_ = tx.next_; }
+-      else { state_->transactions = tx.next_; }
+-      if (tx.next_ != nullptr) { tx.next_->previous_ = tx.previous_; }
+-      tx.previous_ = tx.next_ = nullptr;
+-      tx.descriptor_ = nullptr;
+-      tx.owner_ = nullptr;
+-      tx.snapshot_.reset();
+-    }
+-    release_directory_guard(tx);
++    reset_transaction(tx);
+   }
+   return ret;
+ }
+ 
++int InstanceMetaStore::detach(Transaction &tx)
++{
++  if (tx.owner_ != this || !tx.is_active() || tx.scanning_ || !tx.borrowed_) {
++    return OB_INVALID_ARGUMENT;
++  }
++  reset_transaction(tx);
++  return OB_SUCCESS;
++}
++
++void InstanceMetaStore::reset_transaction(Transaction &tx)
++{
++  // The owner may already have released the native descriptor. Cleanup only
++  // touches our reader registration and never dereferences that descriptor.
++  {
++    std::lock_guard<std::mutex> guard(state_->transactions_mutex);
++    if (tx.previous_ != nullptr) { tx.previous_->next_ = tx.next_; }
++    else { state_->transactions = tx.next_; }
++    if (tx.next_ != nullptr) { tx.next_->previous_ = tx.previous_; }
++    tx.previous_ = tx.next_ = nullptr;
++    tx.descriptor_ = nullptr;
++    tx.owner_ = nullptr;
++    tx.borrowed_ = false;
++    tx.snapshot_.reset();
++  }
++  release_directory_guard(tx);
++}
++
+ int InstanceMetaStore::commit(Transaction &tx) { return end(tx, true); }
+ int InstanceMetaStore::rollback(Transaction &tx) { return end(tx, false); }
+ 
+diff --git a/src/storage/instance_meta/instance_meta_store.h b/src/storage/instance_meta/instance_meta_store.h
+index 76a858a20..2cd1047eb 100644
+--- a/src/storage/instance_meta/instance_meta_store.h
++++ b/src/storage/instance_meta/instance_meta_store.h
+@@ -45,7 +45,7 @@ public:
+   {
+   public:
+     Transaction();
+-    ~Transaction(); // Rolls back an unfinished transaction.
++    ~Transaction(); // Rolls back an owned transaction, or detaches a borrowed one.
+     bool is_active() const { return descriptor_ != nullptr; }
+     bool is_directory_gc() const { return directory_gc_; }
+   private:
+@@ -58,6 +58,7 @@ public:
+     bool scanning_;
+     bool directory_guard_;
+     bool directory_gc_;
++    bool borrowed_;
+     Transaction *previous_;
+     Transaction *next_;
+     DISALLOW_COPY_AND_ASSIGN(Transaction);
+@@ -90,6 +91,11 @@ public:
+   // Excludes ordinary KV transactions while a directory page collector marks
+   // roots and removes unreachable pages in this transaction.
+   int begin_directory_gc(Transaction &tx, int64_t deadline);
++  // Borrow an active native RC transaction. Its owner must end it before
++  // detaching, so snapshot retention and directory GC protection span commit.
++  // Only the owner may commit/rollback/release the native descriptor.
++  int attach(Transaction &tx, transaction::ObTxDesc &descriptor, int64_t deadline);
++  int detach(Transaction &tx);
+   int commit(Transaction &tx);
+   int rollback(Transaction &tx);
+   // Compaction must retain every snapshot held by a native KV transaction.
+@@ -120,7 +126,8 @@ private:
+             const common::ObString &value, Write operation);
+   int end(Transaction &tx, bool commit);
+   int begin_impl(Transaction &tx, int64_t deadline, bool read_only,
+-                 bool directory_gc);
++                 bool directory_gc, transaction::ObTxDesc *borrowed = nullptr);
++  void reset_transaction(Transaction &tx);
+   void release_directory_guard(Transaction &tx);
+   ObAccessService &access_;
+   transaction::ObTransService &transactions_;
+diff --git a/src/storage/ls/ob_ls_tablet_service.cpp b/src/storage/ls/ob_ls_tablet_service.cpp
+index 5293e7a3c..f9433e460 100644
+--- a/src/storage/ls/ob_ls_tablet_service.cpp
++++ b/src/storage/ls/ob_ls_tablet_service.cpp
+@@ -740,7 +740,8 @@ int ObLSTabletService::update_tablet_table_store(
+   return ret;
+ }
+ 
+-int ObLSTabletService::update_tablet_to_empty_shell(const common::ObTabletID &tablet_id)
++int ObLSTabletService::update_tablet_to_empty_shell(
++    const common::ObTabletID &tablet_id, const ObTabletHandle &expected)
+ {
+   int ret = OB_SUCCESS;
+   const ObTabletMapKey key(tablet_id);
+@@ -759,6 +760,9 @@ int ObLSTabletService::update_tablet_to_empty_shell(const common::ObTabletID &ta
+     ret = OB_INVALID_ARGUMENT;
+     LOG_WARN("invalid args", K(ret), K(tablet_id));
+   } else if (OB_FAIL(direct_get_tablet(tablet_id, old_tablet_handle))) {
++  } else if (expected.is_valid() && expected.get_obj() != old_tablet_handle.get_obj()) {
++    // A candidate collected before GC/recreation must not modify the new object.
++    ret = OB_EAGAIN;
+   } else if (old_tablet_handle.get_obj()->is_empty_shell()) {
+     LOG_INFO("old tablet is empty shell tablet, should skip this operation", K(ret), "old_tablet", old_tablet_handle.get_obj());
+   } else if (FALSE_IT(time_guard.click("GetOld"))) {
+diff --git a/src/storage/ls/ob_ls_tablet_service.h b/src/storage/ls/ob_ls_tablet_service.h
+index 64d278fbb..2bf806d75 100644
+--- a/src/storage/ls/ob_ls_tablet_service.h
++++ b/src/storage/ls/ob_ls_tablet_service.h
+@@ -223,7 +223,8 @@ public:
+       const ObTabletMapKey &key,
+       common::ObArenaAllocator &allocator,
+       ObTabletHandle &handle);
+-  int update_tablet_to_empty_shell(const common::ObTabletID &tablet_id);
++  int update_tablet_to_empty_shell(const common::ObTabletID &tablet_id,
++      const ObTabletHandle &expected = ObTabletHandle());
+   int replay_create_tablet(
+       const ObMetaDiskAddr &disk_addr,
+       const char *buf,
+diff --git a/src/storage/ls/ob_ls_tx_service.cpp b/src/storage/ls/ob_ls_tx_service.cpp
+index 9fc358785..7d0aa7549 100644
+--- a/src/storage/ls/ob_ls_tx_service.cpp
++++ b/src/storage/ls/ob_ls_tx_service.cpp
+@@ -446,8 +446,24 @@ int ObLSTxService::activate()
+   if (OB_ISNULL(mgr_)) {
+     ret = OB_NOT_INIT;
+     TRANS_LOG(WARN, "not init", K(ret));
+-  } else if (OB_FAIL(mgr_->online())) {
+-    TRANS_LOG(WARN, "failed to admit local transactions", K(ret));
++  } else {
++    // Activation follows complete replay and enables local append. Replayed
++    // transactions without a durable decision must be aborted, including MDS;
++    // ordinary transaction GC deliberately skips replay contexts.
++    bool finished = false;
++    const int64_t deadline = ObTimeUtility::current_time() + 30 * 1000 * 1000;
++    while (OB_SUCC(ret) && !finished) {
++      if (OB_FAIL(mgr_->abort_replayed_transactions(finished))) {
++        TRANS_LOG(WARN, "failed to abort unfinished replay transactions", K(ret));
++      } else if (!finished && ObTimeUtility::current_time() >= deadline) {
++        ret = OB_TIMEOUT;
++      } else if (!finished) {
++        ob_usleep(1000);
++      }
++    }
++    if (OB_SUCC(ret) && OB_FAIL(mgr_->online())) {
++      TRANS_LOG(WARN, "failed to admit local transactions", K(ret));
++    }
+   }
+   return ret;
+ }
+diff --git a/src/storage/tablet/ob_tablet_create_mds_helper.cpp b/src/storage/tablet/ob_tablet_create_mds_helper.cpp
+index 8785e7d72..d648f208c 100644
+--- a/src/storage/tablet/ob_tablet_create_mds_helper.cpp
++++ b/src/storage/tablet/ob_tablet_create_mds_helper.cpp
+@@ -20,6 +20,7 @@
+ #include "storage/tablet/ob_batch_create_tablet_pretty_arg.h"
+ #include "storage/tablet/ob_tablet_create_replay_executor.h"
+ #include "storage/tx_storage/ob_ls_service.h"
++#include "storage/tx_storage/ob_tablet_gc_service.h"
+ 
+ #define USING_LOG_PREFIX MDS
+ #define PRETTY_ARG(arg) (ObBatchCreateTabletPrettyArg(arg))
+@@ -393,19 +394,67 @@ bool ObTabletCreateMdsHelper::is_bind_hidden_tablets(const obcall::ObCreateTable
+   return tablet_ids.count() >= 1 && !is_contain(tablet_ids, data_tablet_id) && info.is_create_bind_hidden_tablets_;
+ }
+ 
++int ObTabletCreateMdsHelper::check_new_tablet_existence(
++    const ObTabletID &tablet_id, bool &exists)
++{
++  int ret = OB_SUCCESS;
++  auto *t3m = share::server_service<ObStorageMetaMemMgr>();
++  const ObTabletMapKey key(tablet_id);
++  ObTabletHandle handle;
++  if (OB_FAIL(t3m->has_tablet(key, exists)) || !exists) {
++  } else if (OB_FAIL(ObTabletCreateDeleteHelper::get_tablet(key, handle))) {
++    if (ret == OB_TABLET_NOT_EXIST) { ret = OB_SUCCESS; exists = false; }
++  } else if (handle.get_obj()->is_empty_shell()) {
++    // GC removes the shell after the LS checkpoint covers its lifecycle.
++    ret = OB_EAGAIN;
++  } else {
++    bool status_written = false;
++    ObTabletCreateDeleteMdsUserData data;
++    mds::MdsWriter writer;
++    mds::TwoPhaseCommitState state;
++    SCN version;
++    if (OB_FAIL(handle.get_obj()->check_tablet_status_written(status_written))) {
++    } else if (!status_written) {
++      // Another creator has allocated the object but not yet registered MDS.
++    } else if (OB_FAIL(handle.get_obj()->get_latest(data, writer, state, version))) {
++      if (ret == OB_EMPTY_RESULT) {
++        // An aborted CREATE leaves an allocated object until GC. Retrying the
++        // same physical ID must use GC's eligibility and identity checks,
++        // rather than treating that object as a committed duplicate.
++        checkpoint::TabletGCStatus status = checkpoint::NOT_NEED_GC;
++        ObLS *ls = nullptr;
++        ObSEArray<ObTabletHandle, 1> aborted;
++        ret = checkpoint::ObTabletGCHandler::check_tablet_from_aborted_tx(
++            *handle.get_obj(), status);
++        if (OB_FAIL(ret)) {
++        } else if (status != checkpoint::NEED_GC_IMMEDIATELY) {
++          // Redo has been written: checkpoint/GC must finish its durable
++          // cleanup before a new incarnation can reuse this physical ID.
++          ret = OB_EAGAIN;
++        } else if (OB_FAIL(get_ls(ls))) {
++        } else if (OB_FAIL(aborted.push_back(handle))) {
++        } else if (OB_FAIL(ls->get_tablet_gc_handler()->gc_tablets(aborted))) {
++        } else {
++          ret = t3m->has_tablet(key, exists);
++        }
++      }
++    }
++  }
++  return ret;
++}
++
+ int ObTabletCreateMdsHelper::check_pure_data_or_mixed_tablets_info(
+     const obcall::ObCreateTabletInfo &info,
+     bool &valid)
+ {
+   int ret = OB_SUCCESS;
+   bool exist = false;
+-  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
+   ObTabletMapKey key;
+ 
+   for (int64_t i = 0; OB_SUCC(ret) && !exist && i < info.tablet_ids_.count(); ++i) {
+     const ObTabletID &tablet_id = info.tablet_ids_[i];
+     key.tablet_id_ = tablet_id;
+-    if (OB_FAIL(t3m->has_tablet(key, exist))) {
++    if (OB_FAIL(check_new_tablet_existence(tablet_id, exist))) {
+     } else if (OB_UNLIKELY(exist)) {
+       LOG_WARN("unexpected tablet existence", K(ret), K(key), K(exist));
+     }
+@@ -431,7 +480,7 @@ int ObTabletCreateMdsHelper::check_pure_aux_tablets_info(
+   for (int64_t i = 0; OB_SUCC(ret) && !exist && i < info.tablet_ids_.count(); ++i) {
+     const ObTabletID &tablet_id = info.tablet_ids_[i];
+     key.tablet_id_ = tablet_id;
+-    if (OB_FAIL(t3m->has_tablet(key, exist))) {
++    if (OB_FAIL(check_new_tablet_existence(key.tablet_id_, exist))) {
+     } else if (OB_UNLIKELY(exist)) {
+       LOG_WARN("unexpected tablet existence", K(ret), K(key), K(exist));
+     }
+@@ -467,7 +516,7 @@ int ObTabletCreateMdsHelper::check_hidden_tablets_info(
+   for (int64_t i = 0; OB_SUCC(ret) && !exist && i < hidden_info.tablet_ids_.count(); ++i) {
+     const ObTabletID &tablet_id = hidden_info.tablet_ids_[i];
+     key.tablet_id_ = tablet_id;
+-    if (OB_FAIL(t3m->has_tablet(key, exist))) {
++    if (OB_FAIL(check_new_tablet_existence(key.tablet_id_, exist))) {
+     } else if (OB_UNLIKELY(exist)) {
+       LOG_WARN("unexpected tablet existence", K(ret), K(key), K(exist));
+     }
+@@ -493,7 +542,7 @@ int ObTabletCreateMdsHelper::check_hidden_tablets_info(
+     exist = false;
+     for (int64_t i = 0; OB_SUCC(ret) && !exist && i < aux_info->tablet_ids_.count(); ++i) {
+       key.tablet_id_ = aux_info->tablet_ids_[i];
+-      if (OB_FAIL(t3m->has_tablet(key, exist))) {
++      if (OB_FAIL(check_new_tablet_existence(key.tablet_id_, exist))) {
+       } else if (OB_UNLIKELY(exist)) {
+         LOG_WARN("unexpected tablet existence", K(ret), K(key), K(exist));
+       }
+diff --git a/src/storage/tablet/ob_tablet_create_mds_helper.h b/src/storage/tablet/ob_tablet_create_mds_helper.h
+index fd111c259..e30258a7b 100644
+--- a/src/storage/tablet/ob_tablet_create_mds_helper.h
++++ b/src/storage/tablet/ob_tablet_create_mds_helper.h
+@@ -99,6 +99,7 @@ private:
+   static int check_create_arg(
+       const obcall::ObBatchCreateTabletArg &arg,
+       bool &valid);
++  static int check_new_tablet_existence(const common::ObTabletID &tablet_id, bool &exists);
+   static int create_tablets(
+     const obcall::ObBatchCreateTabletArg &arg,
+     const bool for_replay,
+diff --git a/src/storage/tx/ob_trans_ctx_mgr_v4.cpp b/src/storage/tx/ob_trans_ctx_mgr_v4.cpp
+index ade37fca6..e247f34df 100644
+--- a/src/storage/tx/ob_trans_ctx_mgr_v4.cpp
++++ b/src/storage/tx/ob_trans_ctx_mgr_v4.cpp
+@@ -581,6 +581,21 @@ int ObLSTxCtxMgr::block_normal(bool &is_all_tx_cleaned_up)
+   return ret;
+ }
+ 
++int ObLSTxCtxMgr::abort_replayed_transactions(bool &finished)
++{
++  int ret = OB_SUCCESS;
++  RLockGuard guard(rwlock_);
++  finished = true;
++  auto abort_replayed = [&](ObTransCtx *base) {
++    bool tx_finished = false;
++    ret = static_cast<ObTxCtx *>(base)->abort_after_replay(tx_finished);
++    finished = finished && tx_finished;
++    return OB_SUCCESS == ret;
++  };
++  const int iter_ret = ls_tx_ctx_map_.for_each(abort_replayed);
++  return OB_SUCCESS == ret ? iter_ret : ret;
++}
++
+ int ObLSTxCtxMgr::online()
+ {
+   int ret = OB_SUCCESS;
+diff --git a/src/storage/tx/ob_trans_ctx_mgr_v4.h b/src/storage/tx/ob_trans_ctx_mgr_v4.h
+index 0ec6ecf10..660141de7 100644
+--- a/src/storage/tx/ob_trans_ctx_mgr_v4.h
++++ b/src/storage/tx/ob_trans_ctx_mgr_v4.h
+@@ -238,6 +238,7 @@ public:
+   int block_normal(bool &is_all_tx_cleaned_up);
+   int unblock_normal();
+   int online();
++  int abort_replayed_transactions(bool &finished);
+ 
+   // Get the TxCtx count in this ObLSTxCtxMgr;
+   int64_t get_tx_ctx_count() const { return get_tx_ctx_count_(); }
+diff --git a/src/storage/tx/ob_tx_ctx.cpp b/src/storage/tx/ob_tx_ctx.cpp
+index 6650ca330..017007d3e 100644
+--- a/src/storage/tx/ob_tx_ctx.cpp
++++ b/src/storage/tx/ob_tx_ctx.cpp
+@@ -5472,6 +5472,41 @@ int ObTxCtx::submit_rollback_to_log_(const ObTxSEQ from_scn,
+   return ret;
+ }
+ 
++int ObTxCtx::abort_after_replay(bool &finished)
++{
++  int ret = OB_SUCCESS;
++  CtxLockGuard guard(lock_);
++  finished = false;
++  if (IS_NOT_INIT) {
++    ret = OB_NOT_INIT;
++  } else if (is_exiting_) {
++    finished = true;
++  } else if (!is_for_replay() && part_trans_action_ != ObPartTransAction::ABORT) {
++    // A local transaction is not part of crash recovery.
++    finished = true;
++  } else if (is_decided()) {
++    ret = OB_STATE_NOT_MATCH;
++    TRANS_LOG(WARN, "decided replay transaction has not exited", K(ret), KPC(this));
++  } else {
++    if (is_for_replay()) {
++      // The durable local log has no final decision for this transaction.
++      // There is no surviving owner. Use the normal durable abort path so
++      // both row callbacks and MDS callbacks finish before admitting traffic.
++      if (OB_FAIL(mt_ctx_.replay_to_commit(false /*is_resume*/))) {
++      } else {
++        for_replay_ = false;
++        part_trans_action_ = ObPartTransAction::ABORT;
++        trans_expired_time_ = ObClockGenerator::getClock();
++      }
++    }
++    if (OB_SUCC(ret)) {
++      ret = abort_(ObTxAbortCause::IMPLICIT_ROLLBACK);
++      finished = is_exiting_;
++    }
++  }
++  return ret;
++}
++
+ int ObTxCtx::abort(const int reason)
+ {
+   UNUSED(reason);
+diff --git a/src/storage/tx/ob_tx_ctx.h b/src/storage/tx/ob_tx_ctx.h
+index c3f163db7..ef819fc5c 100644
+--- a/src/storage/tx/ob_tx_ctx.h
++++ b/src/storage/tx/ob_tx_ctx.h
+@@ -145,6 +145,8 @@ public:
+              const int64_t &expire_ts,
+              const int64_t &request_id);
+   int abort(const int reason);
++  // Called only after local replay has drained and append is enabled.
++  int abort_after_replay(bool &finished);
+   int one_phase_commit_();
+   int get_prepare_version_if_prepared(bool &is_prepared, share::SCN &prepare_version);
+   const share::SCN get_commit_version() const { return ctx_tx_data_.get_commit_version(); }
+diff --git a/src/storage/tx_storage/ob_empty_shell_task.cpp b/src/storage/tx_storage/ob_empty_shell_task.cpp
+index 5eed2c113..5d5ad8ed6 100644
+--- a/src/storage/tx_storage/ob_empty_shell_task.cpp
++++ b/src/storage/tx_storage/ob_empty_shell_task.cpp
+@@ -64,9 +64,16 @@ void ObEmptyShellTask::runTimerTask()
+         obsys::ObRLockGuard lock(tablet_empty_shell_handler->wait_lock_);
+         bool need_retry = false;
+         common::ObTabletIDArray empty_shell_tablet_ids;
+-        if (OB_FAIL(tablet_empty_shell_handler->get_empty_shell_tablet_ids(empty_shell_tablet_ids, need_retry))) {
++        common::ObSEArray<ObTabletHandle, 16> aborted_tablets;
++        if (OB_FAIL(tablet_empty_shell_handler->get_empty_shell_tablet_ids(
++            empty_shell_tablet_ids, aborted_tablets, need_retry))) {
+           need_retry = true;
+           STORAGE_LOG(WARN, "[emptytablet] tablet_empty_shell_handler get empty shell tablet ids failed", K(ret));
++        } else if (OB_FAIL(tablet_empty_shell_handler->update_aborted_tablets_to_empty_shell(
++            ls, aborted_tablets))) {
++          // An aborted CREATE was never readable or inheritable. Its cleanup
++          // must not wait for readers retrying creation of the same physical ID.
++          need_retry = true;
+         } else if (empty_shell_tablet_ids.empty()) {
+           // do nothing
+         } else if (OB_FAIL(NamespaceForkKernelPrototype::reclaim_unreferenced_tablets(
+@@ -135,7 +142,9 @@ int ObTabletEmptyShellHandler::init(ObLS *ls)
+   return ret;
+ }
+ 
+-int ObTabletEmptyShellHandler::get_empty_shell_tablet_ids(common::ObTabletIDArray &empty_shell_tablet_ids, bool &need_retry)
++int ObTabletEmptyShellHandler::get_empty_shell_tablet_ids(
++    common::ObTabletIDArray &empty_shell_tablet_ids,
++    common::ObIArray<ObTabletHandle> &aborted_tablets, bool &need_retry)
+ {
+   int ret = OB_SUCCESS;
+   ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
+@@ -152,6 +161,7 @@ int ObTabletEmptyShellHandler::get_empty_shell_tablet_ids(common::ObTabletIDArra
+     ObTabletHandle tablet_handle;
+     ObTablet *tablet = NULL;
+     bool can_become_shell = false;
++    bool aborted_create = false;
+     bool is_locked = false;
+     while (OB_SUCC(ret)) {
+       if (check_stop()) {
+@@ -176,9 +186,11 @@ int ObTabletEmptyShellHandler::get_empty_shell_tablet_ids(common::ObTabletIDArra
+       } else if (is_locked) {
+         STORAGE_LOG(INFO, "tablet_status is changing", KR(ret), KPC(tablet));
+         need_retry = true;
+-      } else if (OB_FAIL(check_candidate_tablet_(*tablet, can_become_shell, need_retry))) {
++      } else if (OB_FAIL(check_candidate_tablet_(*tablet, can_become_shell, aborted_create))) {
+       } else if (!can_become_shell) {
+         STORAGE_LOG(INFO, "tablet can not become shell", KR(ret), "tablet_meta", tablet->get_tablet_meta());
++      } else if (aborted_create) {
++        ret = aborted_tablets.push_back(tablet_handle);
+       } else if (OB_FAIL(empty_shell_tablet_ids.push_back(tablet->get_tablet_meta().tablet_id_))) {
+       }
+     }
+@@ -187,6 +199,18 @@ int ObTabletEmptyShellHandler::get_empty_shell_tablet_ids(common::ObTabletIDArra
+   return ret;
+ }
+ 
++int ObTabletEmptyShellHandler::update_aborted_tablets_to_empty_shell(
++    ObLS *ls, const common::ObIArray<ObTabletHandle> &tablets)
++{
++  int ret = OB_SUCCESS;
++  for (int64_t i = 0; OB_SUCC(ret) && i < tablets.count(); ++i) {
++    const auto &handle = tablets.at(i);
++    ret = ls->get_tablet_svr()->update_tablet_to_empty_shell(
++        handle.get_obj()->get_tablet_meta().tablet_id_, handle);
++  }
++  return ret;
++}
++
+ int ObTabletEmptyShellHandler::update_tablets_to_empty_shell(ObLS *ls, const common::ObIArray<common::ObTabletID> &tablet_ids)
+ {
+   int ret = OB_SUCCESS;
+@@ -203,12 +227,14 @@ int ObTabletEmptyShellHandler::update_tablets_to_empty_shell(ObLS *ls, const com
+   return ret;
+ }
+ 
+-int ObTabletEmptyShellHandler::check_candidate_tablet_(const ObTablet &tablet, bool &can_become_shell, bool &need_retry)
++int ObTabletEmptyShellHandler::check_candidate_tablet_(
++    const ObTablet &tablet, bool &can_become_shell, bool &aborted_create)
+ {
+   int ret = OB_SUCCESS;
+   
+   const common::ObTabletID &tablet_id = tablet.get_tablet_meta().tablet_id_;
+   can_become_shell = false;
++  aborted_create = false;
+   bool is_written = false;
+ 
+   if (tablet.is_empty_shell()) {
+@@ -229,8 +255,14 @@ int ObTabletEmptyShellHandler::check_candidate_tablet_(const ObTablet &tablet, b
+         if (!is_written) {
+           // mds table has not been written, do nothing
+         } else {
+-          can_become_shell = true;
+-          STORAGE_LOG(INFO, "inner tablet can become shell", KR(ret), K(tablet_id));
++          TabletGCStatus status = NOT_NEED_GC;
++          if (OB_FAIL(ObTabletGCHandler::check_tablet_from_aborted_tx(tablet, status))) {
++          } else {
++            // Without redo the tablet can be removed directly by native GC;
++            // with redo it first needs a durable shell for replay/checkpoint.
++            can_become_shell = status != NEED_GC_IMMEDIATELY;
++            aborted_create = true;
++          }
+         }
+       } else {
+         STORAGE_LOG(WARN, "failed to get latest tablet status", K(ret), K(tablet_id));
+diff --git a/src/storage/tx_storage/ob_empty_shell_task.h b/src/storage/tx_storage/ob_empty_shell_task.h
+index f6baf9a4b..71d3e293b 100644
+--- a/src/storage/tx_storage/ob_empty_shell_task.h
++++ b/src/storage/tx_storage/ob_empty_shell_task.h
+@@ -52,8 +52,11 @@ private:
+   void set_stop() { ATOMIC_STORE(&stopped_, true); }
+   void set_start() { ATOMIC_STORE(&stopped_, false); }
+   bool is_finish() { obsys::ObWLockGuard lock(wait_lock_, false); return lock.acquired(); }
+-  int check_candidate_tablet_(const ObTablet &tablet, bool &can_become_shell, bool &need_retry);
+-  int get_empty_shell_tablet_ids(common::ObTabletIDArray &empty_shell_tablet_ids, bool &need_retry);
++  int check_candidate_tablet_(const ObTablet &tablet, bool &can_become_shell, bool &aborted_create);
++  int get_empty_shell_tablet_ids(common::ObTabletIDArray &empty_shell_tablet_ids,
++      common::ObIArray<ObTabletHandle> &aborted_tablets, bool &need_retry);
++  int update_aborted_tablets_to_empty_shell(ObLS *ls,
++      const common::ObIArray<ObTabletHandle> &tablets);
+   int update_tablets_to_empty_shell(ObLS *ls, const common::ObIArray<common::ObTabletID> &tablet_ids);
+ public:
+   obsys::ObRWLock wait_lock_;

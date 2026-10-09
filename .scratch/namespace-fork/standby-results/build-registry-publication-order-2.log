@@ -1,0 +1,46 @@
+[  2%] Built target ob_malloc_object
+[  2%] Built target restore
+[  8%] Built target zstd_1_3_8_objs
+[  8%] Built target oblib_lib_simd
+[  8%] Built target oblib_lib_bitmap
+[  9%] Built target malloc_hook
+[ 10%] Built target oblib_rpc
+[ 10%] Built target ob_data_plane
+[ 11%] Built target ob_query
+[ 15%] Built target oblib_common
+[ 16%] Built target oblib_grpc
+[ 17%] Built target ob_sql_simd
+[ 17%] Built target generate_syspack_source
+[ 17%] Built target ob_standby
+[ 22%] Built target ob_sql_server_parser_objects
+[ 24%] Built target ob_pl
+[ 25%] Built target ob_storage_tablet_autoincrement_state
+[ 25%] Built target ob_standby_runtime
+[ 26%] Built target ob_logservice
+[ 26%] Built target ob_namespace
+[ 26%] Built target ob_storage_simd
+[ 30%] Built target ob_rootserver
+[ 31%] Built target ob_main
+[ 31%] Built target sql_nio_build
+[ 35%] Built target ob_share_extra
+[ 40%] Built target ob_sql_extra
+[ 40%] Built target ob_sql_server_parser_static
+[ 41%] Built target zstd_1_3_8
+[ 41%] Built target syspack_source
+[ 41%] Built target ob_malloc
+[ 42%] Built target compress
+[ 46%] Built target oblib_lib
+[ 46%] Built target oblib
+[ 47%] Building CXX object src/observer/CMakeFiles/ob_server.dir/ob_server.cpp.o
+[ 59%] Built target ob_storage
+[ 59%] Built target ob_storage_static
+[ 79%] Built target ob_sql
+[ 79%] Built target ob_sql_static
+[ 95%] Built target ob_share
+[ 95%] Built target ob_share_static
+[100%] Built target ob_server
+[100%] Linking CXX static library liboceanbase_static.a
+[100%] Built target oceanbase_static
+[100%] Linking CXX executable seekdb
+[100%] Built target seekdb
+[100%] Built target observer

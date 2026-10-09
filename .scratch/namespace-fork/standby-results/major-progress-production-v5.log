@@ -1,0 +1,14 @@
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/standby-artifacts/seekdb-production-v5", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_jtb1npyp", "pid": 3289419, "port": 34077}
+{"event": "sql", "sql": "create database major_probe", "rows": []}
+{"event": "sql", "sql": "create table major_probe.t(id int primary key,v int)", "rows": []}
+{"event": "sql", "sql": "insert into major_probe.t values(1,10),(2,20),(3,30)", "rows": []}
+{"event": "sql", "sql": "alter system set ob_compaction_schedule_interval='3s'", "rows": []}
+{"event": "sql", "sql": "alter system minor freeze", "rows": []}
+{"event": "sql", "sql": "alter system major freeze", "rows": []}
+{"event": "sstable_identity", "tablet_id": 200001, "rows": []}
+{"event": "sstable_identity", "tablet_id": 4611686155866541377, "rows": [[4611686155866541377, "MAJOR"]]}
+{"event": "PASS", "case": "major_progress_physical_ids", "rows": [[1790974531047421015, 1790974531047421015, 1790974531047421015]]}
+{"event": "stopped", "pid": 3289419, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_jtb1npyp/data.tar.gz", "bytes": 5006864}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

@@ -1,0 +1,69 @@
+{
+  "stage": "11 remove split DDL publication recovery",
+  "production_binary_sha256": "71c98dd31bd742762480e5f60f2cfabca042e8c6dcd1e11a322781a0b75e8430",
+  "native_binary_sha256": "f08432b0ecf248000b0797bcacc7fd6dace3a5a2c42c8425a8eae8abae7cb35b",
+  "formal": [
+    "ddl-publication-cleanup-schema.log",
+    "ddl-publication-cleanup-read-view.log"
+  ],
+  "standby": [
+    {
+      "case": "publication_initial",
+      "exit_code": 0,
+      "elapsed_s": 113.34
+    },
+    {
+      "case": "publication_child",
+      "exit_code": 0,
+      "elapsed_s": 96.16
+    }
+  ],
+  "faults": [
+    {
+      "owner": "initial",
+      "fault": "rollback",
+      "exit_code": 0,
+      "elapsed_s": 14.45
+    },
+    {
+      "owner": "initial",
+      "fault": "abort_crash",
+      "exit_code": 0,
+      "elapsed_s": 17.41
+    },
+    {
+      "owner": "initial",
+      "fault": "commit_crash",
+      "exit_code": 0,
+      "elapsed_s": 19.63
+    },
+    {
+      "owner": "child",
+      "fault": "rollback",
+      "exit_code": 0,
+      "elapsed_s": 25.08
+    },
+    {
+      "owner": "child",
+      "fault": "abort_crash",
+      "exit_code": 0,
+      "elapsed_s": 21.19
+    },
+    {
+      "owner": "child",
+      "fault": "commit_crash",
+      "exit_code": 0,
+      "elapsed_s": 16.93
+    }
+  ],
+  "native": "ddl-publication-cleanup-native.log",
+  "unit": "ddl-publication-cleanup-unit-result.log",
+  "local_test_compile_failure": "ddl-publication-cleanup-native-build.log: ambiguous int argument resolved explicitly to int64_t",
+  "final_formal_build": "PASS ddl-publication-cleanup-final-build.log",
+  "limits": [
+    "Full four-gate suite not rerun; exercised its relevant native/fault/read/promotion cases.",
+    "Persistent exception records and legacy deletion consumers remain for next stage.",
+    "Global snapshot pins remain until precise physical retention plan is installed."
+  ],
+  "final_formal_binary_sha256": "522b52aef7c6a370d8b4ba55a6c40e029e386d02daf227bad42015cb75706f73"
+}

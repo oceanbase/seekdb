@@ -1,0 +1,23 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/background-materialization-artifacts/seekdb-copy-view-native", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_primary_io0pr741", "pid": 2112105, "port": 31501}
+{"event": "sql", "sql": "CREATE DATABASE copy_probe", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE copy_probe.t(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO copy_probe.t VALUES(1,7)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE copy_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "template_mds_flushed", "tablets": ["4611686293305295982", "4611686293305345982", "4611686293305355982", "4611686293305394849", "4611686293305394850"]}
+{"event": "setup", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_standby_j2ca08_w", "pid": 2112870, "port": 28689, "primary_base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_primary_io0pr741"}
+{"event": "paused_after_sstable_metadata", "physical": 4611686155866541377}
+{"event": "sql", "sql": "UPDATE copy_probe.t SET v=7", "rows": []}
+{"event": "sql", "sql": "DROP TABLE copy_probe.t", "rows": []}
+{"event": "sql", "sql": "ALTER SYSTEM MINOR FREEZE", "rows": []}
+{"event": "waiting_source_reclaimed", "physical": [[4611686155866541377, 3, 1, 0]]}
+{"event": "source_reclaimed_while_copy_paused", "physical": 4611686155866541377, "state": [[4611686155866541377, 3, 1, 1]]}
+{"event": "waiting_readable", "status": [2003, "Can't connect to MySQL server on '127.0.0.1' ([Errno 111] Connection refused)"]}
+{"event": "waiting_readable", "status": [2003, "Can't connect to MySQL server on '127.0.0.1' ([Errno 111] Connection refused)"]}
+{"event": "PASS", "case": "background_mds_fullcopy", "source_mds_flushed": true, "rows": [[1, 7]], "child_read": true, "parent_dropped_before_copy": false, "parent_dropped_during_copy": true, "compaction_interval": "3s"}
+{"event": "stopped", "pid": 2112870, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_standby_j2ca08_w/data.tar.gz", "bytes": 17291344}
+{"event": "stopped", "pid": 2112105, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_primary_io0pr741/data.tar.gz", "bytes": 8686385}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

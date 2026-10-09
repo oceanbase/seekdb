@@ -1,0 +1,12 @@
+[
+  {
+    "case": "standby_sstable_replay",
+    "exit_code": 143,
+    "elapsed_s": 160.25
+  },
+  {
+    "case": "cascade_standby",
+    "exit_code": 0,
+    "elapsed_s": 188.32
+  }
+]

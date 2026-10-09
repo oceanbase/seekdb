@@ -1,0 +1,150 @@
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_dbiyg1pt", "pid": 1968976, "port": 9423}
+{"event": "sql", "sql": "CREATE DATABASE nstrunc_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id BIGINT AUTO_INCREMENT PRIMARY KEY,v INT,b LONGTEXT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(10,REPEAT('p',10000))", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE success FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=30000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "atomic_state", "namespace": 3, "committed": false, "owned": [], "mappings": [], "physical": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=11,b=REPEAT('c',12000) WHERE id=1", "rows": []}
+{"event": "atomic_state", "namespace": 3, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611686430744448321], [4611686430744448322], [4611686430744448323]], "physical": [[4611686430744448321, 1, 1, 0], [4611686430744448322, 1, 1, 0], [4611686430744448323, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000, "c"]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(12,'sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000001]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(13,'next sequence')", "rows": []}
+{"event": "sql", "sql": "SELECT MAX(id) FROM nstrunc_repro.t1", "rows": [[1000002]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 11, 12000], [1000001, 12, 8], [1000002, 13, 13]]}
+{"event": "case_pass", "case": "success", "lob_binding": true, "sequence": true}
+{"event": "sql", "sql": "FORK NAMESPACE concurrent_copy FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=30000000", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=30000000", "rows": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=11,b=REPEAT('c',12000) WHERE id=1", "rows": []}
+{"event": "inherited_read_requested_retry", "error": [4023, "Try again"]}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=v+1 WHERE id=1", "rows": []}
+{"event": "atomic_state", "namespace": 4, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611686568183401793], [4611686568183401794], [4611686568183401795]], "physical": [[4611686568183401793, 1, 1, 0], [4611686568183401794, 1, 1, 0], [4611686568183401795, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM nstrunc_repro.t1", "rows": [[1, 12, 12000]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10, 10000, "p"]]}
+{"event": "case_pass", "case": "concurrent_creation", "rows": [[1, 12, 12000]]}
+{"event": "sql", "sql": "FORK NAMESPACE locked_creation FROM ns1", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(20,20,REPEAT('a',11000))", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(30,30,REPEAT('b',11000))", "rows": []}
+{"event": "atomic_state", "namespace": 5, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611686705622355265], [4611686705622355266], [4611686705622355267]], "physical": [[4611686705622355265, 1, 1, 0], [4611686705622355266, 1, 1, 0], [4611686705622355267, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10], [20, 20], [30, 30]]}
+{"event": "case_pass", "case": "concurrent_insert_and_stale_snapshot", "faults": false}
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_dbiyg1pt", "pid": 1970616, "port": 9423}
+{"event": "atomic_state", "namespace": 4, "committed": true, "owned": [[200001, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200002, {"table_id": 500004, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [200003, {"table_id": 500005, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]], "mappings": [[4611686568183401793], [4611686568183401794], [4611686568183401795]], "physical": [[4611686568183401793, 1, 1, 0], [4611686568183401794, 1, 1, 0], [4611686568183401795, 1, 1, 0]]}
+{"event": "sql", "sql": "SELECT id,v,LENGTH(b) FROM nstrunc_repro.t1", "rows": [[1, 12, 12000]]}
+{"event": "PASS", "case": "shared_transaction", "faults": false, "atomic_lob_unit": true, "rollback": null, "crash_recovery": true, "concurrent_creation": true}
+{"event": "stopped", "pid": 1970616, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_dbiyg1pt/data.tar.gz", "bytes": 3283316}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_kv_startup_30s_tv63pp7u", "pid": 1971015, "port": 45837}
+{"event": "sql", "sql": "SELECT 1", "rows": [[1]]}
+{"event": "sql", "sql": "CREATE DATABASE kvsmoke", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE kvsmoke.t(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO kvsmoke.t VALUES (1, 42)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE kvsmoke_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM kvsmoke.t WHERE id=1", "rows": [[42]]}
+{"event": "sql", "sql": "UPDATE kvsmoke.t SET v=43 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM kvsmoke.t WHERE id=1", "rows": [[43]]}
+{"event": "child_physical", "tablet": 4611686430744448321, "row": [4611686430744448321, 1, 1, 0]}
+{"event": "sql", "sql": "DROP NAMESPACE kvsmoke_child", "rows": []}
+{"event": "sql", "sql": "SELECT v FROM kvsmoke.t WHERE id=1", "rows": [[42]]}
+{"event": "gc_complete", "tablet": 4611686430744448321, "rows": [[4611686430744448321, 3, 1, 1]]}
+{"event": "PASS", "elapsed_limit_s": 30}
+{"event": "stopped", "pid": 1971015, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_kv_startup_30s_tv63pp7u/data.tar.gz", "bytes": 3276242}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_exchange_mapping_9ppcw6i1", "pid": 1971870, "port": 17045}
+{"event": "sql", "sql": "FORK NAMESPACE exchange_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "CREATE DATABASE x", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE x.parts(id INT PRIMARY KEY, v INT) PARTITION BY RANGE(id) (PARTITION p0 VALUES LESS THAN (10), PARTITION p1 VALUES LESS THAN (MAXVALUE))", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE x.plain(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO x.parts VALUES(1,11),(11,111)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO x.plain VALUES(2,22)", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE x.parts EXCHANGE PARTITION p0 WITH TABLE x.plain WITHOUT VALIDATION", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM x.parts ORDER BY id", "rows": [[2, 22], [11, 111]]}
+{"event": "sql", "sql": "SELECT id,v FROM x.plain", "rows": [[1, 11]]}
+{"event": "PASS", "case": "exchange_mapping"}
+{"event": "stopped", "pid": 1971870, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_exchange_mapping_9ppcw6i1/data.tar.gz", "bytes": 3287848}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_physical_drop_s0m8hj0k", "pid": 1972380, "port": 57471}
+{"event": "sql", "sql": "FORK NAMESPACE ddl_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "CREATE DATABASE ddl_db", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE ddl_db.t(id INT PRIMARY KEY, v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO ddl_db.t VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "SELECT tablet_id FROM oceanbase.__all_table WHERE table_name='t'", "rows": [[200001]]}
+{"event": "sql", "sql": "DROP TABLE ddl_db.t", "rows": []}
+{"event": "PASS", "case": "ddl_physical_drop", "tablet": 4611686430744448321, "storage": [[3, 1, 1]]}
+{"event": "stopped", "pid": 1972380, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_physical_drop_s0m8hj0k/data.tar.gz", "bytes": 3283469}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb", "base": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_parent_truncate_7h37o_tn", "pid": 1973111, "port": 50549}
+{"event": "sql", "sql": "CREATE DATABASE nstrunc_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE trunc_parent_1 FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=10000000", "rows": []}
+{"event": "parent_recyclebin", "iteration": 1, "value": [[0]]}
+{"event": "sql", "sql": "FORK NAMESPACE trunc_child_1 FROM trunc_parent_1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=10000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "before_truncate", "iteration": 1, "parent_namespace": 3, "child_namespace": 4, "old_logical_tablet": 200001, "physical": [[4611686155866541377, 1, 1, 0]], "materialize_parent": false, "materialize_child": false, "prime_parent_schema": false}
+{"event": "sql", "sql": "TRUNCATE TABLE nstrunc_repro.t1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "after_truncate", "iteration": 1, "old_logical_tablet": 200001, "new_parent_tablet": 200002, "physical": [[4611686155866541377, 1, 1, 0], [4611686430744448322, 1, 1, 0]], "exceptions": [[{"namespace_id": "3", "tablet_id": "200001"}, {"table_id": 500003, "kind": 1, "drop_scn": 1790942463727109044, "was_owned": 0, "create_scn": 0}], [{"namespace_id": "3", "tablet_id": "200002"}, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]]}
+{"event": "sql", "sql": "SET ob_query_timeout=2000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "descendant_result", "iteration": 1, "expected": [[1, 10]], "actual": [[1, 10]], "error": null, "elapsed_s": 0.001, "passed": true}
+{"event": "PASS", "case": "fork_parent_truncate", "results": [true], "materialize_parent": false, "materialize_child": false, "prime_parent_schema": false}
+{"event": "stopped", "pid": 1973111, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_parent_truncate_7h37o_tn/data.tar.gz", "bytes": 3281088}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb", "base": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_parent_truncate_48b_3uyj", "pid": 1973747, "port": 57405}
+{"event": "sql", "sql": "CREATE DATABASE nstrunc_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE trunc_parent_1 FROM ns1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=10000000", "rows": []}
+{"event": "sql", "sql": "ALTER TABLE nstrunc_repro.t1 COMMENT='parent metadata ddl'", "rows": []}
+{"event": "parent_recyclebin", "iteration": 1, "value": [[0]]}
+{"event": "sql", "sql": "FORK NAMESPACE trunc_child_1 FROM trunc_parent_1", "rows": []}
+{"event": "sql", "sql": "SET ob_query_timeout=10000000", "rows": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=v+1", "rows": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=v-1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "before_truncate", "iteration": 1, "parent_namespace": 3, "child_namespace": 4, "old_logical_tablet": 200001, "physical": [[4611686155866541377, 1, 1, 0], [4611686568183401793, 1, 1, 0]], "materialize_parent": false, "materialize_child": true, "prime_parent_schema": true}
+{"event": "sql", "sql": "TRUNCATE TABLE nstrunc_repro.t1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "after_truncate", "iteration": 1, "old_logical_tablet": 200001, "new_parent_tablet": 200002, "physical": [[4611686155866541377, 1, 1, 0], [4611686430744448322, 1, 1, 0], [4611686568183401793, 1, 1, 0]], "exceptions": [[{"namespace_id": "3", "tablet_id": "200001"}, {"table_id": 500003, "kind": 1, "drop_scn": 1790942473348966025, "was_owned": 0, "create_scn": 0}], [{"namespace_id": "3", "tablet_id": "200002"}, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}], [{"namespace_id": "4", "tablet_id": "200001"}, {"table_id": 500003, "kind": 0, "drop_scn": 0, "was_owned": 0, "create_scn": 0}]]}
+{"event": "sql", "sql": "SET ob_query_timeout=2000000", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1 ORDER BY id", "rows": [[1, 10]]}
+{"event": "descendant_result", "iteration": 1, "expected": [[1, 10]], "actual": [[1, 10]], "error": null, "elapsed_s": 0.001, "passed": true}
+{"event": "PASS", "case": "fork_parent_truncate", "results": [true], "materialize_parent": false, "materialize_child": true, "prime_parent_schema": true}
+{"event": "stopped", "pid": 1973747, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_parent_truncate_48b_3uyj/data.tar.gz", "bytes": 3282140}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb", "base": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_parent_truncate_ffjg1g4h", "pid": 1974094, "port": 57553}
+{"event": "data_archived", "path": "/data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_parent_truncate_ffjg1g4h/data.tar.gz", "bytes": 2786327}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/fork_parent_truncate_probe.py", line 189, in <module>
+    sys.exit(main())
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/fork_parent_truncate_probe.py", line 174, in main
+    experiment.start()
+  File "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_worker_bootstrap_prototype.py", line 28, in start
+    raise RuntimeError(f"bootstrap exited ({self.proc.returncode}): {self.base}")
+RuntimeError: bootstrap exited (1): /data/1/tmp/seekdb-ns-probes/namespace_fork_PROTOTYPE_parent_truncate_ffjg1g4h

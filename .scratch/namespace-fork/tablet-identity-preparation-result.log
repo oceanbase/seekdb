@@ -1,0 +1,31 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/tablet-identity-artifacts/seekdb-production", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_tablet_preparation_dz12hr_u", "pid": 3809763, "port": 20695}
+{"event": "sql", "sql": "CREATE DATABASE preparation", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE preparation.parts(id INT PRIMARY KEY,v INT,b LONGTEXT) PARTITION BY HASH(id) PARTITIONS 32", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE preparation.vec(id INT PRIMARY KEY,v VECTOR(2048)) LOB_INROW_THRESHOLD=4096", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE preparation_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE preparation_ddl FROM ns1", "rows": []}
+{"event": "sql", "sql": "CREATE INDEX by_v ON preparation.parts(v)", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*),SUM(v) FROM preparation.parts FORCE INDEX(by_v)", "rows": [[32, "496"]]}
+{"event": "case_pass", "case": "cold_partitioned_ddl", "partitions": 32}
+{"event": "sql", "sql": "SELECT SUM(v),SUM(LENGTH(b)) FROM preparation.parts", "rows": [["496", "384000"]]}
+{"event": "sql", "sql": "UPDATE preparation.parts SET v=v+100", "rows": []}
+{"event": "sql", "sql": "UPDATE preparation.parts SET v=v+100", "rows": []}
+{"event": "sql", "sql": "CREATE INDEX by_v ON preparation.parts(v)", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*),SUM(v) FROM preparation.parts FORCE INDEX(by_v)", "rows": [[32, "6896"]]}
+{"event": "sql", "sql": "ALTER TABLE preparation.parts MODIFY v BIGINT", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*),SUM(v),SUM(LENGTH(b)) FROM preparation.parts", "rows": [[32, "6896", "384000"]]}
+{"event": "sql", "sql": "BEGIN", "rows": []}
+{"event": "sql", "sql": "UPDATE preparation.parts SET v=v+1", "rows": []}
+{"event": "sql", "sql": "SELECT SUM(v) FROM preparation.parts FORCE INDEX(by_v)", "rows": [["6928"]]}
+{"event": "sql", "sql": "DELETE FROM preparation.parts WHERE id=0", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM preparation.parts FORCE INDEX(by_v)", "rows": [[31]]}
+{"event": "sql", "sql": "ROLLBACK", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*),SUM(v) FROM preparation.parts FORCE INDEX(by_v)", "rows": [[32, "6896"]]}
+{"event": "case_pass", "case": "partitioned_write_ddl_outrow_vector", "partitions": 32}
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/tablet-identity-artifacts/seekdb-production", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_tablet_preparation_dz12hr_u", "pid": 3810691, "port": 20695}
+{"event": "sql", "sql": "SELECT COUNT(*),SUM(v),SUM(LENGTH(b)) FROM preparation.parts", "rows": [[32, "6896", "384000"]]}
+{"event": "pass", "restart": true}
+{"event": "stopped", "pid": 3810691, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_tablet_preparation_dz12hr_u/data.tar.gz", "bytes": 4436695}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

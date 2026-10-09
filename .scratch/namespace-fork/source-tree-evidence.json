@@ -1,0 +1,39 @@
+{
+  "commit": "78bcaea32e43118a434f183f173577f3aa76c880",
+  "status": "foundation_verified_full_goal_incomplete",
+  "tests": {
+    "catalog_batch": "PASS",
+    "native_transaction_and_crash": "PASS",
+    "startup_fork_write": "PASS",
+    "release_build": "PASS"
+  },
+  "full_mysqltest": false,
+  "sysbench": false,
+  "full_four_gates": false,
+  "production_test_hooks": false,
+  "sha256": {
+    "src/namespace/catalog.cpp": "ef787b73e9a5f2f287b310675e2679730a6bd590b14e73c2740a7811ae6780bc",
+    "src/namespace/catalog.h": "da23fef4453ae4fc8bd496efaf15c1f61fb7d9d42bb4b72befb3fa4cfb5a26c9",
+    "src/rootserver/fork_table/instance_namespace_metadata.cpp": "fff6440f4051a724670e1b5ae043bca0c15f3b50337c5b7c1eeb0f567776b22d",
+    "src/rootserver/fork_table/instance_namespace_metadata.h": "b53fe920e2e41cf1a46ce4abafd91fce49b72c718740e39bf32348b758eb6a10",
+    ".scratch/namespace-fork/catalog_batch_probe.cpp": "94a3c5da8004b88d396dd72ed0f881057c9b49daf04a6cf476986343e90a319c",
+    ".scratch/namespace-fork/catalog_batch_probe.py": "7c353b9215b0c79c66a31ca699adf36e36011512fcd61735a9da8babcbf23b27",
+    ".scratch/namespace-fork/instance_namespace_metadata_probe.ipp": "43f88c27ee19f7b130598b44e309ebbf60e0061d776aced101d26430a22e0bb9",
+    ".scratch/namespace-fork/instance_namespace_durable_probe.ipp": "46ed0c8a7f54b5daa7abe48ad46dbc609a72e08ed27a7f4c798817f84a502b51",
+    ".scratch/namespace-fork/shared_transaction_native_probe.ipp": "40c962e1717a7668376c2647eb052e7c9c91efde6f417b771308e3e6ddb8b8c9",
+    ".scratch/namespace-fork/run_four_gates.py": "e52d64b7854da231ea63054cb8b078b4d29b56170f16e3291043173dc6c88ea8",
+    ".scratch/namespace-fork/catalog-batch-final-result.log": "c38736e5091ec97c2970676ddf71ea5c95679ece90652c4e3b6ee50a98ce7ef9",
+    ".scratch/namespace-fork/source-tree-native-result.log": "a65e6ed9b832a17a1030685dbbcbba48a7f7a4958300c9608b4be07f9d674381",
+    ".scratch/namespace-fork/source-tree-startup-result.log": "fd39d7047951ebc70d1e0b9b2bffe1c8498dfc81208e3a1121b9a2e3010fadbd",
+    ".scratch/namespace-fork/source-tree-build.log": "30e0298358459177a44e7f3a41d6551f9206f4ee56c259e56629728c3716aa9c",
+    ".scratch/namespace-fork/source-tree-artifacts/seekdb-production": "3a557cffc4a831b90637f54a943da0645272dbb5dd6eabfff67daf75f0820110",
+    ".scratch/namespace-fork/source-tree-artifacts/seekdb-native": "a6d2ec9e68f521744c2cc4b4c5d50d51eaf825481ebdfc71126a8c15179bc929",
+    "build_release/src/observer/seekdb": "3a557cffc4a831b90637f54a943da0645272dbb5dd6eabfff67daf75f0820110"
+  },
+  "push": {
+    "remote": "origin",
+    "branch": "codex/namespace-worker-proxy-v20",
+    "verified_commit": "78bcaea32e43118a434f183f173577f3aa76c880",
+    "pull_request_created": false
+  }
+}

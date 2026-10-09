@@ -1,0 +1,17 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/physical-gc-plan/seekdb-native", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_gc_plan_fx_ds81w", "pid": 155177, "port": 39179}
+{"event": "sql", "sql": "CREATE DATABASE gc_plan", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE gc_plan.t(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO gc_plan.t VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "SELECT tablet_id FROM oceanbase.__all_table WHERE table_name='t' AND database_id=(SELECT database_id FROM oceanbase.__all_database WHERE database_name='gc_plan')", "rows": [[200001]]}
+{"event": "sql", "sql": "FORK NAMESPACE gc_parent FROM ns1", "rows": []}
+{"event": "sql", "sql": "DROP TABLE gc_plan.t", "rows": []}
+{"event": "sql", "sql": "UPDATE gc_plan.t SET v=20", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE gc_child FROM gc_parent", "rows": []}
+{"event": "sql", "sql": "DROP NAMESPACE gc_parent", "rows": []}
+{"event": "new_physical_birth_protected", "cut": 1791463261148366001, "inherited_birth": 1791463257289172059, "samples": 24, "physical": 4611686430744448321}
+{"event": "sql", "sql": "DROP NAMESPACE gc_child", "rows": []}
+{"event": "PASS", "case": "physical_gc_plan_cut", "republished_plan_reclaimed": true}
+{"event": "stopped", "pid": 155177, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_gc_plan_fx_ds81w/data.tar.gz", "bytes": 3339334}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

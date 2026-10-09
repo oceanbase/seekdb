@@ -1,0 +1,12 @@
+[
+  {
+    "case": "publication_initial",
+    "exit_code": 0,
+    "elapsed_s": 113.34
+  },
+  {
+    "case": "publication_child",
+    "exit_code": 0,
+    "elapsed_s": 96.16
+  }
+]

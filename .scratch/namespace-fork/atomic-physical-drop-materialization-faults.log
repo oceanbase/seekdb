@@ -1,0 +1,14 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/atomic-physical-drop-artifacts/seekdb-native", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_5i6p428c", "pid": 3953960, "port": 50731}
+{"event": "sql", "sql": "CREATE DATABASE nstrunc_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id BIGINT AUTO_INCREMENT PRIMARY KEY,v INT,b LONGTEXT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1(v,b) VALUES(10,REPEAT('p',10000))", "rows": []}
+{"event": "stopped", "pid": 3953960, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_5i6p428c/data.tar.gz", "bytes": 3324764}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File ".scratch/namespace-fork/shared_transaction_probe.py", line 269, in <module>
+    run(args.binary, args.faults, args.case, args.flush_redo)
+  File ".scratch/namespace-fork/shared_transaction_probe.py", line 104, in run
+    assert cases, selected
+AssertionError: ['rollback_create', 'rollback_owned', 'crash_create', 'crash_owned']

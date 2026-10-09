@@ -1,0 +1,271 @@
+{
+  "bootstrap-native-kv": {
+    "sha256": "ecb725f47b9361ad40c44782a9746cbffeb6e6ec9925393713250b7ff7bc9364",
+    "events": [
+      {
+        "event": "native_kv_verified",
+        "recovered": false,
+        "typed_records": true,
+        "pin_reload": true,
+        "durable_phase": "created"
+      },
+      {
+        "event": "native_kv_verified",
+        "recovered": true,
+        "typed_records": true,
+        "pin_reload": true,
+        "durable_phase": "marked"
+      },
+      {
+        "event": "native_kv_verified",
+        "recovered": true,
+        "typed_records": true,
+        "pin_reload": true,
+        "durable_phase": "finished"
+      },
+      {
+        "event": "native_kv_verified",
+        "recovered": true,
+        "typed_records": true,
+        "pin_reload": true,
+        "durable_phase": "verified"
+      },
+      {
+        "event": "PASS",
+        "case": "instance_meta_native",
+        "rollback": true,
+        "cross_collection": true,
+        "duplicate_key": true,
+        "own_writes": true,
+        "snapshot": true,
+        "locked_current_read": true,
+        "binary_value_60000": true,
+        "key_512": true,
+        "value_65536": true,
+        "binary_bounds": true,
+        "scan": true,
+        "erase": true,
+        "snapshot_across_minor": true,
+        "writer_conflict": true,
+        "typed_records": true,
+        "catalog_tree": true,
+        "lineage": true,
+        "snapshot_pin": true,
+        "gc_watermark": true,
+        "pin_reload": true,
+        "crash_recovery": true,
+        "durable_fork_drop": true
+      }
+    ]
+  },
+  "bootstrap": {
+    "sha256": "63cc34e2cd71224ad53a9f319c4c731859d16c612195adc926d801be7dc42056",
+    "events": [
+      {
+        "event": "PASS",
+        "elapsed_limit_s": 30
+      },
+      {
+        "event": "PASS",
+        "case": "inprocess_bootstrap",
+        "one_process": true,
+        "child_login": true,
+        "inherited_read": true,
+        "empty_namespace": true,
+        "template_restart": true
+      }
+    ]
+  },
+  "sql": {
+    "sha256": "68edec211fd14b21e99a0ae6b6531e823addd79d59561eba288ede81971fe753",
+    "events": [
+      {
+        "event": "PASS",
+        "case": "inprocess_sql",
+        "transactions": true,
+        "index": true,
+        "nested_fork": true,
+        "restart": true
+      }
+    ]
+  },
+  "direct": {
+    "sha256": "eda076d1b0b07926a71d02f86a950307e55f2d9cc45febfe4fa1a6d3d52e5408",
+    "events": [
+      {
+        "event": "PASS",
+        "elapsed_limit_s": 30
+      },
+      {
+        "event": "PASS",
+        "case": "exchange_mapping"
+      },
+      {
+        "event": "PASS",
+        "case": "ddl_physical_drop",
+        "tablet": 4611686430744448321,
+        "storage": [
+          [
+            3,
+            1,
+            1
+          ]
+        ]
+      },
+      {
+        "event": "PASS",
+        "case": "fork_parent_truncate",
+        "results": [
+          true
+        ],
+        "materialize_parent": false,
+        "materialize_child": false,
+        "prime_parent_schema": false
+      },
+      {
+        "event": "PASS",
+        "case": "fork_parent_truncate",
+        "results": [
+          true
+        ],
+        "materialize_parent": false,
+        "materialize_child": true,
+        "prime_parent_schema": true
+      },
+      {
+        "event": "PASS",
+        "case": "fork_parent_truncate",
+        "results": [
+          true
+        ],
+        "materialize_parent": false,
+        "materialize_child": false,
+        "prime_parent_schema": true
+      },
+      {
+        "event": "PASS",
+        "case": "fork_parent_truncate",
+        "results": [
+          true
+        ],
+        "materialize_parent": true,
+        "materialize_child": false,
+        "prime_parent_schema": true
+      },
+      {
+        "event": "PASS",
+        "case": "fork_parent_truncate",
+        "results": [
+          true
+        ],
+        "materialize_parent": true,
+        "materialize_child": false,
+        "prime_parent_schema": false
+      },
+      {
+        "event": "PASS",
+        "case": "fork_parent_truncate",
+        "results": [
+          true
+        ],
+        "materialize_parent": false,
+        "materialize_child": false,
+        "prime_parent_schema": false
+      },
+      {
+        "event": "PASS",
+        "case": "historical_gc_restart_release",
+        "physical": [],
+        "all_old_tablets_removed": true,
+        "retired_pins_removed": true
+      },
+      {
+        "event": "release_survived_restart",
+        "physical": [],
+        "retired_snapshots": [
+          1790885419788622031,
+          1790885420121843010
+        ]
+      },
+      {
+        "event": "PASS",
+        "case": "historical_gc_restart_release",
+        "physical": [],
+        "all_old_tablets_removed": true,
+        "retired_pins_removed": true
+      },
+      {
+        "event": "PASS",
+        "case": "historical_materialize_fork_gc_interleaving",
+        "fork_rows": [
+          [
+            1,
+            120
+          ]
+        ]
+      },
+      {
+        "event": "PASS",
+        "case": "ddl_publish_crash_recovery",
+        "owner": "initial",
+        "inherited": 10,
+        "first_write": 110,
+        "no_phantom_fork_or_pin": true,
+        "tombstone": {
+          "table_id": 500003,
+          "kind": 1,
+          "drop_scn": 1790885492467316341,
+          "was_owned": 1,
+          "create_scn": 1790885481539149013
+        }
+      },
+      {
+        "event": "PASS",
+        "case": "ddl_publish_crash_recovery",
+        "owner": "child",
+        "inherited": 20,
+        "first_write": 120,
+        "no_phantom_fork_or_pin": true,
+        "tombstone": {
+          "table_id": 500003,
+          "kind": 1,
+          "drop_scn": 1790885511212209573,
+          "was_owned": 1,
+          "create_scn": 1790885502765641032
+        }
+      },
+      {
+        "event": "PASS",
+        "case": "inprocess_direct",
+        "ddl": true,
+        "partition": true,
+        "index": true,
+        "lob": true,
+        "fulltext": true,
+        "ivf": true,
+        "ivf_pq": true,
+        "ivf_sq8": true,
+        "empty_hnsw": true,
+        "source_drop": true,
+        "ddl_redefinition": true,
+        "check_constraint": true,
+        "auto_increment": true,
+        "fork_table": true,
+        "cache_lifecycle": true,
+        "interrupted_heap_recovery": true,
+        "restart": true
+      }
+    ]
+  },
+  "tls": {
+    "sha256": "4a5010823f36ffd3c1afef8a28f9396b46c37744fcc781457623e58244bbc7a0",
+    "events": [
+      {
+        "event": "PASS",
+        "case": "inprocess_tls",
+        "protocol": "TLSv1.3",
+        "child_login": true
+      }
+    ]
+  }
+}

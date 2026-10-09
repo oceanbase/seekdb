@@ -1,0 +1,69 @@
+[  0%] Built target sql_nio_build
+[  1%] Built target restore
+[  7%] Built target zstd_1_3_8_objs
+[  8%] Built target ob_malloc_object
+[  8%] Built target oblib_lib_bitmap
+[  9%] Built target oblib_lib_simd
+[  9%] Built target oblib_grpc
+[ 10%] Built target malloc_hook
+[ 11%] Built target oblib_rpc
+Consolidate compiler generated dependencies of target ob_main
+[ 14%] Built target ob_share_extra
+[ 18%] Built target oblib_common
+[ 18%] Built target ob_data_plane
+[ 19%] Built target ob_sql_simd
+[ 19%] Built target generate_syspack_source
+[ 20%] Built target ob_query
+[ 20%] Built target ob_standby
+[ 21%] Built target ob_standby_runtime
+[ 21%] Building CXX object src/observer/CMakeFiles/ob_main.dir/main.cpp.o
+[ 26%] Built target ob_sql_server_parser_objects
+[ 28%] Built target ob_pl
+[ 34%] Built target ob_sql_extra
+[ 35%] Built target ob_storage_tablet_autoincrement_state
+[ 35%] Built target ob_namespace
+[ 36%] Built target ob_logservice
+[ 36%] Built target ob_storage_simd
+[ 36%] Built target ob_malloc
+[ 37%] Built target zstd_1_3_8
+[ 37%] Built target ob_sql_server_parser_static
+[ 37%] Built target syspack_source
+[ 38%] Built target compress
+[ 42%] Built target oblib_lib
+[ 42%] Built target oblib
+Consolidate compiler generated dependencies of target ob_rootserver
+[ 43%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_query_0_c___cxx.cxx.o
+[ 62%] Built target ob_sql
+[ 62%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_common_0_c___cxx.cxx.o
+[ 62%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_ddl_0_c___cxx.cxx.o
+[ 62%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_fork_freeze_0_c___cxx.cxx.o
+[ 63%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_services_0_c___cxx.cxx.o
+[ 63%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/ddl_task/ob_ddl_redefinition_task.cpp.o
+[ 63%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/ob_ddl_service.cpp.o
+[ 63%] Built target ob_sql_static
+[ 63%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/ob_ddl_service_launcher.cpp.o
+[ 80%] Built target ob_share
+[ 80%] Built target ob_share_static
+Consolidate compiler generated dependencies of target ob_server
+[ 81%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_mysql_0_c___cxx.cxx.o
+[ 81%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_omt_0_c___cxx.cxx.o
+[ 81%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_dbms_job_0_c___cxx.cxx.o
+[ 81%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_1_c___cxx.cxx.o
+[ 81%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_2_c___cxx.cxx.o
+[ 82%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_3_c___cxx.cxx.o
+[ 82%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_common_mixed_0_c___cxx.cxx.o
+[ 82%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_common_0_c___cxx.cxx.o
+[ 83%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_4_c___cxx.cxx.o
+[ 83%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_5_c___cxx.cxx.o
+[ 84%] Building CXX object src/observer/CMakeFiles/ob_server.dir/ob_server.cpp.o
+[ 84%] Building CXX object src/observer/CMakeFiles/ob_server.dir/ob_service.cpp.o
+Consolidate compiler generated dependencies of target ob_storage
+[ 96%] Built target ob_storage
+[ 96%] Built target ob_storage_static
+[ 96%] Built target ob_main
+[ 97%] Built target ob_server
+[100%] Built target ob_rootserver
+[100%] Linking CXX static library liboceanbase_static.a
+[100%] Built target oceanbase_static
+[100%] Linking CXX executable seekdb
+[100%] Built target seekdb

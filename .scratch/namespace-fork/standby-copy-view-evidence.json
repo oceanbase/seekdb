@@ -1,0 +1,51 @@
+{
+  "status": "PASS: controlled retirement, peer loss, pre-copy retirement, formal standby, final clean build and fast-compaction fullcopy",
+  "red_log": "standby-copy-retired-during-red.log",
+  "red_engine_log": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_standby_97x7es9q/log/seekdb.log",
+  "result": "OB_SSTABLE_NOT_EXIST -4735 after parent source became empty shell during controlled copy pause",
+  "fix": "One ephemeral physical view per existing LS-view stream; native handles passed to metadata/range/data producers; no current-tablet fallback",
+  "build_failures": [
+    "standby-copy-view-build.log: missing generated VIEW_END enum and unavailable to_cstring helper; regenerated with local protoc 3.19.5 and used TraceId::to_string",
+    "standby-copy-view-retry-build.log: LOG_WARN macro in cleanup implicitly requires ret; corrected with local error code"
+  ],
+  "hooks": "DISABLED in production sources; native artifact includes pause only",
+  "green_log": "standby-copy-retired-during-green.log",
+  "peer_loss_log": "standby-copy-view-peer-loss.log",
+  "retired_before_copy_log": "standby-copy-view-retired-before-retry.log",
+  "formal": [
+    {
+      "case": "namespace_fork_local",
+      "exit_code": 0,
+      "elapsed_s": 114.17
+    }
+  ],
+  "builds": [
+    "standby-copy-view-retry2-build.log (pause hook)",
+    "standby-copy-view-clean-build.log",
+    "standby-copy-view-final-build.log"
+  ],
+  "fixture_failures": [
+    {
+      "log": "standby-copy-view-retired-before.log",
+      "reason": "Probe launched before copy-to-artifact rename completed; no engine started. Artifact existence verified, rerun passed."
+    }
+  ],
+  "capture_release": {
+    "normal": {
+      "captured_tablets": 721,
+      "released": true
+    },
+    "peer_sigkill": {
+      "captured_tablets": 721,
+      "released": true
+    }
+  },
+  "final_smoke": {
+    "log": "standby-copy-view-final-fast.log",
+    "exit_code": 0,
+    "compaction_interval": "3s",
+    "hooks": false
+  },
+  "commit": "934bd884a82b36680dec9b1ab32919ce7aa8c875",
+  "pushed": true
+}

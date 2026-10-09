@@ -1,0 +1,17 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/background-materialization-artifacts/seekdb-template-zero", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_primary_0csy5w2w", "pid": 424698, "port": 42705}
+{"event": "sql", "sql": "CREATE DATABASE copy_probe", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE copy_probe.t(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO copy_probe.t VALUES(1,7)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE copy_child FROM ns1", "rows": []}
+{"event": "template_mds_flushed", "tablets": ["4611686293305354948", "4611686155866392395", "4611686155866341485", "4611686155866402442", "4611686155866443399"]}
+{"event": "setup", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_standby_qbmg8vz3", "pid": 425264, "port": 56383, "primary_base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_primary_0csy5w2w"}
+{"event": "waiting_readable", "status": [2003, "Can't connect to MySQL server on '127.0.0.1' ([Errno 111] Connection refused)"]}
+{"event": "waiting_readable", "status": [2003, "Can't connect to MySQL server on '127.0.0.1' ([Errno 111] Connection refused)"]}
+{"event": "waiting_readable", "status": [2003, "Can't connect to MySQL server on '127.0.0.1' ([Errno 111] Connection refused)"]}
+{"event": "PASS", "case": "background_mds_fullcopy", "source_mds_flushed": true, "rows": [[1, 7]], "child_read": true, "parent_dropped_before_copy": false, "compaction_interval": "3s"}
+{"event": "stopped", "pid": 425264, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_standby_qbmg8vz3/data.tar.gz", "bytes": 16768997}
+{"event": "stopped", "pid": 424698, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_background_copy_primary_0csy5w2w/data.tar.gz", "bytes": 7266908}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

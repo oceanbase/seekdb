@@ -1,0 +1,20 @@
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/ddl-catalog-artifacts/seekdb-native", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_catalog_initial_commit_crash_3ny_lu16", "pid": 3285692, "port": 45305}
+{"event": "sql", "sql": "CREATE DATABASE nstrunc_repro", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE nstrunc_repro.t1(id INT PRIMARY KEY,v INT)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(1,10)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE atomic_old FROM ns1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 10]]}
+{"event": "atomic_boundary", "owner": "initial", "fault": "commit_crash", "schema_before": 1791438885314896, "schema_visible": 1791438885910264, "old_tablet": 200001, "visible_tablet": 200002, "source_count": 359}
+{"event": "setup", "binary": "/data/1/nijia.nj/test/namespace_fork_build_artifacts/ddl-catalog-artifacts/seekdb-native", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_catalog_initial_commit_crash_3ny_lu16", "pid": 3286256, "port": 45305}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 10]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 10]]}
+{"event": "sql", "sql": "INSERT INTO nstrunc_repro.t1 VALUES(2,30)", "rows": []}
+{"event": "sql", "sql": "UPDATE nstrunc_repro.t1 SET v=v+100", "rows": []}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[1, 110]]}
+{"event": "sql", "sql": "SELECT id,v FROM nstrunc_repro.t1", "rows": [[2, 30]]}
+{"event": "PASS", "case": "atomic_ddl_catalog", "owner": "initial", "fault": "commit_crash"}
+{"event": "stopped", "pid": 3286256, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_catalog_initial_commit_crash_3ny_lu16/data.tar.gz", "bytes": 3148273}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

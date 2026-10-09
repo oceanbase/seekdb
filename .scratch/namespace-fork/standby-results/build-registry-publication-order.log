@@ -1,0 +1,49 @@
+[  1%] Built target oblib_grpc
+[  1%] Built target oblib_lib_simd
+[  3%] Built target ob_malloc_object
+[  3%] Built target restore
+[  9%] Built target zstd_1_3_8_objs
+[ 10%] Built target malloc_hook
+[ 10%] Built target oblib_lib_bitmap
+[ 11%] Built target oblib_rpc
+[ 11%] Built target ob_data_plane
+[ 15%] Built target oblib_common
+[ 16%] Built target ob_query
+[ 16%] Built target generate_syspack_source
+[ 17%] Built target ob_sql_simd
+[ 22%] Built target ob_sql_server_parser_objects
+[ 22%] Built target ob_storage_simd
+[ 22%] Built target ob_namespace
+[ 24%] Built target ob_storage_tablet_autoincrement_state
+[ 24%] Built target ob_logservice
+[ 24%] Built target ob_standby
+[ 26%] Built target ob_pl
+[ 26%] Built target ob_standby_runtime
+[ 26%] Built target sql_nio_build
+[ 27%] Built target ob_main
+[ 27%] Built target ob_sql_server_parser_static
+[ 30%] Built target ob_share_extra
+[ 30%] Built target ob_malloc
+[ 30%] Built target syspack_source
+[ 31%] Built target zstd_1_3_8
+[ 37%] Built target ob_sql_extra
+[ 38%] Built target compress
+[ 39%] Building CXX object src/observer/CMakeFiles/ob_server.dir/ob_server.cpp.o
+[ 43%] Built target oblib_lib
+[ 47%] Built target ob_rootserver
+[ 47%] Built target oblib
+[ 59%] Built target ob_storage
+[ 59%] Built target ob_storage_static
+[ 79%] Built target ob_sql
+[ 95%] Built target ob_share
+[ 95%] Built target ob_sql_static
+[ 95%] Built target ob_share_static
+In file included from /home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/src/observer/ob_server.cpp:3268:
+In file included from /home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/src/observer/namespace_worker_gateway_prototype.ipp:773:
+[1m/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/src/observer/namespace_template_registry.ipp:284:24: [0m[0;1;31merror: [0m[1muse of undeclared identifier 'registered'[0m
+  284 |     for (uint64_t id : registered) {[0m
+      | [0;1;32m                       ^
+[0m1 error generated.
+make[2]: *** [src/observer/CMakeFiles/ob_server.dir/build.make:328: src/observer/CMakeFiles/ob_server.dir/ob_server.cpp.o] Error 1
+make[1]: *** [CMakeFiles/Makefile2:1527: src/observer/CMakeFiles/ob_server.dir/all] Error 2
+make: *** [Makefile:91: all] Error 2
