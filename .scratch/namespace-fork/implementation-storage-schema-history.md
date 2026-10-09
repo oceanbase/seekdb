@@ -3,7 +3,25 @@
 目标以 [design-storage-schema-boundaries.md](design-storage-schema-boundaries.md) 为准。
 本文件记录实现和验证证据，不缩减已确认范围。2026-10-10 开始实施。
 
-### 当前推进：SSTable 来源布局与行 redo 版本
+### 当前推进：物理结果身份与完整性
+
+- 进度上报保存物理创建事务、真实创建提交版本 C 和所属 G；checksum 保存同一个创建事务及产生该结果的 SSTable 自身 G/V。继承基线不会被改写为孩子的 G。两类上报仍在已有的同一 SQLite 事务提交，既有虚拟表自动展示新增字段。
+- 新增 `check_physical_merge_progress`：本机可读水位达到 F 后重新枚举 LS 的物理对象，按原生 MDS 判断 C/incarnation；分批读取现有上报，要求身份相符、接管完成且合并快照达到 F。缺项等待，C>F 明确排除，不把没上报的对象从名单中删掉。
+- `ObMajorMergeScheduler` 删除原来跳过 Namespace 1、逐个装载孩子 SchemaService、只遍历返回上报的进度检查，接入统一物理检查；删除统计异常也强行完成的路径。本次没有新增持久候选名单或常驻缓存。
+- 现有逻辑校验的输入检查改为缺项/旧 incarnation/其他 G 均重试；覆盖直接验证和按表构建 checksum 的入口。各 Namespace 的历史 SQL 定义与索引分组尚未统一，不能把本段当作所有 Namespace 已完成逻辑校验。
+- 首轮构建 `/tmp/seekdb-physical-report-build-1.log` 因新增参数误改了 `is_status_valid` 调用失败，已修正；第二轮构建 `/tmp/seekdb-physical-report-build-2.log` 通过。生产实际 major `/tmp/seekdb-physical-report-major-1.log` 通过，F/广播/完成均为1791583088838942050。
+- 新增 `physical_report_probe.py` 与可移除测试注入，直接删除或篡改一次真实大合并的持久上报，要求缺失或身份错误期间不能完成，恢复记录后完成。已加入四件套。原生构建通过，具体动态结果继续记录于下文。
+- 驱动第1轮 `/tmp/seekdb-physical-report-native-test-1.log` 设置了非法的1秒调度间隔，在故障注入前返回4147；改用3秒。第2轮 `/tmp/seekdb-physical-report-native-test-2.log` 在新孩子接管尚未完成时触发10秒freeze准备超时4012，尚未进入上报故障验证；保留证据并扩大测试请求期限观察原生后台，不修改生产超时规则。
+- 第3轮 `/tmp/seekdb-physical-report-native-test-3.log` 的90秒请求仍在准备阶段超时，原生日志显示检查从718个对象推进到1022个，未卡在同一tablet；继续用既有大型回归采用的300秒期限完成冷孩子准备，不把超时算作上报测试成功。
+
+- 第4轮 `/tmp/seekdb-physical-report-native-test-4.log` 七项故障跑通，但驱动在目标tablet就绪后即注入，其他tablet可能仍在合并，等待证据不够强；不以它作为最终证明。第5轮先确认全部原生物理对象的合并结果到齐，再逐项注入，七项均通过：`/tmp/seekdb-physical-report-native-test-5.log`。
+- 第5轮随后执行kill/restart，核对父/子数据分别恢复为 `(1,17),(2,27)`；再执行真实freeze并等待完成，两个tablet的创建事务、C和G均与重启前一致。最终PASS带 `recovery=true`。孩子身份为tx5509/C1791583619506917034/G5510，初始Namespace对象为tx5220/C1791583618895226047/G5252。
+- 第5轮首次冷孩子准备134.821秒；后续请求准备0.035–0.080秒。第一次的较长时间是既有后台物化/接管逐批推进，前两次准备超时未被算作成功；没有调整生产调度节奏或超时规则。
+- 测试注入全部移除后的最终生产构建 `/tmp/seekdb-physical-report-production-final-build.log` 通过。原生测试副本与最终生产代码的行为差异仅为可移除控制点和等待诊断日志中新增的预期身份字段。未运行完整mysqltest/sysbench。
+
+本段之后仍需完成的上层接线：`ObMajorMergeProgressChecker` 目前的逻辑表列表、版本检查与 `ObTableCkmItems` 的 DDL 变化判断仍按旧的默认目录和 freeze.schema_version 工作。需要按所属 Namespace 构造完整校验组、用每个 G@F 的 V 读取单表 SQL 历史，并核对分区绑定与原生退休状态。已有 `namespace_schema_publication.cpp::publication_schema` 通过 `service.get_schema_service()->get_table_schema(status, table_id, V, sql, allocator, schema)` 读取单表历史，可复用底层能力；不能把一个对象的 V 作为整个 Namespace 或主表/索引共同版本。checksum 本次已保存 producing_V，但其与 G@F 的精确核对仍应在该接线完成。正文/G/绑定GC、旧freeze字段删除、实际主备也仍未完成。
+
+### SSTable 来源布局与行 redo 版本
 
 - `ObSSTableBasicMeta` 持久化来源 G，与自身 V 一起定位完整正文。普通创建、合并、DDL、直接复用、重写、空 minor、defrag 及物理恢复参数均传递该身份；固定格式 LS/MDS 文件沿用其定义。
 - fork 重写按输入 SSTable 自身 `(G,V)` 读取完整定义，输出保留这个来源。来源 tablet 自己的 G 可能不同，不能用其当前本地描述代替；目标基线安装仍使用目标 G 的完整定义。

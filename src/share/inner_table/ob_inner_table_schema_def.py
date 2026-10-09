@@ -168,7 +168,10 @@ gen_sqlite_table_def(
       ('data_size', 'INTEGER', 'NOT NULL', None),
       ('required_size', 'INTEGER', 'NOT NULL', '0'),
       ('report_scn', 'INTEGER', 'NOT NULL', '0'),
-      ('status', 'INTEGER', 'NOT NULL', '0')
+      ('status', 'INTEGER', 'NOT NULL', '0'),
+      ('create_transaction_id', 'INTEGER', 'NOT NULL', None),
+      ('physical_create_version', 'INTEGER', 'NOT NULL', None),
+      ('storage_layout_id', 'INTEGER', 'NOT NULL', None)
   ],
   primary_key = ['tablet_id']
   )
@@ -183,7 +186,10 @@ gen_sqlite_table_def(
       ('data_checksum', 'INTEGER', 'NOT NULL', None),
       ('column_checksums', 'TEXT', 'NULL', None),
       ('b_column_checksums', 'BLOB', 'NULL', None),
-      ('data_checksum_type', 'INTEGER', 'NOT NULL', '0')
+      ('data_checksum_type', 'INTEGER', 'NOT NULL', '0'),
+      ('create_transaction_id', 'INTEGER', 'NOT NULL', None),
+      ('storage_layout_id', 'INTEGER', 'NOT NULL', None),
+      ('schema_version', 'INTEGER', 'NOT NULL', None)
   ],
   primary_key = ['tablet_id']
   )

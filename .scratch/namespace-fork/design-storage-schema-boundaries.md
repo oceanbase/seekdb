@@ -261,6 +261,8 @@ owner_catalog 来自上层已确定的物理对象归属，存储只读取G。�
 4. F 之后创建/才变为可读的索引不加入 F 的校验组。F 后已提交的 DROP/TRUNCATE/物理替换如使旧组无法继续取得输入，记录为“对象已被 DDL 替换，本轮不再适用”，不能记录 CHECKSUM_PASS，也不能仅因某个版本不同而吞掉已成立的 checksum 错误。
 5. 对属于本轮、仍存在且可比的完整组，checksum 不一致必须报错；缺失的必需 checksum 是待完成/错误，不能当删除处理。
 
+实施中的上报表示：沿用本机 SQLite 进度和 checksum 存储及它们已有的共同事务。进度携带 `(physical_tablet_id, create_transaction_id, physical_create_version, G)`；checksum 携带 `(physical_tablet_id, create_transaction_id, F, producing_G, producing_V)`。后两项从产生结果的 SSTable 取得，继承文件保留来源 G/V。完成检查先达到本机 F 可读水位，再枚举原生物理对象与上报比对；不能从上报行反推本轮候选集合。这不替代上层按每个 G@F 的历史 SQL 定义构造完整校验组。
+
 范围澄清：freeze到合并之间的DDL并发在重构前已经存在，本节是本次接口适配的正确性约束，不新增一套DDL取消、退休或校验状态机。复用已有合并/校验对删除、索引状态及分区变化的处理；只适配本次改变的历史schema读取、Namespace归属和物理身份，并做针对性回归。例如现有 `ObTableCkmItems::check_schema_change_after_major_freeze()` 已处理全局索引校验遇到冻结后分区变化的情况，但仍读取 `freeze_info.schema_version_`，该查询必须随本次版本来源切换一起修改。这不是需要用户重新选择的DDL语义问题。
 
 ### 7.2 继承数据的覆盖：准备完成后再发布 F

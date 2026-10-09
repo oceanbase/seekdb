@@ -21,6 +21,8 @@
 #include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
 #include "share/ob_structured_event_logger.h"
+#include "storage/compaction/physical_merge_candidate.h"
+#include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
 {
@@ -232,8 +234,9 @@ int ObChecksumValidator::build_table_checksum(uint64_t table_id,
     ret = OB_TABLE_NOT_EXIST;
   } else if (OB_FAIL(get_physical_tablet_ids(*simple_schema, tablets))) {
   } else if (OB_FAIL(checksums.init(tablets.count()))) {
-  } else if (OB_FAIL(ObTabletLocalChecksumOperator::get_local_tablet_checksum_items(
-          get_compaction_scn(), tablets, checksums))) {
+  } else if (OB_FAIL(ObTabletLocalChecksumOperator::batch_get(
+          tablets, get_compaction_scn(), checksums, false))) {
+  } else if (OB_FAIL(check_physical_checksum_inputs(tablets, checksums))) {
   } else {
     ret = items.build(schema_guard, *simple_schema, tablets, checksums);
   }
@@ -309,7 +312,7 @@ int ObChecksumValidator::validate_checksum(
 int ObChecksumValidator::validate_local_tablet_checksum()
 {
   int ret = OB_SUCCESS;
-  if (table_compaction_info_.is_uncompacted()) {
+  if (table_compaction_info_.is_uncompacted() || table_compaction_info_.is_compacted()) {
     if (OB_UNLIKELY(nullptr == simple_schema_ || !simple_schema_->has_tablet())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tablet schema should have tablet", K(ret), KPC_(simple_schema));
@@ -318,9 +321,8 @@ int ObChecksumValidator::validate_local_tablet_checksum()
       } else if (table_compaction_info_.is_compacted()) {
         // Verify the local checksum after the tablet finishes compaction.
         if (OB_FAIL(get_local_tablet_checksum_and_validate(false /*include_larger_than*/))) {
-          if (OB_ITEM_NOT_MATCH == ret) {
-            ret = OB_SUCCESS;
-            table_compaction_info_.set_can_skip_verifying();
+          if (OB_EAGAIN == ret) {
+            table_compaction_info_.set_uncompacted();
           } else {
             LOG_ERROR("fail to validate local tablet checksum", KR(ret), "compaction_scn", get_compaction_scn(), K_(table_compaction_info));
           }
@@ -384,9 +386,8 @@ int ObChecksumValidator::get_local_tablet_checksum_and_validate(const bool inclu
   FREEZE_TIME_GUARD;
   if (OB_FAIL(get_local_ckm(include_larger_than))) {
   } else if (OB_UNLIKELY(local_ckm_items_.get_tablet_cnt() != cur_tablet_ids_.count())) {
-    ret = OB_ITEM_NOT_MATCH;
+    ret = OB_EAGAIN;
     local_ckm_items_.reset();
-    (void) uncompact_info_.add_skip_verify_table(table_id_);
     LOG_TRACE("checksum count is not equal to tablet id count", KR(ret),
       K_(cur_tablet_ids), "compaction_scn", get_compaction_scn(), K_(table_compaction_info), K(local_ckm_items_));
   }
@@ -588,8 +589,7 @@ int ObChecksumValidator::verify_table_index(
   if (local_ckm_items_.empty() && OB_FAIL(get_local_ckm())) {
     LOG_ERROR("fail to batch get local tablet checksum items", KR(ret),  "compaction_scn", get_compaction_scn());
   } else if (local_ckm_items_.get_tablet_cnt() < cur_tablet_ids_.count()) {
-    ret = OB_ITEM_NOT_MATCH;
-    (void) uncompact_info_.add_skip_verify_table(table_id_);
+    ret = OB_EAGAIN;
     LOG_WARN("fail to get local tablet checksum items", KR(ret),  "compaction_scn", get_compaction_scn(),
       K_(cur_tablet_ids), K(local_ckm_items_));
   } else {
@@ -640,9 +640,45 @@ int ObChecksumValidator::get_local_ckm(const bool include_larger_than/* = false*
 {
   int ret = OB_SUCCESS;
   ++statistics_.query_ckm_sql_cnt_;
-  return ObTabletLocalChecksumOperator::batch_get(
+  if (OB_FAIL(ObTabletLocalChecksumOperator::batch_get(
       cur_tablet_ids_, get_compaction_scn(),
-      local_ckm_items_, include_larger_than);
+      local_ckm_items_, include_larger_than))) {
+  } else {
+    ret = check_physical_checksum_inputs(cur_tablet_ids_, local_ckm_items_);
+  }
+  return ret;
+}
+
+int ObChecksumValidator::check_physical_checksum_inputs(
+    const ObIArray<ObTabletID> &expected, const ObLocalTabletChecksumArray &checksums)
+{
+  int ret = OB_SUCCESS;
+  storage::ObLS *ls = nullptr;
+  auto *ls_service = share::server_service<storage::ObLSService>();
+  if (checksums.get_tablet_cnt() != expected.count()) {
+    ret = OB_EAGAIN;
+  } else if (ls_service == nullptr) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(ls_service->get_ls(ls))) {
+  } else if (ls == nullptr) {
+    ret = OB_ERR_UNEXPECTED;
+  }
+  // The query is restricted to expected IDs and returns at most one row per
+  // physical ID. Matching its cardinality is necessary but not sufficient:
+  // every result must belong to the still-live incarnation and its own layout.
+  for (int64_t i = 0; OB_SUCC(ret) && i < checksums.count(); ++i) {
+    const ObTabletLocalChecksumItem &checksum = checksums.at(i);
+    storage::ObTabletHandle handle;
+    PhysicalMergeCandidate candidate;
+    if (OB_FAIL(ls->get_tablet_svr()->get_tablet(checksum.tablet_id_, handle, 0,
+            storage::ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
+      if (ret == OB_TABLET_NOT_EXIST) { ret = OB_EAGAIN; }
+    } else if (OB_FAIL(candidate.load(*handle.get_obj()))) {
+    } else if (!candidate.participates(get_compaction_scn_val()) || !candidate.matches(checksum)) {
+      ret = OB_EAGAIN;
+    }
+  }
+  return ret;
 }
 
 /***************************************** FTS Checksum Section ******************************************/

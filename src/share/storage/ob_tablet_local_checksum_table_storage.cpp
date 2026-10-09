@@ -91,7 +91,7 @@ int ObTabletLocalChecksumTableStorage::batch_get(
     if (OB_FAIL(sql.append_fmt(
         "SELECT tablet_id, compaction_scn, "
         "       row_count, data_checksum, column_checksums, b_column_checksums, "
-        "       data_checksum_type "
+        "       data_checksum_type, create_transaction_id, storage_layout_id, schema_version "
         "FROM __all_tablet_local_checksum "
         "WHERE tablet_id IN ("))) {
     } else {
@@ -132,6 +132,9 @@ int ObTabletLocalChecksumTableStorage::batch_get(
         const char *column_checksums_str = reader.get_text(&column_checksums_len);
         const void *b_column_checksums_blob = reader.get_blob(&b_column_checksums_len);
         int64_t data_checksum_type = reader.get_int64();
+        item.create_transaction_id_ = reader.get_int64();
+        item.storage_layout_id_ = reader.get_int64();
+        item.schema_version_ = reader.get_int64();
         UNUSED(column_checksums_str);
         if (!is_valid_data_checksum_type(static_cast<ObDataChecksumType>(data_checksum_type))) {
           ret = OB_ERR_UNEXPECTED;

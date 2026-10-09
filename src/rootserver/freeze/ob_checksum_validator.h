@@ -110,6 +110,8 @@ private:
   int get_physical_tablet_ids(const share::schema::ObSimpleTableSchemaV2 &simple_schema,
       common::ObIArray<common::ObTabletID> &tablet_ids);
   int get_local_ckm(const bool include_larger_than = false);
+  int check_physical_checksum_inputs(const common::ObIArray<common::ObTabletID> &expected,
+      const share::ObLocalTabletChecksumArray &checksums);
   /* Local Tablet Checksum Section */
   int validate_local_tablet_checksum();
   // check table compaction info according to tablet_status_map

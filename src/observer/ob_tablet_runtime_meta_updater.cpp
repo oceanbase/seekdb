@@ -512,12 +512,7 @@ int ObTabletRuntimeMetaUpdater::generate_tasks_(
 
       if (OB_FAIL(ret) || !is_remove_task) {
         // do nothing
-      } else if (OB_FAIL(tablet_info.init(task->get_tablet_id(),
-                                      1/*snapshot_version*/,
-                                      1/*data_size*/,
-                                      1/*required_size*/,
-                                      0/*report_scn*/,
-                                      ObTabletRuntimeInfo::SCN_STATUS_IDLE))) {
+      } else if (FALSE_IT(tablet_info.fake_for_diagnose(task->get_tablet_id()))) {
       } else if (OB_FAIL(push_task_info_(*task, tablet_info, remove_tablet_infos, remove_tablet_tasks))) {
       }
     } else {

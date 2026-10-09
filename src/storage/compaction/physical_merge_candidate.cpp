@@ -4,11 +4,29 @@
  */
 #include "storage/compaction/physical_merge_candidate.h"
 #include "storage/tablet/ob_tablet.h"
+#include "share/ob_tablet_local_checksum_operator.h"
 
 namespace oceanbase
 {
 namespace compaction
 {
+bool PhysicalMergeCandidate::matches(const share::ObTabletRuntimeInfo &report) const
+{
+  return is_live() && report.is_valid()
+      && tablet_id == report.get_tablet_id().id()
+      && create_transaction_id == report.get_create_transaction_id()
+      && create_version == report.get_physical_create_version()
+      && layout_id == report.get_storage_layout_id();
+}
+
+bool PhysicalMergeCandidate::matches(const share::ObTabletLocalChecksumItem &checksum) const
+{
+  return is_live() && checksum.is_valid()
+      && tablet_id == checksum.tablet_id_.id()
+      && create_transaction_id == checksum.create_transaction_id_
+      && layout_id == checksum.storage_layout_id_;
+}
+
 int PhysicalMergeCandidate::load(const storage::ObTablet &tablet)
 {
   using namespace common;

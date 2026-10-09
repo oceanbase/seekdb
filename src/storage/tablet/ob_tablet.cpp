@@ -29,6 +29,7 @@
 #include "storage/tablet/ob_tablet_medium_info_reader.h"
 #include "storage/tablet/ob_tablet_mds_node_dump_operator.h"
 #include "storage/tx_storage/ob_ls_service.h"
+#include "storage/compaction/physical_merge_candidate.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "storage/truncate_info/ob_tablet_truncate_info_reader.h"
 #include "storage/truncate_info/ob_truncate_info_array.h"
@@ -4413,7 +4414,13 @@ int ObTablet::get_tablet_runtime_info_by_sstable(
   ObArray<int64_t> column_checksums;
   column_checksums.set_attr(ObMemAttr("tmpCkmArr"));
   ObSSTable *table = nullptr;
-  if (OB_UNLIKELY(nullptr == main_major || report_major_snapshot != main_major->get_snapshot_version())) {
+  compaction::PhysicalMergeCandidate candidate;
+  if (OB_FAIL(candidate.load(*this))) {
+  } else if (candidate.state == compaction::PhysicalMergeCandidate::State::RETIRED) {
+    ret = OB_TABLET_NOT_EXIST;
+  } else if (!candidate.is_live()) {
+    ret = OB_EAGAIN;
+  } else if (OB_UNLIKELY(nullptr == main_major || report_major_snapshot != main_major->get_snapshot_version())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get unexpected null major", K(ret), K(table_store));
   } else if (OB_FAIL(main_major->get_meta(main_major_meta_hdl))) {
@@ -4435,7 +4442,8 @@ int ObTablet::get_tablet_runtime_info_by_sstable(
         data_size,
         required_size,
         0/*report_scn*/,
-        ObTabletRuntimeInfo::SCN_STATUS_IDLE))) {
+        ObTabletRuntimeInfo::SCN_STATUS_IDLE,
+        candidate.create_transaction_id, candidate.create_version, candidate.layout_id))) {
       LOG_WARN("fail to init tablet runtime info", KR(ret), "tablet_id", get_tablet_id(), K(runtime_info));
   } else if (OB_FAIL(get_sstable_column_checksum(*main_major, column_checksums))) {
   } else if (OB_FAIL(tablet_checksum.column_meta_.init(column_checksums))) {
@@ -4451,6 +4459,10 @@ int ObTablet::get_tablet_runtime_info_by_sstable(
     tablet_checksum.row_count_ = get_tablet_meta().report_status_.row_count_;
     tablet_checksum.data_checksum_ = get_tablet_meta().report_status_.data_checksum_;
     tablet_checksum.set_data_checksum_type();
+    const auto &basic_meta = main_major_meta_hdl.get_sstable_meta().get_basic_meta();
+    tablet_checksum.create_transaction_id_ = candidate.create_transaction_id;
+    tablet_checksum.storage_layout_id_ = basic_meta.storage_layout_id_;
+    tablet_checksum.schema_version_ = basic_meta.schema_version_;
     LOG_INFO("success to get tablet runtime info", KR(ret), "tablet_id", get_tablet_id(), "report_status",
       tablet_meta_.report_status_, K(tablet_checksum));
   }

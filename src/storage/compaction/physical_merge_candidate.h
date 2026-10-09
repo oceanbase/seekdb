@@ -10,6 +10,7 @@
 namespace oceanbase
 {
 namespace storage { class ObTablet; }
+namespace share { class ObTabletRuntimeInfo; struct ObTabletLocalChecksumItem; }
 namespace compaction
 {
 // A physical incarnation, independent of SQL catalog ownership. Enumerators
@@ -26,6 +27,8 @@ struct PhysicalMergeCandidate final
   int load(const storage::ObTablet &tablet);
   bool is_live() const { return state == State::LIVE; }
   bool participates(int64_t target) const { return is_live() && create_version <= target; }
+  bool matches(const share::ObTabletRuntimeInfo &report) const;
+  bool matches(const share::ObTabletLocalChecksumItem &checksum) const;
 };
 } // namespace compaction
 } // namespace oceanbase

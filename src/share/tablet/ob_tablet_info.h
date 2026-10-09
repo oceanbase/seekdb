@@ -62,6 +62,9 @@ public:
         && data_size_ >= 0
         && required_size_ >= 0
         && report_scn_ >= 0
+        && create_transaction_id_ > 0
+        && physical_create_version_ > 0 && physical_create_version_ < INT64_MAX
+        && storage_layout_id_ != 0 && storage_layout_id_ != common::OB_INVALID_ID
         && is_status_valid(status_);
   }
   inline bool primary_keys_are_valid() const
@@ -76,13 +79,19 @@ public:
   inline int64_t get_required_size() const { return required_size_; }
   inline int64_t get_report_scn() const { return report_scn_; }
   inline ScnStatus get_status() const { return status_; }
+  int64_t get_create_transaction_id() const { return create_transaction_id_; }
+  int64_t get_physical_create_version() const { return physical_create_version_; }
+  uint64_t get_storage_layout_id() const { return storage_layout_id_; }
   int init(
       const common::ObTabletID &tablet_id,
       const int64_t snapshot_version,
       const int64_t data_size,
       const int64_t required_size,
       const int64_t report_scn,
-      const ScnStatus status);
+      const ScnStatus status,
+      const int64_t create_transaction_id,
+      const int64_t physical_create_version,
+      const uint64_t storage_layout_id);
   void fake_for_diagnose(const common::ObTabletID &tablet_id);
   static bool is_status_valid(const ScnStatus status)
   {
@@ -94,7 +103,7 @@ public:
       K_(data_size),
       K_(required_size),
       K_(report_scn),
-      K_(status));
+      K_(status), K_(create_transaction_id), K_(physical_create_version), K_(storage_layout_id));
 
 private:
   common::ObTabletID tablet_id_;
@@ -103,6 +112,9 @@ private:
   int64_t required_size_;
   int64_t report_scn_;
   ScnStatus status_;
+  int64_t create_transaction_id_;
+  int64_t physical_create_version_;
+  uint64_t storage_layout_id_;
 };
 
 class ObTabletTablePair

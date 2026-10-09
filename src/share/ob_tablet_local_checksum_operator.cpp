@@ -395,7 +395,8 @@ ObTabletLocalChecksumItem::ObTabletLocalChecksumItem()
     compaction_scn_(),
     data_checksum_(0),
     column_meta_(),
-    data_checksum_type_(ObDataChecksumType::DATA_CHECKSUM_MAX)
+    data_checksum_type_(ObDataChecksumType::DATA_CHECKSUM_MAX),
+    create_transaction_id_(0), storage_layout_id_(0), schema_version_(-1)
 {}
 
 void ObTabletLocalChecksumItem::reset()
@@ -406,6 +407,9 @@ void ObTabletLocalChecksumItem::reset()
   data_checksum_ = 0;
   column_meta_.reset();
   data_checksum_type_ = ObDataChecksumType::DATA_CHECKSUM_MAX;
+  create_transaction_id_ = 0;
+  storage_layout_id_ = 0;
+  schema_version_ = -1;
 }
 
 bool ObTabletLocalChecksumItem::is_key_valid() const
@@ -418,6 +422,9 @@ bool ObTabletLocalChecksumItem::is_valid() const
   return is_key_valid()
        && compaction_scn_.is_valid()
        && column_meta_.is_valid()
+       && create_transaction_id_ > 0
+       && storage_layout_id_ != 0 && storage_layout_id_ != OB_INVALID_ID
+       && schema_version_ >= 0
        && is_valid_data_checksum_type(data_checksum_type_);
 }
 
@@ -439,6 +446,9 @@ int ObTabletLocalChecksumItem::assign(const ObTabletLocalChecksumItem &other)
       compaction_scn_ = other.compaction_scn_;
       data_checksum_ = other.data_checksum_;
       data_checksum_type_ = other.data_checksum_type_;
+      create_transaction_id_ = other.create_transaction_id_;
+      storage_layout_id_ = other.storage_layout_id_;
+      schema_version_ = other.schema_version_;
     }
   }
   return ret;
@@ -485,15 +495,18 @@ int ObTabletLocalChecksumOperator::batch_update_with_trans(
       "INSERT INTO __all_tablet_local_checksum "
       "(tablet_id, compaction_scn, "
       " row_count, data_checksum, column_checksums, b_column_checksums, "
-      " data_checksum_type) "
-      "VALUES (?, ?, ?, ?, ?, ?, ?) "
+      " data_checksum_type, create_transaction_id, storage_layout_id, schema_version) "
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
       "ON CONFLICT(tablet_id) DO UPDATE SET "
       "compaction_scn = excluded.compaction_scn, "
       "row_count = excluded.row_count, "
       "data_checksum = excluded.data_checksum, "
       "column_checksums = excluded.column_checksums, "
       "b_column_checksums = excluded.b_column_checksums, "
-      "data_checksum_type = excluded.data_checksum_type;";
+      "data_checksum_type = excluded.data_checksum_type, "
+      "create_transaction_id = excluded.create_transaction_id, "
+      "storage_layout_id = excluded.storage_layout_id, "
+      "schema_version = excluded.schema_version;";
 
     ObSQLiteStmt *stmt = nullptr;
     if (OB_FAIL(conn->prepare_execute(upsert_sql, stmt))) {
@@ -533,6 +546,9 @@ int ObTabletLocalChecksumOperator::batch_update_with_trans(
               b.bind_blob(b_column_checksums_str.ptr(), b_column_checksums_str.length());
             }
             b.bind_int64(static_cast<int64_t>(item.data_checksum_type_));
+            b.bind_int64(item.create_transaction_id_);
+            b.bind_int64(item.storage_layout_id_);
+            b.bind_int64(item.schema_version_);
             return OB_SUCCESS;
           };
 

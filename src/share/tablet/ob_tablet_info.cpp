@@ -29,7 +29,8 @@ ObTabletRuntimeInfo::ObTabletRuntimeInfo()
       data_size_(0),
       required_size_(0),
       report_scn_(0),
-      status_(SCN_STATUS_MAX)
+      status_(SCN_STATUS_MAX),
+      create_transaction_id_(0), physical_create_version_(0), storage_layout_id_(0)
 {
 }
 
@@ -46,6 +47,9 @@ void ObTabletRuntimeInfo::reset()
   required_size_ = 0;
   report_scn_ = 0;
   status_ = SCN_STATUS_MAX;
+  create_transaction_id_ = 0;
+  physical_create_version_ = 0;
+  storage_layout_id_ = 0;
 }
 
 int ObTabletRuntimeInfo::assign(const ObTabletRuntimeInfo &other)
@@ -58,6 +62,9 @@ int ObTabletRuntimeInfo::assign(const ObTabletRuntimeInfo &other)
     required_size_ = other.required_size_;
     report_scn_ = other.report_scn_;
     status_ = other.status_;
+    create_transaction_id_ = other.create_transaction_id_;
+    physical_create_version_ = other.physical_create_version_;
+    storage_layout_id_ = other.storage_layout_id_;
   }
   return ret;
 }
@@ -68,7 +75,10 @@ int ObTabletRuntimeInfo::init(
     const int64_t data_size,
     const int64_t required_size,
     const int64_t report_scn,
-    const ScnStatus status)
+    const ScnStatus status,
+    const int64_t create_transaction_id,
+    const int64_t physical_create_version,
+    const uint64_t storage_layout_id)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(
@@ -77,6 +87,9 @@ int ObTabletRuntimeInfo::init(
       || data_size < 0
       || required_size < 0
       || report_scn < 0
+      || create_transaction_id <= 0
+      || physical_create_version <= 0 || physical_create_version == INT64_MAX
+      || storage_layout_id == 0 || storage_layout_id == common::OB_INVALID_ID
       || !is_status_valid(status))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("init with invalid arguments", KR(ret), K(tablet_id),
@@ -88,6 +101,9 @@ int ObTabletRuntimeInfo::init(
     required_size_ = required_size;
     report_scn_ = report_scn;
     status_ = status;
+    create_transaction_id_ = create_transaction_id;
+    physical_create_version_ = physical_create_version;
+    storage_layout_id_ = storage_layout_id;
   }
   return ret;
 }

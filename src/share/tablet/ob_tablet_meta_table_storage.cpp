@@ -44,6 +44,9 @@ int ObTabletRuntimeInfoConstructor::operator()(
   int64_t required_size = reader.get_int64();
   int64_t report_scn = reader.get_int64();
   int status = reader.get_int();
+  const int64_t create_transaction_id = reader.get_int64();
+  const int64_t physical_create_version = reader.get_int64();
+  const uint64_t storage_layout_id = reader.get_int64();
 
   if (OB_UNLIKELY(!ObTabletRuntimeInfo::is_status_valid((ObTabletRuntimeInfo::ScnStatus)status))) {
     ret = OB_ERR_UNEXPECTED;
@@ -54,7 +57,8 @@ int ObTabletRuntimeInfoConstructor::operator()(
       data_size,
       required_size,
       report_scn,
-      (ObTabletRuntimeInfo::ScnStatus)status))) {
+      (ObTabletRuntimeInfo::ScnStatus)status,
+      create_transaction_id, physical_create_version, storage_layout_id))) {
   }
 
   return ret;
@@ -118,7 +122,8 @@ int ObTabletMetaTableStorage::batch_get(
     ObSqlString sql;
     if (OB_FAIL(sql.append_fmt(
         "SELECT tablet_id, "
-        "       compaction_scn, data_size, required_size, report_scn, status "
+        "       compaction_scn, data_size, required_size, report_scn, status, "
+        "       create_transaction_id, physical_create_version, storage_layout_id "
         "FROM __all_tablet_meta_table "
         "WHERE tablet_id IN ("))) {
     } else {
@@ -216,8 +221,9 @@ int ObTabletMetaTableStorage::batch_update(
     const char *upsert_sql =
       "INSERT OR REPLACE INTO __all_tablet_meta_table "
       "(gmt_create, gmt_modified, tablet_id, "
-      " compaction_scn, data_size, required_size, report_scn, status) "
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?);";
+      " compaction_scn, data_size, required_size, report_scn, status, "
+      " create_transaction_id, physical_create_version, storage_layout_id) "
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
 
     int64_t current_time = ObTimeUtility::current_time();
 
@@ -241,6 +247,9 @@ int ObTabletMetaTableStorage::batch_update(
             b.bind_int64(tablet_info.get_required_size());
             b.bind_int64(tablet_info.get_report_scn());
             b.bind_int(tablet_info.get_status());
+            b.bind_int64(tablet_info.get_create_transaction_id());
+            b.bind_int64(tablet_info.get_physical_create_version());
+            b.bind_int64(tablet_info.get_storage_layout_id());
             return OB_SUCCESS;
           };
           ret = conn->step_execute(stmt, binder);
@@ -831,7 +840,8 @@ int ObTabletMetaTableStorage::range_scan_for_compaction(const common::ObTabletID
     ObSqlString sql;
     if (OB_FAIL(sql.append_fmt(
         "SELECT tablet_id, "
-        "       compaction_scn, data_size, required_size, report_scn, status "
+        "       compaction_scn, data_size, required_size, report_scn, status, "
+        "       create_transaction_id, physical_create_version, storage_layout_id "
         "FROM __all_tablet_meta_table "
         "WHERE tablet_id > %ld AND tablet_id <= %ld",
         start_tablet_id.id(), end_tablet_id.id()))) {

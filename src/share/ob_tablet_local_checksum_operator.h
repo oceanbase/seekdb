@@ -104,7 +104,8 @@ public:
   common::ObTabletID get_tablet_id() const { return tablet_id_; }
 
   TO_STRING_KV(K_(tablet_id), K_(row_count),
-      K_(compaction_scn), K_(data_checksum), K_(column_meta), K_(data_checksum_type));
+      K_(compaction_scn), K_(data_checksum), K_(column_meta), K_(data_checksum_type),
+      K_(create_transaction_id), K_(storage_layout_id), K_(schema_version));
 
 public:
   common::ObTabletID tablet_id_;
@@ -113,6 +114,10 @@ public:
   int64_t data_checksum_;
   ObTabletColumnChecksumMeta column_meta_;
   ObDataChecksumType data_checksum_type_;
+  int64_t create_transaction_id_;
+  // The producing SSTable's layout, including inherited baselines.
+  uint64_t storage_layout_id_;
+  int64_t schema_version_;
 };
 typedef ObArrayWithMap<share::ObTabletLocalChecksumItem> ObLocalTabletChecksumArray;
 

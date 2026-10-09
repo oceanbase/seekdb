@@ -1,5 +1,5 @@
 {
-  "scope": "Foundation, atomic DDL/layout publication, durable retention, physical C membership, major/ordinary medium G@target, primary freeze preparation, meta-major exact G/V bodies, SSTable origin G and per-row redo versions have targeted evidence below. Unified progress/checksum, layout/body/binding GC, legacy freeze.schema_version removal and full standby integration remain incomplete.",
+  "scope": "Foundation, atomic DDL/layout publication, durable retention, physical C membership, major/ordinary medium G@target, primary freeze preparation, meta-major exact G/V bodies, SSTable origin G, per-row redo versions and native physical progress/report identity have targeted evidence below. Namespace logical checksum groups/history, layout/body/binding GC, legacy freeze.schema_version removal and full standby integration remain incomplete.",
   "runs": [
     {
       "name": "layout_history",
@@ -5404,6 +5404,467 @@
           "event": "data_archived",
           "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_qr2xyxda/data.tar.gz",
           "bytes": 9129487
+        }
+      ]
+    },
+    {
+      "name": "physical_report_build_first",
+      "log": "/tmp/seekdb-physical-report-build-1.log",
+      "note": "FAIL: is_status_valid accidentally received identity arguments; fixed.",
+      "events": []
+    },
+    {
+      "name": "physical_report_build",
+      "log": "/tmp/seekdb-physical-report-build-2.log",
+      "note": "PASS",
+      "events": []
+    },
+    {
+      "name": "physical_report_native_build",
+      "log": "/tmp/seekdb-physical-report-native-build-1.log",
+      "note": "PASS",
+      "events": []
+    },
+    {
+      "name": "physical_report_production_final_build",
+      "log": "/tmp/seekdb-physical-report-production-final-build.log",
+      "note": "PASS; no test hooks; added expected native identity to pending-result diagnostics.",
+      "events": []
+    },
+    {
+      "name": "physical_report_major",
+      "log": "/tmp/seekdb-physical-report-major-1.log",
+      "note": "PASS",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_4gg11luq",
+          "pid": 848194,
+          "port": 32793
+        },
+        {
+          "event": "PASS",
+          "case": "major_progress_physical_ids",
+          "rows": [
+            [
+              1791583088838942050,
+              1791583088838942050,
+              1791583088838942050
+            ]
+          ]
+        },
+        {
+          "event": "stopped",
+          "pid": 848194,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_4gg11luq/data.tar.gz",
+          "bytes": 10157649
+        }
+      ]
+    },
+    {
+      "name": "physical_report_probe_first",
+      "log": "/tmp/seekdb-physical-report-native-test-1.log",
+      "note": "Driver failure before fault injection: invalid 1s config.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-physical-report-native-v1",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_report_89mkcrx5",
+          "pid": 851716,
+          "port": 12123
+        },
+        {
+          "event": "stopped",
+          "pid": 851716,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_report_89mkcrx5/data.tar.gz",
+          "bytes": 5660783
+        }
+      ]
+    },
+    {
+      "name": "physical_report_probe_second",
+      "log": "/tmp/seekdb-physical-report-native-test-2.log",
+      "note": "Preparation deadline 10s expired before fault injection.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-physical-report-native-v1",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_report_5y7i0vw9",
+          "pid": 852797,
+          "port": 7617
+        },
+        {
+          "event": "stopped",
+          "pid": 852797,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_report_5y7i0vw9/data.tar.gz",
+          "bytes": 7474478
+        }
+      ]
+    },
+    {
+      "name": "physical_report_probe_third",
+      "log": "/tmp/seekdb-physical-report-native-test-3.log",
+      "note": "Preparation deadline 90s expired before fault injection; native background advanced from 718 to 1022 inspected objects.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-physical-report-native-v1",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_report_v0jkcsmb",
+          "pid": 856748,
+          "port": 44913
+        },
+        {
+          "event": "stopped",
+          "pid": 856748,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_report_v0jkcsmb/data.tar.gz",
+          "bytes": 10200946
+        }
+      ]
+    },
+    {
+      "name": "physical_report_probe_fourth",
+      "log": "/tmp/seekdb-physical-report-native-test-4.log",
+      "note": "PASS seven faults; preliminary probe did not first require every other physical result ready, so use fifth run as the decisive evidence.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-physical-report-native-v1",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_report_0qauiocl",
+          "pid": 861977,
+          "port": 23649
+        },
+        {
+          "event": "PASS",
+          "owner": "child",
+          "table": "__all_tablet_meta_table",
+          "fault": "missing_row",
+          "frozen": 1791583551724200006,
+          "identity": [
+            5186,
+            1791583416994377003,
+            5188
+          ],
+          "checksum": [
+            5186,
+            5188,
+            1791583416454688
+          ]
+        },
+        {
+          "event": "PASS",
+          "owner": "child",
+          "table": "__all_tablet_meta_table",
+          "fault": "create_transaction_id",
+          "frozen": 1791583567789077009,
+          "identity": [
+            5186,
+            1791583416994377003,
+            5188
+          ],
+          "checksum": [
+            5186,
+            5188,
+            1791583416454688
+          ]
+        },
+        {
+          "event": "PASS",
+          "owner": "child",
+          "table": "__all_tablet_meta_table",
+          "fault": "physical_create_version",
+          "frozen": 1791583584554370013,
+          "identity": [
+            5186,
+            1791583416994377003,
+            5188
+          ],
+          "checksum": [
+            5186,
+            5188,
+            1791583416454688
+          ]
+        },
+        {
+          "event": "PASS",
+          "owner": "child",
+          "table": "__all_tablet_meta_table",
+          "fault": "storage_layout_id",
+          "frozen": 1791583611521997012,
+          "identity": [
+            5186,
+            1791583416994377003,
+            5188
+          ],
+          "checksum": [
+            5186,
+            5188,
+            1791583416454688
+          ]
+        },
+        {
+          "event": "PASS",
+          "owner": "initial",
+          "table": "__all_tablet_local_checksum",
+          "fault": "missing_row",
+          "frozen": 1791583638598497018,
+          "identity": [
+            4832,
+            1791583416510014013,
+            4864
+          ],
+          "checksum": [
+            4832,
+            4864,
+            1791583416454688
+          ]
+        },
+        {
+          "event": "PASS",
+          "owner": "initial",
+          "table": "__all_tablet_local_checksum",
+          "fault": "create_transaction_id",
+          "frozen": 1791583665818930012,
+          "identity": [
+            4832,
+            1791583416510014013,
+            4864
+          ],
+          "checksum": [
+            4832,
+            4864,
+            1791583416454688
+          ]
+        },
+        {
+          "event": "PASS",
+          "owner": "initial",
+          "table": "__all_tablet_local_checksum",
+          "fault": "storage_layout_id",
+          "frozen": 1791583693091976006,
+          "identity": [
+            4832,
+            1791583416510014013,
+            4864
+          ],
+          "checksum": [
+            4832,
+            4864,
+            1791583416454688
+          ]
+        },
+        {
+          "event": "PASS",
+          "case": "physical_report_identity_and_completeness"
+        },
+        {
+          "event": "stopped",
+          "pid": 861977,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_report_0qauiocl/data.tar.gz",
+          "bytes": 32811400
+        }
+      ]
+    },
+    {
+      "name": "physical_report_probe_fifth",
+      "log": "/tmp/seekdb-physical-report-native-test-5.log",
+      "note": "PASS seven faults after requiring all native physical results ready; each remains unfinished while corrupt/missing and finishes after restoring the record. Kill/restart preserves creation identities, reads back both datasets, and completes the next real freeze.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-physical-report-native-v1",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_report_2472__ly",
+          "pid": 869638,
+          "port": 15523
+        },
+        {
+          "event": "freeze_prepared",
+          "elapsed_s": 134.821
+        },
+        {
+          "event": "PASS",
+          "owner": "child",
+          "table": "__all_tablet_meta_table",
+          "fault": "missing_row",
+          "frozen": 1791583754332464012,
+          "identity": [
+            5509,
+            1791583619506917034,
+            5510
+          ],
+          "checksum": [
+            5509,
+            5510,
+            1791583618830872
+          ]
+        },
+        {
+          "event": "freeze_prepared",
+          "elapsed_s": 0.035
+        },
+        {
+          "event": "PASS",
+          "owner": "child",
+          "table": "__all_tablet_meta_table",
+          "fault": "create_transaction_id",
+          "frozen": 1791583790340701012,
+          "identity": [
+            5509,
+            1791583619506917034,
+            5510
+          ],
+          "checksum": [
+            5509,
+            5510,
+            1791583618830872
+          ]
+        },
+        {
+          "event": "freeze_prepared",
+          "elapsed_s": 0.038
+        },
+        {
+          "event": "PASS",
+          "owner": "child",
+          "table": "__all_tablet_meta_table",
+          "fault": "physical_create_version",
+          "frozen": 1791583836244252012,
+          "identity": [
+            5509,
+            1791583619506917034,
+            5510
+          ],
+          "checksum": [
+            5509,
+            5510,
+            1791583618830872
+          ]
+        },
+        {
+          "event": "freeze_prepared",
+          "elapsed_s": 0.077
+        },
+        {
+          "event": "PASS",
+          "owner": "child",
+          "table": "__all_tablet_meta_table",
+          "fault": "storage_layout_id",
+          "frozen": 1791583883245899006,
+          "identity": [
+            5509,
+            1791583619506917034,
+            5510
+          ],
+          "checksum": [
+            5509,
+            5510,
+            1791583618830872
+          ]
+        },
+        {
+          "event": "freeze_prepared",
+          "elapsed_s": 0.062
+        },
+        {
+          "event": "PASS",
+          "owner": "initial",
+          "table": "__all_tablet_local_checksum",
+          "fault": "missing_row",
+          "frozen": 1791583923397833012,
+          "identity": [
+            5220,
+            1791583618895226047,
+            5252
+          ],
+          "checksum": [
+            5220,
+            5252,
+            1791583618830872
+          ]
+        },
+        {
+          "event": "freeze_prepared",
+          "elapsed_s": 0.06
+        },
+        {
+          "event": "PASS",
+          "owner": "initial",
+          "table": "__all_tablet_local_checksum",
+          "fault": "create_transaction_id",
+          "frozen": 1791583960931797006,
+          "identity": [
+            5220,
+            1791583618895226047,
+            5252
+          ],
+          "checksum": [
+            5220,
+            5252,
+            1791583618830872
+          ]
+        },
+        {
+          "event": "freeze_prepared",
+          "elapsed_s": 0.08
+        },
+        {
+          "event": "PASS",
+          "owner": "initial",
+          "table": "__all_tablet_local_checksum",
+          "fault": "storage_layout_id",
+          "frozen": 1791584009133842006,
+          "identity": [
+            5220,
+            1791583618895226047,
+            5252
+          ],
+          "checksum": [
+            5220,
+            5252,
+            1791583618830872
+          ]
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-physical-report-native-v1",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_report_2472__ly",
+          "pid": 890861,
+          "port": 15523
+        },
+        {
+          "event": "PASS",
+          "case": "physical_report_identity_and_completeness",
+          "recovery": true
+        },
+        {
+          "event": "stopped",
+          "pid": 890861,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_report_2472__ly/data.tar.gz",
+          "bytes": 37250005
         }
       ]
     }
