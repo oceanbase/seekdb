@@ -28,6 +28,7 @@
 #include "share/ob_structured_event_logger.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/tx_storage/ob_access_service.h"
+#include "storage/instance_meta/instance_meta_store.h"
 
 namespace oceanbase
 {
@@ -134,8 +135,12 @@ int ObMajorMergeInfoManager::set_freeze_info(const ObMajorFreezeReason freeze_re
   const int64_t fake_schema_version = 1000;
   SCN remote_snapshot_gc_scn;
   ObFreezeInfo freeze_info;
+  storage::InstanceMetaStore::Transaction layout_reader;
+  auto *access = share::server_service<storage::ObAccessService>();
 
-  if (OB_FAIL(try_reload())) {
+  if (access == nullptr) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(try_reload())) {
   } else {
     ObFreezeInfoProxy freeze_info_proxy{};
     // freeze get_schema_version need interactive with ddl trans but don't use gen_new_schema_version so no need check_in_rs
@@ -149,7 +154,12 @@ int ObMajorMergeInfoManager::set_freeze_info(const ObMajorFreezeReason freeze_re
     } else {
       int64_t schema_version_in_frozen_ts = 0;
       // 2. generate new frozen_scn
-      if (OB_FAIL(generate_frozen_scn(remote_snapshot_gc_scn, new_frozen_scn))) {
+      if (OB_FAIL(access->storage_schema_store().begin_read(layout_reader,
+          THIS_WORKER.get_timeout_ts(), [&](SCN &snapshot) {
+        const int rc = generate_frozen_scn(remote_snapshot_gc_scn, snapshot);
+        if (rc == OB_SUCCESS) { new_frozen_scn = snapshot; }
+        return rc;
+      }))) {
       } else if (OB_FAIL(get_schema_version(new_frozen_scn, schema_version_in_frozen_ts))) {
       } else {
         freeze_info.frozen_scn_ = new_frozen_scn;
@@ -162,6 +172,14 @@ int ObMajorMergeInfoManager::set_freeze_info(const ObMajorFreezeReason freeze_re
     }
 
     ret = trans.handle_trans_in_the_end(ret);
+  }
+
+  // The SQL GC fence remains <= F until the freeze row commits. Subsequent
+  // reload reads that fence before the freeze list, so this temporary reader
+  // can leave without a gap or an extra persistent pin record (also on replay).
+  if (layout_reader.is_active()) {
+    const int end_ret = access->storage_schema_store().commit(layout_reader);
+    if (ret == OB_SUCCESS) { ret = end_ret; }
   }
 
   if (FAILEDx(freeze_info_mgr_.add_freeze_info(freeze_info))) {
@@ -344,9 +362,11 @@ int ObMajorMergeInfoManager::try_gc_freeze_info()
   ObMySQLTransaction trans;
   ObArray<ObFreezeInfo> all_freeze_info;
   SCN cur_snapshot_gc_scn;
+  SCN completed_scn;
 
   if (FAILEDx(try_reload())) {
     LOG_WARN("fail to try reload", K(ret));
+  } else if (OB_FAIL(global_merge_mgr_.get_global_last_merged_scn(completed_scn))) {
   } else if (OB_FAIL(trans.start(sql_proxy_))) {
   } else if (OB_FAIL(ObGlobalStatProxy::select_snapshot_gc_scn_for_update(trans, cur_snapshot_gc_scn))) {
   } else if (OB_FAIL(freeze_info_proxy.get_all_freeze_info(trans, all_freeze_info))) {
@@ -356,7 +376,7 @@ int ObMajorMergeInfoManager::try_gc_freeze_info()
       int64_t reserved_idx = freeze_info_cnt - MIN_REMAINED_VERSION_COUNT - 1;
       const SCN &tmp_frozen_scn = all_freeze_info.at(reserved_idx).frozen_scn_;
 
-      min_frozen_scn = MIN(min_frozen_scn, tmp_frozen_scn);
+      min_frozen_scn = MIN(MIN(min_frozen_scn, tmp_frozen_scn), completed_scn);
       if (OB_FAIL(freeze_info_proxy.batch_delete(trans, min_frozen_scn))) {
       } else {
         // reload will later

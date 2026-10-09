@@ -138,6 +138,12 @@ public:
   // during physical IO or reclamation. No graph is copied or rebuilt here.
   int get_physical_retention(std::shared_ptr<const PhysicalSnapshotRetention> &plan);
 
+  // Complete layout history is retained for the earliest unfinished round.
+  // The persisted snapshot-GC fence also covers freezes not yet in this cache,
+  // including ones still being committed or replayed. NOT_INIT means recovery
+  // has not loaded a complete fence/freeze view; reclamation must not advance.
+  int get_schema_history_retention(share::SCN &snapshot);
+
   int get_min_dependent_freeze_info(share::ObFreezeInfo &freeze_info);
   int64_t get_snapshot_gc_ts();
   share::SCN get_snapshot_gc_scn();
@@ -175,7 +181,8 @@ private:
       const share::SCN &new_snapshot_gc_scn,
       const common::ObIArray<share::ObFreezeInfo> &new_freeze_infos,
       const common::ObIArray<share::ObSnapshotInfo> &new_snapshots,
-      PhysicalSnapshotRetention &new_retention);
+      PhysicalSnapshotRetention &new_retention,
+      const share::SCN &schema_history_retention);
 
   class ReloadTask : public common::ObTimerTask
   {
@@ -213,6 +220,9 @@ private:
   common::ObTimer reload_timer_;
   PhysicalRetentionLoader physical_retention_loader_;
   std::shared_ptr<const PhysicalSnapshotRetention> physical_retention_;
+  // Derived during normal reload from the persisted freeze/fence/local progress
+  // view. Invalid until restored; independent of whether scheduling is paused.
+  share::SCN schema_history_retention_;
   bool inited_;
 };
 

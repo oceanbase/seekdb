@@ -92,6 +92,7 @@ ObFreezeInfoMgr::ObFreezeInfoMgr()
     reload_timer_(),
     physical_retention_loader_(),
     physical_retention_(),
+    schema_history_retention_(),
     inited_(false)
 {
 }
@@ -420,6 +421,21 @@ int ObFreezeInfoMgr::get_physical_retention(
   return ret;
 }
 
+int ObFreezeInfoMgr::get_schema_history_retention(share::SCN &snapshot)
+{
+  int ret = OB_SUCCESS;
+  snapshot = SCN::base_scn();
+  const int64_t deadline = ObTimeUtility::current_time() + RLOCK_TIMEOUT_US;
+  RLockGuardWithTimeout guard(lock_, deadline, ret);
+  if (OB_FAIL(ret)) {
+  } else if (!inited_ || !schema_history_retention_.is_valid()) {
+    ret = OB_NOT_INIT;
+  } else {
+    snapshot = schema_history_retention_;
+  }
+  return ret;
+}
+
 int ObFreezeInfoMgr::update_next_snapshots(const ObIArray<ObSnapshotInfo> &snapshots)
 {
   int ret = OB_SUCCESS;
@@ -521,14 +537,36 @@ int ObFreezeInfoMgr::try_update_info()
   share::SCN new_snapshot_gc_scn;
   share::ObSnapshotTableProxy snapshot_proxy;
   PhysicalSnapshotRetention retention;
+  ObGlobalMergeInfo local_merge;
+  SCN schema_retention;
 
   if (OB_ISNULL(sql_proxy_) || !physical_retention_loader_) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(ObFreezeInfoManager::fetch_new_freeze_info(
         share::SCN::base_scn(), *sql_proxy_, freeze_infos, new_snapshot_gc_scn))) {
   } else if (OB_FAIL(snapshot_proxy.get_all_snapshots(*sql_proxy_, snapshots))) {
+  } else if (OB_FAIL(ObGlobalMergeTableOperator::load_global_merge_info(*sql_proxy_, local_merge))) {
+  } else if (!local_merge.is_valid() || !new_snapshot_gc_scn.is_valid()) {
+    ret = OB_STATE_NOT_MATCH;
   } else if (OB_FAIL(physical_retention_loader_(retention))) {
-  } else if (OB_FAIL(inner_update_info(new_snapshot_gc_scn, freeze_infos, snapshots, retention))) {
+  } else {
+    // Read the GC fence BEFORE the freeze rows: publication holds that fence
+    // until its freeze row commits, including when both replay on a replica.
+    schema_retention = new_snapshot_gc_scn;
+    for (const auto &freeze : freeze_infos) {
+      if (freeze.frozen_scn_ > local_merge.last_merged_scn()
+          && freeze.frozen_scn_ < schema_retention) {
+        schema_retention = freeze.frozen_scn_;
+      }
+    }
+    // The primary may have removed a freeze while a paused replica still owns
+    // that round. Restore its persisted broadcast, not the runtime scheduler's
+    // current version, which need not have been initialized while suspended.
+    if (local_merge.global_broadcast_scn() > local_merge.last_merged_scn()
+        && local_merge.global_broadcast_scn() < schema_retention) {
+      schema_retention = local_merge.global_broadcast_scn();
+    }
+    ret = inner_update_info(new_snapshot_gc_scn, freeze_infos, snapshots, retention, schema_retention);
   }
   return ret;
 }
@@ -537,7 +575,8 @@ int ObFreezeInfoMgr::inner_update_info(
     const share::SCN &new_snapshot_gc_scn,
     const common::ObIArray<share::ObFreezeInfo> &new_freeze_infos,
     const common::ObIArray<share::ObSnapshotInfo> &new_snapshots,
-    PhysicalSnapshotRetention &new_retention)
+    PhysicalSnapshotRetention &new_retention,
+    const share::SCN &schema_history_retention)
 {
   int ret = OB_SUCCESS;
   int64_t snapshot_gc_ts = 0;
@@ -554,6 +593,7 @@ int ObFreezeInfoMgr::inner_update_info(
       // The retired plan is released after this short lock ends. Existing
       // physical readers may keep it until their candidate batch finishes.
       physical_retention_.swap(incoming);
+      schema_history_retention_ = schema_history_retention;
       snapshot_gc_ts = freeze_info_mgr_.get_snapshot_gc_scn().get_val_for_tx();
     }
   }

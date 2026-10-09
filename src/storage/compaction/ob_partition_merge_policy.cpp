@@ -1004,8 +1004,22 @@ int ObPartitionMergePolicy::get_multi_version_start(
     auto &access = *share::server_service<ObAccessService>();
     auto &store = tablet_id.is_ls_storage_schema_tablet()
         ? access.storage_schema_store() : access.instance_meta_store();
-    if (OB_FAIL(store.min_retained_snapshot(retained))) {
-    } else {
+    share::SCN durable = share::SCN::max_scn();
+    if (tablet_id.is_ls_storage_schema_tablet()) {
+      ret = SERVER_CALL_FREEZE_INFO_MGR(get_schema_history_retention, durable);
+      if (ret == OB_NOT_INIT) {
+        // Startup can dump metadata before the durable freeze view is ready,
+        // but must keep its existing MVCC boundary until restoration finishes.
+        durable = share::SCN::base_scn();
+        ret = OB_SUCCESS;
+      }
+    }
+    // Readers register BEFORE checking the durable boundary. Sample that
+    // boundary before the readers, so concurrent completion cannot leave a
+    // gap between an old durable requirement and its newly registered reader.
+    if (OB_SUCC(ret) && OB_FAIL(store.min_retained_snapshot(retained))) {
+    } else if (OB_SUCC(ret)) {
+      if (durable < retained) { retained = durable; }
       result_version_range.multi_version_start_ = std::max(
           result_version_range.multi_version_start_,
           std::min(result_version_range.snapshot_version_, retained.get_val_for_tx()));

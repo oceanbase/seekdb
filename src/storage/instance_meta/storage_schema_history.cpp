@@ -7,6 +7,8 @@
 #include "storage/instance_meta/storage_schema_history.h"
 #include "storage/ob_storage_schema.h"
 #include "lib/allocator/ob_allocator.h"
+#include "storage/compaction/ob_freeze_info_mgr.h"
+#include "storage/tx/ob_trans_service.h"
 
 namespace oceanbase
 {
@@ -66,6 +68,31 @@ int StorageSchemaHistory::read_version(uint64_t layout_id, int64_t &schema_versi
       : store_.get(tx_, MetaCollection::STORAGE_LAYOUTS,
           layout_key(layout_id, 0, key_buf), allocator, row);
   if (ret == OB_SUCCESS) { ret = decode_layout_header(row, size, schema_version); }
+  return ret;
+}
+
+int StorageSchemaHistory::read_at(InstanceMetaStore &store, uint64_t layout_id,
+    const share::SCN &target, int64_t deadline,
+    common::ObIAllocator &allocator, ObStorageSchema &schema)
+{
+  auto *freezes = share::server_service<ObFreezeInfoMgr>();
+  auto *transactions = share::server_service<transaction::ObTransService>();
+  if (freezes == nullptr || transactions == nullptr) { return OB_NOT_INIT; }
+  InstanceMetaStore::Transaction tx;
+  int ret = store.begin_read(tx, deadline, [&](share::SCN &snapshot) {
+    share::SCN retained, readable;
+    int rc = freezes->get_schema_history_retention(retained);
+    if (rc == OB_SUCCESS && target < retained) { rc = OB_SNAPSHOT_DISCARDED; }
+    if (rc == OB_SUCCESS) { rc = transactions->get_weak_read_snapshot_version(-1, readable); }
+    if (rc == OB_SUCCESS && target > readable) { rc = OB_EAGAIN; }
+    if (rc == OB_SUCCESS) { snapshot = target; }
+    return rc;
+  });
+  if (ret == OB_SUCCESS) { ret = StorageSchemaHistory(store, tx).read(layout_id, allocator, schema); }
+  if (tx.is_active()) {
+    const int end = store.commit(tx);
+    if (ret == OB_SUCCESS) { ret = end; }
+  }
   return ret;
 }
 

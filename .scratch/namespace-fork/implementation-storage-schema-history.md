@@ -36,6 +36,19 @@
 
 ## 验证记录
 
+### 持久布局历史保留（进行中）
+
+- 已接入 schema tablet 的 mini/minor 保留输入：SQL snapshot_gc_scn 栅栏、未结束 freeze、本机待完成广播，以及既有活跃读者/弱读水位。生成 F 前注册短期原生读者，freeze SQL 提交后结束；复用既有 snapshot_gc 行锁和先读 GC 栅栏再读 freeze 列表的顺序，不新增持久 pin 表。
+- 启动未恢复完整视图时只允许沿用 tablet 已有 MVCC 边界，不推进；新增 `StorageSchemaHistory::read_at` 在注册读者后核对持久保护和本机可读水位。合并消费者尚未切换，不能据此声称合并/校验已经完成。
+- 第一轮生产构建通过（`/tmp/seekdb-layout-retention-build-1.log`）。专项测试版构建通过（`/tmp/seekdb-layout-retention-native-build-1.log`）。
+- 首个 `run_layout_retention_probe.py` 通过：没有 F 之前的活跃读者，SQL GC 栅栏及原生弱读水位均大于 F，旧 V=10 仍可跨强制转储/minor读取，最新为 V=11；kill/restart 后仍可读，测试输入标记轮次完成后推进 MVS 并拒绝旧 F。实例 `namespace_fork_PROTOTYPE_layout_retention_2wd3x_2c`，日志 `/tmp/seekdb-layout-retention-test-1.log`。该测试控制已完成进度输入，不验证 checksum 完成判断，也不是实际主备测试。
+- 补充暂停恢复用例后复现失败：本机持久广播 F 尚未结束，移除 freeze 行后，`get_schema_history_retention` 返回了大于 F 的边界。内存调度器因暂停尚未启动广播，不能作为恢复依据。实例 `namespace_fork_PROTOTYPE_layout_retention_6mscmser`，`seekdb.log` 中 `LAYOUT_RETENTION_FAIL line=200 ... retained == frozen`；确认失败后终止该测试实例，驱动记录 exit -9，日志 `/tmp/seekdb-layout-retention-test-2.log`。失败场景已在四件套用例中保留。
+- 已改为既有 freeze reload 同时读取本机持久合并进度，计算一个 SCN 边界并与视图一起安装；新增的是可重建的 8 字节派生边界，无持久 pin、名单或独立恢复任务。修正后的专项构建通过（`/tmp/seekdb-layout-retention-native-build-3.log`），完整暂停恢复用例通过：删除 freeze 行、本机暂停未装载广播、kill/restart、mini/minor 中保留旧 F、完成后释放。实例 `namespace_fork_PROTOTYPE_layout_retention_ppewqiq4`，日志 `/tmp/seekdb-layout-retention-test-3.log`。完整主备验证仍待后续接线。
+- 移除注入后的生产构建通过（`/tmp/seekdb-layout-retention-production-final-build.log`），已有 `primary_major_namespace_probe.py` 通过真实 `ALTER SYSTEM MAJOR FREEZE` 和进度完成/物理 ID 断言，F=1791572487823549012，实例 `namespace_fork_PROTOTYPE_major_progress_r_3agyp0`，日志 `/tmp/seekdb-layout-retention-production-major-test.log`。合并布局消费者此时仍是旧路径，此结果只覆盖本次保留接入对真实发布入口的影响。
+- 保留交接的取样顺序已修正：回收器先读持久边界，再检查活跃读者；读者先注册，再检查持久边界。反过来会在“读者进入、轮次完成”交错时同时漏掉两种保护。专项用例在真实 `get_multi_version_start` 两次取样之间确定性插入读者与完成进度变更，断言输出不越过 F、读者仍读到 V=10，再释放并确认 MVS 可推进。测试构建 `/tmp/seekdb-layout-retention-handoff-build.log` 通过，用例 `/tmp/seekdb-layout-retention-test-4.log` 通过，实例 `namespace_fork_PROTOTYPE_layout_retention_7t9vdj26`。包括暂停且 freeze 行消失后的重启保护，全部已纳入四件套。
+- 本轮全部测试注入已从生产代码移除，最终生产构建 `/tmp/seekdb-layout-retention-production-final-build-2.log` 通过；没有运行完整 mysqltest/sysbench。完整目标仍未完成：合并布局消费、资格/进度/checksum、新 freeze 准备、布局对象 GC、非全局任务保护及实际主备并发仍需接线验证。
+- SQL 逻辑历史静态核对：`ObTableSqlService::delete_from_all_table_history/delete_from_all_column_history` 实际插入 `is_deleted=1` 的新版记录；`ObDropIncPartHelper::drop_partition_info` 同样写分区/子分区历史 tombstone。当前在 `src` 的实际 DELETE/exec_delete/splice_delete_sql 调用中未找到这些 schema 历史表的物理行回收入口，因此本轮保持历史行，不新造回收线程；此证据不替代后续历史定义读取的动态验证。
+
 ### 上层发布接线（进行中）
 
 - 新增上层 `TableStorageLayouts`，在 schema tablet 的 `TABLE_STORAGE_LAYOUTS` 集合中保存不可变 `(namespace_id, table_id) -> G`。fork 不复制该集合；首次 DDL/物化用所属目录中的完整定义初始化独立 G，后续分区只复用身份。物理布局正文仍由不感知 Namespace/SQL 的 `StorageSchemaHistory` 管理。

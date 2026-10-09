@@ -27,6 +27,11 @@ public:
   int publish(uint64_t layout_id, const ObStorageSchema &schema);
   int read(uint64_t layout_id, common::ObIAllocator &allocator, ObStorageSchema &schema);
   int read_version(uint64_t layout_id, int64_t &schema_version);
+  // Read a historical merge target protected by persisted freeze/GC state.
+  // Registers the reader before checking that protection and local replay.
+  static int read_at(InstanceMetaStore &store, uint64_t layout_id,
+      const share::SCN &target, int64_t deadline,
+      common::ObIAllocator &allocator, ObStorageSchema &schema);
 
 private:
   int write(uint64_t layout_id, const ObStorageSchema &schema, bool create);

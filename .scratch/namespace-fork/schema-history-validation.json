@@ -1,5 +1,5 @@
 {
-  "scope": "Storage foundation and DDL/layout binding integration; compaction, durable retention, freeze and checksum integration remain incomplete.",
+  "scope": "Storage foundation, DDL/layout binding, durable freeze retention and targeted recovery; compaction layout consumers, unified progress/checksum, freeze readiness, layout GC and full standby integration remain incomplete.",
   "runs": [
     {
       "name": "layout_history",
@@ -502,6 +502,263 @@
           "event": "data_archived",
           "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_large_partition_fork_uljy562p/data.tar.gz",
           "bytes": 8555510
+        }
+      ]
+    },
+    {
+      "name": "durable_retention_initial",
+      "log": "/tmp/seekdb-layout-retention-test-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-retention-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_2wd3x_2c",
+          "pid": 328239,
+          "port": 31497
+        },
+        {
+          "event": "layout_retention_verified",
+          "recovered": 0,
+          "evidence": "LAYOUT_RETENTION_PASS recovered=0 F=1791572137817442005 active=1791572140264944011 durable=1791572137817442005 mini_minor=1 released=0\n"
+        },
+        {
+          "event": "crash_for_recovery",
+          "pid": 328239
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-retention-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_2wd3x_2c",
+          "pid": 329404,
+          "port": 31497
+        },
+        {
+          "event": "layout_retention_verified",
+          "recovered": 1,
+          "evidence": "LAYOUT_RETENTION_PASS recovered=1 F=1791572137817442005 active=1791572168889931000 durable=1791572173684671791 mini_minor=1 released=1\n"
+        },
+        {
+          "event": "PASS",
+          "case": "layout_retention",
+          "no_old_reader": true,
+          "mini_minor": true,
+          "crash_recovery": true,
+          "release_after_completion": true
+        },
+        {
+          "event": "stopped",
+          "pid": 329404,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_2wd3x_2c/data.tar.gz",
+          "bytes": 6442868
+        }
+      ]
+    },
+    {
+      "name": "durable_retention_paused_failure",
+      "log": "/tmp/seekdb-layout-retention-test-2.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-retention-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_6mscmser",
+          "pid": 333779,
+          "port": 23265
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_6mscmser/data.tar.gz",
+          "bytes": 5883326
+        }
+      ],
+      "failure": "LAYOUT_RETENTION_FAIL line=200: retained == frozen after deleting the freeze row while the local persisted broadcast is pending and scheduling is suspended.",
+      "termination": "Confirmed native assertion failure, then killed the owned disposable instance to avoid repeated failing bootstrap retries."
+    },
+    {
+      "name": "durable_retention_paused_recovery",
+      "log": "/tmp/seekdb-layout-retention-test-3.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-retention-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_ppewqiq4",
+          "pid": 339587,
+          "port": 62277
+        },
+        {
+          "event": "layout_retention_verified",
+          "recovered": 0,
+          "evidence": "LAYOUT_RETENTION_PASS recovered=0 F=1791572412376043012 active=1791572414651681011 durable=1791572412376043012 mini_minor=1 released=0\n"
+        },
+        {
+          "event": "crash_for_recovery",
+          "pid": 339587
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-retention-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_ppewqiq4",
+          "pid": 342377,
+          "port": 62277
+        },
+        {
+          "event": "layout_retention_verified",
+          "recovered": 1,
+          "evidence": "LAYOUT_RETENTION_PASS recovered=1 F=1791572412376043012 active=1791572443507908000 durable=1791572447464998281 mini_minor=1 released=1\n"
+        },
+        {
+          "event": "PASS",
+          "case": "layout_retention",
+          "no_old_reader": true,
+          "mini_minor": true,
+          "crash_recovery": true,
+          "release_after_completion": true
+        },
+        {
+          "event": "stopped",
+          "pid": 342377,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_ppewqiq4/data.tar.gz",
+          "bytes": 6113466
+        }
+      ]
+    },
+    {
+      "name": "durable_retention_production_major",
+      "log": "/tmp/seekdb-layout-retention-production-major-test.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_r_3agyp0",
+          "pid": 343790,
+          "port": 46791
+        },
+        {
+          "event": "sql",
+          "sql": "create database major_probe",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "create table major_probe.t(id int primary key,v int)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "insert into major_probe.t values(1,10),(2,20),(3,30)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "alter system set ob_compaction_schedule_interval='3s'",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "alter system minor freeze",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "alter system major freeze",
+          "rows": []
+        },
+        {
+          "event": "sstable_identity",
+          "tablet_id": 200001,
+          "rows": []
+        },
+        {
+          "event": "sstable_identity",
+          "tablet_id": 4611686155866541377,
+          "rows": [
+            [
+              4611686155866541377,
+              "MAJOR"
+            ]
+          ]
+        },
+        {
+          "event": "PASS",
+          "case": "major_progress_physical_ids",
+          "rows": [
+            [
+              1791572487823549012,
+              1791572487823549012,
+              1791572487823549012
+            ]
+          ]
+        },
+        {
+          "event": "stopped",
+          "pid": 343790,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_r_3agyp0/data.tar.gz",
+          "bytes": 8955017
+        }
+      ]
+    },
+    {
+      "name": "durable_retention_reader_handoff",
+      "log": "/tmp/seekdb-layout-retention-test-4.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-retention-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_7t9vdj26",
+          "pid": 351196,
+          "port": 5597
+        },
+        {
+          "event": "layout_retention_verified",
+          "recovered": 0,
+          "evidence": "LAYOUT_RETENTION_PASS recovered=0 F=1791572660051822011 active=1791572662038333011 durable=1791572660051822011 mini_minor=1 released=0 handoff=0\n"
+        },
+        {
+          "event": "crash_for_recovery",
+          "pid": 351196
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-retention-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_7t9vdj26",
+          "pid": 357459,
+          "port": 5597
+        },
+        {
+          "event": "layout_retention_verified",
+          "recovered": 1,
+          "evidence": "LAYOUT_RETENTION_PASS recovered=1 F=1791572660051822011 active=1791572691188975000 durable=1791572695107826939 mini_minor=1 released=1 handoff=1\n"
+        },
+        {
+          "event": "PASS",
+          "case": "layout_retention",
+          "no_old_reader": true,
+          "mini_minor": true,
+          "crash_recovery": true,
+          "release_after_completion": true,
+          "paused_broadcast_without_freeze_row": true,
+          "concurrent_reader_handoff": true
+        },
+        {
+          "event": "stopped",
+          "pid": 357459,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_7t9vdj26/data.tar.gz",
+          "bytes": 5800545
         }
       ]
     }
