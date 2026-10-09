@@ -104,6 +104,7 @@ public:
 
 private:
   int get_feedback_exprs(ObIArray<ObRawExpr *> &exprs) const;
+  bool can_use_basic_native_runtime() const;
 
 private:
   GraphPathDesc path_desc_{};

@@ -132,6 +132,15 @@ public:
                "edge_next", common::ObArrayWrap<uint64_t>(edge_next_columns_, target_key_count_));
 };
 
+// The first native feedback runtime materializes only the generated recursive
+// row's fixed fields: hop count, source key and current key. Keep this predicate
+// shared by EXPLAIN and execution so a plan never advertises a runtime that the
+// physical operator will reject.
+bool supports_basic_native_graph_feedback(
+    const GraphPathDesc &path_desc,
+    const GraphExpandAccessDesc &access_desc,
+    int64_t output_expr_count);
+
 // The DAS-facing access adapter owns the transaction descriptor, statement
 // snapshot and schema guard. It must return an error for scan/RPC failures and
 // must never encode a failed read as an empty successful page.

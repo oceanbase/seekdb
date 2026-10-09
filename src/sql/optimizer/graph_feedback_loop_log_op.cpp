@@ -244,6 +244,15 @@ const char *path_mode_name(GraphPathMode path_mode)
 
 } // namespace
 
+bool GraphFeedbackLoopLogOp::can_use_basic_native_runtime() const
+{
+  const ObLogicalOperator *anchor = get_child(first_child);
+  return anchor != nullptr
+      && supports_basic_native_graph_feedback(
+             path_desc_, expand_access_desc_,
+             anchor->get_output_exprs().count());
+}
+
 int GraphFeedbackLoopLogOp::initialize_expand_access()
 {
   int ret = OB_SUCCESS;
@@ -387,13 +396,15 @@ int GraphFeedbackLoopLogOp::get_plan_item_info(PlanText &plan_text,
   if (OB_FAIL(ObLogicalOperator::get_plan_item_info(plan_text, plan_item))) {
   } else {
     BEGIN_BUF_PRINT;
-    if (OB_FAIL(BUF_PRINTF("direction=%s, hops={%ld,%ld}, access=%s, mode=%s",
+    if (OB_FAIL(BUF_PRINTF("direction=%s, hops={%ld,%ld}, access=%s, mode=%s, runtime=%s",
                            path_desc_.direction_ == GraphPathDirection::IN
                                ? "IN" : "OUT",
                            path_desc_.lower_bound_,
                            path_desc_.upper_bound_,
                            access_method_name(step_access_method_),
-                           path_mode_name(path_desc_.path_mode_)))) {
+                           path_mode_name(path_desc_.path_mode_),
+                           can_use_basic_native_runtime()
+                               ? "native" : "fallback"))) {
     }
     END_BUF_PRINT(plan_item.special_predicates_, plan_item.special_predicates_len_);
   }

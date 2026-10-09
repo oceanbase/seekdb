@@ -103,6 +103,25 @@ bool GraphExpandAccessDesc::is_valid() const
       && valid_graph_columns(edge_next_columns_, target_key_count_);
 }
 
+bool supports_basic_native_graph_feedback(
+    const GraphPathDesc &path_desc,
+    const GraphExpandAccessDesc &access_desc,
+    int64_t output_expr_count)
+{
+  bool supported = path_desc.is_valid() && access_desc.is_valid();
+  if (supported) {
+    const int64_t fixed_output_count = 1 + access_desc.source_key_count_
+        + access_desc.target_key_count_;
+    supported = path_desc.source_element_id_ == path_desc.target_element_id_
+        && path_desc.row_shape_ == GraphPathRowShape::PER_MATCH
+        && path_desc.path_mode_ == GraphPathMode::WALK
+        && !path_desc.need_path_
+        && access_desc.source_table_id_ == access_desc.target_table_id_
+        && output_expr_count == fixed_output_count;
+  }
+  return supported;
+}
+
 int GraphExpandAccessDesc::init(const GraphPathDesc &path_desc,
                                 uint64_t edge_access_table_id,
                                 ObSchemaGetterGuard &schema_guard)

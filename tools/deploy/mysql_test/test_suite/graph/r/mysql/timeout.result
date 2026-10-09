@@ -4,20 +4,37 @@ FROM GRAPH_TABLE(graph_social MATCH
 (a IS person WHERE a.id=1)
 -[e IS knows WHERE SLEEP(0.2 + MOD(e.id,1))=0]->{1,2}(b IS person)
 COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+EXPLAIN INTO plan_table SET statement_id='graph_timeout_fallback'
+SELECT COUNT(*) AS paths
+FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=1)-[e IS knows]->{1,2}(b IS person)
+COLUMNS(b.id AS destination,JSON_ARRAYAGG(e.id) AS edge_ids)) g;
 SELECT COUNT(*)=1 AS uses_native_feedback
 FROM plan_table
 WHERE statement_id='graph_timeout'
   AND operator='GRAPH FEEDBACK LOOP'
-  AND special_predicates LIKE '%direction=OUT, hops={1,2}, access=full-scan%';
+  AND special_predicates LIKE '%direction=OUT, hops={1,2}, access=full-scan, mode=WALK, runtime=native%';
 uses_native_feedback
 1
-timeout_is_propagated_and_prepared_runtime_recovers
+SELECT COUNT(*)=1 AS uses_fallback_feedback
+FROM plan_table
+WHERE statement_id='graph_timeout_fallback'
+  AND operator='GRAPH FEEDBACK LOOP'
+  AND special_predicates LIKE '%runtime=fallback%';
+uses_fallback_feedback
+1
+timeout_is_propagated_and_failed_execution_releases_resources
 PREPARE graph_timeout FROM
 'SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH (a IS person WHERE a.id=1)-[e IS knows WHERE SLEEP(0.2 + MOD(e.id,1))=0]->{1,2}(b IS person) COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g';
 SET ob_query_timeout=100000;
 EXECUTE graph_timeout;
 ERROR HY000: Timeout, query has reached the maximum query timeout: 100000(us), maybe you can adjust the session variable ob_query_timeout or query_timeout hint, and try again.
 SET ob_query_timeout=10000000;
+SELECT COUNT(*)=0 AS graph_work_area_released
+FROM oceanbase.V$OB_MEMORY
+WHERE MOD_NAME='GraphFeedback' AND (HOLD<>0 OR USED<>0);
+graph_work_area_released
+1
 EXECUTE graph_timeout;
 paths
 4
@@ -25,6 +42,11 @@ SET ob_query_timeout=100000;
 EXECUTE graph_timeout;
 ERROR HY000: Timeout, query has reached the maximum query timeout: 100000(us), maybe you can adjust the session variable ob_query_timeout or query_timeout hint, and try again.
 SET ob_query_timeout=10000000;
+SELECT COUNT(*)=0 AS graph_work_area_released
+FROM oceanbase.V$OB_MEMORY
+WHERE MOD_NAME='GraphFeedback' AND (HOLD<>0 OR USED<>0);
+graph_work_area_released
+1
 EXECUTE graph_timeout;
 paths
 4
