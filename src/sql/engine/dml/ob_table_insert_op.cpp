@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "config_bridge.h"
 #include "sql/engine/dml/ob_table_insert_op.h"
 #include "sql/engine/dml/ob_dml_service.h"
 
@@ -45,7 +46,6 @@ OB_DEF_SERIALIZE(ObTableInsertSpec)
       ObInsCtDef *ins_ctdef = ins_ctdefs_.at(i).at(j);
       if (OB_ISNULL(ins_ctdef)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ins_ctdef is nullptr", K(ret));
       }
       OB_UNIS_ENCODE(*ins_ctdef);
     }
@@ -71,7 +71,6 @@ OB_DEF_DESERIALIZE(ObTableInsertSpec)
       ObInsCtDef *ins_ctdef = ins_ctdef_allocator.alloc();
       if (OB_ISNULL(ins_ctdef)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc ins_ctdef failed", K(ret));
       }
       OB_UNIS_DECODE(*ins_ctdef);
       ins_ctdefs_.at(i).at(j) = ins_ctdef;
@@ -228,7 +227,6 @@ OB_INLINE int ObTableInsertOp::insert_row_to_das()
                                                                 eval_ctx_))) {
       } else if (OB_FAIL(ObDMLService::insert_row(ins_ctdef, ins_rtdef, tablet_loc, dml_rtctx_, modify_row.new_row_))) {
       } else if (need_after_row_process(ins_ctdef) && OB_FAIL(dml_modify_rows_.push_back(modify_row))) {
-        LOG_WARN("failed to push dml modify row to modified row list", K(ret));
       }
       if (OB_FAIL(ret)) {
         record_err_for_load_data(ret, ins_rtdef.cur_row_num_);
@@ -280,7 +278,7 @@ int ObTableInsertOp::write_rows_post_proc(int last_errno)
     if (OB_SUCC(ret)) {
       ret = sync_ret;
     }
-    if (OB_SUCC(ret) && GCONF.enable_defensive_check()) {
+    if (OB_SUCC(ret) && (config::_enable_defensive_check() > 0)) {
       if (OB_FAIL(check_insert_affected_row())) {
       }
     }
@@ -345,7 +343,6 @@ int ObTableInsertOp::inner_open()
   if (OB_FAIL(ObTableModifyOp::inner_open())) {
   } else if (OB_UNLIKELY(MY_SPEC.ins_ctdefs_.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ins ctdef is invalid", K(ret), KP(this));
   } else if (OB_UNLIKELY(iter_end_)) {
     //do nothing
   } else if (OB_FAIL(inner_open_with_das())) {

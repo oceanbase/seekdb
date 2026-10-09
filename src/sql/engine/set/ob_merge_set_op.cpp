@@ -48,7 +48,6 @@ int ObMergeSetOp::inner_open()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(left_) || OB_ISNULL(right_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status: left or right is null", K(ret), K(left_), K(right_));
   } else {
     const ObMergeSetSpec &spec = static_cast<const ObMergeSetSpec&>(get_spec());
     if (OB_FAIL(cmp_.init(&spec.sort_collations_, &spec.sort_cmp_funs_))) {
@@ -96,7 +95,6 @@ int ObMergeSetOp::do_strict_distinct(
   while (OB_SUCC(ret) && !is_break) {
     if (OB_FAIL(child_op.get_next_row())) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("failed to get next row", K(ret));
       }
     } else if (OB_FAIL(cmp_(
         compare_row, child_op.get_spec().output_, eval_ctx_, cmp))) {
@@ -147,7 +145,6 @@ int ObMergeSetOp::Compare::init(
   if (OB_UNLIKELY(nullptr == sort_collations || nullptr == cmp_funcs)
       || sort_collations->count() != cmp_funcs->count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("compare info is null", K(ret), K(sort_collations), K(cmp_funcs));
   } else {
     sort_collations_ = sort_collations;
     cmp_funcs_ = cmp_funcs;
@@ -361,15 +358,12 @@ int ObMergeSetOp::locate_next_left_inside(ObOperator &child_op,
       } else if (OB_UNLIKELY(use_last_row_ && nullptr == last_row_.store_row_)
                 || OB_LIKELY(!use_last_row_ && last_idx < 0)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get wrong last idx", K(ret), K(use_last_row_), KP(last_row_.store_row_), K(last_idx));
       } else if (use_last_row_
                 && OB_FAIL(cmp_(*last_row_.store_row_, child_op.get_spec().output_,
                                 curr_idx, eval_ctx_, cmp))) {
-        LOG_WARN("failed to compare row", K(ret));
       } else if (!use_last_row_
                  && OB_FAIL(cmp_(child_op.get_spec().output_, child_op.get_spec().output_,
                                  last_idx, curr_idx, eval_ctx_, cmp))) {
-        LOG_WARN("failed to compare row", K(ret));
       } else if (0 != cmp) {
         got_row = true;
       } else {

@@ -175,7 +175,7 @@ int ObInfoSchemaKvCacheTable::process_row(const ObKVCacheInst *inst)
         break;
       }
       case TOTAL_MISS_CNT: {
-        cells_[cell_idx].set_int(inst->status_.total_miss_cnt_);
+        cells_[cell_idx].set_int(inst->status_.total_miss_cnt_.value());
         break;
       }
       default: {

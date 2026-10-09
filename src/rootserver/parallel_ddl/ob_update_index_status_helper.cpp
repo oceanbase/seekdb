@@ -51,7 +51,6 @@ int ObUpdateIndexStatusHelper::lock_objects_()
   } else if (OB_FAIL(schema_guard_wrapper_.get_database_id(arg_.database_name_, database_id_))) {
   } else if (OB_UNLIKELY(OB_INVALID_ID == database_id_)) {
     ret = OB_ERR_PARALLEL_DDL_CONFLICT;
-    LOG_WARN("invalid database_id, database name may changed", KR(ret), K_(arg_.database_name));
   } else if (OB_FAIL(add_lock_object_by_id_(database_id_,
     share::schema::DATABASE_SCHEMA, transaction::tablelock::SHARE))) {
   } else if (OB_FAIL(add_lock_object_by_id_(arg_.data_table_id_,
@@ -83,30 +82,21 @@ int ObUpdateIndexStatusHelper::generate_schemas_()
   }
   const ObDatabaseSchema *database_schema = NULL;
   if (FAILEDx(schema_guard_wrapper_.get_table_schema(arg_.index_table_id_, orig_index_table_schema_))) {
-    LOG_WARN("fail to get index table schema", KR(ret), K_(arg_.index_table_id));
   } else if (OB_ISNULL(orig_index_table_schema_)) {
     ret = OB_ERR_OBJECT_NOT_EXIST;
     index_table_exist_ = false;
-    LOG_WARN("index table schema is null, may be droped", KR(ret), K_(arg_.index_table_id));
   } else if (OB_UNLIKELY(database_id_ != orig_index_table_schema_->get_database_id())) {
     ret = OB_ERR_PARALLEL_DDL_CONFLICT;
-    LOG_WARN("databse_id_ is not euqal to index_table's database_id",
-             KR(ret), K_(database_id), K(orig_index_table_schema_->get_database_id()));
   } else if (OB_FAIL(schema_guard_wrapper_.get_database_schema(database_id_, database_schema))) {
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("databse_schema is null", KR(ret));
   } else if (OB_UNLIKELY(database_schema->get_database_name_str() != arg_.database_name_)) {
     ret = OB_ERR_PARALLEL_DDL_CONFLICT;
-    LOG_WARN("database_schema's database name not equal to arg",
-             KR(ret), K(database_schema->get_database_name_str()), K_(arg_.database_name));
   } else if (is_available_index_status(new_status_) && !orig_index_table_schema_->is_unavailable_index()) {
     ret = OB_EAGAIN;
-    LOG_WARN("set index status to available, but previous status is not unavailable, which is not expected", KR(ret));
   } else if (OB_FAIL(schema_guard_wrapper_.get_table_schema(arg_.data_table_id_, orig_data_table_schema))) {
   } else if (OB_ISNULL(orig_data_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail data table is null", KR(ret));
   } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_, *orig_data_table_schema, new_data_table_schema_))) {
   } else {
     new_data_table_schema_->set_in_offline_ddl_white_list(arg_.in_offline_ddl_white_list_);
@@ -139,16 +129,13 @@ int ObUpdateIndexStatusHelper::operate_schemas_()
   if (OB_FAIL(check_inner_stat_())) {
   } else if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is nullptr", KR(ret));
   } else if (OB_ISNULL(orig_index_table_schema_)
              || OB_ISNULL(new_data_table_schema_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table schema is null", KR(ret), KP(orig_index_table_schema_), KP(new_data_table_schema_));
   } else {
     ObSchemaService *schema_service = schema_service_->get_schema_service();
     if (OB_ISNULL(schema_service)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("schema service is nullptr", KR(ret));
     } else if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
     } else if (OB_FAIL(schema_service->get_table_sql_service().update_index_status(
       *new_data_table_schema_, arg_.index_table_id_, new_status_, new_schema_version, get_trans_(), ddl_stmt_str))) {
@@ -162,7 +149,6 @@ int ObUpdateIndexStatusHelper::operate_schemas_()
         ObTableLockOwnerID owner_id;
         if (OB_ISNULL(new_data_table_schema_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("data_table_schema is null", KR(ret));
         } else if (OB_FAIL(owner_id.convert_from_value(ObLockOwnerType::DEFAULT_OWNER_TYPE,
                                                        arg_.task_id_))) {
         } else if (OB_FAIL(ObDDLLock::unlock_for_add_drop_index(*new_data_table_schema_,
@@ -203,12 +189,10 @@ int ObUpdateIndexStatusHelper::construct_and_adjust_result_(int &return_ret)
 {
   int ret = return_ret;
   if (FAILEDx(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else {
     ObSchemaVersionGenerator *tsi_generator = GET_TSI(TSISchemaVersionGenerator);
     if (OB_ISNULL(tsi_generator)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tsi schema version generator is null", KR(ret));
     } else {
       tsi_generator->get_current_version(res_.schema_version_);
     }

@@ -50,12 +50,10 @@ int ObExprPrivSTPoint::calc_result_typeN(ObExprResType& type,
       && !ob_is_string_type(type_x)
       && !ob_is_null(type_x)) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid input type x", K(ret), K(type_x));
   } else if (!ob_is_numeric_type(type_y)
       && !ob_is_string_type(type_y)
       && !ob_is_null(type_y)) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid input type y", K(ret), K(type_y));
   } else {
     if (ob_is_numeric_type(type_x)
         && !ob_is_double_type(type_x)
@@ -73,12 +71,10 @@ int ObExprPrivSTPoint::calc_result_typeN(ObExprResType& type,
       dynamic_cast<const ObSQLSessionInfo*>(type_ctx.get_session());
       if (OB_ISNULL(session)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("cast basic session to sql session info failed", K(ret));
       } else if (!ob_is_integer_type(type_srid)
           && !ob_is_string_type(type_srid)
           && !ob_is_null(type_srid)) {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
-        LOG_WARN("invalid input type srid", K(ret), K(type_srid));
       } else if (ob_is_string_type(type_srid)) {
         types_stack[2].set_calc_type(ObIntType);
       }
@@ -121,7 +117,6 @@ int ObExprPrivSTPoint::eval_priv_st_point(const ObExpr &expr,
 
   if (arg_x->is_boolean_ || arg_y->is_boolean_) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid type", K(ret), K(arg_x->is_boolean_), K(arg_y->is_boolean_));
   } else if (ob_is_null(type_x) || ob_is_null(type_y)) {
     is_null_result = true;
   } else if (OB_FAIL(arg_x->eval(ctx, datum_x))) {
@@ -134,20 +129,17 @@ int ObExprPrivSTPoint::eval_priv_st_point(const ObExpr &expr,
   if (!is_null_result && OB_SUCC(ret) && num_args > 2) {
     if (expr.args_[2]->is_boolean_) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;   
-      LOG_WARN("invalid type", K(ret));
     } else if (OB_FAIL(expr.args_[2]->eval(ctx, datum_srid))) {
     } else if (datum_srid->is_null()) {
       is_null_result = true;
     } else if (datum_srid->get_int() < 0 || datum_srid->get_int() > UINT_MAX32) {
       ret = OB_OPERATE_OVERFLOW;
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "SRID", N_PRIV_ST_POINT);
-      LOG_WARN("srid input value out of range", K(ret), K(datum_srid->get_int()));
     } else if (0 != (srid = datum_srid->get_uint32())) {
       if (OB_FAIL(ObGeoExprUtils::get_srs_item(
               ctx, srs_guard, srid, srs_item))) {
       } else if (OB_ISNULL(srs_item)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null srs item", K(ret));
       } else {
         is_geog = srs_item->is_geographical_srs();
       }
@@ -164,9 +156,7 @@ int ObExprPrivSTPoint::eval_priv_st_point(const ObExpr &expr,
       y = datum_y->get_double();
     }
     if (ob_is_string_type(type_x) && OB_FAIL(ObGeoExprUtils::string_to_double(datum_x->get_string(), arg_x->datum_meta_.cs_type_, x))) {
-      LOG_WARN("fail to get x", K(ret), K(type_x));
     } else if (ob_is_string_type(type_y) && OB_FAIL(ObGeoExprUtils::string_to_double(datum_y->get_string(), arg_y->datum_meta_.cs_type_, y))) {
-      LOG_WARN("fail to get y", K(ret), K(type_y));
     } else if (OB_FAIL(res_wkb_buf.append(srid))) {
     } else if (OB_FAIL(res_wkb_buf.append(static_cast<char>(ENCODE_GEO_VERSION(GEO_VESION_1))))) {
     } else if (OB_FAIL(res_wkb_buf.append(static_cast<char>(ObGeoWkbByteOrder::LittleEndian)))) {

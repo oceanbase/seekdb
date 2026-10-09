@@ -50,22 +50,18 @@ int ObExprRegexpReplace::calc_result_typeN(ObExprResType &type,
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(param_num < 2 || param_num > 6)) {
     ret = OB_ERR_PARAM_SIZE;
-    LOG_WARN("param number of regexp_replace at least 2 and at most 6", K(ret), K(param_num));
   } else if (OB_ISNULL(type_ctx.get_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(type_ctx.get_session()));
   } else if (OB_FAIL(type_ctx.get_session()->get_max_allowed_packet(max_allowed_packet))) {
   } else if (OB_FAIL(ObRawExprUtils::get_real_expr_without_cast(raw_expr->get_param_expr(0), real_text))) {
   } else if (OB_FAIL(ObRawExprUtils::get_real_expr_without_cast(raw_expr->get_param_expr(1), real_pattern))) {
   } else if (OB_ISNULL(real_text) || OB_ISNULL(real_pattern)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("real expr is invalid", K(ret), K(real_text), K(real_pattern));
   } else {
     const ObExprResType &text = real_text->get_result_type();
     for (int i = 0; OB_SUCC(ret) && i < param_num; i++) {
       if (!types[i].is_null() && !is_type_valid_regexp(types[i].get_type())) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("the parameter is not castable", K(ret), K(i));
       }
     }
     if (OB_SUCC(ret)) {
@@ -158,19 +154,15 @@ int ObExprRegexpReplace::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_ex
     const ObRawExpr *pattern = raw_expr.get_param_expr(1);
     if (OB_ISNULL(text) || OB_ISNULL(pattern)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(text), K(pattern), K(ret));
     } else if (OB_UNLIKELY(rt_expr.arg_cnt_ < 2
                            || !ObExprRegexContext::is_regexp_calc_collation(rt_expr.args_[0]->datum_meta_.cs_type_)
                            || !ObExprRegexContext::is_regexp_calc_collation(rt_expr.args_[1]->datum_meta_.cs_type_))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected error", K(ret), K(rt_expr));
     } else if (OB_UNLIKELY(rt_expr.arg_cnt_ > 2
                            && !ObExprRegexContext::is_regexp_calc_collation(rt_expr.args_[2]->datum_meta_.cs_type_))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected error", K(ret), K(rt_expr));
     } else if (OB_ISNULL(op_cg_ctx.session_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret), K(op_cg_ctx.session_));
     } else {
       const bool const_text = text->is_const_expr();
       const bool const_pattern = pattern->is_const_expr();
@@ -214,7 +206,6 @@ int ObExprRegexpReplace::regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDa
       const char *tmp_char = NULL;
       LOG_USER_WARN(OB_ERR_INVALID_CHARACTER_STRING, static_cast<int>(charset_name_len), charset_name, 0, tmp_char);
     } else {
-      LOG_WARN("evaluate parameters failed", K(ret));
     }
   } else if (expr.args_[0]->datum_meta_.is_clob()
              && ob_is_empty_lob(expr.args_[0]->datum_meta_.type_, *text, expr.args_[0]->obj_meta_.has_lob_header())) {
@@ -222,7 +213,6 @@ int ObExprRegexpReplace::regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDa
   } else if (!pattern->is_null() && pattern->get_string().empty()) {
     if (NULL == match_type || !match_type->is_null()) {
       ret = OB_ERR_REGEXP_ERROR;
-      LOG_WARN("empty regex expression", K(ret));
     } else {
       expr_datum.set_null();
     }
@@ -236,10 +226,8 @@ int ObExprRegexpReplace::regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDa
           position, expr.arg_cnt_ > 3 && expr.args_[3]->obj_meta_.is_decimal_int(), pos))
         || OB_FAIL(ObExprUtil::get_int_param_val(
           occurrence, expr.arg_cnt_ > 4 && expr.args_[4]->obj_meta_.is_decimal_int(), occur))) {
-      LOG_WARN("get integer parameter value failed", K(ret));
     } else if (!null_result && (pos <= 0 || occur < 0)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("regexp_replace position or occurrence is invalid", K(ret), K(pos), K(occur));
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "use position or occurrence in regexp_replace");
     } else {
       ObString to_str = (NULL != to && !to->is_null()) ? to->get_string() : ObString();
@@ -256,7 +244,6 @@ int ObExprRegexpReplace::regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDa
           if (OB_FAIL(ctx.exec_ctx_.create_expr_op_ctx(expr.expr_ctx_id_, regexp_ctx))) {
           } else if (OB_ISNULL(regexp_ctx)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("NULL context returned", K(ret));
           }
         }
       }
@@ -268,7 +255,6 @@ int ObExprRegexpReplace::regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDa
                                            regexp_vars,
                                            pattern->get_string(), flags, reusable,
                                            expr.args_[1]->datum_meta_.cs_type_))) {
-        LOG_WARN("fail to init regexp", K(pattern), K(flags), K(ret));
       } else if (text->is_null() ||
                  pattern->is_null() ||
                  null_result ||
@@ -345,7 +331,6 @@ int ObExprRegexpReplace::regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDa
         char *mem = expr.get_str_res_mem(ctx, res_replace.length());
         if (OB_ISNULL(mem)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("allocate memory failed", K(ret));
         } else {
           MEMCPY(mem, res_replace.ptr(), res_replace.length());
           expr_datum.set_string(mem, res_replace.length());

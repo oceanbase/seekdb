@@ -704,19 +704,15 @@ for (__typeof__((c).at(0)) *it = ((extra_condition) && (c).count() > 0 ? &(c).at
     } \
   } while (false)
 
-#ifdef NDEBUG
-#define OB_ASSERT(x) (void)(x)
-#else
+// Evaluate once and remain fatal in both Debug and Release builds.
 #define OB_ASSERT(x)                                    \
   do{                                                   \
-    bool v=(x);                                         \
-    if(OB_UNLIKELY(!(v))) {                             \
+    if(OB_UNLIKELY(!(x))) {                             \
       _OB_LOG_RET(ERROR, oceanbase::common::OB_ERROR, "assert fail, exp=%s", #x);        \
       BACKTRACE_RET(ERROR, oceanbase::common::OB_ERROR, 1, "assert fail");               \
-      assert(v);                                        \
+      ob_abort();                                       \
     }                                                   \
   } while(false)
-#endif
 
 #ifndef ENABLE_DEBUG_LOG
 #define OB_SAFE_ASSERT(x)                                                                   \

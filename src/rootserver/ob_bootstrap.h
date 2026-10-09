@@ -29,7 +29,6 @@ namespace common
 class ObDataBuffer;
 class ObMySQLProxy;
 class ObAddr;
-class ObServerConfig;
 class ObISQLClient;
 }
 
@@ -57,7 +56,7 @@ class ObSystemBootstrapService;
 class ObBaseBootstrap
 {
 public:
-  explicit ObBaseBootstrap(common::ObServerConfig &config);
+  ObBaseBootstrap();
   virtual ~ObBaseBootstrap() {}
 
 
@@ -65,8 +64,6 @@ protected:
   virtual int check_inner_stat() const;
 public:
   int64_t step_id_;
-protected:
-  common::ObServerConfig &config_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObBaseBootstrap);
 };
@@ -74,7 +71,7 @@ private:
 class ObPreBootstrap : public ObBaseBootstrap
 {
 public:
-  explicit ObPreBootstrap(common::ObServerConfig &config);
+  ObPreBootstrap();
   virtual ~ObPreBootstrap() {}
   virtual int prepare_bootstrap(common::ObAddr &master_rs);
 
@@ -107,8 +104,7 @@ private:
     int ret_;
   };
   explicit ObBootstrap(ObDDLService &ddl_service,
-                       ObRuntimeDDLService &runtime_ddl_service,
-                       common::ObServerConfig &config);
+                       ObRuntimeDDLService &runtime_ddl_service);
 
   virtual ~ObBootstrap() {}
   virtual int execute_bootstrap();

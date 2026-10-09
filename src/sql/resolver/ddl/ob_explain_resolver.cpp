@@ -126,7 +126,6 @@ int ObExplainResolver::resolve(const ParseNode &parse_tree)
         break;
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected display option", K(ret), K(opt_node->type_));
       }
     }
     if (OB_SUCC(ret)) {

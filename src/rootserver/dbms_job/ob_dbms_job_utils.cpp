@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 
+#include "config_bridge.h"
 #include "ob_dbms_job_utils.h"
 #include "share/ob_dml_sql_splicer.h"
 #include "share/ob_share_util.h"
@@ -157,14 +158,13 @@ int ObDBMSJobUtils::check_job_can_running(bool &can_running)
   ObSqlString sql;
   OX (can_running = false);
   CK (true);
-  OX (job_queue_processor = GCONF.job_queue_processes);
+  OX (job_queue_processor = config::job_queue_processes());
   // found current running job count
   OZ (sql.append("select count(*) from __all_job where this_date is not null"));
 
   // Jobs require the server write capability.
   bool write_enabled = false;
   if (FAILEDx(ObShareUtil::is_server_write_enabled(write_enabled))) {
-    LOG_WARN("failed to read server write capability", KR(ret));
   } else if (write_enabled && job_queue_processor > 0) {
     SMART_VAR(ObMySQLProxy::MySQLResult, result) {
       if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
@@ -176,7 +176,6 @@ int ObDBMSJobUtils::check_job_can_running(bool &can_running)
             job_running_cnt = static_cast<uint64_t>(int_value);
           }
         } else {
-          LOG_WARN("failed to calc all running job, no row return", K(ret));
         }
       }
     }
@@ -274,7 +273,6 @@ int ObDBMSJobUtils::get_dbms_job_info(
           LOG_INFO("job not exists, may delete alreay!", K(ret), K(job_id));
           ret = OB_SUCCESS; // job not exist, do nothing ...
         } else {
-          LOG_WARN("failed to get next", K(ret), K(job_id));
         }
       }
     }
@@ -300,7 +298,6 @@ int ObDBMSJobUtils::get_dbms_job_infos_in_runtime(
         do {
           if (OB_FAIL(result.get_result()->next())) {
             if (ret != OB_ITER_END) {
-              LOG_WARN("failed to get result from result", K(ret));
             }
           } else {
             ObDBMSJobInfo job_info;

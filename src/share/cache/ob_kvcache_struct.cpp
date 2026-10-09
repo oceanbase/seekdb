@@ -50,8 +50,8 @@ ObKVCacheStatus::ObKVCacheStatus()
 double ObKVCacheStatus::get_hit_ratio() const
 {
   double hit_ratio = 0;
-  int64_t total_hit_cnt = total_hit_cnt_.value();
-  int64_t get_cnt = total_hit_cnt + total_miss_cnt_;
+  const int64_t total_hit_cnt = total_hit_cnt_.value();
+  const int64_t get_cnt = total_hit_cnt + total_miss_cnt_.value();
   if (get_cnt > 0) {
     hit_ratio = double(total_hit_cnt) / double(get_cnt);
   }
@@ -68,10 +68,9 @@ void ObKVCacheStatus::reset()
   lfu_mb_cnt_ = 0;
   total_put_cnt_.reset();
   total_hit_cnt_.reset();
-  total_miss_cnt_ = 0;
+  total_miss_cnt_.reset();
   last_hit_cnt_ = 0;
   base_mb_score_ = 0;
-  total_miss_cnt_ = 0;
 }
 
 /*

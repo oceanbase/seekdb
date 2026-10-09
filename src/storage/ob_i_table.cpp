@@ -450,7 +450,6 @@ int ObTableHandleV2::set_sstable_with_tablet(ObITable *table)
   if (OB_ISNULL(table)
       || OB_UNLIKELY(!ObITable::is_sstable(table->get_key().table_type_))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KPC(table));
   } else {
     table_ = table;
     table_->inc_ref();
@@ -468,7 +467,6 @@ int ObTableHandleV2::set_sstable(ObITable *table, const ObStorageMetaHandle &met
       || OB_UNLIKELY(!ObITable::is_sstable(table->get_key().table_type_))
       || OB_UNLIKELY(!meta_handle.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KPC(table), K(meta_handle));
   } else {
     table_ = table;
     table_->inc_ref();
@@ -504,7 +502,6 @@ int ObTablesHandleArray::add_memtable(ObITable *table)
   ObTableHandleV2 handle;
   if (OB_ISNULL(table)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid arguments", K(ret), KP(table));
   } else if (OB_FAIL(tablet_id_check(table->get_key().get_tablet_id()))) {
   } else if (OB_FAIL(handle.set_table(table, ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>(), table->get_key().table_type_))) {
   } else if (OB_FAIL(handles_array_.push_back(handle))) {
@@ -540,7 +537,6 @@ int ObTablesHandleArray::add_sstable(ObITable *table, const ObStorageMetaHandle 
     const ObMetaDiskAddr addr = static_cast<ObSSTable *>(table)->get_addr();
     if (OB_UNLIKELY(!addr.is_valid() || addr.is_none())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), K(addr));
     } else {
       // FIXME: this reload logic looks weird here, should remove after resolve dependencies
       ObStorageMetaCache &meta_cache = OB_STORE_CACHE.get_storage_meta_cache();
@@ -557,7 +553,6 @@ int ObTablesHandleArray::add_sstable(ObITable *table, const ObStorageMetaHandle 
   }
 
   if (FAILEDx(handles_array_.push_back(table_handle))) {
-    STORAGE_LOG(WARN, "failed to push back table", K(ret), KPC(table), K(table_handle));
   }
   return ret;
 }
@@ -579,12 +574,10 @@ int ObTablesHandleArray::get_table(const int64_t idx, ObTableHandleV2 &table_han
   ObITable *table = nullptr;
   if (OB_UNLIKELY(idx >= handles_array_.count() || idx < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(idx), K(handles_array_.count()));
   } else {
     const ObTableHandleV2 &handle = handles_array_.at(idx);
     if (OB_UNLIKELY(!handle.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected invalid table handle", K(ret), K(idx), K(handle));
     } else {
       table_handle = handle;
     }
@@ -692,7 +685,6 @@ int ObTablesHandleArray::check_continues(const share::ObScnRange *scn_range) con
     int64_t i = 0;
     if (OB_ISNULL(table = handles_array_.at(i).get_table())) {
       ret = OB_ERR_SYS;
-      LOG_WARN("table is NULL", KPC(table));
     } else if (table->is_major_sstable()) {
       i++;
     }
@@ -701,23 +693,17 @@ int ObTablesHandleArray::check_continues(const share::ObScnRange *scn_range) con
       table = handles_array_.at(i).get_table();
       if (OB_ISNULL(table)) {
         ret = OB_ERR_SYS;
-        LOG_WARN("table is NULL", KPC(table));
       } else if (table->is_major_sstable()) {
         ret = OB_ERR_SYS;
-        LOG_WARN("major sstable or meta merge should be first", K(ret), K(i), K(table));
       } else if (OB_ISNULL(last_table)) { // first table
         if (OB_NOT_NULL(scn_range)
             && table->get_start_scn() > scn_range->start_scn_) {
           ret = OB_LOG_ID_RANGE_NOT_CONTINUOUS;
-          LOG_WARN("first minor sstable don't match the scn_range::start_log_ts", K(ret),
-              KPC(scn_range), K(i), K(*this));
         } else if (table->get_end_scn() <= base_end_scn) {
           ret = OB_LOG_ID_RANGE_NOT_CONTINUOUS;
-          LOG_WARN("Unexpected end log ts of first minor sstable", K(ret), K(base_end_scn), K(i), K(*this));
         }
       } else if (table->get_start_scn() > last_table->get_end_scn()) {
         ret = OB_LOG_ID_RANGE_NOT_CONTINUOUS;
-        LOG_WARN("log ts range is not continuous", K(ret), K(i), K(*this));
       }
       last_table = table;
     }

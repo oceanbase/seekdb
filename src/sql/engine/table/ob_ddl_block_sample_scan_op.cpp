@@ -42,7 +42,6 @@ int ObDDLBlockSampleScanOp::inner_get_next_row()
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableScanOp::inner_get_next_row())) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("get next row failed", K(ret), "op", op_name());
     }
   }
   return ret;

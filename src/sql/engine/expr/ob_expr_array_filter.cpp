@@ -64,7 +64,6 @@ int ObExprArrayFilter::calc_result_typeN(ObExprResType& type,
 
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec ctx is null", K(ret));
   } else if (ob_is_null(lambda_type)) {
     is_null_res = true;
   }
@@ -76,11 +75,9 @@ int ObExprArrayFilter::calc_result_typeN(ObExprResType& type,
       is_null_res = true;
     } else if (!ob_is_collection_sql_type(types_stack[i].get_type())) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
-      LOG_WARN("invalid data type", K(ret), K(types_stack[i].get_type()));
     } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, types_stack[i].get_subschema_id(), coll_type))) {
     } else if (coll_type->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
-      LOG_WARN("invalid collection type", K(ret), K(coll_type->type_id_));
     }
   }
 
@@ -89,7 +86,6 @@ int ObExprArrayFilter::calc_result_typeN(ObExprResType& type,
     type.set_null();
   } else if (!ob_is_int_uint_tc(lambda_type)) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid data type", K(ret), K(lambda_type));
   } else {
     // result type same as the first array
     type.set_collection(types_stack[1].get_subschema_id());
@@ -117,10 +113,8 @@ int ObExprArrayFilter::eval_array_filter(const ObExpr &expr, ObEvalCtx &ctx, ObD
     is_null_res = true;
   } else if (res_subschema_id != expr.args_[1]->obj_meta_.get_subschema_id()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("subschema id is not equal", K(ret), K(res_subschema_id), K(expr.args_[1]->obj_meta_.get_subschema_id()));
   } else if (OB_ISNULL(info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr extra info is null", K(ret));
   } else if (OB_FAIL(eval_src_arrays(expr, ctx, tmp_allocator, src_arrs, arr_dim, is_null_res))) {
   } else if (is_null_res) {
     // do nothing

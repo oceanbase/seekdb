@@ -161,19 +161,6 @@ public:
   share::SCN scn_;
 };
 
-class ObDDLCommitLogHandle final
-{
-public:
-  ObDDLCommitLogHandle();
-  ~ObDDLCommitLogHandle();
-  int wait(const int64_t timeout = ObDDLRedoLogHandle::DDL_REDO_LOG_TIMEOUT);
-  void reset();
-  share::SCN get_commit_scn() const { return commit_scn_; }
-public:
-  ObDDLCommitClogCb *cb_;
-  share::SCN commit_scn_;
-};
-
 class ObDDLRedoLock final
 {
   friend class ObDDLRedoLockGuard;
@@ -198,7 +185,7 @@ private:
   common::ObBucketHashWLockGuard guard_;
 };
 
-// This class should be the entrance to write redo log and commit log
+// This class is the entrance for writing DDL macro redo logs.
 class ObDDLRedoLogWriter final
 {
 public:
@@ -206,28 +193,11 @@ public:
   ~ObDDLRedoLogWriter();
   int init(const ObTabletID &tablet_id);
   void reset();
-  int write_start_log(
-      const ObITable::TableKey &table_key,
-      const int64_t execution_id,
-      const uint64_t data_format_version,
-      const ObDirectLoadType direct_load_type,
-      ObDDLKvMgrHandle &ddl_kv_mgr_handle,
-      ObDDLKvMgrHandle &lob_kv_mgr_handle,
-      ObTabletDirectLoadMgrHandle &mgr_handle,
-      uint32_t &lock_tid,
-      share::SCN &start_scn);
   int write_macro_block_log(
       const storage::ObDDLMacroBlockRedoInfo &redo_info,
       const blocksstable::MacroBlockId &macro_block_id,
       const int64_t task_id);
   int wait_macro_block_log_finish();
-  int write_commit_log(
-      const ObITable::TableKey &table_key,
-      const share::SCN &start_scn,
-      ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
-      ObTabletHandle &tablet_handle,
-      share::SCN &commit_scn,
-      uint32_t &lock_tid);
   template <typename T>
   static int write_auto_fork_log(const ObDDLClogType &clog_type,
                                   const logservice::ObReplayBarrierType &replay_barrier_type,
@@ -236,23 +206,6 @@ public:
   const ObTabletID &get_tablet_id() const { return tablet_id_; }
 
 private:
-  int local_write_ddl_start_log(
-      const ObDDLStartLog &log,
-      ObLS *ls,
-      logservice::ObLogHandler *log_handler,
-      ObDDLKvMgrHandle &ddl_kv_mgr_handle,
-      ObDDLKvMgrHandle &lob_kv_mgr_handle,
-      ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
-      uint32_t &lock_tid,
-      share::SCN &start_scn);
-  int local_write_ddl_commit_log(
-      const ObDDLCommitLog &log,
-      const ObDDLClogType clog_type,
-      logservice::ObLogHandler *log_handler,
-      ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
-      ObTabletDirectLoadMgrHandle &lob_direct_load_mgr_handle,
-      ObDDLCommitLogHandle &handle,
-      uint32_t &lock_tid);
   int local_write_ddl_macro_redo(
       const storage::ObDDLMacroBlockRedoInfo &redo_info,
       const int64_t task_id,

@@ -19,10 +19,9 @@
 
 #include <atomic>
 
-#include "share/config/ob_common_config.h"
 #include "share/config/ob_config_rpc_types.h"
-#include "share/config/ob_system_config.h"
 #include "lib/lock/ob_drw_lock.h"
+#include "lib/utility/ob_macro_utils.h"
 
 namespace oceanbase
 {
@@ -58,70 +57,26 @@ const char* const LOG_DISK_THROTTLING_PERCENTAGE = "log_disk_throttling_percenta
 const char* const DEFAULT_TABLE_ORGANIZATION = "default_table_organization";
 
 class ObServerMemoryConfig;
+double get_server_default_min_cpu();
+double get_server_default_max_cpu();
 
-class ObServerConfig : public ObCommonConfig, ObConfigUpdateCb
+#ifdef ERRSIM
+struct ErrsimConfig
 {
-public:
-  friend class ObServerMemoryConfig;
-  static ObServerConfig &get_instance();
-
-  // Copy all applicable values from a temporary system config snapshot.
-  virtual int read_config(const ObSystemConfig &system_config,
-                          const bool enable_static_effect);
-
-  // check if all config is validated
-  virtual int check_all() const;
-  // print all config to log file
-  void print() const;
-
-  int64_t get_current_version() const { return global_version_; }
-  int add_extra_config(const char *config_str,
-                       const int64_t version = 0,
-                       const bool check_config = true);
-
-  double get_server_default_min_cpu();
-  double get_server_default_max_cpu();
-
-  virtual int64_t update_version() { return ATOMIC_AAF(&global_version_, 1); }
-  virtual bool is_debug_sync_enabled() const { return static_cast<int64_t>(debug_sync_timeout) > 0; }
-
-  bool is_sql_operator_dump_enabled() const { return enable_sql_operator_dump; }
-
-  bool enable_defensive_check() const
-  {
-    int64_t v = _enable_defensive_check;
-    return v > 0;
-  }
-
-  bool enable_strict_defensive_check() const
-  {
-    int64_t v = _enable_defensive_check;
-    return v == 2;
-  }
-
-  int64_t disk_actual_space_;
-  ObAddr self_addr_;
-  mutable common::DRWLock rwlock_;
-public:
-///////////////////////////////////////////////////////////////////////////////
-// use MACRO 'OB_CLUSTER_PARAMETER' to define new cluster parameters
-// in ob_parameter_seed.ipp:
-///////////////////////////////////////////////////////////////////////////////
-#undef OB_CLUSTER_PARAMETER
-#define OB_CLUSTER_PARAMETER(args...) args
-#include "share/parameter/ob_parameter_seed.ipp"
-#undef OB_CLUSTER_PARAMETER
-
-protected:
-  ObServerConfig();
-  virtual ~ObServerConfig();
-  static const int16_t OB_CONFIG_MAGIC = static_cast<int16_t>(0XBCDE);
-  static const int16_t OB_CONFIG_VERSION = 1;
-
-private:
-  int64_t global_version_;
-  DISALLOW_COPY_AND_ASSIGN(ObServerConfig);
+  std::atomic<int64_t> errsim_ddl_major_delay_time{0};
+  std::atomic<int64_t> errsim_storage_meta_macro_ids_threshold{0};
+  std::atomic<int64_t> errsim_max_ddl_block_count{0};
+  std::atomic<int64_t> errsim_test_tablet_id{0};
+  std::atomic<int64_t> errsim_migration_tablet_id{0};
+  std::atomic<int64_t> macro_block_builder_errsim_flag{0};
 };
+
+inline ErrsimConfig &errsim_config()
+{
+  static ErrsimConfig config;
+  return config;
+}
+#endif
 
 class ObServerMemoryConfig
 {
@@ -130,14 +85,14 @@ public:
   friend class unittest::ObMultiReplicaTestBase;
   ObServerMemoryConfig();
   static ObServerMemoryConfig &get_instance();
-  int reload_config(const ObServerConfig& server_config);
+  int reload_config();
   static int64_t calculate_automatic_memory_budget(const int64_t system_memory);
   static int64_t resolve_kvcache_memory_limit(const int64_t configured_limit,
                                               const int64_t memory_budget);
   static int64_t resolve_memstore_memory_limit(const int64_t configured_limit,
                                                const int64_t memory_budget);
   static int64_t resolve_vector_memory_limit(const int64_t configured_limit,
-                                             const int64_t memory_budget);
+                                             const int64_t effective_memory);
   int64_t get_server_memory_budget() const;
   int64_t get_kvcache_memory_limit() const;
   int64_t get_kvcache_memory_capacity() const;
@@ -154,6 +109,5 @@ private:
 }
 }
 
-#define GCONF (::oceanbase::common::ObServerConfig::get_instance())
 #define GMEMCONF (::oceanbase::common::ObServerMemoryConfig::get_instance())
 #endif // OCEANBASE_SHARE_CONFIG_OB_SERVER_CONFIG_H_

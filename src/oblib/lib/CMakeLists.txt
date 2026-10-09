@@ -27,7 +27,8 @@ target_link_libraries(ob_malloc_object oblib_base_without_pass)
 add_library(ob_malloc STATIC)
 target_link_libraries(ob_malloc ob_malloc_object)
 if(OB_HAVE_BUNDLED_JEMALLOC)
-  target_link_libraries(ob_malloc "${JEMALLOC_STATIC_LIBRARY}")
+  target_link_libraries(ob_malloc_object seekdb_jemalloc)
+  target_link_libraries(ob_malloc seekdb_jemalloc)
 endif()
 
 # malloc_hook is only part of the Linux production runtime.
@@ -35,7 +36,7 @@ if(NOT APPLE AND NOT WIN32 AND NOT ANDROID)
   add_library(malloc_hook STATIC ${SEEKDB_OBLIB_MALLOC_HOOK_STANDALONE})
   target_link_libraries(malloc_hook oblib_base)
   if(OB_HAVE_BUNDLED_JEMALLOC)
-    target_link_libraries(malloc_hook "${JEMALLOC_STATIC_LIBRARY}")
+    target_link_libraries(malloc_hook seekdb_jemalloc)
   endif()
 endif()
 
@@ -71,7 +72,13 @@ else()
   target_link_directories(oblib_lib PUBLIC
     ${DEP_DIR}/lib ${DEP_DIR}/lib/vsag_lib)
   if(UNIX)
-    target_compile_options(oblib_lib PUBLIC -fopenmp)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+      # AppleClang's driver does not expose -fopenmp, but its frontend does.
+      # Keep using the libomp runtime packaged with the arm64 VSAG libraries.
+      target_compile_options(oblib_lib PUBLIC "SHELL:-Xclang -fopenmp")
+    else()
+      target_compile_options(oblib_lib PUBLIC -fopenmp)
+    endif()
   endif()
 
   if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")

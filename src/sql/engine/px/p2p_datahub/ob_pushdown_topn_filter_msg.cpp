@@ -316,7 +316,6 @@ int ObPushDownTopNFilterMsg::prepare_storage_white_filter_data(
     is_data_prepared = true;
   } else if (heap_top_datums_.at(col_idx).is_null()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expect no null in topn runtime filter");
   } else if (OB_FAIL(params.push_back(heap_top_datums_.at(col_idx)))) {
   } else {
     int64_t now_data_version = ATOMIC_LOAD(&data_version_);
@@ -346,7 +345,6 @@ int ObPushDownTopNFilterMsg::update_storage_white_filter_data(
   int col_idx = dynamic_filter.get_col_idx();
   if (heap_top_datums_.at(col_idx).is_null()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expect no null in topn runtime filter");
   } else if (OB_FAIL(params.push_back(heap_top_datums_.at(col_idx)))) {
   } else {
     dynamic_filter.set_stored_data_version(now_data_version);

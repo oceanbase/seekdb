@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_EXE
 
+#include "config_bridge.h"
 #include "ob_sql_trans_control.h"
 #include "data_plane/tablelock/ob_table_lock.h"
 #include "data_plane/transaction/ob_deadlock.h"
@@ -102,7 +103,6 @@ int ObSqlTransControl::explicit_start_trans(ObExecContext &ctx, const bool read_
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx);
   if (OB_ISNULL(plan_ctx)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ctx), K(read_only), K(hint));
   } else {
     ret = explicit_start_trans(ctx.get_my_session(),
                                plan_ctx->get_trans_param(),
@@ -258,14 +258,20 @@ int ObSqlTransControl::end_trans(ObSQLSessionInfo *session,
                               expire_ts,
                               callback))) {
     }
+    const bool rollback_tx_ended =
+        is_rollback && data_plane::tx_desc_is_ended(session->get_tx_desc());
     ObSQLUtils::check_if_need_disconnect_after_end_trans(ret,
                                                          is_rollback,
                                                          is_explicit,
                                                          need_disconnect);
+    if (rollback_tx_ended) {
+      need_disconnect = false;
+    }
     if (is_rollback || OB_FAIL(ret) || !callback) {
       bool reuse_tx = OB_SUCCESS == ret
         || OB_TRANS_COMMITED == ret
-        || OB_TRANS_ROLLBACKED == ret;
+        || OB_TRANS_ROLLBACKED == ret
+        || rollback_tx_ended;
       reset_session_tx_state(session, reuse_tx, reset_trans_variable);
     }
   }
@@ -301,7 +307,6 @@ int ObSqlTransControl::end_trans_before_cmd_execute(ObSQLSessionInfo &session,
                                             !keep_trans_variable))) {
   } else if (session.need_recheck_txn_readonly() && session.get_tx_read_only()) {
     ret = OB_ERR_CANT_EXECUTE_IN_READ_ONLY_TRANSACTION;
-    LOG_WARN("cmd can not execute because txn is read only", K(ret));
   }
   return ret;
 }
@@ -423,7 +428,7 @@ int ObSqlTransControl::do_end_trans_(ObSQLSessionInfo *session,
   int ret = OB_SUCCESS;
   ObTxDesc *&tx_ptr = session->get_tx_desc();
   const ObTransID tx_id = data_plane::tx_desc_id(tx_ptr);
-  const int64_t lcl_op_interval = GCONF._lcl_op_interval;
+  const int64_t lcl_op_interval = config::_lcl_op_interval();
   if (lcl_op_interval > 0) {
     data_plane::finish_transaction_deadlock(data_plane::tx_desc_id(tx_ptr));
   }
@@ -441,7 +446,7 @@ int ObSqlTransControl::do_end_trans_(ObSQLSessionInfo *session,
     
     if (OB_FAIL(get_tx_service(session, txs))) {
     } else if (is_rollback) {
-      ret = txs->rollback_tx(*tx_ptr);
+      ret = txs->rollback_tx(*tx_ptr, expire_ts);
     } else if (callback) {
       if (OB_FAIL(inc_session_ref(session))) {
       } else {
@@ -654,7 +659,7 @@ int ObSqlTransControl::stmt_setup_snapshot_(ObSQLSessionInfo *session,
                                                     snapshot_version))) {
       TRANS_LOG(WARN, "get weak read snapshot fail", KPC(txs));
       int64_t stale_time = session->get_ob_max_read_stale_time();
-      int64_t refresh_interval = GCONF.weak_read_version_refresh_interval;
+      int64_t refresh_interval = config::weak_read_version_refresh_interval();
       if (stale_time > 0 && refresh_interval > stale_time) {
         TRANS_LOG(WARN, "weak_read_version_refresh_interval is larger than ob_max_read_stale_time ", 
                   K(refresh_interval), K(stale_time), KPC(txs));
@@ -742,7 +747,6 @@ int ObSqlTransControl::can_do_plain_insert(ObSQLSessionInfo *session,
   int last_query_retry_err = session->get_retry_info().get_last_query_retry_err();
   if (OB_ISNULL(session) || OB_ISNULL(plan)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null ptr", K(ret), KPC(session), KPC(plan));
   } else if (plan->get_need_serial_exec()
       || ObSQLUtils::is_nested_sql(&exec_ctx)
       || last_query_retry_err == OB_TRANSACTION_SET_VIOLATION
@@ -1130,7 +1134,7 @@ int ObSqlTransControl::reset_session_tx_state(ObSQLSessionInfo *session, bool re
   // cleanup txn level temp tables if this is the txn start node
   ObTxDesc *tx_desc = session->get_tx_desc();
   if (data_plane::tx_owns_local_temporary_tables(
-          tx_desc, GCONF.self_addr_)) {
+          tx_desc, GCTX.self_addr())) {
     temp_ret = session->drop_temp_tables(false);
     if (OB_SUCCESS != temp_ret) {
       LOG_WARN_RET(temp_ret, "trx level temporary table clean failed", KR(temp_ret));

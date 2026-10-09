@@ -128,6 +128,7 @@ cc_library(
     name = "optimizer_public_headers",
     hdrs = _OPTIMIZER_PUBLIC_ROOTS,
     textual_hdrs = _OPTIMIZER_INTERFACE_CLOSURE,
+    deps = ["//rust:config_bridge_headers"],
     tags = ["manual"],
     visibility = ["//src/sql:__subpackages__"],
 )
@@ -135,6 +136,7 @@ cc_library(
 cc_library(
     name = "optimizer_internal_headers",
     hdrs = _OPTIMIZER_PRIVATE_HEADERS,
+    deps = ["//rust:config_bridge_headers"],
     tags = ["manual"],
     visibility = ["//src/sql:__subpackages__"],
 )
@@ -160,6 +162,7 @@ seekdb_semantic_unity_cc_library(
     implementation_deps = [
         ":_textual_optimizer_map_inputs",
         ":optimizer_internal_headers",
+        "//rust:config_bridge_headers",
         "//src/data_plane:optimizer_storage_service",
         "//src/data_plane:parallel_range_task_planner",
         "//src/sql:sql_runtime_internal_headers",

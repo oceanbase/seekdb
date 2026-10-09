@@ -64,7 +64,6 @@ int ObTabletStatus::serialize(char *buf, const int64_t len, int64_t &pos) const
       || OB_UNLIKELY(len <= 0)
       || OB_UNLIKELY(pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(buf), K(len), K(pos));
   } else if (OB_FAIL(serialization::encode_i8(buf, len, new_pos, static_cast<int8_t>(status_)))) {
   } else {
     pos = new_pos;
@@ -82,7 +81,6 @@ int ObTabletStatus::deserialize(const char *buf, const int64_t len, int64_t &pos
       || OB_UNLIKELY(len <= 0)
       || OB_UNLIKELY(pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(buf), K(len), K(pos));
   } else if (OB_FAIL(serialization::decode_i8(buf, len, new_pos, (int8_t*)(&status_)))) {
   } else {
     pos = new_pos;

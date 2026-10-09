@@ -39,13 +39,11 @@ int ObTabletServiceClogReplayExecutor::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", KR(ret), K_(is_inited));
   } else if (OB_ISNULL(buf)
           || OB_UNLIKELY(buf_size <= 0)
           || OB_UNLIKELY(pos < 0)
           || OB_UNLIKELY(!scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments",  KP(buf), K(buf_size), K(pos), K(scn), K(ret));
   } else {
     buf_ = buf;
     buf_size_ = buf_size;

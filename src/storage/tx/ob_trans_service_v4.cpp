@@ -660,7 +660,6 @@ int ObTransService::get_read_store_ctx(const ObTxReadSnapshot &snapshot,
                                                 snapshot.is_weak_read(),
                                                 create_tx_ctx,
                                                 tx_desc))) {
-    TRANS_LOG(WARN, "mvcc_acc_ctx init read fail", KR(ret), K(store_ctx), KPC(this));
   }
 
   // fail, rollback

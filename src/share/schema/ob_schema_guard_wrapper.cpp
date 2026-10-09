@@ -37,7 +37,6 @@ int ObSchemaGuardWrapper::init()
   if (is_local_guard_) {
     if (OB_ISNULL(schema_service_)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("schema service is null", KR(ret));
     } else if (OB_FAIL(
         schema_service_->get_runtime_schema_guard_with_version_in_inner_table(
             local_schema_guard_))) {
@@ -53,11 +52,9 @@ int ObSchemaGuardWrapper::check_inner_stat_() const
   int ret = OB_SUCCESS;
   if (OB_ISNULL(schema_service_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("schema service is null", KR(ret));
   } else if (is_local_guard_) {
     if (!local_schema_guard_.is_inited()) {
       ret = OB_NOT_INIT;
-      LOG_WARN("local_schema_guard not init", KR(ret));
     }
   }
   return ret;
@@ -69,10 +66,8 @@ int ObSchemaGuardWrapper::get_local_schema_version(int64_t &schema_version) cons
   schema_version = OB_INVALID_VERSION;
   if (OB_FAIL(check_inner_stat_())) {
   } else if (is_local_guard_ && OB_FAIL(local_schema_guard_.get_schema_version(schema_version))) {
-    LOG_WARN("fail to get schema version", KR(ret));
   } else if (!is_local_guard_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("not local guard can not get local schema version", KR(ret), K(is_local_guard_));
   }
   return ret;
 }
@@ -255,7 +250,6 @@ int ObSchemaGuardWrapper::get_obj_privs(const uint64_t obj_id,
       for (int64_t i = 0; OB_SUCC(ret) && i < obj_privs_pointer.count(); ++i) {
         if (OB_ISNULL(obj_privs_pointer.at(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("obj_privs_pointer contains NULL", KR(ret), K(i));
         } else if(OB_FAIL(obj_privs.push_back(*(obj_privs_pointer.at(i))))) {
         }
       }
@@ -293,10 +287,8 @@ int ObSchemaGuardWrapper::get_coded_index_name_info_mysql(common::ObIAllocator &
     if (OB_FAIL(local_schema_guard_.get_table_schema( data_table_id, data_table_schema))) {
     } else if (OB_ISNULL(data_table_schema)) {
       // this interface don't care about whehter the data table is exist or not.
-      LOG_WARN("data table not exist", KR(ret), K(data_table_id));
     } else if (OB_ISNULL(schema_service_impl = schema_service_->get_schema_service())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("schema service impl is null", KR(ret));
     } else {
       ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
       bool has_same_index_name = false;
@@ -310,7 +302,6 @@ int ObSchemaGuardWrapper::get_coded_index_name_info_mysql(common::ObIAllocator &
                                                          index_table_schema))) {
         } else if (OB_ISNULL(index_table_schema)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("table schema should not be null", K(ret));
         } else {
           if (schema_service_impl->schema_name_is_equal(index_name,
                                                         index_table_schema->get_table_name(),

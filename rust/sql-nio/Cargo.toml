@@ -41,6 +41,9 @@ rustls-pki-types = { version = "1", features = ["std"] }
 # the account-policy fields exposed by the narrow C ABI.
 x509-parser = { version = "0.18", default-features = false }
 
+[build-dependencies]
+cbindgen = "=0.29.4"
+
 # libc::shutdown is only used on the Unix path.
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

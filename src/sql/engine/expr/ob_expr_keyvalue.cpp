@@ -43,11 +43,9 @@ int ObExprKeyValue::calc_result_typeN(ObExprResType &type,
   int ret = OB_SUCCESS;
   if (param_num != 2 && param_num != 4) {
     ret = OB_ERR_PARAM_SIZE;
-    LOG_WARN("the param number of keyvalue should be 2 or 4", K(ret), K(param_num));
   } else if (ObJsonType == types[0].get_type()) {
     ObString func_name("KEYVALUE");
     ret = OB_ERR_WRONG_FUNC_ARGUMENTS_TYPE;
-    LOG_WARN("The first argument type is incorrect", K(ret), K(types[0].get_type()));
     LOG_USER_ERROR(OB_ERR_WRONG_FUNC_ARGUMENTS_TYPE, func_name.length(), func_name.ptr());
   } else {
     if (ObTextType == types[0].get_type()

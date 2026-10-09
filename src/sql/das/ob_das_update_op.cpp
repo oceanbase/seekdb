@@ -161,7 +161,6 @@ int ObDASUpdIterator::get_next_row(blocksstable::ObDatumRow *&row)
   if (OB_UNLIKELY(das_ctdef_->table_param_.get_data_table().is_domain_index())) {
     if (OB_FAIL(get_next_domain_index_row(row))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("get next domain index row failed", K(ret), K(das_ctdef_->table_param_.get_data_table()));
       }
     }
   } else if (!got_old_row_) {
@@ -180,7 +179,6 @@ int ObDASUpdIterator::get_next_row(blocksstable::ObDatumRow *&row)
     if (OB_SUCC(ret)) {
       if (OB_FAIL(result_iter_.get_next_row(sr))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("get next row from result iterator failed", K(ret));
         }
       } else if (OB_FAIL(ObDASUtils::project_storage_row(*das_ctdef_,
                                                          *sr,
@@ -200,7 +198,6 @@ int ObDASUpdIterator::get_next_row(blocksstable::ObDatumRow *&row)
     got_old_row_ = false;
     if (OB_ISNULL(new_row_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("new row is null", K(ret));
     } else {
       row = new_row_;
     }
@@ -218,7 +215,6 @@ int ObDASUpdIterator::get_next_rows(blocksstable::ObDatumRow *&rows, int64_t &ro
   if (1 == batch_size_) {
     if (OB_FAIL(get_next_row(rows))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("Failed to get next row", K(ret), K_(batch_size), K(is_domain_index));
       }
     } else {
       row_count = 1;
@@ -241,7 +237,6 @@ int ObDASUpdIterator::get_next_rows(blocksstable::ObDatumRow *&rows, int64_t &ro
     while (OB_SUCC(ret) && row_count < batch_size_) {
       if (OB_FAIL(result_iter_.get_next_row(sr))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("get next row from result iterator failed", K(ret));
         }
       } else if (OB_FAIL(ObDASUtils::project_storage_row(*das_ctdef_,
                                                          *sr,
@@ -270,7 +265,6 @@ int ObDASUpdIterator::get_next_rows(blocksstable::ObDatumRow *&rows, int64_t &ro
     got_old_row_ = false;
     if (OB_ISNULL(new_rows_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("new rows is null", K(ret));
     } else {
       rows = new_rows_;
       row_count = got_row_count_; 
@@ -312,7 +306,6 @@ int ObDASUpdIterator::get_next_domain_index_row(ObDatumRow *&row)
     }
     if (FAILEDx(domain_iter_->get_next_domain_row(row))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("fail to get next domain row", K(ret), KPC(domain_iter_));
       } else if (!got_old_row_) {
         // ret == OB_ITER_END, old row is finished, get next new row
         iter_has_built_ = false;
@@ -356,7 +349,6 @@ int ObDASUpdIterator::get_next_domain_index_rows(ObDatumRow *&rows, int64_t &row
     }
     if (FAILEDx(domain_iter_->get_next_domain_rows(rows, row_count))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("fail to get next domain row", K(ret), KPC(domain_iter_));
       } else if (!got_old_row_) {
         // ret == OB_ITER_END, old row is finished, get next new row
         iter_has_built_ = false;
@@ -392,19 +384,16 @@ int ObDASIndexDMLAdaptor<DAS_OP_TABLE_UPDATE, ObDASUpdIterator>::write_rows(cons
     if (OB_FAIL(as->insert_rows(tablet_id, *tx_desc_, dml_execution_,
                                 ctdef.column_ids_, &iter, affected_rows))) {
       if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-        LOG_WARN("insert rows to access service failed", K(ret), K(tablet_id));
       }
     }
   } else if (OB_UNLIKELY(ctdef.table_param_.get_data_table().is_domain_index())) {
     if (OB_FAIL(as->delete_rows(tablet_id, *tx_desc_, dml_execution_,
                                 ctdef.column_ids_, &iter, affected_rows))) {
       if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-        LOG_WARN("delete rows to access service failed", K(ret), K(tablet_id));
       }
     } else if (OB_FAIL(as->insert_rows(tablet_id, *tx_desc_, dml_execution_,
                                        ctdef.column_ids_, &iter, affected_rows))) {
       if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-        LOG_WARN("insert rows to access service failed", K(ret), K(tablet_id));
       }
     }
   } else if (OB_FAIL(as->update_rows(tablet_id,
@@ -415,13 +404,11 @@ int ObDASIndexDMLAdaptor<DAS_OP_TABLE_UPDATE, ObDASUpdIterator>::write_rows(cons
                                      &iter,
                                      affected_rows))) {
     if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-      LOG_WARN("update row to partition storage failed", K(ret));
     }
   } else if (!(ctdef.is_ignore_ || 
             ctdef.table_param_.get_data_table().is_domain_index())
       && 0 == affected_rows) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected affected_rows after do update", K(affected_rows), K(ret));
   }
   return ret;
 }
@@ -461,7 +448,6 @@ int ObDASUpdateOp::open_op()
           upd_ctdef_->is_main_table_in_fts_ddl_, doc_word_infos))) {
   } else if (OB_FAIL(upd_adaptor.write_tablet(upd_iter, affected_rows))) {
     if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-      LOG_WARN("update row to partition storage failed", K(ret));
     }
   } else {
     affected_rows_ = affected_rows;
@@ -480,7 +466,6 @@ int ObDASUpdateOp::assign_task_result(ObIDASTaskOp *other)
   int ret = OB_SUCCESS;
   if (other->get_type() != get_type()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected task type", K(ret), KPC(other));
   } else {
     ObDASUpdateOp *upd_op = static_cast<ObDASUpdateOp *>(other);
     affected_rows_ = upd_op->get_affected_rows();
@@ -500,7 +485,6 @@ int ObDASUpdateOp::init_task_info(uint32_t row_extend_size)
   int ret = OB_SUCCESS;
   if (!write_buffer_.is_inited()
       && OB_FAIL(write_buffer_.init(op_alloc_, row_extend_size, "DASUpdateBuffer"))) {
-    LOG_WARN("init update buffer failed", K(ret));
   }
   return ret;
 }
@@ -512,7 +496,6 @@ int ObDASUpdateOp::write_row(const ExprFixedArray &row,
   int ret = OB_SUCCESS;
   if (!write_buffer_.is_inited()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("buffer not inited", K(ret));
   } else if (OB_FAIL(write_buffer_.add_row(row, &eval_ctx, stored_row, true))) {
   }
   return ret;

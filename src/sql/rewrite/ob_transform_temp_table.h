@@ -124,6 +124,14 @@ public:
                                         QueryRelation relation,
                                         bool check_basic,
                                         bool &is_valid);
+  int check_like_expr_with_const_minmax(const ObSelectStmt &stmt,
+                                        bool &has_const_minmax);
+  int check_like_expr_with_const_minmax(const ObRawExpr *expr,
+                                        bool &has_const_minmax);
+  int check_expr_has_const_minmax(const ObRawExpr *expr,
+                                  bool &has_const_minmax);
+  int check_const_minmax(const ObAggFunRawExpr *aggr,
+                         bool &has_const_minmax);
   int check_equal_join_condition_match(ObSelectStmt &first,
                                        ObSelectStmt &second,
                                        const ObStmtMapInfo &map_info,

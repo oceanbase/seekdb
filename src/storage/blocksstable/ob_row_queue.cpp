@@ -126,7 +126,6 @@ int ObRowQueue::compact_border_row(const ObDatumRow *row,
 
   if (OB_UNLIKELY(nullptr == row || nullptr == nop_pos)) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("Unexpceted row or nop_pos", K(ret), KP(row), KP(nop_pos));
   } else if (row->is_ghost_row()) {
     // ghost row no need to compact
   } else {
@@ -134,7 +133,6 @@ int ObRowQueue::compact_border_row(const ObDatumRow *row,
     ObDatumRow *border_row = last_row ? get_last() : get_first();
     if (OB_ISNULL(border_row)) {
       ret = OB_INNER_STAT_ERROR;
-      LOG_WARN("Unexpected null border row", K(ret), K(last_row), KPC(this));
     } else if (border_row->is_compacted_multi_version_row()) {
       // border row has already been compacted
     } else if (OB_FAIL(storage::ObRowFuse::fuse_row(
@@ -159,7 +157,6 @@ int ObRowQueue::add_shadow_row(
   if (!first_row->is_shadow_row()) {
     if (OB_UNLIKELY(1 != count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected row queue", K(ret), K(count()), KPC(first_row), KPC(this));
     } else if (OB_FAIL(add_row(*first_row, allocator))) {
     } else if (OB_FAIL(ObShadowRowUtil::make_shadow_row(trans_seq_idx, *first_row))) {
     }

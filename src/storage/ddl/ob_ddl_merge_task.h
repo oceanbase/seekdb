@@ -98,10 +98,6 @@ private:
                                     ObTablet &tablet,
                                     SCN &compact_start_scn,
                                     SCN &compact_end_scn);
-  int check_macro_intergrate_for_nidem_sn(ObTabletDDLParam &ddl_param,
-                                         ObTablet &tablet,
-                                         SCN &compact_start_scn,
-                                         SCN &compact_end_scn);
 private:
   bool is_inited_;
   ObDDLTableMergeDagParam merge_param_;

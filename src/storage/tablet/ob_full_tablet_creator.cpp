@@ -41,7 +41,6 @@ int ObFullTabletCreator::init()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObStorageMetaMemMgr has been initialized", K(ret));
   } else if (OB_FAIL(tiny_allocator_.init(lib::ObMallocAllocator::get_instance(),
       OB_MALLOC_NORMAL_BLOCK_SIZE/2, ObMemAttr("TinyAllocator", ObCtxIds::DEFAULT_CTX_ID)))) {
   } else {
@@ -52,7 +51,6 @@ int ObFullTabletCreator::init()
     if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(mstx_mem_ctx_, param))) {
     } else if (nullptr == mstx_mem_ctx_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("memory entity is null", K(ret));
     } else {
       is_inited_ = true;
     }
@@ -106,7 +104,6 @@ int ObFullTabletCreator::throttle_tablet_creation()
       need_wait = false;
     } else if (ObTimeUtility::fast_current_time() - start_time >= timeout) {
       ret = OB_EAGAIN;
-      LOG_WARN("throttle tablet creation timeout", K(ret));
       break;
     } else {
       need_wait = true;
@@ -134,12 +131,10 @@ int ObFullTabletCreator::create_tablet(ObTabletHandle &tablet_handle)
   if (OB_ISNULL(allocator = OB_NEWx(
       ObArenaAllocator, (&tiny_allocator_), mstx_mem_ctx_->get_malloc_allocator(), page_size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to new arena allocator", K(ret));
   } else if (FALSE_IT(allocator->set_label("MSTXAllocator"))) {
   } else if (FALSE_IT(allocator->set_ctx_id(ObCtxIds::DEFAULT_CTX_ID))) {
   } else if (OB_ISNULL(tablet = OB_NEWx(ObTablet, allocator))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to new tablet", K(ret));
   } else if (OB_FAIL(mem_addr.set_mem_addr(0, sizeof(ObTablet)))) {
   } else {
     tablet->set_allocator(allocator);

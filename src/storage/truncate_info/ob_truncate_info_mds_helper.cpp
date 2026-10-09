@@ -63,12 +63,9 @@ int ObTruncateInfoMdsHelper::on_register(
 
   if (OB_UNLIKELY(nullptr == buf || len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), KP(buf), K(len));
   } else if (CLICK_FAIL(arg.deserialize(tmp_allocator, buf, len, pos))) {
-    LOG_WARN("failed to deserialize", K(ret));
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("arg is invalid", K(ret), K(arg));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
   } else if (OB_FAIL(tenant_ls->get_tablet(arg.index_tablet_id_, tablet_handle))) {
   } else if (OB_FAIL(tablet_handle.get_obj()->set_truncate_info(
@@ -96,12 +93,9 @@ int ObTruncateInfoMdsHelper::on_replay(
 
   if (OB_ISNULL(buf) || OB_UNLIKELY(len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), KP(buf), K(len));
   } else if (CLICK_FAIL(arg.deserialize(tmp_allocator, buf, len, pos))) {
-    LOG_WARN("failed to deserialize", K(ret));
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("arg is invalid", K(ret), K(arg));
   } else {
     ObTruncateInfoClogReplayExecutor executor(arg);
     if (OB_FAIL(executor.init(ctx, scn))) {
@@ -128,10 +122,8 @@ int ObTruncateInfoClogReplayExecutor::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", KR(ret), K_(is_inited));
   } else if (OB_UNLIKELY(!truncate_arg_.is_valid() || !scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(truncate_arg_), K(scn));
   } else {
     user_ctx_ = &user_ctx;
     scn_ = scn;

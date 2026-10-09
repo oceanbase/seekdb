@@ -36,8 +36,6 @@ int ObAnonymousBlockResolver::resolve(const ParseNode &parse_tree)
       || OB_ISNULL(params_.param_list_)
       || OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Argument is NULL",
-             K(session_info_), K(params_.param_list_), K(allocator_), K(ret));
   } else if (OB_ISNULL(stmt = create_stmt<ObAnonymousBlockStmt>())
              || OB_ISNULL(params_buf = allocator_->alloc(sizeof(ParamStore)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -77,11 +75,9 @@ int ObAnonymousBlockResolver::resolve(const ParseNode &parse_tree)
     } else if (OB_UNLIKELY(T_SP_ANONYMOUS_BLOCK != parse_tree.type_
                            || OB_ISNULL(block_node = parse_tree.children_[0]))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("the children of parse tree is NULL", K(ret));
     } else if (T_SP_BLOCK_CONTENT != block_node->type_
                && T_SP_LABELED_BLOCK != block_node->type_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Invalid procedure name node", K(block_node->type_), K(ret));
     } else {
       CK (OB_LIKELY(T_SP_ANONYMOUS_BLOCK == parse_tree.type_));
       CK (OB_NOT_NULL(block_node = parse_tree.children_[0]));
@@ -124,14 +120,8 @@ int ObAnonymousBlockResolver::resolve_anonymous_block(
       if (params_.param_list_->count() != params_.query_ctx_->question_marks_count_) {
         if (params_.param_list_->count() < params_.query_ctx_->question_marks_count_) {
           ret = OB_ERR_NOT_ALL_VARIABLE_BIND;
-          LOG_WARN("not all variables bound",
-                    K(ret), K(params_.param_list_->count()),
-                    K(params_.query_ctx_->question_marks_count_));
         } else {
           ret = OB_ERR_BIND_VARIABLE_NOT_EXIST;
-          LOG_WARN("bind variable does not exist",
-                    K(ret), K(params_.param_list_->count()),
-                    K(params_.query_ctx_->question_marks_count_));
         }
       }
     }
@@ -180,7 +170,6 @@ int ObAnonymousBlockResolver::add_param()
   if (OB_ISNULL(stmt_)
       || OB_ISNULL(params_.param_list_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parameter is NULL", K(stmt_), K(params_.param_list_), K(ret));
   } else {
     anonymous_stmt = static_cast<ObAnonymousBlockStmt*>(stmt_);
   }

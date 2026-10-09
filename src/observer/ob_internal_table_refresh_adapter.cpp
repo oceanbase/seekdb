@@ -33,7 +33,6 @@ int ObInternalTableRefreshAdapter::init(
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(timezone_mgr_) || OB_NOT_NULL(srs_service_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("internal table refresh adapter initialized twice", KR(ret));
   } else {
     timezone_mgr_ = &timezone_mgr;
     srs_service_ = &srs_service;
@@ -52,7 +51,6 @@ int ObInternalTableRefreshAdapter::activate()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(timezone_mgr_) || OB_ISNULL(srs_service_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("internal table refresh adapter is not initialized", KR(ret));
   } else {
     srs_service_->mark_stale();
     if (OB_FAIL(timezone_mgr_->schedule_retry())) {

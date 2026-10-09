@@ -60,7 +60,6 @@ int ObHexStringEncoder::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(ObIColumnEncoder::init(ctx, column_index, rows))) {
   } else {
     column_header_.type_ = type_;
@@ -70,7 +69,6 @@ int ObHexStringEncoder::init(
         ob_obj_type_class(column_type_.get_type())];
     if (OB_UNLIKELY(!is_string_encoding_valid(sc))) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not supported type for string diff", K(ret), K(sc), K_(column_index));
     }
   }
   return ret;
@@ -81,7 +79,6 @@ int ObHexStringEncoder::traverse(bool &suitable)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     suitable = true;
     FOREACH_X(r, *rows_, OB_SUCC(ret) && suitable) {
@@ -92,8 +89,6 @@ int ObHexStringEncoder::traverse(bool &suitable)
         nope_cnt_++;
       } else if (datum.is_ext()) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not supported extend object type",
-            K(ret), K(datum), K_(column_type), K_(column_index));
       } else {
         if (datum.len_ < min_string_size_) {
           min_string_size_ = datum.len_;
@@ -152,7 +147,6 @@ int ObHexStringEncoder::store_meta(ObBufferWriter &buf_writer)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     header_ = reinterpret_cast<ObHexStringHeader *>(buf_writer.current());
     header_->reset();
@@ -172,10 +166,8 @@ int ObHexStringEncoder::store_data(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(row_id < 0 || row_id >= rows_->count() || len < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(row_id));
   } else {
     const ObDatum &datum = rows_->at(row_id).get_datum(column_index_);
     const ObStoredExtValue ext_val = get_stored_ext_value(datum);
@@ -203,14 +195,10 @@ int ObHexStringEncoder::set_data_pos(const int64_t offset, const int64_t length)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(header_)) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("call set data pos before store meta", K(ret));
   } else if (offset < 0 || length < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid data position",
-        K(ret), K(offset), K(length), K(desc_), K_(column_header));
   } else {
     header_->offset_ = static_cast<uint32_t>(offset);
     header_->length_ = static_cast<uint32_t>(length);
@@ -223,10 +211,8 @@ int ObHexStringEncoder::get_var_length(const int64_t row_id, int64_t &length)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(row_id < 0 || row_id >= rows_->count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(row_id));
   } else {
     const ObDatum &datum = rows_->at(row_id).get_datum(column_index_);
     if (datum.is_null() || datum.is_nop()) {
@@ -293,13 +279,10 @@ int ObHexStringEncoder::store_fix_data(ObBufferWriter &buf_writer)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!is_valid_fix_encoder())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K_(desc));
   } else if (OB_UNLIKELY(0 >= desc_.fix_data_length_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("fix_data_length should be larger than 0", K(ret), K_(desc));
   } else {
     if (desc_.fix_data_length_ > 0) {
       header_->length_ = static_cast<uint32_t>(desc_.fix_data_length_);

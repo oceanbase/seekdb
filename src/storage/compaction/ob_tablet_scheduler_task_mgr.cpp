@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #define USING_LOG_PREFIX STORAGE_COMPACTION
+#include "share/ob_server_struct.h"
 #include "ob_tablet_scheduler_task_mgr.h"
 #include "share/rc/ob_server_runtime.h"
 #include "data_plane/report/ob_tablet_report.h"
@@ -75,7 +76,7 @@ void ObTabletSchedulerTaskMgr::MergeLoopTask::runTimerTask()
 {
   int ret = OB_SUCCESS;
   int64_t cost_ts = ObTimeUtility::fast_current_time();
-  ObCurTraceId::init(GCONF.self_addr_);
+  ObCurTraceId::init(GCTX.self_addr());
   if (ObBasicMergeScheduler::could_start_loop_task()) {
     if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObTabletScheduler>()->schedule_all_tablets_minor())) {
     }
@@ -89,7 +90,7 @@ void ObTabletSchedulerTaskMgr::MediumLoopTask::runTimerTask()
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
   int64_t cost_ts = ObTimeUtility::fast_current_time();
-  ObCurTraceId::init(GCONF.self_addr_);
+  ObCurTraceId::init(GCTX.self_addr());
   if (ObBasicMergeScheduler::could_start_loop_task()) {
     ObTabletScheduler *scheduler = ::oceanbase::share::server_service<::oceanbase::compaction::ObTabletScheduler>();
     if (OB_FAIL(scheduler->schedule_all_tablets_medium())) {
@@ -110,7 +111,7 @@ void ObTabletSchedulerTaskMgr::SSTableGCTask::runTimerTask()
     // use runtime config to loop minor && medium task
     ::oceanbase::share::server_service<::oceanbase::compaction::ObTabletScheduler>()->reload_runtime_config();
     int64_t cost_ts = ObTimeUtility::fast_current_time();
-    ObCurTraceId::init(GCONF.self_addr_);
+    ObCurTraceId::init(GCTX.self_addr());
     if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObTabletScheduler>()->update_upper_trans_version_and_gc_sstable())) {
     }
     cost_ts = ObTimeUtility::fast_current_time() - cost_ts;
@@ -122,7 +123,7 @@ void ObTabletSchedulerTaskMgr::InfoPoolResizeTask::runTimerTask()
 {
   int ret = OB_SUCCESS;
   int64_t cost_ts = ObTimeUtility::fast_current_time();
-  ObCurTraceId::init(GCONF.self_addr_);
+  ObCurTraceId::init(GCTX.self_addr());
   if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObTabletScheduler>()->set_max())) {
   }
   if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObTabletScheduler>()->gc_info())) {
@@ -137,7 +138,7 @@ void ObTabletSchedulerTaskMgr::TabletUpdaterRefreshTask::runTimerTask()
 {
   int ret = OB_SUCCESS;
   int64_t cost_ts = ObTimeUtility::fast_current_time();
-  ObCurTraceId::init(GCONF.self_addr_);
+  ObCurTraceId::init(GCTX.self_addr());
   if (OB_FAIL(data_plane::refresh_tablet_update_worker_count())) {
   }
   cost_ts = ObTimeUtility::fast_current_time() - cost_ts;
@@ -148,7 +149,7 @@ void ObTabletSchedulerTaskMgr::MediumCheckTask::runTimerTask()
 {
   int ret = OB_SUCCESS;
   int64_t cost_ts = ObTimeUtility::fast_current_time();
-  ObCurTraceId::init(GCONF.self_addr_);
+  ObCurTraceId::init(GCTX.self_addr());
   if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObMediumChecker>()->check_medium_finish_schedule())) {
   }
   cost_ts = ObTimeUtility::fast_current_time() - cost_ts;

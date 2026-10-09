@@ -35,7 +35,6 @@ int ObQueryTranslator::translate()
     DATA_PRINTF(" APPROXIMATE");
   }
   if (OB_SUCC(ret) && translate_limit()) {
-    LOG_WARN("fail to translate limit items", K(ret));
   }
 
   return ret;
@@ -214,7 +213,6 @@ int ObRequestTranslator::translate_table(const ObReqTable *table)
           DATA_PRINTF(" UNION ALL ");
         } else {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected join type", K(ret), K(mul_tab->joined_type_));
         }
       } 
       if (OB_FAIL(ret)) {
@@ -227,7 +225,6 @@ int ObRequestTranslator::translate_table(const ObReqTable *table)
     DATA_PRINTF("(");
     if (OB_ISNULL(jt->left_table_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("left_table should not be NULL", K(ret));
     } else if (OB_FAIL(translate_table(jt->left_table_))) {
     } else {
       ObString join_type;
@@ -243,7 +240,6 @@ int ObRequestTranslator::translate_table(const ObReqTable *table)
           break;
         default:
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("unknown join type", K(ret), K(jt->joined_type_));
           break;
       }
       if (OB_SUCC(ret)) {
@@ -261,7 +257,6 @@ int ObRequestTranslator::translate_table(const ObReqTable *table)
 
   } else {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not supported table type", K(ret), K(table->table_type_));
   }
 
   return ret;

@@ -27,7 +27,6 @@ devdeps-roaringbitmap-croaring-3.0.0-92024092815.al8.aarch64.rpm
 devdeps-vsag-abiv1-1.1.0-1752026041310.al8.aarch64.rpm
 devdeps-fast-float-6.1.3-42024112122.al8.aarch64.rpm
 devdeps-sqlite-abiv1-3.38.1-72026031815.al8.aarch64.rpm
-devdeps-jemalloc-5.3.1-32026080717.al8.aarch64.rpm
 
 [tools]
 obdevtools-binutils-2.30-82024092619.al8.aarch64.rpm
@@ -37,6 +36,7 @@ obdevtools-cmake-3.22.1-122024092710.al8.aarch64.rpm
 obdevtools-flex-2.5.35-42024092621.al8.aarch64.rpm
 obdevtools-gcc-12.3.0-32024122017.al8.aarch64.rpm
 obdevtools-llvm-17.0.6-202026032415.al8.aarch64.rpm
+ob-sanity-abiv1-1.0.0-272026041615.al8.aarch64.rpm target=community
 
 [tools-deps]
 obshell-4.4.1.1-32026031914.al8.aarch64.rpm target=community

@@ -39,7 +39,6 @@ int ObFreezeInfoList::get_latest_freeze_info(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("invalid freeze info", KR(ret), KPC(this));
   } else {
     freeze_info = frozen_statuses_.at(frozen_statuses_.count() - 1);
   }
@@ -53,7 +52,6 @@ int ObFreezeInfoList::get_min_freeze_info_greater_than(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("invalid freeze info", KR(ret), KPC(this));
   } else {
     int64_t idx = -1;
     SCN max_cache_frozen_scn = frozen_statuses_.at(frozen_statuses_.count() - 1).frozen_scn_;
@@ -70,8 +68,6 @@ int ObFreezeInfoList::get_min_freeze_info_greater_than(
       if (max_cache_frozen_scn == frozen_scn) {
       } else if (max_cache_frozen_scn < frozen_scn) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("max cached frozen_scn should not less than frozen_scn", KR(ret), K(frozen_scn),
-          K(max_cache_frozen_scn), K_(frozen_statuses));
       }
     }
   }
@@ -88,7 +84,6 @@ int ObFreezeInfoList::get_freeze_info(
 
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("invalid freeze info", KR(ret), KPC(this));
   } else {
     for (int64_t i = 0; i < frozen_statuses_.count(); i++) {
       if (frozen_statuses_.at(i).frozen_scn_ == frozen_scn) {
@@ -115,7 +110,6 @@ int ObFreezeInfoManager::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", KR(ret));
   } else {
     
     sql_proxy_ = &proxy;
@@ -157,7 +151,6 @@ int ObFreezeInfoManager::fetch_new_freeze_info(
              sql_proxy, min_frozen_scn, freeze_infos))) {
   } else if (OB_UNLIKELY(freeze_infos.empty())) {
     ret = OB_ENTRY_NOT_EXIST;
-    LOG_WARN("no freeze info in inner table", KR(ret), K(min_frozen_scn));
   }
   return ret;
 }
@@ -171,7 +164,6 @@ int ObFreezeInfoManager::update_freeze_info(
 
   if (OB_UNLIKELY(freeze_infos.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid arguments", K(ret), K(freeze_infos), K(latest_snapshot_gc_scn));
   } else if (OB_FAIL(freeze_info_.frozen_statuses_.prepare_allocate(freeze_info_cnt))) {
   } else if (OB_FAIL(freeze_info_.frozen_statuses_.assign(freeze_infos))) {
   } else if (freeze_info_.frozen_statuses_.count() > 1) {
@@ -195,11 +187,9 @@ int ObFreezeInfoManager::add_freeze_info(const share::ObFreezeInfo &frozen_statu
   if (0 == freeze_info_cnt) {
   } else if (OB_UNLIKELY(freeze_info_.frozen_statuses_.at(freeze_info_cnt - 1).frozen_scn_ >= frozen_status.frozen_scn_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid arguments", K(ret), K(freeze_info_), K(frozen_status));
   }
 
   if (FAILEDx(freeze_info_.frozen_statuses_.push_back(frozen_status))) {
-    LOG_WARN("fail to push back", KR(ret), K(frozen_status));
   }
   return ret;
 }
@@ -210,7 +200,6 @@ int ObFreezeInfoManager::update_snapshot_gc_scn(const share::SCN &new_snapshot_g
 
   if (!freeze_info_.is_valid()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
   } else {
     freeze_info_.latest_snapshot_gc_scn_ = new_snapshot_gc_scn;
   }
@@ -246,7 +235,6 @@ int ObFreezeInfoManager::get_latest_freeze_info(share::ObFreezeInfo &frozen_stat
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("freeze info mgr not inited", KR(ret));
   } else if (OB_FAIL(freeze_info_.get_latest_freeze_info(frozen_status))) {
   }
   return ret;
@@ -261,10 +249,8 @@ int ObFreezeInfoManager::get_freeze_info_by_idx(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("freeze info mgr not inited", KR(ret));
   } else if (freeze_info_.empty() || idx >= freeze_info_.count()) {
     ret = OB_ENTRY_NOT_EXIST;
-    LOG_WARN("no freeze info in curr info_list", K(ret), K(freeze_info_));
   } else {
     freeze_info = freeze_info_.frozen_statuses_.at(idx);
   }
@@ -281,10 +267,8 @@ int ObFreezeInfoManager::get_freeze_info_by_major_snapshot(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("freeze info mgr not inited", KR(ret));
   } else if (OB_UNLIKELY(snapshot_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid arguments", K(ret), K(snapshot_version));
   } else if (OB_FAIL(frozen_scn.convert_for_tx(snapshot_version))) {
   } else if (OB_FAIL(freeze_info_.get_freeze_info(frozen_scn, frozen_status, ret_pos))) {
   } else if (ret_pos < 0 || ret_pos >= freeze_info_.count()) {
@@ -303,10 +287,8 @@ int ObFreezeInfoManager::get_freeze_info_behind_snapshot_version(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("freeze info mgr not inited", KR(ret));
   } else if (OB_UNLIKELY(snapshot_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid arguments", K(ret), K(snapshot_version));
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < freeze_info_.frozen_statuses_.count(); ++i) {
@@ -334,10 +316,8 @@ int ObFreezeInfoManager::get_freeze_info_compare_with_major_snapshot(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("freeze info mgr not inited", KR(ret));
   } else if (OB_UNLIKELY(snapshot_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid arguments", K(ret), K(snapshot_version));
   } else {
     bool found = false;
     if (CmpType::GREATER_THAN == cmp_type) {
@@ -378,13 +358,10 @@ int ObFreezeInfoManager::get_neighbour_frozen_status(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("freeze info mgr not inited", KR(ret));
   } else if (OB_UNLIKELY(snapshot_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid arguments", K(ret), K(snapshot_version));
   } else if (info_list.empty()) {
     ret = OB_ENTRY_NOT_EXIST;
-    LOG_WARN("no frozen status in curr info list", K(ret), K(snapshot_version));
   } else if (snapshot_version >= info_list.at(info_list.count() - 1).frozen_scn_.get_val_for_tx()) {
     // use found = false setting
   } else {

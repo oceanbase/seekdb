@@ -23,7 +23,7 @@
 #include "rpc/obmysql/ob_mysql_field.h"
 #include "rpc/obmysql/obsm_struct.h"
 
-struct nio_connection_handle;
+struct NioConnectionHandle;
 
 namespace oceanbase
 {
@@ -177,7 +177,7 @@ protected:
   // Non-owning connection-scoped Rust response identity. The session owns the
   // handle. Only an OWNED sender may dereference it; a SNAPSHOT merely carries
   // the identity until a successful handoff transfers REQUEST_BUSY ownership.
-  nio_connection_handle *nio_connection_handle_;
+  NioConnectionHandle *nio_connection_handle_;
   // Set once this sender has performed a mid-request read on the connection.
   // The stream cursor has then moved even after the packet lease is released,
   // so packet retry must stay closed. Replaces the removed read_handle_, whose

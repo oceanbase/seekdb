@@ -53,7 +53,6 @@ int ObMySQLTransaction::start_transaction(
   int ret = OB_SUCCESS;
   if (NULL == get_connection()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("conn_ is NULL", K(ret));
   } else if (OB_FAIL(get_connection()->start_transaction(with_snapshot))) {
   }
   return ret;
@@ -68,7 +67,6 @@ int ObMySQLTransaction::start(
   start_time_ = ::oceanbase::common::ObTimeUtility::current_time();
   if (OB_FAIL(connect(group_id, sql_client))) {
   } else if (enable_query_stash_ && OB_FAIL(query_stash_desc_.create(1024, "BucketQueryS", "NodeQueryS"))) {
-    LOG_WARN("failed to init map", K(ret));
   } else {
     if (OB_FAIL(start_transaction(with_snapshot))) {
       set_errno(ret);
@@ -151,13 +149,11 @@ int ObMySQLTransaction::get_stash_query(const char *table_name, ObSqlTransQueryS
   int ret = OB_SUCCESS;
   ret = query_stash_desc_.get_refactored(table_name, desc);
   if (OB_FAIL(ret) && ret != OB_HASH_NOT_EXIST) {
-    LOG_WARN("get_stash_query", K(ret), K(table_name));
   } else if (ret == OB_HASH_NOT_EXIST) {
     ret = OB_SUCCESS;
     void *ptr = ob_malloc(sizeof(ObSqlTransQueryStashDesc), "QueryStash");
     if (OB_ISNULL(ptr)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("get_stash_query ob_malloc fail", K(ret));
     } else {
       desc = new(ptr) ObSqlTransQueryStashDesc();
       if (OB_FAIL(query_stash_desc_.set_refactored(table_name, desc))) {

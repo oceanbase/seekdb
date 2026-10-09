@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "config_bridge.h"
 #include "ob_dfo_mgr.h"
 #include "sql/engine/basic/ob_temp_table_access_op.h"
 #include "sql/engine/basic/ob_material_op.h"
@@ -33,7 +34,6 @@ int ObDfoSchedOrderGenerator::generate_sched_order(ObDfoMgr &dfo_mgr)
    ObDfo *dfo_tree = dfo_mgr.get_root_dfo();
    if (OB_ISNULL(dfo_tree)) {
      ret = OB_ERR_UNEXPECTED;
-     LOG_WARN("NULL unexpected", K(ret));
    } else if (OB_FAIL(DfoTreeNormalizer<ObDfo>::normalize(*dfo_tree))) {
    } else if (OB_FAIL(do_generate_sched_order(dfo_mgr, *dfo_tree))) {
    }
@@ -60,11 +60,10 @@ int ObDfoSchedDepthGenerator::generate_sched_depth(ObExecContext &exec_ctx,
                                                    ObDfoMgr &dfo_mgr)
 {
   int ret = OB_SUCCESS;
-  if (GCONF._px_max_pipeline_depth > 2) {
+  if (config::_px_max_pipeline_depth() > 2) {
     ObDfo *dfo_tree = dfo_mgr.get_root_dfo();
     if (OB_ISNULL(dfo_tree)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL unexpected", K(ret));
     } else if (OB_FAIL(do_generate_sched_depth(exec_ctx, dfo_mgr, *dfo_tree))) {
     }
   }
@@ -126,19 +125,16 @@ int ObDfoSchedDepthGenerator::try_set_dfo_block(ObExecContext &exec_ctx, ObDfo &
   const ObOpSpec *phy_op = dfo.get_root_op_spec();
   if (OB_ISNULL(phy_op)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("phy_op is null", K(ret));
   } else {
     const ObTransmitSpec *transmit = static_cast<const ObTransmitSpec *>(phy_op);
     const ObOpSpec *child = transmit->get_child();
     if (OB_ISNULL(child)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("phy_op is null", K(ret));
     } else if (PHY_MATERIAL == child->type_) {
       const ObMaterialSpec *mat = static_cast<const ObMaterialSpec *>(child);
       ObOperatorKit *kit = exec_ctx.get_operator_kit(mat->id_);
       if (OB_ISNULL(kit) || OB_ISNULL(kit->input_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("operator is NULL", K(ret), KP(kit));
       } else {
         ObMaterialOpInput *mat_input = static_cast<ObMaterialOpInput *>(kit->input_);
         mat_input->set_bypass(!block); // so that this dfo will have a blocked material op
@@ -160,7 +156,6 @@ int ObDfoWorkerAssignment::calc_admited_worker_count(const ObIArray<ObDfo*> &dfo
   const ObSqlExecutorCtx *task_exec_ctx = NULL;
   if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(exec_ctx))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("task exec ctx NULL", K(ret));
   } else if (OB_FAIL(ObDfoWorkerAssignment::get_dfos_worker_count(dfos, true, px_minimal))) {
   } else {
     // px level, indicates the number calculated by the optimizer, the current px theoretically requires how many threads
@@ -173,7 +168,6 @@ int ObDfoWorkerAssignment::calc_admited_worker_count(const ObIArray<ObDfo*> &dfo
     const int64_t query_admited = task_exec_ctx->get_admited_worker_cnt();
     if (query_expected > 0 && 0 >= query_admited) {
       ret = OB_ERR_INSUFFICIENT_PX_WORKER;
-      LOG_WARN("not enough thread resource", K(ret), K(px_expected), K(query_admited), K(query_expected));
     } else if (0 == query_expected) {
       // note: For single table, dop=1 queries, it will take the fast dfo path, at this time query_expected = 0
       px_admited = 0;
@@ -181,7 +175,6 @@ int ObDfoWorkerAssignment::calc_admited_worker_count(const ObIArray<ObDfo*> &dfo
       px_admited = px_expected;
     } else if (OB_UNLIKELY(query_admited < query_minimal || query_expected <= query_minimal)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected query admited worker count", K(ret), K(query_minimal), K(query_admited), K(query_expected));
     } else {
       const int64_t extra_worker = query_admited - query_minimal;
       const int64_t extra_expected = px_expected - px_minimal;
@@ -250,8 +243,6 @@ int ObDfoWorkerAssignment::assign_worker(ObDfoMgr &dfo_mgr,
   bool match_expected = false;
   if (OB_UNLIKELY(admited_worker_count < 0 || expected_worker_count <= 0 || minimal_worker_count <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("should have at least one worker",  K(ret), K(admited_worker_count),
-                                        K(expected_worker_count), K(minimal_worker_count));
   } else if (admited_worker_count >= expected_worker_count) {
     match_expected = true;
   } else if (0 >= admited_worker_count) {
@@ -261,7 +252,6 @@ int ObDfoWorkerAssignment::assign_worker(ObDfoMgr &dfo_mgr,
   } else if (OB_UNLIKELY(minimal_worker_count > admited_worker_count
                          || minimal_worker_count >= expected_worker_count)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected params", K(ret), K(minimal_worker_count), K(admited_worker_count), K(expected_worker_count));
   } else {
     scale_rate = static_cast<double>(admited_worker_count - minimal_worker_count)
                  / static_cast<double>(expected_worker_count - minimal_worker_count);
@@ -277,7 +267,6 @@ int ObDfoWorkerAssignment::assign_worker(ObDfoMgr &dfo_mgr,
     child->set_assigned_worker_count(val);
     if (child->is_single() && val > 1) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("local dfo do should not have more than 1", K(*child), K(val), K(ret));
     }
     LOG_TRACE("assign worker count to dfo",
               "dfo_id", child->get_dfo_id(), K(admited_worker_count),
@@ -293,12 +282,6 @@ int ObDfoWorkerAssignment::assign_worker(ObDfoMgr &dfo_mgr,
     // means that some dfo theoretically cannot be assigned to any thread
     ret = OB_ERR_PARALLEL_SERVERS_TARGET_NOT_ENOUGH;
     LOG_USER_ERROR(OB_ERR_PARALLEL_SERVERS_TARGET_NOT_ENOUGH, total_assigned);
-    LOG_WARN("total assigned worker to dfos is more than admited_worker_count",
-             K(total_assigned),
-             K(admited_worker_count),
-             K(minimal_worker_count),
-             K(expected_worker_count),
-             K(ret));
   }
   return ret;
 }
@@ -316,7 +299,6 @@ int ObDfoWorkerAssignment::get_dfos_worker_count(const ObIArray<ObDfo*> &dfos,
     // Find the group with the largest expected worker cnt value
     if (OB_ISNULL(parent) || OB_ISNULL(child)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("dfo edges expect to have parent", KPC(parent), KPC(child), K(ret));
     } else {
       int64_t child_assigned = get_minimal ? 1 : child->get_assigned_worker_count();
       int64_t parent_assigned = get_minimal ? 1 : parent->get_assigned_worker_count();
@@ -380,11 +362,9 @@ int ObDfoMgr::init(ObExecContext &exec_ctx,
   int64_t px_admited = 0;
   if (inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("dfo mgr init twice", K(ret));
   } else if (OB_FAIL(do_split(exec_ctx, allocator_, &root_op_spec, root_dfo_, dfo_int_gen, px_coord_info))) {
   } else if (OB_ISNULL(root_dfo_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL dfo unexpected", K(ret));
   } else if (!px_coord_info.rf_dpd_info_.is_empty()
       && OB_FAIL(px_coord_info.rf_dpd_info_.describe_dependency(root_dfo_))) {
     LOG_WARN("failed to describe rf dependency");
@@ -423,13 +403,10 @@ int ObDfoMgr::do_split(ObExecContext &exec_ctx,
   if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("stack overflow, maybe too deep recursive", K(ret));
   } else if (OB_ISNULL(phy_op)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL unexpected", K(ret));
   } else if (NULL == parent_dfo && !IS_PX_COORD(phy_op->type_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the first phy_op must be a coord op", K(ret), K(phy_op->type_));
   } else if (phy_op->is_table_scan() && NULL != parent_dfo) {
     if (static_cast<const ObTableScanSpec*>(phy_op)->use_dist_das()) {
       parent_dfo->set_das(true);
@@ -564,10 +541,8 @@ int ObDfoMgr::do_split(ObExecContext &exec_ctx,
           (reinterpret_cast<const ObPxTransmitSpec *>(transmit))->repartition_table_id_);
         if (OB_ISNULL(parent_dfo)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("parent dfo should not be null", K(ret));
         } else if (transmit->get_px_dop() <= 0) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("should have dop set by optimizer", K(ret), K(transmit->get_px_dop()));
         } else if (OB_FAIL(dfo_int_gen.gen_id(transmit->get_dfo_id(),
                                               dfo->get_interrupt_id()))) {
         } else {
@@ -595,7 +570,6 @@ int ObDfoMgr::do_split(ObExecContext &exec_ctx,
       // Serialize everything out, that is, include the entire subtree (fulltree)
       if (OB_ISNULL(parent_dfo)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("inner px coord op should be in a dfo", K(ret));
       } else {
         parent_dfo->set_fulltree(true);
         parent_dfo->set_single(true);
@@ -624,13 +598,11 @@ int ObDfoMgr::create_dfo(ObIAllocator &allocator,
   dfo = NULL;
   if (OB_ISNULL(dfo_root_op)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL unexpected", K(ret));
   } else if (OB_ISNULL(tmp = allocator.alloc(sizeof(ObDfo)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("fail to alloc ObDfo", K(ret));
   } else if (OB_ISNULL(dfo = new(tmp) ObDfo(allocator))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to new ObDfo", K(ret));
   } else {
     dfo->set_root_op_spec(dfo_root_op);
     dfo->set_phy_plan(dfo_root_op->get_phy_plan());
@@ -689,7 +661,6 @@ int ObDfoMgr::get_ready_dfos(ObIArray<ObDfo*> &dfos) const
         if (OB_FAIL(dfos.push_back(edge))) {
         } else if (NULL == edge->parent()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("parent is NULL, unexpected", K(ret));
         } else if (OB_FAIL(dfos.push_back(edge->parent()))) {
         } else {
           edge->set_active();
@@ -712,7 +683,6 @@ int ObDfoMgr::get_ready_dfos(ObIArray<ObDfo*> &dfos) const
         } else if (OB_FAIL(dfos.push_back(sibling_edge))) {
         } else if (NULL == sibling_edge->parent()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("parent is NULL, unexpected", K(ret));
         } else if (OB_FAIL(dfos.push_back(sibling_edge->parent()))) {
         } else {
           sibling_edge->set_active();
@@ -725,7 +695,7 @@ int ObDfoMgr::get_ready_dfos(ObIArray<ObDfo*> &dfos) const
       // Three-layer DFO scheduling logic
       // Note: Even if a sibling has been scheduled above, 3 DFOs have already been scheduled
       // will still attempt to schedule the 4th depend parent dfo
-      if (OB_SUCC(ret) && !got_pair_dfo && GCONF._px_max_pipeline_depth > 2) {
+      if (OB_SUCC(ret) && !got_pair_dfo && config::_px_max_pipeline_depth() > 2) {
         ObDfo *parent_edge = edge->parent();
         if (NULL != parent_edge &&
             !parent_edge->is_active() &&
@@ -765,7 +735,6 @@ int ObDfoMgr::get_ready_dfos(ObIArray<ObDfo*> &dfos) const
           // No whitening no adjustment
           if (OB_ISNULL(root_edge->parent()) || root_edge->parent() != root_dfo_) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("The root edge is null or it's parent not root dfo", K(ret));
           } else if (OB_FAIL(dfos.push_back(root_edge))) {
           } else if (OB_FAIL(dfos.push_back(root_dfo_))) {
           } else {
@@ -798,7 +767,6 @@ int ObDfoMgr::add_dfo_edge(ObDfo *edge)
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "plan with more than 128 DFOs");
   } else if (OB_FAIL(edges_.push_back(edge))) {
-    LOG_WARN("fail to push back dfo", K(*edge), K(ret));
     // release the memory
     ObDfo::reset_resource(edge);
     edge = nullptr;
@@ -811,7 +779,6 @@ int ObDfoMgr::find_dfo_edge(int64_t id, ObDfo *&edge)
   int ret = OB_SUCCESS;
   if (id < 0 || id >= ObDfo::MAX_DFO_ID || id >= edges_.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid dfo id", K(id), K(edges_.count()), K(ret));
   } else {
     bool found = false;
     int64_t cnt = edges_.count();
@@ -824,7 +791,6 @@ int ObDfoMgr::find_dfo_edge(int64_t id, ObDfo *&edge)
     }
     if (!found) {
       ret = OB_ENTRY_NOT_EXIST;
-      LOG_WARN("not found dfo", K(id), K(cnt), K(ret));
     }
   }
   return ret;

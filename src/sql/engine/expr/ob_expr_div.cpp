@@ -71,7 +71,6 @@ int ObExprDiv::calc_result_type2(ObExprResType &type,
           ObPrecision res_prec = type1.get_precision() - type2.get_precision() - extra_scale_for_decint_div;
           if (OB_UNLIKELY(res_scale < 0 || res_prec < 0 || res_prec < res_scale)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected result precision & scale", K(ret), K(res_scale), K(res_prec));
           } else {
             type.set_scale(res_scale);
             type.set_precision(res_prec);
@@ -117,7 +116,6 @@ int ObExprDiv::calc_result_type2(ObExprResType &type,
           if (OB_UNLIKELY(PRECISION_UNKNOWN_YET == type.get_precision() ||
                           SCALE_UNKNOWN_YET == type.get_scale())) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected decimal int precision and scale", K(ret), K(type));
           } else {
             const ObScale calc_scale = type.get_scale() + type2.get_scale();
             ObAccuracy dst_acc(type.get_precision(), calc_scale);
@@ -272,7 +270,6 @@ int ObExprDiv::div_double(ObObj &res,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(left.get_type_class() != right.get_type_class())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid types", K(ret), K(left), K(right));
   } else if (fabs(right.get_double()) == 0.0) {
       res.set_null();
   } else {
@@ -308,7 +305,6 @@ int ObExprDiv::div_double_no_overflow(ObObj &res,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(left.get_type_class() != right.get_type_class())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid types", K(ret), K(left), K(right));
   } else if (fabs(right.get_double()) == 0.0) {
       res.set_null();
   } else {
@@ -373,7 +369,6 @@ struct ObFloatDivFunc
                       left_f,
                       right_f);
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BINARY_FLOAT", expr_str);
-      LOG_WARN("float out of range", K(ret), K(left_f), K(right_f));
     } else {
       res.set_float(result_f);
     }
@@ -421,7 +416,6 @@ struct ObDoubleDivFunc
                         left_d,
                         right_d);
         LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "DOUBLE", expr_str);
-        LOG_WARN("double out of range", K(ret), "left", left_d, "right", right_d);
       } else {
         res.set_double(result_d);
       }
@@ -485,7 +479,6 @@ struct ObNumberDivFunc
           if (calc_scale >= 0 && OB_FAIL(result_num.trunc(calc_scale))) {
             //calc_scale is calc_scale ,not res_scale.
             //trunc with calc_scale and round with res_scale
-            LOG_WARN("failed to trunc result number", K(ret), K(result_num), K(calc_scale));
           } else {
             res.set_number(result_num);
           }
@@ -550,7 +543,6 @@ struct ObDecimalIntBatchDivRawWithCheck : public ObDecimalIntBatchDivRaw<int512_
       int64_t pos = 0;
       databuff_printf(expr_str, OB_MAX_TWO_OPERATOR_EXPR_LENGTH, pos, "");
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "DECIMAL", expr_str);
-      LOG_WARN("decimal int out of range", K(ret));
     }
     return ret;
   }
@@ -848,14 +840,12 @@ int ObExprDiv::cg_expr(ObExprCGCtx &op_cg_ctx,
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected result type", K(ret), K(rt_expr.datum_meta_.type_));
     }
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(op_cg_ctx.session_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected session is null", K(ret));
   } else {
     stmt::StmtType stmt_type = op_cg_ctx.session_->get_stmt_type();
     if (is_error_for_division_by_zero(op_cg_ctx.session_->get_sql_mode())

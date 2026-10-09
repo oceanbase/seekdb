@@ -575,7 +575,6 @@ int ObTableScanIterator::init_and_open_scan_merge_iter_()
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("error caused by unknown reasons", K(ret));
       }
     } else {
       INIT_AND_OPEN_ITER(scan_merge_, table_scan_range_.get_ranges().at(0), false);

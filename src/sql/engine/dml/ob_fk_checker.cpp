@@ -63,7 +63,6 @@ int ObForeignKeyChecker::do_fk_check_batch(bool &all_has_result)
   } else if (OB_FAIL(get_scan_result_count(get_row_count))) {
   } else if (get_row_count > batch_distinct_fk_cnt_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("result row count exceeds the number of unique key", K(ret), K(get_row_count), K(batch_distinct_fk_cnt_));
   } else if (get_row_count == batch_distinct_fk_cnt_) {
     all_has_result = true;
   } else {
@@ -89,11 +88,9 @@ int ObForeignKeyChecker::get_scan_result_count(int64_t &get_row_count)
       if (OB_ITER_END == ret) {
         if (OB_FAIL(result_iter.next_result())) {
           if (OB_ITER_END != ret) {
-            LOG_WARN("fetch next task failed", K(ret));
           }
         }
       } else {
-        LOG_WARN("get next row from das result failed", K(ret));
       }
     } else {
       get_row_count++;
@@ -121,7 +118,6 @@ int ObForeignKeyChecker::do_fk_check_single_row(const ObIArray<ObForeignKeyColum
     bool got_row = false;
     if (1 != das_ref_.get_das_task_cnt()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("has more than one das task", K(das_ref_.get_das_task_cnt()), K(ret));
     } else if (OB_FAIL(result_iter.get_next_row())) {
       if (OB_ITER_END == ret) {
          ret = OB_SUCCESS;
@@ -133,7 +129,6 @@ int ObForeignKeyChecker::do_fk_check_single_row(const ObIArray<ObForeignKeyColum
   }
 
   if (OB_SUCC(ret) && OB_FAIL(das_ref_.close_all_task())) {
-    LOG_WARN("close all das task failed", K(ret));
   } else {
     reuse();
   }
@@ -162,7 +157,6 @@ int ObForeignKeyChecker::build_fk_check_das_task(const ObIArray<ObForeignKeyColu
   } else if (OB_FAIL(get_das_scan_op(tablet_loc, das_scan_op))) {
   } else if (OB_ISNULL(das_scan_op)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("das_scan_op should be not null", K(ret));
   } else {
     storage::ObTableScanParam &scan_param = das_scan_op->get_scan_param();
     if (OB_FAIL(scan_param.key_ranges_.push_back(lookup_range))) {
@@ -186,7 +180,6 @@ int ObForeignKeyChecker::calc_lookup_tablet_loc(ObDASTabletLoc *&tablet_loc)
     tablet_loc = local_tablet_loc_;
     if (OB_ISNULL(tablet_loc)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tablet loc is null", K(ret));
     }
   }
   else if (OB_FAIL(ObSQLUtils::clear_evaluated_flag(clear_exprs_, eval_ctx_))) {
@@ -194,9 +187,7 @@ int ObForeignKeyChecker::calc_lookup_tablet_loc(ObDASTabletLoc *&tablet_loc)
     if (OB_NO_PARTITION_FOR_GIVEN_VALUE == ret) {
       //NOTE: no partition means no referenced value in parent table, change the ret_code to OB_ERR_NO_REFERENCED_ROW
       ret = OB_ERR_NO_REFERENCED_ROW;
-      LOG_WARN("No referenced value in parent table and no partition for given value", K(ret));
     } else {
-      LOG_WARN("fail to calc part id", K(ret), KPC(part_id_expr));
     }
   } else if (OB_FAIL(DAS_CTX(das_ref_.get_exec_ctx()).extended_tablet_loc(*table_loc_, tablet_id, tablet_loc))) {
   }
@@ -232,14 +223,12 @@ int ObForeignKeyChecker::init_foreign_key_checker(int64_t estimate_row,
   if (OB_FAIL(DAS_CTX(das_ref_.get_exec_ctx()).extended_table_loc(loc_meta, table_loc_))) {
   } else if (OB_ISNULL(table_loc_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table location is null", K(ret));
   } else if (OB_FAIL(init_das_scan_rtdef())) {
   } else if (OB_FAIL(ObDMLService::create_rowkey_check_hashset(estimate_row, &das_ref_.get_exec_ctx(), se_rowkey_dist_ctx_))) {
   } else if (OB_FAIL(ObSqlTransControl::set_fk_check_snapshot(das_ref_.get_exec_ctx()))) {
   } else if (OB_FAIL(init_clear_exprs(fk_ctdef, row))) {
   } else if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("allocator used to init foreign key checker is null", K(ret));
   } else {
     allocator_ = allocator;
     table_loc_->is_fk_check_ = true; //mark the table location with fk checking action
@@ -259,7 +248,6 @@ int ObForeignKeyChecker::init_clear_exprs(ObForeignKeyCheckerCtdef &fk_ctdef, co
     ObExpr* expr =  fk_ctdef.part_id_dep_exprs_.at(i);
     if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("partition id calc expr is null", K(ret), K(i));
     } else if (!has_exist_in_array(row, expr)) {
       clear_exprs_.push_back(expr);
     }
@@ -309,7 +297,6 @@ int ObForeignKeyChecker::build_table_range(const ObIArray<ObForeignKeyColumn> &c
   bool need_shadow_columns = false;
   if (0 == rowkey_cnt || 0 == fk_cnt) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid rowkey count of foreign key count", K(ret), K(rowkey_cnt), K(fk_cnt));
   } else if (rowkey_cnt == fk_cnt) {
     ret = build_primary_table_range(columns, row, lookup_range, need_check);
   } else if (OB_FAIL(check_need_shadow_columns(columns, row, need_shadow_columns))) {
@@ -365,10 +352,8 @@ int ObForeignKeyChecker::build_primary_table_range(const ObIArray<ObForeignKeyCo
   // check parent table
   if (fk_cnt != checker_ctdef_.rowkey_ids_.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid foreign key column count", K(ret), K(fk_cnt), K(checker_ctdef_.rowkey_ids_.count()));
   } else if (OB_ISNULL(buf = allocator_->alloc(sizeof(ObObj) * rowkey_cnt))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate buffer failed", K(ret), K(rowkey_cnt));
   } else {
     obj_ptr = new(buf) ObObj[rowkey_cnt];
   }
@@ -387,7 +372,6 @@ int ObForeignKeyChecker::build_primary_table_range(const ObIArray<ObForeignKeyCo
         dst_obj_meta.get_stored_precision() : PRECISION_UNKNOWN_YET;
     if (rowkey_index < 0 || rowkey_index >= rowkey_cnt) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Invalid woekey index to build scan range", K(ret), K(rowkey_index));
     } else if (OB_FAIL(check_fk_column_type(col_obj_meta, dst_obj_meta,
         column_expr->datum_meta_.precision_, dst_prec,
         need_extra_cast))) {
@@ -405,7 +389,6 @@ int ObForeignKeyChecker::build_primary_table_range(const ObIArray<ObForeignKeyCo
       }
       ObObj ori_obj = tmp_obj;
       if(OB_FAIL(ObObjCaster::to_type(dst_obj_meta.get_type(), cast_ctx, ori_obj, tmp_obj))) {
-        LOG_WARN("fail to cast type", K(ret), K(col_obj_meta), K(dst_obj_meta));
         if (ret == OB_DATA_OUT_OF_RANGE) {
           // To compatible with MySQL. 
           // Also, if the value is not in the range, then it means that there's no referenced row.
@@ -433,7 +416,6 @@ int ObForeignKeyChecker::build_primary_table_range(const ObIArray<ObForeignKeyCo
       } else if (OB_FAIL(se_rowkey_dist_ctx_->set_refactored(table_rowkey))) {
       }
     } else {
-      LOG_WARN("check if foreign key item exists failed", K(ret), K(table_rowkey));
     }
   }
   return ret;
@@ -451,10 +433,8 @@ int ObForeignKeyChecker::build_index_table_range(const ObIArray<ObForeignKeyColu
   int64_t fk_cnt = columns.count();
   if (fk_cnt != checker_ctdef_.rowkey_ids_.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid foreign key column count", K(ret), K(fk_cnt), K(checker_ctdef_.rowkey_ids_.count()));
   } else if (OB_ISNULL(buf = allocator_->alloc(sizeof(ObObj) * rowkey_cnt))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate buffer failed", K(ret), K(rowkey_cnt));
   } else {
     obj_ptr = new(buf) ObObj[rowkey_cnt];
   }
@@ -474,7 +454,6 @@ int ObForeignKeyChecker::build_index_table_range(const ObIArray<ObForeignKeyColu
       ObObjMeta to_obj_meta = col_obj_meta;
       if (rowkey_index < 0 || rowkey_index >= fk_cnt) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Invalid woekey index to build scan range", K(ret), K(rowkey_index));
       } else if (OB_FAIL(check_fk_column_type(col_obj_meta, dst_obj_meta,
           column_expr->datum_meta_.precision_, dst_prec,
           need_extra_cast))) {
@@ -492,7 +471,6 @@ int ObForeignKeyChecker::build_index_table_range(const ObIArray<ObForeignKeyColu
         }
         ObObj ori_obj = tmp_obj;
         if(OB_FAIL(ObObjCaster::to_type(dst_obj_meta.get_type(), cast_ctx, ori_obj, tmp_obj))) {
-          LOG_WARN("fail to cast type", K(ret), K(col_obj_meta), K(dst_obj_meta));
           if (ret == OB_DATA_OUT_OF_RANGE) {
             // To compatible with MySQL. 
             // Also, if the value is not in the range, then it means that there's no referenced row.
@@ -526,7 +504,6 @@ int ObForeignKeyChecker::build_index_table_range(const ObIArray<ObForeignKeyColu
       } else if (OB_FAIL(se_rowkey_dist_ctx_->set_refactored(table_rowkey))) {
       }
     } else {
-      LOG_WARN("check if foreign key item exists failed", K(ret), K(table_rowkey));
     }
   }
   return ret;
@@ -546,13 +523,10 @@ int ObForeignKeyChecker::build_index_table_range_need_shadow_column(const ObIArr
   int64_t fk_cnt = columns.count();
   if (fk_cnt != checker_ctdef_.rowkey_ids_.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid foreign key column count", K(ret), K(fk_cnt), K(checker_ctdef_.rowkey_ids_.count()));
   } else if (OB_ISNULL(buf_start = allocator_->alloc(sizeof(ObObj) * rowkey_cnt))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate buffer failed", K(ret), K(rowkey_cnt));
   } else if (OB_ISNULL(buf_end = allocator_->alloc(sizeof(ObObj) * rowkey_cnt))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate buffer failed", K(ret), K(rowkey_cnt));
   } else {
     obj_ptr_start = new(buf_start) ObObj[rowkey_cnt];
     obj_ptr_end = new(buf_end) ObObj[rowkey_cnt];
@@ -573,7 +547,6 @@ int ObForeignKeyChecker::build_index_table_range_need_shadow_column(const ObIArr
       ObObjMeta to_obj_meta = col_obj_meta;
       if (rowkey_index < 0 || rowkey_index >= fk_cnt) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Invalid woekey index to build scan range", K(ret), K(rowkey_index));
       } else if (OB_FAIL(check_fk_column_type(col_obj_meta, dst_obj_meta,
           column_expr->datum_meta_.precision_, dst_prec,
           need_extra_cast))) {
@@ -591,7 +564,6 @@ int ObForeignKeyChecker::build_index_table_range_need_shadow_column(const ObIArr
         }
         ObObj ori_obj = tmp_obj;
         if(OB_FAIL(ObObjCaster::to_type(dst_obj_meta.get_type(), cast_ctx, ori_obj, tmp_obj))) {
-          LOG_WARN("fail to cast type", K(ret), K(col_obj_meta), K(dst_obj_meta));
           if (ret == OB_DATA_OUT_OF_RANGE) {
             // To compatible with MySQL. 
             // Also, if the value is not in the range, then it means that there's no referenced row.

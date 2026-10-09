@@ -19,8 +19,7 @@
 
 #include "share/config/ob_server_config.h"
 #include "share/config/ob_reload_config.h"
-#include "share/config/ob_config_storage.h"
-// Remove code changes are significant, keep for now
+#include "config.h"
 
 namespace oceanbase
 {
@@ -30,60 +29,34 @@ namespace common
 class ObConfigManager
 {
 public:
-  ObConfigManager(ObServerConfig &server_config, ObReloadConfig &reload_config);
+  explicit ObConfigManager(ObReloadConfig &reload_config);
   virtual ~ObConfigManager();
 
-  int init(share::ObSQLiteConnectionPool *pool);
-  void stop();
-  void wait();
-  void destroy();
-
-  int check_header_change(const char* path, const char* buf) const;
-  // manual dump to file named by path
-  int dump2file(const char *path = NULL) const;
-
-  // set dump path (filename) for autodump
+  int init();
 
   // Reload config really
   int reload_config();
 
-  ObServerConfig &get_config(void);
-
-  ObConfigStorage &get_storage() { return storage_; }
-
   int update_local();
   virtual int got_version();
-  int64_t get_current_version() const { return server_config_.get_current_version(); }
-  int save_configs(int64_t base_version);
-  int save_config(
-      const char *config_name,
-      const char *value);
+  int save_configs();
+  int save_internal_state(const char *name, const char *value);
+  int update_checked(const char *name, const char *value, bool reset,
+                     ConfigCheckCallback callback, void *context,
+                     bool *after_replace);
   void enable_static_effect() { enable_static_effect_ = true; }
 private:
-  // whitout lock, only used inner
-  int dump2file_unsafe(const char *path = NULL) const;
-
-private:
   bool inited_;
-  ObServerConfig &server_config_;
   ObReloadConfig &reload_config_func_;
-  ObConfigStorage storage_;
   bool enable_static_effect_;
   DISALLOW_COPY_AND_ASSIGN(ObConfigManager);
 };
 
-inline ObConfigManager::ObConfigManager(ObServerConfig &server_config,
-                                        ObReloadConfig &reload_config)
+inline ObConfigManager::ObConfigManager(ObReloadConfig &reload_config)
     : inited_(false),
-      server_config_(server_config),
       reload_config_func_(reload_config),
       enable_static_effect_(false)
 {
-}
-
-inline ObServerConfig &ObConfigManager::get_config(void)
-{
-  return server_config_;
 }
 
 } // namespace common

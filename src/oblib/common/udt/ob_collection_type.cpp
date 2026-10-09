@@ -59,7 +59,6 @@ int ObCollectionBasicType::deep_copy(ObIAllocator &allocator, ObCollectionTypeBa
   ObCollectionBasicType *buf = OB_NEWx(ObCollectionBasicType, &allocator);
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc collection basic type memory failed", K(ret));
   } else {
     buf->type_id_ = type_id_;
     buf->basic_meta_ = basic_meta_;
@@ -83,7 +82,6 @@ int ObCollectionArrayType::serialize(char *buf, const int64_t buf_len, int64_t &
   int ret = OB_SUCCESS;
   if (OB_ISNULL(element_type_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid array type for serialize", K(ret));
   } else {
     LST_DO_CODE(OB_UNIS_ENCODE, type_id_);
     LST_DO_CODE(OB_UNIS_ENCODE, dim_cnt_);
@@ -118,7 +116,6 @@ int ObCollectionArrayType::deep_copy(ObIAllocator &allocator, ObCollectionTypeBa
   ObCollectionArrayType *buf = OB_NEWx(ObCollectionArrayType, &allocator, allocator);
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc collection arry type memory failed", K(ret));
   } else if (OB_FAIL(element_type_->deep_copy(allocator, buf->element_type_))) {
   } else {
     buf->type_id_ = type_id_;
@@ -183,7 +180,6 @@ int ObCollectionMapType::serialize(char *buf, const int64_t buf_len, int64_t &po
   int ret = OB_SUCCESS;
   if (OB_ISNULL(key_type_) || OB_ISNULL(value_type_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid array type for serialize", K(ret));
   } else {
     LST_DO_CODE(OB_UNIS_ENCODE, type_id_);
     if (OB_FAIL(key_type_->serialize(buf, buf_len, pos))) {
@@ -218,7 +214,6 @@ int ObCollectionMapType::deep_copy(ObIAllocator &allocator, ObCollectionTypeBase
   ObCollectionMapType *buf = OB_NEWx(ObCollectionMapType, &allocator, allocator);
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc collection map type memory failed", K(ret));
   } else if (OB_FAIL(key_type_->deep_copy(allocator, buf->key_type_))) {
   } else if (OB_FAIL(value_type_->deep_copy(allocator, buf->value_type_))) {
   } else {
@@ -260,7 +255,6 @@ OB_DEF_SERIALIZE(ObSqlCollectionInfo)
   if (OB_FAIL(ret)) {
   } else if (name_len_ <= 0 || OB_ISNULL(name_def_) || OB_ISNULL(collection_meta_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid udt name length for serialize", K(ret), K(*this));
   } else {
     *reinterpret_cast<size_t*>(buf + pos) = name_len_;
     pos += sizeof(name_len_);
@@ -279,7 +273,6 @@ OB_DEF_DESERIALIZE(ObSqlCollectionInfo)
   pos += sizeof(name_len_);
   if (name_len_ <= 0 || pos >= data_len) {
     ret = OB_DESERIALIZE_ERROR;
-    LOG_WARN("invalid udt name length for deseriazlie", K(ret), K(*this), K(pos), K(data_len));
   } else {
     name_def_ = buf + pos;
     pos += name_len_;
@@ -306,10 +299,8 @@ int ObSqlCollectionInfo::deep_copy(ObIAllocator &allocator, ObSqlCollectionInfo 
   char *copy_name;
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc collection info memory failed", K(ret));
   } else if (OB_ISNULL(copy_name = static_cast<char *>(allocator.alloc(name_len_)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc collection type name failed", K(ret));
   } else if (OB_FAIL(collection_meta_->deep_copy(allocator, buf->collection_meta_))) {
   } else {
     MEMCPY(copy_name, name_def_, name_len_);
@@ -333,26 +324,22 @@ int ObSqlCollectionInfo::collection_type_deserialize(ObIAllocator &allocator, co
   } else if (type_id_tmp == ObNestedType::OB_BASIC_TYPE) {
     if (OB_ISNULL(collection_meta = OB_NEWx(ObCollectionBasicType, &allocator))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc element type failed", K(ret));
     } else if (OB_FAIL(collection_meta->deserialize(buf, data_len, pos))) {
     }
   } else if (type_id_tmp == ObNestedType::OB_ARRAY_TYPE
              || type_id_tmp == ObNestedType::OB_VECTOR_TYPE) {
     if (OB_ISNULL(collection_meta = OB_NEWx(ObCollectionArrayType, &allocator, allocator))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc element type failed", K(ret));
     } else if (OB_FAIL(collection_meta->deserialize(buf, data_len, pos))) {
     }
   } else if (type_id_tmp == ObNestedType::OB_MAP_TYPE
              || type_id_tmp == ObNestedType::OB_SPARSE_VECTOR_TYPE) {
     if (OB_ISNULL(collection_meta = OB_NEWx(ObCollectionMapType, &allocator, allocator))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc element type failed", K(ret));
     } else if (OB_FAIL(collection_meta->deserialize(buf, data_len, pos))) {
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid array type for serialize", K(ret), K(type_id_tmp));
   }
   return ret;
 }
@@ -362,7 +349,6 @@ int ObSqlCollectionInfo::set_element_meta_unsigned(ObCollectionBasicType *meta_i
   int ret = OB_SUCCESS;
   if (OB_ISNULL(meta_info) || meta_info->type_id_ != ObNestedType::OB_BASIC_TYPE) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid meta info", K(ret), K(meta_info));
   } else {
     ObObjType obj_type = meta_info->basic_meta_.get_obj_type();
     switch (obj_type) {
@@ -386,7 +372,6 @@ int ObSqlCollectionInfo::set_element_meta_unsigned(ObCollectionBasicType *meta_i
         break;
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid meta info", K(ret), K(meta_info));
     }
   }
   return ret;
@@ -401,7 +386,6 @@ int ObSqlCollectionInfo::set_element_meta_info(const std::string &name, uint8_t 
   int val = std::stoi(name);
   if (OB_ISNULL(meta_info) || meta_info->type_id_ != ObNestedType::OB_BASIC_TYPE) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid meta info", K(ret), K(meta_info));
   } else {
     ObObjType obj_type = meta_info->basic_meta_.get_obj_type();
     ObObjTypeClass tc = meta_info->basic_meta_.get_type_class();
@@ -422,7 +406,6 @@ int ObSqlCollectionInfo::set_element_meta_info(const std::string &name, uint8_t 
       case ObStringTC:
         if (val <= -1 || val > OB_MAX_VARCHAR_LENGTH / 4) {
           ret = OB_ERR_TOO_LONG_COLUMN_LENGTH;
-          LOG_WARN("data length is invalid", K(ret), K(val));
         } else {
           meta_info->basic_meta_.set_length(val);
         }
@@ -434,12 +417,10 @@ int ObSqlCollectionInfo::set_element_meta_info(const std::string &name, uint8_t 
           meta_info->basic_meta_.set_scale(val);
         } else {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected meta_attr_idx", K(ret), K(meta_attr_idx));
         }
         break;
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid data type", K(ret), K(tc));
     }
   }
   return ret;
@@ -450,7 +431,6 @@ int ObSqlCollectionInfo::set_element_meta(const std::string &name, ObCollectionB
   int ret = OB_SUCCESS;
   if (OB_ISNULL(meta_info) || meta_info->type_id_ != ObNestedType::OB_BASIC_TYPE) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid meta info", K(ret), K(meta_info));
   } else {
     ObDataType &basic_meta = static_cast<ObCollectionBasicType *>(meta_info)->basic_meta_;
     if (0 == name.compare("NULL")) {
@@ -535,7 +515,6 @@ int ObSqlCollectionInfo::parse_type_info() {
   uint8_t arr_depth = 0;
   if (OB_FAIL(parse_collection_info(type_info, meta_info, arr_depth))) {
   } else if (OB_ISNULL(meta_info) && OB_FAIL(parse_element_info(type_info, meta_info, true))) {
-    LOG_WARN("parse basic element info failed", K(ret), K(ObString(type_info.length(), type_info.data())));
   } else {
     collection_meta_ = meta_info;
   }
@@ -548,7 +527,6 @@ int ObSqlCollectionInfo::parse_collection_info(std::string type_info, ObCollecti
   if (0 == type_info.compare("SPARSEVECTOR")) {
     if (OB_ISNULL(meta_info = OB_NEWx(ObCollectionMapType, &allocator_, allocator_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to create array type meta", K(ret));
     } else {
       meta_info->type_id_ = ObNestedType::OB_SPARSE_VECTOR_TYPE;
       if (OB_FAIL(parse_sparse_vector_element_info(static_cast<ObCollectionMapType *>(meta_info)->key_type_,
@@ -565,17 +543,14 @@ int ObSqlCollectionInfo::parse_collection_info(std::string type_info, ObCollecti
       // is collection type
       if (matches.size() != 3) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid matches size", K(ret), K(matches.size()), K(ObString(type_info.length(), type_info.data())));
       } else if (++arr_depth > OB_ARRAY_MAX_NESTED_LEVEL) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not supported array depth", K(ret), K(arr_depth), K(OB_ARRAY_MAX_NESTED_LEVEL));
       } else {
         std::string type_name = matches[1];
         std::string type_value = matches[2];
         if (0 == type_name.compare("ARRAY")) {
           if (OB_ISNULL(meta_info = OB_NEWx(ObCollectionArrayType, &allocator_, allocator_))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("fail to create array type meta", K(ret));
           } else {
             meta_info->type_id_ = ObNestedType::OB_ARRAY_TYPE;
             ObCollectionTypeBase *&elem_meta_info =static_cast<ObCollectionArrayType *>(meta_info)->element_type_;
@@ -585,7 +560,6 @@ int ObSqlCollectionInfo::parse_collection_info(std::string type_info, ObCollecti
               if (elem_meta_info->type_id_ == ObNestedType::OB_MAP_TYPE || elem_meta_info->type_id_ == ObNestedType::OB_SPARSE_VECTOR_TYPE) {
                 // currently not support
                 ret = OB_NOT_SUPPORTED;
-                LOG_WARN("not supported nested map type", K(ret));
               }
             } else if (OB_FAIL(parse_element_info(type_value, elem_meta_info))) {
             }
@@ -593,7 +567,6 @@ int ObSqlCollectionInfo::parse_collection_info(std::string type_info, ObCollecti
         } else if (0 == type_name.compare("VECTOR")) {
           if (OB_ISNULL(meta_info = OB_NEWx(ObCollectionArrayType, &allocator_, allocator_))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("fail to create array type meta", K(ret));
           } else {
             meta_info->type_id_ = ObNestedType::OB_VECTOR_TYPE;
             if (OB_FAIL(parse_vec_element_info(type_value,
@@ -601,13 +574,11 @@ int ObSqlCollectionInfo::parse_collection_info(std::string type_info, ObCollecti
                     static_cast<ObCollectionArrayType *>(meta_info)->dim_cnt_))) {
             } else if (!static_cast<ObCollectionArrayType *>(meta_info)->check_is_valid_vector()) {
               ret = OB_NOT_SUPPORTED;
-              LOG_WARN("not supported vector meta", K(ret), KPC(meta_info));
             }
           }
         } else if (0 == type_name.compare("MAP")) {
           if (OB_ISNULL(meta_info = OB_NEWx(ObCollectionMapType, &allocator_, allocator_))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("fail to create array type meta", K(ret));
           } else {
             meta_info->type_id_ = ObNestedType::OB_MAP_TYPE;
             if (OB_FAIL(parse_map_element_info(type_value,
@@ -618,7 +589,6 @@ int ObSqlCollectionInfo::parse_collection_info(std::string type_info, ObCollecti
           }
         } else {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid type name", K(ret), K(ObString(type_info.length(), type_info.data())));
         }
       }
     }
@@ -646,7 +616,6 @@ int ObSqlCollectionInfo::parse_vec_element_info(std::string type_info, ObCollect
         int32 get_dim = std::stoi(type_name);
         if (get_dim <= 0) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid vector meta", K(ret));
         } else {
           dim = static_cast<uint32_t>(get_dim);
         }
@@ -661,7 +630,6 @@ int ObSqlCollectionInfo::parse_vec_element_info(std::string type_info, ObCollect
         }
       } else {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("vector only support utinyint/float elem type", K(ret));
       }
     } // end while
   }
@@ -715,10 +683,8 @@ int ObSqlCollectionInfo::parse_map_element_info(std::string type_info,
 
   if (arr_depth > 1) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("nested map is not support", K(ret));
   } else if (comma_pos == std::string::npos) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid map element info", K(ret), K(ObString(type_info.length(), type_info.data())));
   } else {
     key_type_info = type_info.substr(0, comma_pos);
     value_type_info = type_info.substr(comma_pos + 1);
@@ -727,10 +693,8 @@ int ObSqlCollectionInfo::parse_map_element_info(std::string type_info,
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(key_meta_info = OB_NEWx(ObCollectionArrayType, &allocator_, allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create array type meta", K(ret));
   } else if (OB_ISNULL(value_meta_info = OB_NEWx(ObCollectionArrayType, &allocator_, allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create array type meta", K(ret));
   } else {
     key_meta_info->type_id_ = ObNestedType::OB_ARRAY_TYPE;
     value_meta_info->type_id_ = ObNestedType::OB_ARRAY_TYPE;
@@ -745,7 +709,6 @@ int ObSqlCollectionInfo::parse_map_element_info(std::string type_info,
         || static_cast<ObCollectionArrayType *>(value_meta_info)->element_type_->type_id_ == ObNestedType::OB_SPARSE_VECTOR_TYPE) {
       // currently not support
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not supported nested map type", K(ret));
     }
   } else if (OB_FAIL(parse_element_info(value_type_info, static_cast<ObCollectionArrayType *>(value_meta_info)->element_type_))) {
   }
@@ -758,10 +721,8 @@ int ObSqlCollectionInfo::parse_sparse_vector_element_info(ObCollectionTypeBase *
 
   if (OB_ISNULL(key_meta_info = OB_NEWx(ObCollectionArrayType, &allocator_, allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create array type meta", K(ret));
   } else if (OB_ISNULL(value_meta_info = OB_NEWx(ObCollectionArrayType, &allocator_, allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create array type meta", K(ret));
   } else {
     key_meta_info->type_id_ = ObNestedType::OB_ARRAY_TYPE;
     value_meta_info->type_id_ = ObNestedType::OB_ARRAY_TYPE;
@@ -774,7 +735,6 @@ int ObSqlCollectionInfo::parse_sparse_vector_element_info(ObCollectionTypeBase *
     LOG_ERROR("fail to create key basic element type meta", K(ret));
   } else if (OB_ISNULL(value_basic_meta_info = OB_NEWx(ObCollectionBasicType, &allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create value basic element type meta", K(ret));
   } else {
     static_cast<ObCollectionArrayType *>(key_meta_info)->element_type_ = key_basic_meta_info;
     key_basic_meta_info->basic_meta_.meta_.set_uint32();
@@ -816,14 +776,12 @@ int ObSqlCollectionInfo::get_child_def_string(ObString &child_def) const
   int ret = OB_SUCCESS;
   if (name_len_ <= 7) { // array()
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(*this));
   } else if (ObString(6, name_def_).compare("ARRAY(") == 0) {
     child_def = ObString(name_len_ - 7, name_def_ + 6);
   } else if (ObString(7, name_def_).compare("VECTOR(") == 0) {
     child_def = ObString(name_len_ - 8, name_def_ + 7);
   } else {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(*this));
   }
   return ret;
 }
@@ -833,7 +791,6 @@ int ObSqlCollectionInfo::get_map_attr_def_string(ObIAllocator &allocator, ObStri
   int ret = OB_SUCCESS;
   if (name_len_ <= 5) { // map()
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(*this));
   } else if (ObString(4, name_def_).compare("MAP(") == 0) {
     ObStringBuffer tmp_buf(&allocator);
     if (OB_FAIL(tmp_buf.append("ARRAY("))) {
@@ -854,7 +811,6 @@ int ObSqlCollectionInfo::get_map_attr_def_string(ObIAllocator &allocator, ObStri
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(*this));
   }
   return ret;
 }

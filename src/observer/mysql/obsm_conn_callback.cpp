@@ -47,7 +47,6 @@ static int create_scramble_string(char *scramble_buf, const int64_t buf_len, com
   }
 
   if (FAILEDx(thread_rand.create_random_string(scramble_buf, buf_len))) {
-    LOG_ERROR("fail to create_random_string", K(scramble_buf), K(buf_len), K(ret));
   }
   return ret;
 }
@@ -137,7 +136,6 @@ void ObSMConnectionCallback::destroy(ObSMConnection& conn)
       } else if (OB_UNLIKELY(NULL == conn.runtime_)) {
         ret = OB_RUNTIME_SCHEMA_NOT_READY;
       } else if (OB_FAIL(conn.runtime_->recv_request(*task))) {
-        LOG_WARN("push disconnect task fail", K(conn.sessid_), K(ret));
         ob_delete(task);
       }
       // free session locally
@@ -175,7 +173,6 @@ int ObSMConnectionCallback::on_disconnect(observer::ObSMConnection& conn)
     if (OB_FAIL(guard.get_session(sess_info))) {
     } else if (OB_ISNULL(sess_info)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("session info is NULL", K(conn.sessid_));
     } else {
       sess_info->set_session_state(sql::SESSION_KILLED);
       sess_info->set_mark_killed(true);

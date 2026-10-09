@@ -41,13 +41,10 @@ int ObExprLocate::calc_result_typeN(ObExprResType &type,
   const ObSQLSessionInfo *session = NULL;
   if (OB_ISNULL(session = type_ctx.get_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is NULL", K(ret));
   } else if (PARAM_NUM_TWO != param_num && PARAM_NUM_THREE != param_num) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("locate() should have two or three arguments", K(ret));
   } else if (OB_ISNULL(types_array)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error. types_array is null", K(ret), K(types_array));
   } else if (OB_FAIL(ObLocationExprOperator::calc_result_type2(type, types_array[0],
                                                                types_array[1], type_ctx))) {
   } else if (3 == param_num) {

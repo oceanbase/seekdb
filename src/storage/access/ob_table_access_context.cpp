@@ -216,7 +216,6 @@ int ObTableAccessContext::init(ObTableScanParam &scan_param,
                   table_store_stat_,
                   table_scan_stat_,
                   query_flag_))) {
-      LOG_WARN("Fail to init micro block handle mgr", K(ret));
     } else if (scan_param.sample_info_.is_row_sample()
         && OB_FAIL(ObRowSampleFilterFactory::build_sample_filter(
           scan_param.sample_info_,
@@ -224,7 +223,6 @@ int ObTableAccessContext::init(ObTableScanParam &scan_param,
           scan_param.op_,
           query_flag_.is_reverse_scan(),
           scan_param.allocator_))) {
-      LOG_WARN("Failed to build sample filter", K(ret), K(scan_param));
     } else {
       is_inited_ = true;
     }
@@ -243,7 +241,6 @@ int ObTableAccessContext::init(const common::ObQueryFlag &query_flag,
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("cannot init twice", K(ret));
   } else {
     const bool enable_limit = false;
     query_flag_ = query_flag;
@@ -266,7 +263,6 @@ int ObTableAccessContext::init(const common::ObQueryFlag &query_flag,
     } else if (!micro_block_handle_mgr_.is_valid()
                && OB_FAIL(micro_block_handle_mgr_.init(enable_limit, table_store_stat_,
                   table_scan_stat_,query_flag_))) {
-      LOG_WARN("Fail to init micro block handle mgr", K(ret));
     } else if (OB_NOT_NULL(mvcc_mds_filter) && mvcc_mds_filter->is_valid()) {
       need_release_truncate_part_filter_ = false;
       truncate_part_filter_ = mvcc_mds_filter->truncate_part_filter_;
@@ -292,7 +288,6 @@ int ObTableAccessContext::init(const common::ObQueryFlag &query_flag,
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("cannot init twice", K(ret));
   } else {
     const bool enable_limit = false;
     query_flag_ = query_flag;
@@ -308,7 +303,6 @@ int ObTableAccessContext::init(const common::ObQueryFlag &query_flag,
     cached_iter_node_ = cached_iter_node;
     if (!micro_block_handle_mgr_.is_valid()
         && OB_FAIL(micro_block_handle_mgr_.init(enable_limit, table_store_stat_, table_scan_stat_, query_flag_))) {
-      LOG_WARN("Fail to init micro block handle mgr", K(ret));
     } else if (OB_NOT_NULL(mvcc_mds_filter) && mvcc_mds_filter->is_valid()) {
       need_release_truncate_part_filter_ = false;
       truncate_part_filter_ = mvcc_mds_filter->truncate_part_filter_;
@@ -370,7 +364,6 @@ int ObTableAccessContext::init_for_fork(ObTableAccessContext &other,
               table_store_stat_,
               table_scan_stat_,
               query_flag_))) {
-    LOG_WARN("Failed to init micro block handle mgr", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -521,7 +514,6 @@ int ObTableAccessContext::alloc_iter_pool()
     void *buf = nullptr;
     if (OB_ISNULL(buf = stmt_allocator_->alloc(sizeof(ObStoreRowIterPool<ObStoreRowIterator>)))) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Failed to alloc row iter pool", K(ret));
     } else {
       stmt_iter_pool_ = new(buf) ObStoreRowIterPool<ObStoreRowIterator>(*stmt_allocator_);
     }

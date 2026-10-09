@@ -58,7 +58,6 @@ int ObLockContext::init(ObExecContext &ctx,
 
   if (OB_ISNULL(session_info = ctx.get_my_session())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("session_info is null in ObExecContext", K(ret));
   } else {
     // use smaller timeout if we specified the lock timeout us.
     if (timeout_us > 0
@@ -107,7 +106,6 @@ int ObLockContext::destroy(ObExecContext &ctx,
 
   if (OB_ISNULL(session_info = ctx.get_my_session())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("session_info is null in ObExecContext", K(ret));
   } else {
     if (has_inner_tx_) {
       if (OB_TMP_FAIL(implicit_end_trans_(*session_info, ctx, is_rollback))) {
@@ -219,13 +217,10 @@ int ObLockContext::open_inner_conn_()
 
   if (OB_ISNULL(my_exec_ctx_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("ObExecContext in ObLockFuncContext is null", K(ret));
   } else if (OB_ISNULL(session = my_exec_ctx_->get_my_session())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("session in ObExecContext is NULL", K(ret), KP(session));
   } else if (OB_NOT_NULL(inner_conn_) || OB_NOT_NULL(store_inner_conn_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("inner_conn_ or store_inner_conn_ should be null", K(ret), KP(inner_conn_), KP(store_inner_conn_));
   } else if (FALSE_IT(store_inner_conn_ = session->get_inner_conn())) {
   } else if (FALSE_IT(session->set_inner_conn(nullptr))) {
   } else if (OB_FAIL(
@@ -234,7 +229,6 @@ int ObLockContext::open_inner_conn_()
                          session, inner_conn_guard_))) {
   } else if (OB_ISNULL(inner_conn = inner_conn_guard_.get_ptr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("inner connection is still null", KPC(session));
   } else {
     /**
      * session is the only data struct which can pass through multi layer nested sql,
@@ -253,15 +247,12 @@ int ObLockContext::close_inner_conn_()
 
   if (OB_ISNULL(my_exec_ctx_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("ObExecContext in ObLockFuncContext is null", K(ret));
   } else {
     if (OB_ISNULL(inner_conn_)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("inner_conn of session is NULL", K(ret), KP(session), KP(inner_conn_));
     }
     if (OB_ISNULL(session = my_exec_ctx_->get_my_session())) {
       ret = OB_NOT_INIT;
-      LOG_WARN("session is NULL", K(ret), KP(session));
     } else if (OB_NOT_NULL(inner_conn_) || OB_NOT_NULL(store_inner_conn_)) {
       // 1. if inner_conn_ is not null, means that we have created inner_conn successfully before, so we must have already
       // set store_inner_conn_ successfully, just restore it to the session.
@@ -285,7 +276,6 @@ int ObLockContext::execute_write(const ObSqlString &sql,
 
   if (OB_ISNULL(inner_conn_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("inner connection is NULL", K(ret));
   } else if (OB_FAIL(inner_conn_->execute_write(sql.ptr(), affected_rows))) {
   }
   return ret;
@@ -298,7 +288,6 @@ int ObLockContext::execute_read(const ObSqlString &sql,
 
   if (OB_ISNULL(inner_conn_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("inner connection is NULL", K(ret));
   } else if (OB_FAIL(inner_conn_->execute_read(sql.ptr(), res))) {
   }
   return ret;

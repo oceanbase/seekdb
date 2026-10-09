@@ -74,7 +74,6 @@ int ObExprMakeTime::eval_batch_maketime(const ObExpr &expr, ObEvalCtx &ctx,
   ObDatumVector input_secs;
   if (OB_FAIL(expr.eval_batch_param_value(ctx, skip, batch_size, input_hours,
                                           input_mins, input_secs))) {
-    LOG_WARN("unexpected input value", K(ret));
     ret = OB_ERR_UNEXPECTED;
   } else if (input_hours.at(0) == nullptr || input_mins.at(0) == nullptr
              || input_secs.at(0) == nullptr) {

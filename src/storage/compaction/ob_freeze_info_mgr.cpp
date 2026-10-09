@@ -15,6 +15,8 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
+#include "config_bridge.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "ob_freeze_info_mgr.h"
 #include "share/rc/ob_server_runtime.h"
 #include "share/ob_merge_info.h"
@@ -319,7 +321,7 @@ int ObFreezeInfoMgr::get_multi_version_duration(int64_t &duration) const
 {
   int ret = OB_SUCCESS;
 
-  duration = GCONF.undo_retention;
+  duration = config::undo_retention();
 
   return ret;
 }
@@ -334,7 +336,7 @@ int64_t ObFreezeInfoMgr::get_min_reserved_snapshot_for_tx()
   bool is_gc_disabled = ::oceanbase::share::server_service<::oceanbase::concurrency_control::ObMultiVersionGarbageCollector>()->
     is_gc_disabled();
 
-  if (GCONF._mvcc_gc_using_min_txn_snapshot
+  if (config::_mvcc_gc_using_min_txn_snapshot()
       && !is_gc_disabled) {
     share::SCN snapshot_for_active_tx =
       ::oceanbase::share::server_service<::oceanbase::concurrency_control::ObMultiVersionGarbageCollector>()->
@@ -369,7 +371,6 @@ int ObFreezeInfoMgr::get_min_reserved_snapshot(
       freeze_info.frozen_scn_.set_min();
     } else if (OB_FAIL(get_freeze_info_compare_with_snapshot_version_(merged_version, share::ObFreezeInfoManager::CmpType::GREATER_THAN, freeze_info))) {
       if (OB_ENTRY_NOT_EXIST != ret) {
-        LOG_WARN("failed to get freeze info behind snapshot", K(ret), K(merged_version));
       } else {
         freeze_info.frozen_scn_.set_max();
         ret = OB_SUCCESS;

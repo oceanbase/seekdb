@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "config_bridge.h"
 #include "ob_weak_read_util.h"
 #include "share/ob_server_struct.h"
 #include "storage/tx/ob_timestamp_service.h"
@@ -33,7 +34,7 @@ int64_t ObWeakReadUtil::replica_keepalive_interval()
 {
   int64_t interval = 0;
   int64_t weak_read_refresh_interval = GCTX.in_bootstrap_ ? BOOTSTRAP_REPLICA_KEEPALIVE_INTERVAL
-    : GCONF.weak_read_version_refresh_interval;
+    : config::weak_read_version_refresh_interval();
   if (weak_read_refresh_interval <= 0
       || weak_read_refresh_interval > DEFAULT_REPLICA_KEEPALIVE_INTERVAL) {
     interval = DEFAULT_REPLICA_KEEPALIVE_INTERVAL;
@@ -56,16 +57,16 @@ int ObWeakReadUtil::generate_min_weak_read_version(SCN &scn)
   // 1. not smaller than max_stale_time_for_weak_consistency - DEFAULT_MAX_STALE_BUFFER_TIME
   // 2. not bigger than readable snapshot version
   int64_t buffer_time = std::max(
-          std::min(static_cast<int64_t>(GCONF.weak_read_version_refresh_interval),
+          std::min(static_cast<int64_t>(config::weak_read_version_refresh_interval()),
                    static_cast<int64_t>(DEFAULT_REPLICA_KEEPALIVE_INTERVAL)),
           static_cast<int64_t>(DEFAULT_MAX_STALE_BUFFER_TIME));
 
   if (share::server_is_recovery_mode()) {
-    max_stale_time = GCONF.max_stale_time_for_weak_consistency
+    max_stale_time = config::max_stale_time_for_weak_consistency()
                      + transaction::ObTimestampService::TIMESTAMP_RECOVERY_SAFETY_RANGE
                      - buffer_time;
   } else {
-    max_stale_time = GCONF.max_stale_time_for_weak_consistency - buffer_time;
+    max_stale_time = config::max_stale_time_for_weak_consistency() - buffer_time;
   }
 
   max_stale_time = std::max(max_stale_time, static_cast<int64_t>(DEFAULT_REPLICA_KEEPALIVE_INTERVAL));
@@ -81,12 +82,12 @@ int ObWeakReadUtil::generate_min_weak_read_version(SCN &scn)
 
 bool ObWeakReadUtil::enable_monotonic_weak_read()
 {
-  return GCONF.enable_monotonic_weak_read;
+  return config::enable_monotonic_weak_read();
 }
 
 int64_t ObWeakReadUtil::max_stale_time_for_weak_consistency()
 {
-  return GCONF.max_stale_time_for_weak_consistency;
+  return config::max_stale_time_for_weak_consistency();
 }
 
 bool ObWeakReadUtil::check_weak_read_service_available()

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_CG
 
+#include "config_bridge.h"
 #include "sql/code_generator/ob_code_generator.h"
 #include "sql/code_generator/ob_static_engine_cg.h"
 #include "sql/engine/ob_physical_plan.h"
@@ -96,7 +97,6 @@ int ObCodeGenerator::detect_batch_size(
   bool has_registered_vec_op = false;
   if (OB_ISNULL(log_plan.get_plan_root())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null plan root", K(ret));
   } else if (OB_FAIL(ObStaticEngineCG::exist_registered_vec_op(*log_plan.get_plan_root(), true,
                                                                has_registered_vec_op))) {
   }
@@ -107,7 +107,7 @@ int ObCodeGenerator::detect_batch_size(
     
     double scan_cardinality = 0;
     // TODO bin.lb: move to optimizer and more sophisticated rules
-    int64_t lob_rowsets_max_rows = GCONF._lob_rowsets_max_rows;
+    int64_t lob_rowsets_max_rows = config::_lob_rowsets_max_rows();
     const ObOptParamHint *opt_params = &log_plan.get_stmt()->get_query_ctx()->get_global_hint().opt_params_;
     if (OB_FAIL(opt_params->get_integer_opt_param(ObOptParamHint::LOB_ROWSETS_MAX_ROWS, lob_rowsets_max_rows))) {
     } else {
@@ -146,10 +146,10 @@ int ObCodeGenerator::detect_batch_size(
           exec_ctx->get_sql_ctx()->schema_guard_,
           exec_ctx->get_physical_plan_ctx()->get_original_param_cnt(),
           0);
-      int64_t rowsets_max_rows = GCONF._rowsets_max_rows;
+      int64_t rowsets_max_rows = config::_rowsets_max_rows();
       OZ(expr_cg.detect_batch_size(flattened_exprs, batch_size,
                                    rowsets_max_rows,
-                                   GCONF._rowsets_target_maxsize,
+                                   config::_rowsets_target_maxsize(),
                                    scan_cardinality,
                                    lob_rowsets_max_rows));
       // overwrite batch size if hint is specified

@@ -39162,7 +39162,6 @@ int ObTZTransitionTypeInfo::get_offset_according_abbr(const ObString &tz_abbr_st
     tran_type_id = info_.tran_type_id_;
   } else {
     ret = OB_ERR_UNEXPECTED_TZ_TRANSITION;
-    LOG_WARN("invalid abbr", K(tz_abbr_str), KPC(this), K(ret));
   }
   return ret;
 }
@@ -39183,7 +39182,6 @@ OB_DEF_DESERIALIZE(ObTZTransitionTypeInfo)
   if(OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(abbr_str.length() + 1 > OB_MAX_TZ_ABBR_LEN)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid abbr_str", K(abbr_str), K(ret));
   } else {
     MEMCPY(info_.abbr_, abbr_str.ptr(), abbr_str.length());
     info_.abbr_[abbr_str.length()] = '\0';
@@ -39250,7 +39248,6 @@ int ObTZRevertTypeInfo::get_offset_according_abbr(const ObString &tz_abbr_str,
     tran_type_id = extra_info_.tran_type_id_;
   } else {
     ret = OB_ERR_UNEXPECTED_TZ_TRANSITION;
-    LOG_WARN("invalid abbr", K(tz_abbr_str), KPC(this), K(ret));
   }
   return ret;
 }
@@ -39271,7 +39268,6 @@ OB_DEF_DESERIALIZE(ObTZRevertTypeInfo)
   if(OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(abbr_str.length() + 1 > OB_MAX_TZ_ABBR_LEN)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid abbr_str", K(abbr_str), K(ret));
   } else {
     MEMCPY(extra_info_.abbr_, abbr_str.ptr(), abbr_str.length());
     extra_info_.abbr_[abbr_str.length()] = '\0';
@@ -39338,10 +39334,8 @@ int ObTimeZoneInfoPos::get_tz_name(ObString &tz_name) const
   int64_t str_length = strlen(tz_name_);
   if (OB_UNLIKELY(false == is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tz info is invalid", K(ret));
   } else if (OB_UNLIKELY(str_length + 1 > OB_MAX_TZ_NAME_LEN)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid tz_name", K(str_length), K(OB_MAX_TZ_NAME_LEN), K(ret));
   } else {
     tz_name.assign_ptr(tz_name_, static_cast<ObString::obstr_size_t>(str_length));
   }
@@ -39355,7 +39349,6 @@ int ObTimeZoneInfoPos::set_tz_name(const char *name, int64_t name_len)
       || OB_ISNULL(tz_name_)
       || OB_UNLIKELY(name_len < 0 || name_len + 1  > OB_MAX_TZ_NAME_LEN)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid parameter", K(name_len), K(OB_MAX_TZ_NAME_LEN), K(ret));
   } else {
     MEMCPY(tz_name_, name, name_len);
     tz_name_[name_len] = 0;
@@ -39439,7 +39432,6 @@ int ObTimeZoneInfoPos::get_timezone_offset(int64_t value, int32_t &offset_sec,
   int64_t type_idx = 0;
   if (OB_UNLIKELY(false == is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tz info is invalid", K(ret));
   } else if (0 == type_cnt
       || value < tz_tran_types.at(0).lower_time_) {
     offset_sec = default_type_.info_.offset_sec_;
@@ -39448,7 +39440,6 @@ int ObTimeZoneInfoPos::get_timezone_offset(int64_t value, int32_t &offset_sec,
   } else if (OB_FAIL(find_time_range(value, tz_tran_types, type_idx))) {
   } else if (OB_UNLIKELY(type_idx < 0 || type_idx >= tz_tran_types.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected type idx", K(type_idx), K(tz_tran_types), K(ret));
   } else {
     const ObTZTransitionStruct &info = tz_tran_types.at(type_idx).info_;
     offset_sec = info.offset_sec_;
@@ -39490,14 +39481,12 @@ int ObTimeZoneInfoPos::get_timezone_offset(const int32_t tran_type_id,
   int64_t type_idx = 0;
   if (OB_UNLIKELY(false == is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tz info is invalid", K(ret));
   } else if (tran_type_id == default_type_.info_.tran_type_id_) {
     offset_sec = default_type_.info_.offset_sec_;
     tz_abbr_str.assign_ptr(default_type_.info_.abbr_, static_cast<int32_t>(strlen(default_type_.info_.abbr_)));
   } else if (OB_FAIL(find_offset_range(tran_type_id, tz_tran_types, type_idx))) {
   } else if (OB_UNLIKELY(type_idx < 0 || type_idx >= tz_tran_types.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected type idx", K(type_idx), K(tz_tran_types), K(ret));
   } else {
     const ObTZTransitionStruct &info = tz_tran_types.at(type_idx).info_;
     offset_sec = info.offset_sec_;
@@ -39516,28 +39505,23 @@ int ObTimeZoneInfoPos::get_timezone_sub_offset(int64_t value, const ObString &tz
   int64_t type_idx = 0;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tz info is invalid", K(ret));
   } else if (OB_FAIL(find_revt_time_range(value, tz_revt_types, type_idx))) {
   } else if (OB_UNLIKELY(type_idx < 0 || type_idx >= tz_revt_types.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected type idx", K(type_idx), K(tz_revt_types), K(ret));
   } else {
     const ObTZRevertTypeInfo &revt_type_info = tz_revt_types.at(type_idx);
     if (OB_UNLIKELY(revt_type_info.is_gap())) {//gap
       ret = OB_ERR_UNEXPECTED_TZ_TRANSITION;
-      LOG_WARN("fail to get offset, value may be in gap range", K(tz_id_), K(value), K(type_idx), K(revt_type_info), K(ret));
     } else if (OB_UNLIKELY(revt_type_info.is_overlap())) {//overlap
       if (OB_LIKELY(tz_abbr_str.empty())) {
         if (error_on_overlap_time_) {
           ret = OB_ERR_UNEXPECTED_TZ_TRANSITION;
-          LOG_WARN("fail to get offset, value may be in overlap range", K(value), K(type_idx), K(revt_type_info), K(ret));
         } else {//if error_on_overlap_time_ == false,
         // Use standard offset here; the abbreviation path selects offset by abbreviation.
           offset_sec = revt_type_info.info_.offset_sec_;
           tran_type_id = revt_type_info.info_.tran_type_id_;
         }
       } else if (OB_FAIL(revt_type_info.get_offset_according_abbr(tz_abbr_str, offset_sec, tran_type_id))) {
-        LOG_WARN("fail to get offset according to abbr", K(tz_abbr_str), K(revt_type_info), K(ret));
         ret = OB_ERR_UNEXPECTED_TZ_TRANSITION;
       }
     } else if (revt_type_info.is_normal()) {//normal
@@ -39545,12 +39529,10 @@ int ObTimeZoneInfoPos::get_timezone_sub_offset(int64_t value, const ObString &tz
         offset_sec = revt_type_info.info_.offset_sec_;
         tran_type_id = revt_type_info.info_.tran_type_id_;
       } else if (OB_FAIL(revt_type_info.get_offset_according_abbr(tz_abbr_str, offset_sec, tran_type_id))) {
-        LOG_WARN("fail to get offset according to abbr", K(tz_abbr_str), K(revt_type_info), K(ret));
         ret = OB_ERR_UNEXPECTED_TZ_TRANSITION;
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected revert type info", K(revt_type_info), K(ret));
     }
   }
   return ret;
@@ -39562,7 +39544,6 @@ int ObTimeZoneInfoPos::calc_revt_types()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(false == is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tz info is invalid", K(ret));
   } else {
     common::ObSArray<ObTZRevertTypeInfo> &tz_revt_types =  tz_revt_types_[get_curr_idx() % 2];
     tz_revt_types.reset();
@@ -39618,7 +39599,6 @@ int ObTimeZoneInfoPos::timezone_to_str(char *buf, const int64_t buf_len, int64_t
     const size_t tz_len = strlen(tz_name_);
     if (OB_UNLIKELY((pos + tz_len + 1) > buf_len)) {
       ret = OB_BUF_NOT_ENOUGH;
-      LOG_WARN("buff size is not enough", K(pos), K(tz_len), K(buf_len), KPC(this), K(ret));
     } else {
       memcpy(buf + pos, tz_name_, tz_len);
       pos += tz_len;
@@ -39746,7 +39726,6 @@ int ObTZInfoMap::init(const lib::ObMemAttr &attr)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(id_map_buf_.init(attr))) {
   } else if (OB_FAIL(name_map_buf_.init(attr))) {
   } else {
@@ -39808,7 +39787,6 @@ int ObTZInfoMap::get_tz_info_by_id(const int64_t tz_id, ObTimeZoneInfoPos *&tz_i
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(tz_info_by_id)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tz_info_by_id should be null here", K(ret));
   } else if (OB_FAIL(id_map_->get(tz_id, tz_info_by_id))) {
   }
   return ret;
@@ -39820,7 +39798,6 @@ int ObTZInfoMap::get_tz_info_by_name(const ObString &tz_name, ObTimeZoneInfoPos 
   ObTZNameIDInfo *name_id_info = NULL;
   if (OB_NOT_NULL(tz_info_by_name)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tz_info_by_name should be null here", K(ret));
   } else if (OB_FAIL(name_map_->get(ObTZNameKey(tz_name), name_id_info))) {
   } else if (OB_FAIL(get_tz_info_by_id(name_id_info->tz_id_, tz_info_by_name))) {
   }
@@ -39900,7 +39877,6 @@ int ObTimeZoneInfoWrap::init_time_zone(const ObString &str_val, const int64_t cu
 
   if (OB_FAIL(ObTimeConverter::str_to_offset(str_val, offset, ret_more, true))) {
     if (ret != OB_ERR_UNKNOWN_TIME_ZONE) {
-      LOG_WARN("fail to convert time zone", K(str_val), K(ret));
     }
   }
 
@@ -39952,7 +39928,6 @@ OB_DEF_SERIALIZE(ObTimeZoneInfoWrap)
     LST_DO_CODE(OB_UNIS_ENCODE, tz_info_pos_);
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid time zone info class", K(class_), KPC(this), KCSTRING(lbt()), K(ret));
   }
   LOG_DEBUG("OB_DEF_SERIALIZE", KPC(this), KCSTRING(lbt()), K(ret));
   return ret;
@@ -39970,7 +39945,6 @@ OB_DEF_DESERIALIZE(ObTimeZoneInfoWrap)
     tz_info_ = &tz_info_offset_;
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid time zone info class", K(class_), KPC(this), KCSTRING(lbt()), K(ret));
   }
   return ret;
 }
@@ -40005,7 +39979,6 @@ int ObTimeZoneInfoWrap::deep_copy(const ObTimeZoneInfoWrap &tz_inf_wrap)
         tz_info_ = &tz_info_offset_;
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid class", K(tz_inf_wrap), K(ret));
       }
     }
   }

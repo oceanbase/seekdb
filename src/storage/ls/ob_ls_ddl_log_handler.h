@@ -96,9 +96,7 @@ public:
 
 private:
   int replay_ddl_redo_log_(const char *log_buf, const int64_t buf_size, int64_t pos, const share::SCN &scn);
-  int replay_ddl_commit_log_(const char *log_buf, const int64_t buf_size, int64_t pos, const share::SCN &scn);
   int replay_ddl_tablet_schema_version_change_log_(const char *log_buf, const int64_t buf_size, int64_t pos, const share::SCN &scn);
-  int replay_ddl_start_log_(const char *log_buf, const int64_t buf_size, int64_t pos, const share::SCN &scn);
   int replay_table_fork_freeze_log_(const char *log_buf, const int64_t buf_size, int64_t pos, const share::SCN &scn);
   int replay_table_fork_start_log_(const char *log_buf, const int64_t buf_size, int64_t pos, const share::SCN &scn);
   int replay_table_fork_finish_log_(const char *log_buf, const int64_t buf_size, int64_t pos, const share::SCN &scn);

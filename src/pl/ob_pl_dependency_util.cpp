@@ -48,7 +48,6 @@ int check_dep_schema_impl(ObSchemaGetterGuard &schema_guard,
       if (OB_FAIL(schema_guard.get_simple_table_schema(dep_obj.object_id_, table_schema))) {
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null table schema", K(ret), K(dep_obj.object_id_));
       } else if (!table_schema->is_index_table()) {
         match = table_schema->get_schema_version() <= merge_version;
       }
@@ -127,7 +126,6 @@ int ObPLDependencyUtil::add_dependency_objects(
                      package_id, package_info))) {
       } else if (OB_ISNULL(package_info)) {
         ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;
-        LOG_WARN("unexpected null package info", K(ret), K(type), K(package_id));
       } else {
         obj_version.object_id_ = package_id;
         obj_version.object_type_ = DEPENDENCY_PACKAGE;

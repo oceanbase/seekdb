@@ -230,15 +230,10 @@ SHARE_UNITY_GROUPS = [
         name = "ob_share_config_0",
         language = "c++",
         srcs = [
-            "src/share/config/ob_common_config.cpp",
-            "src/share/config/ob_config.cpp",
             "src/share/config/ob_config_helper.cpp",
             "src/share/config/ob_config_manager.cpp",
             "src/share/config/ob_reload_config.cpp",
             "src/share/config/ob_server_config.cpp",
-            "src/share/config/ob_system_config.cpp",
-            "src/share/config/ob_config_storage.cpp",
-            "src/share/config/ob_runtime_config.cpp",
         ],
         generated_srcs = [],
         external_srcs = [],
@@ -569,7 +564,6 @@ SHARE_STANDALONE_SOURCES = [
     struct(path = "src/share/ob_rpc_struct.cpp", language = "c++", kind = "source"),
     struct(path = "src/share/ob_sql_client_decorator.cpp", language = "c++", kind = "source"),
     struct(path = "src/share/ob_timezone_mgr.cpp", language = "c++", kind = "source"),
-    struct(path = "src/share/parameter/ob_parameter_attr.cpp", language = "c++", kind = "source"),
 ]
 
 SHARE_DATUM_STANDALONE_SOURCES = [

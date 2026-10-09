@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX STORAGE
 
+#include "config_bridge.h"
 #include "ob_local_storage_meta_service.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/meta_store/ob_storage_meta_io_util.h"
@@ -55,7 +56,6 @@ int ObLocalStorageMetaService::init()
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("has inited", K(ret));
   } else if (OB_FAIL(slogger_.init(
         OB_FILE_SYSTEM_ROUTER.get_slog_dir(),
         ObLogConstants::MAX_LOG_FILE_SIZE,
@@ -79,7 +79,6 @@ int ObLocalStorageMetaService::start()
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(slogger_.start())) {
   } else if (OB_FAIL(ckpt_slog_handler_.start())) {
   } else if (OB_FAIL(replayer_.start_replay(super_block))) {
@@ -129,7 +128,6 @@ int ObLocalStorageMetaService::get_active_cursor(common::ObLogCursor &log_cursor
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(slogger_.get_active_cursor(log_cursor))) {
   }
   return ret;
@@ -141,7 +139,6 @@ int ObLocalStorageMetaService::get_meta_block_list(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     if (OB_FAIL(ckpt_slog_handler_.get_meta_block_list(meta_block_list))) {
     }
@@ -154,7 +151,6 @@ int ObLocalStorageMetaService::write_checkpoint(bool is_force)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.write_checkpoint(is_force))) {
   }
   return ret;
@@ -165,7 +161,6 @@ int ObLocalStorageMetaService::add_snapshot(const ObServerSnapshotMeta &snapshot
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.add_snapshot(snapshot))) {
   }
   return ret;
@@ -176,7 +171,6 @@ int ObLocalStorageMetaService::delete_snapshot(const share::ObServerSnapshotID &
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.delete_snapshot(snapshot_id))) {
   }
   return ret;
@@ -187,7 +181,6 @@ int ObLocalStorageMetaService::swap_snapshot(const ObServerSnapshotMeta &snapsho
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.swap_snapshot(snapshot))) {
   }
   return ret;
@@ -200,7 +193,6 @@ int ObLocalStorageMetaService::clone_ls(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.clone_ls(startup_accel_handler, tablet_meta_entry))) {
   }
   return ret;
@@ -233,7 +225,7 @@ int ObLocalStorageMetaService::read_from_block(
   ObObjectReadHandle read_handle(allocator);
   ObObjectReadInfo read_info;
   read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
-  read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000;
+  read_info.io_timeout_ms_ = config::_data_storage_io_timeout() / 1000;
   read_info.addr_ = addr;
   if (OB_FAIL(ObObjectReaderWriter::async_read(read_info, read_handle))) {
   } else if (OB_FAIL(read_handle.wait())) {

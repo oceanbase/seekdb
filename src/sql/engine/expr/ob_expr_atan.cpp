@@ -41,7 +41,6 @@ int ObExprAtan::calc_result_typeN(ObExprResType &type,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(NULL == types || type_num <= 0 || type_num > 2)) {
     ret = OB_ERR_PARAM_SIZE;
-    LOG_WARN("Invalid argument.", K(ret), K(types), K(type_num));
   } else {
     if (1 == type_num) {
       ret = calc_trig_function_result_type1(type, types[0], type_ctx);
@@ -79,7 +78,6 @@ int calc_atan_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
     ObDatum *y = NULL;
     ObDatum *x = NULL;
     if (OB_FAIL(arg0->eval(ctx, y)) || OB_FAIL(arg1->eval(ctx, x))) {
-      LOG_WARN("eval arg failed", K(ret), K(expr), KP(y), KP(x));
     } else if (y->is_null() || x->is_null()) {
       /* arg is already cast to number type, no extra null-type handling needed */
       res_datum.set_null();
@@ -101,7 +99,6 @@ int ObExprAtan::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   UNUSED(raw_expr);
   if (OB_UNLIKELY(1 != rt_expr.arg_cnt_ && 2 != rt_expr.arg_cnt_)) {
     ret = OB_ERR_PARAM_SIZE;
-    LOG_WARN("invalid arg cnt of expr", K(ret), K(rt_expr));
   } else {
     rt_expr.eval_func_ = calc_atan_expr;
   }

@@ -235,7 +235,6 @@ int ObPxTransmitOp::send_rows_one_by_one(ObSliceIdxCalc &slice_calc)
   ObPhysicalPlanCtx *phy_plan_ctx = GET_PHY_PLAN_CTX(ctx_);
   if (OB_ISNULL(phy_plan_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("physical plan ctx is null", K(ret));
   }
   while (OB_SUCC(ret)) {
     clear_evaluated_flag();
@@ -243,8 +242,6 @@ int ObPxTransmitOp::send_rows_one_by_one(ObSliceIdxCalc &slice_calc)
     ret = next_row();
     if (OB_FAIL(ret)) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
-        LOG_WARN("fail to get next row from child op",
-                 K(ret), K(child_->get_spec().get_type()));
       } else {
         // iter end
         const ObPxTransmitSpec &spec = static_cast<const ObPxTransmitSpec &>(get_spec());
@@ -278,12 +275,10 @@ int ObPxTransmitOp::send_rows_one_by_one(ObSliceIdxCalc &slice_calc)
       ret = OB_ITER_END;
     } else if (NULL != spec.tablet_id_expr_
                && OB_FAIL(slice_calc.get_previous_row_tablet_id(tablet_id))) {
-      LOG_WARN("failed to get previous row tablet_id", K(ret));
     }
     FOREACH_CNT_X(slice_idx, slice_idx_array, OB_SUCC(ret)) {
       if (OB_FAIL(send_row(*slice_idx, send_row_time_recorder, tablet_id.get_int()))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("fail emit row to interm result", K(ret), K(slice_idx_array));
         }
       }
     }
@@ -305,7 +300,6 @@ int ObPxTransmitOp::send_rows_in_batch(ObSliceIdxCalc &slice_calc)
   ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx_);
   while (OB_SUCC(ret)) {
     if (OB_FAIL(next_row())) {
-      LOG_WARN("fetch next rows failed", K(ret));
       break;
     }
     if (dfc_.all_ch_drained()) {
@@ -329,7 +323,6 @@ int ObPxTransmitOp::send_rows_in_batch(ObSliceIdxCalc &slice_calc)
         } else if (OB_FAIL((slice_calc.get_slice_indexes<CALC_TYPE>(get_spec().output_, eval_ctx_, slice_idx_array)))) {
         } else if (NULL != spec.tablet_id_expr_
                    && OB_FAIL(slice_calc.get_previous_row_tablet_id(tablet_id))) {
-          LOG_WARN("failed to get previous row tablet_id", K(ret));
         }
         LOG_DEBUG("send rows batch without prefetch", K(i), K(slice_idx_array), K(tablet_id.get_int()));
         FOREACH_CNT_X(slice_idx, slice_idx_array, OB_SUCC(ret)) {
@@ -380,7 +373,6 @@ int ObPxTransmitOp::send_rows_in_batch(ObSliceIdxCalc &slice_calc)
         ObPhysicalPlanCtx *phy_plan_ctx = GET_PHY_PLAN_CTX(ctx_);
         if (OB_ISNULL(phy_plan_ctx)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("phy plan ctx is null", K(ret));
         }
         for (int i = 0; i < task_channels_.count() && OB_SUCC(ret); i++) {
           dtl::ObDtlChannel *ch = task_channels_.at(i);
@@ -412,8 +404,6 @@ inline int ObPxTransmitOp::broadcast_rows(ObSliceIdxCalc &slice_calc)
         reach_end = true;
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("fail to get next row from child op",
-                 K(ret), K(child_->get_spec().get_type()));
       }
     } else {
       if (is_vectorized()) {

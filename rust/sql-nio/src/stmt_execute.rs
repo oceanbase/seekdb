@@ -15,8 +15,6 @@
 use std::ffi::{c_char, c_int};
 use std::slice;
 
-use crate::ffi_check::{checked_array_len, checked_bytes_len, checked_out_range, ranges_overlap};
-
 use crate::codec::read_lenenc;
 
 const MYSQL_TYPE_DECIMAL: u16 = 0;
@@ -391,10 +389,10 @@ fn parse(
         let type_bytes = param_count.checked_mul(2).ok_or(ParseError::Capacity)?;
         let type_end = pos.checked_add(type_bytes).ok_or(ParseError::Capacity)?;
         let table = tail.get(pos..type_end).ok_or(ParseError::Malformed)?;
-        for pair in table.chunks_exact(2) {
+        for &[mysql_type, type_flags] in table.as_chunks::<2>().0 {
             metas.push(NioMysqlExecuteParamMeta {
-                mysql_type: u16::from(pair[0]),
-                type_flags: pair[1],
+                mysql_type: u16::from(mysql_type),
+                type_flags,
                 reserved: 0,
             });
         }
@@ -448,40 +446,15 @@ pub unsafe extern "C" fn nio_parse_mysql_execute_params(
     out_capacity: i64,
     out_result: *mut NioMysqlExecuteParseResult,
 ) -> c_int {
-    let (tail_len, param_count, out_capacity) = match (
-        checked_bytes_len(tail, tail_len),
-        usize::try_from(param_count),
-        usize::try_from(out_capacity),
-    ) {
-        (Some(a), Ok(b), Ok(c)) => (a, b, c),
-        _ => return NIO_MYSQL_EXECUTE_PARSE_INVALID_ARGUMENT,
-    };
-    let (cached_count, long_data_count) = match (
-        checked_array_len(cached_meta, cached_count),
-        checked_array_len(long_data, long_data_count),
-    ) {
-        (Some(a), Some(b)) => (a, b),
-        _ => return NIO_MYSQL_EXECUTE_PARSE_INVALID_ARGUMENT,
-    };
-    if out_capacity < param_count
-        || checked_array_len(out_params.cast_const(), out_capacity as i64).is_none()
-        || (out_capacity != 0 && out_params.is_null())
-    {
-        return NIO_MYSQL_EXECUTE_PARSE_INVALID_ARGUMENT;
-    }
-    let out_result_range = match checked_out_range(out_result) {
-        Some(range) => range,
-        None => return NIO_MYSQL_EXECUTE_PARSE_INVALID_ARGUMENT,
-    };
-    let out_params_range = (
-        out_params as usize,
-        (out_params as usize) + out_capacity * std::mem::size_of::<NioMysqlExecuteParam>(),
-    );
-    let tail_range = (tail as usize, (tail as usize) + tail_len);
-    if ranges_overlap(out_result_range, tail_range)
-        || ranges_overlap(out_params_range, tail_range)
-        || ranges_overlap(out_result_range, out_params_range)
-    {
+    let tail_len = tail_len as usize;
+    let (param_count, out_capacity) =
+        match (usize::try_from(param_count), usize::try_from(out_capacity)) {
+            (Ok(a), Ok(b)) => (a, b),
+            _ => return NIO_MYSQL_EXECUTE_PARSE_INVALID_ARGUMENT,
+        };
+    let cached_count = cached_count as usize;
+    let long_data_count = long_data_count as usize;
+    if out_capacity < param_count || (out_capacity != 0 && out_params.is_null()) {
         return NIO_MYSQL_EXECUTE_PARSE_INVALID_ARGUMENT;
     }
     let tail = if tail_len == 0 {

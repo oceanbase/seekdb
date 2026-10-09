@@ -76,10 +76,8 @@ int ObJsonParser::parse_json_text(ObIAllocator *allocator,
   char *buf = NULL;
   if (OB_ISNULL(allocator) || OB_ISNULL(text) || length == 0) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("param is null or json text length is 0", K(allocator), KP(text), K(length));
   } else if (OB_ISNULL(buf = reinterpret_cast<char *>(allocator->alloc(length + 1)))) { // for '\0'
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory for json text", K(ret), KCSTRING(text), K(length));
   } else {
     MEMCPY(buf, text, length);
     buf[length] = '\0';
@@ -101,7 +99,6 @@ int ObJsonParser::parse_json_text(ObIAllocator *allocator,
       }
     } catch (const std::bad_alloc &e) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc memory for json text", K(ret), KCSTRING(text), K(length));
     }
 
     if (OB_FAIL(ret)) {
@@ -152,10 +149,8 @@ int ObJsonParser::check_json_syntax(const ObString &j_doc, ObIAllocator *allocat
 
   if (length == 0) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("json text length is 0", K(ret), K(j_doc));
   } else if (OB_ISNULL(alloc_buf = reinterpret_cast<char *>(allocator_ptr->alloc(length + 1)))) { // for '\0'
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory for json text", K(ret), K(j_doc));
   } else {
     MEMCPY(alloc_buf, j_doc.ptr(), length);
     alloc_buf[length] = '\0';
@@ -176,7 +171,6 @@ int ObJsonParser::check_json_syntax(const ObString &j_doc, ObIAllocator *allocat
       } catch (const std::bad_alloc &e) {
         allocator->free(alloc_buf);
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc memory for json text", K(ret));
       }
 
       if (OB_FAIL(ret)) {
@@ -208,7 +202,6 @@ int ObJsonParser::check_json_syntax(const ObString &j_doc, ObIAllocator *allocat
       } catch (const std::bad_alloc &e) {
         allocator->free(alloc_buf);
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc memory for json text", K(ret));
       }
 
       if (OB_FAIL(ret)) {
@@ -252,7 +245,6 @@ bool ObRapidJsonHandler::seeing_value(ObJsonNode *value)
         INIT_SUCC(ret);
         ObJsonArray *array = dynamic_cast<ObJsonArray *>(current_element_);
         if (OB_FAIL(array->append(value))) {
-          LOG_WARN("fail to append element to json array", K(ret));
           is_continue = false;
         }
         break;
@@ -263,7 +255,6 @@ bool ObRapidJsonHandler::seeing_value(ObJsonNode *value)
         next_state_ = ObJsonExpectNextState::EXPECT_OBJECT_KEY;
         ObJsonObject *object = dynamic_cast<ObJsonObject *>(current_element_);
         if (OB_FAIL(object->add(key_, value, with_unique_key_, true, false, is_schema_))) {
-          LOG_WARN("fail to add element to json object", K(ret));
           if (ret == OB_ERR_DUPLICATE_KEY) {
             with_duplicate_key_ = true;
           }

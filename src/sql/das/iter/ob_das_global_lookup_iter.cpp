@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_DAS
+#include "config_bridge.h"
 #include "sql/das/iter/ob_das_global_lookup_iter.h"
 #include "sql/das/iter/ob_das_merge_iter.h"
 #include "sql/das/ob_das_attach_define.h"
@@ -31,7 +32,6 @@ int ObDASGlobalLookupIter::inner_init(ObDASIterParam &param)
   if (OB_FAIL(ObDASLookupIter::inner_init(param))) {
   } else if (param.type_ != ObDASIterType::DAS_ITER_GLOBAL_LOOKUP) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("inner init das iter with bad param type", K(param), K(ret));
   } else {
     ObDASGlobalLookupIterParam &lookup_param = static_cast<ObDASGlobalLookupIterParam&>(param);
     can_retry_ = lookup_param.can_retry_;
@@ -43,7 +43,6 @@ int ObDASGlobalLookupIter::inner_init(ObDASIterParam &param)
     lookup_rtdef_->stmt_allocator_.set_alloc(&get_arena_allocator());
     if (lookup_param.rowkey_exprs_->empty()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected empty global rowkey exprs", K(ret));
     } else if (OB_FAIL(rowkey_exprs_.assign(*lookup_param.rowkey_exprs_))) {
     }
   }
@@ -130,7 +129,6 @@ int ObDASGlobalLookupIter::add_rowkey()
       if (OB_FAIL(build_trans_info_datum(index_ctdef->trans_info_expr_, datum_ptr))) {
       } else if (OB_ISNULL(datum_ptr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected nullptr", K(ret));
       } else if (OB_FAIL(das_scan_op->trans_info_array_.push_back(datum_ptr))) {
       }
     }
@@ -155,7 +153,6 @@ int ObDASGlobalLookupIter::add_rowkeys(int64_t count)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(eval_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr", K_(eval_ctx));
   } else {
     ObEvalCtx::BatchInfoScopeGuard batch_info_guard(*eval_ctx_);
     batch_info_guard.set_batch_size(count);
@@ -186,7 +183,7 @@ int ObDASGlobalLookupIter::check_index_lookup()
   int ret = OB_SUCCESS;
   OB_ASSERT(data_table_iter_->get_type() == DAS_ITER_MERGE);
   ObDASMergeIter *merge_iter = static_cast<ObDASMergeIter*>(data_table_iter_);
-  if (GCONF.enable_defensive_check() &&
+  if ((config::_enable_defensive_check() > 0) &&
       lookup_ctdef_->pd_expr_spec_.pushdown_filters_.empty()) {
     if (OB_UNLIKELY(lookup_rowkey_cnt_ != lookup_row_cnt_)) {
       ret = OB_ERR_DEFENSIVE_CHECK;
@@ -245,7 +242,6 @@ int ObDASGlobalLookupIter::pushdown_attach_task_to_das(ObDASScanOp &target_op)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(attach_ctdef_) || OB_ISNULL(attach_rtinfo_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("attach ctdef or rtinfo is nullptr", K(ret), KPC(attach_ctdef_), KP(attach_rtinfo_));
   } else if (OB_FAIL(target_op.reserve_related_buffer(attach_rtinfo_->related_scan_cnt_))) {
   } else if (OB_FAIL(attach_related_taskinfo(target_op, attach_rtinfo_->attach_rtdef_))) {
   } else {
@@ -260,7 +256,6 @@ int ObDASGlobalLookupIter::attach_related_taskinfo(ObDASScanOp &target_op, ObDAS
   int ret = OB_SUCCESS;
   if (OB_ISNULL(attach_rtdef) || OB_ISNULL(attach_rtdef->ctdef_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("attach rtdef is invalid", K(ret), KP(attach_rtdef));
   } else if (attach_rtdef->op_type_ == DAS_OP_TABLE_SCAN) {
     const ObDASScanCtDef *scan_ctdef = static_cast<const ObDASScanCtDef*>(attach_rtdef->ctdef_);
     ObDASScanRtDef *scan_rtdef = static_cast<ObDASScanRtDef*>(attach_rtdef);
@@ -269,9 +264,6 @@ int ObDASGlobalLookupIter::attach_related_taskinfo(ObDASScanOp &target_op, ObDAS
         *target_op.get_tablet_loc(), table_loc->loc_meta_->ref_table_id_);
     if (OB_ISNULL(tablet_loc)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("related tablet loc is not found", K(ret),
-               KPC(target_op.get_tablet_loc()),
-               KPC(table_loc->loc_meta_));
     } else if (OB_FAIL(target_op.set_related_task_info(scan_ctdef,
                                                        scan_rtdef,
                                                        tablet_loc->tablet_id_))) {

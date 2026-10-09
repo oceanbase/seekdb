@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX RS
 
+#include "config_bridge.h"
+#include "share/config/ob_config_helper.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_local_management_service.h"
 #include "data_plane/ddl/ob_ddl_coordinator.h"
@@ -90,7 +92,7 @@ ObLocalManagementService::ObLocalManagementService()
 : inited_(false), need_bootstrap_(false), service_started_(false),
     local_services_ready_(false),
     debug_(false),
-    self_addr_(), config_(NULL), config_mgr_(NULL),
+    self_addr_(), config_mgr_(NULL),
     sql_proxy_(),
     schema_service_(NULL),
     local_command_service_(NULL),
@@ -117,8 +119,7 @@ ObLocalManagementService::~ObLocalManagementService()
   }
 }
 
-int ObLocalManagementService::init(ObServerConfig &config,
-                        ObConfigManager &config_mgr,
+int ObLocalManagementService::init(ObConfigManager &config_mgr,
                         ObAddr &self,
                         ObMySQLProxy &sql_proxy,
                         ObMultiVersionSchemaService *schema_service,
@@ -139,7 +140,6 @@ int ObLocalManagementService::init(ObServerConfig &config,
     ret = OB_INVALID_ARGUMENT;
     FLOG_WARN("local command service must not null", KR(ret));
   } else {
-    config_ = &config;
     config_mgr_ = &config_mgr;
 
     self_addr_ = self;
@@ -352,7 +352,6 @@ int ObLocalManagementService::submit_ddl_local_build_task(ObAsyncTask &task)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLocalManagementService has not been inited", K(ret));
   } else if (OB_FAIL(ObSysDDLLocalBuilderUtil::push_task(task))) {
   }
   return ret;
@@ -368,7 +367,6 @@ int ObLocalManagementService::schedule_recyclebin_task(int64_t delay)
     if (OB_CANCELED != ret) {
       LOG_ERROR("schedule purge recyclebin task failed", KR(ret), K(delay), K(did_repeat));
     } else {
-      LOG_WARN("schedule purge recyclebin task failed", KR(ret), K(delay), K(did_repeat));
     }
   }
 
@@ -387,11 +385,9 @@ int ObLocalManagementService::schedule_load_ddl_task()
 #endif
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (FALSE_IT(task_exist = load_ddl_task_timer_.task_exist(load_ddl_task_))) {
   } else if (task_exist) {
     // ignore error
-    LOG_WARN("load ddl task already exist", K(ret));
   } else if (OB_FAIL(load_ddl_task_timer_.schedule(load_ddl_task_, delay, did_repeat))) {
   } else {
     LOG_INFO("succeed to add load ddl task");
@@ -410,18 +406,13 @@ int ObLocalManagementService::execute_bootstrap()
                   "cluster bootstrap begin.");
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("local_management_service not inited", K(ret));
   } else if (!sql_proxy_.is_inited() || !service_started_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("sql proxy or local management service is not ready",
-             "sql_proxy_inited", sql_proxy_.is_inited(),
-             K(service_started_), K(ret));
   } else {
     FLOG_INFO("try to get local-service lock in execute_bootstrap");
     ObLatchWGuard guard(bootstrap_lock_, ObLatchIds::RS_BOOTSTRAP_LOCK);
     FLOG_INFO("success to get local-service lock in execute_bootstrap");
-    ObBootstrap bootstrap(ddl_service_, runtime_ddl_service_,
-        *config_);
+    ObBootstrap bootstrap(ddl_service_, runtime_ddl_service_);
     if (OB_FAIL(bootstrap.execute_bootstrap())) {
     }
 
@@ -434,7 +425,6 @@ int ObLocalManagementService::execute_bootstrap()
     } else if (OB_FAIL(start_local_services_())) {
     } else if (FALSE_IT(need_bootstrap_ = false)) {
     } else if (debug_ && OB_FAIL(init_debug_database())) {
-      LOG_WARN("init debug database failed", K(ret));
     } else if (OB_FAIL(check_ddl_allowed())) {
     } else if (OB_FAIL(local_command_service_->load_all_special_system_packages())) {
     } else if (OB_FAIL(finish_bootstrap())) {
@@ -447,10 +437,9 @@ int ObLocalManagementService::execute_bootstrap()
       LOG_DBA_INFO_V2(OB_BOOTSTRAP_WAIT_SYS_PACKAGE_BEGIN,
                       DBA_STEP_INC_INFO(bootstrap),
                       "bootstrap wait sys package begin.");
-      if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, GCONF._ob_ddl_timeout))) {
-      } else if (!GCONF._enable_async_load_sys_package &&
+      if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, config::_ob_ddl_timeout()))) {
+      } else if (!config::_enable_async_load_sys_package() &&
           OB_FAIL(local_command_service_->wait_system_package_ready(ctx))) {
-        LOG_WARN("failed to wait mysql sys package ready", KR(ret), K(ctx));
       } else {
         LOG_DBA_INFO_V2(OB_BOOTSTRAP_WAIT_SYS_PACKAGE_SUCCESS,
                         DBA_STEP_INC_INFO(bootstrap),
@@ -465,7 +454,6 @@ int ObLocalManagementService::execute_bootstrap()
       if (OB_INVALID_INDEX == ObVersionParser::print_version_str(
           data_format_version, OB_SERVER_VERSION_LENGTH, current_data_version)) {
          ret = OB_INVALID_ARGUMENT;
-         LOG_WARN("fail to print data format version", KR(ret), K(current_data_version));
       } else if (OB_FAIL(local_command_service_->get_build_version(
                      build_version, sizeof(build_version)))) {
       } else {
@@ -520,7 +508,6 @@ int ObLocalManagementService::check_config_result(const char *name, const char* 
         if (OB_FAIL(sql_proxy_.read(res, sql.ptr()))) {
         } else if (NULL == (result = res.get_result())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("fail to get sql result", K(ret));
         } else if (OB_FAIL(result->next())) {
         } else {
           int32_t count = OB_INVALID_COUNT;
@@ -540,7 +527,6 @@ int ObLocalManagementService::check_ddl_allowed()
   int ret = OB_SUCCESS;
   if (!is_ddl_allowed()) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("local DDL service is not ready", K(ret));
   }
   return ret;
 }
@@ -552,7 +538,6 @@ int ObLocalManagementService::update_baseline_schema_version()
   int64_t baseline_schema_version = OB_INVALID_VERSION;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(trans.start(&sql_proxy_))) {
   } else if (OB_FAIL(ddl_service_.get_schema_service().
                      get_runtime_refreshed_schema_version(baseline_schema_version))) {
@@ -575,14 +560,12 @@ int ObLocalManagementService::finish_bootstrap()
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     int64_t new_schema_version = OB_INVALID_VERSION;
     ObMultiVersionSchemaService &multi_schema_service = ddl_service_.get_schema_service();
     share::schema::ObSchemaService *tmp_schema_service = multi_schema_service.get_schema_service();
     if (OB_ISNULL(tmp_schema_service)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("schema service is null", K(ret), KP(tmp_schema_service));
     } else {
       ObMySQLProxy &sql_proxy = ddl_service_.get_sql_proxy();
       share::schema::ObDDLSqlService ddl_sql_service(*tmp_schema_service);
@@ -609,7 +592,6 @@ int ObLocalManagementService::modify_system_variable(const obcall::ObModifySysVa
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid sysvar arg", K(arg));
@@ -623,10 +605,8 @@ int ObLocalManagementService::create_database(const ObCreateDatabaseArg &arg, UI
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else {
     ObDatabaseSchema copied_db_schema = arg.database_schema_;
     if (OB_FAIL(ddl_service_.create_database(arg.if_not_exist_,
@@ -643,10 +623,8 @@ int ObLocalManagementService::alter_database(const ObAlterDatabaseArg &arg)
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else if (OB_FAIL(ddl_service_.alter_database(arg))) {
   }
   return ret;
@@ -657,11 +635,9 @@ int ObLocalManagementService::parallel_ddl_pre_check_()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (!schema_service_->is_runtime_schema_refreshed()) {
     // use this err to trigger DDL retry and release current thread.
     ret = OB_ERR_PARALLEL_DDL_CONFLICT;
-    LOG_WARN("runtime schema not refreshed yet, need retry", KR(ret));
   }
   return ret;
 }
@@ -673,10 +649,8 @@ int ObLocalManagementService::parallel_create_table(const ObCreateTableArg &arg,
   bool is_parallel = arg.is_parallel_;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), K(arg));
   } else if (OB_FAIL(parallel_ddl_pre_check_())) {
   } else if (arg.schema_.is_view_table()) {
     ObCreateViewHelper create_view_helper(schema_service_, arg, res, nullptr /*external trans*/,is_parallel);
@@ -706,10 +680,8 @@ int ObLocalManagementService::create_table(const ObCreateTableArg &arg, ObCreate
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), K(arg));
   } else if (OB_FAIL(parallel_ddl_pre_check_())) {
   } else if (arg.schema_.is_view_table()) {
     ObCreateViewHelper create_view_helper(schema_service_, arg, res, nullptr/*external trans*/, false /*is_parallel*/);
@@ -737,10 +709,8 @@ int ObLocalManagementService::fork_database(const obcall::ObForkDatabaseArg &arg
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else if (OB_FAIL(ddl_service_.fork_database(arg, res))) {
   }
   char database_names_buffer[512] = {0};
@@ -761,10 +731,8 @@ int ObLocalManagementService::maintain_obj_dependency_info(const obcall::ObDepen
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else if (OB_FAIL(ddl_service_.maintain_obj_dependency_info(arg))) {
   }
   return ret;
@@ -776,10 +744,8 @@ int ObLocalManagementService::execute_ddl_task(const obcall::ObAlterTableArg &ar
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else {
     switch (arg.ddl_task_type_) {
       case share::REBUILD_INDEX_TASK: {
@@ -848,7 +814,6 @@ int ObLocalManagementService::execute_ddl_task(const obcall::ObAlterTableArg &ar
       }
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unknown ddl task type", K(ret), K(arg.ddl_task_type_));
     }
   }
   return ret;
@@ -869,10 +834,8 @@ int ObLocalManagementService::parallel_create_table_like(const obcall::ObCreateT
   int64_t begin_time = ObTimeUtility::current_time();
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), K(arg));
   } else {
     ObCreateTableLikeHelper create_table_like_helper(schema_service_, arg, res,
                                                      false /*enable ddl parallel*/, nullptr);
@@ -897,10 +860,8 @@ int ObLocalManagementService::update_ddl_task_active_time(const obcall::ObUpdate
   const int64_t task_id = arg.task_id_;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(arg));
   } else if (OB_FAIL(ObSysDDLSchedulerUtil::update_ddl_task_active_time(ObDDLTaskID(task_id)))) {
   }
   return ret;
@@ -912,10 +873,8 @@ int ObLocalManagementService::abort_redef_table(const obcall::ObAbortRedefTableA
   const int64_t task_id = arg.task_id_;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(arg));
   } else if (OB_FAIL(DDL_SIM(arg.task_id_, ABORT_REDEF_TABLE_RPC_FAILED))) {
   } else if (OB_FAIL(DDL_SIM(arg.task_id_, ABORT_REDEF_TABLE_RPC_SLOW))) {
   } else if (OB_FAIL(ObSysDDLSchedulerUtil::abort_redef_table(ObDDLTaskID(task_id)))) {
@@ -934,10 +893,8 @@ int ObLocalManagementService::finish_redef_table(const obcall::ObFinishRedefTabl
   const int64_t task_id = arg.task_id_;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(arg));
   } else if (OB_FAIL(DDL_SIM(arg.task_id_, FINISH_REDEF_TABLE_RPC_FAILED))) {
   } else if (OB_FAIL(DDL_SIM(arg.task_id_, FINISH_REDEF_TABLE_RPC_SLOW))) {
   } else if (OB_FAIL(ObSysDDLSchedulerUtil::finish_redef_table(ObDDLTaskID(task_id)))) {
@@ -962,10 +919,8 @@ int ObLocalManagementService::copy_table_dependents(const obcall::ObCopyTableDep
   const bool is_ignore_errors = arg.ignore_errors_;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(arg));
   } else if (OB_FAIL(DDL_SIM(arg.task_id_, COPY_TABLE_DEPENDENTS_RPC_FAILED))) {
   } else if (OB_FAIL(DDL_SIM(arg.task_id_, COPY_TABLE_DEPENDENTS_RPC_SLOW))) {
   } else if (OB_FAIL(ObSysDDLSchedulerUtil::copy_table_dependents(ObDDLTaskID(task_id),
@@ -988,10 +943,8 @@ int ObLocalManagementService::start_redef_table(const obcall::ObStartRedefTableA
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(arg));
   } else if (OB_FAIL(ObSysDDLSchedulerUtil::start_redef_table(arg, res))) {
   }
   char table_id_buffer[128];
@@ -1013,10 +966,8 @@ int ObLocalManagementService::set_comment(const obcall::ObSetCommentArg &arg, ob
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), K(arg));
   } else if (OB_FAIL(parallel_ddl_pre_check_())) {
   } else {
     ObSetCommentHelper comment_helper(schema_service_, arg, res);
@@ -1039,10 +990,8 @@ int ObLocalManagementService::alter_table(const obcall::ObAlterTableArg &arg, ob
   ObAlterTableArg &nonconst_arg = const_cast<ObAlterTableArg &>(arg);
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else {
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ddl_service_.get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
@@ -1068,7 +1017,6 @@ int ObLocalManagementService::alter_table(const obcall::ObAlterTableArg &arg, ob
         ddl_type = ObDDLType::DDL_RENAME_SUB_PARTITION;
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected ddl type", K(ret), K(nonconst_arg.alter_part_type_), K(nonconst_arg));
       }
 
       if (OB_FAIL(ret)) {
@@ -1078,7 +1026,6 @@ int ObLocalManagementService::alter_table(const obcall::ObAlterTableArg &arg, ob
                                                         orig_table_schema))) {
       } else if (OB_ISNULL(orig_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
-        LOG_WARN("table not exist", K(ret), K(nonconst_arg.alter_table_schema_));
       } else {
         ObCreateDDLTaskParam param(ddl_type,
                                    nullptr,
@@ -1107,7 +1054,6 @@ int ObLocalManagementService::alter_table(const obcall::ObAlterTableArg &arg, ob
       } else if (OB_FAIL(schema_guard.get_simple_table_schema(arg.alter_table_schema_.get_table_id(), simple_table_schema))) {
       } else if (OB_ISNULL(simple_table_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("simple_table_schema is NULL ptr", K(ret), K(simple_table_schema), K(ret));
       } else {
         res.schema_version_ = simple_table_schema->get_schema_version();
       }
@@ -1133,10 +1079,8 @@ int ObLocalManagementService::exchange_partition(const obcall::ObExchangePartiti
   schema_guard.set_session_id(arg.session_id_);
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(arg));
   } else if (OB_FAIL(ddl_service_.get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
   } else if (OB_FAIL(check_parallel_ddl_conflict(schema_guard, arg))) {
   } else {
@@ -1163,7 +1107,6 @@ int ObLocalManagementService::create_aux_index(
   int ret = OB_SUCCESS;
   if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(arg));
   } else if (OB_FAIL(ddl_service_.create_aux_index(arg, result))) {
   }
   LOG_INFO("finish generate aux index schema", K(ret), K(arg), K(result), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
@@ -1176,10 +1119,8 @@ int ObLocalManagementService::create_index(const ObCreateIndexArg &arg, obcall::
   ObSchemaGetterGuard schema_guard;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else {
     ObIndexBuilder index_builder(ddl_service_);
     if (OB_FAIL(ddl_service_.get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
@@ -1206,15 +1147,12 @@ int ObLocalManagementService::parallel_create_index(const ObCreateIndexArg &arg,
   int64_t begin_time = ObTimeUtility::current_time();
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), K(arg));
   } else if (OB_FAIL(parallel_ddl_pre_check_())) {
   } else if (share::schema::is_fts_or_multivalue_index(arg.index_type_)
             || share::schema::is_vec_index(arg.index_type_)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not supported", KR(ret), K(arg.index_type_));
   } else {
     ObCreateIndexHelper create_index_helper(schema_service_, ddl_service_, arg, res);
     if (OB_FAIL(create_index_helper.init(ddl_service_))) {
@@ -1240,10 +1178,8 @@ int ObLocalManagementService::fork_table(const obcall::ObForkTableArg &arg, obca
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else if (OB_FAIL(ddl_service_.fork_table(arg, res))) {
   }
   char table_names_buffer[512] = {0};
@@ -1268,10 +1204,8 @@ int ObLocalManagementService::drop_table(const obcall::ObDropTableArg &arg, obca
   ObSchemaGetterGuard schema_guard;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else if (OB_FAIL(ddl_service_.get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
   } else if (need_add_to_ddl_scheduler) {
     // to decide wherther to add to ddl scheduler.
@@ -1319,7 +1253,6 @@ int ObLocalManagementService::drop_table(const obcall::ObDropTableArg &arg, obca
                                0 /* parent task id*/);
     if (OB_UNLIKELY(OB_INVALID_ID == target_object_id || OB_INVALID_SCHEMA_VERSION == schema_version)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("error unexpected", K(ret), K(arg), K(target_object_id), K(schema_version));
     } else if (OB_FAIL(ObSysDDLSchedulerUtil::create_ddl_task(param, sql_proxy_, task_record))) {
     } else if (OB_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record))) {
     } else {
@@ -1345,10 +1278,8 @@ int ObLocalManagementService::parallel_drop_table(const ObDropTableArg &arg, ObD
   int64_t begin_time = ObTimeUtility::current_time();
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), K(arg));
   } else if (OB_FAIL(parallel_ddl_pre_check_())) {
   } else {
     ObDropTableHelper drop_table_helper(schema_service_, arg, res);
@@ -1375,10 +1306,8 @@ int ObLocalManagementService::drop_database(const obcall::ObDropDatabaseArg &arg
   bool need_add_to_scheduler = arg.is_add_to_scheduler_;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else if (need_add_to_scheduler) {
     ObSchemaGetterGuard schema_guard;
     if (OB_FAIL(ddl_service_.get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
@@ -1419,10 +1348,8 @@ int ObLocalManagementService::drop_index_on_failed(const obcall::ObDropIndexArg 
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(arg));
   } else {
     ObIndexBuilder index_builder(ddl_service_);
     if (OB_FAIL(index_builder.drop_index_on_failed(arg, res))) {
@@ -1443,10 +1370,8 @@ int ObLocalManagementService::drop_index(const obcall::ObDropIndexArg &arg, obca
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else {
     ObIndexBuilder index_builder(ddl_service_);
     if (OB_FAIL(index_builder.drop_index(arg, res))) {
@@ -1467,10 +1392,8 @@ int ObLocalManagementService::rebuild_vec_index(const obcall::ObRebuildIndexArg 
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(arg));
   } else if (OB_FAIL(ddl_service_.rebuild_vec_index(arg, res))) {
   }
   MANAGEMENT_EVENT_ADD("ddl scheduler", "rebuild index",
@@ -1508,10 +1431,8 @@ int ObLocalManagementService::purge_index(const ObPurgeIndexArg &arg)
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(arg), K(ret));
   } else if (OB_FAIL(ddl_service_.purge_index(arg))) {
   }
 
@@ -1523,10 +1444,8 @@ int ObLocalManagementService::rename_table(const obcall::ObRenameTableArg &arg)
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else if (OB_FAIL(ddl_service_.rename_table(arg))){
   }
   return ret;
@@ -1537,10 +1456,8 @@ int ObLocalManagementService::truncate_table(const obcall::ObTruncateTableArg &a
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else {
     SCN frozen_scn;
     if (OB_FAIL(ObMajorFreezeHelper::get_frozen_scn(frozen_scn))) {
@@ -1555,7 +1472,6 @@ int ObLocalManagementService::truncate_table(const obcall::ObTruncateTableArg &a
                                                        table_schema))) {
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
-        LOG_WARN("table not exist", K(ret), K(arg));
       } else {
         ObCreateDDLTaskParam param(ObDDLType::DDL_TRUNCATE_TABLE,
                                    nullptr,
@@ -1602,10 +1518,8 @@ int ObLocalManagementService::truncate_table_v2(const obcall::ObTruncateTableArg
   } batch_gen_schema_version_guard;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else {
     SCN frozen_scn;
     if (OB_FAIL(ObMajorFreezeHelper::get_frozen_scn(frozen_scn))) {
@@ -1632,10 +1546,8 @@ int ObLocalManagementService::restore_table_from_recyclebin(const ObRecyclebinRe
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(arg), K(ret));
   } else if (OB_FAIL(ddl_service_.restore_table_from_recyclebin(arg))) {
   }
   return ret;
@@ -1646,10 +1558,8 @@ int ObLocalManagementService::purge_table(const ObPurgeTableArg &arg)
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(arg), K(ret));
   } else if (OB_FAIL(ddl_service_.purge_table(arg))) {
   }
   return ret;
@@ -1660,10 +1570,8 @@ int ObLocalManagementService::restore_database(const ObRecyclebinRestoreDatabase
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(arg), K(ret));
   } else if (OB_FAIL(ddl_service_.restore_database(arg))) {
   }
   return ret;
@@ -1674,10 +1582,8 @@ int ObLocalManagementService::purge_database(const ObPurgeDatabaseArg &arg)
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(arg), K(ret));
   } else if (OB_FAIL(ddl_service_.purge_database(arg))) {
   }
   return ret;
@@ -1689,7 +1595,6 @@ int ObLocalManagementService::purge_expire_recycle_objects(const ObPurgeRecycleB
   int64_t purged_objects = 0;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ddl_service_.purge_expired_recycle_objects(arg, purged_objects))) {
   } else {
     affected_rows = purged_objects;
@@ -1704,10 +1609,8 @@ int ObLocalManagementService::optimize_table(const ObOptimizeTableArg &arg)
   LOG_INFO("receive optimize table request", K(arg));
   if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(arg));
   } else if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("error unexpected, schema service must not be NULL", K(ret));
   } else {
     const int64_t all_core_table_id = OB_ALL_CORE_TABLE_TID;
     for (int64_t i = 0; OB_SUCC(ret) && i < arg.tables_.count(); ++i) {
@@ -1748,10 +1651,8 @@ int ObLocalManagementService::calc_column_checksum_repsonse(const obcall::ObCalc
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(arg));
   } else if (OB_FAIL(DDL_SIM(arg.task_id_, PROCESS_COLUMN_CHECKSUM_RESPONSE_SLOW))) {
   } else if (OB_FAIL(ObSysDDLSchedulerUtil::on_column_checksum_calc_reply(
               arg.tablet_id_, ObDDLTaskKey(arg.target_table_id_, arg.schema_version_), arg.ret_code_))) {
@@ -1766,10 +1667,8 @@ int ObLocalManagementService::root_minor_freeze(const ObMinorFreezeArg &arg)
 
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else if (OB_FAIL(root_minor_freeze_.try_minor_freeze(arg))) {
   }
   MANAGEMENT_EVENT_ADD("management_service", "root_minor_freeze", K(ret), K(arg));
@@ -1811,10 +1710,8 @@ int ObLocalManagementService::update_index_status(const obcall::ObUpdateIndexSta
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else if (OB_FAIL(ddl_service_.update_index_status(arg))) {
   }
   MANAGEMENT_EVENT_ADD("ddl scheduler", "update index status",
@@ -1832,10 +1729,8 @@ int ObLocalManagementService::parallel_update_index_status(const obcall::ObUpdat
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (OB_UNLIKELY(!arg.is_valid() || OB_INVALID_ID == arg.data_table_id_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), K(arg));
   } else if (OB_FAIL(parallel_ddl_pre_check_())) {
   } else {
     ObUpdateIndexStatusHelper update_index_status_helper(schema_service_, arg, res);
@@ -1865,7 +1760,6 @@ int ObLocalManagementService::init_debug_database()
   HEAP_VAR(char[OB_MAX_SQL_LENGTH], sql) {
     if (!inited_) {
       ret = OB_NOT_INIT;
-      LOG_WARN("not init", K(ret));
     }
 
     ObTableSchema table_schema;
@@ -1879,7 +1773,6 @@ int ObLocalManagementService::init_debug_database()
         create_func_sql.reset();
         del_sql.reset();
         if (OB_FAIL((*creator_ptr)(table_schema))) {
-          LOG_WARN("create table schema failed", K(ret));
           ret = OB_SCHEMA_ERROR;
         } else {
           int64_t affected_rows = 0;
@@ -2021,7 +1914,6 @@ int ObLocalManagementService::start_timer_tasks()
   bool task_exist = false;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   }
 
   if (OB_SUCCESS == ret) {
@@ -2050,7 +1942,6 @@ int ObLocalManagementService::stop_timer_tasks()
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     load_ddl_task_timer_.cancel_task(load_ddl_task_);
     deadlock_event_clear_task_timer_.cancel_task(deadlock_event_clear_task_);
@@ -2070,10 +1961,8 @@ int ObLocalManagementService::create_user(obcall::ObCreateUserArg &arg,
   failed_index.reset();
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else if (OB_FAIL(ddl_service_.create_user(arg, failed_index))){
   }
   return ret;
@@ -2086,10 +1975,8 @@ int ObLocalManagementService::drop_user(const ObDropUserArg &arg,
   failed_index.reset();
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else if (OB_FAIL(ddl_service_.drop_user(arg, failed_index))) {
   }
   return ret;
@@ -2102,10 +1989,8 @@ int ObLocalManagementService::rename_user(const obcall::ObRenameUserArg &arg,
   failed_index.reset();
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else if (OB_FAIL(ddl_service_.rename_user(arg, failed_index))){
   }
   return ret;
@@ -2117,7 +2002,6 @@ int ObLocalManagementService::alter_user_default_role(
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ddl_service_.alter_user_default_role(arg))) {
   }
   return ret;
@@ -2128,10 +2012,8 @@ int ObLocalManagementService::alter_role(const obcall::ObAlterRoleArg &arg)
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if(!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else if (OB_FAIL(ddl_service_.alter_role(arg))) {
   }
   return ret;
@@ -2142,10 +2024,8 @@ int ObLocalManagementService::set_passwd(const obcall::ObSetPasswdArg &arg)
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else if (OB_FAIL(ddl_service_.set_passwd(arg))){
   }
   return ret;
@@ -2156,10 +2036,8 @@ int ObLocalManagementService::grant(const ObGrantArg &arg)
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else if (OB_FAIL(ddl_service_.grant(arg))) {
   }
   return ret;
@@ -2170,10 +2048,8 @@ int ObLocalManagementService::revoke_user(const ObRevokeUserArg &arg)
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else if (OB_FAIL(ddl_service_.revoke(arg))) {
   }
   return ret;
@@ -2185,10 +2061,8 @@ int ObLocalManagementService::lock_user(const ObLockUserArg &arg, ObSArray<int64
   failed_index.reset();
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else if (OB_FAIL(ddl_service_.lock_user(arg, failed_index))){
   }
   return ret;
@@ -2200,10 +2074,8 @@ int ObLocalManagementService::revoke_database(const ObRevokeDBArg &arg)
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else {
     ObOriginalDBKey db_key(arg.user_id_, arg.db_);
     if (OB_FAIL(ddl_service_.revoke_database(db_key, arg.priv_set_))) {
@@ -2217,10 +2089,8 @@ int ObLocalManagementService::revoke_table(const ObRevokeTableArg &arg)
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else {
     if (OB_FAIL(ddl_service_.revoke_table_and_column_mysql(arg))) {
     }
@@ -2233,10 +2103,8 @@ int ObLocalManagementService::revoke_routine(const ObRevokeRoutineArg &arg)
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else {
     ObRoutinePrivSortKey routine_priv_key(arg.user_id_, arg.db_, arg.routine_,
                             (arg.obj_type_ == (int64_t)ObObjectType::PROCEDURE) ? ObRoutineType::ROUTINE_PROCEDURE_TYPE
@@ -2257,10 +2125,8 @@ int ObLocalManagementService::create_outline(const ObCreateOutlineArg &arg)
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else {
     ObOutlineInfo outline_info = arg.outline_info_;
     const bool is_or_replace = arg.or_replace_;
@@ -2277,10 +2143,8 @@ int ObLocalManagementService::create_outline(const ObCreateOutlineArg &arg)
       LOG_USER_ERROR(OB_ERR_BAD_DATABASE, database_name.length(), database_name.ptr());
     } else if (db_schema->is_in_recyclebin()) {
       ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
-      LOG_WARN("Can't not create outline of db in recyclebin", K(ret), K(arg), K(*db_schema));
     } else if (OB_INVALID_ID == db_schema->get_database_id()) {
       ret = OB_ERR_BAD_DATABASE;
-      LOG_WARN("database id is invalid", K(*db_schema), K(ret));
     } else {
       outline_info.set_database_id(db_schema->get_database_id());
     }
@@ -2304,10 +2168,8 @@ int ObLocalManagementService::alter_outline(const ObAlterOutlineArg &arg)
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else if (OB_FAIL(ddl_service_.alter_outline(arg))) {
   } else {/*do nothing*/}
   return ret;
@@ -2318,10 +2180,8 @@ int ObLocalManagementService::drop_outline(const obcall::ObDropOutlineArg &arg)
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else {
     if (OB_FAIL(ddl_service_.drop_outline(arg))) {
     }
@@ -2412,7 +2272,6 @@ int ObLocalManagementService::schema_revise(const obcall::ObSchemaReviseArg &arg
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ddl_service_.do_schema_revise(arg))) {
   }
   return ret;
@@ -2426,7 +2285,6 @@ int ObLocalManagementService::init_sys_admin_ctx(ObSystemAdminCtx &ctx)
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     ctx.sql_proxy_ = &sql_proxy_;
     ctx.schema_service_ = schema_service_;
@@ -2443,10 +2301,8 @@ int ObLocalManagementService::admin_set_config(obcall::ObAdminSetConfigArg &arg)
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else {
     ObSystemAdminCtx ctx;
     if (OB_FAIL(init_sys_admin_ctx(ctx))) {
@@ -2477,10 +2333,8 @@ int ObLocalManagementService::apply_ds_action(const obcall::ObDebugSyncActionArg
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else if (OB_FAIL(ex_rpc::sync_call(
                  [&]{ return local_command_service_->set_ds_action(arg); }))) {
   }
@@ -2492,12 +2346,11 @@ int ObLocalManagementService::refresh_schema(const bool load_frozen_status)
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     ObTimeoutCtx ctx;
     int64_t schema_version = OB_INVALID_VERSION;
     if (load_frozen_status) {
-      ctx.set_timeout(config_->rpc_timeout);
+      ctx.set_timeout(config::rpc_timeout());
     }
     // The local management service depends on the system schema during startup.
     if (OB_FAIL(schema_service_->refresh_and_add_schema())) {
@@ -2509,7 +2362,6 @@ int ObLocalManagementService::refresh_schema(const bool load_frozen_status)
       ObSchemaService *schema_service = schema_service_->get_schema_service();
       if (NULL == schema_service) {
         ret = OB_ERR_SYS;
-        LOG_WARN("schema_service can't be null", K(ret), K(schema_version));
       } else {
         schema_service->set_refreshed_schema_version(schema_version);
         LOG_INFO("set schema version succeed", K(ret), K(schema_service), K(schema_version));
@@ -2528,11 +2380,9 @@ int ObLocalManagementService::request_time_zone_info(const ObRequestTZInfoArg &a
   ObTimeZoneInfoManager *tz_info_mgr = NULL;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(OTTZ_MGR.get_timezone(tz_map_wrap, tz_info_mgr))) {
   } else if (OB_ISNULL(tz_info_mgr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get_tz_mgr failed", K(ret), K(tz_info_mgr));
   } else if (OB_FAIL(tz_info_mgr->response_time_zone_info(result))) {
   } else {
     LOG_INFO("local management service responded with the latest time-zone info",
@@ -2541,9 +2391,11 @@ int ObLocalManagementService::request_time_zone_info(const ObRequestTZInfoArg &a
   return ret;
 }
 
-bool ObLocalManagementService::check_config(const ObConfigItem &item, const char *&err_info)
+bool ObLocalManagementService::check_config(const char *name, const char *value, const char *&err_info)
 {
   bool bret = true;
+  UNUSED(name);
+  UNUSED(value);
   err_info = NULL;
   if (!inited_) {
     bret = false;
@@ -2577,13 +2429,11 @@ int ObLocalManagementService::table_allow_ddl_operation(const obcall::ObAlterTab
   bool is_index = arg.alter_table_schema_.is_index_table();
   if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invali argument", K(ret), K(arg));
   } else if (OB_FAIL(ddl_service_.get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema(origin_database_name,
                                                    origin_table_name, is_index, schema))) {
   } else if (OB_ISNULL(schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("invalid schema", K(ret));
     ObCStringHelper helper;
     LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(origin_database_name), helper.convert(origin_table_name));
   } else if (schema->is_ctas_tmp_table()) {
@@ -2604,11 +2454,9 @@ int ObLocalManagementService::update_stat_cache(const obcall::ObUpdateStatCacheA
   bool evict_plan_failed = false;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     if (OB_FAIL(ex_rpc::sync_call(
             [&]{ return local_command_service_->refresh_stat_cache(arg); }))) {
-      LOG_WARN("fail to update table statistic", K(ret));
       // OB_SQL_PC_NOT_EXIST represent evict plan failed
       if (OB_SQL_PC_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
@@ -2630,7 +2478,6 @@ int ObLocalManagementService::check_weak_read_version_refresh_interval(int64_t r
 
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null", KR(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(sys_schema_guard))) {
   } else {
     ObSchemaGetterGuard schema_guard;
@@ -2642,15 +2489,12 @@ int ObLocalManagementService::check_weak_read_version_refresh_interval(int64_t r
       if (OB_FAIL(sys_schema_guard.get_server_runtime_info(runtime_schema))) {
       } else if (OB_ISNULL(runtime_schema)) {
         ret = OB_SUCCESS;
-        LOG_WARN("runtime schema is null, skip validation", KR(ret));
       } else if (!runtime_schema->is_normal()) {
         ret = OB_SUCCESS;
-        LOG_WARN("runtime schema is not normal, skip validation", KR(ret));
       } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
       } else if (OB_FAIL(schema_guard.get_system_variable(OB_SV_MAX_READ_STALE_TIME, var_schema))) {
       } else if (OB_ISNULL(var_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("var schema is null", KR(ret));
       } else if (OB_FAIL(var_schema->get_value(NULL, NULL, obj))) {
       } else if (OB_FAIL(obj.get_int(session_max_stale_time))) {
       } else if (session_max_stale_time != share::ObSysVarMeta::INVALID_MAX_READ_STALE_TIME
@@ -2669,13 +2513,11 @@ int ObLocalManagementService::set_config_pre_hook(obcall::ObAdminSetConfigArg &a
   int ret = OB_SUCCESS;
   if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(arg));
   }
   FOREACH_X(item, arg.items_, OB_SUCCESS == ret) {
     bool valid = true;
     if (item->name_.is_empty()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("empty config name", "item", *item, K(ret));
     } else if (0 == STRCMP(item->name_.ptr(), DATA_DISK_WRITE_LIMIT_PERCENTAGE)) {
       ret = check_data_disk_write_limit_(*item);
     } else if (0 == STRCMP(item->name_.ptr(), DATA_DISK_USAGE_LIMIT_PERCENTAGE)) {
@@ -2687,10 +2529,8 @@ int ObLocalManagementService::set_config_pre_hook(obcall::ObAdminSetConfigArg &a
     } else if (0 == STRCMP(item->name_.ptr(), WEAK_READ_VERSION_REFRESH_INTERVAL)) {
       int64_t refresh_interval = ObConfigTimeParser::get(item->value_.ptr(), valid);
       if (valid && OB_FAIL(check_weak_read_version_refresh_interval(refresh_interval, valid))) {
-        LOG_WARN("check refresh interval failed ", KR(ret), K(*item));
       } else if (!valid) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("config invalid", KR(ret), K(*item));
       }
     } else if (0 == STRCMP(item->name_.ptr(), LOG_DISK_UTILIZATION_LIMIT_THRESHOLD)) {
       // check log_disk_utilization_limit_threshold
@@ -2699,7 +2539,6 @@ int ObLocalManagementService::set_config_pre_hook(obcall::ObAdminSetConfigArg &a
         ret = OB_INVALID_ARGUMENT;
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, "log_disk_utilization_limit_threshold should be greater than log_disk_throttling_percentage "
                       "when log_disk_throttling_percentage is not equal to 100");
-        LOG_WARN("config invalid", "item", *item, K(ret));
       }
     } else if (0 == STRCMP(item->name_.ptr(), LOG_DISK_THROTTLING_PERCENTAGE)) {
       // check log_disk_throttling_percentage
@@ -2707,7 +2546,6 @@ int ObLocalManagementService::set_config_pre_hook(obcall::ObAdminSetConfigArg &a
       if (!valid) {
         ret = OB_INVALID_ARGUMENT;
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, "log_disk_throttling_percentage should be equal to 100 or smaller than log_disk_utilization_limit_threshold");
-        LOG_WARN("config invalid", "item", *item, K(ret));
       }
     }
   }
@@ -2750,14 +2588,12 @@ int ObLocalManagementService::check_data_disk_write_limit_(obcall::ObAdminSetCon
     "It should greater than or equal with data_disk_usage_limit_percentage";
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", KR(ret));
   } else if (!is_valid) {
     // invalid argument
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(value));
   } else if (value == 0) {
     // does not need check data disk write limit percentage
-  } else if (value < GCONF.data_disk_usage_limit_percentage) {
+  } else if (value < config::data_disk_usage_limit_percentage()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, warn_log);
   }
@@ -2773,14 +2609,12 @@ int ObLocalManagementService::check_data_disk_usage_limit_(obcall::ObAdminSetCon
     "It should less than or equal with data_disk_write_limit_percentage";
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", KR(ret));
   } else if (!is_valid) {
     // invalid argument
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(value));
-  } else if (0 == GCONF.data_disk_write_limit_percentage) {
+  } else if (0 == config::data_disk_write_limit_percentage()) {
     // does not need check data disk write limit percentage
-  } else if (value > GCONF.data_disk_write_limit_percentage) {
+  } else if (value > config::data_disk_write_limit_percentage()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, warn_log);
   }
@@ -2800,15 +2634,12 @@ int ObLocalManagementService::clear_special_cluster_schema_status()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null", KR(ret));
   } else {
     ObSchemaService *schema_service = schema_service_->get_schema_service();
     if (OB_ISNULL(schema_service)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("schema service is null", K(ret));
     } else {
       schema_service->set_cluster_schema_status(
           ObClusterSchemaStatus::NORMAL_STATUS);
@@ -2828,10 +2659,8 @@ int ObLocalManagementService::handle_ddl_local_build_response(const obcall::ObDD
   info.physical_row_count_ = arg.physical_row_count_;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(arg));
   } else if (OB_FAIL(DDL_SIM(arg.task_id_, PROCESS_BUILD_SSTABLE_RESPONSE_SLOW))) {
   } else if (OB_FAIL(ObSysDDLSchedulerUtil::on_sstable_complement_job_reply(
           arg.tablet_id_/*source tablet id*/,
@@ -2854,24 +2683,22 @@ int ObLocalManagementService::purge_recyclebin_objects(int64_t purge_each_time)
 {
   int ret = OB_SUCCESS;
   // always passed
-  int64_t expire_timeval = GCONF.recyclebin_object_expire_time;
+  int64_t expire_timeval = config::recyclebin_object_expire_time();
   ObSchemaGetterGuard guard;
   if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_serviece_ is null", KR(ret));
   } else if (OB_FAIL(schema_service_->get_runtime_schema_guard(guard))) {
   } else {
     const int64_t current_time = ObTimeUtility::current_time();
     const obcall::Int64 expire_time = current_time - expire_timeval;
     const int64_t SLEEP_INTERVAL_US = 100 * 1000;
     const int64_t PURGE_EACH_BATCH = 10;
-    const int64_t purge_interval = GCONF._recyclebin_object_purge_frequency;
+    const int64_t purge_interval = config::_recyclebin_object_purge_frequency();
     int64_t purge_sum = purge_each_time;
     const ObSimpleServerRuntimeSchema *simple_runtime = NULL;
     if (purge_interval <= 0 || !service_started_ || purge_sum <= 0) {
       // Purging is disabled or there is no work to do.
     } else if (OB_FAIL(guard.get_server_runtime_info(simple_runtime))) {
-      LOG_WARN("fail to get simple runtime schema", KR(ret));
       ret = OB_SUCCESS; // periodic maintenance retries after the next schema refresh
     } else if (OB_ISNULL(simple_runtime)) {
       LOG_WARN_RET(OB_RUNTIME_SCHEMA_NOT_READY, "simple runtime schema does not exist");
@@ -2921,7 +2748,6 @@ int ObLocalManagementService::flush_opt_stat_monitoring_info(const obcall::ObFlu
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     if (OB_FAIL(ex_rpc::sync_call([&]{
           return local_command_service_->update_opt_stat_monitoring_info(arg);
@@ -2938,7 +2764,6 @@ int ObLocalManagementService::cancel_ddl_task(const ObCancelDDLTaskArg &arg)
   LOG_INFO("receive cancel ddl task", K(arg));
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(arg));
   } else if (OB_FAIL(local_command_service_->cancel_sys_task(arg.get_task_id()))) {
   } else {
     LOG_INFO("succeed to cancel ddl task", K(arg));
@@ -2971,7 +2796,6 @@ int ObLocalManagementService::set_config_after_bootstrap_()
       }
     }
     if (FAILEDx(sql_proxy_.write(sql.ptr(), affected_rows))) {
-      LOG_WARN("failed to set configs", KR(ret), K(sql));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(configs); i++) {
         if (OB_FAIL(check_config_result(configs[i][0], configs[i][1]))) {
@@ -2988,10 +2812,8 @@ int ObLocalManagementService::recompile_all_views_batch(const obcall::ObRecompil
   int64_t start_time = ObTimeUtility::current_time();
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else if (OB_FAIL(ddl_service_.recompile_all_views_batch(arg.view_ids_))) {
   }
   LOG_INFO("recompile all views batch finish", KR(ret), K(start_time),
@@ -3014,14 +2836,12 @@ int ObLocalManagementService::start_ddl_service_()
     } else {
       // ObDDLServiceLauncher should be started when sys log stream's leader take over
       ret = OB_STATE_NOT_MATCH;
-      LOG_WARN("writable server should have DDL service enabled", KR(ret));
     }
   } else {
     // A replay-only server activates DDL explicitly after replay startup.
     if (ObDDLServiceLauncher::is_ddl_service_started()) {
       // A replay-only role cannot trigger the launcher's leader callback.
       ret = OB_STATE_NOT_MATCH;
-      LOG_WARN("replay-only server should begin with DDL service disabled", KR(ret));
     } else {
       SERVER_MODULE_SCOPE {
         rootserver::ObDDLServiceLauncher* ddl_service_launcher = ::oceanbase::share::server_service<::oceanbase::rootserver::ObDDLServiceLauncher>();
@@ -3045,7 +2865,6 @@ int ObLocalManagementService::create_ai_model(const obcall::ObCreateAiModelArg &
   ObAiModelDDLService ai_model_ddl_service(ddl_service_);
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(arg.check_valid())) {
   } else if (OB_FAIL(ai_model_ddl_service.create_ai_model(arg))) {
   }
@@ -3060,10 +2879,8 @@ int ObLocalManagementService::drop_ai_model(const obcall::ObDropAiModelArg &arg)
   ObAiModelDDLService ai_model_ddl_service(ddl_service_);
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), K(ret));
   } else if (OB_FAIL(ai_model_ddl_service.drop_ai_model(arg))) {
   }
 
@@ -3079,7 +2896,6 @@ int ObLocalManagementService::revoke_object(const ObRevokeObjMysqlArg &arg)
   ObObjPrivMysqlDDLService objpriv_mysql_ddl_service(&ddl_service_);
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     ObObjMysqlPrivSortKey object_key(arg.user_id_, arg.obj_name_, arg.obj_type_);
     OZ (objpriv_mysql_ddl_service.revoke_object(object_key, arg.priv_set_, arg.grantor_, arg.grantor_host_));
@@ -3102,7 +2918,6 @@ int report_column_checksum_response(
   int ret = common::OB_SUCCESS;
   if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("local management service is null", K(ret));
   } else if (OB_FAIL(
                  ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->calc_column_checksum_repsonse(arg))) {
   }
@@ -3115,7 +2930,6 @@ int report_ddl_single_replica_response(
   int ret = common::OB_SUCCESS;
   if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("local management service is null", K(ret));
   } else if (OB_FAIL(
                  ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->handle_ddl_local_build_response(arg))) {
   }
@@ -3127,10 +2941,8 @@ int renew_ddl_task_lease(const int64_t task_id)
   int ret = common::OB_SUCCESS;
   if (task_id <= 0) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid DDL task id", K(ret), K(task_id));
   } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("local management service is null", K(ret), K(task_id));
   } else {
     obcall::ObUpdateDDLTaskActiveTimeArg arg;
     arg.task_id_ = task_id;
@@ -3148,7 +2960,6 @@ int rebuild_vector_index(
   int ret = common::OB_SUCCESS;
   if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("local management service is null", K(ret));
   } else if (OB_FAIL(rootserver::local_ddl_serial_call(
                  [&] {
                    return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->rebuild_vec_index(
@@ -3169,16 +2980,13 @@ int load_idempotent_ddl_tablet_slice_counts(
   bool use_idempotent_mode = false;
   if (task_id <= 0) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid DDL task id", K(ret), K(task_id));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("sql proxy is null", K(ret), K(task_id));
   } else if (OB_FAIL(rootserver::ObDDLTaskRecordOperator::get_schedule_info(
                  *GCTX.sql_proxy_, task_id, allocator, false /*is_for_update*/,
                  slice_info, use_idempotent_mode))) {
   } else if (!use_idempotent_mode) {
     ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("DDL schedule is not idempotent", K(ret), K(task_id));
   } else {
     for (int64_t i = 0;
          OB_SUCC(ret) && i < slice_info.part_ranges_.count();

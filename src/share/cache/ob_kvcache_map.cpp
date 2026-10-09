@@ -15,6 +15,7 @@
  */
 
 #include "ob_kvcache_map.h"
+#include "ob_kvcache_inst_map.h"
 #include "lib/ob_running_mode.h"
 #include "lib/utility/ob_mod_define.h"
 #include "lib/time/ob_clock_generator.h"
@@ -35,6 +36,7 @@ ObKVCacheMap::ObKVCacheMap()
       bucket_size_(0),
       buckets_(NULL),
       store_(NULL),
+      inst_map_(NULL),
       global_hazard_station_()
 {
 }
@@ -43,16 +45,19 @@ ObKVCacheMap::~ObKVCacheMap()
 {
 }
 
-int ObKVCacheMap::init(const int64_t bucket_num, ObKVCacheStore *store)
+int ObKVCacheMap::init(
+    const int64_t bucket_num,
+    ObKVCacheStore *store,
+    ObKVCacheInstMap *inst_map)
 {
   int ret = OB_SUCCESS;
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     COMMON_LOG(WARN, "The ObKVCacheMap has been inited, ", K(ret));
-  } else if (0 >= bucket_num || NULL == store) {
+  } else if (0 >= bucket_num || NULL == store || NULL == inst_map) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "Invalid arguments, ", K(bucket_num), K(store), K(ret));
+    COMMON_LOG(WARN, "Invalid arguments, ", K(bucket_num), K(store), K(inst_map), K(ret));
   } else if (OB_FAIL(bucket_lock_.init(bucket_num,
       ObLatchIds::KV_CACHE_BUCKET_LOCK, ObMemAttr("CACHE_MAP_LOCK", ObCtxIds::DEFAULT_CTX_ID)))) {
   } else if (OB_FAIL(global_hazard_station_.init(HAZARD_STATION_WAITING_THRESHOLD, HAZARD_STATION_SLOT_NUM))) {
@@ -88,6 +93,7 @@ int ObKVCacheMap::init(const int64_t bucket_num, ObKVCacheStore *store)
     if (OB_SUCC(ret)) {
       bucket_num_ = bucket_num;
       store_ = store;
+      inst_map_ = inst_map;
       is_inited_ = true;
     }
   }
@@ -137,6 +143,7 @@ void ObKVCacheMap::destroy()
   bucket_num_ = 0;
   bucket_size_ = 0;
   store_ = NULL;
+  inst_map_ = NULL;
   is_inited_ = false;
 }
 
@@ -310,6 +317,12 @@ int ObKVCacheMap::get(
       int tmp_ret = OB_SUCCESS;
       if (OB_FAIL(ret)) {
       } else if (NULL == iter) {
+        ObKVCacheInstKey inst_key(cache_id);
+        ObKVCacheInstHandle inst_handle;
+        if (OB_SUCCESS == inst_map_->get_cache_inst(inst_key, inst_handle)
+            && OB_NOT_NULL(inst_handle.get_inst())) {
+          inst_handle.get_inst()->status_.total_miss_cnt_.inc();
+        }
         ret = OB_ENTRY_NOT_EXIST;
       } else if (OB_UNLIKELY(mb_handle_kv_cnt < 0)) {
         tmp_ret = OB_ERR_UNEXPECTED;

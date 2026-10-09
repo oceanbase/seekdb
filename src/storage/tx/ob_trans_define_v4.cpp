@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "share/ob_server_struct.h"
 #include "ob_trans_define_v4.h"
 #include "ob_trans_functor.h"
 #include "lib/allocator/ob_malloc.h"
@@ -623,7 +624,7 @@ bool ObTxDesc::in_tx_for_free_route()
 
 bool ObTxDesc::in_tx_for_free_route_()
 {
-  return (addr_.is_valid() && (addr_ != GCONF.self_addr_)) // txn free route temporary node
+  return (addr_.is_valid() && (addr_ != GCTX.self_addr())) // txn free route temporary node
     || in_tx_or_has_extra_state_();
 }
 

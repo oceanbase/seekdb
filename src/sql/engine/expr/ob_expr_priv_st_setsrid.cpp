@@ -52,12 +52,10 @@ int ObExprPrivSTSetSRID::calc_result_type2(ObExprResType &type,
     dynamic_cast<const ObSQLSessionInfo*>(type_ctx.get_session());
     if (OB_ISNULL(session)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("cast basic session to sql session info failed", K(ret));
     } else if (!ob_is_integer_type(type_srid)
         && !ob_is_string_type(type_srid)
         && !ob_is_null(type_srid)) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
-      LOG_WARN("invalid input type srid", K(ret), K(type_srid));
     } else if (ob_is_string_type(type_srid)) {
       type2.set_calc_type(ObIntType);
     }

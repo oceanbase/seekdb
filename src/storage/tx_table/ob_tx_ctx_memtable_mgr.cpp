@@ -91,7 +91,6 @@ int ObTxCtxMemtableMgr::create_memtable(const CreateMemtableArg &arg)
   // TODO: Donot use pool to create the only memtable
   if (get_memtable_count_() > 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tx ctx memtable already exists, should not create again", K(ret));
   } else if (OB_FAIL(t3m_->acquire_tx_ctx_memtable(handle))) {
   } else if (OB_ISNULL(table = handle.get_table())) {
     ret = OB_ERR_UNEXPECTED;
@@ -105,7 +104,6 @@ int ObTxCtxMemtableMgr::create_memtable(const CreateMemtableArg &arg)
     } else if (OB_FAIL(add_memtable_(handle))) {
     } else if (OB_ISNULL(ls_tx_svr = freezer_->get_ls_tx_svr())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ls_tx_svr is null", K(ret));
     } else if (OB_FAIL(ls_tx_svr->register_common_checkpoint(checkpoint::TX_CTX_MEMTABLE_TYPE, tx_ctx_memtable))) {
     } else {
       LOG_INFO("tx ctx memtable mgr create memtable successfully", KPC(tx_ctx_memtable));
@@ -162,7 +160,6 @@ int ObTxCtxMemtableMgr::unregister_from_common_checkpoint_(const ObTxCtxMemtable
   ObLSTxService *ls_tx_svr = nullptr;
   if (OB_ISNULL(ls_tx_svr = freezer_->get_ls_tx_svr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls_tx_svr is null", K(ret));
   } else if (OB_FAIL(ls_tx_svr->unregister_common_checkpoint(checkpoint::TX_CTX_MEMTABLE_TYPE,
                                                              memtable))) {
   } else {

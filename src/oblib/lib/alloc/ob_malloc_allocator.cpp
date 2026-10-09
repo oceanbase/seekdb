@@ -335,7 +335,6 @@ int ObMallocAllocator::set_ctx_idle(const uint64_t ctx_id,
   auto allocator = get_ctx_allocator(ctx_id);
   if (NULL == allocator) {
     ret = OB_ENTRY_NOT_EXIST;
-    LOG_WARN("context allocator does not exist", K(ret), K(ctx_id));
   } else {
     allocator->set_idle(size, reserve);
   }

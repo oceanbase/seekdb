@@ -33,7 +33,6 @@ namespace common
 int OB_WEAK_SYMBOL ob_obj_read_lob_data(ObIAllocator &allocator, const common::ObObj &obj, ObString &data)
 {
   int ret = OB_NOT_SUPPORTED;
-  LOG_WARN("not support outrow lob read", K(ret), K(obj));
   return ret;
 }
 }
@@ -415,7 +414,6 @@ int ObLobLocatorV2::get_disk_locator(ObString &disc_loc_buff) const
     int64_t handle_size = reinterpret_cast<intptr_t>(disk_loc) - reinterpret_cast<intptr_t>(ptr_);
     if (handle_size > size_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get invalid handle size", K(ret), K(size_), K(disk_loc), K(ptr_), K(handle_size));
     } else {
       if (disk_loc->in_row_) {
         handle_size = size_ - handle_size;
@@ -1657,7 +1655,6 @@ int ObObj::print_sql_literal(char *&buffer, int64_t &length,
           pos = saved_pos;
         }
       } else {
-        LOG_WARN("failed to print sql", K(ret));
       }
     } else {
       break;
@@ -1851,7 +1848,6 @@ int ObObj::print_varchar_literal(const ObIArray<ObString> &type_infos, char *buf
   ObSqlString str_val;
   if (OB_UNLIKELY(!meta_.is_enum_or_set())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected obj type", KPC(this), K(ret));
   } else if (is_enum()) {
     if (OB_FAIL(get_enum_str_val(str_val, type_infos))) {
     }
@@ -1861,7 +1857,6 @@ int ObObj::print_varchar_literal(const ObIArray<ObString> &type_infos, char *buf
   }
   if (OB_SUCC(ret) && databuff_printf(buffer, length, pos, "'%.*s'",
                                       static_cast<int32_t>(str_val.length()), str_val.ptr())) {
-    LOG_WARN("fail to print string", KP(buffer), K(length), K(pos), K(str_val), K(ret));
   }
   return ret;
 }
@@ -1872,7 +1867,6 @@ int ObObj::print_plain_str_literal(const ObIArray<ObString> &type_infos, char *b
   ObSqlString str_val;
   if (OB_UNLIKELY(!meta_.is_enum_or_set())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected obj type", KPC(this), K(ret));
   } else if (is_enum()) {
     if (OB_FAIL(get_enum_str_val(str_val, type_infos))) {
     }
@@ -1882,7 +1876,6 @@ int ObObj::print_plain_str_literal(const ObIArray<ObString> &type_infos, char *b
   }
   if (OB_SUCC(ret) && databuff_printf(buffer, length, pos, "%.*s",
                                       static_cast<int32_t>(str_val.length()), str_val.ptr())) {
-    LOG_WARN("fail to print string", KP(buffer), K(length), K(pos), K(str_val), K(ret));
   }
   return ret;
 }
@@ -1892,12 +1885,10 @@ int ObObj::get_enum_str_val(ObSqlString &str_val, const ObIArray<ObString> &type
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!meta_.is_enum())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected type", KPC(this), K(ret));
   } else {
     uint64_t val = get_enum();
     if (OB_UNLIKELY(val > type_infos.count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected obj value", K(type_infos), KPC(this), K(ret));
     } else if (0 == val) {
       if (OB_FAIL(str_val.append(ObString("")))) {
       }
@@ -1915,17 +1906,14 @@ int ObObj::get_set_str_val(ObSqlString &str_val, const ObIArray<ObString> &type_
  int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!meta_.is_set())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected type", KPC(this), K(ret));
   } else {
     uint64_t val = get_set();
     int64_t type_info_cnt = type_infos.count();
     if (OB_UNLIKELY(type_info_cnt > 64 || type_info_cnt <= 0)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected type infos", K(type_infos), K(ret));
     } else if (OB_UNLIKELY(type_info_cnt < 64
                            && (val > ((1ULL << type_info_cnt) - 1)))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected obj value", K(val), K(type_infos), K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < type_info_cnt; ++i) {
       if (val & (1ULL << i)) {
@@ -1936,7 +1924,6 @@ int ObObj::get_set_str_val(ObSqlString &str_val, const ObIArray<ObString> &type_
     }
     if (OB_FAIL(ret)) {
     } else if (val != 0 && OB_FAIL(str_val.set_length(str_val.length() - 1))) {//remove last comma
-      LOG_WARN("fail to str length", K(str_val), K(ret));
     }
   }
   return ret;
@@ -1971,10 +1958,8 @@ int ObObj::convert_string_value_charset(ObCharsetType charset_type, ObIAllocator
     const ObCharsetInfo *to_charset_info = ObCharset::get_charset(collation_type);
     if (OB_ISNULL(from_charset_info) || OB_ISNULL(to_charset_info)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("charsetinfo is null", K(ret), K(get_collation_type()), K(collation_type));
     } else if (CS_TYPE_INVALID == get_collation_type() || CS_TYPE_INVALID == collation_type) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid collation", K(get_collation_type()), K(collation_type), K(ret));
     } else if (CS_TYPE_BINARY != get_collation_type() && CS_TYPE_BINARY != collation_type
         && strcmp(from_charset_info->csname, to_charset_info->csname) != 0) {
       char *buf = NULL;
@@ -2015,12 +2000,9 @@ int ObObj::convert_string_value_charset(ObCharsetType charset_type, ObIAllocator
           }
           if (str_offset < str.length()) {
             ret = OB_SIZE_OVERFLOW;
-            LOG_WARN("size overflow", K(ret), K(str), KPHEX(str.ptr(), str.length()));
           } else {
             result_len = buf_offset;
             ret = OB_SUCCESS;
-            LOG_WARN("charset convert failed", K(ret),
-                K(get_collation_type()), K(collation_type));
           }
         }
         if (OB_SUCC(ret)) {
@@ -2041,10 +2023,8 @@ int ObObj::get_real_param_count(int64_t &count) const
     const ObSqlArrayObj *array_obj = NULL;
     if (OB_ISNULL(array_obj = reinterpret_cast<const ObSqlArrayObj*>(v_.ext_))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected nullptr", K(ret), K(v_.ext_));
     } else if (array_obj->count_ < 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected group_idx", K(ret), K(array_obj->count_));
     } else {
       count = array_obj->count_;
     }
@@ -2064,7 +2044,6 @@ int ObObj::read_lob_data(ObIAllocator &allocator, ObString &data) const
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("not lob storage type", K(ret), KPC(this), K(lbt()));
   }
   return ret;
 }
@@ -2282,7 +2261,6 @@ int ObSqlArrayObj::do_real_deserialize(common::ObIAllocator &allocator, char *bu
   int64_t pos = 0;
   if (OB_ISNULL(array_buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret));
   } else {
     array_obj = new (array_buf) ObSqlArrayObj();
     if (OB_FAIL(array_obj->deserialize(allocator, buf, data_len, pos))) {
@@ -2310,7 +2288,6 @@ int ObSqlArrayObj::deserialize(ObIAllocator &allocator, const char* buf, const i
     void *data_buf = allocator.alloc(sizeof(ObObjParam) * count_);
     if (OB_ISNULL(data_buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret));
     } else {
       data_ = new (data_buf) common::ObObjParam[count_];
       OB_UNIS_DECODE_ARRAY(data_, count_);
@@ -2371,12 +2348,10 @@ int ObObjCharacterUtil::print_safe_hex_represent_mysql(const ObObj &obj, char *b
   const char *collation_name = nullptr;
   if (!ObCharset::is_valid_collation(charset_type, collation_type)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid collation info", K(ret), K(obj.get_type()));
   } else if (FALSE_IT(charset_name = ObCharset::charset_name(charset_type))) {
   } else if (FALSE_IT(collation_name = ObCharset::collation_name(collation_type))) {
   } else if (OB_UNLIKELY(!charset_name || !collation_name)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected collation name", K(ret), K(charset_type), K(collation_type));
   } else if (OB_FAIL(databuff_printf(buffer, length, pos, "%s", CAST_PREFIX))) {
   } else if (OB_FAIL(hex_print(obj.get_string_ptr(), obj.get_string_len(), buffer, length, pos))) {
   } else if (OB_FAIL(databuff_printf(buffer, length, pos, CAST_SUFFIX, charset_name, collation_name))) {
@@ -2390,7 +2365,6 @@ int ObObjCharacterUtil::print_safe_hex_represent(const ObObj &obj, char* buf, co
   int ret = OB_SUCCESS;
   if (!ob_is_character_type(obj.get_type(), obj.get_collation_type())){
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected obj type", K(ret), K(obj.get_type()), K(obj.get_collation_type()));
   } else {
     ret = print_safe_hex_represent_mysql(obj, buf, buf_len, pos);
   }

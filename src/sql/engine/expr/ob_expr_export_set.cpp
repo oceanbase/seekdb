@@ -37,11 +37,8 @@ int ObExprExportSet::calc_result_typeN(ObExprResType& type, ObExprResType* types
   int ret = OB_SUCCESS;
   if (3 != param_num && 4 != param_num && 5 != param_num) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Export_Set() should have three or four or five arguments", K(ret), K(param_num));
   } else if (OB_ISNULL(types_array) || OB_ISNULL(type_ctx.get_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error. types_array or session null", K(ret), KP(types_array),
-        KP(type_ctx.get_session()));
   } else {
     // deduce length
     // Maximum occurrences of on and of in result
@@ -113,7 +110,6 @@ int ObExprExportSet::calc_export_set_inner(const int64_t max_result_size, ObStri
       // tot_length equals to 0 indicates that length_to is zero and "to" is empty string
       ret_str.reset();
     } else if (tot_length > max_result_size) {
-      LOG_WARN("Result of export_set_inner was larger than max_allow_packet_size", K(ret), K(tot_length), K(max_result_size));
       LOG_USER_WARN(OB_ERR_FUNC_RESULT_TOO_LARGE, "export_set", static_cast<int>(max_result_size));
     } else {
       char* buf = static_cast<char*>(string_buf.alloc(tot_length));

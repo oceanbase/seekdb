@@ -30,7 +30,6 @@ int Parser::token(const char *&begin, const char *end, Token &token)
   const char *c = begin;
   if (OB_ISNULL(c)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("begin ptr is NULL", K(ret));
   } else {
     // skip whitespace
     while (c != end) {
@@ -167,7 +166,6 @@ int Parser::init(common::ObArenaAllocator *allocator, JsonProcessor *json_proces
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("allocator is NULL", K(ret));
   } else {
     allocator_ = allocator;
     json_processor_ = json_processor;
@@ -180,7 +178,6 @@ int Parser::alloc_value(Type t, Value *&value)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("allocator not set", K(ret));
   } else if (OB_ISNULL(value = (Value *)allocator_->alloc(sizeof(Value)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("no memory", K(ret));
@@ -196,7 +193,6 @@ int Parser::alloc_pair(Pair *&pair)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("allocator not set", K(ret));
   } else if (OB_ISNULL(pair = (Pair *)allocator_->alloc(sizeof(Pair)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("no memory", K(ret));
@@ -216,7 +212,6 @@ int Parser::parse_value(const char *&begin, const char *end, Value *&value)
         if (OB_FAIL(alloc_value(JT_STRING, value))) {
         } else if (OB_ISNULL(value)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("succ to alloc value, but value is NULL", K(ret));
         } else {
           value->set_string(const_cast<char *>(cur_token_.value_.str_.begin_),
                             static_cast<int32_t>(cur_token_.value_.str_.end_ -
@@ -227,7 +222,6 @@ int Parser::parse_value(const char *&begin, const char *end, Value *&value)
         if (OB_FAIL(alloc_value(JT_NUMBER, value))) {
         } else if (OB_ISNULL(value)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("succ to alloc value, but value is NULL", K(ret));
         } else {
           value->set_int(cur_token_.value_.int_);
         }
@@ -236,21 +230,18 @@ int Parser::parse_value(const char *&begin, const char *end, Value *&value)
         if (OB_FAIL(alloc_value(JT_TRUE, value))) {
         } else if (OB_ISNULL(value)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("succ to alloc value, but value is NULL", K(ret));
         } else {}
         break;
       case TK_FALSE:
         if (OB_FAIL(alloc_value(JT_FALSE, value))) {
         } else if (OB_ISNULL(value)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("succ to alloc value, but value is NULL", K(ret));
         } else {}
         break;
       case TK_NULL:
         if (OB_FAIL(alloc_value(JT_NULL, value))) {
         } else if (OB_ISNULL(value)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("succ to alloc value, but value is NULL", K(ret));
         } else {}
         break;
       case '{':
@@ -278,13 +269,11 @@ int Parser::parse_array(const char *&begin, const char *end, Value *&arr)
   if (OB_FAIL(alloc_value(JT_ARRAY, arr))) {
   } else if (OB_ISNULL(arr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("succ to alloc value, but value is NULL", K(ret));
   } else if (OB_FAIL(SMART_CALL(parse_value(begin, end, value)))) {
     if (cur_token_.type_ == ']') {
       ret = OB_SUCCESS;
       // empty array
     } else {
-      LOG_WARN("invalid array", K_(cur_token_.type), K(ret));
     }
   } else {
     arr->array_add(value);
@@ -316,12 +305,10 @@ int Parser::parse_pair(const char *&begin, const char *end, Pair *&pair)
   if (OB_FAIL(token(begin, end, cur_token_))) {
   } else if (cur_token_.type_ != TK_STRING) {
     ret = OB_ERR_PARSER_SYNTAX;
-    LOG_WARN("type of current token is not TK_STRING", K(ret), K(cur_token_.type_));
   } else {
     if (OB_FAIL(alloc_pair(pair))) {
     } else if (OB_ISNULL(pair)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("succ to alloc pair, but pair is NULL", K(ret));
     } else {
       pair->name_.assign_ptr(const_cast<char *>(cur_token_.value_.str_.begin_),
                              static_cast<int32_t>(cur_token_.value_.str_.end_ -
@@ -332,7 +319,6 @@ int Parser::parse_pair(const char *&begin, const char *end, Pair *&pair)
         LOG_WARN("invalid pair", K(cur_token_.type_));
       } else if (OB_FAIL(SMART_CALL(parse_value(begin, end, pair->value_)))) {
         if (cur_token_.type_ != '}' && begin != end) {
-          LOG_WARN("lack of member value", K(ret), K(pair->name_), KCSTRING(begin));
         } else {}
       } else if (NULL != json_processor_) {
         json_processor_->process_value(pair->name_, pair->value_);
@@ -349,14 +335,12 @@ int Parser::parse_object(const char *&begin, const char *end, Value *&obj)
   if (OB_FAIL(alloc_value(JT_OBJECT, obj))) {
   } else if (OB_ISNULL(obj)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("succ to alloc value, but value is NULL", K(ret));
   } else if (OB_FAIL(SMART_CALL(parse_pair(begin, end, pair)))) {
     if (OB_ISNULL(pair) && '}' == cur_token_.type_) {
       // if the key of the pair is not empty, the format of the json is illegal
       // otherwise empty object
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("invalid object", K_(cur_token_.type), K(ret));
     }
   } else {
     obj->object_add(pair);
@@ -454,7 +438,6 @@ int Walker::step(int level, const Value *node, Type parent)
         DLIST_FOREACH(kv, obj) {
           if (OB_ISNULL(kv)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("kv is NULL", K(ret));
           } else if (OB_FAIL(on_object_member_start(level, parent, kv))) {
           } else {
             if (step_in_) {
@@ -700,7 +683,6 @@ int Tidy::on_object_member_start(int level, Type parent, const Pair *kv)
   int64_t &pos = print_buffer_.get_position();
   if (OB_ISNULL(kv)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("kv is NULL", K(ret));
   } else if (OB_FAIL(print_indent(level + 1))) {
   } else if (OB_FAIL(BUF_PRINTF("\"%.*s\":",
                                 kv->name_.length(),
@@ -741,8 +723,6 @@ int RegexFilter::on_obj_name(common::ObDataBuffer &path_buffer, bool &is_match) 
       const static int64_t REG_ERR_MSG_BUF_LEN = 512;
       char reg_err_msg[REG_ERR_MSG_BUF_LEN];
       size_t err_msg_len = regerror(regexec_ret, &(*iter), reg_err_msg, REG_ERR_MSG_BUF_LEN);
-      LOG_WARN("fail to run match func: regexec", K(ret),
-               K(regexec_ret), K(err_msg_len), KCSTRING(reg_err_msg));
     }
   }
   return ret;
@@ -775,7 +755,6 @@ int RegexFilter::on_object_member_start(int level, Type parent, const Pair *kv)
   int64_t &pos = print_buffer_.get_position();
   if (OB_ISNULL(kv)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("kv is NULL", K(ret));
   } else if (kv->filt_flag_) {
     if (OB_FAIL(print_indent(level + 1))) {
     } else if (OB_FAIL(BUF_PRINTF("\"%.*s\": ", kv->name_.length(), kv->name_.ptr()))) {
@@ -797,7 +776,6 @@ int RegexFilter::on_object_member_end(int level, Type parent, const Pair *kv, bo
   int64_t &pos = print_buffer_.get_position();
   if (OB_ISNULL(kv)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("kv is NULL", K(ret));
   } else if (kv->filt_flag_) {
     if (is_last) {
       if (OB_FAIL(BUF_PRINTF("\n"))) {
@@ -834,7 +812,6 @@ int RegexFilter::mark_need_print(Value *node,
           ObDataBuffer tmp_buffer = path_buffer;
           if (OB_ISNULL(kv)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("kv is NULL", K(ret));
           } else if (OB_FAIL(databuff_printf(tmp_buffer.get_data(),
                                              tmp_buffer.get_capacity(),
                                              tmp_buffer.get_position(),
@@ -888,7 +865,6 @@ int Path::iterate(Value *node, ObDataBuffer path_buff)
         DLIST_FOREACH(kv, node->get_object()) {
           if (OB_ISNULL(kv)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("kv is NULL", K(ret));
           } else if (OB_FAIL(databuff_printf(path_buff.get_data(),
                                              path_buff.get_capacity(),
                                              path_buff.get_position(),

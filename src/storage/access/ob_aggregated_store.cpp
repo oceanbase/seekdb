@@ -69,7 +69,6 @@ int ObAggRow::init(
   const common::ObIArray<share::schema::ObColumnParam *> *out_cols_param = param.iter_param_.get_col_params();
   if (OB_ISNULL(out_cols_param)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null out cols param", K(ret), K_(param.iter_param));
   } else if (OB_FAIL(agg_cells_.init(param.aggregate_exprs_->count()))) {
   } else if (OB_FAIL(dummy_agg_cells_.init(param.output_exprs_->count()))) {
   } else {
@@ -79,7 +78,6 @@ int ObAggRow::init(
       // so we can just set an determined value to output_exprs_ as it's never be used
       if (T_PSEUDO_GROUP_ID == param.output_exprs_->at(i)->type_) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("Unexpected group idx expr", K(ret));
       } else if (nullptr == param.output_sel_mask_ || param.output_sel_mask_->at(i)) {
         ObAggCell *cell = nullptr;
         int32_t col_offset = param.iter_param_.out_cols_project_->at(i);
@@ -93,7 +91,6 @@ int ObAggRow::init(
         } else if (FALSE_IT(cell = dummy_agg_cells_.at(dummy_agg_cells_.count() - 1))) {
         } else if (OB_UNLIKELY(PD_FIRST_ROW != cell->get_type())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Unexpected agg type", K(ret), KPC(cell));
         } else {
           static_cast<ObFirstRowAggCell*>(cell)->set_determined_value();
         }
@@ -109,7 +106,6 @@ int ObAggRow::init(
         sql::ObExpr *agg_expr = param.aggregate_exprs_->at(i);
         if (OB_ISNULL(agg_expr)) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("Unexpected null agg expr", K(ret));
         } else if (T_FUN_COUNT == agg_expr->type_ || T_FUN_SUM_OPNSIZE == agg_expr->type_) {
           if (OB_COUNT_AGG_PD_COLUMN_ID != col_offset) {
             exclude_null = col_param->is_nullable_for_write();
@@ -182,7 +178,6 @@ int ObAggregatedStore::on_scan_start()
 {
   int ret = OB_SUCCESS;
   if (nullptr != aggregate_program_ && OB_FAIL(aggregate_program_->reset_scan())) {
-    LOG_WARN("failed to reset pushdown aggregate program at scan boundary", K(ret));
   }
   return ret;
 }
@@ -192,7 +187,6 @@ int ObAggregatedStore::reuse_capacity(const int64_t capacity)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(capacity <= 0 || capacity > batch_size_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(capacity), K(batch_size_));
   } else {
     agg_row_.reuse();
     row_capacity_ = capacity;
@@ -212,7 +206,6 @@ int ObAggregatedStore::init(const ObTableAccessParam &param, common::hash::ObHas
     if (OB_ISNULL(param.iter_param_.agg_cols_project_)
         || param.iter_param_.agg_cols_project_->count() <= 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected aggregate input projector", K(ret), KP(param.iter_param_.agg_cols_project_));
     } else if (OB_FAIL(ObBlockBatchedRowStore::init(param))) {
     } else if (OB_FAIL(aggregate_plan_->create_program(aggregate_program_))) {
     } else {
@@ -225,22 +218,15 @@ int ObAggregatedStore::init(const ObTableAccessParam &param, common::hash::ObHas
       OB_ISNULL(param.aggregate_exprs_) ||
       OB_ISNULL(param.iter_param_.agg_cols_project_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected aggregate pushdown expr and projector", K(ret), K(param.output_exprs_),
-        K(param.iter_param_.out_cols_project_),
-        K(param.aggregate_exprs_), K(param.iter_param_.agg_cols_project_));
   } else if (param.output_exprs_->count() != param.iter_param_.out_cols_project_->count() ||
       param.aggregate_exprs_->count() != param.iter_param_.agg_cols_project_->count() ||
       param.aggregate_exprs_->count() <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected aggregate count", K(ret), K(param.output_exprs_->count()),
-        K(param.iter_param_.out_cols_project_->count()),
-        K(param.aggregate_exprs_->count()), K(param.iter_param_.agg_cols_project_->count()));
   } else if (OB_FAIL(ObBlockBatchedRowStore::init(param))) {
   } else if (OB_FAIL(agg_row_.init(param, context_, batch_size_, eval_ctx_))) {
   } else if (OB_FAIL(check_agg_in_row_mode(param.iter_param_))) {
   } else if (agg_flat_row_mode_ &&
              OB_FAIL(row_buf_.init(*context_.stmt_allocator_, param.iter_param_.get_max_out_col_cnt()))) {
-    LOG_WARN("Fail to init datum row buf", K(ret));
   }
   if (OB_FAIL(ret)) {
     reset();
@@ -256,16 +242,13 @@ int ObAggregatedStore::check_agg_in_row_mode(const ObTableIterParam &iter_param)
   const ObITableReadInfo *read_info = nullptr;
   if (OB_ISNULL(read_info = iter_param.get_read_info())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null read info", K(ret), K(iter_param));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < agg_row_.get_agg_count(); ++i) {
     if (OB_ISNULL(cell = agg_row_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpecte null agg cell", K(ret), K(i));
     } else if (OB_COUNT_AGG_PD_COLUMN_ID == cell->get_col_offset()) {
     } else if (cell->get_col_offset() >= read_info->get_request_count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected col idx", K(ret), K(i), KPC(cell), K(read_info->get_request_count()));
     } else if (ObPDAggType::PD_FIRST_ROW != cell->get_type()) {
       agg_cnt++;
     }
@@ -283,7 +266,6 @@ int ObAggregatedStore::fill_index_info(const blocksstable::ObMicroIndexInfo &ind
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObAggregatedStore is not inited", K(ret), K(*this));
   } else if (nullptr != aggregate_program_) {
     ObPushdownAggregateInput input(
         *iter_param_, index_info, is_pad_char_to_full_length(context_.sql_mode_));
@@ -292,7 +274,6 @@ int ObAggregatedStore::fill_index_info(const blocksstable::ObMicroIndexInfo &ind
     if (OB_FAIL(aggregate_program_->can_consume(input, can_consume))) {
     } else if (OB_UNLIKELY(!can_consume)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("aggregate index summary no longer satisfies probed capability", K(ret), K(index_info));
     } else if (OB_FAIL(aggregate_program_->consume(input))) {
     }
   } else {
@@ -314,7 +295,6 @@ int ObAggregatedStore::can_use_index_info(
   can_agg = false;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObAggregatedStore is not inited", K(ret));
   } else if (nullptr != aggregate_program_) {
     if (filter_is_null()
         && index_info.can_blockscan()
@@ -349,7 +329,6 @@ int ObAggregatedStore::fill_rows(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObAggregatedStore is not inited", K(ret), K(*this));
   } else if (nullptr != aggregate_program_) {
     blocksstable::ObIMicroBlockReader *reader = scanner.get_reader();
     const bool is_reverse = begin_index > end_index;
@@ -360,7 +339,6 @@ int ObAggregatedStore::fill_rows(
     int64_t micro_row_count = 0;
     if (OB_ISNULL(reader)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null aggregate input reader", K(ret));
     } else if (OB_FAIL(reader->get_row_count(micro_row_count))) {
     } else if (nullptr == res.bitmap_ && micro_row_count == covered_row_count) {
       ObPushdownAggregateInput dense_input(
@@ -379,7 +357,6 @@ int ObAggregatedStore::fill_rows(
           int64_t row_count = 0;
           if (OB_FAIL(get_row_ids(reader, begin_index, end_index, row_count, false, res))) {
             if (OB_UNLIKELY(OB_ITER_END != ret)) {
-              LOG_WARN("failed to get aggregate input row ids", K(ret), K(begin_index), K(end_index));
             }
           } else if (0 == row_count) {
           } else {
@@ -391,8 +368,6 @@ int ObAggregatedStore::fill_rows(
                     selected_input, can_consume_selected))) {
             } else if (OB_UNLIKELY(!can_consume_selected)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("selected aggregate input lacks a required exact value capability",
-                       K(ret), K(row_count));
             } else if (OB_FAIL(aggregate_program_->consume(selected_input))) {
             }
           }
@@ -426,7 +401,6 @@ int ObAggregatedStore::fill_rows(
       while (OB_SUCC(ret)) {
         if (OB_FAIL(get_row_ids(reader, begin_index, end_index, row_count, false, res))) {
           if (OB_UNLIKELY(OB_ITER_END != ret)) {
-            LOG_WARN("Failed to get row ids", K(ret), K(begin_index), K(end_index));
           }
         } else if (0 == row_count) {
         } else if (agg_flat_row_mode_ && blocksstable::ObIMicroBlockReader::Reader == reader->get_type()) {
@@ -458,7 +432,6 @@ int ObAggregatedStore::fill_row(blocksstable::ObDatumRow &row)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObAggregatedStore is not inited", K(ret), K(*this));
   } else if (nullptr != aggregate_program_) {
     ObPushdownAggregateInput input(
         *iter_param_, row, is_pad_char_to_full_length(context_.sql_mode_));
@@ -466,7 +439,6 @@ int ObAggregatedStore::fill_row(blocksstable::ObDatumRow &row)
     if (OB_FAIL(aggregate_program_->can_consume(input, can_consume))) {
     } else if (OB_UNLIKELY(!can_consume)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("aggregate row input lacks a required exact value capability", K(ret), K(row));
     } else if (OB_FAIL(aggregate_program_->consume(input))) {
     }
   } else {
@@ -484,15 +456,12 @@ int ObAggregatedStore::collect_aggregated_result()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObAggregatedStore is not inited", K(ret), K(*this));
   } else if (nullptr != aggregate_program_) {
     share::aggregate::ObAggregateEmitResult emit_result;
     if (OB_FAIL(aggregate_program_->seal())) {
     } else if (OB_FAIL(aggregate_program_->emit(1, emit_result))) {
     } else if (OB_UNLIKELY(1 != emit_result.row_count_ || !emit_result.end_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected scalar aggregate emit result", K(ret),
-               K(emit_result.row_count_), K(emit_result.end_));
     }
   } else if (!has_data()) {
     // just ret OB_ITER_END if no row aggregated
@@ -527,7 +496,6 @@ int ObAggregatedStore::get_agg_cell(const sql::ObExpr *expr, ObAggCell *&agg_cel
   agg_cell = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObAggregatedStore is not inited", K(ret), K(*this));
   } else {
     for (int64_t i = 0; i < agg_row_.get_agg_count(); ++i) {
       ObAggCell *cell = agg_row_.at(i);
@@ -539,7 +507,6 @@ int ObAggregatedStore::get_agg_cell(const sql::ObExpr *expr, ObAggCell *&agg_cel
   }
   if (OB_SUCC(ret) && nullptr == agg_cell) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null agg cell", K(ret), KPC(expr));
   }
   return ret;
 }

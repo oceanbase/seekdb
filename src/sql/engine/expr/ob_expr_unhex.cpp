@@ -77,23 +77,19 @@ int ObExprUnhex::eval_unhex(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_dat
       ObSQLMode sql_mode = 0;
       if (OB_ISNULL(session)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("session is NULL", K(ret));
       } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
       } else if (FALSE_IT(ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
                                                             session->is_ignore_stmt(),
                                                             sql_mode,
                                                             default_cast_mode))) {
-        LOG_WARN("failed to get default cast mode", K(ret));
       } else if (CM_IS_WARN_ON_FAIL(default_cast_mode)) {
         ret = OB_SUCCESS;
         res_datum.set_null();
       } else {
         ret = OB_ERR_INVALID_HEX_NUMBER;
-        LOG_WARN("fail to eval unhex", K(ret), K(expr), K(*param));
       }
     } else {
       //ret is other error code 
-      LOG_WARN("fail to eval unhex", K(ret), K(expr), K(*param));
     }
   }
   return ret;

@@ -48,7 +48,6 @@ int ObCallProcedureInfo::add_out_param(int64_t i,
   } else if (OB_FAIL(ob_write_string(allocator_, out_type_owner, store_out_type_owner))) {
   } else if (OB_FAIL(out_type_owner_.push_back(store_out_type_owner))) {
   } else if (is_client_out_param && OB_FAIL(out_client_params_.add_member(i))) {
-    LOG_WARN("push back error", K(i), K(name), K(is_client_out_param), K(ret));
   } else if (OB_FAIL(out_param_id_.push_back(i))) {
   } else { /*do nothing*/ }
   return ret;
@@ -63,7 +62,6 @@ int ObCallProcedureInfo::prepare_expression(const common::ObIArray<sql::ObRawExp
     if (OB_FAIL(sql_expression_factory_.alloc(expr))) {
     } else if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to create expr", K(ret));
     } else if (OB_FAIL(array.push_back(expr))) {
     } else { /*do nothing*/ }
   }
@@ -101,7 +99,6 @@ int ObCallProcedureInfo::final_expression(const common::ObIArray<sql::ObRawExpr*
     ObSqlExpression *expression = static_cast<ObSqlExpression*>(expressions_.at(i));
     if (OB_ISNULL(raw_expr) || OB_ISNULL(expression)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Invalid arguments", K(i), K(raw_expr), K(expression), K(ret));
     } else {
       if (OB_FAIL(expr_generator.generate(*raw_expr, *expression))) {
       } else {

@@ -31,7 +31,6 @@ int ObPxRFStaticInfo::init(const ObIArray<int64_t> &p2p_dh_ids, bool is_shared)
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("twice init bf static info", K(ret));
   } else if (OB_FAIL(p2p_dh_ids_.assign(p2p_dh_ids))) {
   } else {
     is_shared_ = is_shared;

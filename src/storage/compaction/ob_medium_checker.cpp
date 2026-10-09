@@ -67,7 +67,6 @@ int ObMediumChecker::init()
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObMediumChecker is inited before", KR(ret), KPC(this));
   } else if (OB_FAIL(tablet_check_set_.create(DEFAULT_MAP_BUCKET, "MedCheckSet", "CheckSetNode"))) {
   } else {
     is_inited_ = true;
@@ -91,10 +90,8 @@ int ObMediumChecker::add_tablet(const ObTabletID &tablet_id, const int64_t mediu
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObMediumChecker is not inited", K(ret));
   } else if (!tablet_id.is_valid() || 0 == medium_scn) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id), K(medium_scn));
   } else {
     lib::ObMutexGuard guard(lock_);
     // just cover the old info
@@ -110,7 +107,6 @@ int ObMediumChecker::check_medium_finish_schedule()
   int tmp_ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObMediumChecker is not inited", K(ret));
   } else {
     DEL_SUSPECT_INFO(MEDIUM_MERGE, UNKNOW_TABLET_ID, ObDiagnoseTabletType::TYPE_MEDIUM_MERGE);
     TabletCheckArray tablet_check_infos;
@@ -178,7 +174,6 @@ int ObMediumChecker::check_medium_finish(
       || start_idx >= end_idx
       || end_idx > tablet_check_infos.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(tablet_check_infos), K(start_idx), K(end_idx));
   } else {
     check_tablet_infos.reuse();
     finish_tablet_infos.reuse();
@@ -195,8 +190,6 @@ int ObMediumChecker::check_medium_finish(
     stat.filter_cnt_ += (end_idx - start_idx - check_tablet_infos.count());
     if (FAILEDx(ObMediumCompactionScheduleFunc::batch_check_medium_finish(
          finish_tablet_infos, check_tablet_infos, time_guard))) {
-      LOG_WARN("failed to batch check medium finish", K(ret), K(tablet_check_infos.count()), K(check_tablet_infos.count()),
-        K(tablet_check_infos), K(check_tablet_infos));
       stat.fail_cnt_ += check_tablet_infos.count();
       if (0 != stat.fail_cnt_) {
         stat.failed_info_ = check_tablet_infos.at(0);
@@ -227,7 +220,6 @@ int ObMediumChecker::reput_check_info(ObIArray<ObTabletCheckInfo> &tablet_check_
   int tmp_ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObMediumChecker is not inited", K(ret));
   } else {
     lib::ObMutexGuard guard(lock_);
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_check_infos.count(); ++i) {

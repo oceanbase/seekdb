@@ -120,7 +120,6 @@ int ObDDLSqlGenerator::get_priv_name(const int64_t priv, const char *&name)
       name = "ACCESS AI MODEL"; break;
     default: {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid priv", K(ret), K(priv));
     }
   }
   return ret;
@@ -134,7 +133,6 @@ int ObDDLSqlGenerator::gen_create_user_sql(const ObAccountArg &account,
   sql_string.reset();
   if (OB_UNLIKELY(!account.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("user_name is empty", K(account), K(password), K(ret));
   } else {
     if (account.is_role_) {
       static const char* const CREATE_ROLE_SQL = "CREATE ROLE \"%.*s\"";
@@ -181,7 +179,6 @@ int ObDDLSqlGenerator::gen_alter_role_sql(const ObAccountArg &account,
   sql_string.reset();
   if (OB_UNLIKELY(!account.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("role_name is empty()", K(account), K(password), K(ret));
   } else {
     static const char* const ALTER_ROLE_SQL = "ALTER ROLE \"%.*s\"";
     if (OB_FAIL(sql_string.append_fmt(ALTER_ROLE_SQL,
@@ -294,7 +291,6 @@ int ObDDLSqlGenerator::gen_set_max_connections_sql(const ObAccountArg &account,
   char NEW_SET_MAX_CONNECTIONS_SQL[] = "SET %.*s FOR `%.*s`@`%.*s` = '%lu' ";
   if (OB_UNLIKELY(!account.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("username should not be null", K(account), K(ret));
   } else {
     if (set_max_connections_per_hour) {
       if (0 == account.host_name_.compare(OB_DEFAULT_HOST_NAME)) {
@@ -353,7 +349,6 @@ int ObDDLSqlGenerator::gen_alter_user_require_sql(const obcall::ObAccountArg &ac
   static const char* const SET_SSL_SQL = "ALTER USER `%.*s`@`%.*s` ";
   if (OB_UNLIKELY(!account.is_valid()) || OB_UNLIKELY(ObSSLType::SSL_TYPE_NOT_SPECIFIED == ssl_type)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("username  or ssl_type is invalid", K(account),  K(ssl_type), K(ret));
   } else {
     if (OB_FAIL(sql_string.append_fmt(SET_SSL_SQL,
                                       account.user_name_.length(),
@@ -373,7 +368,6 @@ int ObDDLSqlGenerator::gen_drop_user_sql(const ObAccountArg &account,
   sql_string.reset();
   if (OB_UNLIKELY(!account.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("user_name should not be null", K(account));
   } else {
     if (account.is_role_) {
       static const char* const DROP_USER_SQL = "DROP ROLE \"%.*s\"";
@@ -413,7 +407,6 @@ int ObDDLSqlGenerator::gen_lock_user_sql(const obcall::ObAccountArg &account,
   char NEW_UNLOCK_USER_SQL[] = "ALTER USER `%.*s`@`%.*s` ACCOUNT UNLOCK";
   if (OB_UNLIKELY(!account.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("user_namae is empty", K(ret), K(account));
   } else {
     if (0 == account.host_name_.compare(OB_DEFAULT_HOST_NAME)) {
       if (OB_FAIL(sql_string.append_fmt(adjust_ddl_format_str(locked ? LOCK_USER_SQL : UNLOCK_USER_SQL),
@@ -441,7 +434,6 @@ int ObDDLSqlGenerator::gen_rename_user_sql(const ObAccountArg &old_account,
   char NEW_RENAME_USER_SQL[] = "RENAME USER `%.*s`@`%.*s` to `%.*s`@`%.*s`";
   if (OB_UNLIKELY(!old_account.is_valid()) || OB_UNLIKELY(!new_account.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("old_account or new_account should not be null", K(old_account));
   } else {
     if (0 == old_account.host_name_.compare(OB_DEFAULT_HOST_NAME)
         && 0 == new_account.host_name_.compare(OB_DEFAULT_HOST_NAME)) {
@@ -477,7 +469,6 @@ int ObDDLSqlGenerator::priv_to_name(const ObPrivSet priv, ObSqlString &priv_str)
     if (OB_FAIL(get_priv_name(priv, priv_name))) {
     } else if (OB_ISNULL(priv_name)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("priv_name should not be null", K(ret), K(priv));
     } else if (OB_FAIL(priv_str.append(priv_name))) {
     }
   } else {
@@ -488,7 +479,6 @@ int ObDDLSqlGenerator::priv_to_name(const ObPrivSet priv, ObSqlString &priv_str)
         if (OB_FAIL(get_priv_name(OB_PRIV_GET_TYPE(i), priv_name))) {
         } else if (OB_ISNULL(priv_name)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("priv_name should not be null", K(ret), K(i));
         } else {
           if (priv_str.empty()) {
             if (OB_FAIL(priv_str.append(priv_name))) {
@@ -539,10 +529,8 @@ int ObDDLSqlGenerator::gen_table_priv_sql(const obcall::ObAccountArg &account,
   ObSqlString priv_string;
   if (OB_UNLIKELY(need_priv.db_.empty()) || OB_UNLIKELY(need_priv.table_.empty()) || OB_UNLIKELY(!account.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("db or table or user_name is empty", K(need_priv), K(account), K(ret));
   } else if (need_priv.priv_level_ != OB_PRIV_TABLE_LEVEL) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("priv level is invalid", K(need_priv), K(ret));
   } else if (need_priv.priv_set_ & (~(OB_PRIV_TABLE_ACC | OB_PRIV_GRANT))) {
     ret = OB_ILLEGAL_GRANT_FOR_TABLE;
     LOG_WARN("Grant/Revoke privilege than can not be used",
@@ -609,10 +597,8 @@ int ObDDLSqlGenerator::gen_column_priv_sql(const obcall::ObAccountArg &account,
   ObSqlString priv_string;
   if (OB_UNLIKELY(need_priv.db_.empty()) || OB_UNLIKELY(need_priv.table_.empty()) || OB_UNLIKELY(!account.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("db or table or user_name is empty", K(need_priv), K(account), K(ret));
   } else if (need_priv.priv_level_ != OB_PRIV_TABLE_LEVEL) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("priv level is invalid", K(need_priv), K(ret));
   } else if (need_priv.priv_set_ & (~(OB_PRIV_TABLE_ACC | OB_PRIV_GRANT))) {
     ret = OB_ILLEGAL_GRANT_FOR_TABLE;
     LOG_WARN("Grant/Revoke privilege than can not be used",
@@ -630,7 +616,6 @@ int ObDDLSqlGenerator::gen_column_priv_sql(const obcall::ObAccountArg &account,
   ObSqlString columns_string;
   for (int64_t i = 0; OB_SUCC(ret) && i < need_priv.columns_.count(); i++) {
     if (i != 0 && OB_FAIL(columns_string.append(","))) {
-      LOG_WARN("append failed", K(ret));
     } else if (OB_FAIL(columns_string.append(need_priv.columns_.at(i)))) {
     }
   }
@@ -692,7 +677,6 @@ int ObDDLSqlGenerator::gen_table_priv_sql_ora(const obcall::ObAccountArg &accoun
   if (OB_UNLIKELY(table_priv_key.db_.empty()) || OB_UNLIKELY(table_priv_key.table_.empty()) 
       || OB_UNLIKELY(!account.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("db or table or user_name is empty", K(table_priv_key), K(account), K(ret));
   } else if (true == revoke_all_flag) {
     if (OB_FAIL(priv_string.append("ALL PRIVILEGES"))) {
     }
@@ -749,10 +733,8 @@ int ObDDLSqlGenerator::gen_routine_priv_sql(const obcall::ObAccountArg &account,
   ObSqlString priv_string;
   if (OB_UNLIKELY(need_priv.db_.empty()) || OB_UNLIKELY(need_priv.table_.empty()) || OB_UNLIKELY(!account.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("db or table or user_name is empty", K(need_priv), K(account), K(ret));
   } else if (need_priv.priv_level_ != OB_PRIV_ROUTINE_LEVEL) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("priv level is invalid", K(need_priv), K(ret));
   } else if (need_priv.priv_set_ & (~(OB_PRIV_ROUTINE_ACC | OB_PRIV_GRANT))) {
     ret = OB_ILLEGAL_GRANT_FOR_TABLE;
     LOG_WARN("Grant/Revoke privilege than can not be used",
@@ -812,10 +794,8 @@ int ObDDLSqlGenerator::gen_db_priv_sql(const obcall::ObAccountArg &account,
   ObSqlString priv_string;
   if (OB_UNLIKELY(need_priv.db_.empty()) || OB_UNLIKELY(!account.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("db or user_name is empty", K(ret), K(need_priv), K(account));
   } else if (need_priv.priv_level_ != OB_PRIV_DB_LEVEL) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("priv level is invalid", K(need_priv), K(ret));
   } else if (need_priv.priv_set_ & (~(OB_PRIV_DB_ACC | OB_PRIV_GRANT))) {
     ret = OB_ILLEGAL_GRANT_FOR_TABLE;
     LOG_WARN("Grant/Revoke privilege than can not be used",
@@ -870,7 +850,6 @@ int ObDDLSqlGenerator::gen_revoke_all_sql(const obcall::ObAccountArg &account,
   char NEW_REVOKE_ALL_SQL[] = "REVOKE ALL PRIVILEGES, GRANT OPTION FROM `%.*s`@`%.*s`";
   if (OB_UNLIKELY(!account.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("account is empty", K(ret), K(account));
   } else {
     if (0 == account.host_name_.compare(OB_DEFAULT_HOST_NAME)) {
       if (OB_FAIL(sql_string.append_fmt(adjust_ddl_format_str(REVOKE_ALL_SQL),
@@ -904,10 +883,8 @@ int ObDDLSqlGenerator::gen_user_priv_sql(const obcall::ObAccountArg &account,
   ObSqlString priv_string;
   if (OB_UNLIKELY(!account.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("account is empty", K(ret), K(account));
   } else if (need_priv.priv_level_ != OB_PRIV_USER_LEVEL) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("priv level is invalid", K(need_priv), K(ret));
   } else if (need_priv.priv_set_ & OB_PRIV_BOOTSTRAP) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("bootstrap priv is not allowed to grant", K(ret));
@@ -960,10 +937,8 @@ int ObDDLSqlGenerator::gen_object_priv_sql(
   ObSqlString priv_string;
   if (OB_UNLIKELY(need_priv.table_.empty()) || OB_UNLIKELY(!account.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("object name or user name is empty", K(ret), K(need_priv), K(account));
   } else if (need_priv.priv_level_ != OB_PRIV_OBJECT_LEVEL) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("priv level is invalid", K(need_priv), K(ret));
   } else if (need_priv.priv_set_ & (~(OB_PRIV_OBJECT_ACC | OB_PRIV_GRANT))) {
     ret = OB_ILLEGAL_GRANT_FOR_TABLE;
     LOG_WARN("object privilege cannot be granted or revoked",
@@ -997,7 +972,6 @@ int ObDDLSqlGenerator::gen_object_priv_sql(
   }
   if (OB_SUCC(ret) && is_grant && (need_priv.priv_set_ & OB_PRIV_GRANT)
       && OB_FAIL(sql_string.append(" WITH GRANT OPTION"))) {
-    LOG_WARN("append sql failed", K(ret));
   }
   LOG_DEBUG("gen object priv sql", K(sql_string.string()), K(is_grant), K(need_priv));
   return ret;

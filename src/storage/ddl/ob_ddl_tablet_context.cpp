@@ -54,7 +54,6 @@ int ObDDLTabletContext::MergeCtx::init(const ObDirectLoadType direct_load_type)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), K(is_inited_));
   } else if (OB_FAIL(ObIDDLMergeHelper::get_merge_helper(arena_, direct_load_type, merge_helper_))) {
   } else {
     is_inited_ = true;
@@ -75,7 +74,6 @@ ObDDLSlice::~ObDDLSlice()
     void *tmp = nullptr;
     if (OB_FAIL(chunk_queue_.pop(tmp))) {
       if (OB_ENTRY_NOT_EXIST != ret) {
-        LOG_WARN("pop chunk failed", K(ret));
       }
     } else {
       ObChunk *tmp_chunk = (ObChunk *)tmp;
@@ -94,10 +92,8 @@ int ObDDLSlice::init(const ObTabletID &tablet_id, const int64_t slice_idx)
   const int64_t queue_cap = 100;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), K(is_inited_));
   } else if (OB_UNLIKELY(!tablet_id.is_valid() || slice_idx < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id), K(slice_idx));
   } else if (OB_FAIL(chunk_queue_.init(queue_cap, "DDL_ChunkQueue"))) {
   } else {
     tablet_id_ = tablet_id;
@@ -112,16 +108,13 @@ int ObDDLSlice::push_chunk(ObChunk *&chunk_data)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(chunk_data)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(chunk_data));
   } else {
     const bool is_end_chunk = chunk_data->is_end_chunk();
     const int64_t DEFAULT_TIMEOUT_US = 5LL * 1000 * 1000; // 5s
     if (OB_FAIL(chunk_queue_.push(chunk_data, DEFAULT_TIMEOUT_US))) {
       if (OB_UNLIKELY(OB_TIMEOUT != ret)) {
-        LOG_WARN("push chunk data failed", K(ret), KPC(chunk_data));
       } else {
         ret = OB_EAGAIN;
       }
@@ -139,10 +132,8 @@ int ObDDLSlice::pop_chunk(ObChunk *&chunk_data)
   void *tmp = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(chunk_queue_.pop(tmp))) {
     if (OB_ENTRY_NOT_EXIST != ret) {
-      LOG_WARN("pop chunk data failed", K(ret));
     }
   } else {
     chunk_data = (ObChunk *)tmp;
@@ -170,7 +161,6 @@ int init_tablet_param(ObTablet *tablet, ObStorageSchema *storage_schema, const O
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == tablet || nullptr == storage_schema)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(tablet), KP(storage_schema));
   } else {
     ObDDLKvMgrHandle ddl_kv_mgr_handle;
     const ObTabletMeta &tablet_meta = tablet->get_tablet_meta();
@@ -193,12 +183,9 @@ int ObDDLTabletContext::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), K(is_inited_));
   } else if (OB_UNLIKELY(!tablet_id.is_valid() || ddl_thread_count <= 0 ||
                          !is_valid_direct_load(direct_load_type))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invlaid argument", K(ret), K(tablet_id), K(ddl_thread_count),
-             K(direct_load_type));
   } else {
     tablet_id_ = tablet_id;
     lob_read_service_ = &lob_read_service;
@@ -244,7 +231,6 @@ int ObDDLTabletContext::init_vector_index_context(const int64_t snapshot_version
   if (ddl_table_schema.table_item_.vec_dim_ > 0) {
     if (OB_ISNULL(buf = arena_.alloc(sizeof(ObVectorIndexTabletContext)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret));
     } else {
       vector_index_ctx_ = new (buf) ObVectorIndexTabletContext();
       if (OB_FAIL(vector_index_ctx_->init(tablet_id_, tablet_param_.storage_schema_->get_index_type(), snapshot_version, ddl_table_schema))) {
@@ -309,15 +295,12 @@ int ObDDLTabletContext::get_or_create_slice(const int64_t slice_idx, ObDDLSlice 
   is_new_slice = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(is_inited_));
   } else if (OB_UNLIKELY(slice_idx < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(slice_idx));
   } else {
     ObBucketRLockGuard guard(bucket_lock_, slice_idx % bucket_count_);
     if (OB_FAIL(slice_map_.get_refactored(slice_idx, ddl_slice))) {
       if (OB_HASH_NOT_EXIST != ret) {
-        LOG_WARN("get slice failed", K(ret));
       }
     } else {
       is_new_slice = false;
@@ -329,12 +312,10 @@ int ObDDLTabletContext::get_or_create_slice(const int64_t slice_idx, ObDDLSlice 
     if (OB_SUCCESS == ret) {
       is_new_slice = false;
     } else if (OB_HASH_NOT_EXIST != ret) {
-      LOG_WARN("get slice failed", K(ret));
     } else {
       ObDDLSlice *tmp_slice = OB_NEW(ObDDLSlice, ObMemAttr("dag_ddl_slice"));
       if (OB_ISNULL(tmp_slice)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory failed", K(ret));
       } else if (OB_FAIL(tmp_slice->init(tablet_id_, slice_idx))) {
       } else if (OB_FAIL(slice_map_.set_refactored(slice_idx, tmp_slice))) {
       } else {
@@ -356,17 +337,14 @@ int ObDDLTabletContext::remove_slice(const int64_t slice_idx)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(is_inited_));
   } else if (OB_UNLIKELY(slice_idx < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(slice_idx));
   } else {
     ObDDLSlice *ddl_slice = nullptr;
     ObBucketWLockGuard guard(bucket_lock_, slice_idx % bucket_count_);
     if (OB_FAIL(slice_map_.erase_refactored(slice_idx, &ddl_slice))) {
     } else if (OB_ISNULL(ddl_slice)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ddl slice is null", K(ret), KP(ddl_slice));
     } else {
       ddl_slice->~ObDDLSlice();
       ob_free(ddl_slice);
@@ -381,7 +359,6 @@ int ObDDLTabletContext::get_all_slices(ObIArray<ObDDLSlice *> &ddl_slices)
   ddl_slices.reuse();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(is_inited_));
   } else if (OB_FAIL(ddl_slices.reserve(slice_map_.size()))) {
   } else {
     SLICE_MAP::iterator slice_iter = slice_map_.begin();
@@ -389,7 +366,6 @@ int ObDDLTabletContext::get_all_slices(ObIArray<ObDDLSlice *> &ddl_slices)
       ObDDLSlice *ddl_slice = slice_iter->second;
       if (OB_ISNULL(ddl_slice)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ddl slice is null", K(ret), K(ddl_slice));
       } else if (OB_FAIL(ddl_slices.push_back(ddl_slice))) {
       }
     }

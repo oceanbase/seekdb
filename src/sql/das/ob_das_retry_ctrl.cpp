@@ -45,17 +45,13 @@ void ObDASRetryCtrl::tablet_location_retry_proc(ObDASRef &das_ref,
   const schema::ObTableSchema *table_schema = nullptr;
   if (OB_ISNULL(tablet_loc)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet loc is nullptr", K(ret));
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid schema service", K(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
     // The runtime schema may not be ready.
     task_op.set_errcode(ret);
-    LOG_WARN("get runtime schema guard fail", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( ref_table_id, table_schema))) {
     task_op.set_errcode(ret);
-    LOG_WARN("failed to get table schema", KR(ret), K(ref_table_id));
   } else if (OB_ISNULL(table_schema)) {
     // table could be dropped
     task_op.set_errcode(OB_TABLE_NOT_EXIST);

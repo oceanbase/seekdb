@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "config_bridge.h"
 #include "obmp_base.h"
 
 #include "sql/ob_mysql_end_trans_cb.h"
@@ -102,7 +103,7 @@ int ObMPBase::after_process(int error_code)
   {
     NG_TRACE_EXT(process_end, OB_ID(run_ts), get_run_timestamp());
     const int64_t elapsed_time = common::ObTimeUtility::current_time() - get_receive_timestamp();
-    bool is_slow = (elapsed_time > GCONF.trace_log_slow_query_watermark)
+    bool is_slow = (elapsed_time > config::trace_log_slow_query_watermark())
       && !THIS_WORKER.need_retry();
     if (is_slow) {
       if (THIS_WORKER.need_retry() && OB_TRY_LOCK_ROW_CONFLICT == error_code) {
@@ -285,7 +286,6 @@ int ObMPBase::free_session()
   ObSMConnection* conn = NULL;
   if (NULL == (conn = packet_sender_.get_conn())) {
     ret = OB_CONNECT_ERROR;
-    LOG_WARN("connection already disconnected", K(ret));
   } else {
     ObFreeSessionCtx ctx;
     
@@ -317,9 +317,8 @@ int ObMPBase::init_process_var(sql::ObSqlCtx &ctx,
   int ret = OB_SUCCESS;
   if (!packet_sender_.is_conn_valid()) {
     ret = OB_CONNECT_ERROR;
-    LOG_WARN("connection already disconnected", K(ret));
   } else {
-    const int64_t debug_sync_timeout = GCONF.debug_sync_timeout;
+    const int64_t debug_sync_timeout = config::debug_sync_timeout();
     // ignore session debug sync action actions to thread local actions error
     if (debug_sync_timeout > 0) {
       int tmp_ret = GDS.set_thread_local_actions(session.get_debug_sync_actions());
@@ -331,7 +330,7 @@ int ObMPBase::init_process_var(sql::ObSqlCtx &ctx,
     ctx.session_info_ = &session;
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
 
-    ctx.set_enable_strict_defensive_check(GCONF.enable_strict_defensive_check());
+    ctx.set_enable_strict_defensive_check((config::_enable_defensive_check() == 2));
     LOG_DEBUG("protocol flag info", K(ctx.get_enable_strict_defensive_check()));
   }
   return ret;
@@ -383,14 +382,12 @@ int ObMPBase::check_and_refresh_schema(ObSQLSessionInfo *session_info)
 
   if (OB_ISNULL(gctx_.schema_service_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("null schema service", K(ret), K(gctx_));
   } else {
     bool need_revert_session = false;
     if (NULL == session_info) {
       if (OB_FAIL(get_session(session_info))) {
       } else if (OB_ISNULL(session_info)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid session info", K(ret), K(session_info));
       } else {
         need_revert_session = true;
       }
@@ -424,7 +421,6 @@ int ObMPBase::response_row(ObSQLSessionInfo &session,
   bool has_charset_convert = false;
   if (OB_ISNULL(fields) || row.get_count() != fields->count()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("fields is null", K(ret), KP(fields));
   } else if (OB_FAIL(ob_write_row(allocator, row, tmp_row))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < tmp_row.get_count(); ++i) {
@@ -450,10 +446,8 @@ int ObMPBase::response_row(ObSQLSessionInfo &session,
         if (ob_is_string_tc(value.get_type())
             && CS_TYPE_INVALID != value.get_collation_type()
             && OB_FAIL(value.convert_string_value_charset(charset_type, allocator))) {
-          LOG_WARN("convert string value charset failed", K(ret), K(value));
         } else if (ob_is_text_tc(value.get_type())
                     && OB_FAIL(ObQueryDriver::convert_text_value_charset(value, charset_type, allocator, &session, exec_ctx))) {
-          LOG_WARN("convert text value charset failed", K(ret));
         }
         if (OB_FAIL(ret)) {
         } else if(OB_FAIL(ObQueryDriver::process_lob_locator_results(value,
@@ -468,7 +462,6 @@ int ObMPBase::response_row(ObSQLSessionInfo &session,
                                     is_ps_protocol,
                                     fields,
                                     schema_guard))) {
-          LOG_WARN("convert udt to client format failed", K(ret), K(value.get_udt_subschema_id()));      
         }
       }
     }
@@ -480,7 +473,6 @@ int ObMPBase::response_row(ObSQLSessionInfo &session,
       obmysql::OMPKRow rp(sm_row);
       if (OB_FAIL(response_packet(rp))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("response packet fail", K(ret));
       }
     }
   }
@@ -542,7 +534,6 @@ int ObMPBase::load_privilege_info_for_change_user(sql::ObSQLSessionInfo *session
       } else if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {
       } else if (OB_ISNULL(sys_variable_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("sys variable schema is null", K(ret));
       } else if (OB_FAIL(session->load_all_sys_vars(*sys_variable_schema, true))) {
       } else if (OB_FAIL(session->update_database_variables(&schema_guard))) {
       } else if (!session->get_database_name().empty() &&

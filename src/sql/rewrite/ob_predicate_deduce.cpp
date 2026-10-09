@@ -24,6 +24,88 @@
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
 
+namespace
+{
+bool is_implicit_cast_expr(const ObRawExpr *expr)
+{
+  return NULL != expr &&
+         T_FUN_SYS_CAST == expr->get_expr_type() &&
+         expr->has_flag(IS_OP_OPERAND_IMPLICIT_CAST);
+}
+
+int check_one_implicit_cast_deduce_safe(const ObRawExpr *src_expr,
+                                        const ObRawExpr *dst_expr,
+                                        bool &is_safe)
+{
+  int ret = OB_SUCCESS;
+  bool need_cast = false;
+  bool ignore_dup_cast_error = false;
+  is_safe = true;
+  if (OB_ISNULL(src_expr) || OB_ISNULL(dst_expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null expr", K(ret), K(src_expr), K(dst_expr));
+  } else if (!is_implicit_cast_expr(src_expr)) {
+    // do nothing
+  } else if (OB_FAIL(ObRawExprUtils::check_need_cast_expr(src_expr->get_result_type(),
+                                                          dst_expr->get_result_type(),
+                                                          need_cast,
+                                                          ignore_dup_cast_error))) {
+    LOG_WARN("failed to check need cast expr", K(ret));
+  } else if (need_cast && !ignore_dup_cast_error) {
+    is_safe = false;
+  }
+  return ret;
+}
+
+int check_implicit_cast_deduce_safe(const ObRawExpr *first_expr,
+                                    const ObRawExpr *second_expr,
+                                    bool &is_safe)
+{
+  int ret = OB_SUCCESS;
+  bool first_safe = true;
+  bool second_safe = true;
+  if (OB_FAIL(check_one_implicit_cast_deduce_safe(first_expr, second_expr, first_safe))) {
+    LOG_WARN("failed to check first implicit cast deduce safety", K(ret));
+  } else if (OB_FAIL(check_one_implicit_cast_deduce_safe(second_expr, first_expr, second_safe))) {
+    LOG_WARN("failed to check second implicit cast deduce safety", K(ret));
+  } else {
+    is_safe = first_safe && second_safe;
+  }
+  return ret;
+}
+
+int check_predicate_implicit_cast_deduce_safe(ObRawExpr *expr, bool &is_safe)
+{
+  int ret = OB_SUCCESS;
+  is_safe = true;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null expr", K(ret));
+  } else if (IS_COMPARISON_OP(expr->get_expr_type()) && 2 == expr->get_param_count()) {
+    ObRawExpr *left_expr = expr->get_param_expr(0);
+    ObRawExpr *right_expr = expr->get_param_expr(1);
+    if (OB_ISNULL(left_expr) || OB_ISNULL(right_expr)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null expr", K(ret), K(left_expr), K(right_expr));
+    } else if ((T_OP_IN == expr->get_expr_type() || T_OP_NOT_IN == expr->get_expr_type()) &&
+               T_OP_ROW == right_expr->get_expr_type()) {
+      // The row is an IN-list container, not a scalar comparison operand.
+      // Check the cast against each value rather than the container's null type.
+      for (int64_t i = 0; OB_SUCC(ret) && is_safe && i < right_expr->get_param_count(); ++i) {
+        if (OB_FAIL(check_implicit_cast_deduce_safe(left_expr,
+                                                    right_expr->get_param_expr(i),
+                                                    is_safe))) {
+          LOG_WARN("failed to check IN implicit cast deduce safety", K(ret));
+        }
+      }
+    } else if (OB_FAIL(check_implicit_cast_deduce_safe(left_expr, right_expr, is_safe))) {
+      LOG_WARN("failed to check implicit cast deduce safety", K(ret));
+    }
+  }
+  return ret;
+}
+}
+
 int ObPredicateDeduce::add_predicate(ObRawExpr *pred, bool &is_added)
 {
   int ret = OB_SUCCESS;
@@ -34,7 +116,6 @@ int ObPredicateDeduce::add_predicate(ObRawExpr *pred, bool &is_added)
   if (OB_ISNULL(pred) || OB_ISNULL(left_expr = pred->get_param_expr(0)) ||
       OB_ISNULL(right_expr = pred->get_param_expr(1))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("predicate is invalid", K(ret), K(pred), K(left_expr), K(right_expr));
   } else if (OB_FAIL(ObRelationalExprOperator::get_equal_meta(
                        cmp_meta,
                        left_expr->get_result_type(),
@@ -59,7 +140,6 @@ int ObPredicateDeduce::check_deduce_validity(ObRawExpr *cond, bool &is_valid)
   is_valid = true;
   if (OB_ISNULL(cond)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("condition is null", K(ret));
   } else if (!is_simple_condition(cond->get_expr_type()) ||
              contain_special_expr(*cond) ||
              cond->is_static_const_expr()) {
@@ -67,7 +147,6 @@ int ObPredicateDeduce::check_deduce_validity(ObRawExpr *cond, bool &is_valid)
   } else if (OB_ISNULL(left_expr = cond->get_param_expr(0)) ||
              OB_ISNULL(right_expr = cond->get_param_expr(1))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param exprs are null", K(ret), K(*cond));
   } else if (!left_expr->get_result_type().is_valid() ||
              !right_expr->get_result_type().is_valid()) {
     is_valid = false;
@@ -204,7 +283,6 @@ int ObPredicateDeduce::choose_unequal_preds(ObTransformerCtx &ctx,
     // because, it is better to replace that with B > c1
     if (topo_order_.at(i) < 0 || topo_order_.at(i) >= N) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid expr id", K(ret), K(topo_order_.at(i)));
     } else if (expr_equal_with_const.has_member(topo_order_.at(i))) {
       // do nothing
     } else if (OB_FAIL(ordered_list.push_back(topo_order_.at(i)))) {
@@ -257,7 +335,6 @@ int ObPredicateDeduce::check_index_part_cond(ObTransformerCtx &ctx,
   ObRawExpr *check_expr = NULL;
   if (OB_ISNULL(left_expr) || OB_ISNULL(right_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid index", K(ret), K(left_expr), K(right_expr));
   } else if (left_expr->is_column_ref_expr() && right_expr->is_const_expr()) {
     check_expr = left_expr;
   } else if (right_expr->is_column_ref_expr() && left_expr->is_const_expr()) {
@@ -284,7 +361,6 @@ int ObPredicateDeduce::choose_input_preds(ObIArray<uint8_t> &chosen,
   for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
     if (i * N + i >= chosen.count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid index", K(ret));
     } else {
       set(deduced, i, i, EQ);
     }
@@ -298,7 +374,6 @@ int ObPredicateDeduce::choose_input_preds(ObIArray<uint8_t> &chosen,
     for (int64_t i = 0; OB_SUCC(ret) && i < input_preds_.count(); ++i) {
       ObRawExpr *pred = input_preds_.at(i);
       if (op_type == 0 && OB_FAIL(keep.push_back(false)))  {
-        LOG_WARN("failed to init array", K(ret));
       } else if (OB_FAIL(convert_pred(pred, left, right, type))) {
       } else if (check_type == type) {
         if (has(chosen, left, right, type)) {
@@ -338,15 +413,21 @@ int ObPredicateDeduce::create_simple_preds(ObTransformerCtx &ctx,
   ObSEArray<ObRawExpr *, 4> tmp_exprs;
   if (OB_ISNULL(session_info) || OB_ISNULL(expr_factory)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params are invalid", K(ret), K(session_info), K(expr_factory));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
     for (int64_t j = 0; OB_SUCC(ret) && j < N; ++j) {
       const uint8_t edge = chosen.at(i * N + j);
       pred = NULL;
       if (OB_SUCC(ret) && has(edge, EQ)) {
+        bool is_safe = true;
         clear(chosen, i, j, EQ);
-        if (OB_FAIL(ObRawExprUtils::create_double_op_expr(
+        if (OB_FAIL(check_implicit_cast_deduce_safe(input_exprs_.at(i),
+                                                    input_exprs_.at(j),
+                                                    is_safe))) {
+          LOG_WARN("failed to check implicit cast deduce safety", K(ret));
+        } else if (!is_safe) {
+          // do nothing
+        } else if (OB_FAIL(ObRawExprUtils::create_double_op_expr(
                       *expr_factory, session_info, T_OP_EQ,
                       pred, input_exprs_.at(i), input_exprs_.at(j)))) {
         } else if (OB_FAIL(pred->pull_relation_id())) {
@@ -354,8 +435,15 @@ int ObPredicateDeduce::create_simple_preds(ObTransformerCtx &ctx,
         }
       }
       if (OB_SUCC(ret) && has(edge, GT)) {
+        bool is_safe = true;
         clear(chosen, i, j, GT);
-        if (OB_FAIL(ObRawExprUtils::create_double_op_expr(
+        if (OB_FAIL(check_implicit_cast_deduce_safe(input_exprs_.at(i),
+                                                    input_exprs_.at(j),
+                                                    is_safe))) {
+          LOG_WARN("failed to check implicit cast deduce safety", K(ret));
+        } else if (!is_safe) {
+          // do nothing
+        } else if (OB_FAIL(ObRawExprUtils::create_double_op_expr(
                       *expr_factory, session_info, T_OP_GT,
                       pred, input_exprs_.at(i), input_exprs_.at(j)))) {
         } else if (OB_FAIL(pred->pull_relation_id())) {
@@ -363,8 +451,15 @@ int ObPredicateDeduce::create_simple_preds(ObTransformerCtx &ctx,
         }
       }
       if (OB_SUCC(ret) && has(edge, GE)) {
+        bool is_safe = true;
         clear(chosen, i, j, GE);
-        if (OB_FAIL(ObRawExprUtils::create_double_op_expr(
+        if (OB_FAIL(check_implicit_cast_deduce_safe(input_exprs_.at(i),
+                                                    input_exprs_.at(j),
+                                                    is_safe))) {
+          LOG_WARN("failed to check implicit cast deduce safety", K(ret));
+        } else if (!is_safe) {
+          // do nothing
+        } else if (OB_FAIL(ObRawExprUtils::create_double_op_expr(
                       *expr_factory, session_info, T_OP_GE,
                       pred, input_exprs_.at(i), input_exprs_.at(j)))) {
         } else if (OB_FAIL(pred->pull_relation_id())) {
@@ -378,14 +473,12 @@ int ObPredicateDeduce::create_simple_preds(ObTransformerCtx &ctx,
     for (int64_t j = 0; OB_SUCC(ret) && !find_same && j < output_exprs.count(); ++j) {
       if (OB_ISNULL(output_exprs.at(j))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("expr is null", K(ret), K(j));
       } else if (tmp_exprs.at(i)->same_as(*output_exprs.at(j), &cmp_ctx)) {
         find_same = true;
         // no need to add constraints
       }
     }
     if (OB_SUCC(ret) && !find_same && OB_FAIL(output_exprs.push_back(tmp_exprs.at(i)))) {
-      LOG_WARN("failed to push back expr", K(ret));
     }
   }
   return ret;
@@ -399,11 +492,9 @@ int ObPredicateDeduce::convert_pred(const ObRawExpr *pred,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(pred)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("predicate is null", K(ret), K(pred));
   } else if (!find_equal_expr(input_exprs_, pred->get_param_expr(0), &left_id) ||
              !find_equal_expr(input_exprs_, pred->get_param_expr(1), &right_id)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("does not find expr", K(ret), K(*pred), K(left_id), K(right_id));
   } else if (pred->get_expr_type() == T_OP_EQ) {
     type = EQ;
   } else if (pred->get_expr_type() == T_OP_GT ||
@@ -415,7 +506,6 @@ int ObPredicateDeduce::convert_pred(const ObRawExpr *pred,
     std::swap(left_id, right_id);
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid predicate", K(ret), K(*pred));
   }
   return ret;
 }
@@ -499,17 +589,19 @@ int ObPredicateDeduce::check_type_safe(int64_t first, int64_t second, bool &type
   if (first < 0 || first >= input_exprs_.count() ||
       second < 0 || second >= input_exprs_.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid expr id", K(ret), K(first), K(second));
   } else if (OB_ISNULL(first_expr = input_exprs_.at(first)) ||
              OB_ISNULL(second_expr = input_exprs_.at(second))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret), K(first_expr), K(second_expr));
   } else if (OB_FAIL(ObRelationalExprOperator::get_equal_meta(
                        cmp_meta,
                        first_expr->get_result_type(),
                        second_expr->get_result_type()))) {
   } else {
     type_safe = (cmp_meta == cmp_type_);
+    if (type_safe &&
+        OB_FAIL(check_implicit_cast_deduce_safe(first_expr, second_expr, type_safe))) {
+      LOG_WARN("failed to check implicit cast deduce safety", K(ret));
+    }
   }
   return ret;
 }
@@ -534,12 +626,17 @@ int ObPredicateDeduce::deduce_general_predicates(ObTransformerCtx &ctx,
     }
     for (int64_t j = 0; OB_SUCC(ret) && j < equal_exprs.count(); ++j) {
       ObRawExpr *new_pred = NULL;
+      bool is_safe = true;
       if (OB_FAIL(ObRawExprCopier::copy_expr_node(*ctx.expr_factory_,
                                                   general_preds.at(i),
                                                   new_pred))) {
       } else {
         new_pred->get_param_expr(0) = equal_exprs.at(j);
-        if (OB_FAIL(new_pred->formalize(ctx.session_info_))) {
+        if (OB_FAIL(check_predicate_implicit_cast_deduce_safe(new_pred, is_safe))) {
+          LOG_WARN("failed to check implicit cast deduce safety", K(ret));
+        } else if (!is_safe) {
+          // do nothing
+        } else if (OB_FAIL(new_pred->formalize(ctx.session_info_))) {
         } else if (OB_FAIL(new_pred->pull_relation_id())) {
         } else if (OB_FAIL(result.push_back(new_pred))) {
         }
@@ -554,7 +651,6 @@ int ObPredicateDeduce::deduce_general_predicates(ObTransformerCtx &ctx,
     if (OB_ISNULL(cast_expr = lossless_cast_preds.at(i).first) ||
         OB_ISNULL(pred = lossless_cast_preds.at(i).second)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(ObRawExprUtils::get_real_expr_without_cast(cast_expr, column_expr))) {
     } else if (!ObOptimizerUtil::find_item(input_exprs_, column_expr, &param_idx)) {
       // do nothing
@@ -566,7 +662,6 @@ int ObPredicateDeduce::deduce_general_predicates(ObTransformerCtx &ctx,
           // do nothing
         } else if (OB_ISNULL(expr)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("input expr is null", K(ret));
         } else if (!expr->is_column_ref_expr()) {
           // do nothing
         } else if (OB_FAIL(equal_exprs.push_back(expr))) {
@@ -574,9 +669,14 @@ int ObPredicateDeduce::deduce_general_predicates(ObTransformerCtx &ctx,
       }
       for (int64_t j = 0; OB_SUCC(ret) && j < equal_exprs.count(); ++j) {
         ObRawExpr *new_pred = NULL;
+        bool is_safe = true;
         ObRawExprCopier copier(*ctx.expr_factory_);
         if (OB_FAIL(copier.add_replaced_expr(cast_expr, equal_exprs.at(j)))) {
         } else if (OB_FAIL(copier.copy_on_replace(pred, new_pred))) {
+        } else if (OB_FAIL(check_predicate_implicit_cast_deduce_safe(new_pred, is_safe))) {
+          LOG_WARN("failed to check implicit cast deduce safety", K(ret));
+        } else if (!is_safe) {
+          // do nothing
         } else if (OB_FAIL(new_pred->formalize(ctx.session_info_))) {
         } else if (OB_FAIL(new_pred->pull_relation_id())) {
         } else if (OB_FAIL(result.push_back(new_pred))) {
@@ -593,7 +693,6 @@ int ObPredicateDeduce::check_general_expr_validity(ObRawExpr *general_expr, bool
   is_valid = false;
   if (OB_ISNULL(general_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret));
   } else if (contain_special_expr(*general_expr)) {
     // do nothing
   } else if (!is_general_condition(general_expr->get_expr_type())) {
@@ -604,7 +703,6 @@ int ObPredicateDeduce::check_general_expr_validity(ObRawExpr *general_expr, bool
       ObRawExpr *param_expr = NULL;
       if (OB_ISNULL(param_expr = general_expr->get_param_expr(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("param expr is null", K(ret), K(param_expr));
       } else if (i == 0) {
         is_valid = param_expr->has_flag(IS_COLUMN);
       } else {
@@ -628,7 +726,6 @@ int ObPredicateDeduce::get_equal_exprs(ObRawExpr *pred,
   const TableItem* table_item = NULL;
   if (OB_ISNULL(pred) || OB_ISNULL(param_expr = pred->get_param_expr(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("prediate is invalid", K(ret), K(pred), K(param_expr));
   } else if (OB_FAIL(find_similar_expr(pred, general_preds, first_params))) {
   } else if (ObOptimizerUtil::find_item(input_exprs_, param_expr, &param_idx)) {
     for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
@@ -639,7 +736,6 @@ int ObPredicateDeduce::get_equal_exprs(ObRawExpr *pred,
         // do nothing
       } else if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("input expr is null", K(ret));
       } else if (OB_FAIL(ObRawExprUtils::get_real_expr_without_cast(expr, real_expr))) {
       } else if (!real_expr->is_column_ref_expr()) {
         // do nothing
@@ -650,7 +746,6 @@ int ObPredicateDeduce::get_equal_exprs(ObRawExpr *pred,
       } else if (OB_ISNULL(table_item = stmt_.get_table_item_by_id(
                                               static_cast<const ObColumnRefRawExpr*>(real_expr)->get_table_id()))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (T_OP_IN == pred->get_expr_type() &&
                  (!table_item->is_basic_table() || 
                   has_raw_const_equal_condition(i))) {
@@ -665,7 +760,6 @@ int ObPredicateDeduce::get_equal_exprs(ObRawExpr *pred,
       } else if (OB_FAIL(equal_exprs.push_back(expr))) {
       }
       if (OB_SUCC(ret) && need_check_type_safe && OB_FAIL(candi_exprs.push_back(expr))) {
-        LOG_WARN("failed to push back candi exprs whose result type is different from param_expr", K(ret));
       }
     }
     if (OB_SUCC(ret) && !candi_exprs.empty()) {
@@ -676,7 +770,6 @@ int ObPredicateDeduce::get_equal_exprs(ObRawExpr *pred,
           type_safe = false;
           if (OB_FAIL(check_cmp_metas_for_general_preds(candi_exprs.at(i), pred, type_safe))) {
           } else if (type_safe && OB_FAIL(equal_exprs.push_back(candi_exprs.at(i)))) {
-            LOG_WARN("failed to push back equal expr", K(ret));
           }
         }
       }
@@ -690,7 +783,6 @@ int ObPredicateDeduce::check_cmp_metas_for_general_preds(ObRawExpr *left_expr, O
   ObObjMeta cmp_meta;
   if (OB_ISNULL(left_expr) || OB_ISNULL(pred)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(left_expr), K(pred));
   } else if (T_OP_IN == pred->get_expr_type()) {
     //params of preds like 'A in (a,b,c...)' has been grouped by result types in pre-process phase,
     //for example: 'A in (int_a, int_b, float_a, float_b)' <=> A in (int_a, int_b) or A in (float_a, float_b)
@@ -698,13 +790,10 @@ int ObPredicateDeduce::check_cmp_metas_for_general_preds(ObRawExpr *left_expr, O
     ObRawExpr *right_expr = NULL;
     if (OB_ISNULL(right_expr = pred->get_param_expr(1))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null", K(ret), K(right_expr));
     } else if (T_OP_ROW != right_expr->get_expr_type()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("the second param of in expr is not row_op", K(ret), K(right_expr->get_expr_type()));
     } else if (OB_ISNULL(right_expr = right_expr->get_param_expr(0))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null", K(ret), K(right_expr));
     } else if (OB_FAIL(ObRelationalExprOperator::get_equal_meta(cmp_meta, left_expr->get_result_type(),right_expr->get_result_type()))) {
     } else {
       type_safe = (cmp_meta == cmp_type_);
@@ -712,7 +801,6 @@ int ObPredicateDeduce::check_cmp_metas_for_general_preds(ObRawExpr *left_expr, O
   } else if (T_OP_NE == pred->get_expr_type()) {
     if (OB_ISNULL(pred->get_param_expr(1))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null", K(ret), K(pred->get_param_expr(1)));
     } else if (OB_FAIL(ObRelationalExprOperator::get_equal_meta(cmp_meta, left_expr->get_result_type(),pred->get_param_expr(1)->get_result_type()))) {
     } else {
       type_safe = (cmp_meta == cmp_type_);
@@ -720,7 +808,6 @@ int ObPredicateDeduce::check_cmp_metas_for_general_preds(ObRawExpr *left_expr, O
   } else if (T_OP_BTW == pred->get_expr_type()) {
     if (OB_ISNULL(pred->get_param_expr(1)) || OB_ISNULL(pred->get_param_expr(2))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null", K(ret), K(pred->get_param_expr(1)), K(pred->get_param_expr(2)));
     } else if (OB_FAIL(ObRelationalExprOperator::get_equal_meta(cmp_meta, left_expr->get_result_type(), pred->get_param_expr(1)->get_result_type()))) {
     } else if (cmp_meta != cmp_type_) {
     } else if (OB_FAIL(ObRelationalExprOperator::get_equal_meta(cmp_meta, left_expr->get_result_type(), pred->get_param_expr(2)->get_result_type()))) {
@@ -742,13 +829,11 @@ int ObPredicateDeduce::find_similar_expr(ObRawExpr *pred,
   equal_ctx.override_const_compare_ = true;
   if (OB_ISNULL(pred)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid param expr", K(ret), K(pred));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < general_preds.count(); ++i) {
     bool is_similar = true;
     if (OB_ISNULL(general_preds.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("general predicate is null", K(ret));
     } else if (general_preds.at(i) == pred) {
       is_similar = true;
     } else if (T_OP_IN == pred->get_expr_type() &&
@@ -763,7 +848,6 @@ int ObPredicateDeduce::find_similar_expr(ObRawExpr *pred,
         if (OB_ISNULL(param1 = pred->get_param_expr(j)) ||
             OB_ISNULL(param2 = general_preds.at(i)->get_param_expr(j))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("param expr is null", K(ret));
         } else {
           is_similar = param1->same_as(*param2, &equal_ctx);
         }
@@ -826,7 +910,6 @@ int ObPredicateDeduce::deduce_aggr_bound_predicates(ObTransformerCtx &ctx,
     Type upper_type = EQ;
     if (OB_ISNULL(target_exprs.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("target expr is null", K(ret));
     } else if (OB_FAIL(check_aggr_validity(target_exprs.at(i), param_expr, is_valid))) {
     } else if (!is_valid) {
       // do nothing
@@ -872,12 +955,10 @@ int ObPredicateDeduce::check_aggr_validity(ObRawExpr *expr,
   is_valid = false;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret), K(expr));
   } else if (expr->get_expr_type() == T_FUN_MAX ||
              expr->get_expr_type() == T_FUN_MIN) {
     if (OB_ISNULL(param_expr = expr->get_param_expr(0))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("param expr is null", K(ret));
     } else {
       is_valid = true;
     }
@@ -993,7 +1074,6 @@ int ObPredicateDeduce::check_lossless_cast_table_filter(ObRawExpr *expr,
       OB_ISNULL(left_expr = expr->get_param_expr(0)) ||
       OB_ISNULL(right_expr = expr->get_param_expr(1))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(expr), K(left_expr), K(right_expr));
   } else if (expr->get_expr_type() != T_OP_EQ) {
     is_valid = false;
   } else if (left_expr->is_const_expr()) {
@@ -1017,4 +1097,3 @@ int ObPredicateDeduce::check_lossless_cast_table_filter(ObRawExpr *expr,
   }
   return ret;
 }
-

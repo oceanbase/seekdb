@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_DTL
 
+#include "config_bridge.h"
 #include "observer/virtual_table/ob_all_virtual_dtl_channel.h"
 #include "sql/dtl/ob_dtl.h"
 #include "sql/dtl/ob_dtl_basic_channel.h"
@@ -41,7 +42,7 @@ void ObVirtualChannelInfo::get_info(ObDtlChannel* dtl_ch)
   send_buffer_size_ = ch->get_send_buffer_size();
   hash_val_ = ch->get_hash_val();
   buffer_pool_id_ = ObDtlMemManager::hash(hash_val_,
-    common::ObServerConfig::get_instance()._px_chunklist_count_ratio);
+    ::oceanbase::config::_px_chunklist_count_ratio());
   pins_ = ch->get_pins();
   ObOpMetric &metric = ch->get_op_metric();
   first_in_ts_ = metric.get_first_in_ts();
@@ -286,7 +287,6 @@ int ObAllVirtualDtlChannel::inner_get_next_row(ObNewRow *&row)
   ObVirtualChannelInfo ch_info;
   if (OB_FAIL(iter_.get_next_channel(ch_info))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("failed to get next channel", K(ret));
     } else {
       arena_allocator_.reuse();
     }

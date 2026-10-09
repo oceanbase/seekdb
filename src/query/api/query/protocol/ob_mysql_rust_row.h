@@ -27,26 +27,26 @@
 namespace oceanbase {
 namespace query {
 
-static_assert(sizeof(nio_mysql_cell_view) == 48,
-              "nio_mysql_cell_view ABI mismatch");
-static_assert(std::is_standard_layout<nio_mysql_cell_view>::value,
-              "nio_mysql_cell_view must have standard layout");
-static_assert(std::is_trivially_copyable<nio_mysql_cell_view>::value,
-              "nio_mysql_cell_view must be trivially copyable");
-static_assert(offsetof(nio_mysql_cell_view, value) == 16,
-              "nio_mysql_cell_view.value ABI mismatch");
-static_assert(offsetof(nio_mysql_cell_view, year) == 32,
-              "nio_mysql_cell_view.year ABI mismatch");
-static_assert(offsetof(nio_mysql_cell_view, kind) == 39,
-              "nio_mysql_cell_view.kind ABI mismatch");
-static_assert(offsetof(nio_mysql_cell_view, reserved) == 42,
-              "nio_mysql_cell_view.reserved ABI mismatch");
-static_assert(sizeof(nio_mysql_row_view) == 24,
-              "nio_mysql_row_view ABI mismatch");
-static_assert(offsetof(nio_mysql_row_view, cells) == 0,
-              "nio_mysql_row_view.cells ABI mismatch");
-static_assert(offsetof(nio_mysql_row_view, protocol) == 16,
-              "nio_mysql_row_view.protocol ABI mismatch");
+static_assert(sizeof(NioMysqlCellView) == 48,
+              "NioMysqlCellView ABI mismatch");
+static_assert(std::is_standard_layout<NioMysqlCellView>::value,
+              "NioMysqlCellView must have standard layout");
+static_assert(std::is_trivially_copyable<NioMysqlCellView>::value,
+              "NioMysqlCellView must be trivially copyable");
+static_assert(offsetof(NioMysqlCellView, value) == 16,
+              "NioMysqlCellView.value ABI mismatch");
+static_assert(offsetof(NioMysqlCellView, year) == 32,
+              "NioMysqlCellView.year ABI mismatch");
+static_assert(offsetof(NioMysqlCellView, kind) == 39,
+              "NioMysqlCellView.kind ABI mismatch");
+static_assert(offsetof(NioMysqlCellView, reserved) == 42,
+              "NioMysqlCellView.reserved ABI mismatch");
+static_assert(sizeof(NioMysqlRowView) == 24,
+              "NioMysqlRowView ABI mismatch");
+static_assert(offsetof(NioMysqlRowView, cells) == 0,
+              "NioMysqlRowView.cells ABI mismatch");
+static_assert(offsetof(NioMysqlRowView, protocol) == 16,
+              "NioMysqlRowView.protocol ABI mismatch");
 
 static_assert(static_cast<uint8_t>(obmysql::ObMySQLCellValueKind::NULL_VALUE) ==
                   NIO_MYSQL_CELL_NULL,
@@ -94,7 +94,7 @@ static_assert(
     "Rust Row legacy-NULL kind mismatch");
 
 inline int build_nio_mysql_cell_view(const obmysql::ObMySQLCellValue &value,
-                                     nio_mysql_cell_view &view) {
+                                     NioMysqlCellView &view) {
   int ret = common::OB_SUCCESS;
   const int64_t bytes_len = value.get_bytes_len();
   if (bytes_len < 0 ||
@@ -104,7 +104,7 @@ inline int build_nio_mysql_cell_view(const obmysql::ObMySQLCellValue &value,
       value.bit_len_ > 255 || value.is_negative_ > 1) {
     ret = common::OB_INVALID_ARGUMENT;
   } else {
-    view = nio_mysql_cell_view{};
+    view = NioMysqlCellView{};
     view.bytes.data = value.get_bytes();
     view.bytes.len = bytes_len;
     view.value = value.value_;

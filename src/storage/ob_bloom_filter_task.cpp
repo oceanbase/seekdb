@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
+#include "config_bridge.h"
 #include <algorithm>
 #include "storage/ob_bloom_filter_task.h"
 #include "storage/blocksstable/ob_macro_block_bare_iterator.h"
@@ -103,8 +104,6 @@ int ObBloomFilterBuildTask::process()
   if (OB_UNLIKELY(!macro_id_.is_valid())
       || OB_UNLIKELY(prefix_len_ <= 0)) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("The bloom filter build task is not valid, ",
-      K_(macro_id), K_(prefix_len), K(ret));
   } else if (OB_FAIL(build_bloom_filter())) {
   } else {
     LOG_INFO("Success to build bloom filter, ", K_(table_id), K_(macro_id), K_(prefix_len));
@@ -145,7 +144,7 @@ int ObBloomFilterBuildTask::build_bloom_filter()
       read_info.io_desc_.set_mode(ObIOMode::READ);
       read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
       read_info.io_desc_.set_sys_module_id(ObIOModule::BLOOM_FILTER_IO);
-      read_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
+      read_info.io_timeout_ms_ = std::max(config::_data_storage_io_timeout() / 1000, DEFAULT_IO_WAIT_TIME_MS);
 
       if (OB_ISNULL(io_buf_) && OB_ISNULL(io_buf_ =
           reinterpret_cast<char*>(allocator_.alloc(OB_DEFAULT_MACRO_BLOCK_SIZE)))) {
@@ -161,7 +160,6 @@ int ObBloomFilterBuildTask::build_bloom_filter()
       } else if (OB_FAIL(macro_bare_iter->get_macro_block_header(macro_header))) {
       } else if (OB_UNLIKELY(!macro_header.is_valid())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Invalid macro block header", K(ret), K(macro_header));
       } else if (OB_FAIL(bfcache_value.init(prefix_len_, macro_header.fixed_header_.row_count_))) {
       } else {
         ObStorageDatumUtils datum_utils;
@@ -178,7 +176,6 @@ int ObBloomFilterBuildTask::build_bloom_filter()
           }
         }
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("Fail to iterate macro block", K(ret));
         } else if (OB_FAIL(ObStorageCacheSuite::get_instance().get_bf_cache().put_bloom_filter(macro_id_, bfcache_value))) {
         }
       }

@@ -66,12 +66,9 @@ int ObGroupByOp::inner_open()
     if (ObThreeStageAggrStage::NONE_STAGE != op_spec->aggr_stage_) {
       if (OB_ISNULL(op_spec->aggr_code_expr_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected status: aggr_code_expr is null in three stage aggregation", K(ret));
       } else if (ObThreeStageAggrStage::FIRST_STAGE != op_spec->aggr_stage_ &&
           0 == op_spec->dist_aggr_group_idxes_.count()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected status: distinct aggregation group is 0", K(ret),
-          K(op_spec->aggr_stage_), K(op_spec->dist_aggr_group_idxes_.count()));
       }
     } else {
     }

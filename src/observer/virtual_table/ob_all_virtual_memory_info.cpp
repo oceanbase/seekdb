@@ -16,6 +16,7 @@
 
 #include "ob_all_virtual_memory_info.h"
 #include "lib/alloc/memory_dump.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -38,7 +39,7 @@ ObAllVirtualMemoryInfo::~ObAllVirtualMemoryInfo()
 int ObAllVirtualMemoryInfo::inner_open()
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(ObServerConfig::get_instance().self_addr_.ip_to_string(ip_buf_, sizeof(ip_buf_))
+  if (OB_UNLIKELY(GCTX.self_addr().ip_to_string(ip_buf_, sizeof(ip_buf_))
               == false)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "ip_to_string() fail", K(ret));

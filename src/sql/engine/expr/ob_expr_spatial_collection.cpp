@@ -80,7 +80,6 @@ int ObExprSpatialCollection::calc_resultN(common::ObObj &result,
 
   if (ObGeoType::GEOMETRY >= geo_type || ObGeoType::GEOTYPEMAX <= geo_type) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid geo type", K(ret), K(geo_type));
   } else if (OB_FAIL(res_wkb_buf.reserve(WKB_OFFSET + WKB_COMMON_WKB_HEADER_LEN))) {
   } else if (OB_FAIL(res_wkb_buf.append(srid))) {
   } else if (OB_FAIL(res_wkb_buf.append(static_cast<char>(ENCODE_GEO_VERSION(GEO_VESION_1))))) {
@@ -94,7 +93,6 @@ int ObExprSpatialCollection::calc_resultN(common::ObObj &result,
       ObString wkb = objs[i].get_string();
       if (OB_ISNULL(expr_ctx.exec_ctx_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("execution context is null", K(ret));
       } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
                      *expr_ctx.exec_ctx_, &tmp_allocator, objs[i], wkb))) {
       } else if (ObGeoType::LINESTRING == geo_type) { // linestring
@@ -130,7 +128,6 @@ int ObExprSpatialCollection::calc_resultN(common::ObObj &result,
   if (OB_SUCC(ret) && ObGeoType::LINESTRING == geo_type && param_num < 2) { // adapt mysql, check arg count at last.
     ret = OB_ERR_GIS_INVALID_DATA;
     LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, get_func_name());
-    LOG_WARN("invalid linestring data", K(ret), K(param_num));
   }
 
   return ret;
@@ -149,7 +146,6 @@ int ObExprSpatialCollection::calc_linestring(const ObString &wkb_point,
   } else if (expect_sub_type() != wkb_type) {
     ret = OB_INVALID_ARGUMENT;
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, get_func_name());
-    LOG_WARN("unexpected sub geo type", K(ret), K(wkb_type));
   } else if (OB_FAIL(res_wkb_buf.append(data, WKB_POINT_DATA_SIZE))) {
   }
 
@@ -168,7 +164,6 @@ int ObExprSpatialCollection::calc_multi(const ObString &sub,
   } else if (expect_sub_type() != wkb_type) {
     ret = OB_INVALID_ARGUMENT;
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, get_func_name());
-    LOG_WARN("unexpected sub geo type", K(ret), K(wkb_type));
   } else {
     const char *data = sub.ptr() + WKB_OFFSET;
     const uint32_t len = sub.length() - WKB_OFFSET;
@@ -191,17 +186,14 @@ int ObExprSpatialCollection::calc_polygon(const ObString wkb_linestring,
   } else if (expect_sub_type() != wkb_type) {
     ret = OB_INVALID_ARGUMENT;
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, get_func_name());
-    LOG_WARN("unexpected sub geo type", K(ret), K(wkb_type));
   } else {
     ObGeoWkbByteOrder bo = ObGeoWkbByteOrder::LittleEndian;
     const char *data = wkb_linestring.ptr() + WKB_DATA_OFFSET + WKB_GEO_TYPE_SIZE;
     int64_t len = wkb_linestring.length() - WKB_DATA_OFFSET - WKB_GEO_TYPE_SIZE;
     const char *org_data = data;
     if (ObGeoTypeUtil::get_bo_from_wkb(wkb_linestring, bo)) {
-      LOG_WARN("fail to get byte order", K(ret), K(wkb_linestring));
     } else if (len < WKB_GEO_ELEMENT_NUM_SIZE) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid data len", K(ret), K(len));
     } else {
       uint32_t point_num = ObGeoWkbByteOrderUtil::read<uint32_t>(data, bo);
       data += WKB_GEO_ELEMENT_NUM_SIZE;
@@ -247,7 +239,6 @@ int ObExprSpatialCollection::eval_spatial_collection(const ObExpr &expr,
 
   if (ObGeoType::GEOMETRY >= geo_type || ObGeoType::GEOTYPEMAX <= geo_type) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid geo type", K(ret), K(geo_type));
   } else if (OB_FAIL(res_wkb_buf.reserve(WKB_OFFSET + WKB_COMMON_WKB_HEADER_LEN))) {
   } else if (OB_FAIL(res_wkb_buf.append(srid))) {
   } else if (OB_FAIL(res_wkb_buf.append(static_cast<char>(ENCODE_GEO_VERSION(GEO_VESION_1))))) {
@@ -286,7 +277,6 @@ int ObExprSpatialCollection::eval_spatial_collection(const ObExpr &expr,
         } else if (ObGeoTypeUtil::is_3d_geo_type(sub_type)) {
           ret = OB_INVALID_ARGUMENT;
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, get_func_name());
-          LOG_WARN("unexpected sub geo type", K(ret), K(sub_type));
         } else if (OB_FAIL(res_wkb_buf.append(data, len))) {
         }
       }
@@ -299,7 +289,6 @@ int ObExprSpatialCollection::eval_spatial_collection(const ObExpr &expr,
     } else if (ObGeoType::LINESTRING == geo_type && expr.arg_cnt_ < 2) {
       ret = OB_ERR_GIS_INVALID_DATA;
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, get_func_name());
-      LOG_WARN("invalid linestring data", K(ret), K(expr.arg_cnt_));
     } else if (OB_FAIL(ObGeoExprUtils::pack_geo_res(expr, ctx, res, res_wkb_buf.string()))) {
     }
   }

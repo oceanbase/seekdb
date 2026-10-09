@@ -70,17 +70,14 @@ int ObStringBuffer::append(const char *str, const uint64_t len, int8_t flag)
   INIT_SUCC(ret);
   if (OB_ISNULL(allocator_)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("allocator is null.", K(ret));
   } else if (len > INT64_MAX) {
     // %str can be NULL
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(len));
   } else {
     if (NULL != str && len >= 0) {
       const uint64_t need_len = len_ + len;
       if (need_len < len_) {
         ret = OB_SIZE_OVERFLOW;
-        LOG_WARN("size over flow", K(ret), K(need_len), K(len_));
       } else if (OB_FAIL(reserve(flag == -1 ? need_len : len))) {
       } else {
         MEMCPY(data_ + len_, str, len);
@@ -105,7 +102,6 @@ int ObStringBuffer::reserve(const uint64_t len)
   static const uint64_t BIT_PER_BYTE = 8;
   if (OB_ISNULL(allocator_)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("allocator is null.", K(ret));
   } else if (cap_ < need_size) {
     uint64_t extend_to = (cap_ == 0) ? STRING_BUFFER_INIT_STRING_LEN : cap_;
     // buffer extend by double
@@ -127,10 +123,8 @@ int ObStringBuffer::extend(const uint64_t len)
   char *new_data = NULL;
   if (OB_ISNULL(allocator_)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("allocator is null.", K(ret));
   } else if (len > INT64_MAX) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(len));
   } else if (NULL == (new_data = (static_cast<char *>(allocator_->alloc(len))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("allocate memory failed", K(ret), K(len));
@@ -151,7 +145,6 @@ int ObStringBuffer::set_length(const uint64_t len)
   INIT_SUCC(ret);
   if (len < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(len));
   } else if (len > capacity()) {
     ret = OB_BUF_NOT_ENOUGH;
     LOG_ERROR("try set too long length, buffer maybe overflow",
@@ -171,7 +164,6 @@ int ObStringBuffer::deep_copy(ObIAllocator *allocator, ObStringBuffer &input)
   char *new_data = NULL;
   if (OB_ISNULL(allocator)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("allocator is null.", K(ret));
   } else {
     set_allocator(allocator);
     len_ = input.length();

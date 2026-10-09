@@ -31,17 +31,14 @@ int ObLogFunctionTable::generate_access_exprs()
   const ObDMLStmt *stmt = get_stmt();
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_column_size(); ++i) {
       const ColumnItem *col_item = stmt->get_column_item(i);
       if (OB_ISNULL(col_item) || OB_ISNULL(col_item->expr_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (col_item->table_id_ == table_id_ &&
                  col_item->expr_->is_explicited_reference() &&
                  OB_FAIL(access_exprs_.push_back(col_item->expr_))) {
-        LOG_WARN("failed to push back column expr", K(ret));
       } else { /*do nothing*/ }
     }
   }
@@ -54,7 +51,6 @@ int ObLogFunctionTable::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
   if (OB_FAIL(generate_access_exprs())) {
   } else if (OB_FAIL(append(all_exprs, access_exprs_))) {
   } else if (NULL != value_expr_ && OB_FAIL(all_exprs.push_back(value_expr_))) {
-    LOG_WARN("failed to push back expr", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::get_op_exprs(all_exprs))) {
   } else { /*do nothing*/ }
 
@@ -68,7 +64,6 @@ int ObLogFunctionTable::allocate_expr_post(ObAllocExprContext &ctx)
     ObRawExpr *value_col = access_exprs_.at(i);
     if (OB_FAIL(mark_expr_produced(value_col, branch_id_, id_, ctx))) {
     } else if (!is_plan_root() && OB_FAIL(add_var_to_array_no_dup(output_exprs_, value_col))) {
-      LOG_WARN("add expr no duplicate key failed", K(ret));
     } else { /*do nothing*/ }
   }
   if (OB_SUCC(ret)) {
@@ -85,7 +80,6 @@ int ObLogFunctionTable::get_plan_item_info(PlanText &plan_text,
   if (OB_FAIL(ObLogicalOperator::get_plan_item_info(plan_text, plan_item))) {
   } else if (OB_ISNULL(get_value_expr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null value expr", K(ret));
   } else {
     BEGIN_BUF_PRINT;
     const ObRawExpr* value = get_value_expr();

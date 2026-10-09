@@ -40,10 +40,8 @@ int ObWhereOptimizer::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObWhereOptimizer init twice", K(ret));
   } else if (OB_ISNULL(iter_param_ = iter_param) || OB_ISNULL(filter_ = filter)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("iter param or filter is null", K(ret), K(iter_param_), K(filter_));
   } else {
     filter_conditions_.reset();
     batch_num_ = 0;
@@ -85,7 +83,6 @@ int ObWhereOptimizer::analyze(bool &reordered)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     ret = analyze_impl(*filter_, reordered);
   }

@@ -52,15 +52,12 @@ int ObMicroBlockEncoder::try_encoder(ObIColumnEncoder *&encoder, const int64_t c
   bool suitable = false;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(column_index < 0 || column_index > ctx_.column_cnt_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(column_index));
   } else if (ctx_.encoder_opt_.enable<T>()) {
     T *e = alloc_encoder<T>();
     if (NULL == e) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc encoder failed", K(ret));
     } else if (FALSE_IT(col_ctxs_.at(column_index).try_set_need_sort(e->get_type(), column_index))) {
     } else if (OB_FAIL(e->init(col_ctxs_.at(column_index), column_index, datum_rows_))) {
     } else if (OB_FAIL(e->traverse(suitable))) {
@@ -130,7 +127,6 @@ int ObMicroBlockEncoder::init(const ObMicroBlockEncodingCtx &ctx)
 
   if (OB_UNLIKELY(!ctx.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid encoder context", K(ret), K(ctx));
   } else if (OB_FAIL(encoders_.reserve(ctx.column_cnt_))) {
   } else if (OB_FAIL(encoder_allocator_.init())) {
   } else if (OB_FAIL(hashtables_.reserve(ctx.column_cnt_))) {
@@ -160,13 +156,11 @@ int ObMicroBlockEncoder::inner_init()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("fail to reserve enough space for micro block buffer", K(ret));
   } else if (data_buffer_.length() > 0) {
     // has been inner_inited, do nothing
   } else {
     if (OB_UNLIKELY(!ctx_.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected invalid ctx", K(ret), K_(ctx));
     } else if (!data_buffer_.is_inited()) {
       if (OB_FAIL(data_buffer_.init(DEFAULT_DATA_BUFFER_SIZE))) {
       } else if (OB_FAIL(row_buf_holder_.init(2 * DEFAULT_DATA_BUFFER_SIZE))) {
@@ -257,7 +251,6 @@ void ObMicroBlockEncoder::dump_diagnose_info()
   int tmp_ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!ctx_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected encoding ctx", K_(ctx));
@@ -303,9 +296,7 @@ int ObMicroBlockEncoder::init_all_col_values(const ObMicroBlockEncodingCtx &ctx)
     ObColDatums *c = OB_NEWx(ObColDatums, &pivot_allocator_, pivot_allocator_);
     if (OB_ISNULL(c)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc memory failed", K(ret), K(ctx));
     } else if (OB_FAIL(all_col_datums_.push_back(c))) {
-      LOG_WARN("push back column values failed", K(ret));
       if (nullptr != c) {
         c->~ObColDatums();
         pivot_allocator_.free(c);
@@ -369,16 +360,12 @@ int ObMicroBlockEncoder::append_row(const ObDatumRow &row)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!row.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(row));
   } else if (OB_UNLIKELY(row.get_column_count() != ctx_.column_cnt_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("column count mismatch", K(ret), "ctx", ctx_, K(row));
   } else if (OB_UNLIKELY(encoder_freezed_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected encoder status", K(ret), K_(encoder_freezed), K(datum_rows_.count()));
   } else if (OB_FAIL(inner_init())) {
   } else {
     if (datum_rows_.empty()) {
@@ -399,7 +386,6 @@ int ObMicroBlockEncoder::append_row(const ObDatumRow &row)
     } else if (OB_FAIL(process_out_row_columns(row))) {
     } else if (OB_FAIL(copy_and_append_row(row, store_size))) {
       if (OB_UNLIKELY(OB_BUF_NOT_ENOUGH != ret)) {
-        LOG_WARN("copy and append row failed", K(ret));
       }
     } else if (header->has_column_checksum_ && OB_FAIL(checksum_helper_.cal_column_checksum(
         row, header->column_checksums_))) {
@@ -421,10 +407,8 @@ int ObMicroBlockEncoder::pivot()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(datum_rows_.empty())) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("empty micro block", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < ctx_.column_cnt_; ++i) {
       ObColDatums &c = *all_col_datums_.at(i);
@@ -455,7 +439,6 @@ int ObMicroBlockEncoder::reserve_header(const ObMicroBlockEncodingCtx &ctx)
   int ret = OB_SUCCESS;
   if (ctx.column_cnt_ < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("column_count was invalid", K(ret), K(ctx));
   } else {
     int32_t header_size = ObMicroBlockHeader::get_serialize_size(
         ctx.column_cnt_, ctx.need_calc_column_chksum_);
@@ -482,7 +465,6 @@ int ObMicroBlockEncoder::store_encoding_meta_and_fix_cols(ObBufferWriter &buf_wr
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     ObMicroBlockHeader *header = get_header(data_buffer_);
     // detect extend value bit
@@ -545,13 +527,10 @@ int ObMicroBlockEncoder::build_block(char *&buf, int64_t &size)
   char *encoding_meta_buf = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(datum_rows_.empty())) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("empty micro block", K(ret));
   } else if (OB_UNLIKELY(encoder_freezed_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected encoder status", K(ret), K_(encoder_freezed), K(datum_rows_.count()));
   } else if (FALSE_IT(encoder_freezed_ = true)) {
   } else if (OB_FAIL(set_datum_rows_ptr())) {
   } else if (OB_FAIL(pivot())) {
@@ -668,7 +647,6 @@ int ObMicroBlockEncoder::build_block(char *&buf, int64_t &size)
         // maximum block size after encoding failed, rewrite errno with OB_ENCODING_EST_SIZE_OVERFLOW
         // to force compaction task retry with flat row store type.
         ret = OB_ENCODING_EST_SIZE_OVERFLOW;
-        LOG_WARN("build block failed by probably estimated maximum encoding data size overflow", K(ret));
       }
     }
 
@@ -687,10 +665,8 @@ int ObMicroBlockEncoder::set_row_data_pos(int64_t &fix_data_size)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(datum_rows_.empty())) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("empty micro block", K(ret));
   } else {
 
     // detect extend value bit size and dispatch encoders.
@@ -777,10 +753,8 @@ int ObMicroBlockEncoder::fill_row_data(const int64_t fix_data_size)
   var_lengths.set_attr(ObMemAttr("MicroBlkEncoder"));
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(datum_rows_.empty())) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("empty micro block", K(ret));
   } else if (OB_FAIL(var_lengths.reserve(var_data_encoders_.count()))) {
   } else if (OB_FAIL(row_indexs_.push_back(0))) {
   } else {
@@ -867,7 +841,6 @@ int ObMicroBlockEncoder::init_column_ctxs()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     ObColumnEncodingCtx cc;
     for (int64_t i = 0; OB_SUCC(ret) && i < ctx_.column_cnt_; ++i) {
@@ -902,7 +875,6 @@ int ObMicroBlockEncoder::process_out_row_columns(const ObDatumRow &row)
   if (!need_check_lob_) {
   } else if (OB_UNLIKELY(row.get_column_count() != col_ctxs_.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected column count not match", K(ret));
   } else if (!has_lob_out_row_) {
     for (int64_t i = 0; !has_lob_out_row_ && OB_SUCC(ret) && i < row.get_column_count(); ++i) {
       ObStorageDatum &datum = row.storage_datums_[i];
@@ -910,7 +882,6 @@ int ObMicroBlockEncoder::process_out_row_columns(const ObDatumRow &row)
         if (datum.is_nop() || datum.is_null()) {
         } else if (datum.len_ < sizeof(ObLobCommon)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Unexpected lob datum len", K(ret), K(i), K(ctx_.col_descs_->at(i).col_type_), K(datum));
         } else {
           const ObLobCommon &lob_common = datum.get_lob_data();
           has_lob_out_row_ = !lob_common.in_row_;
@@ -962,7 +933,6 @@ int ObMicroBlockEncoder::copy_and_append_row(const ObDatumRow &src, int64_t &sto
             is_large_row,
             is_buffer_not_enough))) {
           if (OB_UNLIKELY(OB_BUF_NOT_ENOUGH != ret)) {
-            LOG_WARN("fail to copy cell", K(ret), K(col_idx), K(src), K(store_size), K(is_large_row));
           }
         } else if (is_buffer_not_enough) {
           int64_t var_len_column_cnt = 0;
@@ -988,10 +958,8 @@ int ObMicroBlockEncoder::copy_and_append_row(const ObDatumRow &src, int64_t &sto
 
   if (OB_FAIL(ret)) {
   } else if (is_large_row && OB_FAIL(process_large_row(src, datum_arr, store_size))) {
-    LOG_WARN("fail to process large row", K(ret));
   } else if (OB_FAIL(try_to_append_row(store_size))) {
     if (OB_UNLIKELY(OB_BUF_NOT_ENOUGH != ret)) {
-      LOG_WARN("fail to try append row", K(ret));
     }
   } else {
     ObConstDatumRow datum_row(datum_arr, src.get_column_count(), datum_row_offset);
@@ -1024,7 +992,6 @@ int ObMicroBlockEncoder::copy_cell(
     datum_size = dest.len_;
   } else if (OB_UNLIKELY(src.is_ext())) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("unsupported store extend datum type", K(ret), K(src));
   } else {
     datum_size = is_int_sc ? sizeof(uint64_t) : dest.len_;
     if (is_var_length_type(store_class)) {
@@ -1133,7 +1100,6 @@ int ObMicroBlockEncoder::prescan(const int64_t column_index)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     const ObColDesc &col_desc = ctx_.col_descs_->at(column_index);
     const ObObjMeta column_type = col_desc.col_type_;
@@ -1187,7 +1153,6 @@ int ObMicroBlockEncoder::encoder_detection(int64_t &encoders_need_size)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < ctx_.column_cnt_; ++i) {
       if (OB_FAIL(prescan(i))) {
@@ -1212,7 +1177,6 @@ int ObMicroBlockEncoder::encoder_detection(int64_t &encoders_need_size)
         if (encoders_.count() <= i) {
           if (col_ctxs_.at(i).only_raw_encoding_) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("The column should only use raw_encoding", "col_ctx", col_ctxs_.at(i), K(i), K(ret));
           } else if (OB_FAIL(choose_encoder(i, col_ctxs_.at(i)))) {
           }
         }
@@ -1244,10 +1208,8 @@ int ObMicroBlockEncoder::fast_encoder_detect(
   ObIColumnEncoder *e = NULL;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(column_idx < 0 || column_idx >= ctx_.column_cnt_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid column_idx", K(ret), K(column_idx));
   } else if (nullptr != ctx_.column_encodings_
       && ctx_.column_encodings_[column_idx] > 0
       && ctx_.column_encodings_[column_idx] < ObColumnHeader::Type::MAX_TYPE) {
@@ -1256,14 +1218,11 @@ int ObMicroBlockEncoder::fast_encoder_detect(
         static_cast<ObColumnHeader::Type>(ctx_.column_encodings_[column_idx]), 0, -1))) {
     } else if (OB_ISNULL(e)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("specified encoder is NULL", K(ret), K(column_idx),
-          K(ctx_.column_encodings_[column_idx]));
     }
   } else if (cc.only_raw_encoding_) {
     if (OB_FAIL(force_raw_encoding(column_idx, true, e))) {
     } else if (OB_ISNULL(e)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("raw encoder is NULL", K(ret), K(column_idx));
     }
   } else if (cc.ht_->distinct_cnt() <= 1) {
     if (OB_FAIL(try_encoder<ObConstEncoder>(e, column_idx))) {
@@ -1274,7 +1233,6 @@ int ObMicroBlockEncoder::fast_encoder_detect(
         "column_header", e->get_column_header(),
         "data_desc", e->get_desc());
     if (OB_FAIL(encoders_.push_back(e))) {
-      LOG_WARN("push back encoder failed", K(ret));
       free_encoder(e);
       e = NULL;
     }
@@ -1296,10 +1254,8 @@ int ObMicroBlockEncoder::try_encoder(ObIColumnEncoder *&e, const int64_t column_
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(column_index < 0 || column_index > ctx_.column_cnt_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(column_index));
   } else {
     switch (type) {
       case ObColumnHeader::RAW: {
@@ -1349,7 +1305,6 @@ int ObMicroBlockEncoder::try_encoder(ObIColumnEncoder *&e, const int64_t column_
       }
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unknown encoding type", K(ret), K(type));
     }
 
     if (OB_FAIL(ret)) {
@@ -1365,10 +1320,8 @@ int ObMicroBlockEncoder::try_previous_encoder(ObIColumnEncoder *&choose,
   ObIColumnEncoder *e = NULL;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(column_index < 0 || column_index > ctx_.column_cnt_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(column_index));
   } else {
     bool need_calc = false;
     int64_t cycle_cnt = 0;
@@ -1419,16 +1372,13 @@ int ObMicroBlockEncoder::try_span_column_encoder(ObIColumnEncoder *&e,
   e = NULL;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(column_index < 0 || column_index > ctx_.column_cnt_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(column_index), "column_cnt", ctx_.column_cnt_);
   } else if (ctx_.encoder_opt_.enable<T>() && !col_ctxs_.at(column_index).is_refed_) {
     bool suitable = false;
     T *encoder = alloc_encoder<T>();
     if (NULL == encoder) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < ctx_.column_cnt_ && !suitable; ++i) {
         if (column_index == i) {
@@ -1468,7 +1418,6 @@ int ObMicroBlockEncoder::try_span_column_encoder(ObIColumnEncoder *&e,
       T *encoder = alloc_encoder<T>();
       if (NULL == encoder) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory failed", K(ret));
       } else if (OB_FAIL(try_span_column_encoder(encoder, column_index, ref_column_index, suitable))) {
       }
 
@@ -1495,7 +1444,6 @@ int ObMicroBlockEncoder::try_span_column_encoder(ObSpanColumnEncoder *encoder,
       || ref_column_index < 0
       || ref_column_index > ctx_.column_cnt_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(encoder), K(column_index), K(ref_column_index));
   } else if (ref_column_index > UINT16_MAX) {
     // not suitable
   } else if (FALSE_IT(col_ctxs_.at(column_index).try_set_need_sort(encoder->get_type(), column_index))) {
@@ -1514,15 +1462,11 @@ int ObMicroBlockEncoder::choose_encoder(const int64_t column_idx,
   ObIColumnEncoder *e = NULL;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(column_idx < 0 || column_idx >= ctx_.column_cnt_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid column_idx", K(column_idx), K(ret));
   } else if (OB_FAIL(try_encoder<ObRawEncoder>(e, column_idx))) {
   } else if (NULL == e) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("raw encoder can not be disabled and must always be suitable",
-        K(ret), K(column_idx));
   } else {
     bool try_more = true;
     ObIColumnEncoder *choose = e;
@@ -1742,16 +1686,13 @@ int ObMicroBlockEncoder::force_raw_encoding(const int64_t column_idx,
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(column_idx < 0 || column_idx >= ctx_.column_cnt_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid column_idx", K(ret), K(column_idx));
   } else {
     bool suitable = false;
     ObRawEncoder *e = alloc_encoder<ObRawEncoder>();
     if (NULL == e) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc encoder failed", K(ret));
     } else if (OB_FAIL(e->init(col_ctxs_.at(column_idx), column_idx, datum_rows_))) {
     } else if (OB_FAIL(e->traverse(force_var_store, suitable))) {
     }
@@ -1759,7 +1700,6 @@ int ObMicroBlockEncoder::force_raw_encoding(const int64_t column_idx,
     if (OB_SUCC(ret)) {
       if (!suitable) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("find raw encoder not suitable", K(ret));
       } else {
         e->set_extend_value_bit(get_header(data_buffer_)->extend_value_bit_);
       }
@@ -1780,13 +1720,10 @@ int ObMicroBlockEncoder::get_pre_agg_param(const int64_t col_idx, ObMicroDataPre
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!block_generated_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("need to build block before get pre-agg parameters", K(ret));
   } else if (OB_UNLIKELY(col_idx >= ctx_.column_cnt_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid column index", K(ret), K(col_idx), K_(ctx));
   } else {
     pre_agg_param.reset();
     const ObColumnEncodingCtx &col_ctx = col_ctxs_.at(col_idx);

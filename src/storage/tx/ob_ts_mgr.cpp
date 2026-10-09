@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "config_bridge.h"
 #include "ob_ts_mgr.h"
 #include "ob_timestamp_access.h"
 #include "share/config/ob_server_config.h"
@@ -69,7 +70,7 @@ int ObTsMgr::get_gts_sync(const int64_t timeout_us, SCN &scn)
 int ObTsMgr::wait_gts_elapse(const SCN &scn)
 {
   int ret = OB_EAGAIN;
-  const int64_t expire_ts = ObClockGenerator::getClock() + GCONF.rpc_timeout;
+  const int64_t expire_ts = ObClockGenerator::getClock() + config::rpc_timeout();
   while (OB_EAGAIN == ret) {
     SCN current_scn;
     if (ObClockGenerator::getClock() >= expire_ts) {

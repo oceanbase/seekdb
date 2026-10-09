@@ -39,7 +39,6 @@ int64_t ObRawExprPrintVisitor::to_string(char* buf, const int64_t buf_len) const
   buf_len_ = buf_len;
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr_root_.preorder_accept(*const_cast<ObRawExprPrintVisitor*>(this)))) {
-    LOG_WARN("failed to print raw expr", K(ret));
     pos_ = 0;
   }
   return pos_;
@@ -59,7 +58,6 @@ int ObRawExprPrintVisitor::visit(ObExecParamRawExpr &expr)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr.get_ref_expr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ref expr is null", K(ret));
   } else if (OB_FAIL(expr.get_ref_expr()->preorder_accept(*this))) {
   }
   return ret;

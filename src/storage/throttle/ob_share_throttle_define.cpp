@@ -15,6 +15,7 @@
  */
 
 
+#include "config_bridge.h"
 #include "ob_share_throttle_define.h"
 #include "lib/alloc/alloc_func.h"
 #include "storage/throttle/ob_throttle_info.h"
@@ -52,8 +53,8 @@ void FakeAllocatorForTxShare::init_throttle_config(int64_t &resource_limit,
                                                    int64_t &max_duration)
 {
   resource_limit = get_tx_share_memory_limit();
-  trigger_percentage = GCONF.writing_throttling_trigger_percentage;
-  max_duration = GCONF.writing_throttling_maximum_duration;
+  trigger_percentage = config::writing_throttling_trigger_percentage();
+  max_duration = config::writing_throttling_maximum_duration();
 }
 
 void FakeAllocatorForTxShare::adaptive_update_limit(const int64_t holding_size,

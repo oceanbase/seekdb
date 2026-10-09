@@ -386,7 +386,6 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
         LOG_ERROR("Fail to allocate memory for id_hash_array, ", K(id_hash_array_size), K(ret));
       } else if (NULL == (id_hash_array_ = new (buf) IdHashArray(id_hash_array_size))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Fail to new IdHashArray", K(ret));
       }
     }
 
@@ -396,7 +395,6 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else if (NULL == (name_hash_array_ = new (buf) NameHashArray(name_hash_array_size))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Fail to new NameHashArray", K(ret));
       }
     }
 
@@ -422,7 +420,6 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
 
   }
   if (OB_SUCC(ret) && OB_FAIL(deep_copy_str(src_schema.index_params_, index_params_))) {
-    LOG_WARN("Fail to deep copy vector index param string", K(ret));
   }
 
   if (OB_SUCC(ret)) {

@@ -37,7 +37,6 @@ int ObSqlSockSession::init() {
   if (OB_SUCC(ret) &&
       OB_ISNULL(nio_connection_handle_ = nio_connection_handle_acquire(this))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to acquire Rust SQL-NIO connection handle", K(ret));
   }
   return ret;
 }
@@ -46,7 +45,7 @@ void ObSqlSockSession::destroy() {
   // Clear the published pointer first so an accidental re-entry cannot release
   // the opaque Rust owner twice. Append/flush/prepare cannot overlap release;
   // commit pins Conn before clearing BUSY, so its remaining tail may overlap.
-  nio_connection_handle *connection_handle = nio_connection_handle_;
+  NioConnectionHandle *connection_handle = nio_connection_handle_;
   nio_connection_handle_ = NULL;
   sm_conn_cb_.destroy(conn_);
   pool_.reset();

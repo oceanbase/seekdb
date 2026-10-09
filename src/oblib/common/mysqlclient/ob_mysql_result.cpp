@@ -37,7 +37,6 @@ int ObMySQLResult::varchar2datetime(const ObString &varchar, int64_t &datetime) 
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(varchar.length() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid empty value", K(varchar), K(ret));
   } else {
     ObTimeConvertCtx cvrt_ctx(NULL, false);
     ret = ObTimeConverter::str_to_datetime(varchar, cvrt_ctx, datetime, NULL);

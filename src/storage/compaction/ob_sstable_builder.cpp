@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
+#include "config_bridge.h"
 #include "ob_sstable_builder.h"
 #include "storage/compaction/ob_basic_tablet_merge_ctx.h"
 
@@ -44,7 +45,7 @@ int ObSSTableRebuildMicroBlockIter::prefetch()
       read_info.io_desc_.set_mode(ObIOMode::READ);
       read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
       read_info.io_desc_.set_sys_module_id(ObIOModule::INDEX_BLOCK_MICRO_ITER_IO);
-      read_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
+      read_info.io_timeout_ms_ = std::max(config::_data_storage_io_timeout() / 1000, DEFAULT_IO_WAIT_TIME_MS);
       read_info.macro_block_id_ = macro_id_array_.at(prefetch_idx_);
       read_info.buf_ = io_buf_[io_index];
       
@@ -108,7 +109,6 @@ int ObSSTableRebuildMicroBlockIter::get_next_micro_block(
   allocator_.reuse();
   if (OB_FAIL(mirco_block_iter_.get_next_micro_block_desc(micro_block_desc, micro_index_data, allocator_))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("failed to get next micro block desc", K(ret));
     }
   }
   return ret;
@@ -149,7 +149,6 @@ int ObSSTableBuilder::set_index_read_info(const ObITableReadInfo *read_info)
 
   if (OB_UNLIKELY(NULL != index_read_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected index read info", K(ret), KPC(this), KP(index_read_info_));
   } else {
     index_read_info_ = read_info;
   }
@@ -162,7 +161,6 @@ int ObSSTableBuilder::prepare_index_builder()
 
   if (OB_UNLIKELY(!data_store_desc_.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid data store desc", K(ret), K(data_store_desc_));
   } else if (OB_FAIL(index_builder_.init(data_store_desc_.get_desc()))) {
   }
 
@@ -182,7 +180,6 @@ int ObSSTableBuilder::build_sstable_merge_res(
   void *buf = NULL;
   if (OB_ISNULL(buf = allocator_.alloc(sizeof(ObSSTableRebuilder)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc sstable rebuilder", KR(ret));
   } else if (FALSE_IT(rebuilder_ptr_ = new(buf) ObSSTableRebuilder(data_store_desc_, index_read_info_))) {
   } else if (OB_FAIL(rebuilder_ptr_->build_res_with_rewrite_macros(
             merge_param, pre_warm_param, input_macro_seq, index_builder_,

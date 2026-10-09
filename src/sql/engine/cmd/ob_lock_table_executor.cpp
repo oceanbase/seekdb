@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "config_bridge.h"
 #include "sql/engine/cmd/ob_lock_table_executor.h"
 #include "sql/resolver/ddl/ob_lock_table_stmt.h"
 #include "sql/engine/ob_exec_context.h"
@@ -43,7 +44,7 @@ int ObLockTableExecutor::execute_mysql_(ObExecContext &ctx,
   int ret = OB_SUCCESS;
   // only execute normally after enable lock_priority configuration, otherwise
   // it will directly throw OB_SUCCESS, which is an empty implementation
-  if (GCONF.enable_lock_priority) {
+  if (config::enable_lock_priority()) {
     switch(stmt.get_lock_stmt_type()) {
     case ObLockTableStmt::MYSQL_LOCK_TABLE_STMT: {
       ObMySQLLockTableExecutor executor;
@@ -53,14 +54,12 @@ int ObLockTableExecutor::execute_mysql_(ObExecContext &ctx,
         const ObMySQLLockNode &node = lock_nodes.at(i);
         if (OB_UNLIKELY(!node.is_valid())) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("lock node invalid", K(ret), K(node));
         } else if (OB_FAIL(lock_targets.push_back(data_plane::ObTableLockTarget(
                        node.table_item_->ref_id_,
                        static_cast<ObTableLockMode>(node.lock_mode_))))) {
         }
       }
       if (OB_SUCC(ret) && OB_FAIL(executor.execute(ctx, lock_targets))) {
-        LOG_WARN("lock table failed", K(ret));
       }
       break;
     }
@@ -72,7 +71,6 @@ int ObLockTableExecutor::execute_mysql_(ObExecContext &ctx,
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unknown lock statement type", K(ret), K(stmt.get_lock_stmt_type()));
     }
     }
   }

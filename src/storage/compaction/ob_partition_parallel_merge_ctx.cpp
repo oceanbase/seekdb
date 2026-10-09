@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "config_bridge.h"
 #include "ob_partition_parallel_merge_ctx.h"
 #include "lib/alloc/alloc_func.h"
 #include "share/rc/ob_server_runtime.h"
@@ -85,7 +86,7 @@ int ObParallelMergeCtx::init(compaction::ObBasicTabletMergeCtx &merge_ctx)
     enable_parallel_minor_merge = false;
   } else {
 
-    enable_parallel_minor_merge = GCONF._enable_parallel_minor_merge;
+    enable_parallel_minor_merge = config::_enable_parallel_minor_merge();
 
   }
 
@@ -155,7 +156,6 @@ int ObParallelMergeCtx::init(const compaction::ObMediumCompactionInfo &medium_in
       }
       multi_version_range.reset();
       if (FAILEDx(schema_rowkey_range.to_multi_version_range(allocator_, multi_version_range))) {
-        STORAGE_LOG(WARN, "failed to convert multi_version range", K(ret), K(schema_rowkey_range));
       } else if (OB_FAIL(range_array_.push_back(multi_version_range))) {
       }
     }

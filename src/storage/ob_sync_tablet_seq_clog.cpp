@@ -34,7 +34,6 @@ int ObSyncTabletSeqLog::init(const ObTabletID &tablet_id, const uint64_t autoinc
   int ret = OB_SUCCESS;
   if (!tablet_id.is_valid() || autoinc_seq <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id), K(autoinc_seq));
   } else {
     tablet_id_ = tablet_id;
     autoinc_seq_ = autoinc_seq;
@@ -51,7 +50,6 @@ int ObSyncTabletSeqLog::serialize(char *buf, const int64_t len, int64_t &pos) co
       || OB_UNLIKELY(len <= 0)
       || OB_UNLIKELY(pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(buf), K(len), K(pos));
   } else if (OB_FAIL(tablet_id_.serialize(buf, len, new_pos))) {
   } else if (OB_FAIL(serialization::encode_i64(buf, len, new_pos, static_cast<int64_t>(autoinc_seq_)))) {
   } else {
@@ -70,7 +68,6 @@ int ObSyncTabletSeqLog::deserialize(const char *buf, const int64_t len, int64_t 
       || OB_UNLIKELY(len <= 0)
       || OB_UNLIKELY(pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(buf), K(len), K(pos));
   } else if (OB_FAIL(tablet_id_.deserialize(buf, len, new_pos))) {
   } else if (OB_FAIL(serialization::decode_i64(buf, len, new_pos, (int64_t*)(&autoinc_seq_)))) {
   } else {
@@ -105,7 +102,6 @@ int ObSyncTabletSeqMdsLogCb::init(const ObTabletID &tablet_id, const int64_t wri
   ObLSService *ls_srv = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   if (OB_UNLIKELY(!tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tablet id", K(ret), K(tablet_id));
   } else if (OB_FAIL(ls_srv->get_ls(tenant_ls))) {
   } else if (OB_FAIL(tenant_ls->get_tablet(tablet_id,
                                                     tablet_handle_,

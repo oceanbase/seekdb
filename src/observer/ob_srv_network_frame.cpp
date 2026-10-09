@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SERVER
+#include "config_bridge.h"
 #include "observer/ob_srv_network_frame.h"
 #include "rpc/obmysql/ob_sql_nio_server.h"
 #include "observer/mysql/obsm_conn_callback.h"
@@ -48,8 +49,6 @@ static int update_tcp_keepalive_parameters_for_sql_nio_server(int tcp_keepalive_
       || tcp_keepcnt <= 0
       || tcp_keepcnt > static_cast<int64_t>(UINT32_MAX)) {
     ret = OB_INVALID_CONFIG;
-    LOG_WARN("TCP keepalive configuration exceeds the SQL-NIO ABI range",
-             K(ret), K(tcp_keepidle), K(tcp_keepintvl), K(tcp_keepcnt));
   } else if (NULL != global_sql_nio_server) {
     global_sql_nio_server->update_tcp_keepalive_params(
         tcp_keepalive_enabled, static_cast<uint32_t>(tcp_keepidle),
@@ -80,27 +79,42 @@ void ObSrvNetworkFrame::destroy()
 int ObSrvNetworkFrame::start()
 {
   int ret = OB_SUCCESS;
-  const bool disable_tcp = gctx_.is_embedded_mode();
+  int mysql_port = static_cast<int>(config::mysql_port());
+  const rust::String port_mode_value = config::mysql_port_mode();
+  const ObString port_mode(static_cast<int32_t>(port_mode_value.size()), port_mode_value.data());
+  if (0 == port_mode.case_compare("random")) {
+    mysql_port = 0;
+  } else if (0 == port_mode.case_compare("disabled")) {
+    mysql_port = -1;
+  } else if (0 != port_mode.case_compare("specified")) {
+    ret = OB_INVALID_CONFIG;
+    LOG_ERROR("invalid mysql_port_mode", KR(ret), K(port_mode));
+  }
   obmysql::global_sql_nio_server =
       OB_NEW(obmysql::ObSqlNioServer, "SqlNio",
               obmysql::global_sm_conn_callback);
-  if (NULL == obmysql::global_sql_nio_server) {
+  if (OB_FAIL(ret)) {
+  } else if (NULL == obmysql::global_sql_nio_server) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("allocate memory for global_sql_nio_server failed", K(ret));
   } else {
-    int sql_net_thread_count = (int)GCONF.sql_net_thread_count;
+    int sql_net_thread_count = (int)config::sql_net_thread_count();
     if (sql_net_thread_count == 0) {
-      if (GCONF.net_thread_count == 0) {
+      if (config::net_thread_count() == 0) {
         sql_net_thread_count = get_default_net_thread_count();
       } else {
-        sql_net_thread_count = GCONF.net_thread_count;
+        sql_net_thread_count = config::net_thread_count();
       }
     }
+    rust::String tls_version = config::sql_protocol_min_tls_version();
     if (OB_FAIL(obmysql::global_sql_nio_server->start(
-            GCONF.mysql_port, &deliver_, sql_net_thread_count,
-            disable_tcp, GCONF.ssl_client_authentication,
-            GCONF.sql_protocol_min_tls_version.str()))) {
-    } else if (OB_FAIL(reload_config())) {
+            mysql_port, &deliver_, sql_net_thread_count,
+            config::ssl_client_authentication(),
+            tls_version.c_str()))) {
+      LOG_ERROR("failed to start SQL listener", K(ret), K(mysql_port), K(sql_net_thread_count));
+    } else {
+      if (OB_FAIL(reload_config())) {
+      }
     }
   }
   return ret;
@@ -111,11 +125,11 @@ int ObSrvNetworkFrame::reload_config()
 {
   int ret = common::OB_SUCCESS;
   int enable_tcp_keepalive  = 0;
-  int64_t tcp_keepidle      = GCONF.tcp_keepidle;
-  int64_t tcp_keepintvl     = GCONF.tcp_keepintvl;
-  int64_t tcp_keepcnt       = GCONF.tcp_keepcnt;
+  int64_t tcp_keepidle      = config::tcp_keepidle();
+  int64_t tcp_keepintvl     = config::tcp_keepintvl();
+  int64_t tcp_keepcnt       = config::tcp_keepcnt();
 
-  if (GCONF.enable_tcp_keepalive) {
+  if (config::enable_tcp_keepalive()) {
     enable_tcp_keepalive = 1;
     LOG_INFO("tcp keepalive enabled.");
   } else {

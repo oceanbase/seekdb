@@ -34,7 +34,6 @@ int ObDASParallelHandler::init(rpc::ObSrvTask *task)
   int ret = OB_SUCCESS;
   if (NULL == task) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KPC(task));
   } else {
     task_ = task;
   }
@@ -57,7 +56,6 @@ int ObDASParallelHandler::deep_copy_all_das_tasks(ObDASTaskFactory &das_factory,
       if (OB_FAIL(deep_copy_das_task(das_factory, src_task_list.at(i), das_op, alloc))) {
       } else if (OB_ISNULL(das_op)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null ptr", K(ret));
       } else if (OB_FAIL(new_task_list.push_back(das_op))) {
       } else if (OB_FAIL(das_task_wrapper.push_back_task(das_op))) {
       }
@@ -76,7 +74,6 @@ int ObDASParallelHandler::deep_copy_das_task(ObDASTaskFactory &das_factory,
   ObIDASTaskOp *das_op = nullptr;
   if (OB_ISNULL(src_op->get_agg_task()) || OB_ISNULL(src_op->get_cur_agg_list())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null agg_task", K(ret), K(src_op->get_agg_task()), K(src_op->get_cur_agg_list()));
   } else if (OB_FAIL(das_factory.create_das_task_op(src_op->get_type(), das_op))) {
   } else if (OB_FAIL(das_op->init_task_info(ObDASWriteBuffer::DAS_ROW_DEFAULT_EXTEND_SIZE))) {
   } else {
@@ -88,12 +85,10 @@ int ObDASParallelHandler::deep_copy_das_task(ObDASTaskFactory &das_factory,
     int64_t ser_arg_len = src_op->get_serialize_size();
     if (OB_ISNULL(ser_ptr = alloc.alloc(ser_arg_len))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail alloc memory", K(ser_arg_len), KP(ser_ptr), K(ret));
     } else if (OB_FAIL(src_op->serialize(static_cast<char *>(ser_ptr), ser_arg_len, ser_pos))) {
     } else if (OB_FAIL(das_op->deserialize(static_cast<const char *>(ser_ptr), ser_pos, des_pos))) {
     } else if (ser_pos != des_pos) {
       ret = OB_DESERIALIZE_ERROR;
-      LOG_WARN("data_len and pos mismatch", K(ser_arg_len), K(ser_pos), K(des_pos), K(ret));
     } else {
       das_op->set_tablet_loc(src_op->get_tablet_loc());
       dst_op = das_op;
@@ -200,7 +195,6 @@ int ObDASParallelTask::init(ObDasAggregatedTask *agg_task, int64_t timeout_ts)
   int ret = OB_SUCCESS;
   if (NULL == agg_task) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("task is null, unexpected error", K(ret));
   } else if (OB_FAIL(handler_.init(this))) {
   } else {
     agg_task_ = agg_task;

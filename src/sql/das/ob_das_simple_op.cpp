@@ -127,7 +127,6 @@ int ObDASSimpleUtils::split_multi_ranges(ObExecContext &exec_ctx,
     ObPhysicalPlanCtx *plan_ctx = nullptr;
     if (OB_ISNULL(plan_ctx = exec_ctx.get_physical_plan_ctx())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected nullptr", K(ret));
     } else if (OB_FAIL(split_ranges_op->init(ranges,
                                              expected_task_count,
                                              plan_ctx->get_timeout_timestamp() - ObTimeUtility::current_time()))) {
@@ -177,7 +176,6 @@ int ObDASSimpleUtils::get_multi_ranges_cost(ObExecContext &exec_ctx,
     ObPhysicalPlanCtx *plan_ctx = nullptr;
     if (OB_ISNULL(plan_ctx = exec_ctx.get_physical_plan_ctx())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected nullptr", K(ret));
     } else if (OB_FAIL(ranges_cost_op->init(ranges, plan_ctx->get_timeout_timestamp() - ObTimeUtility::current_time()))) {
     } else if (OB_FAIL(das_ref.execute_all_task())) {
     } else {

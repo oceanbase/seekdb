@@ -4,6 +4,10 @@ add_library(oblib_pass INTERFACE)
 
 get_property(EASY_INCLUDE_DIRS GLOBAL PROPERTY "EASY_INCLUDE_DIRS" )
 
+if(OB_MACOS27)
+  include("${CMAKE_SOURCE_DIR}/cmake/BoostCompat.cmake")
+endif()
+
 if(WIN32)
   set(OPENSSL_INCLUDE_DIR "${OB_OPENSSL_DIR}/include")
   set(VCPKG_INCLUDE_DIR "${OB_VCPKG_DIR}/include")
@@ -131,6 +135,23 @@ if (OB_USE_CLANG)
       -Wno-string-concatenation
       -Wno-vla ${VLA_WARN_FLAG})
   endif()
+  if(OB_MACOS27)
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag("-Wenum-constexpr-conversion" OB_HAS_ENUM_CONSTEXPR_WARNING)
+    if(NOT OB_HAS_ENUM_CONSTEXPR_WARNING)
+      list(REMOVE_ITEM OBLIB_COMPILE_DEFINITIONS -Wno-enum-constexpr-conversion)
+    endif()
+    # New Clang diagnostics cover existing virtual ABI, byte-copy containers,
+    # and erased function-pointer serialization. Keep the established warning
+    # policy when using the host LLVM instead of the pinned Clang 17.
+    foreach(_warning unnecessary-virtual-specifier nontrivial-memcall cast-function-type-mismatch)
+      string(MAKE_C_IDENTIFIER "OB_HAS_${_warning}" _warning_supported)
+      check_cxx_compiler_flag("-W${_warning}" ${_warning_supported})
+      if(${_warning_supported})
+        list(APPEND OBLIB_COMPILE_DEFINITIONS "-Wno-${_warning}")
+      endif()
+    endforeach()
+  endif()
   target_compile_options(oblib_base_without_pass INTERFACE ${OBLIB_COMPILE_DEFINITIONS})
 else()
   target_compile_options(oblib_base_without_pass
@@ -172,6 +193,16 @@ else()
     $<$<COMPILE_LANGUAGE:C>:
     -Wno-unused-parameter>
     )
+endif()
+
+if(ENABLE_SANITY)
+  target_compile_options(oblib_pass INTERFACE
+    "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-fpass-plugin=${SEEKDB_SANITY_PASS}>")
+  foreach(SEEKDB_SANITY_COMPILE_OPTION
+      IN LISTS SEEKDB_SANITY_NO_BUILTIN_COMPILE_OPTIONS)
+    target_compile_options(oblib_pass INTERFACE
+      "$<$<COMPILE_LANGUAGE:C,CXX>:${SEEKDB_SANITY_COMPILE_OPTION}>")
+  endforeach()
 endif()
 
 target_compile_features(oblib_base INTERFACE cxx_std_11)

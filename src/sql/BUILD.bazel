@@ -194,6 +194,7 @@ cc_library(
         _SQL_SEMANTIC_HEADER_PREFIXES,
     ),
     deps = _SQL_INTERFACE_NON_SHARE_DEPS + _SQL_PUBLIC_CLOSURE_OBLIB_DEPS + _SQL_PUBLIC_CLOSURE_SHARE_DEPS + [
+        "//rust:config_bridge_headers",
         "//src/sql/optimizer:optimizer_public_headers",
         "//src/sql/parser:parser_public_headers",
         "//src/sql/resolver/prepare:resolver_prepare_public_headers",
@@ -241,6 +242,7 @@ cc_library(
     deps = [
         ":sql_retrieval_composition_headers",
         ":sql_runtime_interface",
+        "//rust:config_bridge_headers",
         "//src/sql/engine/prepare:engine_prepare_internal_headers",
         "//src/sql/optimizer:optimizer_internal_headers",
         "//src/sql/parser:parser_internal_headers",
@@ -302,6 +304,7 @@ _SQL_RUNTIME_WITHOUT_PASS_UNITY_GROUPS = sql_singleton_unity_groups(
 )
 
 _SQL_RUNTIME_IMPLEMENTATION_DEPS = [
+    "//rust:config_bridge_headers",
     ":_textual_sql_map_inputs",
     ":sql_runtime_interface",
     ":sql_runtime_internal_headers",

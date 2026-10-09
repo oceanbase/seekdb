@@ -37,10 +37,8 @@ int ObStringPrefixDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDatum
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(NULL == data || len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(data), K(len));
   } else {
     UNUSED(row_id);
     uint64_t val = STORED_NOT_EXT;
@@ -81,7 +79,6 @@ int ObStringPrefixDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDatum
             const int64_t buf_size = std::max(meta_header_->max_string_size_, min_buf_size);
             if (OB_ISNULL(buf = static_cast<char *>(ctx.allocator_->alloc(buf_size)))) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
-              LOG_WARN("fail to allocate memory", K(ret), K(buf_size));
             }
           }
 
@@ -120,10 +117,8 @@ int ObStringPrefixDecoder::update_pointer(const char *old_block, const char *cur
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(old_block) || OB_ISNULL(cur_block)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(old_block), KP(cur_block));
   } else {
     ObIColumnDecoder::update_pointer(meta_header_, old_block, cur_block);
     ObIColumnDecoder::update_pointer(meta_data_, old_block, cur_block);
@@ -143,7 +138,6 @@ int ObStringPrefixDecoder::batch_decode(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not inited", K(ret));
   } else {
     const char *row_data = nullptr;
     int64_t row_len = 0;
@@ -160,7 +154,6 @@ int ObStringPrefixDecoder::batch_decode(
       const int64_t buf_size = std::max(meta_header_->max_string_size_, min_buf_size);
       if (OB_ISNULL(buf = static_cast<char *>(ctx.allocator_->alloc(buf_size * row_cap)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("Failed to allocate memory", K(ret), K(buf_size));
       } else if (OB_FAIL(meta_gen.init(meta_data_, meta_header_->prefix_index_byte_))) {
       } else {
         const ObStringPrefixCellHeader *cell_header = nullptr;
@@ -221,7 +214,6 @@ int ObStringPrefixDecoder::get_null_count(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("StringPrefix decoder is not inited", K(ret));
   } else if OB_FAIL(ObIColumnDecoder::get_null_count_from_extend_value(
       ctx,
       row_index,

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "config_bridge.h"
 #include "ob_single_merge.h"
 #include "src/storage/ls/ob_ls.h"
 
@@ -42,7 +43,6 @@ int ObSingleMerge::open(const ObDatumRowkey &rowkey)
   if (OB_FAIL(ObMultipleMerge::open())) {
   } else if (OB_ISNULL(get_table_param_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObSingleMerge has not been inited", K(ret), K_(get_table_param));
   } else {
     const ObTabletMeta &tablet_meta = get_table_param_->tablet_iter_.get_tablet()->get_tablet_meta();
     if (!full_row_.is_valid()) {
@@ -286,7 +286,7 @@ int ObSingleMerge::inner_get_next_row(ObDatumRow &row)
     // When the index lookups the rowkeys from the main table, it should exists
     // and if we find that it does not exist, there must be an anomaly
     // Async vector index: skip 4377 when row not found (index may have stale entries)
-    if (GCONF.enable_defensive_check()
+    if ((config::_enable_defensive_check() > 0)
         && access_ctx_->query_flag_.is_lookup_for_4377()
         && !access_ctx_->query_flag_.skip_4377_for_async_index_lookup()
         && OB_ITER_END == ret) {

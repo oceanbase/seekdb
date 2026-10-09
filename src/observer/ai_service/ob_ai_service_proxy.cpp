@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "config_bridge.h"
 #include "observer/ai_service/ob_ai_service_proxy.h"
 #include "share/ob_share_util.h"
 #include "share/ob_dml_sql_splicer.h"
@@ -54,13 +55,11 @@ int ObAiServiceProxy::insert_ai_endpoint(ObMySQLTransaction &trans, const int64_
   } else if (OB_FAIL(trans.write(buffer.ptr(), affected_rows))) {
   } else if (1 != affected_rows) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("affected_rows should be one", KR(ret), K(affected_rows));
   }
 
   if (OB_ERR_PRIMARY_KEY_DUPLICATE == ret) {
     ret = OB_ENTRY_EXIST;
     LOG_USER_ERROR(OB_ENTRY_EXIST, "endpoint already exists");
-    LOG_WARN("ai model endpoint already exists", KR(ret), K(endpoint));
   }
   return ret;
 }
@@ -88,7 +87,6 @@ int ObAiServiceProxy::update_ai_endpoint(ObMySQLTransaction &trans, const int64_
   } else if (OB_FAIL(trans.write(buffer.ptr(), affected_rows))) {
   } else if (1 != affected_rows) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("affected_rows should be one", KR(ret), K(affected_rows));
   }
   return ret;
 }
@@ -99,7 +97,7 @@ int ObAiServiceProxy::select_ai_endpoint(ObArenaAllocator &allocator, ObISQLClie
   int ret = OB_SUCCESS;
   ObSqlString sql;
   ObTimeoutCtx ctx;
-  const int64_t default_timeout = GCONF.internal_sql_execute_timeout;
+  const int64_t default_timeout = config::internal_sql_execute_timeout();
   endpoint.reset();
   
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, default_timeout))) {
@@ -107,21 +105,17 @@ int ObAiServiceProxy::select_ai_endpoint(ObArenaAllocator &allocator, ObISQLClie
       OB_ALL_AI_MODEL_ENDPOINT_TNAME))) {
   } else if (OB_FAIL(sql_append_hex_escape_str(name, sql))) {
   } else if (for_update && (OB_FAIL(sql.append_fmt(" FOR UPDATE")))) {
-    LOG_WARN("failed to append for update", KR(ret));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       ObMySQLResult *result = NULL;
       if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("execute sql failed", K(sql), KR(ret));
       } else if (OB_FAIL(result->next())) {
         if (OB_ITER_END == ret) {
           ret = OB_AI_FUNC_ENDPOINT_NOT_FOUND;
           LOG_USER_ERROR(OB_AI_FUNC_ENDPOINT_NOT_FOUND, name.length(), name.ptr());
-          LOG_WARN("ai model endpoint not found", K(ret), K(name));
         } else {
-          LOG_WARN("failed to get next result", KR(ret));
         }
       } else if (OB_FAIL(build_ai_endpoint_(allocator, *result, endpoint))) {
       } else {
@@ -142,7 +136,7 @@ int ObAiServiceProxy::select_ai_endpoint_by_ai_model_name(ObArenaAllocator &allo
   int ret = OB_SUCCESS;
   ObSqlString sql;
   ObTimeoutCtx ctx;
-  const int64_t default_timeout = GCONF.internal_sql_execute_timeout;
+  const int64_t default_timeout = config::internal_sql_execute_timeout();
   endpoint.reset();
   
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, default_timeout))) {
@@ -158,7 +152,6 @@ int ObAiServiceProxy::select_ai_endpoint_by_ai_model_name(ObArenaAllocator &allo
       }
     } else {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid name case mode", K(ret), K(name_case_mode));
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "invalid name case mode");
     }
   }
@@ -169,13 +162,10 @@ int ObAiServiceProxy::select_ai_endpoint_by_ai_model_name(ObArenaAllocator &allo
       if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("execute sql failed", K(sql), KR(ret));
       } else if (OB_FAIL(result->next())) {
         if (OB_ITER_END == ret) {
           ret = OB_AI_FUNC_ENDPOINT_NOT_FOUND;
-          LOG_WARN("ai model endpoint not found by ai model name", K(ret), K(ai_model_name));
         } else {
-          LOG_WARN("failed to get next result", KR(ret));
         }
       } else if (OB_FAIL(build_ai_endpoint_(allocator, *result, endpoint))) {
       } else {
@@ -253,7 +243,6 @@ int ObAiServiceProxy::drop_ai_model_endpoint(ObMySQLTransaction &trans, const Ob
     LOG_USER_ERROR(OB_AI_FUNC_ENDPOINT_NOT_FOUND, name.length(), name.ptr());
   } else if (1 != affected_rows) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("affected_rows should be one", KR(ret), K(affected_rows));
   }
   return ret;
 }
@@ -263,7 +252,7 @@ int ObAiServiceProxy::check_ai_endpoint_exists(ObArenaAllocator &allocator, ObIS
   int ret = OB_SUCCESS;
   ObSqlString sql;
   ObTimeoutCtx ctx;
-  const int64_t default_timeout = GCONF.internal_sql_execute_timeout;
+  const int64_t default_timeout = config::internal_sql_execute_timeout();
   
   int64_t count = 0;
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, default_timeout))) {
@@ -278,12 +267,10 @@ int ObAiServiceProxy::check_ai_endpoint_exists(ObArenaAllocator &allocator, ObIS
       if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("execute sql failed", K(sql), KR(ret));
       } else if (OB_FAIL(result->next())) {
       } else if (OB_FAIL(result->get_int(idx, count))) {
       } else if (count > 1) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("count should be less or equal than one", KR(ret), K(count));
       } else {
         int tmp_ret = OB_SUCCESS;
         if (OB_ITER_END != (tmp_ret = result->next())) {

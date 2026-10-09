@@ -61,7 +61,6 @@ private:
     typename ObWkbGeomCollection::iterator iter;
     if (OB_ISNULL(allocator)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Null allocator", K(ret));
     } else if (g->type() == ObGeoType::GEOMETRYCOLLECTION) {
       ObCartesianBox tmp_result;
       const ObWkbGeomCollection *geo = reinterpret_cast<const ObWkbGeomCollection *>(g->val());

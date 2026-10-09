@@ -114,7 +114,6 @@ int ObExprMod::mod_int(ObObj &res,
     }
   } else if (OB_UNLIKELY(ObUIntTC != right.get_type_class())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid types", K(ret), K(left), K(right));
   } else {
     if (left_i < 0) {
       res.set_int(-static_cast<int64_t>(-left_i % static_cast<uint64_t>(right_i)));
@@ -142,7 +141,6 @@ int ObExprMod::mod_uint(ObObj &res,
     res.set_uint64(left_ui % right_ui);
   } else if (OB_UNLIKELY(ObIntTC != right.get_type_class())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid types", K(ret), K(left), K(right));
   } else {
     if (static_cast<int64_t>(right_ui) < 0) {
       res.set_uint64(left_ui % -static_cast<int64_t>(right_ui));
@@ -166,7 +164,6 @@ int ObExprMod::mod_double(ObObj &res,
   const double EPSILON = 1e-14;
   if (OB_UNLIKELY(left.get_type_class() != right.get_type_class())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid types", K(ret), K(left), K(right));
   } else if (fabs(right.get_double()) < EPSILON) {
     res.set_null();
   } else {
@@ -311,7 +308,6 @@ int ObExprMod::mod_float(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
 {
   int ret = OB_SUCCESS;
   ret = OB_ERR_UNEXPECTED;
-  LOG_WARN("unexpected float mod evaluation path", K(ret));
   return ret;
 }
 
@@ -417,7 +413,6 @@ int ObExprMod::mod_decimalint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum
         CALC_DECIMAL_INT_MOD(int512)
         default: {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("int_bytes is unexpected", K(ret), K(int_bytes));
           break;
         }
       }
@@ -495,10 +490,8 @@ int ObExprMod::cg_expr(ObExprCGCtx &op_cg_ctx,
 
   if (OB_ISNULL(rt_expr.eval_func_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected result type", K(ret), K(rt_expr.datum_meta_.type_), K(left), K(right));
   } else if (OB_ISNULL(op_cg_ctx.session_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected session is null", K(ret));
   } else {
     stmt::StmtType stmt_type = op_cg_ctx.session_->get_stmt_type();
     if (is_error_for_division_by_zero(op_cg_ctx.session_->get_sql_mode())

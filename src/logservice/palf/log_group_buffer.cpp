@@ -53,7 +53,6 @@ int LogGroupBuffer::init(const LSN &start_lsn)
     PALF_LOG(WARN, "invalid arguments", K(ret), K(start_lsn));
   } else {
     int64_t group_buffer_size = DEFAULT_GROUP_BUFFER_SIZE;
-    // omt::ObTenantConfigGuard tenant_config(&GCONF);
     // if (!tenant_config.is_valid()) {
     //  PALF_LOG(WARN, "get tenant config failed", K(ret));
     //  // TODO: add tenant config
@@ -279,7 +278,7 @@ int LogGroupBuffer::fill_padding_body(const LSN &lsn,
       PALF_LOG(INFO, "fill padding log success", K(ret), K(lsn), K(log_body_size), K(start_pos), K(data_len),
           K(group_buf_tail_len), K(first_part_len), "second_part_len", data_len - first_part_len);
     }
-    
+
   }
   return ret;
 }

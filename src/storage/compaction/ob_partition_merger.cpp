@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
+#include "config_bridge.h"
 #include "ob_partition_merger.h"
 #include "share/rc/ob_server_runtime.h"
 #include "ob_tablet_scheduler.h"
@@ -311,7 +312,7 @@ int ObPartitionMerger::process(
   int ret = OB_SUCCESS;
 
 #ifdef ERRSIM
-  int64_t macro_block_builder_errsim_flag = GCONF.macro_block_builder_errsim_flag;
+  int64_t macro_block_builder_errsim_flag = ::oceanbase::common::errsim_config().macro_block_builder_errsim_flag.load();
   if (2 == macro_block_builder_errsim_flag) {
     if (macro_writer_->get_macro_block_write_ctx().get_macro_block_count() -
         macro_writer_->get_merge_block_info().multiplexed_macro_block_count_ >= 1) {
@@ -326,7 +327,6 @@ int ObPartitionMerger::process(
     // do nothing
   } else if (OB_UNLIKELY(!macro_desc.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument to append macro block", K(ret), K(macro_desc));
   } else if (OB_FAIL(macro_writer_->append_macro_block(macro_desc, micro_block_data))) {
   } else {
   }
@@ -355,7 +355,7 @@ int ObPartitionMerger::process(
   int ret = OB_SUCCESS;
   ObICompactionFilter::ObFilterRet filter_ret = ObICompactionFilter::FILTER_RET_MAX;
 #ifdef ERRSIM
-  int64_t macro_block_builder_errsim_flag = GCONF.macro_block_builder_errsim_flag;
+  int64_t macro_block_builder_errsim_flag = ::oceanbase::common::errsim_config().macro_block_builder_errsim_flag.load();
   if (1 == macro_block_builder_errsim_flag) {
     if (macro_writer_->get_macro_block_write_ctx().get_macro_block_count() > 1) {
       ret = OB_ERR_SYS;
@@ -596,7 +596,7 @@ int ObPartitionMajorMerger::merge_partition(
     }
     if (OB_ITER_END != ret || OB_FAIL(merge_helper_->check_iter_end())) { //verify merge end
       STORAGE_LOG(WARN, "Partition merge did not end normally", K(ret));
-      if (OB_ALLOCATE_MEMORY_FAILED != ret && GCONF._enable_compaction_diagnose) {
+      if (OB_ALLOCATE_MEMORY_FAILED != ret && config::_enable_compaction_diagnose()) {
         ObPartitionMergeDumper::print_error_info(ret, merge_helper_->get_merge_iters(), *merge_ctx_);
         macro_writer_->dump_block_and_writer_buffer();
       }
@@ -711,8 +711,6 @@ int ObPartitionMajorMerger::reuse_base_small_sstable(
   if (OB_UNLIKELY(nullptr == base_iter
                   || !base_iter->is_macro_block_opened())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected iterator state for small sstable",
-             K(ret), K(base_iter));
   }
   while (OB_SUCC(ret)) {
     const blocksstable::ObMicroBlock *micro_block = nullptr;
@@ -761,7 +759,7 @@ int ObPartitionMajorMerger::reuse_base_sstable(ObPartitionMergeHelper &merge_hel
             STORAGE_LOG(WARN, "curr row is unexpected null", K(ret), KPC(base_iter));
           } else if (OB_FAIL(process(*base_iter->get_curr_row()))) {
             STORAGE_LOG(WARN, "Failed to process row", K(ret), K(partition_fuser_->get_result_row()));
-            if (GCONF._enable_compaction_diagnose) {
+            if (config::_enable_compaction_diagnose()) {
               ObPartitionMergeDumper::print_error_info(ret, minimum_iters, *merge_ctx_);
             }
           } else if (OB_FAIL(base_iter->next())) {
@@ -860,7 +858,6 @@ int ObPartitionMinorMerger::inner_process(
 
   const blocksstable::ObMacroBlockDesc *macro_desc;
   if (FAILEDx(get_base_iter_curr_macro_block(macro_desc))) {
-    STORAGE_LOG(WARN, "Failed to get base iter macro", K(ret));
   } else if (OB_FAIL(macro_writer_->append_row(row, macro_desc))) {
   } else {
     macro_writer_->inc_incremental_row_count();
@@ -918,7 +915,7 @@ int ObPartitionMinorMerger::merge_partition(
 
     if (OB_ITER_END != ret || OB_FAIL(merge_helper_->check_iter_end())) {
       STORAGE_LOG(WARN, "Partition merge did not end normally", K(ret));
-      if (OB_ALLOCATE_MEMORY_FAILED != ret && GCONF._enable_compaction_diagnose) {
+      if (OB_ALLOCATE_MEMORY_FAILED != ret && config::_enable_compaction_diagnose()) {
         ObPartitionMergeDumper::print_error_info(ret, merge_helper_->get_merge_iters(), *merge_ctx_);
         macro_writer_->dump_block_and_writer_buffer();
       }
@@ -947,7 +944,6 @@ int ObPartitionMinorMerger::collect_merge_stat(
 
   if (OB_UNLIKELY(!ctx.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid argument", K(ret), K(merge_type), K(ctx));
   } else if (OB_UNLIKELY(!is_mini_merge(merge_type))) {
   } else if (ctx.get_tablet_id().is_special_merge_tablet()) {
     // do nothing
@@ -1122,12 +1118,8 @@ int ObPartitionMinorMerger::set_result_flag(MERGE_ITER_ARRAY &fuse_iters,
       }
     }
     if (FAILEDx(partition_fuser_->set_multi_version_flag(row_flag))) {
-      STORAGE_LOG(WARN, "Failed to set multi version row flag and dml", K(ret));
     } else if (add_shadow_row && OB_FAIL(partition_fuser_->make_result_row_shadow(
           data_store_desc_.get_schema_rowkey_col_cnt() + 1 /*sql_sequence_col_idx*/))) {
-        LOG_WARN("failed to make shadow row", K(ret),
-          "result_row", partition_fuser_->get_result_row(),
-          "sql_seq_col_idx", data_store_desc_.get_schema_rowkey_col_cnt() + 1);
     } else {
       STORAGE_LOG(DEBUG, "succ to set multi version row flag and dml", K(partition_fuser_->get_result_row()),
                   K(row_flag), KPC(base_row));
@@ -1215,7 +1207,6 @@ int ObPartitionMinorMerger::merge_same_rowkey_iters(
       } else if (shadow_already_output && base_iter->get_curr_row()->is_shadow_row()) {
         if (OB_UNLIKELY(1 != minimum_iters_.count())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Unexpected minimum shadow row iters", K(ret), K(minimum_iters_));
         } else if (OB_FAIL(move_and_remove_unused_iters(merge_iters, minimum_iters_, minimum_iter_idxs_))) {
         } else {
           continue;
@@ -1260,7 +1251,6 @@ int ObPartitionMinorMerger::check_add_shadow_row(MERGE_ITER_ARRAY &merge_iters, 
       for (int64_t i = 0; OB_SUCC(ret) && i < merge_iters.count(); i++) {
         if (OB_UNLIKELY(nullptr == merge_iters.at(i) || nullptr == merge_iters.at(i)->get_curr_row())) {
           ret = OB_INNER_STAT_ERROR;
-          LOG_WARN("Unexpected null fuse iter or curr row", K(ret), K(i), KPC(merge_iters.at(i)));
         } else if (merge_iters.at(i)->get_curr_row()->is_shadow_row()) {
           add_shadow_row = true;
           break;
@@ -1292,14 +1282,12 @@ int ObPartitionMinorMerger::move_and_remove_unused_iter(MERGE_ITER_ARRAY &merge_
   int ret = OB_SUCCESS;
   if (OB_ISNULL(merge_iter)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null merge iter", K(ret));
   } else {
     need_remove = merge_iter->get_curr_row()->is_last_multi_version_row();
     if (OB_FAIL(merge_iter->next())) {
       if (OB_ITER_END == ret && need_remove) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("Failed to next merge iter", K(ret), KPC(merge_iter));
       }
     } else if (!need_remove && nullptr == merge_iter->get_curr_row()) {
       if (OB_FAIL(merge_iter->open_curr_range(false /*for_rewrite*/))) {
@@ -1321,10 +1309,8 @@ int ObPartitionMinorMerger::skip_shadow_row(MERGE_ITER_ARRAY &merge_iters)
   for (int64_t i = merge_iters.count() - 1; OB_SUCC(ret) && i >= 0; i--) {
     if (OB_ISNULL(merge_iter = merge_iters.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected null merge iter", K(ret), K(i), K(merge_iters));
     } else if (OB_ISNULL(merge_row = merge_iter->get_curr_row())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected null curr row", K(ret), KPC(merge_iter));
     } else if (merge_row->is_shadow_row()) {
       if (OB_FAIL(merge_iter->next())) {
       } else if (nullptr == merge_iter->get_curr_row()) {

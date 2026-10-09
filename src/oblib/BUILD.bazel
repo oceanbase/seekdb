@@ -1,4 +1,5 @@
 load("@rules_cc//cc:cc_import.bzl", "cc_import")
+load("@rules_cc//cc:cc_library.bzl", native_cc_library = "cc_library")
 load(
     ":oblib_build_defs.bzl",
     "OBLIB_STANDALONE_SOURCES",
@@ -29,6 +30,14 @@ _OBLIB_INTERFACE_VISIBILITY = [
 ]
 
 declare_oblib_header_interfaces(_OBLIB_INTERFACE_VISIBILITY)
+
+native_cc_library(
+    name = "_jemalloc_headers",
+    deps = select({
+        "//bazel:sanity_enabled": ["//deps/external:jemalloc_headers"],
+        "//conditions:default": [],
+    }),
+)
 
 _COMMON_GROUP_NAMES = [
     "oblib_common_common_0",
@@ -203,6 +212,7 @@ seekdb_semantic_unity_cc_library(
     implementation_deps = [
         ":_oblib_implementation_headers",
         ":oblib_foundation",
+        ":_jemalloc_headers",
     ],
     copts = SEEKDB_OBLIB_COPTS,
     local_defines = SEEKDB_OBLIB_LOCAL_DEFINES,
@@ -420,13 +430,7 @@ cc_library(
     name = "ob_malloc_objects",
     implementation_deps = [
         ":_ob_malloc_impl",
-    ] + select({
-        "//bazel:sanity_enabled": [
-            "//bazel:sanity_abort_runtime",
-            "@seekdb_3rd_headers//:sanity_runtime",
-        ],
-        "//conditions:default": [],
-    }),
+    ],
     tags = ["manual"],
     visibility = ["//src/observer:__pkg__"],
 )

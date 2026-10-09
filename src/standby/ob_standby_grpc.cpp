@@ -197,11 +197,10 @@ bool StandbyPromotionBoundary::is_same_as(
 
 int StandbyPromotionBoundary::add_source_hop(
     const common::ObAddr &relay,
-    const common::ObAddr &source,
-    const int64_t source_version)
+    const common::ObAddr &source)
 {
   int ret = OB_SUCCESS;
-  const SourceHop hop(relay, source, source_version);
+  const SourceHop hop(relay, source);
   if (!is_valid() || !hop.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
   } else if (source_chain_.count() >= MAX_PROMOTION_BOUNDARY_HOPS) {
@@ -220,7 +219,7 @@ int StandbyPromotionBoundary::add_source_hop(
 }
 
 OB_SERIALIZE_MEMBER(StandbyPromotionBoundary::SourceHop,
-    relay_, source_, source_version_);
+    relay_, source_);
 OB_SERIALIZE_MEMBER(StandbyPromotionBoundary,
     origin_, cutover_scn_, source_chain_);
 
@@ -953,11 +952,9 @@ grpc::Status StandbyGrpcService::get_promotion_boundary(
         common::ObString source_after;
         common::ObAddr source_addr;
         common::ObAddr source_addr_after;
-        int64_t source_version = 0;
-        int64_t source_version_after = 0;
         ObStandbyGrpcClient client;
         if (OB_FAIL(host_.load_log_restore_source(
-            before_allocator, source_before, source_version))) {
+            before_allocator, source_before))) {
           LOG_WARN("failed to load relay source", K(ret));
         } else if (source_before.empty()) {
           ret = OB_ENTRY_NOT_EXIST;
@@ -974,7 +971,7 @@ grpc::Status StandbyGrpcService::get_promotion_boundary(
         } else if (OB_FAIL(client.get_promotion_boundary(boundary_request, boundary))) {
           LOG_WARN("failed to relay promotion boundary", K(ret), K(source_addr));
         } else if (OB_FAIL(host_.load_log_restore_source(
-            after_allocator, source_after, source_version_after))) {
+            after_allocator, source_after))) {
           LOG_WARN("failed to recheck relay source", K(ret));
         } else if (source_after.empty()) {
           ret = OB_ENTRY_NOT_EXIST;
@@ -982,13 +979,11 @@ grpc::Status StandbyGrpcService::get_promotion_boundary(
         } else if (OB_FAIL(StandbySourceParser::get_first_service_addr(
             source_after, source_addr_after))) {
           LOG_WARN("failed to parse reloaded relay source", K(ret), K(source_after));
-        } else if (source_version != source_version_after
-                   || source_before.compare(source_after) != 0
+        } else if (source_before.compare(source_after) != 0
                    || source_addr != source_addr_after) {
           ret = OB_STATE_NOT_MATCH;
           LOG_WARN("relay source changed while resolving promotion boundary",
-              K(ret), K(source_version), K(source_version_after),
-              K(source_before), K(source_after));
+              K(ret), K(source_before), K(source_after));
         } else {
           share::ObServerInfo rechecked_server_info;
           if (OB_FAIL(state_store_.load(rechecked_server_info))) {
@@ -999,9 +994,9 @@ grpc::Status StandbyGrpcService::get_promotion_boundary(
             LOG_WARN("relay role changed while resolving promotion boundary",
                 K(ret), K(rechecked_server_info));
           } else if (OB_FAIL(boundary.add_source_hop(
-              promotion_node_id_, source_addr, source_version))) {
+              promotion_node_id_, source_addr))) {
             LOG_WARN("failed to record stable promotion relay",
-                K(ret), K_(promotion_node_id), K(source_addr), K(source_version));
+                K(ret), K_(promotion_node_id), K(source_addr));
           }
         }
       }

@@ -64,7 +64,6 @@ int ObDDLLocalBuildArg::assign(const ObDDLLocalBuildArg &other)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!other.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(other));
   } else if (OB_FAIL(lob_col_idxs_.assign(other.lob_col_idxs_))) {
   } else {
     source_tablet_id_ = other.source_tablet_id_;

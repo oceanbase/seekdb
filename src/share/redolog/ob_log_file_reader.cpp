@@ -116,7 +116,6 @@ int ObLogReadFdHandle::set_read_fd(ObLogReadFdCacheItem *fd_item, const bool is_
   int ret = OB_SUCCESS;
   if (OB_ISNULL(fd_item)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else {
     reset();
     fd_item_ = fd_item;
@@ -167,7 +166,6 @@ int ObLogFileReader2::init(lib::IRunWrapper *run_wrapper)
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("already inited", K(ret));
   } else if (OB_FAIL(quick_map_.create(MAP_BUCKET_INIT_CNT, "LogFileReaderM"))) {
   } else if (OB_FAIL(timer_.set_run_wrapper_with_ret(run_wrapper))) {
   } else if (OB_FAIL(timer_.init("ObLogFileReader2"))) {
@@ -213,15 +211,12 @@ int ObLogFileReader2::pread(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!fd_handle.is_valid() || count <= 0 || offset < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument.", K(ret), K(fd_handle), K(count), K(offset));
   } else {
     common::ObIOFd target_io_fd = fd_handle.get_read_fd();
     if (!target_io_fd.is_normal_file()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid fd", K(ret), K(target_io_fd));
     } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.pread(target_io_fd, offset, count, buf, read_size))) {
     }
   }
@@ -233,7 +228,6 @@ int ObLogFileReader2::move_item_to_head(ObLogReadFdCacheItem &item)
   int ret = OB_SUCCESS;
   if (nullptr == head_ || nullptr == tail_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("head or tail is null", K(ret), KP(head_), KP(tail_), K(item));
   } else if (head_ == &item) {
     // do nothing
   } else {
@@ -259,14 +253,11 @@ int ObLogFileReader2::evict_fd_from_map(const ObLogReadFdKey &fd_key)
 
   if (OB_UNLIKELY(!fd_key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid fd key", K(ret), K(fd_key));
   } else if (OB_FAIL(quick_map_.erase_refactored(fd_key, &target)) && OB_HASH_NOT_EXIST != ret) {
-    LOG_WARN("erase item from map fail", K(ret), K(fd_key));
   } else if (OB_HASH_NOT_EXIST == ret) {
     ret = OB_SUCCESS;
   } else if (OB_ISNULL(target)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("erased item is null", K(ret), K(fd_key));
   } else {
     target->in_map_ = false;
   }
@@ -280,10 +271,8 @@ int ObLogFileReader2::evict_fd(const char* log_dir, const uint32_t file_id)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!ObLogFileHandler::is_valid_file_id(file_id) || OB_ISNULL(log_dir)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument.", K(ret), K(file_id), KP(log_dir));
   } else if (OB_FAIL(ObLogFileHandler::format_file_path(file_path, sizeof(file_path),
       log_dir, file_id))) {
   } else if (OB_FAIL(evict_fd(file_path))) {
@@ -296,7 +285,6 @@ int ObLogFileReader2::evict_fd(const char* file_path)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     lib::ObMutexGuard guard(lock_);
     ObLogReadFdKey fd_key;
@@ -321,10 +309,8 @@ int ObLogFileReader2::get_fd(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!ObLogFileHandler::is_valid_file_id(file_id) || OB_ISNULL(log_dir)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument.", K(ret), K(file_id), KP(log_dir));
   } else if (OB_FAIL(ObLogFileHandler::format_file_path(file_path, sizeof(file_path),
       log_dir, file_id))) {
   } else {
@@ -333,7 +319,6 @@ int ObLogFileReader2::get_fd(
     {
       lib::ObMutexGuard guard(lock_);
       if (OB_FAIL(try_get_cache(fd_key, ret_item)) && OB_HASH_NOT_EXIST != ret) {
-        LOG_WARN("get fd from cache fail", K(ret), K(fd_key));
       } else {
         hit_cache = (ret == OB_SUCCESS);
         ret = OB_SUCCESS;
@@ -424,7 +409,6 @@ int ObLogFileReader2::open_fd(const ObLogReadFdKey &fd_key, common::ObIOFd &ret_
 
   if (OB_UNLIKELY(!fd_key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(fd_key));
   } else if (OB_FAIL(ObLogFileHandler::open(fd_key.path_, O_RDONLY | O_DIRECT, 0, ret_io_fd))) {
   } else if (OB_UNLIKELY(!ret_io_fd.is_normal_file())) {
     ret = OB_ERR_UNEXPECTED;
@@ -446,10 +430,8 @@ int ObLogFileReader2::put_new_item(
   if (OB_UNLIKELY(!fd_key.is_valid()) || OB_UNLIKELY(nullptr != ret_item)
       || OB_UNLIKELY(!open_io_fd.is_normal_file())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(ret_item), K(fd_key), K(open_io_fd));
   } else if (NULL == (new_item = OB_NEW(ObLogReadFdCacheItem, MEMORY_LABEL))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc new item fail", K(ret));
   } else {
     new_item->reset();
     ret_item = new_item;
@@ -464,7 +446,6 @@ int ObLogFileReader2::put_new_item(
     } else {
       if (OB_FAIL(quick_map_.set_refactored(fd_key, new_item))
           && OB_HASH_EXIST != ret) {
-        LOG_WARN("set new item fail", K(ret), K(fd_key), K(*new_item));
       } else if (OB_HASH_EXIST == ret) {
         // some thread already put new, close self and get from cache again
         LOCAL_DEVICE_INSTANCE.close(open_io_fd);
@@ -511,15 +492,12 @@ int ObLogFileReader2::try_get_cache(const ObLogReadFdKey &fd_key, ObLogReadFdCac
 
   if (OB_UNLIKELY(nullptr != ret_item) || OB_UNLIKELY(!fd_key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(ret_item), K(fd_key));
   } else if (OB_FAIL(quick_map_.get_refactored(fd_key, p_item))
       && OB_HASH_NOT_EXIST != ret) {
-    LOG_WARN("get from map fail", K(ret), K(fd_key));
   } else if (OB_HASH_NOT_EXIST == ret) {
     // cache miss
   } else if (OB_ISNULL(p_item)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null cache item", K(ret), K(fd_key));
   } else if (p_item->timestamp_ == OB_INVALID_TIMESTAMP
       || ObTimeUtility::fast_current_time() - p_item->timestamp_ > cache_evict_time_in_us_) {
     if (OB_FAIL(evict_fd_from_map(fd_key))) {

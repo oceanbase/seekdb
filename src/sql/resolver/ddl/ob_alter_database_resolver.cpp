@@ -46,10 +46,8 @@ int ObAlterDatabaseResolver::resolve(const ParseNode &parse_tree)
       || OB_ISNULL(node->children_)
       || OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid parse tree", K(ret));
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session info should not be null", K(ret));
   } else {
     ObAlterDatabaseStmt *alter_database_stmt = NULL;
     if (OB_ISNULL(alter_database_stmt = create_stmt<ObAlterDatabaseStmt>())) {
@@ -69,7 +67,6 @@ int ObAlterDatabaseResolver::resolve(const ParseNode &parse_tree)
       } else {
         if (OB_UNLIKELY(T_IDENT != dbname_node->type_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid parse tree node", K(ret), K(dbname_node->type_));
         } else {
           database_name.assign_ptr(dbname_node->str_value_,
                                    static_cast<int32_t>(dbname_node->str_len_));
@@ -102,7 +99,6 @@ int ObAlterDatabaseResolver::resolve(const ParseNode &parse_tree)
       ParseNode *dboption_node = node->children_[DATABASE_OPTION];
       if (OB_ISNULL(dboption_node) || OB_UNLIKELY(T_DATABASE_OPTION_LIST != dboption_node->type_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid parse tree", K(ret));
       } else {
         ObDatabaseResolver<ObAlterDatabaseStmt> resolver;
         if (OB_FAIL(resolver.resolve_database_options(alter_database_stmt,

@@ -16,30 +16,40 @@ load("//bazel:defs.bzl", cc_library = "seekdb_cc_library")
 
 package(default_visibility = ["//visibility:private"])
 
+exports_files(
+    ["rust-toolchain.toml"],
+    visibility = ["//deps/external:__pkg__"],
+)
+
 config_setting(
     name = "windows",
     constraint_values = ["@platforms//os:windows"],
 )
 
-_SQL_NIO_INPUTS = [
-    "Cargo.toml",
-    "rust-toolchain.toml",
-    "sql-nio/Cargo.toml",
-] + glob(["sql-nio/src/*.rs"])
+# Track sources and build inputs for every crate in the workspace. Cargo only
+# runs when Bazel sees one of these inputs change.
+_RUST_INPUTS = glob(
+    ["**/*.rs", "**/*.toml", "**/*.yaml", "**/*.yml", "**/*.json", "*.lock"],
+    exclude = ["target/**"],
+    allow_empty = True,
+)
 
 # Cargo remains the authoritative Rust dependency resolver used by the
 # upstream CMake build.  Keep the action local and outside the sandbox until
 # Cargo dependencies are vendored: cargo currently updates the registry under
 # ~/.cargo, which Bazel's sandbox deliberately mounts read-only.
 genrule(
-    name = "_sql_nio_static_unix",
-    srcs = _SQL_NIO_INPUTS,
-    outs = ["libsql_nio.a"],
+    name = "_rust_static_unix",
+    srcs = _RUST_INPUTS,
+    outs = ["libsql_nio.a", "libconfig.a", "unix/config_bridge.h", "unix/config_checkers.h"],
     cmd = """
 set -eu
-export CARGO_TARGET_DIR="$(@D)/sql_nio-cargo-target"
-cargo build --release --manifest-path "$(location Cargo.toml)" --package sql-nio
-cp "$$CARGO_TARGET_DIR/release/libsql_nio.a" "$@"
+export CARGO_TARGET_DIR="$(@D)/rust-cargo-target"
+export CONFIG_HEADER_DIR="$$PWD/$(@D)/unix"
+export DEFAULT_LOG_LEVEL=OB_LOG_LEVEL_ERROR
+cargo build --release --manifest-path "$(location Cargo.toml)" --package sql-nio --package config
+cp "$$CARGO_TARGET_DIR/release/libsql_nio.a" "$(@D)/libsql_nio.a"
+cp "$$CARGO_TARGET_DIR/release/libconfig.a" "$(@D)/libconfig.a"
 """,
     tags = [
         "no-remote",
@@ -52,13 +62,16 @@ cp "$$CARGO_TARGET_DIR/release/libsql_nio.a" "$@"
 )
 
 genrule(
-    name = "_sql_nio_static_windows",
-    srcs = _SQL_NIO_INPUTS,
-    outs = ["sql_nio.lib"],
+    name = "_rust_static_windows",
+    srcs = _RUST_INPUTS,
+    outs = ["sql_nio.lib", "config.lib", "windows/config_bridge.h", "windows/config_checkers.h"],
     cmd_bat = """
-set CARGO_TARGET_DIR=$(@D)\\sql_nio-cargo-target
-cargo build --release --manifest-path "$(location Cargo.toml)" --package sql-nio
-copy /Y "%CARGO_TARGET_DIR%\\release\\sql_nio.lib" "$@"
+set CARGO_TARGET_DIR=$(@D)\\rust-cargo-target
+set CONFIG_HEADER_DIR=%CD%\\$(@D)\\windows
+set DEFAULT_LOG_LEVEL=OB_LOG_LEVEL_ERROR
+cargo build --release --manifest-path "$(location Cargo.toml)" --package sql-nio --package config
+copy /Y "%CARGO_TARGET_DIR%\\release\\sql_nio.lib" "$(@D)\\sql_nio.lib"
+copy /Y "%CARGO_TARGET_DIR%\\release\\config.lib" "$(@D)\\config.lib"
 """,
     tags = [
         "no-remote",
@@ -73,8 +86,17 @@ copy /Y "%CARGO_TARGET_DIR%\\release\\sql_nio.lib" "$@"
 filegroup(
     name = "sql_nio_archive",
     srcs = select({
-        ":windows": [":_sql_nio_static_windows"],
-        "//conditions:default": [":_sql_nio_static_unix"],
+        ":windows": ["sql_nio.lib"],
+        "//conditions:default": ["libsql_nio.a"],
+    }),
+    visibility = ["//src/observer:__pkg__"],
+)
+
+filegroup(
+    name = "config_archive",
+    srcs = select({
+        ":windows": ["config.lib"],
+        "//conditions:default": ["libconfig.a"],
     }),
     visibility = ["//src/observer:__pkg__"],
 )
@@ -89,4 +111,24 @@ cc_library(
         "//src/query:__pkg__",
         "//unittest/oblib:__pkg__",
     ],
+)
+
+cc_library(
+    name = "config_headers",
+    hdrs = ["config/include/config.h"],
+    includes = ["config/include"],
+    visibility = ["//src/share:__pkg__", "//src/observer:__pkg__"],
+)
+
+cc_library(
+    name = "config_bridge_headers",
+    hdrs = select({
+        ":windows": ["windows/config_bridge.h", "windows/config_checkers.h"],
+        "//conditions:default": ["unix/config_bridge.h", "unix/config_checkers.h"],
+    }),
+    includes = select({
+        ":windows": ["windows"],
+        "//conditions:default": ["unix"],
+    }),
+    visibility = ["//src/share:__pkg__", "//src/observer:__pkg__", "//src/rootserver:__pkg__", "//src/sql:__subpackages__", "//src/storage:__pkg__", "//src/pl:__pkg__", "//src/standby:__pkg__"],
 )

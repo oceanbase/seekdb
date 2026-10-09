@@ -31,7 +31,6 @@ int ObParamedSelectItemCtx::deep_copy(const ObParamedSelectItemCtx &other, ObIAl
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid null allocator", K(ret));
   } else if (OB_FAIL(ob_write_string(*allocator, other.paramed_cname_, paramed_cname_))) {
   } else if (OB_FAIL(param_str_offsets_.assign(other.param_str_offsets_))) {
   } else if (OB_FAIL(param_idxs_.assign(other.param_idxs_))) {
@@ -65,7 +64,6 @@ int ObField::full_deep_copy(const ObField &other, ObIAllocator *allocator)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator)) {
-    LOG_WARN("null ptr");
     ret = OB_ERR_UNEXPECTED;
   } else {
     if (OB_FAIL(ob_write_string(*allocator, other.dname_, dname_))) {
@@ -88,7 +86,6 @@ int ObField::full_deep_copy(const ObField &other, ObIAllocator *allocator)
         void *buf = NULL;
         if (OB_ISNULL(buf = allocator->alloc(sizeof(ObParamedSelectItemCtx)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to allocator memory", K(ret));
         } else if (FALSE_IT(paramed_ctx_ = new(buf)ObParamedSelectItemCtx())) {
           // do nothing
         } else if (OB_FAIL(paramed_ctx_->deep_copy(*other.paramed_ctx_, allocator))) {
@@ -105,7 +102,6 @@ int ObField::deep_copy(const ObField &other, ObIAllocator *allocator)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator)) {
-    LOG_WARN("null ptr");
     ret = OB_ERR_UNEXPECTED;
   } else {
     if (OB_FAIL(ob_write_string(*allocator, other.dname_, dname_))) {
@@ -131,7 +127,6 @@ int ObField::deep_copy(const ObField &other, ObIAllocator *allocator)
         void *buf = NULL;
         if (OB_ISNULL(buf = allocator->alloc(sizeof(ObParamedSelectItemCtx)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to allocator memory", K(ret));
         } else if (FALSE_IT(paramed_ctx_ = new(buf)ObParamedSelectItemCtx())) {
           // do nothing
         } else if (OB_FAIL(paramed_ctx_->deep_copy(*other.paramed_ctx_, allocator))) {
@@ -259,7 +254,6 @@ int ObField::get_field_mb_length(const ObObjType type,
         length = number::ObNumber::MAX_PRECISION - number::ObNumber::MIN_SCALE;
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error. invalid precision or scale", K(ret), K(accuracy));
       }
       break;
     case ObTextTC: // TODO@hanhui texttc share with the stringtc temporarily
@@ -309,7 +303,6 @@ int ObField::get_field_mb_length(const ObObjType type,
         // When create table is not specified, the default value will be used. Affects the output of zerofill and must be set
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error. invalid precision or scale", K(ret), K(accuracy));
       }
       break;
     case ObDoubleTC:
@@ -323,7 +316,6 @@ int ObField::get_field_mb_length(const ObObjType type,
         //Security considerations, here is set to MAX_DOUBLE_STR_LENGTH plus 1
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error. invalid precision or scale", K(ret), K(accuracy));
       }
       break;
     case ObNullTC:
@@ -341,7 +333,6 @@ int ObField::get_field_mb_length(const ObObjType type,
     case ObEnumSetInnerTC:
       if (accuracy.get_length() <= 0) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("length is less than zero", K(accuracy), K(type), K(ret));
       } else {
         int64_t mbmaxlen = 1;
         if (OB_FAIL(common::ObCharset::get_mbmaxlen_by_coll(charsetnr, mbmaxlen))) {
@@ -354,7 +345,6 @@ int ObField::get_field_mb_length(const ObObjType type,
     case ObUserDefinedSQLTC:
     case ObCollectionSQLTC:
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not supported get_field_mb_length for extend type", K(ret));
       break;
     default:
       ret = OB_ERR_UNEXPECTED;

@@ -247,7 +247,9 @@ OBLIB_UNITY_GROUPS = {
                 "src/oblib/lib/allocator/ob_delay_free_allocator.cpp",
                 "src/oblib/lib/allocator/ob_fifo_allocator.cpp",
                 "src/oblib/lib/allocator/ob_hazard_ref.cpp",
+                "src/oblib/lib/allocator/ob_jemalloc_sanity.cpp",
                 "src/oblib/lib/allocator/ob_malloc.cpp",
+                "src/oblib/lib/allocator/ob_sanity_libc_wrap.cpp",
                 "src/oblib/lib/utility/ob_mod_define.cpp",
                 "src/oblib/lib/allocator/ob_page_manager.cpp",
             ],
@@ -615,7 +617,6 @@ OBLIB_UNITY_GROUPS = {
             srcs = [
                 "src/oblib/rpc/obmysql/ob_mysql_packet.cpp",
                 "src/oblib/rpc/obmysql/ob_mysql_util.cpp",
-                "src/oblib/rpc/obmysql/ob_nio_abi_check.cpp",
                 "src/oblib/rpc/obmysql/ob_sql_nio_server.cpp",
                 "src/oblib/rpc/obmysql/ob_sql_sock_handler.cpp",
                 "src/oblib/rpc/obmysql/ob_sql_sock_session.cpp",

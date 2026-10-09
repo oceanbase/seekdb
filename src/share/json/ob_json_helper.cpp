@@ -40,7 +40,6 @@ int ObJsonBuilder::create_object(Value *&root)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(root = (Value*)allocator_.alloc(sizeof(Value)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc root value", K(ret));
   } else {
     new (root) Value();
     root->set_type(JT_OBJECT);
@@ -53,7 +52,6 @@ int ObJsonBuilder::create_array(Value *&array)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(array = (Value*)allocator_.alloc(sizeof(Value)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc array value", K(ret));
   } else {
     new (array) Value();
     array->set_type(JT_ARRAY);
@@ -66,10 +64,8 @@ int ObJsonBuilder::add_string_field(Value *obj, const ObString &key, const ObStr
   int ret = OB_SUCCESS;
   if (OB_ISNULL(obj) || OB_ISNULL(key)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(obj), K(key));
   } else if (obj->get_type() != JT_OBJECT) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("value is not an object", K(ret));
   } else {
     Pair *pair = nullptr;
     Value *str_val = nullptr;
@@ -77,13 +73,10 @@ int ObJsonBuilder::add_string_field(Value *obj, const ObString &key, const ObStr
     
     if (OB_ISNULL(pair = (Pair*)allocator_.alloc(sizeof(Pair)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc pair", K(ret));
     } else if (OB_ISNULL(str_val = (Value*)allocator_.alloc(sizeof(Value)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc string value", K(ret));
     } else if (OB_ISNULL(str_buf = (char*)allocator_.alloc(value.length() + 1))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc string buffer", K(ret));
     } else {
       new (pair) Pair();
       new (str_val) Value();
@@ -107,20 +100,16 @@ int ObJsonBuilder::add_int_field(Value *obj, const ObString &key, int64_t value)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(obj) || OB_ISNULL(key)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(obj), K(key));
   } else if (obj->get_type() != JT_OBJECT) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("value is not an object", K(ret));
   } else {
     Pair *pair = nullptr;
     Value *int_val = nullptr;
     
     if (OB_ISNULL(pair = (Pair*)allocator_.alloc(sizeof(Pair)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc pair", K(ret));
     } else if (OB_ISNULL(int_val = (Value*)allocator_.alloc(sizeof(Value)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc int value", K(ret));
     } else {
       new (pair) Pair();
       new (int_val) Value();
@@ -142,17 +131,14 @@ int ObJsonBuilder::add_array_field(Value *obj, const ObString &key, Value *&arra
   int ret = OB_SUCCESS;
   if (OB_ISNULL(obj) || OB_ISNULL(key)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(obj), K(key));
   } else if (obj->get_type() != JT_OBJECT) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("value is not an object", K(ret));
   } else {
     Pair *pair = nullptr;
     
     if (OB_FAIL(create_array(array))) {
     } else if (OB_ISNULL(pair = (Pair*)allocator_.alloc(sizeof(Pair)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc pair", K(ret));
     } else {
       new (pair) Pair();
       pair->name_ = key;
@@ -168,20 +154,16 @@ int ObJsonBuilder::array_add_string(Value *array, const ObString &value)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(array)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(array));
   } else if (array->get_type() != JT_ARRAY) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("value is not an array", K(ret));
   } else {
     Value *str_val = nullptr;
     char *str_buf = nullptr;
     
     if (OB_ISNULL(str_val = (Value*)allocator_.alloc(sizeof(Value)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc string value", K(ret));
     } else if (OB_ISNULL(str_buf = (char*)allocator_.alloc(value.length() + 1))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc string buffer", K(ret));
     } else {
       new (str_val) Value();
       memcpy(str_buf, value.ptr(), value.length());
@@ -199,13 +181,11 @@ int ObJsonBuilder::to_string(Value *root, char *buffer, int64_t buffer_len, int6
   int ret = OB_SUCCESS;
   if (OB_ISNULL(root) || OB_ISNULL(buffer) || buffer_len <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(root), KP(buffer), K(buffer_len));
   } else {
     Tidy json_tidy(root);
     json_len = json_tidy.to_string(buffer, buffer_len);
     if (json_len <= 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to convert json to string", K(ret), K(json_len));
     }
   }
   return ret;
@@ -227,15 +207,12 @@ int ObJsonReaderHelper::parse(const char *json_str, size_t json_len, ObJsonNode 
   int ret = OB_SUCCESS;
   if (OB_ISNULL(json_str) || json_len == 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(json_str), K(json_len));
   } else if (OB_FAIL(ObJsonParser::get_tree(&allocator_, json_str, json_len, root))) {
-    LOG_WARN("failed to parse json response", K(ret), KP(json_str), K(json_len));
     
     int64_t print_size = std::min(static_cast<size_t>(1000), json_len);
     char debug_buffer[1001];
     MEMCPY(debug_buffer, json_str, print_size);
     debug_buffer[print_size] = '\0';
-    LOG_WARN("json parse failed, response content", K(ret), K(debug_buffer));
   }
   return ret;
 }
@@ -245,15 +222,12 @@ int ObJsonReaderHelper::get_object_value(const ObIJsonBase *obj, const ObString 
   int ret = OB_SUCCESS;
   if (OB_ISNULL(obj) || OB_ISNULL(key)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(obj), K(key));
   } else if (obj->json_type() != ObJsonNodeType::J_OBJECT) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("json node is not an object", K(ret));
   } else {
     if (OB_FAIL(obj->get_object_value(key, value))) {
     } else if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("object value is null", K(ret), K(key));
     }
   }
   return ret;
@@ -264,17 +238,13 @@ int ObJsonReaderHelper::get_array_element(const ObIJsonBase *array, uint64_t ind
   int ret = OB_SUCCESS;
   if (OB_ISNULL(array)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(array));
   } else if (array->json_type() != ObJsonNodeType::J_ARRAY) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("json node is not an array", K(ret));
   } else if (index >= array->element_count()) {
     ret = OB_ARRAY_OUT_OF_RANGE;
-    LOG_WARN("array index out of range", K(ret), K(index), K(array->element_count()));
   } else if (OB_FAIL(array->get_array_element(index, element))) {
   } else if (OB_ISNULL(element)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("array element is null", K(ret), K(index));
   }
   return ret;
 }
@@ -292,7 +262,6 @@ int ObJsonReaderHelper::get_float_value(const ObIJsonBase *element, float &value
   int ret = OB_SUCCESS;
   if (OB_ISNULL(element)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(element));
   } else {
     ObJsonNodeType node_type = element->json_type();
     if (node_type == ObJsonNodeType::J_DOUBLE) {
@@ -312,7 +281,6 @@ int ObJsonReaderHelper::get_float_value(const ObIJsonBase *element, float &value
       }
     } else {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("json element is not a number", K(ret), K(node_type));
     }
   }
   return ret;

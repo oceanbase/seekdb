@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_PC
 
+#include "config_bridge.h"
 #include "ob_plan_cache_util.h"
 #include "sql/optimizer/ob_log_plan.h"
 using namespace oceanbase::share;
@@ -59,7 +60,6 @@ int ObPhyLocationGetter::get_phy_locations(const common::ObIArray<ObTablePartiti
   for (int64_t i = 0; OB_SUCC(ret) && i < N; i++) {
     if (OB_ISNULL(partition_infos.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid partition info", K(ret));
     } else if (OB_FAIL(candi_table_locs.push_back(
                    partition_infos.at(i)->get_phy_tbl_location_info()))) {
     } else { /* do nothing */ }
@@ -77,7 +77,6 @@ int ObPhyLocationGetter::get_phy_locations(const ObIArray<ObTableLocation> &tabl
   int64_t N = table_locations.count();
   if (OB_ISNULL(plan_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid executor ctx!", K(ret), K(plan_ctx));
   } else {
     ObSEArray<const ObTableLocation *, 2> table_location_ptrs;
     ObSEArray<ObCandiTableLoc *, 2> phy_location_info_ptrs;
@@ -169,34 +168,36 @@ int ObConfigInfoInPC::load_influence_plan_config()
 
   // For Cluster configs
   // here to add value of configs that can influence execution plan.
-  enable_px_ordered_coord_ = GCONF._enable_px_ordered_coord;
-  enable_newsort_ = GCONF._enable_newsort;
-  is_strict_defensive_check_ = GCONF.enable_strict_defensive_check();
-  bloom_filter_ratio_ = GCONF._bloom_filter_ratio;
-  realistic_runtime_bloom_filter_size_ = !GCONF._preset_runtime_bloom_filter_size;
-  ndv_runtime_bloom_filter_size_ = GCONF._ndv_runtime_bloom_filter_size;
+  enable_px_ordered_coord_ = config::_enable_px_ordered_coord();
+  enable_newsort_ = config::_enable_newsort();
+  is_strict_defensive_check_ = (config::_enable_defensive_check() == 2);
+  bloom_filter_ratio_ = config::_bloom_filter_ratio();
+  realistic_runtime_bloom_filter_size_ = !config::_preset_runtime_bloom_filter_size();
+  ndv_runtime_bloom_filter_size_ = config::_ndv_runtime_bloom_filter_size();
 
   // Runtime configuration dependencies.
   // Use the runtime configuration to read the current settings.
 
-  pushdown_storage_level_ = GCONF._pushdown_storage_level;
-  enable_px_batch_rescan_ = GCONF._enable_px_batch_rescan;
-  bloom_filter_enabled_ = GCONF._bloom_filter_enabled;
-  px_join_skew_handling_ = GCONF._px_join_skew_handling;
-  px_join_skew_minfreq_ = static_cast<int8_t>(GCONF._px_join_skew_minfreq);
-  enable_spf_batch_rescan_ = GCONF._enable_spf_batch_rescan;
-  enable_var_assign_use_das_ = GCONF._enable_var_assign_use_das;
-  enable_das_keep_order_ = GCONF._enable_das_keep_order;
-  enable_index_merge_ = GCONF._enable_index_merge;
-  enable_parallel_das_dml_ = GCONF._enable_parallel_das_dml;
-  hash_rollup_policy_ = GCONF._use_hash_rollup.case_compare("auto") == 0 ?
+  pushdown_storage_level_ = config::_pushdown_storage_level();
+  enable_px_batch_rescan_ = config::_enable_px_batch_rescan();
+  bloom_filter_enabled_ = config::_bloom_filter_enabled();
+  px_join_skew_handling_ = config::_px_join_skew_handling();
+  px_join_skew_minfreq_ = static_cast<int8_t>(config::_px_join_skew_minfreq());
+  enable_spf_batch_rescan_ = config::_enable_spf_batch_rescan();
+  enable_var_assign_use_das_ = config::_enable_var_assign_use_das();
+  enable_das_keep_order_ = config::_enable_das_keep_order();
+  enable_index_merge_ = config::_enable_index_merge();
+  enable_parallel_das_dml_ = config::_enable_parallel_das_dml();
+  const rust::String rollup_value = config::_use_hash_rollup();
+  const ObString rollup_policy(static_cast<int32_t>(rollup_value.size()), rollup_value.data());
+  hash_rollup_policy_ = rollup_policy.case_compare("auto") == 0 ?
                           0 :
-                          (GCONF._use_hash_rollup.case_compare("forced") == 0 ? 1 : 2);
-  enable_distributed_das_scan_ = GCONF._enable_distributed_das_scan;
-  enable_das_batch_rescan_flag_ = GCONF._enable_das_batch_rescan_flag;
-  enable_topn_runtime_filter_ = GCONF._enable_topn_runtime_filter;
-  min_const_integer_precision_ = static_cast<int8_t>(GCONF._min_const_integer_precision);
-  enable_px_task_rebalance_ = GCONF._enable_px_task_rebalance;
+                          (rollup_policy.case_compare("forced") == 0 ? 1 : 2);
+  enable_distributed_das_scan_ = config::_enable_distributed_das_scan();
+  enable_das_batch_rescan_flag_ = config::_enable_das_batch_rescan_flag();
+  enable_topn_runtime_filter_ = config::_enable_topn_runtime_filter();
+  min_const_integer_precision_ = static_cast<int8_t>(config::_min_const_integer_precision());
+  enable_px_task_rebalance_ = config::_enable_px_task_rebalance();
 
 
   return ret;

@@ -36,10 +36,8 @@ int ObIntegerBaseDiffDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDa
 
   if (OB_UNLIKELY(!is_inited())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(NULL == data || len < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(data), K(len));
   } else {
     // read extend value bit
     if (ctx.has_extend_value()) {
@@ -82,10 +80,8 @@ int ObIntegerBaseDiffDecoder::update_pointer(const char *old_block, const char *
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(old_block) || OB_ISNULL(cur_block)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(old_block), KP(cur_block));
   } else {
     ObIColumnDecoder::update_pointer(header_, old_block, cur_block);
   }
@@ -149,7 +145,6 @@ int ObIntegerBaseDiffDecoder::batch_get_bitpacked_values(
         ctx, row_ids, row_cap, datums, datum_len, data_offset, ObBitStream::DEFAULT)
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unpack size larger than 64 bit", K(ret), K(packed_len));
   }
   return ret;
 }
@@ -170,7 +165,6 @@ int ObIntegerBaseDiffDecoder::batch_decode(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not inited", K(ret));
   } else {
     int64_t data_offset = 0;
     const unsigned char *col_data = reinterpret_cast<const unsigned char *>(header_)
@@ -230,11 +224,8 @@ int ObIntegerBaseDiffDecoder::pushdown_operator(
       col_ctx.col_header_->length_;
   if (OB_UNLIKELY(!is_inited())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Raw Decoder not inited", K(ret), K(filter));
   } else if (OB_UNLIKELY(op_type >= sql::WHITE_OP_MAX)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid op type for pushed down white filter",
-             K(ret), K(op_type));
   } else if (OB_FAIL(get_is_null_bitmap_from_fixed_column(col_ctx, col_data,
                                                           pd_filter_info, result_bitmap))) {
   } else {
@@ -261,7 +252,6 @@ int ObIntegerBaseDiffDecoder::pushdown_operator(
                   pd_filter_info,
                   result_bitmap))) {
         if (OB_UNLIKELY(OB_NOT_SUPPORTED != ret)) {
-          LOG_WARN("Failed on EQ / NE operator", K(ret), K(col_ctx));
         }
       }
       break;
@@ -269,7 +259,6 @@ int ObIntegerBaseDiffDecoder::pushdown_operator(
     case sql::WHITE_OP_BT: {
       if (OB_FAIL(bt_operator(parent, col_ctx, col_data, filter, pd_filter_info, result_bitmap))) {
         if (OB_UNLIKELY(OB_NOT_SUPPORTED != ret)) {
-          LOG_WARN("Failed on BT operator", K(ret), K(col_ctx));
         }
       }
       break;
@@ -281,7 +270,6 @@ int ObIntegerBaseDiffDecoder::pushdown_operator(
     }
     default: {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("Unexpected operation type", K(ret), K(op_type));
     }
     }
   }
@@ -299,7 +287,6 @@ inline int ObIntegerBaseDiffDecoder::get_delta<uint64_t>(
   const uint32_t datum_size = common::ObDatum::get_reserved_size(datum_type);
   if (OB_UNLIKELY(type_store_size < 0 || datum_size > 8)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Invalid size for int_diff decoder", K(ret), K(type_store_size), K(datum_size));
   } else {
     uint64_t mask = INTEGER_MASK_TABLE[type_store_size];
     uint64_t datum_value = 0;
@@ -320,7 +307,6 @@ inline int ObIntegerBaseDiffDecoder::get_delta<int64_t>(
   const uint32_t datum_size = common::ObDatum::get_reserved_size(datum_type);
   if (OB_UNLIKELY(type_store_size < 0 || datum_size > 8)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Invalid size for int_diff decoder", K(ret), K(type_store_size), K(datum_size));
   } else {
     uint64_t mask = INTEGER_MASK_TABLE[type_store_size];
     uint64_t reverse_mask = ~mask;
@@ -352,8 +338,6 @@ int ObIntegerBaseDiffDecoder::comparison_operator(
                           || NULL == col_data
                           || filter.get_datums().count() != 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Filter Pushdown Operator: Invalid argument",
-        K(ret), K(col_ctx), K(pd_filter_info), K(result_bitmap.size()), K(filter));
   } else if (col_ctx.obj_meta_.get_type_class() == ObFloatTC
             || col_ctx.obj_meta_.get_type_class() == ObDoubleTC) {
     // Can't compare by uint directly, support this later with float point number compare later
@@ -377,7 +361,6 @@ int ObIntegerBaseDiffDecoder::comparison_operator(
     ObGetFilterCmpRetFunc get_cmp_ret = get_filter_cmp_ret_func(op_type);
     int cmp_res = 0;
     if (FAILEDx(cmp_func(base_datum, ref_datum, cmp_res, nullptr))) {
-      LOG_WARN("Failed to compare datum", K(ret), K(ref_datum), K(base_datum));
     } else if (FALSE_IT(filter_obj_smaller_than_base = cmp_res > 0)){
     } else if (filter_obj_smaller_than_base) {
       // Do not need to decode the data
@@ -408,7 +391,6 @@ int ObIntegerBaseDiffDecoder::comparison_operator(
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected Store type for int_diff decoder", K(ret), K(column_sc));
       }
 
       if (OB_FAIL(ret)) {
@@ -466,8 +448,6 @@ int ObIntegerBaseDiffDecoder::bt_operator(
                           || NULL == col_data
                           || filter.get_datums().count() != 2)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Filter pushdown operator: Invalid argument",
-        K(ret), K(col_ctx), K(pd_filter_info), K(result_bitmap.size()), K(filter));
   } else if (col_ctx.obj_meta_.get_type_class() == ObFloatTC
             || col_ctx.obj_meta_.get_type_class() == ObDoubleTC) {
     // Can't compare by uint directly, support this later with float point number compare later
@@ -484,9 +464,7 @@ int ObIntegerBaseDiffDecoder::bt_operator(
                   int right_cmp_res = 0;
                   ObDatumCmpFuncType cmp_func = filter.cmp_func_;
                   if (OB_FAIL(cmp_func(cur_datum, filter.get_datums().at(0), left_cmp_res, nullptr))) {
-                    LOG_WARN("fail to compare datums", K(ret), K(cur_datum), K(filter.get_datums().at(0)));
                   } else if (OB_FAIL(cmp_func(cur_datum, filter.get_datums().at(1), right_cmp_res, nullptr))) {
-                    LOG_WARN("fail to compare datums", K(ret), K(cur_datum), K(filter.get_datums().at(1)));
                   } else {
                     result = (left_cmp_res >= 0) && (right_cmp_res <= 0);
                   }
@@ -495,7 +473,6 @@ int ObIntegerBaseDiffDecoder::bt_operator(
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Integer base encoding should only encode data as IntSC", K(ret), K(filter));
   }
   return ret;
 }
@@ -512,8 +489,6 @@ int ObIntegerBaseDiffDecoder::in_operator(
   if (OB_UNLIKELY(filter.get_datums().count() == 0
                   || result_bitmap.size() != pd_filter_info.count_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Pushdown in operator: Invalid arguments",
-        K(ret), K(col_ctx), K(pd_filter_info), K(result_bitmap.size()), K(filter));
   } else if (OB_FAIL(traverse_all_data(parent, col_ctx, col_data,
                       filter, pd_filter_info, result_bitmap,
                       [](const ObDatum &cur_datum,
@@ -521,7 +496,6 @@ int ObIntegerBaseDiffDecoder::in_operator(
                          bool &result) -> int {
                         int ret = OB_SUCCESS;
                         if (OB_FAIL(filter.exist_in_set(cur_datum, result))) {
-                          LOG_WARN("Failed to check datum in hashset", K(ret), K(cur_datum));
                         }
                         return ret;
                       }))) {
@@ -583,7 +557,6 @@ int ObIntegerBaseDiffDecoder::traverse_all_data(
         // use lambda here to filter and set result bitmap
         bool result = false;
         if (FAILEDx(lambda(cur_datum, filter, result))) {
-          LOG_WARN("Failed on trying to filter the row", K(ret), K(row_id), K(cur_int));
         } else if (result) {
           if (OB_FAIL(result_bitmap.set(offset))) {
           }
@@ -605,7 +578,6 @@ int ObIntegerBaseDiffDecoder::get_null_count(
   const char *col_data = reinterpret_cast<const char *>(header_) + ctx.col_header_->length_;
   if (OB_UNLIKELY(!is_inited())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Raw decoder is not inited", K(ret));
   } else if OB_FAIL(ObIColumnDecoder::get_null_count_from_extend_value(
       ctx,
       row_index,

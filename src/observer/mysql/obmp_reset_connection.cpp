@@ -61,7 +61,6 @@ int ObMPResetConnection::process()
     } else if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {
     } else if (OB_ISNULL(sys_variable_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("sys variable schema is null", K(ret));
     } else if (OB_FAIL(session->load_all_sys_vars(*sys_variable_schema, true))) {
     } else if (OB_FAIL(session->update_database_variables(&schema_guard))) {
     } else if (OB_FAIL(update_charset_sys_vars(*conn, *session))) {
@@ -211,10 +210,7 @@ int ObMPResetConnection::process()
 
   if (OB_UNLIKELY(need_disconnect) && is_conn_valid()) {
     if (NULL == session) {
-      LOG_WARN("will disconnect connection", K(ret), K(need_disconnect));
     } else {
-      LOG_WARN("will disconnect connection", K(ret), K(session->get_server_sid()),
-               K(need_disconnect));
     }
     force_disconnect();
   }

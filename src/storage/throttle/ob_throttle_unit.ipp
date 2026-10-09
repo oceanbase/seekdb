@@ -19,10 +19,10 @@
 
 #ifndef OCEANBASE_SHARE_THROTTLE_OB_THROTTLE_UNIT_H_IPP
 #define OCEANBASE_SHARE_THROTTLE_OB_THROTTLE_UNIT_H_IPP
+#include "share/rc/ob_server_runtime.h"
 #include "ob_throttle_unit.h"
 #endif
 
-#include "share/config/ob_runtime_config.h"
 #include "lib/alloc/alloc_func.h"
 #include "lib/thread_local/ob_tsi_utils.h"
 

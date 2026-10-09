@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX PL
+#include "config_bridge.h"
 #include "ob_dbms_index_manager.h"
 #include "query/change_stream/ob_change_stream_service.h"
 #include "share/rc/ob_server_runtime.h"
@@ -36,7 +37,7 @@ int ObDBMSIndexManager::refresh(
   UNUSED(result);
 
   ObMySQLProxy *mysql_proxy = GCTX.sql_proxy_;
-  const int64_t timeout_us = GCONF.internal_sql_execute_timeout;
+  const int64_t timeout_us = config::internal_sql_execute_timeout();
   query::ObIChangeStreamService *change_stream =
       OB_ISNULL(ctx.exec_ctx_)
           ? nullptr
@@ -44,13 +45,10 @@ int ObDBMSIndexManager::refresh(
 
   if (OB_ISNULL(ctx.exec_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec ctx is null", KR(ret));
   } else if (OB_ISNULL(mysql_proxy)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("mysql proxy is not inited", KR(ret));
   } else if (OB_ISNULL(change_stream)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("change stream service is not initialized", KR(ret));
   } else if (OB_FAIL(change_stream->wait_until_refreshed(
                  *mysql_proxy, timeout_us))) {
   }

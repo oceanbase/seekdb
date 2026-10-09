@@ -35,7 +35,6 @@ int ObRLEDecoder::decode(const ObColumnDecoderCtx &ctx, ObDatum &datum, const in
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     // get ref value
     const int64_t pos = ObIntArrayFuncTable::instance(meta_header_->row_id_byte_)
@@ -57,10 +56,8 @@ int ObRLEDecoder::update_pointer(const char *old_block, const char *cur_block)
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(old_block) || OB_ISNULL(cur_block)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(old_block), KP(cur_block));
   } else {
     ObIColumnDecoder::update_pointer(meta_header_, old_block, cur_block);
     if (OB_FAIL(dict_decoder_.update_pointer(old_block, cur_block))) {
@@ -84,7 +81,6 @@ int ObRLEDecoder::batch_decode(
   int64_t unused_null_cnt;
   if (OB_UNLIKELY(!is_inited())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not inited", K(ret));
   } else if (OB_FAIL(extract_ref_and_null_count(row_ids, row_cap, datums, unused_null_cnt))) {
   } else if (OB_FAIL(dict_decoder_.batch_decode_dict(
       ctx.col_header_->get_store_obj_type(),
@@ -108,7 +104,6 @@ int ObRLEDecoder::get_null_count(
   null_count = 0;
   if (OB_UNLIKELY(!is_inited())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not inited", K(ret));
   } else if (OB_FAIL(extract_ref_and_null_count(row_ids, row_cap, nullptr, null_count))) {
   }
   return ret;
@@ -128,10 +123,8 @@ int ObRLEDecoder::pushdown_operator(
   const sql::ObWhiteFilterOperatorType op_type = filter.get_op_type();
   if (OB_UNLIKELY(!is_inited())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Const decoder not inited", K(ret));
   } else if (OB_UNLIKELY(op_type >= sql::WHITE_OP_MAX)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid op type for pushed down white filter", K(ret), K(op_type));
   } else {
     switch (op_type) {
       case sql::WHITE_OP_NU:
@@ -171,7 +164,6 @@ int ObRLEDecoder::pushdown_operator(
       }
       default: {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("Pushed down filter operator type not supported", K(ret), K(filter));
       }
     } // end of switch
   }
@@ -188,8 +180,6 @@ int ObRLEDecoder::nu_nn_operator(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(result_bitmap.size() != pd_filter_info.count_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument for NU / NN operator", K(ret),
-             K(result_bitmap.size()), K(pd_filter_info), K(filter));
   } else {
     const int64_t dict_count = dict_decoder_.get_dict_header()->count_;
     if (dict_count == 0) {
@@ -221,8 +211,6 @@ int ObRLEDecoder::eq_ne_operator(
                   || filter.get_datums().count() != 1
                   || filter.null_param_contained())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument for EQ / NE operator", K(ret),
-             K(result_bitmap.size()), K(pd_filter_info), K(filter));
   } else {
     const int64_t dict_count = dict_decoder_.get_dict_header()->count_;
     const int64_t dict_meta_length = col_ctx.col_header_->length_ - meta_header_->offset_;
@@ -266,8 +254,6 @@ int ObRLEDecoder::comparison_operator(
                   || filter.get_datums().count() != 1
                   || filter.null_param_contained())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument for comparison operator", K(ret),
-             K(result_bitmap.size()), K(pd_filter_info), K(filter));
   } else {
     const int64_t dict_count = dict_decoder_.get_dict_header()->count_;
     const int64_t dict_meta_length = col_ctx.col_header_->length_ - meta_header_->offset_;
@@ -296,7 +282,6 @@ int ObRLEDecoder::comparison_operator(
       }
       if (OB_SUCC(ret) && found && OB_FAIL(set_res_with_bitset(parent, col_ctx,
           ref_bitset, pd_filter_info, result_bitmap))) {
-        LOG_WARN("Failed to set result_bitmap", K(ret));
       }
     }
   }
@@ -315,8 +300,6 @@ int ObRLEDecoder::bt_operator(
                 || filter.get_datums().count() != 2
                 || filter.get_op_type() != sql::WHITE_OP_BT)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Invalid argument for BT operator",
-          K(ret), K(result_bitmap.size()), K(pd_filter_info), K(filter.get_datums()));
   } else {
     const int64_t dict_count = dict_decoder_.get_dict_header()->count_;
     if (dict_count > 0) {
@@ -347,7 +330,6 @@ int ObRLEDecoder::bt_operator(
       }
       if (OB_SUCC(ret) && found && OB_FAIL(set_res_with_bitset(parent, col_ctx,
           ref_bitset, pd_filter_info, result_bitmap))) {
-        LOG_WARN("Failed to set result_bitmap", K(ret));
       }
     }
   }
@@ -366,8 +348,6 @@ int ObRLEDecoder::in_operator(
   if (OB_UNLIKELY(result_bitmap.size() != pd_filter_info.count_
                   || filter.get_datums().count() == 0
                   || filter.get_op_type() != sql::WHITE_OP_IN)) {
-    LOG_WARN("Invalid argument for BT operator", K(ret),
-             K(result_bitmap.size()), K(pd_filter_info), K(filter));
   } else {
     const int64_t dict_count = dict_decoder_.get_dict_header()->count_;
     if (dict_count > 0) {
@@ -392,7 +372,6 @@ int ObRLEDecoder::in_operator(
       }
       if (OB_SUCC(ret) && found && OB_FAIL(set_res_with_bitset(parent, col_ctx,
           ref_bitset, pd_filter_info, result_bitmap))) {
-        LOG_WARN("Failed to set result_bitmap", K(ret));
       }
     }
   }
@@ -427,8 +406,6 @@ int ObRLEDecoder::cmp_ref_and_set_res(
       for (int64_t idx = row_id; OB_SUCC(ret) && idx < next_row_id; ++idx) {
         if (idx >= pd_filter_info.start_ && idx < pd_filter_info.start_ + pd_filter_info.count_
             && OB_FAIL(result_bitmap.set(idx - pd_filter_info.start_, flag))) {
-          LOG_WARN("Failed to set result_bitmap",
-              K(ret), K(row_id), K(pd_filter_info), K(next_row_id), K(idx));
         }
       }
     }
@@ -460,8 +437,6 @@ int ObRLEDecoder::set_res_with_bitset(
       for (int64_t idx = row_id; OB_SUCC(ret) && idx < next_row_id; ++idx) {
         if (idx >= pd_filter_info.start_ && idx < pd_filter_info.start_ + pd_filter_info.count_
             && OB_FAIL(result_bitmap.set(idx - pd_filter_info.start_))) {
-          LOG_WARN("Failed to set result_bitmap",
-              K(ret), K(row_id), K(pd_filter_info), K(next_row_id), K(idx));
         }
       }
     }

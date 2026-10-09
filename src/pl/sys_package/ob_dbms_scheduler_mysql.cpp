@@ -135,15 +135,9 @@ int ObDBMSSchedulerMysql::set_attribute(
       if (attr_name.empty()) {
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "attr_name empty");
-        LOG_WARN("attr_name empty", K(ret), K(params.at(0).get_string()),
-                                                      K(params.at(1).get_string()),
-                                                      K(params.at(2).get_string()));
       } else if (attr_val.empty()) {
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "attr_val empty");
-        LOG_WARN("attr_val empty", K(ret), K(params.at(0).get_string()),
-                                                      K(params.at(1).get_string()),
-                                                      K(params.at(2).get_string()));
       } else if (0 == attr_name.case_compare("max_run_duration")) { // set max run duration
         const int MAX_RUN_DURATION_LEN = 16;
         char max_run_duration_buf[MAX_RUN_DURATION_LEN];
@@ -153,9 +147,6 @@ int ObDBMSSchedulerMysql::set_attribute(
       } else {
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "the job set attribute");
-        LOG_WARN("not support the job set attribute", K(ret), K(params.at(0).get_string()),
-                                                      K(params.at(1).get_string()),
-                                                      K(params.at(2).get_string()));
       }
     }
   }
@@ -184,7 +175,6 @@ int ObDBMSSchedulerMysql::_generate_job_id(int64_t &max_job_id)
       ::oceanbase::share::server_service<::oceanbase::query::ObISchedulerService>();
   if (OB_ISNULL(scheduler)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("scheduler service is not initialized", K(ret));
   } else if (OB_FAIL(scheduler->allocate_job_id(max_job_id))) {
   }
   return ret;

@@ -69,14 +69,11 @@ int ObLockMemtableMgr::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("lock memtable mgr init twice.", K(ret));
   } else if (OB_ISNULL(freezer) ||
              OB_ISNULL(t3m)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(freezer), KP(t3m));
   } else if (!lock_def_.is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("lock memtable mgr lock not init", K(ret), K(tablet_id));
   } else {
     freezer_ = freezer;
     t3m_ = t3m;
@@ -105,7 +102,6 @@ int ObLockMemtableMgr::create_memtable(const CreateMemtableArg &arg)
 
   if (get_memtable_count_() > 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lock memtable already exists, should not create again", K(ret));
   } else if (OB_FAIL(t3m_->acquire_lock_memtable(handle))) {
   } else if (OB_ISNULL(table = handle.get_table())) {
     ret = OB_ERR_UNEXPECTED;
@@ -117,7 +113,6 @@ int ObLockMemtableMgr::create_memtable(const CreateMemtableArg &arg)
   } else if (OB_FAIL(add_memtable_(handle))) {
   } else if (OB_ISNULL(ls_tx_svr = freezer_->get_ls_tx_svr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls_tx_svr is null", K(ret));
   } else {
     LOG_INFO("create lock memtable successfully", K(memtable), KPC(this));
   }

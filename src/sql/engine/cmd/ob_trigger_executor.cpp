@@ -75,13 +75,11 @@ int ObCreateTriggerExecutor::execute(ObExecContext &ctx, ObCreateTriggerStmt &st
         [&]{ return ctx.root_command_service().create_trigger_with_res(arg, res); }),
         GCTX.self_addr());
     if (OB_ERR_PARALLEL_DDL_CONFLICT == ret) {
-      LOG_WARN("trigger or base table maybe changed by other session, ignore the error", K(ret), K(res));
       ret = OB_SUCCESS;
     }
   }
   if(arg.with_if_not_exist_ && ret == OB_ERR_TRIGGER_ALREADY_EXIST) {
     const ObString &trigger_name = arg.trigger_info_.get_trigger_name();
-    LOG_WARN("trigger with if not exist grammar, ignore the error", K(ret), K(arg.with_if_not_exist_), K(trigger_name));
     LOG_USER_WARN(OB_ERR_TRIGGER_ALREADY_EXIST, trigger_name.length(), trigger_name.ptr());
     ret = OB_SUCCESS;
   }
@@ -141,7 +139,6 @@ int ObCreateTriggerExecutor::analyze_dependencies(ObSchemaGetterGuard &schema_gu
                                             trigger_name, trigger_info))) {
   } else if (NULL == trigger_info) {
     ret = OB_ERR_TRIGGER_NOT_EXIST;
-    LOG_WARN("trigger not exist", K(db_name), K(trigger_name), K(ret));
   } else {
     if (OB_FAIL(ObTriggerResolver::analyze_trigger(schema_guard, session_info, plan_cache,
                                                    pl_sql_runtime, pl_engine, sql_proxy,

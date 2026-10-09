@@ -80,7 +80,6 @@ int ObSortOp::inner_open()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(child_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("child is null", K(ret));
   }
   return OB_SUCCESS;
 }
@@ -147,7 +146,6 @@ int ObSortOp::get_int_value(const ObExpr *in_val, int64_t &out_val)
     if (OB_FAIL(in_val->eval(eval_ctx_, datum))) {
     } else if (OB_ISNULL(datum)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected status: datum is null", K(ret));
     } else if (datum->is_null()) {
       out_val = 0;
     } else {
@@ -165,8 +163,6 @@ int ObSortOp::get_topn_count(int64_t &topn_cnt)
     // do nothing
   } else if (((NULL != MY_SPEC.topn_expr_) && (NULL != MY_SPEC.topk_limit_expr_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid topn_expr or topk_limit_expr", K(MY_SPEC.topn_expr_),
-      K(MY_SPEC.topk_limit_expr_), K(ret));
   } else if (NULL != MY_SPEC.topn_expr_) {
     if (OB_FAIL(get_int_value(MY_SPEC.topn_expr_, topn_cnt))) {
     } else {
@@ -177,10 +173,8 @@ int ObSortOp::get_topn_count(int64_t &topn_cnt)
     int64_t offset = 0;
     if ((OB_FAIL(get_int_value(MY_SPEC.topk_limit_expr_, limit))
         || OB_FAIL(get_int_value(MY_SPEC.topk_offset_expr_, offset)))) {
-      LOG_WARN("Get limit/offset value failed", K(ret));
     } else if (OB_UNLIKELY(limit < 0 || offset < 0)) {
       ret = OB_ERR_ILLEGAL_VALUE;
-      LOG_WARN("Invalid limit/offset value", K(limit), K(offset), K(ret));
     } else {
       // TODO & FIXME by longzhong.wlz : Wait for groupby implementation to handle this logic
       topn_cnt = std::max(MY_SPEC.minimum_row_count_, limit + offset);
@@ -188,7 +182,6 @@ int ObSortOp::get_topn_count(int64_t &topn_cnt)
       ObPhyOperatorType op_type = child_->get_spec().type_;
       if (PHY_HASH_GROUP_BY != op_type) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Invalid child_op_", K(op_type), K(ret));
       } else {
         row_count = static_cast<ObHashGroupByOp *>(child_)->get_hash_groupby_row_count();
       }
@@ -218,7 +211,6 @@ int ObSortOp::process_sort()
       if (OB_FAIL(try_check_status())) {
       } else if (OB_FAIL(child_->get_next_row())) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("failed to get next row", K(ret));
         }
       } else {
         sort_row_count_++;
@@ -232,7 +224,6 @@ int ObSortOp::process_sort()
     if (OB_SUCC(ret) && need_dump && MY_SPEC.prescan_enabled_
         && OB_FAIL(scan_all_then_sort())) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("fail to scan all rows before inmem sort", K(ret));
       }
     }
     if (OB_ITER_END == ret) {
@@ -242,8 +233,6 @@ int ObSortOp::process_sort()
     sort_impl_.collect_memory_dump_info(op_monitor_info_);
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid read function pointer",
-        K(ret), K(*reinterpret_cast<int64_t *>(&read_func_)));
   }
   return ret;
 }
@@ -276,7 +265,6 @@ int ObSortOp::process_sort_batch()
     if (OB_SUCC(ret) && need_dump && MY_SPEC.prescan_enabled_
         && OB_FAIL(scan_all_then_sort_batch())) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("fail to scan all rows before inmem sort", K(ret));
       }
     }
     op_monitor_info_.otherstat_7_id_ = ObSqlMonitorStatIds::ROW_COUNT;
@@ -285,8 +273,6 @@ int ObSortOp::process_sort_batch()
     sort_impl_.collect_memory_dump_info(op_monitor_info_);
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid read function pointer",
-        K(ret), K(*reinterpret_cast<int64_t *>(&read_func_)));
   }
   return ret;
 }
@@ -309,7 +295,6 @@ int ObSortOp::scan_all_then_sort()
       if (OB_FAIL(try_check_status())) {
       } else if (OB_FAIL(child_->get_next_row())) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("failed to get next row", K(ret));
         }
       } else {
         sort_row_count_++;
@@ -330,11 +315,9 @@ int ObSortOp::scan_all_then_sort()
         while (OB_SUCC(ret) && OB_SUCC(cache_store.has_next(has_next)) && has_next) {
           if (OB_FAIL(cache_store.get_next_row(store_row))) {
             if (OB_ITER_END != ret) {
-              LOG_WARN("failed to get next row", K(ret));
             }
           } else if (OB_ISNULL(store_row)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("failed to get next row", K(ret));
           } else {
             OZ(sort_impl_.add_stored_row(*store_row));
           }
@@ -482,7 +465,6 @@ int ObSortOp::inner_get_next_row()
     if (OB_SUCC(ret)) {
       if (OB_FAIL(process_sort())) { // process sort
         if (OB_ITER_END != ret) {
-          LOG_WARN("process sort failed", K(ret));
         }
       }
     }
@@ -496,7 +478,6 @@ int ObSortOp::inner_get_next_row()
       } else {
         if (ctx_.get_my_session()->get_ddl_info().is_ddl() && ret_row_count_ != sort_row_count_) {
           ret = OB_CHECKSUM_ERROR;
-          LOG_WARN("output row count not match", K(ret), K(sort_row_count_), K(ret_row_count_));
         }
         iter_end_ = true;
         reset();
@@ -547,7 +528,6 @@ int ObSortOp::inner_get_next_batch(const int64_t max_row_cnt)
       if (brs_.end_) {
         if (ctx_.get_my_session()->get_ddl_info().is_ddl() && ret_row_count_ != sort_row_count_) {
           ret = OB_CHECKSUM_ERROR;
-          LOG_WARN("output row count not match", K(ret), K(sort_row_count_), K(ret_row_count_));
         }
       }
     }

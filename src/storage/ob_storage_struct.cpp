@@ -90,10 +90,8 @@ int ObErrsimBackfillPoint::set_point_type(const ObErrsimBackfillPointType &point
   int ret = OB_SUCCESS;
   if (!point_type.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("point type is invalid", K(ret), K(point_type));
   } else if (is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("The point type is in effect, reset is not allowed", K(ret), K(point_type_), K(point_type));
   } else {
     point_type_ = point_type;
   }
@@ -105,10 +103,8 @@ int ObErrsimBackfillPoint::set_point_start_time(int64_t start_time)
   int ret = OB_SUCCESS;
   if (start_time < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("point type is invalid", K(ret), K(start_time));
   } else if (is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("The point type is in effect, reset is not allowed", K(ret), K(point_start_time_), K(start_time));
   } else {
     point_start_time_ = start_time;
   }
@@ -255,7 +251,6 @@ int ObGetMergeTablesResult::copy_basic_info(const ObGetMergeTablesResult &src)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!src.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(src));
   } else {
     version_range_ = src.version_range_;
     merge_version_ = src.merge_version_;
@@ -275,7 +270,6 @@ int ObGetMergeTablesResult::assign(const ObGetMergeTablesResult &src)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!src.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(src));
   } else if (OB_FAIL(handle_.assign(src.handle_))) {
   } else if (OB_FAIL(copy_basic_info(src))) {
   }
@@ -350,7 +344,6 @@ int ObCompactionTableStoreParam::assign(const ObCompactionTableStoreParam &other
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!other.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(other));
   } else {
     merge_type_ = other.merge_type_;
     clog_checkpoint_scn_ = other.clog_checkpoint_scn_;
@@ -429,7 +422,6 @@ int ObUpdateTableStoreParam::init_with_compaction_info(const ObCompactionTableSt
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!input_param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(input_param));
   } else if (OB_FAIL(compaction_info_.assign(input_param))) {
   }
   return ret;

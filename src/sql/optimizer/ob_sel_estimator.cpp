@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_OPT
 #include "sql/optimizer/ob_access_path_estimation.h"
 #include "sql/optimizer/ob_sel_estimator.h"
+#include "sql/resolver/expr/ob_shared_expr_resolver.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
@@ -229,14 +230,12 @@ int ObSelEstimator::append_estimators(ObIArray<ObSelEstimator *> &sel_estimators
   bool find_same_class = false;
   if (OB_ISNULL(new_estimator)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("estimator is null", K(new_estimator));
   } else if (new_estimator->is_independent()) {
     // do nothing
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && !find_same_class && i < sel_estimators.count(); i ++) {
       if (OB_ISNULL(sel_estimators.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("estimator is null", K(ret), K(sel_estimators));
       } else if (OB_FAIL(sel_estimators.at(i)->merge(*new_estimator, find_same_class))) {
       }
     }
@@ -294,7 +293,6 @@ int ObDefaultSelEstimator::get_sel(const OptTableMetas &table_metas,
   int64_t idx = 0;
   if (OB_ISNULL(expr_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null expr", KPC(this));
   } else if (qual.is_spatial_expr()) {
     selectivity = DEFAULT_SPATIAL_SEL;
   } else if (ObOptimizerUtil::find_item(all_predicate_sel, ObExprSelPair(&qual, 0), &idx)) {
@@ -314,7 +312,6 @@ int ObConstSelEstimator::get_const_sel(const OptSelectivityCtx &ctx,
   const ObDMLStmt *stmt = ctx.get_stmt();
   if (OB_ISNULL(params) || OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(params), K(stmt));
   } else if (ObOptEstUtils::is_calculable_expr(qual, params->count())) {
     ObObj const_value;
     bool got_result = false;
@@ -376,7 +373,6 @@ int ObInSelEstimator::get_in_sel(const OptTableMetas &table_metas,
       OB_ISNULL(right_expr = qual.get_param_expr(1)) ||
       T_OP_ROW != right_expr->get_expr_type()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpect expr", K(ret), K(qual), K(left_expr), K(right_expr));
   } else if (OB_FAIL(ObOptSelectivity::remove_ignorable_func_for_est_sel(left_expr))) {
   } else if (OB_LIKELY(left_expr->is_column_ref_expr() && !right_expr->has_flag(CNT_COLUMN))) {
     ObOptColumnStatHandle handler;
@@ -397,7 +393,6 @@ int ObInSelEstimator::get_in_sel(const OptTableMetas &table_metas,
       bool get_value = false;
       if (OB_ISNULL(param_expr = right_expr->get_param_expr(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null expr", K(ret));
       } else if (OB_FAIL(ObOptSelectivity::get_compare_value(ctx, col, param_expr, expr_value, get_value))) {
         // cast may failed due to invalid type or value out of range.
         // Then use ndv instead of histogram
@@ -443,7 +438,6 @@ int ObInSelEstimator::get_in_sel(const OptTableMetas &table_metas,
     for (int64_t i = 0; OB_SUCC(ret) && i < right_expr->get_param_count(); ++i) {
       if (OB_ISNULL(param_expr = right_expr->get_param_expr(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null expr", K(ret));
       } else if (OB_FAIL(ObEqualSelEstimator::get_equal_sel(table_metas, ctx, *left_expr, *param_expr,
                                                             false, tmp_selectivity))) {
       } else {
@@ -463,7 +457,6 @@ int ObInSelEstimator::get_in_sel(const OptTableMetas &table_metas,
       } else if (1 == cur_vars.count()) { // only one column, consider null_sel
         if (OB_ISNULL(cur_vars.at(0))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("expr is null", K(ret));
         } else if (OB_FAIL(ObOptSelectivity::get_column_basic_sel(table_metas, ctx, *cur_vars.at(0),
                                                                   &distinct_sel, &null_sel))) {
         } else if (use_hist) {
@@ -493,7 +486,6 @@ int ObIsSelEstimator::get_sel(const OptTableMetas &table_metas,
   if (can_calc_sel_) {
     if (OB_ISNULL(expr_) || OB_ISNULL(left_expr_) || OB_UNLIKELY(!left_expr_->is_column_ref_expr())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpect error", K(ret), KPC(expr_), KPC(left_expr_));
     } else if (OB_LIKELY(right_const_obj_.is_null())) {
       if (OB_FAIL(ObOptSelectivity::get_column_basic_sel(table_metas, ctx, *left_expr_, NULL, &selectivity))) {
       }
@@ -515,7 +507,6 @@ int ObIsSelEstimator::get_sel(const OptTableMetas &table_metas,
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected error", K(ret), KPC(left_expr_), K(right_const_obj_));
     }
   }
 
@@ -535,7 +526,6 @@ int ObCmpSelEstimator::get_sel(const OptTableMetas &table_metas,
   if (can_calc_sel_) {
     if (OB_ISNULL(expr_) || OB_ISNULL(col_expr_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null expr", K(ret), KPC(col_expr_), KPC(expr_));
     } else if (OB_FAIL(ObOptSelectivity::get_column_range_sel(table_metas, ctx, *col_expr_, *expr_, true, selectivity))) {
     } else {/*do nothing*/}
   }
@@ -552,7 +542,6 @@ int ObBtwSelEstimator::get_sel(const OptTableMetas &table_metas,
   if (can_calc_sel_) {
     if (OB_ISNULL(expr_) || OB_ISNULL(col_expr_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null expr", K(ret), KPC(col_expr_), KPC(expr_));
     } else if (OB_FAIL(ObOptSelectivity::get_column_range_sel(table_metas, ctx, *col_expr_, *expr_, true, selectivity))) {
     }
   }
@@ -568,13 +557,11 @@ int ObEqualSelEstimator::get_sel(const OptTableMetas &table_metas,
   const ObRawExpr &qual = *expr_;
   if (OB_ISNULL(expr_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null expr", KPC(this));
   } else {
     const ObRawExpr *left_expr = qual.get_param_expr(0);
     const ObRawExpr *right_expr = qual.get_param_expr(1);
     if (OB_ISNULL(left_expr) || OB_ISNULL(right_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null expr", K(ret), K(qual), K(left_expr), K(right_expr));
     } else if (T_OP_NE == qual.get_expr_type()) {
       if (OB_FAIL(get_ne_sel(table_metas, ctx, *left_expr, *right_expr, selectivity))) {
       }
@@ -617,7 +604,6 @@ int ObEqualSelEstimator::get_ne_sel(const OptTableMetas &table_metas,
     }
     if (OB_UNLIKELY(l_row->get_param_count() != r_row->get_param_count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected expr", KPC(l_row), KPC(r_row), K(ret));
     } else {
       int64_t num = l_row->get_param_count();
       ObSEArray<double, 4> selectivities;
@@ -625,7 +611,6 @@ int ObEqualSelEstimator::get_ne_sel(const OptTableMetas &table_metas,
         if (OB_ISNULL(l_param = l_row->get_param_expr(i)) ||
             OB_ISNULL(r_param = r_row->get_param_expr(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get null expr", K(ret), K(l_row), K(r_row), K(i));
         } else if (OB_FAIL(SMART_CALL(get_ne_sel(table_metas, ctx, *l_param,
                                                  *r_param, tmp_selectivity)))) {
         } else if (OB_FAIL(selectivities.push_back(1 - tmp_selectivity))) {
@@ -700,7 +685,6 @@ int ObEqualSelEstimator::get_equal_sel(const OptTableMetas &table_metas,
   const ObRawExpr *right_expr = qual.get_param_expr(1);
   if (OB_ISNULL(left_expr) || OB_ISNULL(right_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null expr", K(ret), K(qual), K(left_expr), K(right_expr));
   } else if (OB_FAIL(get_equal_sel(table_metas, ctx, *left_expr, *right_expr,
                                    T_OP_NSEQ == qual.get_expr_type(), selectivity))) {
   }
@@ -734,7 +718,6 @@ int ObEqualSelEstimator::get_equal_sel(const OptTableMetas &table_metas,
     }
     if (OB_UNLIKELY(l_row->get_param_count() != r_row->get_param_count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected expr", KPC(l_row), KPC(l_row), K(ret));
     } else {
       int64_t num = l_row->get_param_count();
       ObSEArray<double, 4> selectivities;
@@ -742,7 +725,6 @@ int ObEqualSelEstimator::get_equal_sel(const OptTableMetas &table_metas,
         if (OB_ISNULL(l_expr = l_row->get_param_expr(i)) ||
             OB_ISNULL(r_expr = r_row->get_param_expr(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get null expr", K(ret), K(l_expr), K(r_expr), K(i));
         } else if (OB_FAIL(SMART_CALL(get_equal_sel(table_metas, ctx, *l_expr,
                                                     *r_expr, null_safe, tmp_selectivity)))) {
         } else if (OB_FAIL(selectivities.push_back(tmp_selectivity))) {
@@ -795,7 +777,6 @@ int ObEqualSelEstimator::get_equal_sel(const OptTableMetas &table_metas,
     const ParamStore *params = ctx.get_params();
     if (OB_ISNULL(params)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Params is NULL", K(ret));
     } else if (ObOptEstUtils::is_calculable_expr(left_expr, params->count()) &&
                ObOptEstUtils::is_calculable_expr(right_expr, params->count())) {
       // 1 in (c1, 2, 3) will reach this branch
@@ -891,7 +872,6 @@ int ObEqualSelEstimator::get_cntcol_op_cntcol_sel(const OptTableMetas &table_met
   double right_base_ndv = -1.0;
   if (OB_FAIL(ObOptSelectivity::remove_ignorable_func_for_est_sel(left_expr)) ||
       OB_FAIL(ObOptSelectivity::remove_ignorable_func_for_est_sel(right_expr))) {
-    LOG_WARN("failed to remove ignorable function", K(ret));
   } else {
     bool calc_with_hist = false;
     if (OB_FAIL(try_calc_equal_sel_with_hist(table_metas,
@@ -1044,7 +1024,6 @@ int ObAggSelEstimator::get_sel(const OptTableMetas &table_metas,
   const ObRawExpr &qual = *expr_;
   if (OB_ISNULL(expr_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null expr", KPC(this));
   } else if (OB_FAIL(get_agg_sel(table_metas, ctx, qual, selectivity))) {
   }
   return ret;
@@ -1078,7 +1057,6 @@ int ObAggSelEstimator::get_agg_sel(const OptTableMetas &table_metas,
       /* use default selectivity */
     } else if (OB_ISNULL(aggr_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (T_FUN_MAX == aggr_expr->get_expr_type() ||
                T_FUN_MIN == aggr_expr->get_expr_type() ||
                T_FUN_COUNT == aggr_expr->get_expr_type()) {
@@ -1105,7 +1083,6 @@ int ObAggSelEstimator::get_agg_sel(const OptTableMetas &table_metas,
         int64_t N;
         if(OB_ISNULL(const_expr1)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null");
         } else if (FALSE_IT(N = const_expr1->get_param_count())) {
         } else if (N < 6) {
           selectivity = DEFAULT_AGG_EQ * N;
@@ -1117,7 +1094,6 @@ int ObAggSelEstimator::get_agg_sel(const OptTableMetas &table_metas,
         // agg(col) not in (const1, const2, ...) <=> agg(col) != const1 and agg(col) != const2 and ...
         if(OB_ISNULL(const_expr1)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null");
         } else {
           selectivity = std::pow(DEFAULT_AGG_RANGE, const_expr1->get_param_count());
         }
@@ -1158,8 +1134,6 @@ int ObAggSelEstimator::get_agg_sel_with_minmax(const OptTableMetas &table_metas,
   if (OB_ISNULL(aggr_expr.get_param_expr(0)) || OB_ISNULL(params) ||
       OB_ISNULL(stmt) || OB_ISNULL(const_expr1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(aggr_expr.get_param_expr(0)),
-                                    K(params), K(stmt), K(const_expr1));
   } else if (!aggr_expr.get_param_expr(0)->is_column_ref_expr()) {
     // Only process sum(column) form, sum(column + 1)/sum(column1 + column2) all use default selection rate
   } else if (OB_FAIL(ObOptSelectivity::get_column_basic_sel(table_metas, ctx, *aggr_expr.get_param_expr(0),
@@ -1171,7 +1145,6 @@ int ObAggSelEstimator::get_agg_sel_with_minmax(const OptTableMetas &table_metas,
   } else if (T_OP_IN == type || T_OP_NOT_IN == type) {
     if (OB_UNLIKELY(T_OP_ROW != const_expr1->get_expr_type())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("expr should be row", K(ret), K(*const_expr1));
     } else {
       // If row exceeds 5 columns, then calculate the selection rate on the 5th column, and then scale proportionally
       int64_t N = const_expr1->get_param_count() > 5 ? 5 :const_expr1->get_param_count();
@@ -1182,7 +1155,6 @@ int ObAggSelEstimator::get_agg_sel_with_minmax(const OptTableMetas &table_metas,
         ObObj tmp_result;
         if (OB_ISNULL(sub_expr = const_expr1->get_param_expr(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret));
         } else if (!ObOptEstUtils::is_calculable_expr(*sub_expr, params->count())) {
         } else if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(exec_ctx,
                                                                      sub_expr,
@@ -1226,7 +1198,6 @@ int ObAggSelEstimator::get_agg_sel_with_minmax(const OptTableMetas &table_metas,
   } else if (T_OP_BTW == type || T_OP_NOT_BTW == type) {
     if (OB_ISNULL(const_expr2)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (!ObOptEstUtils::is_calculable_expr(*const_expr2, params->count())) {
     } else if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(exec_ctx,
                                                                  const_expr2,
@@ -1266,7 +1237,6 @@ double ObAggSelEstimator::get_agg_eq_sel(const ObObj &maxobj,
     if (OB_FAIL(ObOptEstObjToScalar::convert_obj_to_double(&constobj, const_val)) ||
         OB_FAIL(ObOptEstObjToScalar::convert_obj_to_double(&minobj, min_val)) ||
         OB_FAIL(ObOptEstObjToScalar::convert_obj_to_double(&maxobj, max_val))) {
-      LOG_WARN("failed to convert obj to double", K(ret));
     } else {
       if (is_sum) {
         min_val *= rows_per_group;
@@ -1418,7 +1388,6 @@ int ObAggSelEstimator::is_valid_agg_qual(const ObRawExpr &qual,
         OB_ISNULL(expr1 = qual.get_param_expr(1)) ||
         OB_ISNULL(expr2 = qual.get_param_expr(2))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (expr0->has_flag(IS_AGG) &&
                expr1->is_const_expr() &&
                expr2->is_const_expr()) {
@@ -1430,7 +1399,6 @@ int ObAggSelEstimator::is_valid_agg_qual(const ObRawExpr &qual,
   } else {
     if (OB_ISNULL(expr0 = qual.get_param_expr(0)) || OB_ISNULL(expr1 = qual.get_param_expr(1))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (T_OP_IN == qual.get_expr_type() || T_OP_NOT_IN == qual.get_expr_type()) {
       if (!qual.has_flag(CNT_SUB_QUERY) &&
           expr0->has_flag(IS_AGG) &&
@@ -1471,13 +1439,11 @@ int ObLikeSelEstimator::create_estimator(ObSelEstimatorFactory &factory,
     const ParamStore *params = ctx.get_params();
     if (3 != expr.get_param_count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("like expr should have 3 param", K(ret), K(expr));
     } else if (OB_ISNULL(params) ||
                OB_ISNULL(like_estimator->variable_ = expr.get_param_expr(0)) ||
                OB_ISNULL(like_estimator->pattern_ = expr.get_param_expr(1)) ||
                OB_ISNULL(like_estimator->escape_ = expr.get_param_expr(2))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null params", K(ret), K(params), K(expr));
     } else if (OB_FAIL(ObOptimizerUtil::get_expr_without_lossless_cast(like_estimator->variable_,
                                                                        like_estimator->variable_))) {
     } else if (like_estimator->variable_->is_column_ref_expr() &&
@@ -1514,13 +1480,11 @@ int ObLikeSelEstimator::can_calc_like_sel(const OptSelectivityCtx &ctx, const Ob
     const ObRawExpr *escape = NULL;
     if (3 != expr.get_param_count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("like expr should have 3 param", K(ret), K(expr));
     } else if (OB_ISNULL(params) ||
                OB_ISNULL(variable = expr.get_param_expr(0)) ||
                OB_ISNULL(pattern = expr.get_param_expr(1)) ||
                OB_ISNULL(escape = expr.get_param_expr(2))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null params", K(ret), K(params), K(expr));
     } else if (OB_FAIL(ObOptimizerUtil::get_expr_without_lossless_cast(variable,
                                                                        variable))) {
     } else if (variable->is_column_ref_expr() &&
@@ -1555,7 +1519,6 @@ int ObLikeSelEstimator::get_sel(const OptTableMetas &table_metas,
   bool can_calc_sel = false;
   if (OB_ISNULL(expr_) || OB_ISNULL(variable_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null expr", KPC(this));
   } else if (match_all_str_ && can_calc_sel_by_prefix_) {
     double nns = 0.0;
     if (OB_FAIL(ObOptSelectivity::get_column_ndv_and_nns(table_metas, ctx, *variable_, NULL, &nns))) {
@@ -1588,7 +1551,6 @@ int ObLikeSelEstimator::get_wildcard_length(const OptSelectivityCtx &ctx, double
   wildcard_length = 1.0; // default guess value
   if (OB_ISNULL(pattern_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   } else if (!pattern_->is_static_const_expr()) {
     ObString percent_str = ObCharsetUtils::get_const_str(pattern_->get_collation_type(), '%');
     wildcard_length = percent_str.length();
@@ -1650,7 +1612,6 @@ int ObLikeSelEstimator::calculate_like_sel_by_substr(const OptTableMetas &table_
   selectivity = DEFAULT_LIKE_SEL;
   if (OB_ISNULL(variable_) || OB_ISNULL(pattern_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   } else if (!variable_->get_result_type().is_string_type() ||
              !pattern_->get_result_type().is_string_type() ||
              !variable_->is_column_ref_expr()) {
@@ -1693,6 +1654,7 @@ int ObBoolOpSelEstimator::create_estimator(ObSelEstimatorFactory &factory,
   estimator = NULL;
   ObBoolOpSelEstimator *bool_estimator = NULL;
   ObSEArray<ObRawExpr *, 4> exprs;
+  ObQuestionmarkEqualCtx equal_ctx(false);
   if (T_OP_NOT != expr.get_expr_type() &&
       T_OP_AND != expr.get_expr_type() &&
       T_OP_OR != expr.get_expr_type() &&
@@ -1706,11 +1668,29 @@ int ObBoolOpSelEstimator::create_estimator(ObSelEstimatorFactory &factory,
     for (int64_t i = 0; OB_SUCC(ret) && i < expr.get_param_count(); ++i) {
       const ObRawExpr *child_expr = expr.get_param_expr(i);
       ObSelEstimator *child_estimator = NULL;
+      bool is_duplicate = false;
       if (OB_ISNULL(child_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null expr", K(ret));
-      } else if (ObOptimizerUtil::find_equal_expr(exprs, child_expr)) {
-        // do nothing
+      }
+      for (int64_t j = 0; OB_SUCC(ret) && !is_duplicate && j < exprs.count(); ++j) {
+        equal_ctx.equal_pairs_.reuse();
+        // Auto-parameterization gives equal literal values different questionmark indexes.
+        // Compare their current values so idempotent predicates are estimated only once.
+        is_duplicate = child_expr == exprs.at(j) || child_expr->same_as(*exprs.at(j), &equal_ctx);
+        if (OB_UNLIKELY(OB_SUCCESS != equal_ctx.err_code_)) {
+          ret = equal_ctx.err_code_;
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (is_duplicate) {
+        if (!equal_ctx.equal_pairs_.empty()) {
+          ObQueryCtx *query_ctx = ctx.get_opt_ctx().get_query_ctx();
+          if (OB_ISNULL(query_ctx)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (OB_FAIL(append(query_ctx->all_equal_param_constraints_,
+                                    equal_ctx.equal_pairs_))) {
+          }
+        }
       } else if (OB_FAIL(SMART_CALL(factory.create_estimator(ctx, child_expr, child_estimator)))) {
       } else if (OB_FAIL(exprs.push_back(const_cast<ObRawExpr *>(child_expr)))) {
       } else {
@@ -1776,7 +1756,6 @@ int ObBoolOpSelEstimator::get_sel(const OptTableMetas &table_metas,
   const ObRawExpr &qual = *expr_;
   if (OB_ISNULL(expr_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null param", KPC(this), K(ctx));
   } else if (T_OP_NOT == qual.get_expr_type() ||
              T_FUN_SYS_LNNVL == qual.get_expr_type() ||
              T_OP_BOOL == qual.get_expr_type()) {
@@ -1802,7 +1781,6 @@ int ObBoolOpSelEstimator::get_sel(const OptTableMetas &table_metas,
       double null_sel = 1.0;
       if (OB_ISNULL(cur_vars.at(0))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null expr", K(ret));
       } else if (OB_FAIL(ObOptSelectivity::get_column_basic_sel(table_metas, ctx, *cur_vars.at(0), NULL, &null_sel))) {
       } else {
         // not op.
@@ -1958,10 +1936,8 @@ int ObSimpleJoinSelEstimator::is_simple_join_condition(const ObRawExpr &qual,
     const ObRawExpr *expr1 = qual.get_param_expr(1);
     if (OB_ISNULL(expr0) || OB_ISNULL(expr1)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null exprs", K(ret), K(expr0), K(expr1));
     } else if (OB_FAIL(ObOptSelectivity::remove_ignorable_func_for_est_sel(expr0)) ||
                OB_FAIL(ObOptSelectivity::remove_ignorable_func_for_est_sel(expr1))) {
-      LOG_WARN("failed to remove ignorable function", K(ret));
     } else if (!expr0->is_column_ref_expr() || !expr1->is_column_ref_expr()) {
       // do nothing
     } else if ((left_rel_ids->is_superset(expr0->get_relation_ids()) &&
@@ -1984,7 +1960,6 @@ int ObSimpleJoinSelEstimator::merge(const ObSelEstimator &other, bool &is_succes
         OB_ISNULL(est_other.left_rel_ids_) || OB_ISNULL(est_other.right_rel_ids_) ||
         OB_ISNULL(join_rel_ids_) || OB_ISNULL(est_other.join_rel_ids_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected NULL", KPC(this), K(est_other));
     } else if (*left_rel_ids_ == *est_other.left_rel_ids_ &&
                *right_rel_ids_ == *est_other.right_rel_ids_ &&
                *join_rel_ids_ == *est_other.join_rel_ids_
@@ -2011,7 +1986,6 @@ int ObSimpleJoinSelEstimator::get_sel(const OptTableMetas &table_metas,
     // only one join condition, calculate selectivity directly
     if (OB_ISNULL(join_conditions_.at(0))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(ObEqualSelEstimator::get_equal_sel(table_metas, ctx, *join_conditions_.at(0), selectivity))) {
     } else {
       LOG_PRINT_EXPR(TRACE, "get single equal expr selectivity", *join_conditions_.at(0), K(selectivity));
@@ -2038,7 +2012,6 @@ int ObSimpleJoinSelEstimator::get_multi_equal_sel(const OptTableMetas &table_met
   bool is_valid;
   if (OB_ISNULL(ctx.get_left_rel_ids()) || OB_ISNULL(ctx.get_right_rel_ids())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed get unexpected null", K(ret), K(ctx));
   } else if (OB_FAIL(is_valid_multi_join(quals, is_valid))) {
   } else if (OB_UNLIKELY(!is_valid)) {
     ret = OB_ERR_UNEXPECTED;
@@ -2060,10 +2033,8 @@ int ObSimpleJoinSelEstimator::is_valid_multi_join(ObIArray<ObRawExpr *> &quals,
   is_valid = false;
   if (OB_UNLIKELY(quals.count() < 2)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("quals should have more than 1 exprs", K(ret));
   } else if (OB_ISNULL(quals.at(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else {
     const ObRelIds &rel_ids = quals.at(0)->get_relation_ids();
     is_valid = rel_ids.num_members() == 2;
@@ -2071,7 +2042,6 @@ int ObSimpleJoinSelEstimator::is_valid_multi_join(ObIArray<ObRawExpr *> &quals,
       ObRawExpr *cur_expr = quals.at(i);
       if (OB_ISNULL(cur_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (!rel_ids.equal(cur_expr->get_relation_ids())) {
         is_valid = false;
       }
@@ -2096,13 +2066,10 @@ int ObSimpleJoinSelEstimator::extract_join_exprs(ObIArray<ObRawExpr *> &quals,
         OB_ISNULL(left_expr = cur_expr->get_param_expr(0)) ||
         OB_ISNULL(right_expr = cur_expr->get_param_expr(1))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret), K(cur_expr), K(left_expr), K(right_expr));
     } else if (OB_FAIL(ObOptSelectivity::remove_ignorable_func_for_est_sel(left_expr)) ||
                OB_FAIL(ObOptSelectivity::remove_ignorable_func_for_est_sel(right_expr))) {
-      LOG_WARN("failed to remove ignorable function", K(ret));
     } else if (OB_UNLIKELY(!left_expr->is_column_ref_expr() || !right_expr->is_column_ref_expr())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("all expr should be column ref", K(ret), K(*cur_expr));
     } else if (left_rel_ids.is_superset(left_expr->get_relation_ids()) &&
                right_rel_ids.is_superset(right_expr->get_relation_ids())) {
       // do nothing
@@ -2111,7 +2078,6 @@ int ObSimpleJoinSelEstimator::extract_join_exprs(ObIArray<ObRawExpr *> &quals,
       std::swap(left_expr, right_expr);
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected expr", K(ret), K(left_expr), K(right_expr));
     }
 
     if (OB_SUCC(ret)) {
@@ -2155,7 +2121,6 @@ int ObSimpleJoinSelEstimator::get_cntcols_eq_cntcols_sel(const OptTableMetas &ta
 
   if (OB_ISNULL(ctx.get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(ObOptSelectivity::is_columns_contain_pkey(table_metas, left_exprs,
                                                                left_contain_pk, is_union_pk))) {
   } else if (OB_FALSE_IT(refine_right_ndv = left_contain_pk && is_union_pk)) {
@@ -2166,7 +2131,6 @@ int ObSimpleJoinSelEstimator::get_cntcols_eq_cntcols_sel(const OptTableMetas &ta
     for (int64_t i = 0; OB_SUCC(ret) && i < left_exprs.count(); ++i) {
       if (OB_ISNULL(left_exprs.at(i)) || OB_ISNULL(right_exprs.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(ObOptSelectivity::get_column_ndv_and_nns(table_metas, ctx, *left_exprs.at(i),
                                                                   &left_ndv, &left_nns))) {
       } else if (OB_FAIL(ObOptSelectivity::get_column_ndv_and_nns(table_metas, ctx, *right_exprs.at(i),
@@ -2184,12 +2148,10 @@ int ObSimpleJoinSelEstimator::get_cntcols_eq_cntcols_sel(const OptTableMetas &ta
                   OB_FAIL(ObOptSelectivity::get_column_basic_info(ctx.get_plan()->get_basic_table_metas(),
                                                                   ctx, *left_exprs.at(i),
                                                                   NULL, NULL, NULL, &left_origin_rows))) {
-          LOG_WARN("failed to get column basic info", K(ret));
         } else if (refine_left_ndv &&
                   OB_FAIL(ObOptSelectivity::get_column_basic_info(ctx.get_plan()->get_basic_table_metas(),
                                                                   ctx, *right_exprs.at(i),
                                                                   NULL, NULL, NULL, &right_origin_rows))) {
-          LOG_WARN("failed to get column basic info", K(ret));
         }
       }
     }
@@ -2338,7 +2300,6 @@ int ObInequalJoinSelEstimator::create_estimator(ObSelEstimatorFactory &factory,
     double offset = 0.0;
     if (2 != expr.get_param_count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("expr should have 2 param", K(ret), K(expr));
     } else if (OB_FAIL(extract_column_offset(ctx, expr.get_param_expr(0), false, is_valid, term, offset))) {
     } else if (!is_valid) {
       // do nothing
@@ -2359,7 +2320,6 @@ int ObInequalJoinSelEstimator::create_estimator(ObSelEstimatorFactory &factory,
     bool need_reverse = false;
     if (3 != expr.get_param_count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("between expr should have 3 param", K(ret), K(expr));
     } else if (OB_FAIL(extract_column_offset(ctx, expr.get_param_expr(0), false, is_valid, term1, offset1))) {
     } else if (!is_valid) {
       // do nothing
@@ -2598,7 +2558,6 @@ int ObInequalJoinSelEstimator::get_sel(const OptTableMetas &table_metas,
     if (is_semi) {
       if (OB_ISNULL(ctx.get_left_rel_ids()) || OB_ISNULL(ctx.get_right_rel_ids())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ctx.get_left_rel_ids()), K(ctx.get_right_rel_ids()));
       } else if (IS_LEFT_SEMI_ANTI_JOIN(ctx.get_join_type()) &&
                 (term_.col1_->get_relation_ids().overlap(*ctx.get_right_rel_ids()) ||
                  term_.col2_->get_relation_ids().overlap(*ctx.get_left_rel_ids()))) {
@@ -2710,7 +2669,6 @@ int ObSelEstimatorFactory::create_estimator(const OptSelectivityCtx &ctx,
   static const int64_t func_cnt = sizeof(create_estimator_funcs)/sizeof(CreateEstimatorFunc);
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null expr", KPC(expr));
   } else if (OB_FAIL(ObOptimizerUtil::get_expr_without_lossless_cast(expr, expr))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && NULL == new_estimator && i < func_cnt; i ++) {
@@ -2751,7 +2709,6 @@ int ObEqualSelEstimator::create_estimator(ObSelEstimatorFactory &factory,
              OB_ISNULL(expr.get_param_expr(0)) ||
              OB_ISNULL(expr.get_param_expr(1))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null expr", K(ret), K(expr));
   } else if (OB_FAIL(check_can_calc_sel(*expr.get_param_expr(0),
                                         *expr.get_param_expr(1),
                                         static_cast<ObEqualSelEstimator*>(estimator)->can_calc_sel_))) {
@@ -2781,14 +2738,12 @@ int ObEqualSelEstimator::check_can_calc_sel(const ObRawExpr &l_expr,
     }
     if (OB_UNLIKELY(l_row->get_param_count() != r_row->get_param_count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected expr", KPC(l_row), KPC(r_row), K(ret));
     } else {
       int64_t num = l_row->get_param_count();
       for (int64_t i = 0; OB_SUCC(ret) && can_calc_sel && i < num; ++i) {
         if (OB_ISNULL(l_param = l_row->get_param_expr(i)) ||
             OB_ISNULL(r_param = r_row->get_param_expr(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get null expr", K(ret), K(l_row), K(r_row), K(i));
         } else if (OB_FAIL(SMART_CALL(check_can_calc_sel(*l_param, *r_param, can_calc_sel)))) {
         }
       }
@@ -2816,10 +2771,8 @@ int ObEqualSelEstimator::check_can_calc_sel(const ObRawExpr &l_expr,
       //do noting, not same table, dynamic sampling not support join.
     } else if (OB_FAIL(ObOptSelectivity::remove_ignorable_func_for_est_sel(left_expr)) ||
                OB_FAIL(ObOptSelectivity::remove_ignorable_func_for_est_sel(right_expr))) {
-      LOG_WARN("failed to remove ignorable function", K(ret));
     } else if (OB_ISNULL(left_expr) || OB_ISNULL(right_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret), K(left_expr), K(right_expr));
     } else if (left_expr->is_column_ref_expr() && right_expr->is_column_ref_expr()) {
       //do nothing
     } else {// func(col) = func(col) or col = func(col)
@@ -2843,7 +2796,6 @@ int ObIsSelEstimator::create_estimator(ObSelEstimatorFactory &factory,
     //do nothing
   } else if (OB_UNLIKELY(expr.get_param_count() != 2)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(expr));
   } else {
     const ParamStore *params = ctx.get_params();
     const ObDMLStmt *stmt = ctx.get_stmt();
@@ -2852,7 +2804,6 @@ int ObIsSelEstimator::create_estimator(ObSelEstimatorFactory &factory,
     bool got_result = false;
     if (OB_ISNULL(params) || OB_ISNULL(stmt) || OB_ISNULL(left_expr) || OB_ISNULL(right_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpect null", K(ret), K(params), K(stmt), K(left_expr), K(right_expr));
     } else if (OB_UNLIKELY(!ObOptEstUtils::is_calculable_expr(*right_expr, params->count()))) {
       //do nothing
     } else if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx.get_opt_ctx().get_exec_ctx(),
@@ -2887,17 +2838,14 @@ int ObCmpSelEstimator::create_estimator(ObSelEstimatorFactory &factory,
     //do nothing
   } else if (OB_UNLIKELY(expr.get_param_count() != 2)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(expr));
   } else {
     const ObRawExpr *left_expr = expr.get_param_expr(0);
     const ObRawExpr *right_expr = expr.get_param_expr(1);
     ObCmpSelEstimator *cmp_estimator = static_cast<ObCmpSelEstimator*>(estimator);
     if (OB_ISNULL(left_expr) || OB_ISNULL(right_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null expr", K(ret), K(left_expr), K(right_expr));
     } else if (OB_FAIL(ObOptimizerUtil::get_expr_without_lossless_cast(left_expr, left_expr)) ||
                OB_FAIL(ObOptimizerUtil::get_expr_without_lossless_cast(right_expr, right_expr))) {
-      LOG_WARN("failed to get expr without lossless cast", K(ret));
     } else if ((left_expr->is_column_ref_expr() && right_expr->is_const_expr()) ||
                (left_expr->is_const_expr() && right_expr->is_column_ref_expr())) {
       cmp_estimator->can_calc_sel_ = true;
@@ -2922,7 +2870,6 @@ int ObCmpSelEstimator::create_estimator(ObSelEstimatorFactory &factory,
       } else if (OB_ISNULL(left_expr = left_expr->get_param_expr(0)) ||
                 OB_ISNULL(right_expr = right_expr->get_param_expr(0))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(left_expr), K(right_expr));
       } else if ((left_expr->is_column_ref_expr() && right_expr->is_const_expr()) ||
                  (left_expr->is_const_expr() && right_expr->is_column_ref_expr())) {
         cmp_estimator->can_calc_sel_ = true;
@@ -2954,13 +2901,11 @@ int ObBtwSelEstimator::create_estimator(ObSelEstimatorFactory &factory,
     const ParamStore *params = ctx.get_params();
     if (3 != expr.get_param_count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("between expr should have 3 param", K(ret), K(expr));
     } else if (OB_ISNULL(params) ||
               OB_ISNULL(cmp_expr = expr.get_param_expr(0)) ||
               OB_ISNULL(l_expr = expr.get_param_expr(1)) ||
               OB_ISNULL(r_expr = expr.get_param_expr(2))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null params", K(ret), K(params), K(cmp_expr), K(l_expr), K(r_expr));
     } else if (OB_FAIL(ObOptimizerUtil::get_expr_without_lossless_cast(cmp_expr, cmp_expr))) {
     } else if (cmp_expr->is_column_ref_expr() &&
                ObOptEstUtils::is_calculable_expr(*l_expr, params->count()) &&
@@ -3148,7 +3093,6 @@ int ObUniformRangeSelEstimator::get_sel(const OptTableMetas &table_metas,
                                               start_scalar.get_double(),
                                               end_scalar.get_double(),
                                               selectivity))) {
-    LOG_WARN("failed to refine out of bounds sel", K(ret));
   } else {
     if (is_not_op_) {
       selectivity = 1 - selectivity;
@@ -3178,7 +3122,6 @@ int ObUniformRangeSelEstimator::refine_out_of_bounds_sel(const OptTableMetas &ta
   bool need_calc = true;
   if (OB_ISNULL(expr_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", KPC(this));
   } else if (expr_->get_relation_ids().num_members() != 1 ||
              min_val.is_min_value() || max_val.is_min_value() ||
              min_val.is_max_value() || max_val.is_max_value() ||

@@ -62,10 +62,8 @@ int ObParallelMergeInfo::serialize(char *buf, const int64_t buf_len, int64_t &po
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == buf || buf_len <= 0 || pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(buf), K(buf_len), K(pos));
   } else if (!is_valid() || 0 == list_size_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parallel merge info is invalid", K(ret), KPC(this));
   } else {
     LST_DO_CODE(OB_UNIS_ENCODE, parallel_info_);
     for (int i = 0; OB_SUCC(ret) && i < list_size_; ++i) {
@@ -94,16 +92,13 @@ int ObParallelMergeInfo::deserialize(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == buf || data_len <= 0 || pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(buf), K(data_len), K(pos));
   } else {
     LST_DO_CODE(OB_UNIS_DECODE, parallel_info_);
     if (OB_FAIL(ret)) {
     } else if (PARALLEL_INFO_VERSION != format_version_ || 0 != reserved_) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("parallel merge info format mismatch", K(ret), K_(format_version), K_(reserved));
     } else if (0 == list_size_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("list size is invalid", K(ret), K(list_size_));
     } else {
       ALLOC_ROWKEY_ARRAY(parallel_datum_rowkey_list_, ObDatumRowkey);
       if (OB_SUCC(ret)) {
@@ -144,7 +139,6 @@ int ObParallelMergeInfo::generate_from_range_array(
   if (OB_UNLIKELY(0 != list_size_
       || nullptr != parallel_datum_rowkey_list_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parallel merge info is not empty", K(ret), KPC(this));
   } else {
     int64_t sum_range_cnt = 0;
     for (int64_t i = 0; i < paral_range.count(); ++i) {
@@ -201,7 +195,6 @@ int ObParallelMergeInfo::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!other.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("other parallel info is invalid", K(ret), K(other));
   } else {
     format_version_ = other.format_version_;
     list_size_ = other.list_size_;
@@ -224,7 +217,6 @@ int ObParallelMergeInfo::deep_copy_datum_rowkey(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(idx < 0 || idx >= list_size_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid idx", KR(ret), K(idx), K_(list_size));
   } else {
     if (OB_FAIL(parallel_datum_rowkey_list_[idx].deep_copy(rowkey/*dst*/, input_allocator))) {
     }
@@ -309,15 +301,12 @@ int ObMediumCompactionInfo::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!medium_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(medium_info));
   } else if (FALSE_IT(allocator_ = &allocator)) {
   } else if (medium_info.contain_storage_schema()
           && OB_FAIL(storage_schema_.init(allocator, medium_info.storage_schema_))) {
-    LOG_WARN("failed to init storage schema", K(ret), K(medium_info));
   } else if (OB_FAIL(parallel_merge_info_.init(allocator, medium_info.parallel_merge_info_))) {
   } else if (medium_info.contain_mds_filter_info_
       && OB_FAIL(mds_filter_info_.assign(allocator, medium_info.mds_filter_info_))) {
-    LOG_WARN("failed to init mds filter info", K(ret), K(medium_info));
   } else {
     info_ = medium_info.info_;
     medium_snapshot_ = medium_info.medium_snapshot_;
@@ -376,10 +365,8 @@ int ObMediumCompactionInfo::gene_parallel_info(
   contain_parallel_range_ = false;
   if (OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("allocator is not init", KR(ret), KP_(allocator));
   } else if (OB_FAIL(parallel_merge_info_.generate_from_range_array(*allocator_, paral_range))) {
     if (OB_UNLIKELY(OB_SIZE_OVERFLOW != ret)) {
-      LOG_WARN("failed to generate parallel merge info", K(ret), K(paral_range));
     }
   } else if (parallel_merge_info_.get_size() > 0) {
     contain_parallel_range_ = true;
@@ -398,10 +385,8 @@ int ObMediumCompactionInfo::serialize(char *buf, const int64_t buf_len, int64_t 
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == buf || buf_len <= 0 || pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(buf), K(buf_len), K(pos));
   } else if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("medium compaction info is invalid", K(ret), KPC(this));
   } else {
     LST_DO_CODE(
         OB_UNIS_ENCODE,
@@ -440,7 +425,6 @@ int ObMediumCompactionInfo::deserialize(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == buf || data_len <= 0 || pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(buf), K(data_len), K(pos));
   } else {
     allocator_ = &allocator;
     LST_DO_CODE(OB_UNIS_DECODE,
@@ -453,10 +437,7 @@ int ObMediumCompactionInfo::deserialize(
                            || 0 != reserved2_
                            || DATA_CURRENT_VERSION != data_version_)) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("medium compaction info format mismatch", K(ret), K_(format_version),
-          K_(reserved1), K_(reserved2), K_(data_version));
     } else if (contain_storage_schema() && OB_FAIL(storage_schema_.deserialize(allocator, buf, data_len, pos))) {
-      LOG_WARN("failed to deserialize storage schema", K(ret), K(buf), K(data_len), K(pos));
     } else if (contain_parallel_range_) {
       if (OB_FAIL(parallel_merge_info_.deserialize(allocator, buf, data_len, pos))) {
       }
@@ -472,7 +453,6 @@ int ObMediumCompactionInfo::deserialize(
     }
     if (OB_SUCC(ret) && OB_UNLIKELY(!is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("deserialized medium compaction info is invalid", K(ret), KPC(this));
     }
     if (OB_FAIL(ret)) {
       reset();

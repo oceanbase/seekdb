@@ -53,13 +53,11 @@ int ObSpatialMBR::filter(const ObSpatialMBR &other, ObDomainOpType type, bool &p
 
           case ObDomainOpType::T_GEO_DFULLYWITHIN: {
             ret = OB_NOT_SUPPORTED;
-            LOG_WARN("not support within geo relation type", K(ret), K(type));
             break;
           }
 
           default: {
             ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("undefined geo relation type", K(ret), K(type));
             break;
           }
         }
@@ -90,13 +88,11 @@ int ObSpatialMBR::filter(const ObSpatialMBR &other, ObDomainOpType type, bool &p
 
         case ObDomainOpType::T_GEO_DFULLYWITHIN: {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("not support within geo relation type", K(ret), K(type));
           break;
         }
 
         default: {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("undefined geo relation type", K(ret), K(type));
           break;
         }
       }
@@ -139,7 +135,6 @@ int ObSpatialMBR::from_string(ObString &mbr_str,
   const char *data = mbr_str.ptr();
   if (mbr_str.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("mbr string is empty", K(ret), K(mbr_str));
   } else if (is_point) {
     double x_min = *reinterpret_cast<const double*>(data); // lng_lo
     data += sizeof(double);
@@ -273,7 +268,6 @@ int64_t ObS2Adapter::get_mbr(ObSpatialMBR &mbr)
   INIT_SUCC(ret);
   if (OB_ISNULL(geo_)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("input geo is null", K(ret));
   } else {
     mbr.is_geog_ = is_geog_;
     mbr.is_point_ = (geo_->type() == ObGeoType::POINT);
@@ -314,10 +308,8 @@ int64_t ObS2Adapter::init(const ObString &swkb, const ObSrsBoundsItem *bound)
   if (OB_ISNULL(visitor_)) {
    if (OB_ISNULL(visitor_ = new ObWkbToS2Visitor(bound, options_, is_geog_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate memory", K(ret));
     } else if (OB_ISNULL(swkb.ptr())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("input swkb is empty", K(ret));
     } else {
       ObGeoType type = ObGeoType::GEOTYPEMAX;
       ObGeometry *geo = NULL;
@@ -348,7 +340,6 @@ int64_t ObS2Adapter::init(const ObString &swkb, const ObSrsBoundsItem *bound)
               ret = OB_SUCCESS;
               need_do_visit = false;
             } else {
-              LOG_WARN("fail to do_visit by ObWkbToS2Visitor", K(ret));
             }
           }
 

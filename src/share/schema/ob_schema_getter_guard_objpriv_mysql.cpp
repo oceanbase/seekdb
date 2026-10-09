@@ -48,7 +48,6 @@ int ObSchemaGetterGuard::get_obj_mysql_priv_with_user_id(const uint64_t user_id,
   obj_mysql_privs.reset();
   if (OB_INVALID_ID == user_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(user_id));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
   } else if (OB_FAIL(mgr->priv_mgr_.get_obj_mysql_privs_in_user( user_id, obj_mysql_privs))) {
   }
@@ -68,7 +67,6 @@ int ObSchemaGetterGuard::get_obj_mysql_priv_with_obj_name(const ObString &obj_na
   if (obj_name.empty()
           || OB_INVALID_ID == obj_type) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(obj_name), K(obj_type));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
   } else if (OB_FAIL(mgr->priv_mgr_.get_obj_mysql_privs_in_obj( obj_name, obj_type,
                   obj_privs, reset_flag))) {

@@ -28,7 +28,6 @@ int ObPathCtx::init(ObMulModeMemCtx* ctx, ObIMulModeBase *doc_root, ObIMulModeBa
   INIT_SUCC(ret);
   if (OB_ISNULL(ctx) || OB_ISNULL(doc_root)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("should not be null", K(ret));
   } else {
     ctx_ = ctx;
     alloc_ = ctx->allocator_;
@@ -41,10 +40,8 @@ int ObPathCtx::init(ObMulModeMemCtx* ctx, ObIMulModeBase *doc_root, ObIMulModeBa
     extend_ = nullptr;
     if (doc_root->data_type() == OB_JSON_TYPE) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not supported yet", K(ret));
     } else if (doc_root->data_type() != OB_XML_TYPE) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("can't be path node", K(ret));
     }
   }
   return ret;
@@ -60,10 +57,8 @@ int ObPathCtx::reinit(ObIMulModeBase* doc, ObIAllocator *tmp_alloc)
   extend_ = nullptr;
   if (doc->data_type() == OB_JSON_TYPE) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not supported yet", K(ret));
   } else if (doc->data_type() != OB_XML_TYPE) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("can't be path node", K(ret));
   }
   return ret;
 }
@@ -73,7 +68,6 @@ int ObPathCtx::push_ancestor(ObIMulModeBase*& base_node)
   INIT_SUCC(ret);
   if (OB_ISNULL(base_node)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("should not be null", K(ret));
   } else if (OB_FAIL(ancestor_record_.push(base_node))) {
   }
   return ret;
@@ -85,12 +79,10 @@ int ObPathCtx::pop_ancestor()
   INIT_SUCC(ret);
   if (ancestor_record_.size() <= 0) {
     ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("fail to pop", K(ret));
   } else {
     ObIMulModeBase* top = ancestor_record_.top();
     if (OB_ISNULL(top)) {
       ret = OB_BAD_NULL_ERROR;
-      LOG_WARN("should not be null", K(ret));
     } else {
       ancestor_record_.pop();
     }
@@ -119,7 +111,6 @@ int ObPathLocationNode::init(const ObLocationType& location_type)
     set_default_prefix_ns(false);
   } else {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("fail to init location node", K(ret));
   }
   return ret;
 }
@@ -140,7 +131,6 @@ int ObPathLocationNode::init(const ObLocationType& location_type, const ObSeekTy
     node_axis_ = axis_type;
   } else {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("fail to init location node", K(ret));
   }
   return ret;
 }
@@ -151,7 +141,6 @@ int ObPathFilterNode::init(const ObXpathFilterChar& filter_char, ObPathNode* lef
   ObFilterType type = ObFilterType::PN_FILTER_ERROR;
   if (OB_ISNULL(left) || OB_ISNULL(right)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("should not be null", K(ret));
   } else if (OB_FAIL(ObPathUtil::char_to_filter_type(filter_char, type))) {
   } else {
     node_type_.set_filter_type(type);
@@ -165,7 +154,6 @@ int ObPathFilterNode::init(const ObXpathFilterChar& filter_char, ObPathNode* lef
     } else if (OB_FAIL(this->append(right))) {
     } else if (!pred && ObPathParserUtil::is_illegal_comp_for_filter(type, left, right)) {
       ret = OB_OP_NOT_ALLOW;
-      LOG_WARN("Given XPATH expression not supported", K(ret));
     }
   }
   return ret;
@@ -195,7 +183,6 @@ int ObPathFuncNode::init(ObFuncType& func_type)
     max_arg_num_ = func_arg_num[func_type - ObFuncType::PN_ABS][1];
   } else {
     ret = OB_ERR_WRONG_VALUE_FOR_VAR;
-    LOG_WARN("fail to init func", K(ret));
   }
   return ret;
 }
@@ -259,7 +246,6 @@ int ObPathLocationNode::set_check_ns_by_nodetest(ObIAllocator *allocator, ObStri
         && node_axis_ != ObPathNodeAxis::ATTRIBUTE
         && node_axis_ !=  ObPathNodeAxis::NAMESPACE) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("must be element or attribute when there is prefix ns.", K(ret), K(seek_type_));
     }
   } else { 
     // without prefix ns
@@ -307,14 +293,12 @@ int ObPathRootNode::node_to_string(ObStringBuffer& str)
         ObPathNode* temp_node = static_cast<ObPathNode*>(member(i));
         if (OB_ISNULL(temp_node)) {
           ret = OB_BAD_NULL_ERROR;
-          LOG_WARN("should not be null", K(ret), K(str));
         } else if (OB_FAIL(temp_node->node_to_string(str))) {
         }
       } // end for
     } // end child is null
   } else {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("must be root node", K(ret), K(str));
   }
   return ret;
 }
@@ -335,7 +319,6 @@ int ObPathLocationNode::node_to_string(ObStringBuffer& str)
   INIT_SUCC(ret);
   if (node_type_.is_xml_path()) {
     if (is_absolute_ && OB_FAIL(str.append("/"))) {
-      LOG_WARN("fail to append slash", K(ret));
     } else if (node_type_.get_location_type() == ObLocationType::PN_ELLIPSIS && OB_FAIL(str.append("/"))) {
     } else if (OB_FAIL(axis_to_string(str))) {
     } else if (OB_FAIL(nodetest_to_string(str))) {
@@ -344,7 +327,6 @@ int ObPathLocationNode::node_to_string(ObStringBuffer& str)
         ObPathNode* temp_node = static_cast<ObPathNode*>(member(i));
         if (OB_ISNULL(temp_node)) {
           ret = OB_BAD_NULL_ERROR;
-          LOG_WARN("should not be null", K(ret), K(str));
         } else if (OB_FAIL(str.append("["))) {
         } else if (OB_FAIL(temp_node->node_to_string(str))) {
         } else if (OB_FAIL(str.append("]"))) {
@@ -385,10 +367,8 @@ int ObPathLocationNode::nodetest_to_string(ObStringBuffer& str)
       case ObSeekType::PROCESSING_INSTRUCTION: {
         if (OB_FAIL(str.append(ObPathItem::PROCESSING_INSTRUCTION))) {
         } else if (node_content_.key_.len_ > 0 && OB_FAIL(str.append("\""))) {
-          LOG_WARN("fail to append \"", K(ret));
         } else if (OB_FAIL(str.append(node_content_.key_.name_, node_content_.key_.len_))) {
         } else if (node_content_.key_.len_ > 0 &&OB_FAIL(str.append("\""))) {
-          LOG_WARN("fail to append \"", K(ret));
         } else if (OB_FAIL(str.append(")"))) {
         }
         break;
@@ -413,7 +393,6 @@ int ObPathFilterNode::filter_arg_to_string(ObStringBuffer& str, bool is_left)
   ObPathNode* temp_node = static_cast<ObPathNode*>(member(index));
   if (OB_ISNULL(temp_node)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("should not be null", K(ret), K(str));
   } else if (OB_FAIL(temp_node->node_to_string(str))) {
   }
   return ret;
@@ -429,11 +408,9 @@ int ObPathFilterNode::filter_type_to_string(ObStringBuffer& str)
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Wrong filter type", K(ret), K(xml_filter));
     }
   } else {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not supported yet", K(ret));
   }
   return ret;
 }
@@ -444,14 +421,12 @@ int ObPathFilterNode::node_to_string(ObStringBuffer& str)
   if (node_type_.is_xml_path()) {
     if (size() != 2) {
       ret = OB_INVALID_ARGUMENT_NUM;
-      LOG_WARN("wrong arg num", K(size()), K(ret));
     } else if (OB_FAIL(filter_arg_to_string(str, true))) {
     } else if (OB_FAIL(filter_type_to_string(str))) {
     } else if (OB_FAIL(filter_arg_to_string(str, false))) {
     }
   } else {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not supported yet", K(ret));
   }
   return ret;
 }
@@ -467,7 +442,6 @@ int ObPathFilterOpNode::filter_op_arg_to_str(bool is_left, ObStringBuffer& str)
       if (first->get_node_type().is_location() 
         && first->get_node_type().get_location_type() != PN_ELLIPSIS
         && OB_FAIL(str.append("/"))) {
-          LOG_WARN("fail to append /", K(ret));
       }
     }
   }
@@ -486,7 +460,6 @@ int ObPathFilterOpNode::node_to_string(ObStringBuffer& str)
         ObPathNode* temp_node = static_cast<ObPathNode*>(member(i));
         if (OB_ISNULL(temp_node)) {
           ret = OB_BAD_NULL_ERROR;
-          LOG_WARN("should not be null", K(ret), K(str));
         } else if (OB_FAIL(str.append("["))) {
         } else if (OB_FAIL(temp_node->node_to_string(str))) {
         } else if (OB_FAIL(str.append("]"))) {
@@ -500,7 +473,6 @@ int ObPathFilterOpNode::node_to_string(ObStringBuffer& str)
     } // right to string
   } else {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not supported yet", K(ret));
   }
   return ret;
 }
@@ -515,7 +487,6 @@ int ObPathFuncNode::node_to_string(ObStringBuffer& str)
     }
   } else {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not supported yet", K(ret));
   }
   return ret;
 }
@@ -528,10 +499,8 @@ int ObPathFuncNode::func_arg_to_string(ObStringBuffer& str)
       ObPathNode* temp_node = static_cast<ObPathNode*>(member(i));
       if (OB_ISNULL(temp_node)) {
         ret = OB_BAD_NULL_ERROR;
-        LOG_WARN("should not be null", K(ret), K(str));
       } else if (OB_FAIL(temp_node->node_to_string(str))) {
       } else if ( i + 1 < size() && OB_FAIL(str.append(", "))) {
-        LOG_WARN("fail to append ','", K(ret));
       } 
     } // end for
   }// end child is null
@@ -561,7 +530,6 @@ int ObPathArgNode::node_to_string(ObStringBuffer& str)
                                   sizeof(buf) - 1, buf, NULL);
         if (length== 0) {
           ret = OB_SIZE_OVERFLOW;
-          LOG_WARN("fail to convert double to string", K(ret));
         } else {
           ObString num_str(sizeof(buf), static_cast<int32_t>(length), buf);
           if (OB_FAIL(str.append(num_str))) {
@@ -572,7 +540,6 @@ int ObPathArgNode::node_to_string(ObStringBuffer& str)
       case ObArgType::PN_SUBPATH: {
         if (OB_ISNULL(arg_.subpath_)) {
            ret = OB_BAD_NULL_ERROR;
-          LOG_WARN("should not be null", K(ret), K(str));
         } else if (OB_FAIL(arg_.subpath_->node_to_string(str))) {
         }
         break;
@@ -587,12 +554,10 @@ int ObPathArgNode::node_to_string(ObStringBuffer& str)
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Wrong arg type", K(ret), K(xml_arg));
       }
     }
   } else {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not supported yet", K(ret));
   }
   return ret;
 }
@@ -603,12 +568,10 @@ int ObPathUtil::alloc_seek_result(ObIAllocator *allocator, ObPathArgNode* arg, O
   INIT_SUCC(ret);
   if (OB_ISNULL(allocator)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("should not be null", K(ret));
   } else {
     res = static_cast<ObSeekResult*> (allocator->alloc(sizeof(ObSeekResult)));
     if (OB_ISNULL(res)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate row buffer failed at seek result", K(ret));
     } else {
       res = new (res) ObSeekResult(true);
       res->result_.scalar_ = arg;
@@ -622,12 +585,10 @@ int ObPathUtil::trans_scalar_to_base(ObIAllocator *allocator, ObPathArgNode* arg
   INIT_SUCC(ret);
   if (OB_ISNULL(allocator) || OB_ISNULL(arg)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("should not be null", K(ret));
   } else {
     ObXmlText* res = static_cast<ObXmlText*> (allocator->alloc(sizeof(ObXmlText)));
     if (OB_ISNULL(res)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate row buffer failed at seek result", K(ret));
     } else {
       res = new (res) ObXmlText(ObMulModeNodeType::M_TEXT);
       if (arg->node_type_.get_arg_type() == ObArgType::PN_STRING) {
@@ -653,7 +614,6 @@ int ObPathFuncNode::check_is_legal_count_arg()
   ObPathNode* func_arg = static_cast<ObPathNode*>(member(0));
   if (OB_ISNULL(func_arg) || func_arg->node_type_.is_location()) {
     ret = OB_ERR_PARSER_SYNTAX; // XML parsing failed
-    LOG_WARN("Function call with invalid arguments", K(ret), K(func_arg->node_type_.node_class_));
   } 
 
   return ret;
@@ -674,7 +634,6 @@ int ObPathFuncNode::checek_cache_and_abs()
     case ObFuncType::PN_BOOLEAN_FUNC: {
       if (size() != 1) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Function call with invalid arguments", K(ret), K(size()));
       } else {
         ObPathNode* path = static_cast<ObPathNode*>(member(0));
         need_cache_ = path->need_cache_;
@@ -716,7 +675,6 @@ int ObPathFuncNode::checek_cache_and_abs()
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("axis not supported yet", K(ret));
       break;
     }
   }
@@ -728,7 +686,6 @@ int ObPathFuncNode::check_is_legal_arg()
   INIT_SUCC(ret);
   if (min_arg_num_ > size() || max_arg_num_ < size()) { // check_arg_num
     ret = OB_ERR_PARSER_SYNTAX; // XML parsing failed
-    LOG_WARN("Function call with invalid number of arguments", K(ret), K(min_arg_num_), K(max_arg_num_));
   } else { // check arg type
     switch (node_type_.get_func_type()) {
       case ObFuncType::PN_COUNT: {
@@ -764,7 +721,6 @@ int ObPathRootNode::init_adapt(ObPathCtx &ctx, ObIMulModeBase*& ans)
       ObSeekIterator* ada = nullptr;
       if (OB_ISNULL(ans) || OB_ISNULL(loc)) {
         ret = OB_BAD_NULL_ERROR;
-        LOG_WARN("should not be null", K(ans), K(loc));
       } else if (OB_FAIL(ObPathUtil::get_seek_iterator(ctx.alloc_, loc, ada))) {
       } else if (OB_FAIL(ada->init(ctx, loc, ans))) {
       } else if (OB_FAIL(adapt_.push_back(ada))) {
@@ -788,7 +744,6 @@ int ObPathRootNode::init_adapt(ObPathCtx &ctx, ObIMulModeBase*& ans)
         ObSeekIterator* ada = nullptr;
         if (OB_ISNULL(ans) || OB_ISNULL(loc)) {
           ret = OB_BAD_NULL_ERROR;
-          LOG_WARN("should not be null", K(ans), K(loc));
         } else if (OB_FAIL(ObPathUtil::get_seek_iterator(ctx.alloc_, loc, ada))) {
         } else if (OB_FAIL(ada->init(ctx, loc, ans))) {
         } else if (OB_FAIL(adapt_.push_back(ada))) {
@@ -814,7 +769,6 @@ int ObPathRootNode::next_adapt(ObPathCtx &ctx, ObIMulModeBase*& ans)
   INIT_SUCC(ret);
   if (iter_pos_ >= adapt_.size()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("wrong pos", K(ret));
   } else if (iter_pos_ < 0) {
     for (int i = 0; i < adapt_.size() && OB_NOT_NULL(adapt_[i]); ++i) {
       adapt_[i]->reset();
@@ -827,7 +781,6 @@ int ObPathRootNode::next_adapt(ObPathCtx &ctx, ObIMulModeBase*& ans)
     ObSeekIterator* top = adapt_[iter_pos_];
     if (OB_ISNULL(top)) {
       ret = OB_BAD_NULL_ERROR;
-      LOG_WARN("should not be null", K(ret));
     } else if (OB_SUCC(top->next(ctx, tmp_ans)) && OB_NOT_NULL(tmp_ans)) {
       ans = tmp_ans;
     } else {
@@ -855,10 +808,8 @@ int ObPathRootNode::eval_node(ObPathCtx &ctx, ObSeekResult& res)
   ObIMulModeBase* ans = nullptr;
   if (!ctx.is_inited()) {
     ret = OB_INIT_FAIL;
-    LOG_WARN("should be inited", K(ret));
   } else if (!node_type_.is_root()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("must be root node", K(ret));
   } else if (size() == 0) { // last path node
     if (!is_seeked_) {
       ans = is_abs_path_ ? ctx.doc_root_ : ctx.cur_doc_;
@@ -872,7 +823,6 @@ int ObPathRootNode::eval_node(ObPathCtx &ctx, ObSeekResult& res)
     }
   } else if (OB_FAIL(next_adapt(ctx, ans))) {
     if (ret != OB_ITER_END) {
-      LOG_WARN("fail to get next", K(ret));
     }
   } 
   if (OB_FAIL(ret)) {
@@ -915,7 +865,6 @@ int ObPathRootNode::eval_node(ObPathCtx &ctx, ObSeekResult& res)
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("must be sub location type", K(ret)); 
   }
   return ret;
 }
@@ -971,12 +920,10 @@ int ObPathFuncNode::eval_node(ObPathCtx &ctx, ObSeekResult& res)
     case ObFuncType::PN_LAST:
     case ObFuncType::PN_ROUND: {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("axis not supported yet", K(ret));
       break;
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("axis not supported yet", K(ret));
       break;
     }
   }
@@ -1088,12 +1035,10 @@ int ObPathUtil::alloc_num_arg(ObMulModeMemCtx *ctx, ObPathArgNode*& arg, ObParse
   INIT_SUCC(ret);
   if (OB_ISNULL(ctx) || OB_ISNULL(ctx->allocator_)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("should not be null", K(ret));
   } else {
     ObPathArgNode* num_arg = static_cast<ObPathArgNode*> (ctx->allocator_->alloc(sizeof(ObPathArgNode)));
     if (OB_ISNULL(num_arg)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate row buffer failed at location_node", K(ret));
     } else {
       num_arg = new (num_arg) ObPathArgNode(ctx, parser_type);
       if (OB_FAIL(num_arg->init(num, false))) {
@@ -1110,12 +1055,10 @@ int ObPathUtil::alloc_boolean_arg(ObMulModeMemCtx *ctx, ObPathArgNode*& arg, ObP
   INIT_SUCC(ret);
   if (OB_ISNULL(ctx) || OB_ISNULL(ctx->allocator_)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("should not be null", K(ret));
   } else {
     ObPathArgNode* boolean_arg = static_cast<ObPathArgNode*> (ctx->allocator_->alloc(sizeof(ObPathArgNode)));
     if (OB_ISNULL(boolean_arg)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate row buffer failed at location_node", K(ret));
     } else {
       boolean_arg = new (boolean_arg) ObPathArgNode(ctx, parser_type);
       if (OB_FAIL(boolean_arg->init(ans, false))) {
@@ -1136,12 +1079,10 @@ int ObPathFuncNode::eval_count(ObPathCtx &ctx, ObSeekResult& res)
     is_seeked_ = true;
     if (size() != 1) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("error arg", K(ret));
     } else {
       ObPathNode* arg = static_cast<ObPathNode*>(member(0));
       if (OB_ISNULL(arg)) {
         ret = OB_BAD_NULL_ERROR;
-        LOG_WARN("value is NULL", K(ret));
       } else {
         int count  = 0;
         ObSeekResult tmp_res;
@@ -1196,7 +1137,6 @@ int ObSeekIterator::init(ObPathCtx &ctx, ObPathLocationNode* location, ObIMulMod
   INIT_SUCC(ret);
   if (OB_ISNULL(location) || OB_ISNULL(ada_root)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("value is NULL", K(ret));
   } else {
     ada_root_ = ada_root;
     ObXmlPathFilter* filter = nullptr;
@@ -1206,7 +1146,6 @@ int ObSeekIterator::init(ObPathCtx &ctx, ObPathLocationNode* location, ObIMulMod
     } else if (location->get_node_type().get_location_type() == PN_ELLIPSIS) {
       if (ObPathUtil::is_upper_axis(location->get_axis())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("can't be upper axis for ellipsis node", K(ret));
       } else if (ObPathUtil::include_self_axis(location->get_axis())) {
         axis_ = DESCENDANT_OR_SELF;
       } else {
@@ -1228,31 +1167,26 @@ int ObSeekIterator::next(ObPathCtx &ctx, ObIMulModeBase*& res)
   switch(axis_) {
     case ObPathNodeAxis::CHILD: {
       if (OB_FAIL(next_child(ctx, res)) && ret != OB_ITER_END) {
-        LOG_WARN("fail to find child", K(ret));
       }
       break;
     }
     case ObPathNodeAxis::ATTRIBUTE: {
       if (OB_FAIL(next_attribute(ctx, res)) && ret != OB_ITER_END) {
-        LOG_WARN("fail to find attribute", K(ret));
       }
       break;
     }
     case ObPathNodeAxis::NAMESPACE: {
       if (OB_FAIL(next_namespace(ctx, res)) && ret != OB_ITER_END) {
-        LOG_WARN("fail to find attribute", K(ret));
       }
       break;
     }
     case ObPathNodeAxis::PARENT: {
       if (OB_FAIL(next_parent(ctx, res)) && ret != OB_ITER_END) {
-        LOG_WARN("fail to find self", K(ret));
       }
       break;
     }
     case ObPathNodeAxis::SELF: {
       if (OB_FAIL(next_self(ctx, res)) && ret != OB_ITER_END) {
-        LOG_WARN("fail to find self", K(ret));
       }
       break;
     }
@@ -1270,7 +1204,6 @@ int ObSeekComplexIterator::next(ObPathCtx &ctx, ObIMulModeBase*& res)
     case ObPathNodeAxis::DESCENDANT_OR_SELF:
     case ObPathNodeAxis::DESCENDANT: {
       if (OB_FAIL(next_descendant(ctx, DESCENDANT_OR_SELF == axis_, res)) && ret != OB_ITER_END) {
-        LOG_WARN("fail to find child", K(ret));
       }
       break;
     }
@@ -1289,7 +1222,6 @@ int ObSeekAncestorIterator::next(ObPathCtx &ctx, ObIMulModeBase*& res)
     case ObPathNodeAxis::ANCESTOR:
     {
       if (OB_FAIL(next_ancestor(ctx, ANCESTOR_OR_SELF == axis_, res)) && ret != OB_ITER_END) {
-        LOG_WARN("fail to find child", K(ret));
       }
       break;
     }
@@ -1402,7 +1334,6 @@ int ObSeekIterator::next_parent(ObPathCtx &ctx, ObIMulModeBase*& res)
     is_seeked_ = true;
     if (OB_ISNULL(top)) {
       ret = OB_BAD_NULL_ERROR;
-      LOG_WARN("should not be null", K(ret));
     } else if (OB_FAIL(filter_ans(top, filtered))) {
     } else if (filtered) {
       ret = ctx.pop_ancestor();
@@ -1434,7 +1365,6 @@ int ObSeekIterator::next_self(ObPathCtx &ctx, ObIMulModeBase*& res)
     ObPathLocationNode* path = (filter == nullptr) ? nullptr : filter->path_;
     if (OB_ISNULL(filter) || OB_ISNULL(path)) {
       ret = OB_BAD_NULL_ERROR;
-      LOG_WARN("should not be null", K(ret));
     } else if (path->get_wildcard_info() 
           && path->get_seek_type() == ObSeekType::NODES) { 
       // if wildcard, do not need filter
@@ -1510,7 +1440,6 @@ int ObSeekComplexIterator::next_descendant(ObPathCtx &ctx, bool include_self, Ob
   while (OB_SUCC(ret) && OB_ISNULL(tmp_res)) {
     // get valid next
     if (OB_FAIL(ellipsis_inner_next(ctx, tmp_res)) && ret != OB_ITER_END) {
-      LOG_WARN("fail to get next", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
@@ -1544,7 +1473,6 @@ int ObSeekAncestorIterator::next_ancestor(ObPathCtx &ctx, bool include_self, ObI
   }
   while (OB_SUCC(ret) && OB_ISNULL(tmp_res)) {
     if (OB_FAIL(ancestor_inner_next(ctx, tmp_res)) && ret != OB_ITER_END) {
-      LOG_WARN("fail to get next", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
@@ -1564,7 +1492,6 @@ int ObSeekAncestorIterator::anc_stack_push(ObPathCtx &ctx, ObIMulModeBase* push_
   UNUSED(ctx);
   if (OB_ISNULL(push_node)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("should not be null", K(ret));
   } else if (OB_FAIL(anc_stack_.push(push_node))) {
   }
   return ret;
@@ -1609,7 +1536,6 @@ int ObSeekIterator::filter_ans(ObIMulModeBase* ans, bool& filtered)
   ObXmlPathFilter* seek_filter = static_cast<ObXmlPathFilter*> (seek_info_.filter_);
   if (OB_ISNULL(seek_filter)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("should not be null", K(ret));
   } else if (OB_FAIL((*seek_filter)(ans, filtered))) {
   }
   return ret;
@@ -1637,7 +1563,6 @@ int ObPathVarObject::add(const common::ObString &key, ObDatum *value, bool with_
 
   if (OB_ISNULL(value)) { // check param
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("param value is NULL", K(ret));
   } else {
     ObPathVarPair pair(key, value);
     ObPathKeyCompare cmp;
@@ -1646,7 +1571,6 @@ int ObPathVarObject::add(const common::ObString &key, ObDatum *value, bool with_
     if (low_iter != object_array_.end() && low_iter->get_key() == key) { // Found and covered
       if (with_unique_key) {
         ret = OB_ERR_DUPLICATE_KEY;
-        LOG_WARN("Found duplicate key inserted before!", K(key), K(ret));
       } else {
         low_iter->set_value(value);
       }
@@ -1665,7 +1589,6 @@ int ObPathExprIter::init(ObMulModeMemCtx *ctx, ObString& path, ObString& default
   INIT_SUCC(ret);
   if (OB_ISNULL(ctx)  || OB_ISNULL(ctx->allocator_) || OB_ISNULL(doc) || OB_ISNULL(path.ptr())) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("should not be null", K(ret), K(ctx->allocator_), K(doc), K(path.ptr()));
   } else {
     ctx_ = ctx;
     allocator_ = ctx->allocator_;
@@ -1694,7 +1617,6 @@ int ObPathUtil::get_parser_type(ObIMulModeBase *doc, ObParserType& parser_type)
     }
     default: {
       ret = OB_INVALID_DATA;
-      LOG_WARN("Wrong type for seek", K(ret));
     }
   }
   return ret;
@@ -1720,7 +1642,6 @@ int ObPathUtil::pop_char_stack(ObFilterCharPointers& char_stack)
     }
   } else {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("should not be null", K(ret));
   }
   return ret;
 }
@@ -1735,7 +1656,6 @@ int ObPathUtil::pop_node_stack(ObPathVectorPointers& node_stack, ObPathNode*& to
     }
   } else {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("should not be null", K(ret));
   }
   return ret;
 }
@@ -1745,7 +1665,6 @@ int ObPathExprIter::open()
   INIT_SUCC(ret);
   if (!is_inited_) {
     ret = OB_INIT_FAIL;
-    LOG_WARN("should be inited", K(ret));
   } else {
     ObParserType parser_type;
     if (OB_FAIL(ObPathUtil::get_parser_type(doc_, parser_type))) {
@@ -1768,7 +1687,6 @@ int ObPathExprIter::get_first_node(ObPathNode*& loc)
   INIT_SUCC(ret);
   if (OB_ISNULL(path_node_)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("param value is NULL", K(ret));
   } else if (path_node_->get_node_type().is_root()) {
     if (path_node_->size() > 0) {
       loc = static_cast<ObPathNode*>(path_node_->member(0));
@@ -1833,14 +1751,12 @@ int ObPathExprIter::get_next_node(ObIMulModeBase*& res)
   INIT_SUCC(ret);
   if (!is_inited_ || OB_ISNULL(path_node_)) {
     ret = OB_INIT_FAIL;
-    LOG_WARN("should be inited", K(ret));
   } else {
     ObSeekResult path_res;
     bool end_seek = false;
     while (OB_SUCC(ret) && !end_seek) {
       if (OB_FAIL(path_node_->eval_node(path_ctx_, path_res))) {
         if (ret != OB_ITER_END) {
-          LOG_WARN("fail to seek", K(ret));
         }
       } else if (path_res.is_scalar_) {
         if (OB_FAIL(ObPathUtil::trans_scalar_to_base(tmp_allocator_, path_res.result_.scalar_, res))) {
@@ -1848,7 +1764,6 @@ int ObPathExprIter::get_next_node(ObIMulModeBase*& res)
         end_seek = true;
       } else if (OB_ISNULL(path_res.result_.base_)) { 
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("res is NULL", K(ret));
       } else if (OB_FAIL(ObPathUtil::add_dup_if_missing(tmp_allocator_, path_res.result_.base_, dup_, end_seek))) {
       } else if (end_seek) {
         res = path_res.result_.base_;
@@ -1875,7 +1790,6 @@ int ObPathExprIter::reset(ObIMulModeBase* doc, ObIAllocator *tmp_allocator)
   INIT_SUCC(ret);
   if (OB_ISNULL(doc) || OB_ISNULL(tmp_allocator)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("should not be null.", K(ret));
   } else {
     doc_ = doc;
     tmp_allocator_ = tmp_allocator;
@@ -1896,7 +1810,6 @@ int ObXmlPathFilter::operator()(ObIMulModeBase* doc, bool& filtered)
   filtered = false;
   if (OB_ISNULL(doc) || OB_ISNULL(path_)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("param value is NULL", K(ret));
   } else if (doc->data_type() == ObNodeDataType::OB_XML_TYPE) {
     ObMulModeNodeType xtype = doc->type();
     ObSeekType seek_info  = path_->get_seek_type();
@@ -1986,14 +1899,11 @@ int ObPathUtil::logic_compare_rule(ObPathCtx &ctx, ObPathNode *path_node, bool &
   ObPathArgNode *arg_node;
   if (OB_ISNULL(ctx.alloc_)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("should not be null", K(ret));
   } else if (OB_ISNULL(path_node)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("get path node null", K(ret));
   } else if (OB_FAIL(ObPathUtil::get_arg_type(node_type, path_node))) {
   } else if (OB_ISNULL(arg_node = static_cast<ObPathArgNode*>(path_node))) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("get arg node null", K(ret));
   } else if (ObArgType::PN_SUBPATH == node_type)  {
     ObSeekVector seek_vector;
     if (OB_FAIL(get_seek_vec(ctx, path_node, seek_vector))) {
@@ -2003,7 +1913,6 @@ int ObPathUtil::logic_compare_rule(ObPathCtx &ctx, ObPathNode *path_node, bool &
       ret_bool = false;
     }
     if (OB_SUCC(ret) && OB_FAIL(release_seek_vector(ctx,seek_vector))) {
-      LOG_WARN("release_seek_vec failed", K(ret), K(path_node));
     }
   } else {
     ObNodeTypeAndContent *content = nullptr;
@@ -2020,10 +1929,8 @@ int ObPathUtil::alloc_node_set_vector(ObPathCtx &ctx, ObPathNode *path_node, ObA
   ObNodeTypeAndContent *content = nullptr;
   if (OB_ISNULL(ctx.alloc_)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("should not be null", K(ret));
   } else if (OB_ISNULL(path_node)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("get path node null", K(ret));
   } else if (ObArgType::PN_SUBPATH == node_type) {
     ObSeekVector seek_vector;
     if (OB_FAIL(get_seek_vec(ctx, path_node, seek_vector))) {
@@ -2048,7 +1955,6 @@ int ObPathUtil::alloc_node_set_vector(ObPathCtx &ctx, ObPathNode *path_node, ObA
       ObPathArgNode* arg_node;
       if (OB_ISNULL(arg_node = seek_vector[0].result_.scalar_)) {
         ret = OB_BAD_NULL_ERROR;
-        LOG_WARN("scalar get null", K(ret));
       } else if (OB_FAIL(ObPathUtil::alloc_node_content_info(ctx.alloc_, &(arg_node->arg_), 
                                                               arg_node->node_type_.get_arg_type(), 
                                                               content))) {
@@ -2061,16 +1967,13 @@ int ObPathUtil::alloc_node_set_vector(ObPathCtx &ctx, ObPathNode *path_node, ObA
         ObIMulModeBase *base = tmp_result->result_.base_;
         ObString text_str;
         if (OB_ISNULL(tmp_result)) {
-          LOG_WARN("seek result is null", K(ret), K(i));
         } else if (tmp_result->is_scalar_) {
 			    ret = OB_ERR_UNEXPECTED;
-			    LOG_WARN("compare get scalar unexpected", K(ret));
         } else if (base->size() == 0) { // leaf node
           if ((base->type() == ObMulModeNodeType::M_TEXT || 
               base->type() == ObMulModeNodeType::M_ATTRIBUTE ||
               base->type() == ObMulModeNodeType::M_NAMESPACE) 
               && OB_FAIL(base->get_value(text_str))) {
-            LOG_WARN("get value failed", K(ret));
           } else if (OB_FAIL(ObPathUtil::alloc_node_content_info(ctx.alloc_, &text_str, content))) {
           } else if (OB_FAIL(node_vec.push_back(content))) {
           }
@@ -2086,9 +1989,7 @@ int ObPathUtil::alloc_node_set_vector(ObPathCtx &ctx, ObPathNode *path_node, ObA
                             base->type() == ObMulModeNodeType::M_ATTRIBUTE ||
                             base->type() == ObMulModeNodeType::M_NAMESPACE);
           if (is_scalar && OB_FAIL(base->get_value(text))) {
-            LOG_WARN("get value failed", K(ret));
           } else if (!is_scalar && OB_FAIL(ObXmlUtil::dfs_xml_text_node(ctx.ctx_, base, text))) {
-            LOG_WARN("dfs get text failed", K(ret));
           } else if (OB_FAIL(ObPathUtil::alloc_node_content_info(ctx.alloc_, &text, content))) {
           } else if (OB_FAIL(node_vec.push_back(content))) {
           }
@@ -2096,13 +1997,11 @@ int ObPathUtil::alloc_node_set_vector(ObPathCtx &ctx, ObPathNode *path_node, ObA
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(release_seek_vector(ctx,seek_vector))) {
-      LOG_WARN("release_seek_vec failed", K(ret), K(path_node));
     }
   } else {
     ObPathArgNode* arg_node = static_cast<ObPathArgNode*>(path_node);
     if (OB_ISNULL(arg_node)) {
       ret = OB_BAD_NULL_ERROR;
-      LOG_WARN("scalar get null", K(ret));
     } else if (OB_FAIL(ObPathUtil::alloc_node_content_info(ctx.alloc_, &arg_node->arg_, node_type, content))) {
     } else if (OB_FAIL(node_vec.push_back(content))) {
     }
@@ -2130,7 +2029,6 @@ int ObPathUtil::filter_compare(ObPathCtx &ctx,
     bool str_bool = false;
     if (right.size() != 1 || left.size() != 1) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("right size unexpect", K(ret));
     } else if (OB_FAIL(ObXmlUtil::to_boolean(&right[0]->content_->str_, str_bool))) {
     } else if (OB_FAIL(ObXmlUtil::compare(left[0]->content_->boolean_, str_bool, op, ret_bool))) {
     }
@@ -2138,9 +2036,7 @@ int ObPathUtil::filter_compare(ObPathCtx &ctx,
               ((left_type == ObArgType::PN_SUBPATH && left.size() == 0 && right_type == ObArgType::PN_BOOLEAN) ||
               (left_type == ObArgType::PN_BOOLEAN && right_type == ObArgType::PN_SUBPATH && right.size() == 0))) {
     if (left.size() == 0 && OB_FAIL(ObXmlUtil::compare(false, right[0]->content_->boolean_, op, ret_bool))) {
-      LOG_WARN("left size = 0 and compare failed", K(ret));
     } else if (right.size() == 0 && OB_FAIL(ObXmlUtil::compare(left[0]->content_->boolean_, false, op, ret_bool))) {
-      LOG_WARN("right size = 0 and compare failed", K(ret));
     }
   } else {
     for (int32_t i = 0; OB_SUCC(ret) && !ret_bool && i < left.size(); i++) {
@@ -2156,12 +2052,10 @@ int ObPathUtil::filter_compare(ObPathCtx &ctx,
           double left_double = 0.0;
           double right_double = 0.0;
           if (OB_FAIL(ObXmlUtil::to_number(left[i], left_double)) && ret != OB_INVALID_DATA) {
-            LOG_WARN("check left bool rule failed", K(ret), K(left[i]));
           } else if (ret == OB_INVALID_DATA) {
             ret = OB_SUCCESS;
             ret_bool = op == ObFilterType::PN_CMP_UNEQUAL ? true : false;
           } else if (OB_FAIL(ObXmlUtil::to_number(right[j], right_double)) && ret != OB_INVALID_DATA) {
-            LOG_WARN("check right bool rule failed", K(ret), K(right[j]));
           } else if (ret == OB_INVALID_DATA) {
             ret = OB_SUCCESS;
             ret_bool = op == ObFilterType::PN_CMP_UNEQUAL ? true : false;
@@ -2189,7 +2083,6 @@ int ObPathUtil::filter_compare(ObPathCtx &ctx,
           }
         } else {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid target type", K(ret), K(target_type), K(left_type), K(right_type));
         }
       }
     }
@@ -2248,7 +2141,6 @@ int ObPathFilterOpNode::get_filter_ans(ObFilterOpAns& ans, ObPathCtx& filter_ctx
     ObPathNode* filter_node = static_cast<ObPathNode*>(member(i));
     if (OB_ISNULL(filter_node)) {
       ret = OB_BAD_NULL_ERROR;
-      LOG_WARN("should not be null", K(ret));
     } else if (filter_node->node_type_.is_arg()) {
       ret = OB_NOT_IMPLEMENT;
       LOG_WARN("single arg not support");
@@ -2368,7 +2260,6 @@ int ObPathFilterOpNode::eval_node(ObPathCtx &ctx, ObSeekResult& res)
   ObSeekVector res_filtered;
   if (OB_ISNULL(left_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("left can't be null", K(ret));
   } else if (!contain_relative_path_ && !need_cache_) {  // could get filter ans directly
     if (ans_ == ObFilterOpAns::NOT_FILTERED) {
       ObFilterOpAns ans;
@@ -2435,13 +2326,11 @@ int ObPathFilterNode::eval_node(ObPathCtx &ctx, ObSeekResult& res)
     is_seeked_ = true;
   } else if (!ctx.is_inited()) {
     ret = OB_INIT_FAIL;
-    LOG_WARN("should be inited", K(ret));
   } else if (1 == count()) {
     // only one param, check bool rule for result
     ret = OB_NOT_SUPPORTED;
   } else if (count() != 2) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("filter node is not filter type", K(ret));
   } else {
     // two params, filter for op
     ObPathNode* left_node;
@@ -2455,21 +2344,18 @@ int ObPathFilterNode::eval_node(ObPathCtx &ctx, ObSeekResult& res)
     } else if (OB_FAIL(ObPathUtil::get_filter_node_result(ctx, member(1), right_node))) {
     } else if (OB_ISNULL(left_node) || OB_ISNULL(right_node)) {
       ret = OB_BAD_NULL_ERROR;
-      LOG_WARN("node is null", K(ret), K(left_node), K(right_node));
     } else if (op == ObFilterType::PN_AND_COND || op == ObFilterType::PN_OR_COND) {
       if (OB_FAIL(ObPathUtil::filter_logic_compare(ctx, left_node, right_node, op, res))) {
       }
     } else if (op == ObFilterType::PN_CMP_UNION) {
       if (in_predication_) {
         ret = OB_NOT_IMPLEMENT;
-        LOG_WARN("union out_predication_ not implement", K(ret));
         // if (OB_FAIL(ObPathUtil::filter_union(ctx, left_node, right_node, op, res))) {
         //   LOG_WARN("filter_union failed", K(ret));
         // }
       } else {
         // TODO outter_union
         ret = OB_NOT_IMPLEMENT;
-        LOG_WARN("union out_predication_ not implement", K(ret));
       }
     } else if (OB_FAIL(ObPathUtil::get_arg_type(left_type, left_node))) {
     } else if (OB_FAIL(ObPathUtil::get_arg_type(right_type, right_node))) {
@@ -2496,7 +2382,6 @@ int ObPathFilterNode::eval_node(ObPathCtx &ctx, ObSeekResult& res)
       case ObFilterType::PN_CMP_DIV:
       case ObFilterType::PN_CMP_MOD:
         ret = OB_NOT_IMPLEMENT;
-        LOG_WARN("oparete implement", K(ret));
         // calculate TODO
         // if (OB_FAIL(ObPathUtil::filter_calculate(ctx, 
         //                                           left_node_vec, left_type,
@@ -2508,7 +2393,6 @@ int ObPathFilterNode::eval_node(ObPathCtx &ctx, ObSeekResult& res)
 
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("filter node eval_node unexpected err", K(ret), K(op));
       }
     }
     is_seeked_ = true;
@@ -2526,7 +2410,6 @@ int ObPathUtil::get_filter_node_result(ObPathCtx &ctx, ObLibTreeNodeBase* filter
   ObPathNode* filter_node;
   if (OB_ISNULL(filter_node = static_cast<ObPathNode*>(filter_node_base))) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("filter node get null", K(ret));
   } else if (!filter_node->node_type_.is_filter()) {
     res = filter_node;
   } else {
@@ -2535,7 +2418,6 @@ int ObPathUtil::get_filter_node_result(ObPathCtx &ctx, ObLibTreeNodeBase* filter
     if (OB_FAIL(filter_node->eval_node(ctx, seek_result))) {
     } else if (!seek_result.is_scalar_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("eval result size 0", K(ret));
     } else {
       res = seek_result.result_.scalar_;
     }
@@ -2548,14 +2430,11 @@ int ObPathArgNode::eval_node(ObPathCtx &ctx, ObSeekResult& res)
   INIT_SUCC(ret);
   if (!ctx.is_inited()) {
     ret = OB_INIT_FAIL;
-    LOG_WARN("should be inited", K(ret));
   } else if (!node_type_.is_xml_path()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect node_type", K(ret));
   } else {
     // TODO waiting
     ret = OB_NOT_IMPLEMENT;
-    LOG_WARN("others type not implement", K(ret));
   }
   return ret;
 }
@@ -2571,7 +2450,6 @@ int ObPathUtil::get_seek_vec(ObPathCtx &ctx, ObPathNode *from_node, ObSeekVector
     while (OB_SUCC(ret)) {
       if (OB_FAIL(from_node->eval_node(ctx, path_res))) {
         if (ret != OB_ITER_END) {
-          LOG_WARN("fail to seek", K(ret));
         }
       } else if (path_res.is_scalar_) {
         if (OB_FAIL(res.push_back(path_res))) {
@@ -2584,7 +2462,6 @@ int ObPathUtil::get_seek_vec(ObPathCtx &ctx, ObPathNode *from_node, ObSeekVector
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("should be subpath", K(ret));
   } 
   return ret;
 }
@@ -2594,10 +2471,8 @@ int ObPathUtil::seek_res_to_boolean(ObSeekResult& filter, bool &res)
   INIT_SUCC(ret);
   if (!filter.is_scalar_ ) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("now, filter ans must be scalar(boolean)", K(ret));
   } else if(OB_ISNULL(filter.result_.scalar_)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("arg is null", K(ret));
   } else {
     res = filter.result_.scalar_->arg_.boolean_;
   }
@@ -2609,7 +2484,6 @@ int ObPathUtil::get_arg_type(ObArgType& arg_type, ObPathNode *path_node)
   INIT_SUCC(ret);
   if (OB_ISNULL(path_node)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("should not be null", K(ret));
   } else if (path_node->get_node_type().is_arg()) {
     arg_type = path_node->get_node_type().get_arg_type();
   } else {
@@ -2630,13 +2504,11 @@ int ObPathUtil::alloc_iterator(common::ObIAllocator *allocator, ObSeekIterator*&
   INIT_SUCC(ret);
   if (OB_ISNULL(allocator)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("should not be null", K(ret));
   } else {
     ObSeekIterator* node = 
     static_cast<ObSeekIterator*> (allocator->alloc(sizeof(ObSeekIterator)));
     if (OB_ISNULL(node)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate row buffer failed at path_node", K(ret));
     } else {
       ada = node;
     }
@@ -2677,13 +2549,11 @@ int ObPathUtil::alloc_complex_iterator(common::ObIAllocator *allocator, ObSeekCo
   INIT_SUCC(ret);
   if (OB_ISNULL(allocator)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("should not be null", K(ret));
   } else {
     ObSeekComplexIterator* node = 
     static_cast<ObSeekComplexIterator*> (allocator->alloc(sizeof(ObSeekComplexIterator)));
     if (OB_ISNULL(node)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate row buffer failed at path_node", K(ret));
     } else {
       ada = node;
     }
@@ -2696,13 +2566,11 @@ int ObPathUtil::alloc_ancestor_iterator(common::ObIAllocator *allocator, ObSeekA
   INIT_SUCC(ret);
   if (OB_ISNULL(allocator)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("should not be null", K(ret));
   } else {
     ObSeekAncestorIterator* node = 
     static_cast<ObSeekAncestorIterator*> (allocator->alloc(sizeof(ObSeekAncestorIterator)));
     if (OB_ISNULL(node)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate row buffer failed at path_node", K(ret));
     } else {
       ada = node;
     }
@@ -2715,12 +2583,10 @@ int ObPathUtil::alloc_node_content_info(ObIAllocator *allocator, ObString *str, 
   INIT_SUCC(ret);
   if (OB_ISNULL(allocator)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("should not be null", K(ret));
   } else {
     res = static_cast<ObNodeTypeAndContent*> (allocator->alloc(sizeof(ObNodeTypeAndContent)));
     if (OB_ISNULL(res)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate row buffer failed at seek result", K(ret));
     } else {
       ObPathStr path_str;
       path_str.len_ = str->length();
@@ -2728,7 +2594,6 @@ int ObPathUtil::alloc_node_content_info(ObIAllocator *allocator, ObString *str, 
       ObArgNodeContent *content;
       if (OB_ISNULL(content = static_cast<ObArgNodeContent*> (allocator->alloc(sizeof(ObArgNodeContent))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate row buffer failed at seek result", K(ret));
       } else if (OB_FALSE_IT(content->str_ = path_str)) {
       } else {
         res->type_ = ObArgType::PN_STRING;
@@ -2744,12 +2609,10 @@ int ObPathUtil::alloc_node_content_info(ObIAllocator *allocator, ObArgNodeConten
   INIT_SUCC(ret);
   if (OB_ISNULL(allocator)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("should not be null", K(ret));
   } else {
     res = static_cast<ObNodeTypeAndContent*> (allocator->alloc(sizeof(ObNodeTypeAndContent)));
     if (OB_ISNULL(res)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate row buffer failed at seek result", K(ret));
     } else {
       res->type_ = type;
       res->content_ = content;

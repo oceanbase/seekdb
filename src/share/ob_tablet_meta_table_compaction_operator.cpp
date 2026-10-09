@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SHARE
+#include "config_bridge.h"
 #include "ob_tablet_meta_table_compaction_operator.h"
 #include "share/tablet/ob_tablet_table_operator.h"
 #include "share/tablet/ob_tablet_meta_table_storage.h"
@@ -34,10 +35,8 @@ int ObTabletMetaTableCompactionOperator::get_status(
   ret_info.reset();
   if (OB_UNLIKELY(!input_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(input_info));
   } else if (OB_ISNULL(meta_db_pool)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("meta_db_pool_ is not initialized", K(ret));
   } else {
     ObTabletMetaTableStorage storage;
     if (OB_FAIL(storage.init(meta_db_pool))) {
@@ -48,7 +47,6 @@ int ObTabletMetaTableCompactionOperator::get_status(
           report_scn,
           status))) {
         if (OB_ENTRY_NOT_EXIST != ret) {
-          LOG_WARN("failed to get report_scn and status", KR(ret), K(input_info));
         }
       } else {
         ret_info = input_info;
@@ -68,7 +66,6 @@ int ObTabletMetaTableCompactionOperator::batch_update_unequal_report_scn_tablet(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(meta_db_pool)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("meta_db_pool_ is not initialized", K(ret));
   } else {
     LOG_INFO("start to update unequal tablet id array", KR(ret), K(major_frozen_scn),
       "input_tablet_id_array_cnt", input_tablet_id_array.count());
@@ -116,7 +113,6 @@ int ObTabletMetaTableCompactionOperator::get_min_compaction_scn(
   const int64_t start_time_us = ObTimeUtil::current_time();
   if (OB_ISNULL(meta_db_pool)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("meta_db_pool_ is not initialized", K(ret));
   } else {
     int64_t estimated_timeout_us = 0;
     ObTimeoutCtx timeout_ctx;
@@ -154,7 +150,6 @@ int ObTabletMetaTableCompactionOperator::batch_update_report_scn(
   const int64_t BATCH_UPDATE_CNT = 1000;
   if (OB_ISNULL(meta_db_pool)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("meta_db_pool_ is not initialized", K(ret));
   } else {
     LOG_INFO("start to batch update report scn", KR(ret), K(global_broadcast_scn_val));
     ObTabletMetaTableStorage storage;
@@ -195,7 +190,6 @@ int ObTabletMetaTableCompactionOperator::batch_update_status(
   const int64_t BATCH_UPDATE_CNT = 1000;
   if (OB_ISNULL(meta_db_pool)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("meta_db_pool_ is not initialized", K(ret));
   } else {
     LOG_INFO("start to batch update status", KR(ret));
     ObTabletMetaTableStorage storage;
@@ -238,7 +232,7 @@ int ObTabletMetaTableCompactionOperator::get_estimated_timeout_us(
     estimated_timeout_us = tablet_count * 1000L; // 1ms for each tablet
     estimated_timeout_us = MAX(estimated_timeout_us, THIS_WORKER.get_timeout_remain());
     estimated_timeout_us = MIN(estimated_timeout_us, 3 * 3600 * 1000 * 1000L);
-    estimated_timeout_us = MAX(estimated_timeout_us, GCONF.rpc_timeout);
+    estimated_timeout_us = MAX(estimated_timeout_us, config::rpc_timeout());
   }
   return ret;
 }
@@ -250,7 +244,6 @@ int ObTabletMetaTableCompactionOperator::get_tablet_count(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(meta_db_pool)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("meta_db_pool_ is not initialized", K(ret));
   } else {
     ObTabletMetaTableStorage storage;
     if (OB_FAIL(storage.init(meta_db_pool))) {
@@ -271,10 +264,8 @@ int ObTabletMetaTableCompactionOperator::batch_update_report_scn(
   const int64_t all_tablet_cnt = tablet_ids.count();
   if (OB_UNLIKELY(all_tablet_cnt < 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(all_tablet_cnt));
   } else if (OB_ISNULL(meta_db_pool)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("meta_db_pool_ is not initialized", K(ret));
   } else {
     ObTabletMetaTableStorage storage;
     if (OB_FAIL(storage.init(meta_db_pool))) {
@@ -285,7 +276,6 @@ int ObTabletMetaTableCompactionOperator::batch_update_report_scn(
         for (int64_t idx = i; OB_SUCC(ret) && (idx < cur_end_idx); ++idx) {
           if (OB_UNLIKELY(!tablet_ids.at(idx).is_valid())) {
             ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("invalid tablet id", KR(ret), K(tablet_ids.at(idx)));
           } else if (OB_FAIL(batch_tablet_ids.push_back(tablet_ids.at(idx)))) {
           }
         }
@@ -316,10 +306,8 @@ int ObTabletMetaTableCompactionOperator::get_next_batch_tablet_ids(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(batch_update_cnt < 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(batch_update_cnt));
   } else if (OB_ISNULL(meta_db_pool)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("meta_db_pool_ is not initialized", K(ret));
   } else {
     ObTabletID start_tablet_id = ObTabletID(ObTabletID::INVALID_TABLET_ID);
     if (tablet_ids.count() > 0) {
@@ -347,7 +335,6 @@ int ObTabletMetaTableCompactionOperator::range_scan_for_compaction(
   tablet_infos.reset();
   if (OB_UNLIKELY(batch_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(start_tablet_id), K(batch_size));
   } else if (start_tablet_id.id() == INT64_MAX) {
     ret = OB_ITER_END;
   } else {
@@ -389,14 +376,12 @@ int ObTabletMetaTableCompactionOperator::inner_range_scan_for_compaction(
   ObTabletID max_tablet_id;
   if (OB_ISNULL(meta_db_pool)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("meta_db_pool_ is not initialized", K(ret));
   } else {
     ObTabletMetaTableStorage storage;
     if (OB_FAIL(storage.init(meta_db_pool))) {
     } else if (OB_FAIL(inner_get_max_tablet_id_in_range(
         meta_db_pool, start_tablet_id, batch_size, max_tablet_id))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("failed to get max tablet id in range", KR(ret), K(start_tablet_id));
       } else {
         ret = OB_SUCCESS;
         max_tablet_id = ObTabletID(INT64_MAX);
@@ -424,13 +409,11 @@ int ObTabletMetaTableCompactionOperator::inner_get_max_tablet_id_in_range(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(meta_db_pool)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("meta_db_pool_ is not initialized", K(ret));
   } else {
     ObTabletMetaTableStorage storage;
     if (OB_FAIL(storage.init(meta_db_pool))) {
     } else if (OB_FAIL(storage.get_max_tablet_id_in_range(start_tablet_id, batch_size, end_tablet_id))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("failed to get max tablet id in range", KR(ret), K(start_tablet_id));
       }
     }
   }

@@ -36,7 +36,6 @@ int ObTransformEliminateOuterJoin::transform_one_stmt(common::ObIArray<ObParentD
   UNUSED(parent_stmts);
   if (OB_ISNULL(stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("stmt is NULL", K(ret));
   } else if (OB_FAIL(eliminate_outer_join(parent_stmts, stmt, trans_happened))) {
   } else if (trans_happened) {
     if (OB_FAIL(add_transform_hint(*stmt))) {
@@ -55,7 +54,6 @@ int ObTransformEliminateOuterJoin::eliminate_outer_join(ObIArray<ObParentDMLStmt
   ObDMLStmt* parent_stmt = parent_stmts.empty() ? NULL : parent_stmts.at(parent_stmts.count() - 1).stmt_; 
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt should not be null", K(ret));
   } else if (stmt->get_joined_tables().empty()) {
     /*do nothing*/
   } else if (OB_FAIL(stmt->get_equal_set_conditions(conditions, true))) {
@@ -95,11 +93,9 @@ int ObTransformEliminateOuterJoin::recursive_eliminate_outer_join_in_table_item(
   JoinedTable *process_join = NULL;
   if (OB_ISNULL(cur_table_item) || OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param has null", K(ret));
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("too deep recursive", K(ret), K(is_stack_overflow));
   } else if (OB_FAIL(is_outer_joined_table_type(stmt,
                                                 cur_table_item,
                                                 from_item_list,
@@ -129,7 +125,6 @@ int ObTransformEliminateOuterJoin::recursive_eliminate_outer_join_in_table_item(
       if (OB_FAIL(append_array_no_dup(left_child_conditions, conditions))) {
       } else if (process_join->joined_type_ == INNER_JOIN
                   && OB_FAIL(append_array_no_dup(left_child_conditions, process_join->join_conditions_))) {
-        LOG_WARN("failed to append array no dup.", K(ret));
       } else if (OB_FAIL(SMART_CALL(recursive_eliminate_outer_join_in_table_item(stmt,
                                                                                 l_child,
                                                                                 from_item_list,
@@ -142,7 +137,6 @@ int ObTransformEliminateOuterJoin::recursive_eliminate_outer_join_in_table_item(
         if (OB_FAIL(append_array_no_dup(right_child_conditions, conditions))) {
         } else if (process_join->joined_type_ != FULL_OUTER_JOIN
                   && OB_FAIL(append_array_no_dup(right_child_conditions, process_join->join_conditions_))) {
-          LOG_WARN("failed to append array no dup.", K(ret));
         } else if (OB_FAIL(SMART_CALL(recursive_eliminate_outer_join_in_table_item(stmt,
                                                                                   r_child,
                                                                                   from_item_list,
@@ -175,7 +169,6 @@ int ObTransformEliminateOuterJoin::is_outer_joined_table_type(ObDMLStmt *stmt,
   is_my_joined_table_type = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(cur_table_item)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param has null", K(ret));
   } else if (!cur_table_item->is_joined_table()) {
     if (should_move_to_from_list) {
       // Non-joined table not processed, directly put into from_item_list
@@ -193,7 +186,6 @@ int ObTransformEliminateOuterJoin::is_outer_joined_table_type(ObDMLStmt *stmt,
     cur_joined_table_item = static_cast<JoinedTable *>(cur_table_item);
     if (OB_ISNULL(cur_joined_table_item)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table item should not be null", K(ret));
     } else if (LEFT_OUTER_JOIN == cur_joined_table_item->joined_type_ ||
         FULL_OUTER_JOIN == cur_joined_table_item->joined_type_ ||
         INNER_JOIN == cur_joined_table_item->joined_type_) {
@@ -231,7 +223,6 @@ int ObTransformEliminateOuterJoin::do_eliminate_outer_join(ObDMLStmt *stmt,
     || OB_ISNULL(cur_joined_table->left_table_)
     || OB_ISNULL(cur_joined_table->right_table_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("param has null", K(ret));
   } else {
     if (FULL_OUTER_JOIN == cur_joined_table->joined_type_) {
       // Can left outer join be eliminated
@@ -354,13 +345,11 @@ int ObTransformEliminateOuterJoin::can_be_eliminated_with_null_reject(ObDMLStmt 
   has_null_reject = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(joined_table)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("params have null", K(ret), K(stmt), K(joined_table));
   } else if (INNER_JOIN == joined_table->joined_type_) {
     has_null_reject = true;
     OPT_TRACE("inner join will be eliminated");
   } else if (OB_ISNULL(right_table = joined_table->right_table_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("right table is null", K(ret));
   } else if (OB_FAIL(stmt->get_table_rel_ids(*(joined_table->right_table_), right_table_ids))) {
   }
 
@@ -404,7 +393,6 @@ int ObTransformEliminateOuterJoin::can_be_eliminated_with_foreign_primary_join(O
       || OB_ISNULL(joined_table->left_table_)
       || OB_ISNULL(joined_table->right_table_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("params have null", K(ret), K(stmt), K(joined_table));
   } else if (INNER_JOIN == joined_table->joined_type_) {
     can_eliminate = true;
     OPT_TRACE("inner join will be eliminated");
@@ -471,7 +459,6 @@ int ObTransformEliminateOuterJoin::is_all_columns_not_null(ObDMLStmt *stmt,
   is_not_null = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("stmt is null", K(ret));
   } else {
     // Whether all columns of the foreign key have non-null constraints
     bool is_nullable = false;
@@ -480,7 +467,6 @@ int ObTransformEliminateOuterJoin::is_all_columns_not_null(ObDMLStmt *stmt,
     for (int64_t i = 0; OB_SUCC(ret) && !is_nullable && i < col_exprs.count(); ++i) {
       if (OB_ISNULL(col_expr = col_exprs.at(i)) || OB_UNLIKELY(!col_expr->is_column_ref_expr())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected column ref expr", K(ret), K(col_expr));
       } else if (OB_FAIL(ObTransformUtils::is_column_nullable(stmt, ctx_->schema_checker_,
                                               static_cast<const ObColumnRefRawExpr *>(col_expr),
                                               ctx_->session_info_,
@@ -513,16 +499,13 @@ int ObTransformEliminateOuterJoin::is_simple_join_condition(const ObIArray<ObRaw
       ObRawExpr *expr = join_condition.at(i);
       if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("expr is null", K(ret));
       } else if (T_OP_EQ == expr->get_expr_type()) {
         ObOpRawExpr *op = static_cast<ObOpRawExpr *>(expr);
         if (OB_ISNULL(op)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("op expr is null", K(ret));
         } else if (OB_ISNULL(op->get_param_expr(0))
                     || OB_ISNULL(op->get_param_expr(1))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("EQ expr has null param", K(ret));
         } else if (op->get_param_expr(0)->has_flag(IS_COLUMN)
                     && op->get_param_expr(1)->has_flag(IS_COLUMN)) {
           ObColumnRefRawExpr *col1 = static_cast<ObColumnRefRawExpr *>(op->get_param_expr(0));
@@ -551,11 +534,9 @@ int ObTransformEliminateOuterJoin::extract_columns(const ObRawExpr *expr,
   bool is_stack_overflow = false;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret));
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("too deep recursive", K(ret), K(is_stack_overflow));
   } else if (expr->is_column_ref_expr()) {
     if (rel_ids.is_superset(expr->get_relation_ids())) {
       if (OB_FAIL(col_exprs.push_back(static_cast<const ObColumnRefRawExpr *>(expr)))) {
@@ -599,7 +580,6 @@ int ObTransformEliminateOuterJoin::can_be_eliminated_with_null_side_column_in_ag
 
   if (OB_ISNULL(stmt) || OB_ISNULL(joined_table) || OB_ISNULL(ctx_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("params have null", K(ret), K(stmt), K(joined_table));
   } else if (!stmt->is_select_stmt()) {
     /*do nothing*/
   } else if (OB_FALSE_IT(select_stmt = static_cast<ObSelectStmt*>(stmt))) {
@@ -610,7 +590,6 @@ int ObTransformEliminateOuterJoin::can_be_eliminated_with_null_side_column_in_ag
     /*do nothing*/
   } else if (OB_ISNULL(right_table = joined_table->right_table_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get right join item failed", K(ret));
   } else if (OB_FAIL(stmt->get_table_rel_ids(*right_table, right_table_ids))) {
   } else {
     can_eliminate = true;
@@ -628,7 +607,6 @@ int ObTransformEliminateOuterJoin::can_be_eliminated_with_null_side_column_in_ag
 
       if (OB_ISNULL(aggr_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("expr is null", K(ret));
       } else if (aggr_expr->get_expr_type() != T_FUN_COUNT &&
                  aggr_expr->get_expr_type() != T_FUN_MIN &&
                  aggr_expr->get_expr_type() != T_FUN_MAX &&
@@ -654,7 +632,6 @@ int ObTransformEliminateOuterJoin::check_expr_ref_column_all_in_aggr(const ObRaw
   is_in = true;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret));
   } else if (expr->is_column_ref_expr()) {
     is_in = false;
   } else if (expr->is_aggr_expr()) {

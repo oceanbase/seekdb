@@ -105,7 +105,6 @@ int ObLockTable::restore_lock_table_(ObITable &sstable)
     while (OB_SUCC(ret)) {
       if (OB_FAIL(row_iter->get_next_row(row))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("failed to get next row", K(ret));
         }
       } else if (OB_FAIL(recover_(*row))) {
       }
@@ -139,7 +138,6 @@ int ObLockTable::recover_(const blocksstable::ObDatumRow &row)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLockTable not inited", K(ret));
   } else if (OB_FAIL(store_info.deserialize(obj_str.ptr(), obj_str.length(), pos))) {
   } else if (FALSE_IT(store_info.create_timestamp_ = OB_MIN(store_info.create_timestamp_,
                                                             curr_timestamp))) {
@@ -208,14 +206,11 @@ int ObLockTable::init(ObLS *parent)
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObLockTable init twice.", K(ret));
   } else if (OB_ISNULL(parent)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(parent));
   } else if (OB_FAIL(parent->get_tablet_svr()->get_lock_memtable_mgr(memtable_mgr_handle))) {
   } else if (OB_ISNULL(lock_mt_mgr_ = static_cast<ObLockMemtableMgr*>(memtable_mgr_handle.get_memtable_mgr()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lock memtable mgr pointer", KR(ret), KPC(parent_));
   } else if (OB_FAIL(check_obj_lock_timer_.init("OBJLockCheck", ObMemAttr("OBJLockCheck")))) {
   } else {
     parent_ = parent;
@@ -259,7 +254,6 @@ int ObLockTable::offline()
         ret = OB_SUCCESS;
         LOG_INFO("modify ret code to success because lock memtable mgr is not init and do not need offline.");
       } else {
-        LOG_WARN("release all memtable in lock memtable mgr failed", KR(ret), KPC(lock_mt_mgr_));
       }
     }
   }
@@ -319,7 +313,6 @@ int ObLockTable::create_tablet(const SCN &create_scn)
   ObCreateTabletSchema create_tablet_schema;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLockTable not inited", K(ret));
   } else if (OB_FAIL(get_table_schema_(table_schema))) {
   } else if (OB_FAIL(create_tablet_schema.init(arena_allocator, table_schema,
         false/*skip_column_info*/))) {
@@ -331,7 +324,6 @@ int ObLockTable::create_tablet(const SCN &create_scn)
                      get_lock_memtable_mgr(memtable_mgr_handle))) {
   } else if (OB_ISNULL(memtable_mgr = memtable_mgr_handle.get_memtable_mgr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get_memtable_mgr from memtable mgr handle failed", K(ret));
   } else {
     // do nothing
   }
@@ -342,7 +334,6 @@ int ObLockTable::remove_tablet()
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
-    LOG_WARN("lock table does not inited, remove do nothing");
   } else if (OB_FAIL(parent_->remove_ls_inner_tablet(LS_LOCK_TABLET))) {
     LOG_ERROR("failed to remove ls inner tablet", K(ret), K(LS_LOCK_TABLET));
     ob_usleep(1000 * 1000);
@@ -356,7 +347,6 @@ int ObLockTable::get_lock_memtable(ObTableHandleV2 &handle)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("lock table is not inited", KR(ret));
   } else {
     while (OB_SUCC(ret)) {
       {
@@ -395,11 +385,9 @@ int ObLockTable::check_lock_conflict(
   ObTxIDSet unused_conflict_tx_set;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLockTable not inited", K(ret));
   } else if (OB_UNLIKELY(!ctx.is_write()) ||
              OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ctx), K(param));
   } else if (FALSE_IT(mem_ctx = static_cast<ObMemtableCtx *>(ctx.mvcc_acc_ctx_.mem_ctx_))) {
   } else if (OB_FAIL(get_lock_memtable(handle))) {
   } else if (OB_FAIL(handle.get_lock_memtable(memtable))) {
@@ -423,7 +411,6 @@ int ObLockTable::check_lock_conflict(
                                               only_check_dml_lock,
                                               param.expired_time_))) {
       if (ret != OB_TRY_LOCK_ROW_CONFLICT) {
-        LOG_WARN("lock failed.", K(ret), K(lock_op));
       }
     }
   }
@@ -441,11 +428,9 @@ int ObLockTable::check_lock_conflict(
   ObLockMemtable *memtable = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLockTable not inited", K(ret));
   } else if (OB_ISNULL(mem_ctx) ||
              OB_UNLIKELY(!lock_op.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(mem_ctx), K(lock_op));
   } else if (OB_FAIL(get_lock_memtable(handle))) {
   } else if (OB_FAIL(handle.get_lock_memtable(memtable))) {
   } else if (OB_FAIL(memtable->check_lock_conflict(mem_ctx,
@@ -453,7 +438,6 @@ int ObLockTable::check_lock_conflict(
                                                    conflict_tx_set,
                                                    include_finish_tx))) {
     if (ret != OB_TRY_LOCK_ROW_CONFLICT) {
-      LOG_WARN("check_lock_conflict failed.", K(ret), K(lock_op));
     }
   } else {
     // do nothing
@@ -472,11 +456,9 @@ int ObLockTable::lock(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLockTable not inited", K(ret));
   } else if (OB_UNLIKELY(!ctx.is_write()) ||
              OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ctx), K(param));
   } else if (OB_UNLIKELY(!tx_id.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid argument", K(ret), K(ctx), K(param), K(ctx.mvcc_acc_ctx_));
@@ -500,7 +482,6 @@ int ObLockTable::lock(
                                ctx,
                                lock_op))) {
       if (ret != OB_TRY_LOCK_ROW_CONFLICT) {
-        LOG_WARN("lock failed.", K(ret), K(lock_op));
       }
     }
   }
@@ -516,11 +497,9 @@ int ObLockTable::unlock(
   ObLockMemtable *memtable = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLockTable not inited", K(ret));
   } else if (OB_UNLIKELY(!ctx.is_write()) ||
              OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ctx), K(param));
   } else if (OB_FAIL(get_lock_memtable(handle))) {
   } else if (OB_FAIL(handle.get_lock_memtable(memtable))) {
   } else {
@@ -554,11 +533,9 @@ int ObLockTable::replace_lock(
   ObLockMemtable *memtable = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLockTable not inited", K(ret));
   } else if (OB_UNLIKELY(!ctx.is_write()) ||
              OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ctx), K(param));
   } else if (OB_FAIL(get_lock_memtable(handle))) {
   } else if (OB_FAIL(handle.get_lock_memtable(memtable))) {
   } else {
@@ -670,7 +647,6 @@ int ObLockTable::check_and_clear_obj_lock(const bool force_compact)
   ObLockMemtable *lock_memtable = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLockTable is not inited", K(ret));
   } else if (OB_FAIL(get_lock_memtable(handle))) {
   } else if (OB_FAIL(handle.get_lock_memtable(lock_memtable))) {
   } else if (OB_FAIL(lock_memtable->check_and_clear_obj_lock(force_compact))) {
@@ -687,11 +663,9 @@ int ObLockTable::add_lock_into_queue(storage::ObStoreCtx &ctx, const ObLockParam
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLockTable not inited", K(ret));
   } else if (OB_UNLIKELY(!ctx.is_write()) ||
              OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ctx), K(param));
   } else if (!param.is_two_phase_lock_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("unexpected operation", K(ret), K(ctx), K(param));
@@ -720,7 +694,6 @@ int ObLockTable::add_lock_into_queue(storage::ObStoreCtx &ctx, const ObLockParam
                                             lock_op))) {
     } else if (0 >= lock_op.create_timestamp_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected create ts", K(ret), K(lock_op));
     }
   }
   return ret;
@@ -732,7 +705,6 @@ int ObLockTable::activate()
   common::ObTimeGuard timeguard("switch_to_leader", 10 * 1000);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLockTable is not inited", K(ret));
   } else {
     timeguard.click();
     if (OB_NOT_NULL(parent_)) {
@@ -748,9 +720,7 @@ int ObLockTable::activate()
   if (OB_FAIL(ret)) {
     if (OB_ISNULL(parent_)) {
       // ignore ret
-      LOG_WARN("parent ls of ObLockTable is null", K(ret));
     } else {
-      LOG_WARN("collect obj lock garbage when switch to leader failed", K(ret));
     }
   } else {
     // switch to leader for lock memtable
@@ -771,7 +741,6 @@ void ObLockTable::deactivate()
   common::ObTimeGuard timeguard("switch_to_follower", 10 * 1000);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLockTable is not inited", K(ret));
   } else if (OB_FAIL(switch_to_follower_())) {
   }
   timeguard.click();

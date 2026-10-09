@@ -44,10 +44,8 @@ public:
     ObString trace_id_str = param.get_string();
     if (OB_ISNULL(buf)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("allocate string res buf failed", K(ret));
     } else if (trace_id_str.empty()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid trace id string", K(ret));
     } else if (OB_FAIL(trace_id.parse_from_buf(trace_id_str.ptr()))) {
     } else if (OB_FAIL(trace_id.get_addr().addr_to_buffer(buf, MAX_DECODE_TRACE_ID_RES_LEN, len))) {
     } else {

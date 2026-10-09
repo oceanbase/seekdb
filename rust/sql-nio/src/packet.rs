@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub const HEADER_SIZE: usize = 4;
+pub(crate) const HEADER_SIZE: usize = 4;
 
-pub const MAX_PAYLOAD: usize = 0xff_ffff;
+pub(crate) const MAX_PAYLOAD: usize = 0xff_ffff;
 
-pub const MAX_LOGICAL_PAYLOAD: usize = 1024 * 1024 * 1024;
+pub(crate) const MAX_LOGICAL_PAYLOAD: usize = 1024 * 1024 * 1024;
 
 pub enum AssembleStep {
     NeedMore,

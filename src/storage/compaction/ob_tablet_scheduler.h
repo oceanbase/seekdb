@@ -162,9 +162,6 @@ public:
       const ObMergeType merge_type,
       const int64_t &merge_snapshot_version,
       const ObDagId *dag_net_id = nullptr);
-  static int schedule_tablet_ddl_major_merge(
-      ObLS *ls,
-      ObTabletHandle &tablet_handle);
 #ifdef ERRSIM
   static void errsim_after_mini_schedule_adaptive(
     const ObTabletID &tablet_id,

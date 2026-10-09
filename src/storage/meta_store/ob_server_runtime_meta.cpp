@@ -23,7 +23,10 @@ namespace oceanbase
 namespace omt
 {
 
-OB_SERIALIZE_MEMBER(ObServerRuntimeMeta, runtime_config_, super_block_, create_status_);
+OB_SERIALIZE_MEMBER(ObServerRuntimeMeta,
+                    runtime_config_,
+                    super_block_,
+                    legacy_create_status_);
 
 int ObServerRuntimeMeta::build(const share::ObServerRuntimeConfig &runtime_config,
                         const storage::ObServerRuntimeSuperBlock &super_block)
@@ -32,11 +35,10 @@ int ObServerRuntimeMeta::build(const share::ObServerRuntimeConfig &runtime_confi
 
   if (OB_UNLIKELY(!runtime_config.is_valid() || !super_block.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(runtime_config), K(super_block));
   } else {
     runtime_config_ = runtime_config;
     super_block_ = super_block;
-    create_status_ = storage::ObServerRuntimeCreateStatus::CREATING;
+    legacy_create_status_ = LEGACY_CREATE_STATUS_CREATED;
   }
 
   return ret;

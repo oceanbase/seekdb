@@ -39,10 +39,8 @@ int ObInterColSubStrDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDat
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(data) || OB_UNLIKELY(len < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(data), K(len));
   } else {
     int64_t ref = 0;
     if (!has_exc(ctx)) {
@@ -96,10 +94,8 @@ int ObInterColSubStrDecoder::update_pointer(const char *old_block, const char *c
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(old_block) || OB_ISNULL(cur_block)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(old_block), KP(cur_block));
   } else {
     ObIColumnDecoder::update_pointer(meta_header_, old_block, cur_block);
     //ObIColumnDecoder::update_pointer(meta_data_, old_block, cur_block);
@@ -112,7 +108,6 @@ int ObInterColSubStrDecoder::get_ref_col_idx(int64_t &ref_col_idx) const
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     ref_col_idx = meta_header_->ref_col_idx_;
   }

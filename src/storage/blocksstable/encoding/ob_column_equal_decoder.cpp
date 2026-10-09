@@ -41,10 +41,8 @@ int ObColumnEqualDecoder::decode(const ObColumnDecoderCtx &ctx, ObDatum &datum, 
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(row_id < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(row_id));
   } else {
     int64_t ref = 0;
     if (!has_exc(ctx)) {
@@ -113,7 +111,6 @@ int ObColumnEqualDecoder::decode(const ObColumnDecoderCtx &ctx, ObDatum &datum, 
         }
         default:
           ret = OB_INNER_STAT_ERROR;
-          LOG_WARN("not supported store class", K(ret), K(ctx));
       }
     }
 
@@ -131,10 +128,8 @@ int ObColumnEqualDecoder::update_pointer(const char *old_block, const char *cur_
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(old_block) || OB_ISNULL(cur_block)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(old_block), KP(cur_block));
   } else {
     ObIColumnDecoder::update_pointer(meta_header_, old_block, cur_block);
   }
@@ -146,7 +141,6 @@ int ObColumnEqualDecoder::get_ref_col_idx(int64_t &ref_col_idx) const
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     ref_col_idx = meta_header_->ref_col_idx_;
   }

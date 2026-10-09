@@ -223,10 +223,9 @@ ObVirtualTableIteratorFactory::ObVirtualTableIteratorFactory(ObVTIterCreator &vt
 }
 
 ObVirtualTableIteratorFactory::ObVirtualTableIteratorFactory(ObLocalManagementService &local_management_service,
-                                                             common::ObAddr &addr,
-                                                             common::ObServerConfig *config) :
+                                                             common::ObAddr &addr) :
     ObIVirtualTableIteratorFactory(),
-    vt_iter_creator_(local_management_service, addr, config)
+    vt_iter_creator_(local_management_service, addr)
 {
 }
 
@@ -295,7 +294,6 @@ int ObVTIterCreator::check_is_index(const share::schema::ObTableSchema &table,
   int ret = OB_SUCCESS;
   if (NULL == index_name) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(index_name));
   } else {
     is_index = false;
     int64_t index_name_len = strlen(index_name);
@@ -1336,7 +1334,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           case OB_ALL_VIRTUAL_SERVER_STAT_TID: {
             ObAllVirtualServer *server = NULL;
             if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualServer, server))) {
-            } else if (OB_FAIL(server->init(addr_, config_))) {
+            } else if (OB_FAIL(server->init(addr_))) {
             } else {
               vt_iter = static_cast<ObVirtualTableIterator *>(server);
             }

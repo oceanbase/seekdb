@@ -59,10 +59,8 @@ void *ObIdManagerAllocator::alloc_(const int64_t sz)
 
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObIdManagerAllocator not inited", K(ret));
   } else if (OB_UNLIKELY(sz <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(sz), K(ret));
   } else if (sz <= object_size_ - EXTEND_SIZE) {
     if (OB_UNLIKELY(NULL == (buf = small_alloc_.alloc()))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -100,10 +98,8 @@ void ObIdManagerAllocator::free_(void *ptr)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObIdManagerAllocator not inited", K(ret));
   } else if (OB_UNLIKELY(NULL == ptr)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KP(ptr), K(ret));
   } else {
     int64_t *tmp_magic = static_cast<int64_t *>(ptr);
     int64_t *tmp_symbol = static_cast<int64_t *>(ptr);
@@ -111,7 +107,6 @@ void ObIdManagerAllocator::free_(void *ptr)
     tmp_symbol -= 1;
     if (OB_UNLIKELY(ALLOC_MAGIC != *tmp_magic)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid magic", KP(ptr), K(*tmp_magic), K(ret));
     } else {
       switch (*tmp_symbol) {
       case SMALL_ALLOC_SYMBOL: {
@@ -124,7 +119,6 @@ void ObIdManagerAllocator::free_(void *ptr)
         }
       default: {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid symbol magic", KP(ptr), K(*tmp_symbol), K(ret));
           break;
         }
       }

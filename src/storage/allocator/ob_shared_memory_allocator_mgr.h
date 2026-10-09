@@ -52,7 +52,7 @@ public:
     } else if (OB_FAIL(tx_data_op_allocator_.init())) {
     } else if (OB_FAIL(vector_allocator_.init())) {
     } else if (OB_FAIL(share_resource_throttle_tool_.init(
-                   &memstore_allocator_, &tx_data_allocator_, &mds_allocator_, &vector_allocator_))) {
+                   &memstore_allocator_, &tx_data_allocator_, &mds_allocator_))) {
     } else {
       SHARE_LOG(INFO, "finish init runtime shared memory allocator mgr", KP(this));
     }
@@ -85,10 +85,6 @@ public:
   { return tx_data_quota_used() + tx_data_metadata_tracker_.used(); }
 
 private:
-  void update_share_throttle_config_(const int64_t total_memory, common::ObServerConfig *config);
-  void update_memstore_throttle_config_(const int64_t total_memory, common::ObServerConfig *config);
-  void update_tx_data_throttle_config_(const int64_t total_memory, common::ObServerConfig *config);
-  void update_mds_throttle_config_(const int64_t total_memory, common::ObServerConfig *config);
 
 private:
   

@@ -58,7 +58,6 @@ int ObMacroBlocksWriteCtx::set(ObMacroBlocksWriteCtx &src)
 
   if (!is_empty()) {
     ret = OB_NO_EMPTY_ENTRY;
-    LOG_WARN("not empty, cannot transfer new macro blocks", K(ret), K(*this));
   } else {
     use_old_macro_block_count_ = src.use_old_macro_block_count_;
   }
@@ -71,7 +70,6 @@ int ObMacroBlocksWriteCtx::set(ObMacroBlocksWriteCtx &src)
   if (OB_SUCC(ret)) {
     src.clear();
   } else { // handle failed
-    LOG_WARN("failed to assign macro blocks write ctx, clear dest ctx", K(ret));
     clear();
   }
   return ret;
@@ -119,7 +117,6 @@ int ObMacroBlocksWriteCtx::add_macro_block_id(const MacroBlockId &macro_block_id
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!macro_block_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(macro_block_id));
   } else if (OB_FAIL(macro_block_list_.push_back(macro_block_id))) {
   } else {
     if (OB_FAIL(OB_STORAGE_OBJECT_MGR.inc_ref(macro_block_id))) {

@@ -33,6 +33,32 @@ build_release/src/observer/seekdb
 
 在 Linux 上，同一套 CMake 构建还提供模块单元测试目标和聚合目标 `pretest`，具体用法参见[编写与运行单元测试](unittest.md)。
 
+## 编译 Sanity 二进制
+
+在 Linux 上，可以使用独立的 CMake `sanity` 模式配置经过 Sanity 插桩的 seekdb 构建：
+
+```bash
+./build.sh sanity --init
+```
+
+`--init` 通常只在首次编译或依赖定义变化后使用。与 Release 模式相同，增加 `--make` 可以在配置后直接编译：
+
+```bash
+./build.sh sanity --init --make -j32
+```
+
+后续增量编译可以使用：
+
+```bash
+./build.sh sanity --make -j32
+```
+
+编译产物位于：
+
+```text
+build_sanity/src/observer/seekdb
+```
+
 ## 运行本地实例
 
 使用仓库中的 `obd.sh` 包装脚本准备隔离环境并启动 seekdb：

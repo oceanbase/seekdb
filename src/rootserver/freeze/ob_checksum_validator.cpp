@@ -38,7 +38,6 @@ int ObChecksumValidator::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", KR(ret));
   } else if (OB_FAIL(local_ckm_items_.init(DEFAULT_TABLET_CNT))) {
   } else {
     is_primary_service_ = is_primary_service;
@@ -55,7 +54,6 @@ int ObChecksumValidator::set_basic_info(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!freeze_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(freeze_info));
   } else if (FALSE_IT(freeze_info_ = freeze_info)) {
   } else if (OB_FAIL(set_need_validate())) { // init freeze_info_ before call this func
   } else {
@@ -80,12 +78,9 @@ int ObChecksumValidator::deal_with_special_table_at_last(bool &finish_validate)
   } else if (OB_FAIL(schema_guard_->get_simple_table_schema( table_id_, simple_schema_))) {
   } else if (OB_ISNULL(simple_schema_)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table schema is null", KR(ret), K_(table_id));
   } else if (OB_FAIL(simple_schema_->get_tablet_ids(cur_tablet_ids_))) {
   } else if (OB_UNLIKELY(cur_tablet_ids_.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to get tablet ids of current table schema", KR(ret), K_(table_id),
-      K_(cur_tablet_ids));
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(get_local_tablet_checksum_and_validate(true /*include_larger_than*/))) {
@@ -124,7 +119,6 @@ int ObChecksumValidator::get_table_compaction_info(
       table_compaction_info.reset();
       table_compaction_info.table_id_ = table_id;
     } else {
-      LOG_WARN("fail to get val from hashmap", KR(ret), K(table_id));
     }
   }
   return ret;
@@ -135,14 +129,10 @@ int ObChecksumValidator::check_inner_status()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("is not init", KR(ret));
   } else if (stop_) {
     ret = OB_CANCELED;
-    LOG_WARN("already stop", KR(ret));
   } else if (OB_UNLIKELY(!freeze_info_.is_valid() || nullptr == schema_guard_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid freeze_info/schema_guard_", KR(ret),
-      K_(freeze_info), KP_(schema_guard));
   }
   return ret;
 }
@@ -167,11 +157,9 @@ int ObChecksumValidator::get_tablet_ids(
   SMART_VAR(ObArray<ObTabletID>, tablet_ids) {
     if (OB_UNLIKELY(!simple_schema.has_tablet())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tablet schema should have tablet", K(ret), K(simple_schema));
     } else if (OB_FAIL(simple_schema.get_tablet_ids(tablet_ids))) {
     } else if (OB_UNLIKELY(tablet_ids.empty())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to get tablet_ids of current table schema", KR(ret), K(simple_schema));
     } else if (OB_FAIL(cur_tablet_ids_.reserve(tablet_ids.count()))) {
     } else if (OB_FAIL(finish_tablet_ids_.reserve(tablet_ids.count()))) {
     } else if (OB_FAIL(cur_tablet_ids_.assign(tablet_ids))) {
@@ -203,7 +191,6 @@ int ObChecksumValidator::validate_checksum(
   schema_guard_ = &schema_guard;
   if (OB_UNLIKELY(0 == table_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(table_id));
   } else if (FALSE_IT(table_id_ = table_id)) {
   } else if (OB_FAIL(get_table_compaction_info(table_id_, table_compaction_info_))) {
   } else if (OB_FAIL(check_inner_status())) {
@@ -223,11 +210,9 @@ int ObChecksumValidator::validate_checksum(
       table_compaction_info_.set_can_skip_verifying();
       (void) uncompact_info_.add_skip_verify_table(table_id_);
     } else {
-      LOG_WARN("failed to get tablet ids", K(ret), KPC_(simple_schema));
     }
   } else if (OB_UNLIKELY(cur_tablet_ids_.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet id array is unexpected empty", KR(ret), KPC_(simple_schema), K_(cur_tablet_ids));
   } else {
     if (OB_FAIL(validate_local_tablet_checksum())) {
     } else if (OB_FAIL(validate_index_checksum())) {
@@ -251,7 +236,6 @@ int ObChecksumValidator::validate_checksum(
   cur_tablet_ids_.reuse(); // need reuse array when get_tablet_ids failed
 
   if (FAILEDx(table_compaction_map_.set_refactored(table_id_, table_compaction_info_, true /*overwrite*/))) {
-    LOG_WARN("fail to set refactored", KR(ret), K_(table_id), K_(table_compaction_info));
   } else {
   }
   // do no clear table_compaction_info_ until validate next table
@@ -267,7 +251,6 @@ int ObChecksumValidator::validate_local_tablet_checksum()
   if (table_compaction_info_.is_uncompacted()) {
     if (OB_UNLIKELY(nullptr == simple_schema_ || !simple_schema_->has_tablet())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tablet schema should have tablet", K(ret), KPC_(simple_schema));
     } else {
       if (OB_FAIL(update_table_compaction_info_by_tablet())) {
       } else if (table_compaction_info_.is_compacted()) {
@@ -313,11 +296,9 @@ int ObChecksumValidator::update_table_compaction_info_by_tablet()
 #endif
         break;
       } else {
-        LOG_WARN("fail to get tablet compaction status from map", KR(ret), K(idx));
       }
     } else if (ObTabletCompactionStatusEnum::INITIAL == tablet_status) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid tablet status", KR(ret), K(tablet_status));
     } else if (ObTabletCompactionStatusEnum::CAN_SKIP_VERIFYING == tablet_status) {
       table_compaction_info_.set_can_skip_verifying();
       break;
@@ -354,7 +335,6 @@ int ObChecksumValidator::finish_checksum_validation()
   int ret = OB_SUCCESS;
   if (stop_) {
     ret = OB_CANCELED;
-    LOG_WARN("already stop", KR(ret));
   } else if (table_compaction_info_.is_index_ckm_verified()) {
     if (OB_FAIL(push_finish_tablet_ids_with_update(table_id_, cur_tablet_ids_))) {
     } else {
@@ -409,10 +389,8 @@ int ObChecksumValidator::validate_index_checksum() {
   int ret = OB_SUCCESS;
   if (stop_) {
     ret = OB_CANCELED;
-    LOG_WARN("already stop", KR(ret));
   } else if (OB_ISNULL(simple_schema_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table schema is unexpected null", K(ret), KPC_(simple_schema));
   } else if (!need_validate_index_ckm_) { // no need to validate data-index checksum
     table_compaction_info_.set_index_ckm_verified();
   } else if (simple_schema_->is_index_table()) { // for index table, do not check status
@@ -424,7 +402,6 @@ int ObChecksumValidator::validate_index_checksum() {
     }
 #endif
     if (should_handle_index_table && !table_compaction_info_.finish_idx_verified() && OB_FAIL(handle_index_table(*simple_schema_))) {
-      LOG_WARN("fail to handle index table", KR(ret), KPC_(simple_schema));
     }
 #ifdef ERRSIM
     if (EN_SPECIAL_INDEX_TABLE_VERIFY && simple_schema_->should_not_validate_data_index_ckm()) { 
@@ -522,7 +499,6 @@ int ObChecksumValidator::handle_index_table(
     // add for defend, unfinish_index_cnt_ of data table should not be less than 0
     if (data_compaction_info.unfinish_index_cnt_ < 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unfinish index cnt is unexpected", KR(ret), K(data_compaction_info));
     } else if (OB_FAIL(table_compaction_map_.set_refactored(
             data_compaction_info.table_id_, data_compaction_info,
             true /*overwrite*/))) {
@@ -554,7 +530,6 @@ int ObChecksumValidator::verify_table_index(
     if (last_table_ckm_items_.is_inited()) { // use cached data table ckm
       if (OB_UNLIKELY(last_table_ckm_items_.get_table_id() != data_table_id)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("cached last table ckm items is invalid", KR(ret), K(data_table_id), K_(last_table_ckm_items));
       } else {
         data_table_ckm_ptr = &last_table_ckm_items_;
         ++statistics_.use_cached_ckm_cnt_;
@@ -569,7 +544,6 @@ int ObChecksumValidator::verify_table_index(
     }
     if (FAILEDx(index_table_ckm.build(*schema_guard_, index_simple_schema, cur_tablet_ids_,
                                       local_ckm_items_))) {
-      LOG_WARN("failed to assign checksum items", K(ret), K(local_ckm_items_));
     } else {
       const bool is_global_index = index_simple_schema.is_global_index_table();
       if (OB_FAIL(ObTableCkmItems::validate_ckm_func[is_global_index](
@@ -612,7 +586,6 @@ int ObChecksumValidator::build_ckm_item_for_fts(const int64_t table_id,
   ObTableCompactionInfo table_compaction_info;
   if (OB_FAIL(get_table_compaction_info(table_id, table_compaction_info))) {
   } else if (OB_UNLIKELY(!table_compaction_info.is_compacted())) {
-    LOG_WARN("exist special status table", KR(ret), K(table_compaction_info));
     skip_verify = true;
   } else if (OB_FAIL(ckm_item.build(table_id, get_compaction_scn(),
                                     *schema_guard_))) {
@@ -646,7 +619,6 @@ int ObChecksumValidator::finish_verify_fts_ckm(const int64_t table_id)
     table_compaction_info.set_index_ckm_verified();
   }
   if (FAILEDx(table_compaction_map_.set_refactored(table_id, table_compaction_info, true /*overwrite*/))) {
-    LOG_WARN("fail to set refactored", KR(ret), K(table_id), K(table_compaction_info));
   }
   return ret;
 }
@@ -666,7 +638,6 @@ int ObChecksumValidator::handle_fts_checksum(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(fts_group_array.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(fts_group_array));
   } else {
     schema_guard_ = &schema_guard;
     ObSEArray<int64_t, 16> finish_table_ids;
@@ -701,7 +672,6 @@ int ObChecksumValidator::validate_rowkey_doc_indexs(const ObFTSGroup &fts_group,
     void *buf = nullptr;
     if (OB_ISNULL(buf = tmp_allocator.alloc(sizeof(ObTableCkmItems)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc mem for table ckm items", K(ret));
     } else {
       ObTableCkmItems *ptr = new (buf) ObTableCkmItems();
       ckm_item[i] = ptr;

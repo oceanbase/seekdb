@@ -88,7 +88,6 @@ int ObTmpFileEvictionManager::add_file(const bool is_meta, ObSharedNothingTmpFil
   if (OB_UNLIKELY(!eviction_list.add_last(&eviction_node))) {
     file.dec_ref_cnt();
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to add node", KR(ret));
   }
 
   return ret;
@@ -113,7 +112,6 @@ int ObTmpFileEvictionManager::remove_file(const bool is_meta, ObSharedNothingTmp
   if (OB_NOT_NULL(eviction_node.get_next())) {
     if (OB_UNLIKELY(!eviction_list.remove(&eviction_node))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to remove node", KR(ret), K(file));
     } else {
       file.dec_ref_cnt();
     }
@@ -137,7 +135,6 @@ int ObTmpFileEvictionManager::evict(const int64_t expected_evict_page_num, int64
 
   int64_t actual_evict_meta_page_num = 0;
   if (FAILEDx(evict_file_from_list_(true/*is_meta*/, remain_evict_page_num, actual_evict_meta_page_num))) {
-    LOG_WARN("fail to evict file from list", KR(ret), K(remain_evict_page_num), K(actual_evict_meta_page_num));
   } else {
     remain_evict_page_num -= actual_evict_meta_page_num;
     actual_evict_page_num += actual_evict_meta_page_num;
@@ -174,11 +171,9 @@ int ObTmpFileEvictionManager::evict_file_from_list_(const bool &is_meta,
         ret = OB_SUCCESS;
         is_empty_list = true;
       } else {
-        LOG_WARN("fail to pop file from list", KR(ret), K(is_meta));
       }
     } else if (OB_ISNULL(file_handle.get())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("file handle is invalid", KR(ret), K(file_handle));
     } else if (is_meta) {
       if (OB_FAIL(file_handle.get()->evict_meta_pages(remain_evict_page_num,
                                                       actual_evict_file_page_num))) {
@@ -190,10 +185,6 @@ int ObTmpFileEvictionManager::evict_file_from_list_(const bool &is_meta,
       } else if (OB_UNLIKELY(remain_evict_page_num > actual_evict_file_page_num && remain_flushed_file_page_num > 1)) {
         // we allow to not evict the last data page
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("evict_data_pages unexpected finishes before expected pages are eliminated",
-                  KR(ret), K(is_meta), K(file_handle), K(remain_evict_page_num),
-                  K(actual_evict_page_num), K(actual_evict_file_page_num),
-                  K(remain_flushed_file_page_num));
       }
     }
 
@@ -219,10 +210,8 @@ int ObTmpFileEvictionManager::pop_file_from_list_(const bool &is_meta, ObSNTmpFi
     ret = OB_EMPTY_RESULT;
   } else if (OB_ISNULL(file = &eviction_list.remove_first()->file_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("file is null", KR(ret));
   } else if (OB_FAIL(file_handle.init(file))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to init file", KR(ret), KP(file));
   } else {
     file->dec_ref_cnt();
   }

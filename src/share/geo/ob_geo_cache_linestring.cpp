@@ -36,7 +36,6 @@ int ObCachedGeoLinestring::init()
       ObLineIntersectionAnalyzer *buf = static_cast<ObLineIntersectionAnalyzer *>(allocator_->alloc(sizeof(ObLineIntersectionAnalyzer)));
       if (OB_ISNULL(buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc point location analyzer failed", K(ret));
       } else {
         lAnalyzer_ = new(buf) ObLineIntersectionAnalyzer(this, rtree_);
       }
@@ -52,7 +51,6 @@ int ObCachedGeoLinestring::intersects(ObGeometry& geo, ObGeoEvalCtx& gis_context
   ObGeoDimension dim = ObGeoDimension::MAX_DIMENSION;
   bool has_dimension = false;
   if (!is_inited() && OB_FAIL(init())) {
-    LOG_WARN("cached polygon init failed", K(ret));
   } else if (OB_FAIL(ObGeoTypeUtil::get_geo_dimension(&geo, dim))) {
   } else if (OB_FAIL(lAnalyzer_->segment_intersection_query(&geo))) {
   } else if (lAnalyzer_->is_intersects()) {

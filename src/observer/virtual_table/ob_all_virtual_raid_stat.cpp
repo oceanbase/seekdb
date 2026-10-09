@@ -64,13 +64,10 @@ int ObAllVirtualRaidStat::init(const common::ObAddr &addr)
 
   if (start_to_read_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("cannot init twice", K(ret));
   } else if (!addr.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(addr));
   } else if (!addr.ip_to_string(ip_buf_, sizeof(ip_buf_))) {
     ret = OB_ERR_SYS;
-    LOG_WARN("failed to set ip buf", K(ret));
   } else {
     cur_idx_ = 0;
     addr_ = addr;

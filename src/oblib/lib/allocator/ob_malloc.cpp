@@ -30,7 +30,12 @@
 #include <execinfo.h>
 #endif
 
-#if defined(OB_HAVE_BUNDLED_JEMALLOC)
+#if defined(ENABLE_SANITY)
+extern "C" {
+const char *je_malloc_conf =
+    "background_thread:false,dirty_decay_ms:1000,muzzy_decay_ms:0";
+}
+#elif defined(OB_HAVE_BUNDLED_JEMALLOC)
 extern "C" {
 const char *je_malloc_conf =
     "background_thread:true,dirty_decay_ms:1000,muzzy_decay_ms:0";

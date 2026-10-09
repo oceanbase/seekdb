@@ -56,7 +56,6 @@ int ObExprPrivSTAsEwkt::calc_result_typeN(ObExprResType& type,
       types_stack[0].set_calc_collation_level(CS_LEVEL_IMPLICIT);
     } else {
       ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-      LOG_WARN("invalid type", K(ret), K(types_stack[0].get_type()));
     }
 
     if (OB_SUCC(ret) && param_num > 1) {
@@ -65,7 +64,6 @@ int ObExprPrivSTAsEwkt::calc_result_typeN(ObExprResType& type,
         // do nothing
       } else {
         ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-        LOG_WARN("invalid type", K(ret), K(types_stack[1].get_type()));
       }
     }
     if (OB_SUCC(ret)) {
@@ -154,7 +152,6 @@ int ObExprPrivSTAsEwkt::calc_resultN(common::ObObj &result,
       result.set_null();
     } else if (OB_ISNULL(expr_ctx.exec_ctx_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("execution context is null", K(ret));
     } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
                    *expr_ctx.exec_ctx_, &tmp_allocator, objs[0], wkb))) {
     } else if (OB_FAIL(ObGeoTypeUtil::geo_to_ewkt(wkb,

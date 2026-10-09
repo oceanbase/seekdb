@@ -50,13 +50,10 @@ int ObSqlObjCastRuntime::get_enum_set_values(
   collation_type = common::CS_TYPE_INVALID;
   if (OB_ISNULL(exec_ctx_)) {
     ret = OB_ERR_UNDEFINED;
-    LOG_WARN("object cast runtime has no execution context", K(ret));
   } else if (OB_FAIL(exec_ctx_->get_enumset_meta_by_subschema_id(
                  subschema_id, false, meta))) {
-    LOG_WARN("failed to get enum/set metadata", K(ret), K(subschema_id));
   } else if (OB_ISNULL(meta) || OB_ISNULL(meta->get_str_values())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid enum/set metadata", K(ret), K(subschema_id), KP(meta));
   } else {
     values = meta->get_str_values();
     collation_type = meta->get_collation_type();
@@ -75,16 +72,13 @@ int ObSqlObjCastRuntime::cast_collection(
     output.set_null();
   } else if (OB_ISNULL(exec_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("object cast runtime has no execution context", K(ret));
   } else if (OB_ISNULL(params.allocator_v2_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("object cast allocator is null", K(ret));
   } else {
     const uint16_t dst_subschema_id = output.get_meta().get_subschema_id();
     ObSubSchemaValue dst_meta;
     if (OB_FAIL(exec_ctx_->get_sqludt_meta_by_subschema_id(
             dst_subschema_id, dst_meta))) {
-      LOG_WARN("failed to get collection metadata", K(ret), K(dst_subschema_id));
     } else {
       common::ObString input_string = input.get_string();
       const common::ObCollationType cs_type = input.get_collation_type();
@@ -94,7 +88,6 @@ int ObSqlObjCastRuntime::cast_collection(
           reinterpret_cast<const ObSqlCollectionInfo *>(dst_meta.value_);
       if (OB_ISNULL(collection_info) || OB_ISNULL(collection_info->collection_meta_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid collection metadata", K(ret), K(dst_subschema_id));
       } else {
         common::ObCollectionTypeBase *collection_type =
             collection_info->collection_meta_;
@@ -103,25 +96,20 @@ int ObSqlObjCastRuntime::cast_collection(
         if (collection_type->type_id_ != common::ObNestedType::OB_VECTOR_TYPE
             && OB_FAIL(common::ObArrayTypeObjFactory::construct(
                 allocator, *array_type, array))) {
-          LOG_WARN("failed to construct collection", K(ret));
         } else if (collection_type->type_id_ == common::ObNestedType::OB_VECTOR_TYPE) {
           const bool is_binary = cs_type == common::CS_TYPE_BINARY;
           if (OB_FAIL(common::ObArrayTypeObjFactory::construct(
                   allocator, *array_type, array, is_binary))) {
-            LOG_WARN("failed to construct vector", K(ret));
           } else if (OB_FAIL(ObArrayCastUtils::string_cast_vector(
                          allocator, input_string, array, array_type, is_binary))) {
-            LOG_WARN("failed to cast vector elements", K(ret));
           }
         } else if (collection_type->type_id_ == common::ObNestedType::OB_ARRAY_TYPE) {
           if (cs_type != common::CS_TYPE_BINARY) {
             if (OB_FAIL(ObArrayCastUtils::string_cast(
                     allocator, input_string, array, array_type->element_type_))) {
-              LOG_WARN("failed to cast array elements", K(ret));
             }
           } else if (OB_FAIL(ObArrayCastUtils::string_cast_array(
                          input_string, array, array_type->element_type_))) {
-            LOG_WARN("failed to decode array", K(ret));
           }
         } else if (collection_type->type_id_ == common::ObNestedType::OB_MAP_TYPE
                    || collection_type->type_id_
@@ -132,21 +120,17 @@ int ObSqlObjCastRuntime::cast_collection(
               == common::ObNestedType::OB_SPARSE_VECTOR_TYPE) {
             if (OB_FAIL(ObArrayCastUtils::string_cast_sparse_vector_fast(
                     allocator, input_string, array, map_type))) {
-              LOG_WARN("failed to cast sparse vector", K(ret));
             }
           } else if (OB_FAIL(ObArrayCastUtils::string_cast_map(
                          allocator, input_string, array, map_type,
                          cast_mode, false))) {
-            LOG_WARN("failed to cast map", K(ret));
           }
         } else {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unsupported collection type", K(ret), K(collection_type->type_id_));
         }
 
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(array->check_validity(*array_type, *array))) {
-          LOG_WARN("invalid collection value", K(ret));
           if (ret == OB_ERR_INVALID_VECTOR_DIM) {
             LOG_USER_ERROR(
                 OB_ERR_INVALID_VECTOR_DIM,
@@ -155,7 +139,6 @@ int ObSqlObjCastRuntime::cast_collection(
           }
         } else if (OB_FAIL(ObArrayCastUtils::set_array_obj_res(
                        array, &params, &output))) {
-          LOG_WARN("failed to encode collection result", K(ret));
         }
       }
     }

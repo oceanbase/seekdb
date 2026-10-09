@@ -54,7 +54,6 @@ int ObExprAIPrompt::calc_result_typeN(ObExprResType &type,
   ObExprResType template_type = types_stack[0];
   if (!ob_is_string_tc(template_type.get_type())) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid template type", K(ret), K(template_type.get_type()));
   } else {
     types_stack[0].set_calc_type(ObVarcharType);
     types_stack[0].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
@@ -66,11 +65,9 @@ int ObExprAIPrompt::calc_result_typeN(ObExprResType &type,
       types_stack[i].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
     } else if (ob_is_json(types_stack[i].get_type())) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("json type is not supported", K(ret));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "json type is not supported");
     } else {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
-      LOG_WARN("invalid data type", K(ret), K(types_stack[i].get_type()));
     }
   }
 
@@ -97,7 +94,6 @@ int ObExprAIPrompt::eval_ai_prompt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   if (OB_FAIL(tmp_allocator.eval_arg(arg0, ctx, template_datum))) {
   } else if (template_datum->is_null()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid template argument", K(ret), K(arg0->datum_meta_.type_));
   } else {
     template_str = template_datum->get_string();
   }
@@ -118,11 +114,9 @@ int ObExprAIPrompt::eval_ai_prompt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
         }
       } else if (ob_is_json(arg->datum_meta_.type_)) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("json type is not supported", K(ret));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "json type is not supported");
       } else if (datum->is_null()) {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
-        LOG_WARN("invalid data type", K(ret), K(arg->datum_meta_.type_));
       }
     }
   }

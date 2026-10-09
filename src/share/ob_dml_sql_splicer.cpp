@@ -176,7 +176,6 @@ int ObDMLSqlSplicer::append_value(const ObHexEscapeSqlStr &escape_str, bool &is_
   int ret = OB_SUCCESS;
   if (NAKED_VALUE_MODE == mode_) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("add hex escaped string value in naked mode not supported", K(ret), K(escape_str));
   } else {
     is_null = (NULL == escape_str.str().ptr());
     if (!is_null) {
@@ -279,7 +278,6 @@ int ObDMLSqlSplicer::add_pk_column(const bool is_null, const char *col_name)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(col_name)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid column name", K(ret), KP(col_name));
   } else if (OB_FAIL(add_column(is_pk, is_null, col_name))) {
   }
   return ret;
@@ -291,7 +289,6 @@ int ObDMLSqlSplicer::add_column(const bool is_null, const char *col_name)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(col_name)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid column name", K(ret), KP(col_name));
   } else if (OB_FAIL(add_column(is_pk, is_null, col_name))) {
   }
   return ret;
@@ -303,7 +300,6 @@ int ObDMLSqlSplicer::add_column(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(col_name)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid column name", K(ret), KP(col_name));
   } else {
     Column col;
     col.primary_key_ = is_primary_key;
@@ -325,7 +321,6 @@ int ObDMLSqlSplicer::add_uint64_pk_column(const char *col_name, const uint64_t v
   int ret = OB_SUCCESS;
   if (OB_ISNULL(col_name)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid column name", K(ret), KP(col_name));
   } else if (OB_FAIL(add_uint64_column(is_pk, col_name, value))) {
   }
   return ret;
@@ -337,7 +332,6 @@ int ObDMLSqlSplicer::add_uint64_column(const char *col_name, const uint64_t valu
   int ret = OB_SUCCESS;
   if (OB_ISNULL(col_name)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid column name", K(ret), KP(col_name));
   } else if (OB_FAIL(add_uint64_column(is_pk, col_name, value))) {
   }
   return ret;
@@ -350,7 +344,6 @@ int ObDMLSqlSplicer::add_uint64_column(
   bool is_null = false;
   if (OB_ISNULL(col_name)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid column name", K(ret), KP(col_name));
   } else if (OB_FAIL(append_uint64_value(value, is_null))) {
   } else if (OB_FAIL(add_column(is_primary_key, is_null, col_name))) {
   }
@@ -364,7 +357,6 @@ int ObDMLSqlSplicer::add_time_column(const char *col_name,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(col_name)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid column name", K(ret), KP(col_name));
   } else {
     if (now > 0) {
       if (OB_FAIL(values_.append_fmt("usec_to_time(%lld)", (long long)now))) {
@@ -392,7 +384,6 @@ int ObDMLSqlSplicer::add_raw_time_column(const char *col_name, const int64_t now
 
   if (OB_ISNULL(col_name)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid column name", K(ret), KP(col_name));
   } else if (OB_FAIL(values_.append_fmt("usec_to_time(%lld)", (long long)now))) {
   } else if (OB_FAIL(add_column(is_primary_key, is_null, col_name))) {
   }
@@ -406,19 +397,15 @@ int ObDMLSqlSplicer::splice_insert(const char *table_name, const char *head,
   int ret = OB_SUCCESS;
   if (NULL == table_name || NULL == head) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(table_name), KP(head));
   } else if (columns_.count() <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column_count is invalid", K(ret), "column_count", columns_.count());
   } else {
     if (OB_FAIL(sql.assign_fmt("%s INTO %s (", head, table_name))) {
     } else if (OB_FAIL(splice_column(", ", ColSet::ALL, ValSet::ONLY_COL_NAME, sql))) {
     } else if (!default_column_header_.empty() && OB_FAIL(sql.append_fmt(", %s", default_column_header_.ptr()))) {
-      LOG_WARN("failed to append default_column_header_", KR(ret), K(default_column_header_));
     } else if (OB_FAIL(sql.append(") VALUES ("))) {
     } else if (OB_FAIL(splice_column(", ", ColSet::ALL, ValSet::ONLY_VALUE, sql))) {
     } else if (!default_column_value_.empty() && OB_FAIL(sql.append_fmt(", %s", default_column_value_.ptr()))) {
-      LOG_WARN("failed to append default_column_value_", KR(ret), K(default_column_value_));
     } else if (OB_FAIL(sql.append(")"))) {
     }
   }
@@ -433,10 +420,8 @@ int ObDMLSqlSplicer::splice_column(const char *sep,
   int64_t start_pos = 0;
   if (NULL == sep) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(sep));
   } else if (columns_.count() <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column_count is invalid", K(ret), "column_count", columns_.count());
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < columns_.count(); ++i) {
     const Column &col = columns_.at(i);
@@ -474,7 +459,6 @@ int ObDMLSqlSplicer::splice_column(const char *sep,
           }
           default : {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected value", K(ret), K(val_set));
           }
         }
         if (OB_FAIL(ret)) {
@@ -492,10 +476,8 @@ int ObDMLSqlSplicer::splice_insert_sql_without_plancache(const char *table_name,
   int ret = OB_SUCCESS;
   if (NULL == table_name) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(table_name));
   } else if (columns_.count() <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column_count is invalid", K(ret), "column_count", columns_.count());
   } else if (OB_FAIL(splice_insert(table_name, "INSERT /*+use_plan_cache(none)*/", sql))) {
   }
   return ret;
@@ -506,10 +488,8 @@ int ObDMLSqlSplicer::splice_insert_sql(const char *table_name, ObSqlString &sql)
   int ret = OB_SUCCESS;
   if (NULL == table_name) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(table_name));
   } else if (columns_.count() <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column_count is invalid", K(ret), "column_count", columns_.count());
   } else if (OB_FAIL(splice_insert(table_name, "INSERT", sql))) {
   }
   return ret;
@@ -521,10 +501,8 @@ int ObDMLSqlSplicer::splice_insert_update_sql(const char *table_name, ObSqlStrin
   int ret = OB_SUCCESS;
   if (NULL == table_name) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(table_name));
   } else if (columns_.count() <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column_count is invalid", K(ret), "column_count", columns_.count());
   } else if (OB_FAIL(splice_insert_sql(table_name, sql))) {
   } else if (OB_FAIL(sql.append(" ON DUPLICATE KEY UPDATE "))) {
   } else if (OB_FAIL(splice_column(", ", ColSet::FILTER_PK, ValSet::ALL, sql))) {
@@ -537,10 +515,8 @@ int ObDMLSqlSplicer::splice_replace_sql(const char *table_name, ObSqlString &sql
   int ret = OB_SUCCESS;
   if (NULL == table_name) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(table_name));
   } else if (columns_.count() <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column_count is invalid", K(ret), "column_count", columns_.count());
   } else if (OB_FAIL(splice_insert(table_name, "REPLACE", sql))) {
   }
   return ret;
@@ -551,10 +527,8 @@ int ObDMLSqlSplicer::splice_delete_sql(const char *table_name, ObSqlString &sql)
   int ret = OB_SUCCESS;
   if (NULL == table_name) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(table_name));
   } else if (columns_.count() <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column_count is invalid", K(ret), "column_count", columns_.count());
   } else if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE ", table_name))) {
   } else if (OB_FAIL(splice_column(" AND ", ColSet::ONLY_PK, ValSet::ALL, sql))) {
   } else {
@@ -573,7 +547,6 @@ int ObDMLSqlSplicer::splice_column_names(common::ObSqlString &sql) const
   int ret = OB_SUCCESS;
   if (columns_.count() <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid column count", K(ret), "column_count", columns_.count());
   } else if (OB_FAIL(splice_column(",", ColSet::ALL, ValSet::ONLY_COL_NAME, sql))) {
   }
   return ret;
@@ -584,7 +557,6 @@ int ObDMLSqlSplicer::splice_values(ObSqlString &sql) const
   int ret = OB_SUCCESS;
   if (columns_.count() <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid column count", K(ret), "column_count", columns_.count());
   } else if (OB_FAIL(splice_column(", ", ColSet::ALL, ValSet::ONLY_VALUE, sql))) {
   }
   return ret;
@@ -596,7 +568,6 @@ int ObDMLSqlSplicer::splice_assignments(common::ObSqlString &sql) const
   int ret = OB_SUCCESS;
   if (columns_.count() <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid column count", K(ret), "column_count", columns_.count());
   } else if (OB_FAIL(splice_column(", ", ColSet::ALL, ValSet::ALL, sql))) {
   }
   return ret;
@@ -607,7 +578,6 @@ int ObDMLSqlSplicer::splice_predicates(ObSqlString &sql) const
   int ret = OB_SUCCESS;
   if (columns_.count() <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid column count", K(ret), "column_count", columns_.count());
   } else if (OB_FAIL(splice_column(" AND ", ColSet::ALL, ValSet::ALL, sql))) {
   }
   return ret;
@@ -618,10 +588,8 @@ int ObDMLSqlSplicer::splice_update_sql(const char *table_name, ObSqlString &sql)
   int ret = OB_SUCCESS;
   if (NULL == table_name) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(table_name));
   } else if (columns_.count() <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column_count is invalid", K(ret), "column_count", columns_.count());
   } else if (OB_FAIL(sql.assign_fmt("UPDATE %s SET ", table_name))) {
   } else if (OB_FAIL(splice_column(", ", ColSet::FILTER_PK, ValSet::ALL, sql))) {
   } else if (OB_FAIL(sql.append(" WHERE "))) {
@@ -641,10 +609,8 @@ int ObDMLSqlSplicer::splice_select_1_sql(const char *table_name, ObSqlString &sq
   int ret = OB_SUCCESS;
   if (NULL == table_name) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(table_name));
   } else if (columns_.count() <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column_count is invalid", K(ret), "column_count", columns_.count());
   } else if (OB_FAIL(sql.assign_fmt("SELECT 1 FROM %s WHERE ", table_name))) {
   } else if (OB_FAIL(splice_column(" AND ", ColSet::ONLY_PK, ValSet::ALL, sql))) {
   }
@@ -661,7 +627,6 @@ int ObDMLSqlSplicer::splice_core_cells(ObCoreTableStoreCell &kv_proxy,
   ObCoreTableProxy::UpdateCell ucell;
   if (columns_.count() <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid column count", K(ret), "column_count", columns_.count());
   }
 
   FOREACH_X(col, columns_, OB_SUCCESS == ret) {
@@ -690,14 +655,12 @@ int ObDMLSqlSplicer::finish_row()
   if (0 >= N) {
     if (last_pos < 0) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("no cells in the row", K(ret), K(last_pos));
     } else if (OB_FAIL(rows_end_pos_.push_back(last_pos))) {
     }
   } else {
     int64_t last_row_end_pos = rows_end_pos_.at(N-1);
     if (last_pos <= last_row_end_pos) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("no cells in the row", K(ret), K(last_pos), K(last_row_end_pos));
     } else if (OB_FAIL(rows_end_pos_.push_back(last_pos))) {
     }
   }
@@ -730,7 +693,6 @@ int ObDMLSqlSplicer::build_rows_matrix(ObIArray<ObString> &all_names, ObIArray<i
           name_idx = all_names.count()-1;
         }
       } else {
-        LOG_WARN("failed to get name from map", K(ret));
       }
     } else {
       // column name already exists
@@ -743,7 +705,6 @@ int ObDMLSqlSplicer::build_rows_matrix(ObIArray<ObString> &all_names, ObIArray<i
   ObArray<int64_t> name_idx_to_pos;
   int64_t row_count = rows_end_pos_.count();
   if (FAILEDx(name_idx_to_pos.prepare_allocate(all_names.count()))) {
-    LOG_WARN("failed to prepare_allocate", KR(ret), K(all_names.count()));
   } else if (OB_FAIL(rows_matrix.reserve(row_count * all_names.count()))) {
   }
   int64_t last_pos = 0;
@@ -762,7 +723,6 @@ int ObDMLSqlSplicer::build_rows_matrix(ObIArray<ObString> &all_names, ObIArray<i
       if (OB_UNLIKELY(pos >= name_idx_array.count() || name_idx_array[pos] >= name_idx_to_pos.count()
           || name_idx_array[pos] < 0)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("index out of range", KR(ret), K(pos));
       } else {
         name_idx_to_pos[name_idx_array[pos]] = pos;
       }
@@ -774,7 +734,6 @@ int ObDMLSqlSplicer::build_rows_matrix(ObIArray<ObString> &all_names, ObIArray<i
     {
       if (OB_UNLIKELY(j >= name_idx_to_pos.count())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("index out of range", KR(ret), K(j), "count", name_idx_to_pos.count(), K(column_count));
       } else if (OB_FAIL(rows_matrix.push_back(name_idx_to_pos[j]))) {
       }
     } // end for
@@ -840,13 +799,11 @@ int ObDMLSqlSplicer::construct_insert_row(const common::ObArray<common::ObString
   const int64_t begin_idx = row_id * column_count;
   if (begin_idx >= matrix_size || begin_idx + column_count > matrix_size || begin_idx < 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("index out of bound", KR(ret), K(begin_idx), K(column_count), K(matrix_size));
   } else if (OB_FAIL(sql.append("("))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < column_count; i++) {
       int64_t cell_pos = rows_matrix.at(i + begin_idx);
       if (i != 0 && OB_FAIL(sql.append(", "))) {
-        LOG_WARN("failed to append", KR(ret));
       } else if (cell_pos != -1) {
         if (cell_pos >= columns_.count()) {
           ret = OB_ERR_UNEXPECTED;
@@ -873,7 +830,6 @@ int ObDMLSqlSplicer::construct_insert_row(const common::ObArray<common::ObString
     }
     if (OB_FAIL(ret)) {
     } else if (!default_column_value_.empty() && OB_FAIL(sql.append_fmt(", %s", default_column_value_.ptr()))) {
-      LOG_WARN("failed to append default_column_value_", KR(ret), K(default_column_value_));
     } else if (OB_FAIL(sql.append(")"))) {
     }
   }
@@ -900,13 +856,11 @@ int ObDMLSqlSplicer::splice_rows_matrix_in_array(const common::ObArray<common::O
     for (int64_t i = 0; i < row_count && OB_SUCC(ret); i++) {
       tmp_sql.reuse();
       if (0 == current_row_count && OB_FAIL(sql.assign(header))) {
-        LOG_WARN("failed to assign header", KR(ret), K(header));
       } else if (OB_FAIL(construct_insert_row(all_names, i, rows_matrix, tmp_sql))) {
       } else {
         int64_t next_sql_length = tmp_sql.length() + 1 /*length of ","*/ + sql.length();
         if (next_sql_length <= 0) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("sql length overflow", KR(ret), K(next_sql_length), K(tmp_sql), K(sql));
         } else if (current_row_count != 0 && next_sql_length > max_sql_length) {
           // sql length exceed, append sql to sqls and reset
           if (OB_FAIL(sqls.push_back(sql))) {
@@ -917,7 +871,6 @@ int ObDMLSqlSplicer::splice_rows_matrix_in_array(const common::ObArray<common::O
         }
         if (OB_FAIL(ret)) {
         } else if (current_row_count != 0 && OB_FAIL(sql.append(","))) {
-          LOG_WARN("append sql failed", K(ret));
         } else if (OB_FAIL(sql.append(tmp_sql.string()))) {
         } else {
           current_row_count++;
@@ -932,7 +885,6 @@ int ObDMLSqlSplicer::splice_rows_matrix_in_array(const common::ObArray<common::O
     }
     if (current_row_count != 0) {
       if (FAILEDx(sqls.push_back(sql))) {
-        LOG_WARN("failed to push_back sql", KR(ret));
       }
     }
   }
@@ -973,14 +925,11 @@ int ObDMLSqlSplicer::splice_batch_insert_header(const char *table_name, const ch
   int ret = OB_SUCCESS;
   if (NULL == table_name || NULL == head) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(table_name), KP(head));
   } else if (columns_.count() <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column_count is invalid", K(ret), "column_count", columns_.count());
   } else if (OB_FAIL(sql_header.assign_fmt("%s INTO %s (", head, table_name))) {
   } else if (OB_FAIL(join_strings(", ", all_names, sql_header))) {
   } else if (!default_column_header_.empty() && OB_FAIL(sql_header.append_fmt(", %s", default_column_header_.ptr()))) {
-    LOG_WARN("failed to append default_column_header_", KR(ret), K(default_column_header_));
   } else if (OB_FAIL(sql_header.append(") VALUES "))) {
   }
   return ret;
@@ -993,10 +942,8 @@ int ObDMLSqlSplicer::splice_batch_insert(const char *table_name, const char *hea
   ObSqlString sql_header;
   if (NULL == table_name || NULL == head) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(table_name), KP(head));
   } else if (columns_.count() <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column_count is invalid", K(ret), "column_count", columns_.count());
   } else if (OB_FAIL(build_rows_matrix(all_names, rows_matrix))) {
   } else if (OB_FAIL(splice_batch_insert_header(table_name, head, all_names, sql_header))) {
   } else if (OB_FAIL(splice_rows_matrix(all_names, sql_header, rows_matrix, sql))) {
@@ -1013,7 +960,6 @@ int ObDMLSqlSplicer::splice_batch_insert_in_array(const char *table_name,
   ObSqlString header;
   if (OB_ISNULL(table_name)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pointer is null", KR(ret), KP(table_name));
   } else if (OB_FAIL(build_rows_matrix(all_names, rows_matrix))) {
   } else if (OB_FAIL(splice_batch_insert_header(table_name, insert_header, all_names, header))) {
   } else if (OB_FAIL(splice_rows_matrix_in_array(all_names, rows_matrix, get_max_dml_num(), OB_MAX_SQL_LENGTH, header, sqls))) {
@@ -1028,10 +974,8 @@ int ObDMLSqlSplicer::splice_batch_insert_sql(const char *table_name, ObSqlString
   ObArray<int64_t> rows_matrix;
   if (NULL == table_name) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(table_name));
   } else if (columns_.count() <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column_count is invalid", K(ret), "column_count", columns_.count());
   } else if (OB_FAIL(splice_batch_insert(table_name, "INSERT", sql, all_names, rows_matrix))) {
   }
   return ret;
@@ -1044,10 +988,8 @@ int ObDMLSqlSplicer::splice_batch_insert_ignore_sql(const char *table_name, ObSq
   ObArray<int64_t> rows_matrix;
   if (NULL == table_name) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(table_name));
   } else if (columns_.count() <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column_count is invalid", K(ret), "column_count", columns_.count());
   } else if (OB_FAIL(splice_batch_insert(table_name, "INSERT IGNORE", sql, all_names, rows_matrix))) {
   }
   return ret;
@@ -1061,10 +1003,8 @@ int ObDMLSqlSplicer::splice_batch_replace_sql(const char *table_name, ObSqlStrin
   ObArray<int64_t> rows_matrix;
   if (NULL == table_name) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(table_name));
   } else if (columns_.count() <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column_count is invalid", K(ret), "column_count", columns_.count());
   } else if (OB_FAIL(splice_batch_insert(table_name, "REPLACE", sql, all_names, rows_matrix))) {
   }
   return ret;
@@ -1097,10 +1037,8 @@ int ObDMLSqlSplicer::splice_batch_insert_update_sql(const char *table_name, comm
   ObArray<int64_t> rows_matrix;
   if (NULL == table_name) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(table_name));
   } else if (columns_.count() <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column_count is invalid", K(ret), "column_count", columns_.count());
   } else if (OB_FAIL(splice_batch_insert(table_name, "INSERT", sql, all_names, rows_matrix))) {
   } else if (OB_FAIL(sql.append(" ON DUPLICATE KEY UPDATE "))) {
   } else if (OB_FAIL(splice_on_duplicate_key_update(ObString::make_string(","), all_names, sql))) {
@@ -1149,10 +1087,8 @@ int ObDMLSqlSplicer::splice_batch_delete_sql(const char *table_name, common::ObS
   ObArray<int64_t> rows_matrix;
   if (NULL == table_name) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(table_name));
   } else if (columns_.count() <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column_count is invalid", K(ret), "column_count", columns_.count());
   } else if (OB_FAIL(build_rows_matrix(all_names, rows_matrix))) {
   } else if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE ", table_name))) {
   } else if (OB_FAIL(splice_batch_predicates(all_names, rows_matrix, sql))) {
@@ -1171,7 +1107,6 @@ int ObDMLSqlSplicer::splice_batch_predicates_sql(common::ObSqlString &sql) const
   ObArray<int64_t> rows_matrix;
   if (columns_.count() <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column_count is invalid", K(ret), "column_count", columns_.count());
   } else if (OB_FAIL(build_rows_matrix(all_names, rows_matrix))) {
   } else if (OB_FAIL(splice_batch_predicates(all_names, rows_matrix, sql))) {
   }
@@ -1212,7 +1147,6 @@ int ObDMLExecHelper::exec_batch_insert(const char *table_name,
   affected_rows = 0;
   if (NULL == table_name) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(table_name));
   } else if (OB_FAIL(splicer.splice_batch_insert_in_array(table_name, sqls, insert_header))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < sqls.count(); i++) {
@@ -1234,7 +1168,6 @@ int ObDMLExecHelper::check_row_exist(const char *table_name,
   ObSqlString sql;
   if (NULL == table_name) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(table_name));
   } else if (OB_FAIL(splicer.splice_select_1_sql(table_name, sql))) {
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
@@ -1248,7 +1181,6 @@ int ObDMLExecHelper::check_row_exist(const char *table_name,
             ret = OB_SUCCESS;
             exist = false;
           } else {
-            LOG_WARN("next failed", K(ret));
           }
         }
       }
@@ -1264,7 +1196,6 @@ int ObDMLSqlSplicer::add_long_double_column(const char *col_name, const double v
   const bool is_null = false;
   if (OB_ISNULL(col_name)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid column name", K(ret), KP(col_name));
   } else if (OB_FAIL(values_.append_fmt("%.17g", value))) {
   } else if (OB_FAIL(add_column(is_primary_key, is_null, col_name))) {
   }
@@ -1278,7 +1209,6 @@ int ObDMLSqlSplicer::add_function_call(const char *col_name, const char *func_ca
   const bool is_null = false;
   if (OB_ISNULL(col_name) || OB_ISNULL(func_call)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid column name", K(ret), KP(col_name));
   } else if (OB_FAIL(values_.append(func_call))) {
   } else if (OB_FAIL(add_column(is_primary_key, is_null, col_name))) {
   }

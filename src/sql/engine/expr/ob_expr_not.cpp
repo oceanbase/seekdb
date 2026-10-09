@@ -65,7 +65,6 @@ int ObExprNot::cg_expr(ObExprCGCtx &expr_cg_ctx,
   if (OB_UNLIKELY(rt_expr.type_ != T_OP_NOT)
       || OB_UNLIKELY(rt_expr.arg_cnt_ != 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else {
     rt_expr.eval_func_ = &eval_not;
     rt_expr.eval_batch_func_ = &eval_not_batch;
@@ -82,7 +81,6 @@ int ObExprNot::eval_not(const ObExpr &expr,
       || OB_UNLIKELY(expr.arg_cnt_ != 1)
       || OB_ISNULL(expr.args_[0])) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else {
     // not indicates that the parameter has been added with a bool expression, so the logic reaches here
     // The value of the parameter must be an int (0 or 1)
@@ -108,7 +106,6 @@ int ObExprNot::eval_not_batch(const ObExpr &expr,
       || OB_UNLIKELY(expr.arg_cnt_ != 1)
       || OB_ISNULL(expr.args_[0])) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else {
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {

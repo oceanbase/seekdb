@@ -60,7 +60,6 @@ int ObSimpleBatch::serialize(char *buf, const int64_t buf_len, int64_t &pos) con
     /* send nothing */
   } else if (OB_ISNULL(range_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL data", K(ret));
   } else if (T_SCAN == type_) {
     if (OB_FAIL(range_->serialize(buf, buf_len, pos))) {
     }
@@ -113,7 +112,6 @@ int ObSimpleBatch::deserialize(common::ObIAllocator &allocator,
                                                            data_len,
                                                            pos,
                                                            ((int64_t *)(&M))))) {
-      LOG_WARN("failed to deserialize count", K(ret));
     }
 
     for (int64_t i = 0; OB_SUCC(ret) && i < M; i++) {

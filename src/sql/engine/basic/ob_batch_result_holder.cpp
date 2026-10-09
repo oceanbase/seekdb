@@ -44,7 +44,6 @@ int ObBatchResultHolder::init(const common::ObIArray<ObExpr *> &exprs, ObEvalCtx
     datums_ = static_cast<ObDatum *>(alloc.alloc(batch_size * exprs.count() * sizeof(*datums_)));
     if (OB_ISNULL(datums_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret), K(batch_size), K(exprs.count()));
     }
     inited_ = true;
     saved_size_ = 0;
@@ -124,12 +123,9 @@ int ObBatchResultHolder::check_datum_modified()
         }
         if (j >= cnt) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected status", K(ret), K(j), K(cnt));
         } else {
           const ObDatum datum_saved = (datums_ + off)[j];
           const ObDatum datum_in_expr = e->locate_batch_datums(*eval_ctx_)[j];
-          LOG_WARN("Datum modified", K(ret), K(i), K(j), K(datum_saved.pack_), KP(datum_saved.ptr_),
-                                    K(datum_in_expr.pack_), KP(datum_in_expr.ptr_));
         }
         break;
       }

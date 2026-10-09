@@ -182,7 +182,7 @@ pub(crate) fn take_mid_request_body_for_generation_locked(
 
 pub(crate) fn deliver_decoded_packet(
     conn: &Arc<Conn>,
-    cb: NioCallbacks,
+    handler: Handler,
     packet: DecodedPacket,
     packet_kind: c_int,
     command_view: Option<NioMysqlCommandView>,
@@ -209,7 +209,7 @@ pub(crate) fn deliver_decoded_packet(
             }
         };
     let delivered = deliver_to_cpp(
-        cb,
+        handler,
         conn.sess(),
         body,
         body_len,
@@ -537,9 +537,9 @@ pub unsafe extern "C" fn nio_release_read_packet(
     0
 }
 
-pub(crate) const NIO_AUTH_NO_CHANGE: c_int = 0;
-pub(crate) const NIO_AUTH_OK: c_int = 1;
-pub(crate) const NIO_AUTH_SWITCH_SENT: c_int = 2;
+pub const NIO_AUTH_NO_CHANGE: c_int = 0;
+pub const NIO_AUTH_OK: c_int = 1;
+pub const NIO_AUTH_SWITCH_SENT: c_int = 2;
 
 /// # Safety
 /// `connection_handle` is null or is a live acquired handle and must not be

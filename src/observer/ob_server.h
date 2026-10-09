@@ -166,7 +166,6 @@ class ObSSTableMergeInfoMgr;
 class ObLobManager;
 class ObMemstoreFreezer;
 class ObCompactionMemPool;
-class ObDirectLoadMgr;
 class ObFreezeInfoMgr;
 class ObAccessService;
 class ObEmptyReadBucket;
@@ -348,10 +347,10 @@ private:
   ~ObServer();
 
   int init_config(const ObServerOptions &opts);
-  int init_opts_config(const ObServerOptions &opts, const char *optstr); // init configs from command line
+  int init_opts_config(const ObServerOptions &opts); // init configs from command line
   int init_data_dir_and_redo_dir(const ObServerOptions &opts);
   int init_self_addr();
-  int init_config_module(const char *optstr);
+  int init_config_module();
   int init_tz_info_mgr();
   int init_pre_setting();
   int init_network();
@@ -429,7 +428,6 @@ private:
   common::ObMySQLProxy ddl_sql_proxy_;
 
   // The OceanBase configuration relating to.
-  common::ObServerConfig &config_;
   ObServerReloadConfig reload_config_;
   common::ObConfigManager config_mgr_;
   omt::ObTimezoneMgr &timezone_mgr_;
@@ -509,7 +507,6 @@ public:
   share::ObISharedTimer * shared_timer() { return mods_shared_timer_; }
   blocksstable::ObSharedMacroBlockMgr * shared_macro_block_mgr() { return mods_shared_macro_block_mgr_; }
   storage::ObStorageMetaMemMgr * storage_meta_mem_mgr() { return mods_storage_meta_mem_mgr_; }
-  ObTableScanIteratorObjPool * table_scan_iterator_obj_pool() { return mods_table_scan_iterator_obj_pool_; }
   common::ObIOService * io_service() { return mods_io_service_; }
   storage::mds::ObMdsService * mds_service() { return mods_mds_service_; }
   share::ObSharedMemAllocMgr * shared_mem_alloc_mgr() { return mods_shared_mem_alloc_mgr_; }
@@ -575,7 +572,6 @@ public:
   compaction::ObTabletScheduler * tablet_scheduler() { return mods_tablet_scheduler_; }
   compaction::ObMediumChecker * medium_checker() { return mods_medium_checker_; }
   storage::ObCompactionMemPool * compaction_mem_pool() { return mods_compaction_mem_pool_; }
-  storage::ObDirectLoadMgr * direct_load_mgr() { return mods_direct_load_mgr_; }
   share::ObDagScheduler * dag_scheduler() { return mods_dag_scheduler_; }
   storage::ObFreezeInfoMgr * freeze_info_mgr() { return mods_freeze_info_mgr_; }
   transaction::ObTxLoopWorker * tx_loop_worker() { return mods_tx_loop_worker_; }
@@ -695,7 +691,6 @@ private:
   omt::ObSharedTimer * mods_shared_timer_ = nullptr;
   blocksstable::ObSharedMacroBlockMgr * mods_shared_macro_block_mgr_ = nullptr;
   storage::ObStorageMetaMemMgr * mods_storage_meta_mem_mgr_ = nullptr;
-  ObTableScanIteratorObjPool * mods_table_scan_iterator_obj_pool_ = nullptr;
   common::ObIOService * mods_io_service_ = nullptr;
   storage::mds::ObMdsService * mods_mds_service_ = nullptr;
   share::ObSharedMemAllocMgr * mods_shared_mem_alloc_mgr_ = nullptr;
@@ -739,7 +734,6 @@ private:
   compaction::ObTabletScheduler * mods_tablet_scheduler_ = nullptr;
   compaction::ObMediumChecker * mods_medium_checker_ = nullptr;
   storage::ObCompactionMemPool * mods_compaction_mem_pool_ = nullptr;
-  storage::ObDirectLoadMgr * mods_direct_load_mgr_ = nullptr;
   share::ObDagScheduler * mods_dag_scheduler_ = nullptr;
   storage::ObFreezeInfoMgr * mods_freeze_info_mgr_ = nullptr;
   transaction::ObTxLoopWorker * mods_tx_loop_worker_ = nullptr;

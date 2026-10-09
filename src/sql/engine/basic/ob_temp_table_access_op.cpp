@@ -109,7 +109,6 @@ OB_DEF_DESERIALIZE(ObTempTableAccessOpInput)
       int64_t interm_result_id = 0;
       if (OB_ISNULL(deserialize_allocator_)) {
         ret = OB_NOT_INIT;
-        LOG_WARN("deserialize allocator is NULL", K(ret));
       } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &interm_result_id))) {
       } else if (OB_FAIL(interm_result_ids_.push_back(interm_result_id))) {
       } else { /*do nothing.*/ }
@@ -180,7 +179,6 @@ int ObTempTableAccessOp::inner_rescan()
   }
   if (OB_SUCC(ret) && 
       OB_FAIL(ObOperator::inner_rescan())) {
-    LOG_WARN("failed to rescan", K(ret));
   }
   return ret;
 }
@@ -191,13 +189,10 @@ int ObTempTableAccessOp::inner_open()
   int64_t alloc_size = sizeof(ObChunkDatumStore::StoredRow *) * MY_SPEC.max_batch_size_;
   if (OB_UNLIKELY(MY_SPEC.output_indexs_.count() != MY_SPEC.access_exprs_.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(MY_SPEC.output_indexs_.count()),
-                                     K(MY_SPEC.access_exprs_.count()));
   } else if (alloc_size > 0
              && OB_ISNULL(stored_rows_ = static_cast<const ObChunkDatumStore::StoredRow **>
                          (ctx_.get_allocator().alloc(alloc_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret), K(alloc_size));
   }
   return ret;
 }
@@ -224,12 +219,10 @@ int ObTempTableAccessOp::inner_get_next_row()
   const ObChunkDatumStore::StoredRow *tmp_sr = NULL;
   if (OB_FAIL(THIS_WORKER.check_status())) {
   } else if (!is_started_ && OB_FAIL(locate_next_interm_result(is_end))) {
-    LOG_WARN("failed to locate next interm result.", K(ret));
   }
   while (OB_SUCC(ret) && !is_end) {
     if (OB_FAIL(datum_store_it_.get_next_row(tmp_sr))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("failed to get next row", K(ret));
       } else if (OB_FAIL(locate_next_interm_result(is_end))) {
       }
     } else {
@@ -241,20 +234,15 @@ int ObTempTableAccessOp::inner_get_next_row()
   } else if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(tmp_sr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("temp src row is null.", K(ret));
   } else if (OB_UNLIKELY(MY_SPEC.output_indexs_.count() != MY_SPEC.access_exprs_.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(MY_SPEC.output_indexs_.count()),
-                                     K(MY_SPEC.access_exprs_.count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.output_indexs_.count(); ++i) {
       int64_t col_idx = MY_SPEC.output_indexs_.at(i);
       if (OB_UNLIKELY(col_idx >= tmp_sr->cnt_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(col_idx), K(tmp_sr->cnt_));
       } else if (OB_ISNULL(MY_SPEC.access_exprs_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("spec output is null.", K(ret));
       } else {
         MY_SPEC.access_exprs_.at(i)->locate_expr_datum(eval_ctx_) = tmp_sr->cells()[col_idx];
         MY_SPEC.access_exprs_.at(i)->set_evaluated_projected(eval_ctx_);
@@ -273,13 +261,11 @@ int ObTempTableAccessOp::inner_get_next_batch(const int64_t max_row_cnt)
   int64_t read_rows = -1;
   if (OB_FAIL(THIS_WORKER.check_status())) {
   } else if (!is_started_ && OB_FAIL(locate_next_interm_result(is_end))) {
-    LOG_WARN("failed to locate next interm result.", K(ret));
   }
   while (OB_SUCC(ret) && !is_end) {
     if (OB_FAIL(datum_store_it_.get_next_batch(stored_rows_,
             std::min(MY_SPEC.max_batch_size_, max_row_cnt), read_rows))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("failed to get next row", K(ret));
       } else if (OB_FAIL(locate_next_interm_result(is_end))) {
       }
     } else {
@@ -368,13 +354,10 @@ int ObTempTableAccessOp::locate_interm_result(int64_t result_id)
   // After getting the intermediate result, need to judge whether the result is readable.
   } else if (OB_SUCCESS != result_info->ret_) {
     ret = result_info->ret_;
-    LOG_WARN("the interm result info meet a error", K(ret));
   } else if (!result_info->is_store_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("there is no row store in internal result", K(ret));
   } else if (OB_ISNULL(result_info->datum_store_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("datum store is null.", K(ret));
   } else if (OB_FAIL(result_info->datum_store_->begin(datum_store_it_))) {
   } else { /*do nothing.*/ }
   return ret;
@@ -391,11 +374,9 @@ int ObTempTableAccessOp::get_local_interm_result_id(int64_t &result_id)
       /* do nothing */
     } else if (OB_UNLIKELY(!temp_ctx.is_local_interm_result_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("local interm result ids is empty.", K(ret));
     } else if (temp_ctx.interm_result_infos_.count() != 1 ||
                temp_ctx.interm_result_infos_.at(0).interm_result_ids_.count() != 1) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("local interm result ids expect one.", K(ret));
     } else {
       // local_interm_result_ids_ count is 1 now.
       get_result_id = true;
@@ -404,7 +385,6 @@ int ObTempTableAccessOp::get_local_interm_result_id(int64_t &result_id)
   }
   if (OB_SUCC(ret) && !get_result_id) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get temp table interm result id ", K(ret));
   }
   return ret;
 }

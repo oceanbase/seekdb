@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_DTL
+#include "config_bridge.h"
 #include "ob_dtl_channel.h"
 #include "sql/dtl/ob_dtl_flow_control.h"
 
@@ -29,7 +30,7 @@ ObDtlChannel::ObDtlChannel(uint64_t id)
       pins_(0),
       id_(id),
       done_(false),
-      send_buffer_size_(GCONF.dtl_buffer_size),
+      send_buffer_size_(config::dtl_buffer_size()),
       msg_watcher_(),
       channel_loop_(nullptr),
       dfc_(nullptr),

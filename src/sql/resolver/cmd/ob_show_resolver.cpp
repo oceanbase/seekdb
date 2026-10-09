@@ -123,7 +123,6 @@ int ObShowResolver::check_db_access_for_show_sql(const ObShowResolverContext &sh
                       session_priv.host_name_.length(),session_priv.host_name_.ptr(),
                       show_db_name.length(), show_db_name.ptr());
     } else {
-      LOG_WARN("fail to check priv", K(ret));
     }
   } else { /* do nothing */ }
   return ret;
@@ -145,11 +144,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                   || NULL == schema_checker_
                   || NULL == schema_checker_->get_schema_guard())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("data member is not init",
-        K(ret),
-        K(session_info_),
-        K(params_.allocator_),
-        K(schema_checker_));
   } else if (OB_UNLIKELY(parse_tree.type_ < T_SHOW_TABLES || parse_tree.type_ > T_SHOW_GRANTS)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_TRIGGERS)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_PROFILE)
@@ -158,7 +152,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_CREATE_USER)
             && OB_UNLIKELY(parse_tree.type_ != T_SHOW_CHECK_TABLE)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected parse tree type", K(ret), K(parse_tree.type_));
   } else {
     real_id = 1;
     database_name.assign_ptr(session_info_->get_database_name().ptr(),
@@ -190,12 +183,8 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
       case T_SHOW_TABLES: {
         if (OB_UNLIKELY(parse_tree.num_child_ != 3 || NULL == parse_tree.children_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_), K(parse_tree.children_));
         } else if (OB_UNLIKELY(NULL == parse_tree.children_[2])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("parser tree child is NULL",
-              K(ret),
-              K(parse_tree.children_[2]));
         } else {
           show_resv_ctx.condition_node_ = parse_tree.children_[1];
           show_resv_ctx.stmt_type_ = stmt::T_SHOW_TABLES;
@@ -209,7 +198,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                                         show_db_id))) {
           } else if (OB_UNLIKELY(OB_INVALID_ID == show_db_id)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("database id is invalid", K(ret), K(show_db_id));
           } else if (OB_FAIL(check_db_access_for_show_sql(show_resv_ctx, session_priv, enable_role_id_array))) {
           } else {
             /* (parse_tree.children_[2]->value_)&1        ->  FULL
@@ -221,25 +209,15 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             bool is_extended = (1 == (((parse_tree.children_[2]->value_)>>1)&1));
             if (OB_UNLIKELY(((parse_tree.children_[2]->value_)>>2) != 0)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("node value unexpected", K(ret), K(parse_tree.children_[2]->value_));
               break;
             } else if (!is_full) {
               if (NULL != condition_node && T_LIKE_CLAUSE == condition_node->type_) {
                 if (OB_UNLIKELY(condition_node->num_child_ != 2
                                 || NULL == condition_node->children_)) {
                   ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("invalid like parse node",
-                      K(ret),
-                      K(condition_node->num_child_),
-                      K(condition_node->children_));
                 } else if (OB_UNLIKELY(NULL == condition_node->children_[0]
                                         || NULL == condition_node->children_[1])) {
                   ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("invalid like parse node",
-                      K(ret),
-                      K(condition_node->num_child_),
-                      K(condition_node->children_[0]),
-                      K(condition_node->children_[1]));
 
                 } else {
                   GEN_SQL_STEP_1(
@@ -262,11 +240,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                                 || NULL == condition_node->children_[0]
                                 || NULL == condition_node->children_[1])) {
                   ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("invalid like parse node",
-                      K(ret),
-                      K(condition_node->num_child_),
-                      K(condition_node->children_[0]),
-                      K(condition_node->children_[1]));
                 } else {
                   GEN_SQL_STEP_1(
                       ObShowSqlSet::SHOW_FULL_TABLES_LIKE,
@@ -317,7 +290,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         [&] {
           if (OB_UNLIKELY(parse_tree.num_child_ != 2 || NULL == parse_tree.children_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_), K(parse_tree.children_));
           } else {
             show_resv_ctx.condition_node_ = parse_tree.children_[0];
             ParseNode *condition_node = show_resv_ctx.condition_node_;
@@ -327,18 +299,9 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
               if (OB_UNLIKELY(show_resv_ctx.condition_node_->num_child_ != 2
                               || NULL == show_resv_ctx.condition_node_->children_)) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("invalid like parse node",
-                    K(ret),
-                    K(show_resv_ctx.condition_node_->num_child_),
-                    K(show_resv_ctx.condition_node_->children_));
               } else if (OB_UNLIKELY(NULL == condition_node->children_[0]
                                     || NULL == condition_node->children_[1])) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("invalid like parse node",
-                    K(ret),
-                    K(condition_node->num_child_),
-                    K(condition_node->children_[0]),
-                    K(condition_node->children_[1]));
                 } else {
                   if (show_db_status) {
                     GEN_SQL_STEP_1(ObShowSqlSet::SHOW_DATABASES_STATUS_LIKE,
@@ -383,12 +346,8 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         [&] {
           if (OB_UNLIKELY(parse_tree.num_child_ != 2 || NULL == parse_tree.children_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_), K(parse_tree.children_));
           } else if (OB_UNLIKELY(NULL == parse_tree.children_[0])) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parser tree child is NULL",
-                K(ret),
-                K(parse_tree.children_[0]));
           } else {
             show_resv_ctx.condition_node_ = parse_tree.children_[1];
             show_resv_ctx.stmt_type_ = stmt::T_SHOW_VARIABLES;
@@ -409,12 +368,8 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
           // desc table
           if (OB_UNLIKELY(parse_tree.num_child_ != 4 || NULL == parse_tree.children_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_), K(parse_tree.children_));
           } else if (OB_UNLIKELY(NULL == parse_tree.children_[0])) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parser tree child is NULL",
-                K(ret),
-                K(parse_tree.children_[0]));
           } else {
             ObString show_db_name;
             uint64_t show_db_id = OB_INVALID_ID;
@@ -442,7 +397,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
               bool is_extended = (1 == (((parse_tree.children_[0]->value_)>>1)&1));
               if (OB_UNLIKELY(((parse_tree.children_[0]->value_)>>2) != 0)) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("node value unexpected", K(ret), K(parse_tree.children_[0]->value_));
               } else if (is_full) {
                 if (is_extended) {
                   GEN_SQL_STEP_1(ObShowSqlSet::SHOW_EXTENDED_FULL_COLUMNS);
@@ -469,12 +423,8 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         [&] {
           if (OB_UNLIKELY(parse_tree.num_child_ != 2 || NULL == parse_tree.children_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_), K(parse_tree.children_));
           } else if (OB_UNLIKELY(NULL == parse_tree.children_[1])) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parser tree child is NULL",
-                K(ret),
-                K(parse_tree.children_[1]));
           } else {
             ObString show_db_name;
             uint64_t show_db_id = OB_INVALID_ID;
@@ -489,7 +439,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                                session_priv.host_name_.length(),session_priv.host_name_.ptr(),
                                show_db_name.length(), show_db_name.ptr());
               } else {
-                LOG_WARN("fail to check priv", K(ret));
               }
             } else if (NULL != parse_tree.children_[0]) {
               GEN_SQL_STEP_1(ObShowSqlSet::SHOW_CREATE_DATABASE_EXISTS);
@@ -507,7 +456,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         [&] {
           if (OB_UNLIKELY(parse_tree.num_child_ != 1 || NULL == parse_tree.children_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_), K(parse_tree.children_));
           } else {
             ObString show_db_name;
             uint64_t show_db_id = OB_INVALID_ID;
@@ -569,7 +517,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         [&] {
           if (OB_UNLIKELY(parse_tree.num_child_ != 1 || NULL == parse_tree.children_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_), K(parse_tree.children_));
           } else {
             ObString show_db_name;
             uint64_t show_db_id = OB_INVALID_ID;
@@ -609,8 +556,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         [&] {
           if (OB_UNLIKELY(parse_tree.num_child_ != 1 || NULL == parse_tree.children_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_),
-                    K(parse_tree.children_));
           } else {
             ObString show_db_name;
             uint64_t show_db_id = OB_INVALID_ID;
@@ -628,7 +573,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                                                                   show_tg_name, allow_show, show_table_name))) {
             } else if (!allow_show) {
               ret = OB_ERR_NO_PRIVILEGE;
-              LOG_WARN("trigger not has priv", K(ret), K(show_db_name), K(show_table_name), K(show_tg_name));
               LOG_USER_ERROR(OB_ERR_NO_PRIVILEGE, "TRIGGER");
             } else { }//do nothing
             if (OB_SUCC(ret)) {
@@ -647,7 +591,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         [&] {
           if (OB_UNLIKELY(parse_tree.num_child_ != 4 || NULL == parse_tree.children_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_), K(parse_tree.children_));
           } else {
             ObString show_db_name;
             uint64_t show_db_id = OB_INVALID_ID;
@@ -716,7 +659,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         [&] {
           if (OB_UNLIKELY(parse_tree.num_child_ != 1 || NULL == parse_tree.children_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_), K(parse_tree.children_));
           } else {
             ObSqlStrGenerator sql_gen;
             show_resv_ctx.condition_node_ = parse_tree.children_[0];
@@ -731,7 +673,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         [&] {
           if (OB_UNLIKELY(parse_tree.num_child_ != 1 || NULL == parse_tree.children_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_), K(parse_tree.children_));
           } else {
             show_resv_ctx.condition_node_ = parse_tree.children_[0];
             show_resv_ctx.stmt_type_ = stmt::T_SHOW_COLLATION;
@@ -745,7 +686,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         [&] {
           if (OB_UNLIKELY(parse_tree.num_child_ != 2 || NULL == parse_tree.children_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_), K(parse_tree.children_));
           } else if (!session_info_->is_use_trace_log()) {
             ret = OB_NOT_SUPPORTED;
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "If show trace is not enabled, show trace is");
@@ -760,7 +700,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
               if (show_format.case_compare("JSON")!=0
                     && show_format.case_compare("ROW")!=0) {
                 ret = OB_NOT_SUPPORTED;
-                LOG_WARN("show format is wrong", K(ret), K(show_format));
                 LOG_USER_ERROR(OB_NOT_SUPPORTED, "show format only support json/row, other type is ");
               } else {
                 is_row_traceformat = (show_format.case_compare("ROW")==0);
@@ -786,10 +725,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
           if (OB_UNLIKELY(parse_tree.num_child_ != 2
                           || NULL == parse_tree.children_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong",
-                K(ret),
-                K(parse_tree.num_child_),
-                K(parse_tree.children_));
           } else {
             uint64_t show_user_id = OB_INVALID_ID;
             ObString show_user_name;
@@ -802,11 +737,9 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
               show_host_name = host_name;
             } else if (2 != parse_tree.children_[0]->num_child_) {
               ret = OB_INVALID_ARGUMENT;
-              LOG_WARN("sql_parser parse user error", K(ret));
             //0: user name; 1: host name
             } else if (OB_ISNULL(parse_tree.children_[0])) {
               ret = OB_ERR_PARSE_SQL;
-              LOG_WARN("The child of user node should not be NULL", K(ret));
             } else {
               const ParseNode *user_hostname_node = parse_tree.children_[0];
               ObString user_name(user_hostname_node->children_[0]->str_len_,
@@ -878,15 +811,8 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
       case T_SHOW_PROCESSLIST:{
         if (OB_UNLIKELY(parse_tree.num_child_ != 1 || NULL == parse_tree.children_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("parse tree is wrong",
-              K(ret),
-              K(parse_tree.num_child_),
-              K(parse_tree.children_));
         } else if (OB_UNLIKELY(NULL == parse_tree.children_[0])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("parser tree child is NULL",
-              K(ret),
-              K(parse_tree.children_[0]));
         } else {
           ObString database_name;
           ObString table_name;
@@ -915,10 +841,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         [&] {
           if (OB_UNLIKELY(parse_tree.num_child_ != 2 || NULL == parse_tree.children_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong",
-                K(ret),
-                K(parse_tree.num_child_),
-                K(parse_tree.children_));
           } else {
             show_resv_ctx.condition_node_ = parse_tree.children_[1];
             uint64_t show_db_id;
@@ -929,7 +851,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                                           show_db_id))) {
             } else if (OB_UNLIKELY(OB_INVALID_ID == show_db_id)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("database id is invalid", K(ret), K(show_db_id));
             } else if (OB_FAIL(check_db_access_for_show_sql(show_resv_ctx, session_priv, enable_role_id_array))) {
             } else {
               show_resv_ctx.stmt_type_ = stmt::T_SHOW_TABLE_STATUS;
@@ -945,10 +866,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         [&] {
           if (OB_UNLIKELY(parse_tree.num_child_ != 2 || NULL == parse_tree.children_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong",
-                K(ret),
-                K(parse_tree.num_child_),
-                K(parse_tree.children_));
           } else {
             show_resv_ctx.condition_node_ = parse_tree.children_[1];
             uint64_t show_db_id;
@@ -959,7 +876,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                                           show_db_id))) {
             } else if (OB_UNLIKELY(OB_INVALID_ID == show_db_id)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("database id is invalid", K(ret), K(show_db_id));
             } else if (OB_FAIL(check_db_access_for_show_sql(show_resv_ctx, session_priv, enable_role_id_array))) {
             } else {
               int64_t proc_type = T_SHOW_PROCEDURE_STATUS == parse_tree.type_ ? ROUTINE_PROCEDURE_TYPE : ROUTINE_FUNCTION_TYPE;
@@ -979,10 +895,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         [&] {
           if (OB_UNLIKELY(parse_tree.num_child_ != 2 || NULL == parse_tree.children_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong",
-                K(ret),
-                K(parse_tree.num_child_),
-                K(parse_tree.children_));
           } else {
             show_resv_ctx.condition_node_ = parse_tree.children_[1];
             show_resv_ctx.stmt_type_ = stmt::T_SHOW_TRIGGERS;
@@ -995,24 +907,14 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                                           show_db_id))) {
             } else if (OB_UNLIKELY(OB_INVALID_ID == show_db_id)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("database id is invalid", K(ret), K(show_db_id));
             } else {
               if (NULL != condition_node && T_LIKE_CLAUSE == condition_node->type_) {
                 if (OB_UNLIKELY(condition_node->num_child_ != 2
                                 || NULL == condition_node->children_)) {
                   ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("invalid like parse node",
-                      K(ret),
-                      K(condition_node->num_child_),
-                      K(condition_node->children_));
                 } else if (OB_UNLIKELY(NULL == condition_node->children_[0]
                                         || NULL == condition_node->children_[1])) {
                   ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("invalid like parse node",
-                      K(ret),
-                      K(condition_node->num_child_),
-                      K(condition_node->children_[0]),
-                      K(condition_node->children_[1]));
                 } else {
                   GEN_SQL_STEP_1(ObShowSqlSet::SHOW_TRIGGERS_LIKE);
                   GEN_SQL_STEP_2(ObShowSqlSet::SHOW_TRIGGERS_LIKE,
@@ -1045,7 +947,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
           ParseNode *row_count_node = NULL;
           if (OB_UNLIKELY(parse_tree.num_child_ != 1 || NULL == parse_tree.children_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_), K(parse_tree.children_));
           } else {
             show_resv_ctx.stmt_type_ = parse_tree.type_ == T_SHOW_WARNINGS ? stmt::T_SHOW_WARNINGS : stmt::T_SHOW_ERRORS;
             if (NULL == parse_tree.children_[0]) { // show  warnings|errors
@@ -1063,12 +964,8 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                       T_SHOW_LIMIT == parse_tree.children_[0]->type_) {
               if (OB_UNLIKELY(parse_tree.children_[0]->num_child_ != 2 || NULL == parse_tree.children_[0]->children_)) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.children_[0]->num_child_), K(parse_tree.children_[0]->children_));
               } else if (OB_UNLIKELY(NULL == parse_tree.children_[0]->children_[1])) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("parser tree child is NULL",
-                    K(ret),
-                    K(parse_tree.children_[0]->children_[0]));
               } else {
                 offset_node = parse_tree.children_[0]->children_[0];
                 row_count_node = parse_tree.children_[0]->children_[1];
@@ -1119,7 +1016,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         
         if (OB_UNLIKELY(parse_tree.num_child_ != 2 || nullptr == parse_tree.children_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_), K(parse_tree.children_));
         } else if (OB_FAIL(ObResolverUtils::resolve_local_runtime_selector(parse_tree.children_[1]))) {
         } else {
           show_resv_ctx.stmt_type_ = stmt::T_SHOW_PARAMETERS;
@@ -1135,12 +1031,8 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         [&] {
           if (OB_UNLIKELY(parse_tree.num_child_ != 2 || NULL == parse_tree.children_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_), K(parse_tree.children_));
           } else if (OB_UNLIKELY(NULL == parse_tree.children_[0])) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parser tree child is NULL",
-                K(ret),
-                K(parse_tree.children_[0]));
           } else {
             show_resv_ctx.condition_node_ = parse_tree.children_[1];
             show_resv_ctx.stmt_type_ = stmt::T_SHOW_STATUS;
@@ -1160,7 +1052,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         [&] {
           if (OB_UNLIKELY(parse_tree.num_child_ != 0)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_));
           } else {
             show_resv_ctx.stmt_type_ = stmt::T_SHOW_ENGINES;
             GEN_SQL_STEP_1(ObShowSqlSet::SHOW_ENGINES);
@@ -1174,10 +1065,8 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
           ObWarningBuffer *wb = common::ob_get_tsi_warning_buffer();
           if (OB_ISNULL(wb)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected null warning buffer", K(ret));
           } else if (OB_UNLIKELY(parse_tree.num_child_ != 0)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_));
           } else {
             show_resv_ctx.stmt_type_ = stmt::T_SHOW_PROFILE;
             GEN_SQL_STEP_1(ObShowSqlSet::SHOW_PROFILE);
@@ -1195,7 +1084,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         [&] {
           if (OB_UNLIKELY(parse_tree.num_child_ != 0)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_));
           } else {
             show_resv_ctx.stmt_type_ = stmt::T_SHOW_ENGINE;
             GEN_SQL_STEP_1(ObShowSqlSet::SHOW_ENGINE);
@@ -1208,7 +1096,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         [&] {
           if (OB_UNLIKELY(parse_tree.num_child_ != 1 || NULL == parse_tree.children_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_), K(parse_tree.children_));
           } else {
             show_resv_ctx.condition_node_ = parse_tree.children_[0];
             show_resv_ctx.stmt_type_ = stmt::T_SHOW_OPEN_TABLES;
@@ -1222,7 +1109,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         [&] {
           if (OB_UNLIKELY(parse_tree.num_child_ != 0)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_));
           } else {
             show_resv_ctx.stmt_type_ = stmt::T_SHOW_PRIVILEGES;
             GEN_SQL_STEP_1(ObShowSqlSet::SHOW_PRIVILEGES);
@@ -1235,7 +1121,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         [&] {
           if (OB_UNLIKELY(parse_tree.num_child_ != 0)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_));
           } else {
             show_resv_ctx.stmt_type_ = stmt::T_SHOW_RECYCLEBIN;
             GEN_SQL_STEP_1(ObShowSqlSet::SHOW_RECYCLEBIN);
@@ -1291,11 +1176,9 @@ int ObShowResolver::resolve_show_check_table(const ParseNode &parse_tree,
   if (OB_FAIL(tables_set.create(MAX_CHECK_TABLE_CNT / 2))) {
   } else if (OB_UNLIKELY(1 != parse_tree.num_child_) || OB_ISNULL(parse_tree.children_[0])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parse tree is wrong", K(ret));
   } else if (OB_FAIL(recursive_resolve_table_info(parse_tree.children_[0], alloc, infos, tables_set))) {
   } else if (infos.empty()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get error info", K(ret));
   } else if (infos.count() >= MAX_CHECK_TABLE_CNT) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "check table count exceed 10000 is");
@@ -1303,7 +1186,6 @@ int ObShowResolver::resolve_show_check_table(const ParseNode &parse_tree,
     OB_ISNULL(params_.schema_checker_) ||
     OB_ISNULL(schema_guard = params_.schema_checker_->get_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("got null ptr", K(ret));
   } else if (OB_FAIL(session_info_->get_session_priv_info(session_priv))) {
   }
   if (OB_SUCC(ret)) {
@@ -1315,7 +1197,6 @@ int ObShowResolver::resolve_show_check_table(const ParseNode &parse_tree,
         session_priv, enable_role_id_array, infos.at(i).db_name_, allow_show))) {
       } else if (allow_show && OB_FAIL(schema_guard->check_table_show(
               session_priv, enable_role_id_array, infos.at(i).db_name_, infos.at(i).table_name_, allow_show))) {
-        LOG_WARN("Check table show failed", K(ret));
       }
       if (OB_FAIL(ret)) {
       } else if (!allow_show) {
@@ -1378,10 +1259,8 @@ int ObShowResolver::resolve_show_create_user(const ParseNode &parse_tree,
              OB_ISNULL(params_.schema_checker_) ||
              OB_ISNULL(schema_guard = params_.schema_checker_->get_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("got null ptr", K(ret));
   } else if (OB_UNLIKELY(1 != parse_tree.num_child_) || OB_ISNULL(parse_tree.children_[0])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parse tree is wrong", K(ret));
   } else if (T_FUN_SYS_CURRENT_USER == parse_tree.children_[0]->type_) {
     user_id = session_info_->get_priv_user_id();
     show_current_user = true;
@@ -1390,7 +1269,6 @@ int ObShowResolver::resolve_show_create_user(const ParseNode &parse_tree,
         tmp_ret = OB_USER_NOT_EXIST;
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("failed to got user info", K(ret), K(user_id));
       }
     } else if (OB_ISNULL(user_info)) {
       tmp_ret = OB_USER_NOT_EXIST;
@@ -1402,13 +1280,11 @@ int ObShowResolver::resolve_show_create_user(const ParseNode &parse_tree,
   } else if (OB_UNLIKELY(T_USER_WITH_HOST_NAME != parse_tree.children_[0]->type_) ||
              OB_UNLIKELY(2 != parse_tree.children_[0]->num_child_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parse tree is wrong", K(ret));
   } else {
     ParseNode *user_name_node = parse_tree.children_[0]->children_[0];
     ParseNode *host_name_node = parse_tree.children_[0]->children_[1];
     if (OB_ISNULL(user_name_node)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("user_name is NULL", K(ret), K(user_name));
     } else {
       user_name = ObString(user_name_node->str_len_, user_name_node->str_value_);
       if (NULL != host_name_node) {
@@ -1421,7 +1297,6 @@ int ObShowResolver::resolve_show_create_user(const ParseNode &parse_tree,
           tmp_ret = OB_USER_NOT_EXIST;
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("failed to got user info", K(ret), K(user_name), K(host_name));
         }
       } else if (OB_ISNULL(user_info)) {
         tmp_ret = OB_USER_NOT_EXIST;
@@ -1457,17 +1332,14 @@ int ObShowResolver::resolve_show_create_user(const ParseNode &parse_tree,
                        (int)strlen("OCEANBASE.__ALL_USER"), "OCEANBASE.__ALL_USER");
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("got unexpected ret code", K(ret), K(ret_code));
       }
     } else if (has_select_privilege && OB_USER_NOT_EXIST == tmp_ret) {
       ObSqlString msg;
       if (show_current_user &&
           OB_FAIL(msg.append_fmt("CURRENT_USER()"))) {
-        LOG_WARN("Build msg fail", K(ret));
       } else if (!show_current_user &&
                  OB_FAIL(msg.append_fmt("`%.*s`@`%.*s`", user_name.length(), user_name.ptr(),
                                                          host_name.length(), host_name.ptr()))) {
-        LOG_WARN("Build msg fail", K(user_name), K(host_name), K(ret));
       } else {
         ret = OB_CANNOT_USER;
         LOG_USER_ERROR(OB_CANNOT_USER, (int)strlen("SHOW CREATE USER"), "SHOW CREATE USER",
@@ -1510,7 +1382,6 @@ int ObShowResolver::check_show_create_user_privilege(const bool show_current_use
   has_select_privilege = false;
   if (OB_ISNULL(session_info_) || OB_ISNULL(params_.schema_checker_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("got unexpected NULL ptr", K(ret));
   } else if (show_current_user) {
     // current_user require select privileges on mysql.user or oceanbase.__all_user
     // user level
@@ -1572,7 +1443,6 @@ int ObShowResolver::check_show_create_user_privilege(const bool show_current_use
         ret = OB_SUCCESS;
         has_select_privilege = false;
       } else {
-        LOG_WARN("Failed to check acc", K(ret));
       }
     } else {
       has_select_privilege = true;
@@ -1590,7 +1460,6 @@ int ObShowResolver::get_database_info(const ParseNode *database_node,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(schema_checker_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("some data member is not init", K(ret), K(schema_checker_));
   } else {
     if (NULL == database_node) {
       if (OB_UNLIKELY(session_database_name.empty())) {
@@ -1604,10 +1473,8 @@ int ObShowResolver::get_database_info(const ParseNode *database_node,
     } else {
       if (OB_UNLIKELY(database_node->num_child_ != 1 || NULL == database_node->children_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("parse tree is wrong", K(ret), K(database_node->num_child_), K(database_node->children_));
       } else if (OB_UNLIKELY(NULL == database_node->children_[0])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("show from database node is NULL", K(ret));
       } else if (OB_FAIL(resolve_show_from_database(*database_node->children_[0],
                                                     real_id,
                                                     show_db_id,
@@ -1661,27 +1528,17 @@ int ObShowResolver::resolve_show_from_table(const ParseNode *from_table_node,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(NULL == schema_checker_)) {
     ret = OB_ERR_SCHEMA_UNSET;
-    LOG_WARN("some data member is not init", K(ret), K(schema_checker_));
   } else if (OB_UNLIKELY(NULL == session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session info is null", K(ret));
   } else if (OB_UNLIKELY(T_RELATION_FACTOR != from_table_node->type_
                          || from_table_node->num_child_ < 2
                          || NULL == from_table_node->children_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parse tree is invalid",
-             K(ret),
-             K(from_table_node->type_),
-             K(from_table_node->num_child_),
-             K(from_table_node->children_));
   } else if (from_table_node->num_child_ > 2 && OB_NOT_NULL(from_table_node->children_[2])) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "desc link table is");
   } else if (OB_UNLIKELY(NULL == from_table_node->children_[1])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parser tree child is NULL",
-        K(ret),
-        K(from_table_node->children_[1]));
   } else {
     const ObTableSchema *table_schema = NULL;
     if (NULL == from_database_clause_node) {
@@ -1704,36 +1561,25 @@ int ObShowResolver::resolve_show_from_table(const ParseNode *from_table_node,
                   helper.convert(show_table_name));
             }
           } else {
-            LOG_WARN("fail to resolve table name", K(ret));
           }
         }
       }
     } else if (NULL == from_database_clause_node->children_[0]) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("from_database_clause_node->children_[0] is NULL", K(ret));
     } else {
       // database from from database clause
       if (OB_UNLIKELY(T_FROM_LIST != from_database_clause_node->type_
                       || from_database_clause_node->num_child_ != 1
                       || NULL == from_table_node->children_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("parse tree is invalid",
-                 K(ret),
-                 K(from_database_clause_node->type_),
-                 K(from_database_clause_node->num_child_),
-                 K(from_database_clause_node->children_));
       } else if (OB_UNLIKELY(NULL == from_database_clause_node->children_[0])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("parser tree child is NULL",
-            K(ret),
-            K(from_database_clause_node->children_[0]));
       } else {
         ParseNode *relation_node = from_table_node->children_[1];
         show_table_name.assign_ptr(const_cast<char *>(relation_node->str_value_),
                                    static_cast<int32_t>(relation_node->str_len_));
         if (show_table_name.empty()) {
           ret = OB_WRONG_TABLE_NAME;
-          LOG_WARN("table name is empty", K(ret));
         } else if (OB_FAIL(resolve_show_from_database(*from_database_clause_node->children_[0],
                                                       real_id,
                                                       show_database_id,
@@ -1760,7 +1606,6 @@ int ObShowResolver::resolve_show_from_table(const ParseNode *from_table_node,
                                                          table_schema))) {
     } else if (OB_UNLIKELY(NULL == table_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table schema from schema checker is NULL", K(ret), K(table_schema));
     } else if (T_SHOW_CREATE_VIEW == node_type &&
                !table_schema->is_view_table()) {
       ret = OB_ERR_WRONG_OBJECT;
@@ -1792,7 +1637,6 @@ int ObShowResolver::resolve_show_from_database(const ParseNode &from_db_node,
     if (OB_ERR_BAD_DATABASE == ret) {
       LOG_USER_ERROR(OB_ERR_BAD_DATABASE, show_database_name.length(), show_database_name.ptr());
     } else {
-      LOG_WARN("fail to resolve database name", K(ret));
     }
   }
   return ret;
@@ -1811,19 +1655,12 @@ int ObShowResolver::resolve_show_from_routine(const ParseNode *from_routine_node
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(NULL == schema_checker_ || NULL == session_info_)) {
     ret = OB_ERR_SCHEMA_UNSET;
-    LOG_WARN("some data member is not init", K(ret), K(schema_checker_), K(session_info_));
   } else if (OB_UNLIKELY(T_RELATION_FACTOR != from_routine_node->type_
              || from_routine_node->num_child_ < 2
              || NULL == from_routine_node->children_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parse tree is invalid",
-             K(ret),
-             K(from_routine_node->type_),
-             K(from_routine_node->num_child_),
-             K(from_routine_node->children_));
   } else if (OB_UNLIKELY(NULL == from_routine_node->children_[1])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parser tree child is NULL", K(ret), K(from_routine_node->children_[1]));
   } else {
     const ObRoutineInfo *routine_info = NULL;
     if(OB_UNLIKELY(is_database_unselected && NULL == from_routine_node->children_[0])) {
@@ -1839,13 +1676,11 @@ int ObShowResolver::resolve_show_from_routine(const ParseNode *from_routine_node
           show_database_name = session_info_->get_database_name();
         } else if (OB_UNLIKELY(db_node->type_ != T_IDENT)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Invalid node type", K(ret));
         } else {
           show_database_name.assign_ptr(db_node->str_value_, static_cast<int32_t>(db_node->str_len_));
         }
       }
       if (OB_SUCC(ret) && OB_FAIL(schema_checker_->get_database_id(show_database_name, show_database_id))) {
-        LOG_WARN("failed to get procedure id", K(show_database_name), K(ret));
       } else { /*do nothing*/ }
     }
     if (OB_FAIL(ret)) {
@@ -1862,7 +1697,6 @@ int ObShowResolver::resolve_show_from_routine(const ParseNode *from_routine_node
     if (OB_SUCC(ret)) {
       if (OB_UNLIKELY(NULL == routine_info)) {
         ret = OB_ERR_SP_DOES_NOT_EXIST;
-        LOG_WARN("procudure info from schema checker is NULL", K(ret), K(routine_info));
       } else {
         show_routine_id = routine_info->get_routine_id();
         routine_type = routine_info->get_routine_type();
@@ -1885,21 +1719,16 @@ int ObShowResolver::resolve_show_from_trigger(const ParseNode *from_tg_node,
   const ObTableSchema *table = NULL;
   if (OB_UNLIKELY(NULL == schema_checker_ || NULL == session_info_)) {
     ret = OB_ERR_SCHEMA_UNSET;
-    LOG_WARN("some data member is not init", K(ret), K(schema_checker_), K(session_info_));
   } else if (OB_UNLIKELY(T_RELATION_FACTOR != from_tg_node->type_
              || from_tg_node->num_child_ < 2
              || NULL == from_tg_node->children_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parse tree is invalid", K(ret), K(from_tg_node->type_),
-             K(from_tg_node->num_child_), K(from_tg_node->children_));
   } else if (OB_UNLIKELY(NULL == from_tg_node->children_[1])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parser tree child is NULL", K(ret), K(from_tg_node->children_[1]));
   } else {
     const ObTriggerInfo *tg_info = NULL;
     if (OB_UNLIKELY(is_database_unselected && NULL == from_tg_node->children_[0])) {
       ret = OB_ERR_NO_DB_SELECTED;
-      LOG_WARN("no database selected", K(ret));
     } else {
       const ParseNode *db_node = NULL;
       show_tg_name.assign_ptr(from_tg_node->children_[1]->str_value_,
@@ -1908,7 +1737,6 @@ int ObShowResolver::resolve_show_from_trigger(const ParseNode *from_tg_node,
         show_database_name = session_info_->get_database_name();
       } else if (OB_UNLIKELY(db_node->type_ != T_IDENT)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Invalid node type", K(ret));
       } else {
         show_database_name.assign_ptr(db_node->str_value_,
                                       static_cast<int32_t>(db_node->str_len_));
@@ -1938,7 +1766,6 @@ int ObShowResolver::parse_and_resolve_select_sql(const ObString &select_sql)
   // 1. parse and resolve view defination
   if (OB_ISNULL(session_info_) || OB_ISNULL(params_.allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("data member is not init", K(ret), K(session_info_), K(params_.allocator_));
   } else {
     ParseResult select_result;
     ObParser parser(*params_.allocator_, session_info_->get_sql_mode());
@@ -1947,15 +1774,11 @@ int ObShowResolver::parse_and_resolve_select_sql(const ObString &select_sql)
       // use alias to make all columns number continued
       if (OB_ISNULL(select_result.result_tree_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result tree is NULL", K(ret));
       } else if (OB_UNLIKELY(select_result.result_tree_->num_child_ != 1
                              || NULL == select_result.result_tree_->children_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result tree is invalid",
-                 K(ret), K(select_result.result_tree_->num_child_), K(select_result.result_tree_->children_));
       } else if (OB_UNLIKELY(NULL == select_result.result_tree_->children_[0])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result tree is invalid", K(ret), "child ptr", select_result.result_tree_->children_[0]);
       } else {
         ParseNode *select_stmt_node = select_result.result_tree_->children_[0];
         if (OB_FAIL(ObSelectResolver::resolve(*select_stmt_node))) {
@@ -1975,7 +1798,6 @@ int ObShowResolver::resolve_like_or_where_clause(ObShowResolverContext &ctx)
   ObDMLStmt *stmt = get_stmt();
   if (OB_ISNULL(ctx.parse_tree_) || OB_ISNULL(stmt) || OB_ISNULL(allocator_) || OB_ISNULL(params_.expr_factory_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("data member is not init", K(ret), K(ctx.parse_tree_), K(stmt), K_(params_.expr_factory));
   } else if (NULL == condition_node
              || (parse_tree->type_ != T_SHOW_TABLES
                  && parse_tree->type_ != T_SHOW_DATABASES
@@ -1998,23 +1820,14 @@ int ObShowResolver::resolve_like_or_where_clause(ObShowResolverContext &ctx)
       // like clause
       if (OB_UNLIKELY(condition_node->num_child_ != 2 || NULL == condition_node->children_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("parse tree is wrong", K(ret), K(condition_node->num_child_), K(condition_node->children_));
       } else if (OB_UNLIKELY(NULL == condition_node->children_[0]
                              || NULL == condition_node->children_[1])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("parse tree child is NULL",
-            K(ret),
-            K(condition_node->children_[0]),
-            K(condition_node->children_[1]));
       } else if (OB_UNLIKELY((T_VARCHAR != condition_node->children_[0]->type_
                               && T_CHAR != condition_node->children_[0]->type_)
                              || (T_VARCHAR != condition_node->children_[1]->type_
                                   && T_CHAR != condition_node->children_[1]->type_))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("parse node type is unexpected",
-            K(ret),
-            K(condition_node->children_[0]->type_),
-            K(condition_node->children_[1]->type_));
       } else {
         ObString like_pattern;
         ObString like_escape;
@@ -2041,7 +1854,6 @@ int ObShowResolver::resolve_like_or_where_clause(ObShowResolverContext &ctx)
           if (OB_FAIL(resolve_column_ref_expr(q_name, ref_expr))) {
           } else if (OB_ISNULL(ref_expr)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("column expr is null");
           } else if (OB_FAIL(ObRawExprUtils::build_const_string_expr(*params_.expr_factory_,
                                                               ObVarcharType,
                                                               like_pattern,
@@ -2055,7 +1867,6 @@ int ObShowResolver::resolve_like_or_where_clause(ObShowResolverContext &ctx)
           } else if (OB_FAIL(params_.expr_factory_->create_raw_expr(T_OP_LIKE, op_expr))) {
           } else if (OB_ISNULL(op_expr)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("op expr is null");
           } else {
             op_expr->set_param_exprs(ref_expr, like_pat_expr, like_es_expr);
             if (OB_FAIL(op_expr->formalize(session_info_))) {
@@ -2070,7 +1881,6 @@ int ObShowResolver::resolve_like_or_where_clause(ObShowResolverContext &ctx)
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid condition type", K(ret), K(get_type_name(condition_node->type_)));
     }
   }
   return ret;
@@ -2081,7 +1891,6 @@ int ObShowResolver::replace_where_clause(ParseNode* node, const ObShowResolverCo
   int ret = OB_SUCCESS;
   if (OB_ISNULL(node)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("expr node is null");
   } else {
     switch (node->type_) {
       case T_NULL:
@@ -2120,10 +1929,8 @@ int ObShowResolver::replace_where_clause(ParseNode* node, const ObShowResolverCo
         }
         if (OB_UNLIKELY(node->num_child_ != 3 || NULL == node->children_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("parse tree is wrong", K(ret), K(node->num_child_), K(node->children_));
         } else if (OB_UNLIKELY(NULL == node->children_[2])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("parser tree child is NULL", K(ret), K(node->children_[2]));
         } else {
           if (ObCharset::case_insensitive_equal(
                   ObString(node->children_[2]->str_len_, node->children_[2]->str_value_),
@@ -2137,10 +1944,8 @@ int ObShowResolver::replace_where_clause(ParseNode* node, const ObShowResolverCo
       case T_OBJ_ACCESS_REF: {
         if (OB_UNLIKELY(node->num_child_ != 2 || NULL == node->children_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("parse tree is wrong", K(ret), K(node->num_child_), K(node->children_));
         } else if (OB_UNLIKELY(NULL == node->children_[0])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("parser tree child is NULL", K(ret), K(node->children_[2]));
         } else {
           if (T_IDENT == node->children_[0]->type_) {
             if (ObCharset::case_insensitive_equal(
@@ -2163,13 +1968,9 @@ int ObShowResolver::replace_where_clause(ParseNode* node, const ObShowResolverCo
       case T_ALL: {
         if (OB_UNLIKELY(node->num_child_ < 1 || NULL == node->children_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("parse tree is wrong", K(ret), K(node->num_child_), K(node->children_));
         } else if (OB_UNLIKELY(NULL == node->children_[0]
                                || T_SELECT != node->children_[0]->type_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("parser tree child is NULL",
-              K(ret),
-              K(node->children_[0]));
         } else {
           if (OB_FAIL(replace_where_clause(node->children_[0], show_resv_ctx))) {
           }
@@ -2181,7 +1982,6 @@ int ObShowResolver::replace_where_clause(ParseNode* node, const ObShowResolverCo
         while (OB_SUCCESS == ret && cur_expr && cur_expr->type_ == T_OP_NOT) {
           if (OB_UNLIKELY(cur_expr->num_child_ < 1 || NULL == cur_expr->children_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong", K(ret), K(cur_expr->num_child_), K(cur_expr->children_));
           } else {
             cur_expr = cur_expr->children_[0];
           }
@@ -2201,7 +2001,6 @@ int ObShowResolver::replace_where_clause(ParseNode* node, const ObShowResolverCo
                && (cur_expr->type_ == T_OP_POS || cur_expr->type_ == T_OP_NEG)) {
           if (OB_UNLIKELY(cur_expr->num_child_ < 1 || NULL == cur_expr->children_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong", K(ret), K(cur_expr->num_child_), K(cur_expr->children_));
           } else {
             cur_expr = cur_expr->children_[0];
           }
@@ -2242,7 +2041,6 @@ int ObShowResolver::replace_where_clause(ParseNode* node, const ObShowResolverCo
       case T_OP_NOT_IN: {
         if (OB_UNLIKELY(node->num_child_ != 2 || NULL == node->children_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("parse tree is wrong", K(ret), K(node->num_child_), K(node->children_));
         } else {
           if (OB_FAIL(replace_where_clause(node->children_[0], show_resv_ctx))) {
           } else if (OB_FAIL(replace_where_clause(node->children_[1], show_resv_ctx))){
@@ -2254,7 +2052,6 @@ int ObShowResolver::replace_where_clause(ParseNode* node, const ObShowResolverCo
       case T_OP_NOT_LIKE: {
         if (OB_UNLIKELY(!(node->num_child_ == 3 || node->num_child_ == 2) || NULL == node->children_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("parse tree is wrong", K(ret), K(node->num_child_), K(node->children_));
         } else if (node->num_child_ == 3){
           if (OB_FAIL(replace_where_clause(node->children_[0], show_resv_ctx))) {
           } else if (OB_FAIL(replace_where_clause(node->children_[1], show_resv_ctx))){
@@ -2271,7 +2068,6 @@ int ObShowResolver::replace_where_clause(ParseNode* node, const ObShowResolverCo
       case T_OP_NOT_BTW: {
         if (OB_UNLIKELY(node->num_child_ != 3 || NULL == node->children_)) {
            ret = OB_ERR_UNEXPECTED;
-           LOG_WARN("parse tree is wrong", K(ret), K(node->num_child_), K(node->children_));
         } else {
           if (OB_FAIL(replace_where_clause(node->children_[0], show_resv_ctx))) {
           } else if (OB_FAIL(replace_where_clause(node->children_[1], show_resv_ctx))){
@@ -2283,17 +2079,12 @@ int ObShowResolver::replace_where_clause(ParseNode* node, const ObShowResolverCo
       case T_CASE: {
         if (OB_UNLIKELY(node->num_child_ != 3 || NULL == node->children_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("parse tree is wrong", K(ret), K(node->num_child_), K(node->children_));
         } else if (OB_UNLIKELY(NULL == node->children_[1]
                                || T_WHEN_LIST != node->children_[1]->type_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("parser tree child is NULL",
-              K(ret),
-              K(node->children_[1]));
         } else {
           if (node->children_[0]) {
             if (OB_FAIL(replace_where_clause(node->children_[0], show_resv_ctx))) {
-              LOG_WARN("failed replace expr", K(ret));
               break;
             }
           }
@@ -2301,18 +2092,14 @@ int ObShowResolver::replace_where_clause(ParseNode* node, const ObShowResolverCo
           for (int32_t i = 0; OB_SUCC(ret) && i < node->children_[1]->num_child_; i++) {
             if (OB_UNLIKELY(NULL == node->children_[1]->children_)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("parser tree child is NULL", K(ret));
             } else {
               when_node = node->children_[1]->children_[i];
               if (OB_UNLIKELY(when_node->num_child_ != 2 || NULL == when_node->children_)) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("parse tree is wrong", K(ret), K(when_node->num_child_), K(when_node->children_));
               } else {
                 if (OB_FAIL(replace_where_clause(when_node->children_[0], show_resv_ctx))) {
-                  LOG_WARN("failed replace expr", K(ret));
                   break;
                 } else if (OB_FAIL(replace_where_clause(when_node->children_[1], show_resv_ctx))){
-                  LOG_WARN("failed replace expr", K(ret));
                   break;
                 } else {/*do nothing*/}
               }
@@ -2321,7 +2108,6 @@ int ObShowResolver::replace_where_clause(ParseNode* node, const ObShowResolverCo
 
           if (node->children_[2]) {
             if (OB_FAIL(replace_where_clause(node->children_[2], show_resv_ctx))) {
-              LOG_WARN("failed replace expr", K(ret));
               break;
             }
           }
@@ -2331,7 +2117,6 @@ int ObShowResolver::replace_where_clause(ParseNode* node, const ObShowResolverCo
       case T_EXPR_LIST: {
         if (OB_UNLIKELY(NULL == node->children_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("parse tree is wrong", K(ret), K(node->num_child_), K(node->children_));
         } else {
           for (int32_t i = 0; OB_SUCC(ret) && i < node->num_child_; i++) {
             if (OB_FAIL(replace_where_clause(node->children_[i], show_resv_ctx))) {
@@ -2344,18 +2129,13 @@ int ObShowResolver::replace_where_clause(ParseNode* node, const ObShowResolverCo
         if (node->num_child_ >1 ) {
           if (OB_UNLIKELY(NULL == node->children_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong", K(ret), K(node->num_child_), K(node->children_));
           } else if (OB_UNLIKELY(NULL == node->children_[1]
                                  || T_EXPR_LIST != node->children_[1]->type_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parser tree child is NULL",
-                     K(ret),
-                     K(node->children_[1]));
           } else {
             int32_t num = node->children_[1]->num_child_;
             for (int32_t i = 0; OB_SUCC(ret) && i < num; i++) {
               if (OB_FAIL(replace_where_clause(node->children_[1]->children_[i], show_resv_ctx))) {
-                LOG_WARN("failed replace expr", K(ret));
                 break;
               }
             }
@@ -2388,7 +2168,6 @@ int ObShowResolver::recursive_resolve_table_info(const ParseNode *table_list_nod
   int ret = OB_SUCCESS;
   if (OB_ISNULL(table_list_node)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("null point", K(ret), KP(table_list_node));
   } else if (T_LINK_NODE == table_list_node->type_) {
     if (OB_FAIL(SMART_CALL(recursive_resolve_table_info(table_list_node->children_[0], alloc, table_infos, tables_set)))) {
     } else if (OB_FAIL(SMART_CALL(recursive_resolve_table_info(table_list_node->children_[1], alloc, table_infos, tables_set)))) {
@@ -2412,7 +2191,6 @@ int ObShowResolver::resolve_table_info(const ParseNode *table_node,
   ObCheckTableInfo curr_info;
   if (OB_ISNULL(table_node) || OB_ISNULL(schema_checker_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("null point", K(table_node), K(schema_checker_), K(ret));
   } else if (OB_FAIL(resolve_table_relation_node(table_node, table_name, database_name))) {
   } else if (OB_FAIL(ob_write_string(alloc, database_name, curr_info.db_name_, true))) {
   } else if (OB_FAIL(ob_write_string(alloc, table_name, curr_info.table_name_, true))) {
@@ -2420,7 +2198,6 @@ int ObShowResolver::resolve_table_info(const ParseNode *table_node,
     const ObTableSchema *table_schema = nullptr;
     if (OB_FAIL(schema_checker_->get_database_id(database_name, database_id))) {
       if (OB_ERR_BAD_DATABASE != ret) {
-        LOG_WARN("failed to get database id", K(ret));
       } else {
         ret = OB_SUCCESS;
         curr_info.db_exist_ = false;
@@ -2433,7 +2210,6 @@ int ObShowResolver::resolve_table_info(const ParseNode *table_node,
         && OB_FAIL(schema_checker_->get_table_schema( database_name,
                                                      table_name, false, table_schema))) {
       if (OB_TABLE_NOT_EXIST != ret) {
-        LOG_WARN("failed to get schema", K(ret));
       } else {
         curr_info.table_exist_ = false;
         ret = OB_SUCCESS;
@@ -2448,7 +2224,6 @@ int ObShowResolver::resolve_table_info(const ParseNode *table_node,
     if (OB_SUCC(ret)) {
       if (OB_FAIL(tables_set.set_refactored(curr_info, 0))) {
         if (OB_HASH_EXIST != ret) {
-          LOG_WARN("failed to set info", K(ret));
         } else {
           ret = OB_ERR_NONUNIQ_TABLE;
           LOG_USER_ERROR(OB_ERR_NONUNIQ_TABLE, curr_info.table_name_.length(), curr_info.table_name_.ptr());
@@ -2477,7 +2252,6 @@ int ObShowResolver::ObSqlStrGenerator::gen_select_str(const char *select_str, ..
   int ret = OB_SUCCESS;
   if (OB_ISNULL(sql_buf_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("sql buffer is not init", K(ret));
   } else {
     if (NULL == select_str) {
       if (OB_FAIL(databuff_printf(sql_buf_, OB_MAX_SQL_LENGTH, sql_buf_pos_, "SELECT * "))) {
@@ -2501,7 +2275,6 @@ int ObShowResolver::ObSqlStrGenerator::gen_from_str(const char *subquery_str, ..
     int64_t pos = 0;
     if (OB_ISNULL(sql_buf_) || OB_ISNULL(subquery_str)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("sql buffer or subquery_str is not init", K(ret), K(sql_buf_), K(subquery_str));
     } else if (OB_FAIL(databuff_printf(tmp_buf,
                                 OB_MAX_SQL_LENGTH,
                                 pos,

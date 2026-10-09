@@ -92,7 +92,6 @@ int ObNewRow::deep_copy(const ObNewRow &src, char *buf, int64_t len, int64_t &po
 
   if (src.get_deep_copy_size() + pos > len) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("size overflow, ", K(ret), "need", src.get_deep_copy_size() + pos, K(len));
   } else {
     cells_ = new(buf + pos) ObObj[src.count_];
     pos += src.count_ * sizeof(ObObj);
@@ -101,7 +100,6 @@ int ObNewRow::deep_copy(const ObNewRow &src, char *buf, int64_t len, int64_t &po
     projector_ = NULL;
     for (int64_t i = 0; i < src.count_; ++i) {
       if (OB_FAIL(cells_[i].deep_copy(src.cells_[i], buf, len, pos))) {
-        LOG_WARN("fail to deep copy cell, ", K(ret));
         break;
       }
     }
@@ -124,14 +122,12 @@ int ObNewRow::construct(char *buf, int64_t len, int64_t &pos, ObNewRow *&row)
   //first, construct ObNewRow header
   if (OB_ISNULL(buf)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf));
   } else {
     row = reinterpret_cast<ObNewRow*>(buf + pos);
     pos += sizeof(ObNewRow);
   }
   if (OB_SUCC(ret) && pos > len) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("size overflow", K(ret), K(pos), K(len));
   }
   //construct obj cells_
   if (OB_SUCC(ret)) {
@@ -140,7 +136,6 @@ int ObNewRow::construct(char *buf, int64_t len, int64_t &pos, ObNewRow *&row)
   }
   if (OB_SUCC(ret) && pos > len) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("size overflow", K(ret), K(pos), K(len));
   }
   //construct deep copy data ptr
   for (int64_t i = 0; OB_SUCC(ret) && i < row->count_; ++i) {
@@ -149,7 +144,6 @@ int ObNewRow::construct(char *buf, int64_t len, int64_t &pos, ObNewRow *&row)
       pos += row->cells_[i].get_deep_copy_size();
       if (pos > len) {
         ret = OB_SIZE_OVERFLOW;
-        LOG_WARN("size overflow", K(ret), K(pos), K(len));
       }
     }
   }
@@ -160,7 +154,6 @@ int ObNewRow::construct(char *buf, int64_t len, int64_t &pos, ObNewRow *&row)
   }
   if (OB_SUCC(ret) && pos > len) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid ObNewRow buffer", K(ret), K(pos), K(len));
   }
   return ret;
 }
@@ -192,7 +185,6 @@ DEFINE_DESERIALIZE(ObNewRow)
   if (OB_SUCCESS == ret && count_ > 0) {
     if (OB_ISNULL(cells_)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("cells is null");
     } else {
       OB_UNIS_DECODE_ARRAY(cells_, count_);
     }
@@ -213,7 +205,6 @@ DEFINE_DESERIALIZE(ObNewRow)
   if (OB_SUCCESS == ret && projector_size_ > 0) {
     if (OB_ISNULL(projector_)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("projector is null");
     } else {
       OB_UNIS_DECODE_ARRAY(projector_, projector_size_);
     }

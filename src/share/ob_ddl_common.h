@@ -18,6 +18,7 @@
 #define OCEANBASE_SHARE_OB_DDL_COMMON_H
 
 namespace oceanbase { namespace common { struct ObDatum; } }
+#include "config_bridge.h"
 #include "lib/allocator/page_arena.h"
 #include "share/config/ob_server_config.h"
 #include "share/schema/ob_table_schema.h"
@@ -630,7 +631,7 @@ public:
       const ObObjMeta &obj_meta);
   static int64_t calc_inner_sql_execute_timeout()
   {
-    return max(OB_MAX_DDL_BUILD_TIMEOUT, GCONF._ob_ddl_timeout);
+    return max(OB_MAX_DDL_BUILD_TIMEOUT, config::_ob_ddl_timeout());
   }
 
   /**

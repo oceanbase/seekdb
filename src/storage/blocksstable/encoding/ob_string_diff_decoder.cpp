@@ -46,10 +46,8 @@ int ObStringDiffDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDatum &
 
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(nullptr == data || len < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(data), K(len));
   } else {
 
     // read extend value bit
@@ -90,7 +88,6 @@ int ObStringDiffDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDatum &
       const int64_t buf_size = std::max(header_->string_size_, min_buf_size);
       if (OB_ISNULL(buf = static_cast<char *>(ctx.allocator_->alloc(buf_size)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to allocate memory", K(ret), K(buf_size));
       } else {
         header_->copy_string(ObStringDiffHeader::LeftToRight(), std::logical_not<uint8_t>(),
             header_->common_data(), buf);
@@ -123,10 +120,8 @@ int ObStringDiffDecoder::update_pointer(const char *old_block, const char *cur_b
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(old_block) || OB_ISNULL(cur_block)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(old_block), KP(cur_block));
   } else {
     ObIColumnDecoder::update_pointer(header_, old_block, cur_block);
   }
@@ -146,7 +141,6 @@ int ObStringDiffDecoder::batch_decode(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not inited", K(ret));
   } else {
     const unsigned char *col_data = reinterpret_cast<const unsigned char *>(header_)
         + ctx.col_header_->length_;
@@ -171,7 +165,6 @@ int ObStringDiffDecoder::batch_decode(
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(buf = static_cast<char *>(ctx.allocator_->alloc(buf_size * row_cap)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Failed to allocate memory", K(ret), K(buf_size), K(row_cap));
     } else {
       for (int64_t i = 0; i < row_cap; ++i) {
         header_->copy_string(ObStringDiffHeader::LeftToRight(), std::logical_not<uint8_t>(),

@@ -37,7 +37,6 @@ int ObAllVirtualPrivilege::inner_get_next_row(common::ObNewRow *&row)
   if (OB_SUCC(ret) && start_to_read_) {
     if (OB_FAIL(scanner_it_.get_next_row(cur_row_))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("fail to get next row", K(ret));
       }
     } else {
       row = &cur_row_;
@@ -52,10 +51,8 @@ int ObAllVirtualPrivilege::fill_scanner()
   ObObj *cells = NULL;
   if (OB_ISNULL(allocator_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("allocator is NULL", K(ret));
   } else if (OB_ISNULL(cells = cur_row_.cells_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cur row cell is NULL", K(ret));
   }
 
   int64_t row_count = sizeof(share::all_privileges) / sizeof(share::PrivilegeRow);
@@ -98,7 +95,6 @@ int ObAllVirtualPrivilege::fill_scanner()
       }
     }//end for
     if (OB_SUCC(ret) && OB_FAIL(scanner_.add_row(cur_row_))) {
-      LOG_WARN("fail to add row", K(ret), K(cur_row_));
     }
   }
   if (OB_SUCC(ret)) {

@@ -133,7 +133,6 @@ int ObDASTabletMapper::get_all_virtual_tablet_and_object_id(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_virtual_table(virtual_table_id_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid virtual table id", K(ret), K(virtual_table_id_));
   } else if (OB_FAIL(object_ids.push_back(1))) {
   } else if (OB_FAIL(tablet_ids.push_back(ObTabletID(1)))) {
   }
@@ -175,18 +174,15 @@ int ObDASTabletMapper::get_tablet_and_object_id(
       }
     } else {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid part level", KR(ret), K(part_level));
     }
     OZ(append_array_no_dup(tablet_ids, tmp_tablet_ids));
     OZ(append_array_no_dup(object_ids, tmp_part_ids));
   } else {
     if (part_level == PARTITION_LEVEL_TWO) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("virtual table with subpartition table not supported", KR(ret), K(virtual_table_id_));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "virtual table with subpartition table");
     } else if (!range.is_whole_range()) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("virtual table get tablet_id only with whole range is supported", KR(ret), K(virtual_table_id_));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "virtual table get tablet_id with precise range info");
     } else if (OB_FAIL(get_all_virtual_tablet_and_object_id(tablet_ids, object_ids))) {
     } else if (OB_FAIL(mock_vtable_related_tablet_id_map(tablet_ids, object_ids))) {
@@ -224,18 +220,15 @@ int ObDASTabletMapper::get_tablet_and_object_id(const ObPartitionLevel part_leve
       }
     } else {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid part level", KR(ret), K(part_level));
     }
   } else {
     //virtual table, only supported partition by list(svr_ip, svr_port) ...
     ObAddr svr_addr;
     if (part_level == PARTITION_LEVEL_TWO) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("virtual table with subpartition table not supported", KR(ret), K(virtual_table_id_));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "virtual table with subpartition table");
     } else if (row.get_count() != 2) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("virtual table, only supported partition by list(svr_ip, svr_port)", KR(ret), K(row));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "virtual table partition by other than list(svr_ip, svr_port)");
     } else {
       const ObObj &svr_ip = row.get_cell(0);
@@ -249,7 +242,6 @@ int ObDASTabletMapper::get_tablet_and_object_id(const ObPartitionLevel part_leve
     }
     if (OB_SUCC(ret) && tablet_id.is_valid()
         && OB_FAIL(mock_vtable_related_tablet_id_map(tablet_id, object_id))) {
-      LOG_WARN("fail to mock vtable related tablet id map", KR(ret), K(tablet_id), K(object_id));
     }
   }
   return ret;
@@ -287,12 +279,10 @@ int ObDASTabletMapper::get_tablet_and_object_id(const share::schema::ObPartition
       }
     } else {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid part level", KR(ret), K(part_level));
     }
   } else {
     //virtual table, only supported partition by list(svr_ip, svr_port) ...
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("get partition id by target partition for virtual table not support", KR(ret));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "get partition id by target partition for virtual table");
   }
   return ret;
@@ -347,7 +337,6 @@ int ObDASTabletMapper::get_non_partition_tablet_id(ObIArray<ObTabletID> &tablet_
       DASRelatedTabletMap *map = static_cast<DASRelatedTabletMap *>(related_info_.related_map_);
       if (OB_NOT_NULL(map) && OB_NOT_NULL(related_list_)
           && OB_FAIL(map->assign(*related_list_))) {
-        LOG_WARN("failed to assign related map list", K(ret));
       }
     }
   } else {
@@ -468,7 +457,6 @@ int ObDASTabletMapper::get_default_tablet_and_object_id(const ObPartitionLevel p
     while (OB_SUCC(ret) && !tablet_id.is_valid()) {
       if (OB_FAIL(iter.next_partition_info(info))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("switch the src partition info failed", K(ret));
         }
       } else if (part_hint_ids.empty()) {
         //if partition hint is empty,
@@ -516,7 +504,6 @@ int ObDASTabletMapper::get_default_tablet_and_object_id(const ObPartitionLevel p
           if (OB_FAIL(guard.get_simple_table_schema( related_table_id, table_schema))) {
           } else if (OB_ISNULL(table_schema)) {
             ret = OB_SCHEMA_EAGAIN;
-            LOG_WARN("fail to get table schema", KR(ret), K(related_table_id));
           } else if (OB_FAIL(table_schema->get_part_id_and_tablet_id_by_idx(info.part_idx_,
                                                                             info.subpart_idx_,
                                                                             related_part_id,
@@ -537,7 +524,6 @@ int ObDASTabletMapper::get_default_tablet_and_object_id(const ObPartitionLevel p
     }
   } else if (!part_hint_ids.empty()) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("specify partition name in virtual table not supported", K(ret));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "specify partition name in virtual table");
   } else {
     object_id = EMPTY_VIRTUAL_TABLE_TABLET_ID;
@@ -554,7 +540,6 @@ int ObDASTabletMapper::get_default_tablet_and_object_id(const ObPartitionLevel p
   }
   if (OB_SUCC(ret) && !tablet_id.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid first tablet id", K(ret), KPC(table_schema_), K(virtual_table_id_));
   }
   return ret;
 }
@@ -578,7 +563,6 @@ int ObDASTabletMapper::get_related_partition_id(const ObTableID &src_table_id,
     while (OB_SUCC(ret) && !is_found) {
       if (OB_FAIL(iter.next_partition_info(info))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("switch the src partition info failed", K(ret));
         }
       } else if (info.object_id_ == src_part_id) {
         //find the partition array offset by search partition id
@@ -601,7 +585,6 @@ int ObDASTabletMapper::get_related_partition_id(const ObTableID &src_table_id,
       } else if (OB_FAIL(guard.get_simple_table_schema( dst_table_id, dst_table_schema))) {
       } else if (OB_ISNULL(dst_table_schema)) {
         ret = OB_SCHEMA_EAGAIN;
-        LOG_WARN("fail to get table schema", KR(ret), K(dst_table_id));
       } else if (OB_FAIL(dst_table_schema->get_part_id_and_tablet_id_by_idx(info.part_idx_,
                                                                             info.subpart_idx_,
                                                                             related_part_id,
@@ -705,14 +688,12 @@ int ObDASTabletMapper::get_tablet_and_object_id(
       }
     } else {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid part level", KR(ret), K(part_level));
     }
     OZ(append_array_no_dup(tablet_ids, tmp_tablet_ids));
     OZ(append_array_no_dup(object_ids, tmp_part_ids));
   } else {
     if (part_level == PARTITION_LEVEL_TWO) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("virtual table with subpartition table not supported", KR(ret), K(virtual_table_id_));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "virtual table with subpartition table");
     } else if (OB_FAIL(get_all_virtual_tablet_and_object_id(tablet_ids, object_ids))) {
     } else if (OB_FAIL(mock_vtable_related_tablet_id_map(tablet_ids, object_ids))) {
@@ -764,7 +745,6 @@ int ObDASTabletMapper::get_tablet_and_part_id_for_list_part(const share::schema:
             ObObj res;
             if (OB_ISNULL(vies.at(k))) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("get null vie");
             } else {
               ObCastCtx cast_ctx(&exec_ctx.get_allocator(), &dtc_params, CM_NONE, vies.at(k)->dst_cs_type_);
               if (OB_FAIL(ObTableLocation::se_calc_value_item(cast_ctx, exec_ctx, params,
@@ -799,7 +779,6 @@ int ObDASTabletMapper::get_tablet_and_part_id_for_list_part(const share::schema:
                                                              related_table,
                                                              tablet_ids,
                                                              part_ids))) {
-      LOG_WARN("fail to fill tablet and part_ids", K(fill_tablet_id), K(table_id), K(partition_indexes));
     }
   }
   return ret;
@@ -860,7 +839,6 @@ int ObDASTabletMapper::get_tablet_and_subpart_id_for_list_part(const ObTableSche
             ObObj res;
             if (OB_ISNULL(vies.at(k))) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("get null vie");
             } else {
               ObCastCtx cast_ctx(&exec_ctx.get_allocator(), &dtc_params, CM_NONE, vies.at(k)->dst_cs_type_);
               if (OB_FAIL(ObTableLocation::se_calc_value_item(cast_ctx, exec_ctx, params,
@@ -878,7 +856,6 @@ int ObDASTabletMapper::get_tablet_and_subpart_id_for_list_part(const ObTableSche
           const ObSubPartition *subpartition = NULL;
           if (OB_ISNULL(subpartition = subpart_array[i])) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("subpartition is null", K(i));
           } else if (OB_UNLIKELY(static_cast<ObPartID>(subpartition->get_part_id()) != part_id)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("part_id not match", KPC(subpartition), K(part_id));
@@ -904,7 +881,6 @@ int ObDASTabletMapper::get_tablet_and_subpart_id_for_list_part(const ObTableSche
                                                              related_table,
                                                              tablet_ids,
                                                              subpart_ids))) {
-      LOG_WARN("fail to fill tablet and subpart_ids", K(fill_tablet_id), K(table_id), K(partition_indexes));
     }
   }
   return ret;

@@ -36,10 +36,8 @@ int ObVecIndexDMLIterator::generate_domain_rows(const ObChunkDatumStore::StoredR
   int ret = OB_SUCCESS;
   if (OB_ISNULL(store_row)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(store_row));
   } else if (OB_UNLIKELY(!das_ctdef_->table_param_.get_data_table().is_vector_index())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, it isn't fulltext index", K(ret), K(das_ctdef_->table_param_.get_data_table()));
   } else if (das_ctdef_->table_param_.get_data_table().is_no_need_update_vector_index()) {
     ret = OB_ITER_END; // for 4, 5 table, do not need to write when DML
   } else {
@@ -54,9 +52,7 @@ int ObVecIndexDMLIterator::generate_domain_rows(const ObChunkDatumStore::StoredR
     }
     for (int i = 0; OB_SUCC(ret) && i < row_cnt; i++) {
       if (!is_update_ && OB_FAIL(get_vec_data(store_row, vec_id_idx, vector_idx, vec_id, vector))) {
-        LOG_WARN("fail to get fulltext and doc id", K(ret), K(vec_id_idx), K(vector_idx), KPC(store_row));
       } else if (is_update_ && OB_FAIL(get_vec_data_for_update(store_row, vec_id_idx, vector_idx, vec_id, vector))) {
-        LOG_WARN("fail to get fulltext and doc id for update", K(ret), K(vec_id_idx), K(vector_idx), KPC(store_row));
       } else if (OB_FAIL(generate_vec_delta_buff_row(allocator_, store_row, vec_id_idx, type_idx, vector_idx, vec_id, vector, rows_))) {
       } else if (is_update) {
         is_old_row_ = !is_old_row_;
@@ -76,7 +72,6 @@ int ObVecIndexDMLIterator::get_vec_data(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(vec_id_idx >= row_projector_->count() || vector_idx >= row_projector_->count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid vector index column idx", K(ret), K(vec_id_idx), K(vector_idx), KPC(row_projector_));
   } else {
     vec_id = store_row->cells()[row_projector_->at(vec_id_idx)].get_int();
     // get vec data without lob
@@ -111,7 +106,6 @@ int ObVecIndexDMLIterator::get_vec_data_for_update(
   const uint64_t new_proj_cnt = das_ctdef_->new_row_projector_.count();
   if (OB_UNLIKELY(vec_id_idx >= old_proj_cnt || vector_idx >= old_proj_cnt || vec_id_idx >= new_proj_cnt || vector_idx >= new_proj_cnt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid vector index column idx", K(ret), K(vec_id_idx), K(vector_idx), K(old_proj_cnt), K(new_proj_cnt));
   } else {
     // get vec id
     const int64_t vec_id_old_proj_idx = das_ctdef_->old_row_projector_.at(vec_id_idx);
@@ -161,7 +155,6 @@ int ObVecIndexDMLIterator::generate_vec_delta_buff_row(common::ObIAllocator &all
   blocksstable::ObDatumRow *row = nullptr;
   if (OB_UNLIKELY(vec_id_idx >= row_projector->count() || vector_idx >= row_projector->count() || type_idx >= row_projector->count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid vector index column idx", K(ret), K(vec_id_idx), K(vector_idx), KPC(row_projector));
   } else if (OB_FAIL(data_plane::create_datum_row(allocator_, row_projector->count(), row))) {
   } else if (OB_FAIL(ObDASUtils::project_storage_row(*das_ctdef_,
                                                      *store_row,
@@ -197,7 +190,6 @@ int ObVecIndexDMLIterator::generate_vec_delta_buff_row(common::ObIAllocator &all
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid das op type", K(ret), K(das_ctdef_->op_type_));
       }
     }
     if (!is_old_row_) {
@@ -224,7 +216,6 @@ int ObVecIndexDMLIterator::get_vector_index_column_idxs(int64_t &vec_id_idx, int
   const uint64_t vec_type_col_id = vec_vector_col_id - 1;
   if (OB_UNLIKELY(OB_INVALID_ID == vec_id_col_id || OB_INVALID_ID == vec_type_col_id || OB_INVALID_ID == vec_vector_col_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid vector index column id", K(ret), K(vec_id_col_id), K(vec_type_col_id), K(vec_vector_col_id));
   } else {
     vec_id_idx = OB_INVALID_INDEX;
     type_idx = OB_INVALID_INDEX;
@@ -241,8 +232,6 @@ int ObVecIndexDMLIterator::get_vector_index_column_idxs(int64_t &vec_id_idx, int
     }
     if (OB_UNLIKELY(vec_id_idx == OB_INVALID_INDEX || type_idx == OB_INVALID_INDEX || vector_idx == OB_INVALID_INDEX)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("not get vec index column idxs", K(ret), K(vec_id_col_id), K(vec_type_col_id), K(vec_vector_col_id),
-          K(vec_id_idx), K(type_idx), K(vector_idx));
     }
   }
   return ret;
@@ -254,10 +243,8 @@ int ObSparseVecIndexDMLIterator::generate_domain_rows(const ObChunkDatumStore::S
 
   if (OB_ISNULL(store_row)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(store_row));
   } else if (OB_UNLIKELY(!das_ctdef_->table_param_.get_data_table().is_vector_index())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, it isn't sparse vector index", K(ret), K(das_ctdef_->table_param_.get_data_table()));
   } else {
     int64_t sparce_vec_idx = OB_INVALID_ID;
     int64_t docid_idx = OB_INVALID_ID;
@@ -269,9 +256,7 @@ int ObSparseVecIndexDMLIterator::generate_domain_rows(const ObChunkDatumStore::S
 
     if (OB_FAIL(get_sparse_vector_index_column_idxs(sparce_vec_idx, dim_idx, docid_idx, value_idx))) {
     } else if (!is_update_ && OB_FAIL(get_sparse_vec_data(store_row, docid_idx, sparce_vec_idx, docid, sparse_vec))) {
-      LOG_WARN("failed to get sparse vec data", K(ret));
     } else if (is_update_ && OB_FAIL(get_sparse_vec_data_for_update(store_row, docid_idx, sparce_vec_idx, docid, sparse_vec))) {
-      LOG_WARN("failed to get sparse vec data for update", K(ret));
     } else if (sparse_vec.empty()) {
     } else if (OB_FAIL(generate_sparse_vec_index_row(allocator_, store_row, dim_idx, docid_idx, value_idx, sparce_vec_idx, docid, sparse_vec, rows_))) {
     }
@@ -312,7 +297,6 @@ int ObSparseVecIndexDMLIterator::get_sparse_vector_index_column_idxs(
   }
   if (OB_UNLIKELY(sparse_vec_idx == OB_INVALID_INDEX || dim_idx == OB_INVALID_INDEX || docid_idx == OB_INVALID_INDEX || value_idx == OB_INVALID_INDEX)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("not get sparse vector index column idxs", K(ret), K(sparse_vec_idx), K(dim_idx), K(docid_idx), K(value_idx));
   }
   
   return ret;
@@ -329,7 +313,6 @@ int ObSparseVecIndexDMLIterator::get_sparse_vec_data(
 
   if (OB_UNLIKELY(docid_idx >= row_projector_->count() || sparse_vec_idx >= row_projector_->count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid sparse vector index column idx", K(ret), K(docid_idx), K(sparse_vec_idx), KPC(row_projector_));
   } else {
     docid = store_row->cells()[row_projector_->at(docid_idx)];
     sparse_vec = store_row->cells()[row_projector_->at(sparse_vec_idx)].get_string();
@@ -361,7 +344,6 @@ int ObSparseVecIndexDMLIterator::get_sparse_vec_data_for_update(
 
   if (docid_idx >= old_proj_cnt || docid_idx >= old_proj_cnt || docid_idx >= new_proj_cnt || sparse_vec_idx >= new_proj_cnt) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid sparse vector index column idx", K(ret), K(docid_idx), K(sparse_vec_idx), K(old_proj_cnt), K(new_proj_cnt));
   } else {
     const int64_t docid_proj_idx = row_projector_->at(docid_idx);
     const int64_t sparse_vec_proj_idx = row_projector_->at(sparse_vec_idx);
@@ -413,7 +395,6 @@ int ObSparseVecIndexDMLIterator::generate_sparse_vec_index_row(
     void *rows_buf = nullptr;
     if (OB_ISNULL(rows_buf = reinterpret_cast<char *>(allocator.alloc(dim_count * sizeof(blocksstable::ObDatumRow))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory for sparse vec index rows buffer", K(ret));
     } else {
       blocksstable::ObDatumRow *rows = new (rows_buf) blocksstable::ObDatumRow[dim_count];
       
@@ -443,13 +424,10 @@ int ObHybridVecLogDMLIterator::generate_domain_rows(const ObChunkDatumStore::Sto
   int ret = OB_SUCCESS;
   if (OB_ISNULL(store_row)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(store_row));
   } else if (OB_UNLIKELY(!das_ctdef_->table_param_.get_data_table().is_vector_index())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, it isn't vector index", K(ret), K(das_ctdef_->table_param_.get_data_table()));
   } else if (OB_UNLIKELY(!share::schema::is_hybrid_vec_index_log_type(das_ctdef_->table_param_.get_data_table().get_index_type()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, it isn't hybrid vec log index", K(ret), K(das_ctdef_->table_param_.get_data_table()));
   } else {
     int64_t vec_id;
     bool is_update = (das_ctdef_->op_type_ == ObDASOpType::DAS_OP_TABLE_UPDATE);
@@ -463,9 +441,7 @@ int ObHybridVecLogDMLIterator::generate_domain_rows(const ObChunkDatumStore::Sto
     
     for (int i = 0; OB_SUCC(ret) && i < row_cnt; i++) {
       if (!is_update_ && OB_FAIL(get_vec_id(store_row, vec_id_idx, vec_id))) {
-        LOG_WARN("fail to get vec id", K(ret), K(vec_id_idx), KPC(store_row));
       } else if (is_update_ && OB_FAIL(get_vec_data_for_update(store_row, vec_id_idx, vec_id))) {
-        LOG_WARN("fail to get vec id for update", K(ret), K(vec_id_idx), KPC(store_row));
       } else if (OB_FAIL(generate_hybrid_vec_log_row(allocator_, store_row, vec_id_idx, type_idx, chunk_idx, vec_id, rows_))) {
       } else if (is_update) {
         is_old_row_ = !is_old_row_;
@@ -485,7 +461,6 @@ int ObHybridVecLogDMLIterator::get_vec_id(
     const uint64_t new_proj_cnt = das_ctdef_->new_row_projector_.count();
     if (OB_UNLIKELY(vec_id_idx >= new_proj_cnt)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid vec id idx for update", K(ret), K(vec_id_idx), K(new_proj_cnt));
     } else {
       const int64_t vec_id_new_proj_idx = das_ctdef_->new_row_projector_.at(vec_id_idx);
       vec_id = store_row->cells()[vec_id_new_proj_idx].get_int();
@@ -493,7 +468,6 @@ int ObHybridVecLogDMLIterator::get_vec_id(
   } else {
     if (OB_UNLIKELY(vec_id_idx >= row_projector_->count())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid hybrid vec log column idx", K(ret), K(vec_id_idx), KPC(row_projector_));
     } else {
       vec_id = store_row->cells()[row_projector_->at(vec_id_idx)].get_int();
     }
@@ -511,7 +485,6 @@ int ObHybridVecLogDMLIterator::get_vec_data_for_update(
   const uint64_t new_proj_cnt = das_ctdef_->new_row_projector_.count();
   if (OB_UNLIKELY(vec_id_idx >= old_proj_cnt || vec_id_idx >= new_proj_cnt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid vec id idx for update", K(ret), K(vec_id_idx), K(old_proj_cnt), K(new_proj_cnt));
   } else {
     const int64_t vec_id_old_proj_idx = das_ctdef_->old_row_projector_.at(vec_id_idx);
     const int64_t vec_id_new_proj_idx = das_ctdef_->new_row_projector_.at(vec_id_idx);
@@ -541,7 +514,6 @@ int ObHybridVecLogDMLIterator::generate_hybrid_vec_log_row(common::ObIAllocator 
   blocksstable::ObDatumRow *row = nullptr;
   if (OB_UNLIKELY(vec_id_idx >= row_projector->count() || chunk_idx >= row_projector->count() || type_idx >= row_projector->count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid hybrid vec log column idx", K(ret), K(vec_id_idx), K(chunk_idx), KPC(row_projector));
   } else if (OB_FAIL(data_plane::create_datum_row(allocator_, row_projector->count(), row))) {
   } else if (OB_FAIL(ObDASUtils::project_storage_row(*das_ctdef_,
                                                      *store_row,
@@ -572,7 +544,6 @@ int ObHybridVecLogDMLIterator::generate_hybrid_vec_log_row(common::ObIAllocator 
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid das op type", K(ret), K(das_ctdef_->op_type_));
       }
     }
     bool is_sync_interval = false;
@@ -597,7 +568,6 @@ int ObHybridVecLogDMLIterator::get_hybrid_vec_log_column_idxs(int64_t &vec_id_id
   const uint64_t vec_type_col_id = vec_chunk_col_id - 1;
   if (OB_UNLIKELY(OB_INVALID_ID == vec_id_col_id || OB_INVALID_ID == vec_type_col_id || OB_INVALID_ID == vec_chunk_col_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid hybrid vec log column id", K(ret), K(vec_id_col_id), K(vec_type_col_id), K(vec_chunk_col_id));
   } else {
     vec_id_idx = OB_INVALID_INDEX;
     type_idx = OB_INVALID_INDEX;
@@ -614,8 +584,6 @@ int ObHybridVecLogDMLIterator::get_hybrid_vec_log_column_idxs(int64_t &vec_id_id
     }
     if (OB_UNLIKELY(vec_id_idx == OB_INVALID_INDEX || type_idx == OB_INVALID_INDEX || chunk_idx == OB_INVALID_INDEX)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("not get hybrid vec log column idxs", K(ret), K(vec_id_col_id), K(vec_type_col_id), K(vec_chunk_col_id),
-          K(vec_id_idx), K(type_idx), K(chunk_idx));
     }
   }
   return ret;
@@ -655,13 +623,10 @@ int ObEmbeddedVecDMLIterator::generate_domain_rows(const ObChunkDatumStore::Stor
 
   if (OB_ISNULL(store_row)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(store_row));
   } else if (OB_UNLIKELY(!das_ctdef_->table_param_.get_data_table().is_vector_index())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, it isn't vector index", K(ret), K(das_ctdef_->table_param_.get_data_table()));
   } else if (OB_UNLIKELY(!share::schema::is_hybrid_vec_index_embedded_type(das_ctdef_->table_param_.get_data_table().get_index_type()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, it isn't hybrid vec embedded index", K(ret), K(das_ctdef_->table_param_.get_data_table()));
   } else {
     bool is_sync_interval = false;
     if (OB_FAIL(check_sync_interval(is_sync_interval))) {
@@ -677,7 +642,6 @@ int ObEmbeddedVecDMLIterator::generate_embedded_vec_row(const ObChunkDatumStore:
 
   if (OB_ISNULL(store_row)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(store_row));
   } else {
     const IntFixedArray* row_projector = row_projector_;
     blocksstable::ObDatumRow *row = nullptr;
@@ -695,7 +659,6 @@ int ObEmbeddedVecDMLIterator::generate_embedded_vec_row(const ObChunkDatumStore:
       } else {
         if (OB_ISNULL(das_ctdef_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("das_ctdef_ is null", K(ret), KP(das_ctdef_));
         } else {
           ObString vec_index_param = das_ctdef_->table_param_.get_data_table().get_vec_index_param();
           ObString chunk;
@@ -721,7 +684,6 @@ int ObEmbeddedVecDMLIterator::generate_embedded_vec_row(const ObChunkDatumStore:
             }
           }
           if (OB_SUCC(ret) && OB_FAIL(rows_.push_back(row))) {
-            LOG_WARN("fail to push back row", K(ret));
           }
         }
       }
@@ -736,10 +698,8 @@ int ObEmbeddedVecDMLIterator::get_vid(const ObChunkDatumStore::StoredRow *store_
   vid = OB_INVALID_ID;
   if (OB_UNLIKELY(vid_idx == OB_INVALID_INDEX)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("not found vid column", K(ret));
   } else if (OB_UNLIKELY(vid_idx >= row_projector_->count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid vid idx", K(ret), K(vid_idx), KPC(row_projector_));
   } else {
     const int64_t main_table_vid_idx = row_projector_->at(vid_idx);
     vid = store_row->cells()[main_table_vid_idx].get_int();
@@ -752,10 +712,8 @@ int ObEmbeddedVecDMLIterator::get_chunk_data(const ObChunkDatumStore::StoredRow 
   chunk.reset();
   if (OB_UNLIKELY(embedded_vec_idx == OB_INVALID_INDEX)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("not found embedded vec column", K(ret));
   } else if (OB_UNLIKELY(embedded_vec_idx >= row_projector_->count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid embedded vec idx", K(ret), K(embedded_vec_idx), KPC(row_projector_));
   } else {
     const int64_t main_table_embedded_idx = row_projector_->at(embedded_vec_idx);
     chunk = store_row->cells()[main_table_embedded_idx].get_string();
@@ -783,7 +741,6 @@ int ObEmbeddedVecDMLIterator::get_embedded_vec_column_idxs(int64_t &vid_idx, int
   
   if (OB_UNLIKELY(OB_INVALID_ID == vec_id_col_id || OB_INVALID_ID == vec_embedded_vec_col_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid embedded vec column id", K(ret), K(vec_id_col_id), K(vec_embedded_vec_col_id));
   } else {
     for (int64_t i = 0; i < das_ctdef_->table_param_.get_col_descs().count(); i++) {
       uint64_t col_id = das_ctdef_->table_param_.get_col_descs().at(i).col_id_;
@@ -795,8 +752,6 @@ int ObEmbeddedVecDMLIterator::get_embedded_vec_column_idxs(int64_t &vid_idx, int
     }
     if (OB_UNLIKELY(vid_idx == OB_INVALID_INDEX || embedded_vec_idx == OB_INVALID_INDEX)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("not get embedded vec column idxs", K(ret), K(vec_id_col_id), K(vec_embedded_vec_col_id),
-          K(vid_idx), K(embedded_vec_idx));
     }
   }
   return ret;

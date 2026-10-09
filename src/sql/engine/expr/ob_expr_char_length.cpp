@@ -48,7 +48,6 @@ int ObExprCharLength::calc_result_type1(ObExprResType &type,
   } else {
     if (!is_type_valid(text.get_type())) {
       ret = OB_INVALID_ARGUMENT_NUM;
-      LOG_WARN("the param is not castable", K(text), K(ret));
     } else {
       type.set_int();
       type.set_precision(ObAccuracy::DDL_DEFAULT_ACCURACY[ObIntType].precision_);

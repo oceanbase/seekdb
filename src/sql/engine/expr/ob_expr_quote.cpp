@@ -68,7 +68,6 @@ int ObExprQuote::calc(ObString &res_str, ObString str, ObCollationType coll_type
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("calc buf is NULL", K(ret));
   } else {
     ObString escape_char = ObCharsetUtils::get_const_str(coll_type, '\\');
     int64_t buf_len = str.length() * 2 + 2 * escape_char.length();
@@ -145,7 +144,6 @@ int ObExprQuote::calc_quote_expr(const ObExpr &expr, ObEvalCtx &ctx,
       if (OB_ERR_INCORRECT_STRING_VALUE == ret) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("calc quote expr failed", K(ret), K(str));
       }
     } else {
       res_datum.set_string(res_str);

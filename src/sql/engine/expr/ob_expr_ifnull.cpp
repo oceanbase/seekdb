@@ -48,7 +48,6 @@ int ObExprIfNull::calc_result_type2(ObExprResType &type,
   const ObSQLSessionInfo *session = type_ctx.get_session();
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is NULL", K(ret));
   } else if (OB_FAIL(ObExprPromotionUtil::get_nvl_type(type, type1, type2))) {
   } else if (ob_is_string_type(type.get_type()) || ob_is_json_tc(type.get_type())) {
     ObExprResTypes res_types;
@@ -65,7 +64,6 @@ int ObExprIfNull::calc_result_type2(ObExprResType &type,
     ObExprResType coll_calc_type = type;
     if (OB_ISNULL(exec_ctx)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("exec ctx is null", K(ret));
     } else if (type1.get_subschema_id() == type2.get_subschema_id()) {
       type.set_collection(type1.get_subschema_id());
     } else if (OB_FAIL(ObExprResultTypeUtil::get_array_calc_type(exec_ctx, type1, type2, coll_calc_type))) {

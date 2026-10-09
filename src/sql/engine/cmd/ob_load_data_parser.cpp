@@ -44,7 +44,6 @@ int ObCSVGeneralFormat::init_format(const ObDataInFileStruct &format,
 
   if (!ObCharset::is_valid_collation(file_cs_type)) {
     ret = OB_ERR_UNKNOWN_CHARSET;
-    LOG_WARN("invalid charset", K(ret), K(file_cs_type));
   } else {
     cs_type_ = ObCharset::charset_type_by_coll(file_cs_type);
     file_column_nums_ = file_column_nums;
@@ -112,7 +111,6 @@ int ObCSVGeneralParser::init_opt_variables()
   }
 
   if (OB_SUCC(ret) && OB_FAIL(fields_per_line_.prepare_allocate(format_.file_column_nums_))) {
-    LOG_WARN("fail to allocate memory", K(ret), K(format_.file_column_nums_));
   }
   return ret;
 }
@@ -289,14 +287,12 @@ int ObCSVGeneralFormat::load_from_json_data(json::Pair *&node, ObIAllocator &all
     int64_t idx = 0;
     if (it_array.get_size() > 0
         && OB_FAIL(null_if_.allocate_array(allocator, it_array.get_size()))) {
-      LOG_WARN("allocate array failed", K(ret));
     }
     for (auto it_tmp = it_array.get_first();
          OB_SUCC(ret) && it_tmp != it_array.get_header() && it_tmp != NULL;
          it_tmp = it_tmp->get_next()) {
       if (OB_UNLIKELY(json::JT_STRING != it_tmp->get_type())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("null_if_ child is not string", K(ret), "type", it_tmp->get_type());
       } else {
         ObObj obj;
         OZ(ObHexUtilsBase::unhex(it_tmp->get_string(), allocator, obj));
@@ -540,7 +536,6 @@ int ObExternalFileFormat::to_string_with_alloc(ObString &str, ObIAllocator &allo
     ret = OB_SUCCESS;
     if (OB_ISNULL(buf = static_cast<char*>(allocator.alloc(buf_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc buf", K(ret), K(buf_len));
     } else if (OB_FAIL(to_string(buf, buf_len, pos, into_outfile))) {
     }
   } while (OB_SIZE_OVERFLOW == ret);
@@ -583,17 +578,14 @@ int ObExternalFileFormat::load_from_string(const ObString &str, ObIAllocator &al
   ObArenaAllocator temp_allocator;
   if (OB_UNLIKELY(str.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("format string is empty", K(ret), K(str));
   } else if (OB_FAIL(parser.init(&temp_allocator))) {
   } else if (OB_FAIL(parser.parse(str.ptr(), str.length(), data))) {
   } else if (NULL == data || json::JT_OBJECT != data->get_type()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("error json value", K(ret), KPC(data));
   } else {
     auto format_type_node = data->get_object().get_first();
     if (format_type_node->value_->get_type() != json::JT_STRING) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected json format", K(ret), K(str));
     } else {
       ObString format_type_str = format_type_node->value_->get_string();
       for (int i = 0; i < array_elements(ObExternalFileFormat::FORMAT_TYPE_STR); ++i) {
@@ -610,7 +602,6 @@ int ObExternalFileFormat::load_from_string(const ObString &str, ObIAllocator &al
           break;
         default:
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid format type", K(ret), K(format_type_str));
           break;
       }
     }
@@ -634,7 +625,6 @@ int ObExternalFileFormat::mock_gen_column_def(
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected format", K(ret), K(format_type_));
     }
 
   }
@@ -661,7 +651,6 @@ int ObExternalFileFormat::get_format_file_extension(FormatType format_type, ObSt
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected to get format file extension", K(ret), K(format_type_));
     }
   }
   return ret;

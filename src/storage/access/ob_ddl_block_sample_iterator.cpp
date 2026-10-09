@@ -72,7 +72,6 @@ int ObDDLBlockSampleIterator::open(ObMultipleScanMerge &scan_merge,
     read_info_ = &get_table_param.tablet_iter_.get_tablet()->get_rowkey_read_info();
   }
   if (FAILEDx(reservoir_block_sample())) {
-    STORAGE_LOG(WARN, "fail to do reservoir sampling", K(ret));
   } else {
     is_opened_ = true;
   }

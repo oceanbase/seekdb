@@ -89,7 +89,6 @@ int ObExprUnixTimestamp::calc_result_type_literal(ObExprResType &type,
     ObTimeConvertCtx cvrt_ctx(NULL, false);
     if (OB_FAIL(ObTimeConverter::str_to_datetime(
                 date_obj.get_string(), cvrt_ctx, utz_value, &scale, 0))) {
-      LOG_WARN("failed to cast str to datetime", K(ret));
       is_number_res_type = true;
       type.set_scale(MAX_SCALE_FOR_TEMPORAL);
     } else {
@@ -105,7 +104,6 @@ int ObExprUnixTimestamp::calc_result_type_literal(ObExprResType &type,
                        NULL);
     EXPR_GET_DATETIME_V2(date_obj, utz_value);
     if (OB_FAIL(ret)) {
-      LOG_WARN("failed to cast date to datetime", K(ret), K(date_obj));
       utz_value = 0;
     }
   }
@@ -173,7 +171,6 @@ int ObExprUnixTimestamp::eval_unix_timestamp(const ObExpr &expr, ObEvalCtx &ctx,
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected arg cnt", K(ret), K(expr.arg_cnt_));
   }
 
   if (OB_SUCC(ret) && !is_null) {
@@ -194,7 +191,6 @@ int ObExprUnixTimestamp::eval_unix_timestamp(const ObExpr &expr, ObEvalCtx &ctx,
       OX(res.set_number(res_nmb));
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected res type", K(ret), K(res_type));
     }
   }
   return ret;

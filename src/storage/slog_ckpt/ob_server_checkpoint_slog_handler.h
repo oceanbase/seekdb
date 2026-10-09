@@ -89,10 +89,6 @@ private:
       const common::ObLogCursor &replay_start_point,
       common::ObLogCursor &replay_finish_point);
 
-  int replay_create_runtime_prepare(const char *buf, const int64_t buf_len);
-  int replay_create_runtime_commit(const char *buf, const int64_t buf_len);
-  int replay_create_runtime_abort(const char *buf, const int64_t buf_len);
-
   int replay_update_server_resources(const char *buf, const int64_t buf_len);
   int replay_update_runtime_super_block(const char *buf, const int64_t buf_len);
 

@@ -46,7 +46,6 @@ int ObPsStmtItemRefAtomicOp::get_value(ObPsStmtItem *&ps_item)
   ps_item = NULL;
   if (OB_ISNULL(stmt_item_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("stmt_item should not be null", K(ret));
   } else {
     ps_item = stmt_item_;
   }
@@ -88,7 +87,6 @@ int ObPsStmtInfoRefAtomicOp::get_value(ObPsStmtInfo *&ps_info)
   ps_info = NULL;
   if (OB_ISNULL(stmt_info_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("stmt info should not be null", K(ret));
   } else {
     ps_info = stmt_info_;
   }

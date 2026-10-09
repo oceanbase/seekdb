@@ -115,13 +115,11 @@
    
    if (3 != expr.arg_cnt_) {
      ret = OB_NOT_SUPPORTED;
-     LOG_WARN("unexpected argument count", K(ret), K(expr.arg_cnt_));
    } else {
      ObDatum *datum = NULL;
      if (OB_FAIL(expr.args_[2]->eval(ctx, datum))) {
      } else if (datum->is_null()) {
        ret = OB_INVALID_ARGUMENT;
-       LOG_WARN("distance_type is null", K(ret));
      } else {
        dis_type = static_cast<ObExprVectorDistance::ObVecDisType>(datum->get_int());
      }

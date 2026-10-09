@@ -62,7 +62,6 @@ int ObDeleteResolver::resolve(const ParseNode &parse_tree)
   bool is_multi_table_delete = false;
   if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   } else if (OB_ISNULL(delete_stmt = create_stmt<ObDeleteStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("create delete stmt failed", K(ret));
@@ -71,7 +70,6 @@ int ObDeleteResolver::resolve(const ParseNode &parse_tree)
     LOG_WARN("parse tree type is invalid", K_(parse_tree.type), K_(parse_tree.num_child));
   } else if (OB_ISNULL(parse_tree.children_[TABLE])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table_node is null", K(ret));
   } else {
     stmt_ = delete_stmt;
     // Only support the syntax of delete ignore, and there is no semantic support.
@@ -88,7 +86,6 @@ int ObDeleteResolver::resolve(const ParseNode &parse_tree)
         const TableItem *table_item = delete_tables_.at(i);
         if (OB_ISNULL(table_item)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret));
         } else if (OB_FAIL(generate_delete_table_info(*table_item))) {
         } else { /*do nothing*/ }
       }
@@ -126,7 +123,6 @@ int ObDeleteResolver::check_safe_update_mode(ObDeleteStmt *delete_stmt, bool is_
   bool is_sql_safe_updates = false;
   if (OB_ISNULL(params_.session_info_) || OB_ISNULL(delete_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected", K(ret), K(params_.session_info_), K(delete_stmt));
   } else if (OB_FAIL(params_.session_info_->get_sql_safe_updates(is_sql_safe_updates))) {
   } else if (is_sql_safe_updates) {
     /*Update table values in mysql safe mode, needs to meet:
@@ -138,7 +134,6 @@ int ObDeleteResolver::check_safe_update_mode(ObDeleteStmt *delete_stmt, bool is_
     */
     if (is_multi_table_delete || delete_stmt->get_condition_exprs().empty()) {//precondition}
       ret = OB_ERR_SAFE_UPDATE_MODE_NEED_WHERE_OR_LIMIT;
-      LOG_WARN("using safe update mode need WHERE or LIMIT", K(ret));
     } else if (delete_stmt->has_limit()) {//condition 1
       bool is_const_expr = true;
       for (int64_t i = 0;
@@ -147,14 +142,12 @@ int ObDeleteResolver::check_safe_update_mode(ObDeleteStmt *delete_stmt, bool is_
         const ObRawExpr *expr = delete_stmt->get_condition_expr(i);
         if (OB_ISNULL(expr)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(expr));
         } else {
           is_const_expr = expr->is_const_expr();
         }
       }
       if (OB_SUCC(ret) && is_const_expr) {
         ret = OB_ERR_SAFE_UPDATE_MODE_NEED_WHERE_OR_LIMIT;
-        LOG_WARN("using safe update mode need WHERE or LIMIT", K(ret));
       }
     }
   } else {/*do nothing*/}
@@ -167,7 +160,6 @@ int ObDeleteResolver::check_multi_delete_table_conflict()
   const ObDeleteStmt *delete_stmt = get_delete_stmt();
   if (OB_ISNULL(delete_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (delete_stmt->get_delete_table_info().count() <= 1) {
     /*do nothing*/
   } else {
@@ -175,12 +167,10 @@ int ObDeleteResolver::check_multi_delete_table_conflict()
     for (int64_t i = 0; OB_SUCC(ret) && i < tables_info.count() - 1; ++i) {
       if (OB_ISNULL(tables_info.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else {
         for (int64_t j = i + 1; OB_SUCC(ret) && j < tables_info.count(); ++j) {
           if (OB_ISNULL(tables_info.at(j))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected null", K(ret));
           } else if (tables_info.at(i)->ref_table_id_ == tables_info.at(j)->ref_table_id_) {
             ret = OB_NOT_SUPPORTED;
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "multiple aliases to same table");
@@ -221,7 +211,6 @@ int ObDeleteResolver::resolve_table_list(const ParseNode &table_list, bool &is_m
       if (OB_FAIL(ObDMLResolver::resolve_table(*table_node, table_item))) {
       } else if (table_item->is_function_table() || table_item->is_json_table()) { // invalid delete target
         ret = OB_WRONG_TABLE_NAME;
-        LOG_WARN("invalid table name", K(ret));
       } else if (OB_FAIL(column_namespace_checker_.add_reference_table(table_item))) {
       } else if (OB_FAIL(delete_stmt->add_from_item(table_item->table_id_,
                                                     table_item->is_joined_table()))) {
@@ -255,7 +244,6 @@ int ObDeleteResolver::resolve_table_list(const ParseNode &table_list, bool &is_m
         } else if (OB_FAIL(find_delete_table_with_mysql_rule(db_name, table_name, table_item))) {
         } else if (OB_ISNULL(table_item)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get null table item", K(ret));
         } else if (OB_UNLIKELY(ObOptimizerUtil::find_item(delete_tables_, table_item))) {
           ret = OB_ERR_NONUNIQ_TABLE;
           LOG_USER_ERROR(OB_ERR_NONUNIQ_TABLE, table_item->table_name_.length(),
@@ -277,7 +265,6 @@ int ObDeleteResolver::resolve_table_list(const ParseNode &table_list, bool &is_m
           LOG_USER_ERROR(OB_ERR_NON_UPDATABLE_TABLE,
                           table_name.length(), table_name.ptr(),
                           scope_name.length(), scope_name.ptr());
-          LOG_WARN("table is not updatable", K(ret));
         } else if ((*table_item)->is_generated_table() || (*table_item)->is_temp_table()) {
           if (OB_FAIL(set_base_table_for_view(**table_item))) {
           } else if (OB_FAIL(add_all_column_to_updatable_view(*delete_stmt, **table_item))) {
@@ -357,20 +344,16 @@ int ObDeleteResolver::generate_delete_table_info(const TableItem &table_item)
   if (OB_ISNULL(schema_checker_) || OB_ISNULL(params_.session_info_) ||
       OB_ISNULL(allocator_) || OB_ISNULL(delete_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(schema_checker_), K(params_.session_info_),
-        K(allocator_), K(delete_stmt), K(ret));
   } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                        base_table_item.ref_id_,
                                                        table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(schema_checker_->get_can_write_index_array(base_table_item.ref_id_,
                                                                 index_tid, gindex_cnt, true))) {
   } else if (OB_FAIL(params_.session_info_->get_binlog_row_image(binlog_row_image))) {
   } else if (NULL == (ptr = allocator_->alloc(sizeof(ObDeleteTableInfo)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate table info", K(ret));
   } else {
     table_info = new(ptr) ObDeleteTableInfo();
     if (OB_FAIL(table_info->part_ids_.assign(base_table_item.part_ids_))) {
@@ -410,12 +393,10 @@ int ObDeleteResolver::check_view_deletable()
     const TableItem *table = *it;
     if (OB_ISNULL(*it)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL table table ", K(ret));
     } else if (!table->is_generated_table() && !table->is_temp_table()) {
       continue;
     } else if (OB_ISNULL(table->ref_query_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ref query is NULL for generate table", K(ret));
     }
 
     if (OB_SUCC(ret)) {

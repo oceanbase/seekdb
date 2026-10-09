@@ -31,11 +31,9 @@ int ObDASIndexMergeIter::IndexMergeRowStore::init(common::ObIAllocator &allocato
   int ret = OB_SUCCESS;
   if (OB_ISNULL(exprs) || OB_ISNULL(eval_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr for init index merge row store", K(ret));
   } else if (OB_ISNULL(store_rows_ =
       static_cast<LastDASStoreRow*>(allocator.alloc(max_size * sizeof(LastDASStoreRow))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory", K(max_size), K(ret));
   } else {
     exprs_ = exprs;
     eval_ctx_ = eval_ctx;
@@ -54,7 +52,6 @@ int ObDASIndexMergeIter::IndexMergeRowStore::save(bool is_vectorized, int64_t si
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(size > max_size_) || OB_ISNULL(store_rows_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error for save store rows", K(size), K_(max_size), K_(store_rows), K(ret));
   } else {
     if (is_vectorized) {
       ObEvalCtx::BatchInfoScopeGuard batch_info_guard(*eval_ctx_);
@@ -129,7 +126,6 @@ int ObDASIndexMergeIter::MergeResultBuffer::init(int64_t max_size,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(max_size <= 0) || OB_ISNULL(eval_ctx) || OB_ISNULL(exprs)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(max_size), K(eval_ctx), K(exprs), K(ret));
   } else if (OB_FAIL(result_store_.init(UINT64_MAX, ObCtxIds::DEFAULT_CTX_ID, "DASIndexMerge"))) {
   } else {
     result_store_.set_allocator(alloc);
@@ -155,11 +151,9 @@ int ObDASIndexMergeIter::MergeResultBuffer::to_expr(int64_t size)
   if (OB_FAIL(result_store_.begin(result_store_iter_))) {
   } else if (OB_UNLIKELY(!(result_store_iter_.is_valid() && result_store_iter_.has_next()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected no available rows", K(ret));
   } else if (OB_FAIL(result_store_iter_.get_next_batch<true>(*exprs_, *eval_ctx_, max_size_, read_size))) {
   } else if (OB_UNLIKELY(size != read_size)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected read size not equal to actually size", K(ret));
   }
   return ret;
 }
@@ -219,7 +213,6 @@ int ObDASIndexMergeIter::inner_init(ObDASIterParam &param)
           ExprFixedArray &child_match_against_expr = child_match_against_exprs_.at(i);
           if (OB_ISNULL(child) || OB_ISNULL(child->get_output())) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("invalid child iter", K(i), K(child), K(ret));
           } else if (OB_FAIL(row_store.init(alloc, child->get_output(), eval_ctx_, max_size_))) {
           } else if (OB_FAIL(extract_match_against_exprs(*child->get_output(), match_against_exprs))) {
           } else if (FALSE_IT(child_match_against_expr.set_allocator(&alloc))) {
@@ -228,7 +221,6 @@ int ObDASIndexMergeIter::inner_init(ObDASIterParam &param)
             // need to prepare scan param for normal scan node
             if (OB_ISNULL(child_scan_param = OB_NEWx(ObTableScanParam, &alloc))) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
-              LOG_WARN("failed to allocate child scan param", K(ret));
             }
           }
         }
@@ -250,7 +242,6 @@ int ObDASIndexMergeIter::init_scan_param(const common::ObTabletID &tablet_id,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ctdef) || OB_ISNULL(rtdef)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KPC(ctdef), KPC(rtdef), K(tablet_id));
   } else {
     
     
@@ -298,7 +289,6 @@ int ObDASIndexMergeIter::init_scan_param(const common::ObTabletID &tablet_id,
     }
 
     if (FAILEDx(scan_param.column_ids_.assign(ctdef->access_column_ids_))) {
-      LOG_WARN("failed to init column ids", K(ret));
     } else if (OB_FAIL(prepare_scan_ranges(scan_param, rtdef))) {
     }
   }
@@ -310,7 +300,6 @@ int ObDASIndexMergeIter::prepare_scan_ranges(ObTableScanParam &scan_param, const
   int ret = OB_SUCCESS;
   if (OB_ISNULL(rtdef)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr scan rtdef", K(ret));
   } else if (OB_FAIL(scan_param.key_ranges_.assign(rtdef->key_ranges_))) {
   } else if (OB_FAIL(scan_param.mbr_filters_.assign(rtdef->mbr_filters_))) {
   }
@@ -341,7 +330,6 @@ int ObDASIndexMergeIter::extract_match_against_exprs(const common::ObIArray<ObEx
     ObExpr *expr = exprs.at(i);
     if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected nullptr expr", K(ret));
     } else if (T_FUN_MATCH_AGAINST == expr->type_) {
       if (OB_FAIL(match_against_exprs.push_back(expr))) {
       }
@@ -357,7 +345,6 @@ int ObDASIndexMergeIter::fill_default_values_for_union(const common::ObIArray<Ob
     ObExpr *expr = exprs.at(i);
     if (OB_ISNULL(expr) || OB_UNLIKELY(T_FUN_MATCH_AGAINST != expr->type_)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid expr to fill default value", KP(expr), K(ret));
     } else {
       ObEvalCtx::BatchInfoScopeGuard batch_info_guard(*eval_ctx_);
       batch_info_guard.set_batch_size(1);
@@ -384,13 +371,11 @@ int ObDASIndexMergeIter::do_table_scan()
     ObDASIter *iter = child_iters_.at(i);
     if (OB_ISNULL(iter)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected nullptr iter", K(ret));
     } else if (scan_rtdef != nullptr) {
       const ObDASScanCtDef *scan_ctdef = static_cast<const ObDASScanCtDef*>(scan_rtdef->ctdef_);
       ObTableScanParam *scan_param = child_scan_params_.at(i);
       if (OB_ISNULL(scan_ctdef) || OB_ISNULL(scan_param)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected nullptr child scan info", K(scan_ctdef), K(scan_param), K(ret));
       } else if (OB_FAIL(init_scan_param(child_tablet_ids_.at(i), scan_ctdef, scan_rtdef, *scan_param))) {
       } else if (OB_FAIL(iter->do_table_scan())) {
       }
@@ -408,13 +393,11 @@ int ObDASIndexMergeIter::rescan()
     ObDASIter *iter = child_iters_.at(i);
     if (OB_ISNULL(iter)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected nullptr iter", K(ret));
     } else if (scan_rtdef != nullptr) {
       const ObDASScanCtDef *scan_ctdef = static_cast<const ObDASScanCtDef*>(scan_rtdef->ctdef_);
       ObTableScanParam *scan_param = child_scan_params_.at(i);
       if (OB_ISNULL(scan_ctdef) || OB_ISNULL(scan_param)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected nullptr child scan info", K(scan_ctdef), K(scan_param), K(ret));
       } else {
         scan_param->tablet_id_ = child_tablet_ids_.at(scan_ctdef->index_merge_idx_);
         if (OB_FAIL(prepare_scan_ranges(*scan_param, scan_rtdef))) {
@@ -446,7 +429,6 @@ int ObDASIndexMergeIter::set_tablet_ids(const ObDASRelatedTabletID &related_tabl
       const ObDASScanCtDef *scan_ctdef = static_cast<const ObDASScanCtDef*>(scan_rtdef->ctdef_);
       if (OB_ISNULL(scan_ctdef)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected nullptr scan ctdef", K(ret));
       } else {
         child_tablet_ids_.at(i) = index_merge_tablet_ids.at(scan_ctdef->index_merge_idx_);
       }
@@ -463,13 +445,11 @@ int ObDASIndexMergeIter::inner_reuse()
     ObDASIter *iter = child_iters_.at(i);
     if (OB_ISNULL(iter)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected nullptr iter", K(ret));
     } else if (scan_rtdef != nullptr) {
       const ObDASScanCtDef *scan_ctdef = static_cast<const ObDASScanCtDef*>(scan_rtdef->ctdef_);
       ObTableScanParam *scan_param = child_scan_params_.at(i);
       if (OB_ISNULL(scan_ctdef) || OB_ISNULL(scan_param)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected nullptr child scan info", K(scan_ctdef), K(scan_param), K(ret));
       } else {
         const ObTabletID &new_tablet_id = child_tablet_ids_.at(scan_ctdef->index_merge_idx_);
         const ObTabletID &old_tablet_id = scan_param->tablet_id_;
@@ -528,7 +508,6 @@ int ObDASIndexMergeIter::inner_get_next_row()
   clear_evaluated_flag();
   if (OB_FAIL(union_get_next_row())) {
     if (ret != OB_ITER_END) {
-      LOG_WARN("index merge iter failed to get next row", K(ret));
     }
   }
   return ret;
@@ -540,7 +519,6 @@ int ObDASIndexMergeIter::inner_get_next_rows(int64_t &count, int64_t capacity)
   clear_evaluated_flag();
   if (OB_FAIL(union_get_next_rows(count, capacity))) {
     if (ret != OB_ITER_END) {
-      LOG_WARN("index merge iter failed to get next rows", K(ret));
     }
   }
   const ObBitVector *skip = nullptr;
@@ -555,7 +533,6 @@ int ObDASIndexMergeIter::compare(int64_t cur_idx, int64_t &output_idx, int &cmp_
   cmp_ret = 0;
   if (cur_idx == OB_INVALID_INDEX || !child_stores_.at(cur_idx).have_data()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid idx", K(cur_idx), K(ret));
   } else if (output_idx == OB_INVALID_INDEX) {
     output_idx = cur_idx;
   } else {
@@ -563,7 +540,6 @@ int ObDASIndexMergeIter::compare(int64_t cur_idx, int64_t &output_idx, int &cmp_
     const ObDatum *output_datums = child_stores_.at(output_idx).cur_datums();
     if (OB_ISNULL(cur_datums) || OB_ISNULL(output_datums)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected nullptr", K(cur_datums), K(output_datums));
     }
     ObObj cur_obj;
     ObObj output_obj;
@@ -571,7 +547,6 @@ int ObDASIndexMergeIter::compare(int64_t cur_idx, int64_t &output_idx, int &cmp_
       const ObExpr *expr = rowkey_exprs_->at(i);
       if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected nullptr", K(ret));
       } else if (OB_FAIL(cur_datums[i].to_obj(cur_obj, expr->obj_meta_, expr->obj_datum_map_))) {
       } else if (OB_FAIL(output_datums[i].to_obj(output_obj, expr->obj_meta_, expr->obj_datum_map_))) {
       } else if (OB_FAIL(cur_obj.check_collation_free_and_compare(output_obj, cmp_ret))) {
@@ -600,13 +575,11 @@ int ObDASIndexMergeIter::union_get_next_row()
         ObDASIter *child_iter = child_iters_.at(i);
         if (OB_ISNULL(child_iter)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected nullptr", K(i));
         } else if (OB_FAIL(child_iter->get_next_row())) {
           if (OB_ITER_END == ret) {
             child_store.iter_end_ = true;
             ret = OB_SUCCESS;
           } else {
-            LOG_WARN("failed to get next row from child iter", K(ret));
           }
         } else if (OB_FAIL(child_store.save(false, 1))) {
         } else if (OB_FAIL(compare(i, output_idx, cmp_ret))) {
@@ -672,7 +645,6 @@ int ObDASIndexMergeIter::union_get_next_rows(int64_t &count, int64_t capacity)
           ObDASIter *child_iter = child_iters_.at(i);
           if (OB_ISNULL(child_iter)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected nullptr", K(i));
           } else {
             ret = child_iter->get_next_rows(child_rows_cnt, capacity);
             if (OB_ITER_END == ret && child_rows_cnt > 0) {
@@ -688,7 +660,6 @@ int ObDASIndexMergeIter::union_get_next_rows(int64_t &count, int64_t capacity)
               child_store.iter_end_ = true;
               ret = OB_SUCCESS;
             } else {
-              LOG_WARN("failed to get next rows from child iter", K(ret));
             }
           }
         }

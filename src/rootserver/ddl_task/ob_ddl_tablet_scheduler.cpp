@@ -60,13 +60,10 @@ int ObDDLTabletScheduler::init(const uint64_t table_id,
   common::hash::ObHashMap<uint64_t, bool> tablet_finished_map;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), K(is_inited_));
   } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
-    LOG_WARN("local_management_service is null", K(ret), KP(local_management_service_));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("ddl service not started", KR(ret));
   } else if (OB_UNLIKELY(
         !(OB_INVALID_ID != table_id
           && OB_INVALID_ID != ref_data_table_id
@@ -76,14 +73,11 @@ int ObDDLTabletScheduler::init(const uint64_t table_id,
           && trace_id.is_valid()
           && tablets.count() > 0))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(table_id), K(ref_data_table_id), K(task_id), K(parallelism), K(snapshot_version), K(trace_id), K(tablets.count()));
   } else if (OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, ref_data_table_id, ref_data_table_tablets))) {
   } else if (OB_UNLIKELY(tablets.count() != ref_data_table_tablets.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("index table tablets count is not equal to data table tablets count", K(ret), K(tablets.count()), K(ref_data_table_tablets.count()));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(tablet_finished_map.create(tablets.count(), ObModIds::OB_SSTABLE_CREATE_INDEX))) {
   } else if (OB_FAIL(tablet_id_to_data_size_.create(ref_data_table_tablets.count(), ObModIds::OB_SSTABLE_CREATE_INDEX))) {
   } else if (OB_FAIL(tablet_id_to_data_row_cnt_.create(ref_data_table_tablets.count(), ObModIds::OB_SSTABLE_CREATE_INDEX))) {
@@ -137,11 +131,8 @@ int ObDDLTabletScheduler::init(const uint64_t table_id,
             LOG_INFO("tablet has complemented data", K(ret), K(table_id), K(ref_data_table_id), K(tablets.at(i)));
           } else {
             if (is_running_status && OB_FAIL(running_tablets_.push_back(tablets.at(i)))) {
-              LOG_WARN("fail to push running tablet", K(ret), K(table_id), K(ref_data_table_id),
-                       K(tablets.at(i)), K(is_finished_status));
             }
             if (OB_SUCC(ret) && OB_FAIL(all_tablets_.push_back(tablets.at(i)))) {
-              LOG_WARN("fail to push back", K(ret), K(tablets.at(i)));
             }
           }
         }
@@ -177,7 +168,6 @@ int ObDDLTabletScheduler::get_next_batch_tablets(const bool is_ddl_retryable,
   share::ObDDLType task_type = share::DDL_CREATE_PARTITIONED_LOCAL_INDEX;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (is_all_tasks_finished()) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(determine_if_need_to_send_new_task(need_send_task))) {
@@ -201,25 +191,20 @@ int ObDDLTabletScheduler::confirm_batch_tablets_status(const int64_t execution_i
   TCWLockGuard guard(lock_);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(tablets.count() < 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tablets array is null", K(ret), K(tablets.count()));
   } else if (OB_UNLIKELY(all_tablets_.empty() || running_tablets_.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet queue is null", K(ret), K(all_tablets_.count()), K(running_tablets_.count()));
   } else {
     if (execution_id != -1) { //execution_id == -1 indicates the task before switching to rs is confirming
       if (OB_UNLIKELY(execution_id != running_execution_id_)) {
         ret = OB_TASK_EXPIRED;
-        LOG_WARN("receive a mismatch execution result", K(ret), K(execution_id), K_(running_execution_id), K(tablets), K(finish_status));
       }
     }
     if (OB_SUCC(ret)) {
       running_tablets_.reset();
       running_execution_id_ = -1;
       if (finish_status && OB_FAIL(remove_finished_tablets_(tablets))) {
-        LOG_WARN("fail to remove finished tablets", K(ret), K(tablets));
       }
     }
   }
@@ -239,10 +224,8 @@ int ObDDLTabletScheduler::push_tablet_execution_id(const bool ddl_can_retry,
   new_task_execution_id = 0;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("scheduler not init", K(ret));
   } else if (OB_UNLIKELY(tablets.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tablets", K(ret), K(tablets.count()));
   } else {
     int64_t next_tablet_execution_id = DEFAULT_EXECUTION_ID;
     for (int64_t i = 0; OB_SUCC(ret) && i < tablets.count(); ++i) {
@@ -250,7 +233,6 @@ int ObDDLTabletScheduler::push_tablet_execution_id(const bool ddl_can_retry,
       int64_t tablet_execution_id = -1;
       if (OB_FAIL(tablet_id_to_execution_id_map_.get_refactored(tablet, tablet_execution_id))) {
         if (OB_HASH_NOT_EXIST != ret) {
-          LOG_WARN("failed to get tablet execution id", K(ret), K(tablet));
         } else {
           tablet_execution_id = -1;
           ret = OB_SUCCESS;
@@ -279,10 +261,8 @@ int ObDDLTabletScheduler::push_task_execution_id(int64_t &new_task_execution_id)
   int64_t unused_snapshot_ver = OB_INVALID_VERSION;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("scheduler not init", K(ret));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
   } else if (OB_FAIL(ObDDLTaskRecordOperator::select_for_update(trans, task_id_, task_status, task_execution_id, ret_code, unused_snapshot_ver))) {
   } else if (task_execution_id == -1) {
@@ -372,13 +352,11 @@ int ObDDLTabletScheduler::get_next_parallelism(int64_t &parallelism)
   TCRLockGuard guard(lock_);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(is_inited_));
   } else {
     if (all_tablets_.count() > 0) {
       parallelism = parallelism_;
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tablet queue is empty", K(ret), K(all_tablets_.count()), K(parallelism));
     }
   }
   return ret;
@@ -395,11 +373,9 @@ int ObDDLTabletScheduler::get_unfinished_tablets(const share::ObDDLType task_typ
   uint64_t left_space_size = 0;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(is_inited_));
   } else if (OB_FAIL(get_to_be_scheduled_tablets(tablet_queue))) {
   } else if (OB_UNLIKELY(tablet_queue.count() < 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet queue is null", K(ret), K(tablet_queue.count()));
   } else if (OB_FAIL(ObDDLUtil::get_ls_host_left_disk_space(*GCTX.sql_proxy_, left_space_size))) {
   } else if (OB_FAIL(calculate_candidate_tablets(left_space_size, tablet_queue, tablets))) {
   } else if (OB_FAIL(push_tablet_execution_id(ddl_can_retry, tablets, new_execution_id))) {
@@ -420,10 +396,8 @@ int ObDDLTabletScheduler::get_to_be_scheduled_tablets(ObIArray<ObTabletID> &tabl
   TCWLockGuard guard(lock_);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(is_inited_));
   } else if (OB_UNLIKELY(all_tablets_.empty() || !running_tablets_.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet queue state is invalid", K(ret), K(all_tablets_.count()), K(running_tablets_.count()));
   } else if (OB_FAIL(tablets.assign(all_tablets_))) {
   }
   return ret;
@@ -438,22 +412,18 @@ int ObDDLTabletScheduler::calculate_candidate_tablets(const uint64_t left_space_
   out_tablets.reset();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( ref_data_table_id_, data_table_schema))) {
   } else if (OB_ISNULL(data_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("error unexpected, data table schema is null", K(ret), K(ref_data_table_id_));
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id_, index_schema))) {
   } else if (OB_ISNULL(index_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("error unexpected, index table schema is null", K(ret), K(table_id_));
   } else {
     ObPartition **data_partitions = data_table_schema->get_part_array();
     const ObPartitionLevel part_level = data_table_schema->get_part_level();
     if (OB_ISNULL(data_partitions)) {
       ret = OB_PARTITION_NOT_EXIST;
-      LOG_WARN("data table part array is null", K(ret), KPC(this));
     } else {
       int64_t part_index = -1;
       int64_t subpart_index = -1;
@@ -481,7 +451,6 @@ int ObDDLTabletScheduler::calculate_candidate_tablets(const uint64_t left_space_
             ObSubPartition **data_subpart_array = data_partitions[part_index]->get_subpart_array();
             if (OB_ISNULL(data_subpart_array)) {
               ret = OB_PARTITION_NOT_EXIST;
-              LOG_WARN("part array is null", K(ret), KPC(this));
             } else if (OB_FAIL(tablet_id_to_data_size_.get_refactored(data_subpart_array[subpart_index]->get_tablet_id().id(), tablet_data_size))) {
             } else if (OB_FAIL(tablet_id_to_data_row_cnt_.get_refactored(data_subpart_array[subpart_index]->get_tablet_id().id(), tablet_data_row_cnt))) {
             }
@@ -541,10 +510,8 @@ int ObDDLTabletScheduler::check_running_task_completion_status()
   common::ObArray<ObString> running_sql_info;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else {
     {
       TCRLockGuard guard(lock_);
@@ -593,7 +560,6 @@ int ObDDLTabletScheduler::check_running_task_completion_status()
                 ret = OB_SUCCESS;
                 break;
               } else {
-                LOG_WARN("fail to get refactored", K(ret), K(running_tablet_queue.at(i)), K(is_finished_status));
               }
             }
           }
@@ -615,7 +581,6 @@ int ObDDLTabletScheduler::determine_if_need_to_send_new_task(bool &status)
   TCRLockGuard guard(lock_);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     status = running_tablets_.empty() && !all_tablets_.empty();
   }

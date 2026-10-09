@@ -43,10 +43,8 @@ int ObCreateDatabaseResolver::resolve(const ParseNode &parse_tree)
       || OB_UNLIKELY(node->type_ != T_CREATE_DATABASE)
       || OB_UNLIKELY(node->num_child_ != DATABASE_NODE_COUNT)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid parse tree", K(ret));
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session info should not be null", K(ret));
   } else if (OB_ISNULL(node->children_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid node children", K(node), K(node->children_));
@@ -63,7 +61,6 @@ int ObCreateDatabaseResolver::resolve(const ParseNode &parse_tree)
     if (OB_SUCC(ret)) {
       if (node->children_[IF_NOT_EXIST] != NULL) {
         if (node->children_[IF_NOT_EXIST]->type_ != T_IF_NOT_EXISTS) {
-          LOG_WARN("invalid parse tree", K(ret));
         } else {
           create_database_stmt->set_if_not_exists(true);
         }
@@ -76,7 +73,6 @@ int ObCreateDatabaseResolver::resolve(const ParseNode &parse_tree)
       ParseNode *dbname_node = node->children_[DBNAME];
       if (OB_ISNULL(dbname_node) || dbname_node->type_ != T_IDENT) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid parse tree", K(ret));
       } else {
         database_name.assign_ptr(dbname_node->str_value_,
                                  static_cast<int32_t>(dbname_node->str_len_));
@@ -100,7 +96,6 @@ int ObCreateDatabaseResolver::resolve(const ParseNode &parse_tree)
       if (NULL != dboption_node) {
         if (T_DATABASE_OPTION_LIST != dboption_node->type_) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid parse tree", K(ret));
         } else {
           ObDatabaseResolver<ObCreateDatabaseStmt> resolver;
           if (OB_FAIL(resolver.resolve_database_options(create_database_stmt, dboption_node, session_info_))) {

@@ -32,17 +32,14 @@ int ObLogJsonTable::generate_access_exprs()
   const ObDMLStmt *stmt = get_stmt();
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_column_size(); ++i) {
       const ColumnItem *col_item = stmt->get_column_item(i);
       if (OB_ISNULL(col_item) || OB_ISNULL(col_item->expr_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (col_item->table_id_ == table_id_ &&
                  col_item->expr_->is_explicited_reference() &&
                  OB_FAIL(access_exprs_.push_back(col_item->expr_))) {
-        LOG_WARN("failed to push back column expr", K(ret));
       } else { /*do nothing*/ }
     }
   }
@@ -56,7 +53,6 @@ int ObLogJsonTable::allocate_expr_post(ObAllocExprContext &ctx)
     ObRawExpr *value_col = access_exprs_.at(i);
     if (OB_FAIL(mark_expr_produced(value_col, branch_id_, id_, ctx))) {
     } else if (!is_plan_root() && OB_FAIL(add_var_to_array_no_dup(output_exprs_, value_col))) {
-      LOG_WARN("add expr no duplicate key failed", K(ret));
     } else { /*do nothing*/ }
   }
 
@@ -78,23 +74,19 @@ int ObLogJsonTable::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
     // add value expr into all exprs
     for (int64_t i = 0; OB_SUCC(ret) && i < value_exprs_.count(); i ++) {
       if (OB_NOT_NULL(value_exprs_.at(i)) && OB_FAIL(all_exprs.push_back(value_exprs_.at(i)))) {
-        LOG_WARN("push value expr to array failed", K(ret));
       }
     }
     // add default value into all exprs
     for (int64_t i = 0; OB_SUCC(ret) && i < column_param_default_exprs_.count(); i ++) {
       if (OB_NOT_NULL(column_param_default_exprs_.at(i).default_error_expr_)
           && OB_FAIL(all_exprs.push_back(column_param_default_exprs_.at(i).default_error_expr_))) {
-        LOG_WARN("push error expr to array failed", K(ret));
       } else if (OB_NOT_NULL(column_param_default_exprs_.at(i).default_empty_expr_)
           && OB_FAIL(all_exprs.push_back(column_param_default_exprs_.at(i).default_empty_expr_))) {
-        LOG_WARN("push empty expr to array failed", K(ret));
       }
     }
   } 
   
   if (OB_SUCC(ret) && OB_FAIL(ObLogicalOperator::get_op_exprs(all_exprs))) {
-    LOG_WARN("failed to get op exprs", K(ret));
   }
 
   return ret;
@@ -107,7 +99,6 @@ int ObLogJsonTable::get_plan_item_info(PlanText &plan_text,
   if (OB_FAIL(ObLogicalOperator::get_plan_item_info(plan_text, plan_item))) {
   } else if (get_value_expr().empty()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null value expr", K(ret));
   } else {
     BEGIN_BUF_PRINT;
     const ObIArray<ObRawExpr*> &value =  get_value_expr();

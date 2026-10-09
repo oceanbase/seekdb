@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS_COMPACTION
 
+#include "config_bridge.h"
 #include "rootserver/freeze/ob_daily_major_freeze_launcher.h"
 
 #include "rootserver/freeze/ob_major_freeze_helper.h"
@@ -36,7 +37,6 @@ ObDailyMajorFreezeLauncher::ObDailyMajorFreezeLauncher()
     is_paused_(false),
     already_launch_(false),
     sql_proxy_(nullptr),
-    config_(nullptr),
     gc_freeze_info_last_timestamp_(0),
     merge_info_mgr_(nullptr),
     last_check_tablet_ckm_us_(0),
@@ -52,16 +52,13 @@ ObDailyMajorFreezeLauncher::~ObDailyMajorFreezeLauncher()
 }
 
 int ObDailyMajorFreezeLauncher::init(
-    ObServerConfig &config,
     ObMySQLProxy &proxy,
     ObMajorMergeInfoManager &merge_info_manager)
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", KR(ret));
   } else {
-    config_ = &config;
     gc_freeze_info_last_timestamp_ = ObTimeUtility::current_time();
     merge_info_mgr_ = &merge_info_manager;
     last_check_tablet_ckm_us_ = ObTimeUtility::current_time();
@@ -82,7 +79,6 @@ int ObDailyMajorFreezeLauncher::start()
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDailyMajorFreezeLauncher not init", KR(ret));
   } else if (OB_FAIL(timer_.start())) {
   } else if (OB_FAIL(timer_.schedule(*this, LAUNCHER_INTERVAL_US, true/*is_repeat*/))) {
   } else {
@@ -98,7 +94,6 @@ void ObDailyMajorFreezeLauncher::runTimerTask()
   int tmp_ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("fail to run, not init", KR(ret));
   } else if (stop_ || is_paused()) {
   } else {
     SERVER_MODULE_SCOPE {
@@ -140,7 +135,6 @@ int ObDailyMajorFreezeLauncher::destroy()
   is_paused_ = false;
   is_inited_ = false;
   sql_proxy_ = nullptr;
-  config_ = nullptr;
   merge_info_mgr_ = nullptr;
   tablet_ckm_gc_compaction_scn_.set_invalid();
   return ret;
@@ -149,15 +143,15 @@ int ObDailyMajorFreezeLauncher::destroy()
 int ObDailyMajorFreezeLauncher::try_launch_major_freeze()
 {
   int ret = OB_SUCCESS;
+  const config::MomentTime duty = config::major_freeze_duty_time_parts();
 
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
-  } else if (GCONF.major_freeze_duty_time.disable()) {
+  } else if (duty.disabled) {
     LOG_INFO("major_freeze_duty_time is disabled, can not launch major freeze by duty");
   } else {
-    const int hour = GCONF.major_freeze_duty_time.hour();
-    const int minute = GCONF.major_freeze_duty_time.minute();
+    const int hour = duty.hour;
+    const int minute = duty.minute;
     time_t cur_time = -1;
     time(&cur_time);
     struct tm human_time;
@@ -169,7 +163,6 @@ int ObDailyMajorFreezeLauncher::try_launch_major_freeze()
 #endif
     if (nullptr == human_time_ptr) {
       ret = OB_ERR_SYS;
-      LOG_WARN("fail to get localtime", KR(ret), K(errno));
     } else if ((human_time_ptr->tm_hour == hour) && (human_time_ptr->tm_min == minute)) {
       if (!already_launch_) {
         const int64_t start_us = ObTimeUtility::current_time();
@@ -180,15 +173,13 @@ int ObDailyMajorFreezeLauncher::try_launch_major_freeze()
           if (OB_FAIL(ObMajorFreezeHelper::major_freeze(param))) {
             if ((OB_TIMEOUT == ret)) {
               ret = OB_EAGAIN; // in order to try launch major freeze again, set ret = OB_EAGAIN here
-              LOG_WARN("may be ddl confilict, will try to launch major freeze again", KR(ret),
-                       "sleep_us", MAJOR_FREEZE_RETRY_INTERVAL_US * MAJOR_FREEZE_RETRY_LIMIT);
             } else {
               LOG_ERROR("fail to major freeze", KR(ret));
             }
           } else {
             already_launch_ = true;
-            LOG_INFO("launch major freeze by duty time",
-                     "duty_time", GCONF.major_freeze_duty_time);
+            rust::String duty_text = config::major_freeze_duty_time();
+            LOG_INFO("launch major freeze by duty time", "duty_time", duty_text.c_str());
           }
 
           // launcher will retry when error code is OB_EAGAIN
@@ -224,7 +215,6 @@ int ObDailyMajorFreezeLauncher::try_gc_freeze_info()
   int64_t now = ObTimeUtility::current_time();
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if ((now - gc_freeze_info_last_timestamp_) < MODIFY_GC_INTERVAL) {
     // nothing
   } else if (OB_FAIL(merge_info_mgr_->try_gc_freeze_info())) {
@@ -246,7 +236,6 @@ int ObDailyMajorFreezeLauncher::try_gc_tablet_checksum()
   const static int64_t BATCH_DELETE_CNT = 2000;
   if (OB_UNLIKELY(!is_inited_ || OB_ISNULL(sql_proxy_) || OB_ISNULL(merge_info_mgr_))) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret), K_(is_inited), KP(sql_proxy_), KP(merge_info_mgr_));
   } else {
     SMART_VAR(ObArray<SCN>, all_compaction_scn) {
       // 1. load all distinct compaction_scn, when reach 30 min interval time and no valid

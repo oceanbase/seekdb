@@ -22,8 +22,7 @@
 #include "share/rc/ob_server_runtime.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
 #include "storage/ob_i_table.h"
-#include "storage/ddl/ob_direct_load_mgr_utils.h"
-#include "storage/ddl/ob_direct_insert_sstable_ctx.h"
+#include "storage/ddl/ob_ddl_direct_load_utils.h"
 
 using namespace oceanbase::storage;
 using namespace oceanbase::blocksstable;
@@ -58,7 +57,6 @@ int ObDDLMacroHandle::set_block_id(const blocksstable::MacroBlockId &block_id)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!block_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(reset_macro_block_ref())) {
   } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.inc_ref(block_id))) {
   } else {
@@ -103,10 +101,8 @@ int ObDDLMacroBlock::set_data_macro_meta(const MacroBlockId &macro_id, const cha
   int ret = OB_SUCCESS;
   if (!macro_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(macro_id));
   } else if (nullptr == macro_block_buf || 0 >= size) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(macro_block_buf), K(size));
   } else {
     if (OB_FAIL(ObIndexBlockRebuilder::get_macro_meta(macro_block_buf, size, macro_id, allocator_, data_macro_meta_))) {
     }
@@ -155,7 +151,6 @@ int ObDDLKVHandle::set_obj(ObDDLKV *ddl_kv)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ddl_kv)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(ddl_kv));
   } else {
     ddl_kv->inc_ref();
     reset();
@@ -188,39 +183,30 @@ ObDDLKVPendingGuard::ObDDLKVPendingGuard(
     const SCN &start_scn,
     const int64_t snapshot_version,
     const uint64_t data_format_version,
-    ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
     const ObDirectLoadType direct_load_type)
   : tablet_(tablet), scn_(scn), kv_handle_(), ret_(OB_SUCCESS), can_freeze_(false)
 {
   int ret = OB_SUCCESS;
   ObDDLKV *curr_kv = nullptr;
   ObDDLKvMgrHandle ddl_kv_mgr_handle;
+  // Current DDL direct load always uses the idempotent DDL KV path.
   if (OB_UNLIKELY(nullptr == tablet
       || !scn.is_valid_and_not_min()
       || !start_scn.is_valid_and_not_min()
       || snapshot_version <= 0
       || data_format_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(tablet), K(scn), K(start_scn), K(snapshot_version), K(data_format_version));
   } else if (OB_UNLIKELY(!is_full_direct_load(direct_load_type))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("only support DDL direct load type", KR(ret), K(direct_load_type));
-  } else if (ObDDLUtil::use_idempotent_mode()) {
-    if (OB_FAIL(tablet->get_ddl_kv_mgr(ddl_kv_mgr_handle, true/*try_create*/))) {
-    } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->get_or_create_idem_ddl_kv(
-        scn, start_scn, snapshot_version, data_format_version, kv_handle_))) {
-    }
-  } else {
-    if (OB_FAIL(tablet->get_ddl_kv_mgr(ddl_kv_mgr_handle, true /*try_create*/))) {
-    } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->get_or_create_local_ddl_kv(
-        scn, start_scn, direct_load_mgr_handle, kv_handle_))) {
-    }
+  } else if (OB_FAIL(tablet->get_ddl_kv_mgr(ddl_kv_mgr_handle, true/*try_create*/))) {
+    LOG_WARN("get ddl kv mgr failed", K(ret));
+  } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->get_or_create_idem_ddl_kv(
+      scn, start_scn, snapshot_version, data_format_version, kv_handle_))) {
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(curr_kv = kv_handle_.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("error unexpected, active ddl kv must not be nullptr", K(ret));
   } else {
     curr_kv->inc_pending_cnt();
     can_freeze_ = ddl_kv_mgr_handle.get_obj()->can_freeze();
@@ -261,28 +247,23 @@ int ObDDLKVPendingGuard::set_macro_block(
     const ObDDLMacroBlock &macro_block,
     const int64_t snapshot_version,
     const uint64_t data_format_version,
-    ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
     const ObDirectLoadType direct_load_type)
 {
   int ret = OB_SUCCESS;
   static const int64_t MAX_RETRY_COUNT = 10;
   if (OB_UNLIKELY(nullptr == tablet || !macro_block.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(tablet), K(macro_block));
   } else if (OB_UNLIKELY(!is_full_direct_load(direct_load_type))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("only support DDL direct load type", KR(ret), K(direct_load_type));
   } else {
     int64_t try_count = 0;
     while ((OB_SUCCESS == ret || OB_EAGAIN == ret) && try_count < MAX_RETRY_COUNT) {
       ObDDLKV *ddl_kv = nullptr;
       ObDDLKVPendingGuard guard(tablet, macro_block.scn_, macro_block.ddl_start_scn_,
-          snapshot_version, data_format_version, direct_load_mgr_handle,
-          direct_load_type);
+          snapshot_version, data_format_version, direct_load_type);
       if (OB_FAIL(guard.get_ddl_kv(ddl_kv))) {
       } else if (OB_ISNULL(ddl_kv)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ddl kv is null", K(ret), KP(ddl_kv), K(guard));
       } else if (OB_FAIL(ddl_kv->set_macro_block(*tablet, macro_block, snapshot_version, data_format_version, guard.can_freeze()))) {
       } else {
         break;
@@ -302,7 +283,7 @@ ObDDLMacroBlockRedoInfo::ObDDLMacroBlockRedoInfo()
     block_type_(ObDDLMacroBlockType::DDL_MB_INVALID_TYPE),
     start_scn_(SCN::min_scn()),
     data_format_version_(0),
-    type_(ObDirectLoadType::DIRECT_LOAD_DDL),
+    type_(ObDirectLoadType::DIRECT_LOAD_INVALID),
     macro_block_id_(MacroBlockId::mock_valid_macro_id()),
     parallel_cnt_(0),
     merge_slice_idx_(0)
@@ -317,7 +298,7 @@ void ObDDLMacroBlockRedoInfo::reset()
   logic_id_.reset();
   start_scn_ = SCN::min_scn();
   data_format_version_ = 0;
-  type_ = ObDirectLoadType::DIRECT_LOAD_DDL;
+  type_ = ObDirectLoadType::DIRECT_LOAD_INVALID;
   macro_block_id_ = MacroBlockId::mock_valid_macro_id();
   parallel_cnt_ = 0;
   merge_slice_idx_ = 0;
@@ -347,97 +328,6 @@ OB_SERIALIZE_MEMBER(ObDDLMacroBlockRedoInfo,
                     macro_block_id_,
                     parallel_cnt_,
                     merge_slice_idx_);
-
-ObTabletDirectLoadMgrHandle::ObTabletDirectLoadMgrHandle()
-  : tablet_mgr_(nullptr)
-{ }
-
-ObTabletDirectLoadMgrHandle::~ObTabletDirectLoadMgrHandle()
-{
-  reset();
-}
-
-int ObTabletDirectLoadMgrHandle::set_obj(ObBaseTabletDirectLoadMgr *mgr)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(mgr)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret));
-  } else {
-    mgr->inc_ref();
-    reset();
-    tablet_mgr_ = mgr;
-  }
-  return ret;
-}
-
-ObBaseTabletDirectLoadMgr* ObTabletDirectLoadMgrHandle::get_base_obj()
-{
-  return tablet_mgr_;
-}
-
-const ObBaseTabletDirectLoadMgr* ObTabletDirectLoadMgrHandle::get_base_obj() const
-{
-  return tablet_mgr_;
-}
-
-ObTabletDirectLoadMgr* ObTabletDirectLoadMgrHandle::get_obj()
-{
-  ObTabletDirectLoadMgr* res = nullptr;
-  if (nullptr != tablet_mgr_ && !is_idem_type(tablet_mgr_->get_direct_load_type())) {
-    res = static_cast<ObTabletDirectLoadMgr*>(tablet_mgr_);
-  }
-  return res;
-}
-
-const ObTabletDirectLoadMgr *ObTabletDirectLoadMgrHandle::get_obj() const
-{
-  ObTabletDirectLoadMgr* res = nullptr;
-  if (nullptr != tablet_mgr_ && !is_idem_type(tablet_mgr_->get_direct_load_type())) {
-    res = static_cast<ObTabletDirectLoadMgr*>(tablet_mgr_);
-  }
-  return res;
-}
-
-ObTabletFullDirectLoadMgr* ObTabletDirectLoadMgrHandle::get_full_obj() const
-{
-  ObTabletFullDirectLoadMgr* res = nullptr;
-  if (nullptr != tablet_mgr_ && !is_idem_type(tablet_mgr_->get_direct_load_type())) {
-    res = static_cast<ObTabletFullDirectLoadMgr*>(tablet_mgr_);
-  }
-  return res;
-}
-
-bool ObTabletDirectLoadMgrHandle::is_valid() const
-{
-  return nullptr != tablet_mgr_;
-}
-
-void ObTabletDirectLoadMgrHandle::reset()
-{
-  if (nullptr != tablet_mgr_) {
-    if (0 == tablet_mgr_->dec_ref()) {
-      if (is_idem_type(tablet_mgr_->get_direct_load_type())) {
-        tablet_mgr_->~ObBaseTabletDirectLoadMgr();
-      } else {
-        tablet_mgr_->~ObBaseTabletDirectLoadMgr();
-        ::oceanbase::share::server_service<::oceanbase::storage::ObDirectLoadMgr>()->get_allocator().free(tablet_mgr_);
-      }
-    }
-    tablet_mgr_ = nullptr;
-  }
-}
-
-int ObTabletDirectLoadMgrHandle::assign(const ObTabletDirectLoadMgrHandle &other)
-{
-  int ret = OB_SUCCESS;
-  reset();
-  if (OB_LIKELY(other.is_valid())) {
-    if (OB_FAIL(set_obj(other.tablet_mgr_))) {
-    }
-  }
-  return ret;
-}
 
 ObDDLWriteStat::ObDDLWriteStat() : row_count_(0)
 { }
@@ -496,11 +386,9 @@ int ObDDLTableSchema::fill_vector_index_schema_item(ObSchemaGetterGuard &schema_
   if (OB_FAIL(schema_guard.get_table_schema( table_schema->get_data_table_id(), data_table_schema))) {
   } else if (OB_ISNULL(data_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table not exist", K(ret), K(table_schema->get_data_table_id()));
   } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_id(*data_table_schema, *table_schema, col_ids))) {
   } else if (col_ids.count() != 1) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get invalid col id array", K(ret), K(col_ids));
   } else {
     if (index_type == INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL) {
       ObString index_prefix;
@@ -526,11 +414,9 @@ int ObDDLTableSchema::fill_vector_index_schema_item(ObSchemaGetterGuard &schema_
   } else if (OB_FAIL(schema_guard.get_table_schema( with_param_table_tid, with_param_table_schema))) {
   } else if (OB_ISNULL(with_param_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table not exist", K(ret), K(with_param_table_tid));
   } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_dim(*with_param_table_schema, *data_table_schema, schema_item.vec_dim_))) {
   } else if (schema_item.vec_dim_ == 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get vector dim is zero, fail to calc", K(ret), K(schema_item.vec_dim_), KPC(with_param_table_schema));
   } else if (OB_FAIL(ob_write_string(allocator, with_param_table_schema->get_index_params(), schema_item.vec_idx_param_))) {
   } else {
     schema_item.lob_inrow_threshold_ = data_table_schema->get_lob_inrow_threshold();
@@ -542,10 +428,8 @@ int ObDDLTableSchema::fill_vector_index_schema_item(ObSchemaGetterGuard &schema_
          // skip multi version column, keep item invalid
        } else if (i >= column_descs.count()) {
          ret = OB_ERR_UNEXPECTED;
-         LOG_WARN("error unexpected, index is invalid", K(ret), K(i), K(column_descs));
        } else if (OB_ISNULL(data_column_schema = data_table_schema->get_column_schema(column_descs.at(i).col_id_))) {
          ret = OB_ERR_UNEXPECTED;
-         LOG_WARN("data column schema is null", K(ret), K(i), K(column_descs.at(i).col_id_));
        } else {
          column_item.column_flags_ = data_column_schema->get_column_flags();
        }
@@ -565,12 +449,10 @@ int ObDDLTableSchema::fill_ddl_table_schema(const uint64_t table_id,
   bool is_vector_data_complement = false;
   if (OB_UNLIKELY(OB_INVALID_ID == table_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(table_id));
   } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table not exist", K(ret), K(table_id));
   } else if (OB_FAIL(table_schema->get_multi_version_column_descs(column_descs))) {
   } else {
     ddl_table_schema.table_id_ = table_id;
@@ -589,7 +471,6 @@ int ObDDLTableSchema::fill_ddl_table_schema(const uint64_t table_id,
       if (OB_FAIL(schema_guard.get_table_schema( lob_meta_table_id, lob_meta_table_schema))) {
       } else if (OB_ISNULL(lob_meta_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
-        LOG_WARN("table not exist", K(ret), K(lob_meta_table_id));
       } else if (OB_FAIL(ObDDLStorageUtil::convert_to_storage_schema(lob_meta_table_schema, allocator, ddl_table_schema.lob_meta_storage_schema_))) {
       }
     }
@@ -605,7 +486,6 @@ int ObDDLTableSchema::fill_ddl_table_schema(const uint64_t table_id,
         column_item.col_type_ = col_desc.col_type_; // for append_batch, skip multi version column, keep item invalid
       } else if (OB_ISNULL(column_schema = table_schema->get_column_schema(col_desc.col_id_))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("column schema is null", K(ret), K(i), K(column_descs), K(col_desc.col_id_));
       } else {
         column_item.is_valid_ = true;
         column_item.col_type_ = column_schema->get_meta_type();
@@ -637,7 +517,6 @@ int ObDDLTableSchema::fill_ddl_table_schema(const uint64_t table_id,
           allocator,
           column_descs,
           ddl_table_schema))) {
-        LOG_WARN("fail to prepare vector index data", K(ret));
       }
     }
   }

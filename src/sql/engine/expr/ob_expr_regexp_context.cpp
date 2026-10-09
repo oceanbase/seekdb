@@ -62,7 +62,6 @@ int ObExprRegexContext::convert_to_regexp_utf16(ObIAllocator &alloc,
   dst.reset();
   if (OB_UNLIKELY(src.length() < 0 || (src.length() > 0 && OB_ISNULL(src.ptr())))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid regexp source string", K(ret), K(src));
   } else if (CS_TYPE_UTF16_BIN == src_coll || CS_TYPE_UTF16_GENERAL_CI == src_coll) {
     dst = src;
   } else if (CS_TYPE_BINARY == src_coll) {
@@ -73,7 +72,6 @@ int ObExprRegexContext::convert_to_regexp_utf16(ObIAllocator &alloc,
       // will allocate the one-UChar scratch buffer required by ICU.
     } else if (OB_ISNULL(buf = static_cast<char *>(alloc.alloc(dst_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate regexp utf16 buffer failed", K(ret), K(dst_len));
     } else {
       UChar *u_buf = reinterpret_cast<UChar *>(buf);
       for (int64_t i = 0; i < src.length(); ++i) {
@@ -86,13 +84,11 @@ int ObExprRegexContext::convert_to_regexp_utf16(ObIAllocator &alloc,
     UErrorCode u_error_code = U_ZERO_ERROR;
     if (src.length() > INT32_MAX) {
       ret = OB_SIZE_OVERFLOW;
-      LOG_WARN("regexp source string too long", K(ret), K(src.length()));
     } else {
       u_strFromUTF8(NULL, 0, &u_len, src.ptr(), static_cast<int32_t>(src.length()), &u_error_code);
       if (U_BUFFER_OVERFLOW_ERROR != u_error_code && U_STRING_NOT_TERMINATED_WARNING != u_error_code
           && U_ZERO_ERROR != u_error_code) {
         ret = OB_ERR_INCORRECT_STRING_VALUE;
-        LOG_WARN("failed to calculate regexp utf16 length", K(ret), K(u_errorName(u_error_code)), K(src_coll));
       } else if (0 == u_len) {
         // Keep dst empty.
       } else {
@@ -100,14 +96,12 @@ int ObExprRegexContext::convert_to_regexp_utf16(ObIAllocator &alloc,
         UChar *u_buf = NULL;
         if (OB_ISNULL(u_buf = static_cast<UChar *>(alloc.alloc(dst_len)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("allocate regexp utf16 buffer failed", K(ret), K(dst_len));
         } else {
           u_error_code = U_ZERO_ERROR;
           int32_t actual_len = 0;
           u_strFromUTF8(u_buf, u_len, &actual_len, src.ptr(), static_cast<int32_t>(src.length()), &u_error_code);
           if (U_FAILURE(u_error_code)) {
             ret = OB_ERR_INCORRECT_STRING_VALUE;
-            LOG_WARN("failed to convert regexp string to utf16", K(ret), K(u_errorName(u_error_code)), K(src_coll));
           } else {
             for (int32_t i = 0; i < actual_len; ++i) {
               u_buf[i] = htons(static_cast<uint16_t>(u_buf[i]));
@@ -120,7 +114,6 @@ int ObExprRegexContext::convert_to_regexp_utf16(ObIAllocator &alloc,
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected regexp source collation", K(ret), K(src_coll));
   }
   return ret;
 }
@@ -135,7 +128,6 @@ int ObExprRegexContext::convert_from_regexp_utf16(ObIAllocator &alloc,
   if (OB_UNLIKELY(src.length() < 0 || (src.length() > 0 && OB_ISNULL(src.ptr()))
                   || 0 != src.length() % static_cast<int64_t>(sizeof(UChar)))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid regexp utf16 string", K(ret), K(src));
   } else if (0 == src.length()) {
     // Keep dst empty.
   } else {
@@ -144,7 +136,6 @@ int ObExprRegexContext::convert_from_regexp_utf16(ObIAllocator &alloc,
     UChar *u_buf = NULL;
     if (OB_ISNULL(u_buf = static_cast<UChar *>(alloc.alloc(host_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate regexp host utf16 buffer failed", K(ret), K(host_len));
     } else {
       const UChar *src_u = reinterpret_cast<const UChar *>(src.ptr());
       for (int32_t i = 0; i < u_len; ++i) {
@@ -156,7 +147,6 @@ int ObExprRegexContext::convert_from_regexp_utf16(ObIAllocator &alloc,
         char *buf = NULL;
         if (OB_ISNULL(buf = static_cast<char *>(alloc.alloc(u_len)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("allocate regexp binary buffer failed", K(ret), K(u_len));
         } else {
           for (int32_t i = 0; i < u_len; ++i) {
             buf[i] = static_cast<char>(u_buf[i] & 0xff);
@@ -170,21 +160,18 @@ int ObExprRegexContext::convert_from_regexp_utf16(ObIAllocator &alloc,
         if (U_BUFFER_OVERFLOW_ERROR != u_error_code && U_STRING_NOT_TERMINATED_WARNING != u_error_code
             && U_ZERO_ERROR != u_error_code) {
           ret = OB_ERR_INCORRECT_STRING_VALUE;
-          LOG_WARN("failed to calculate regexp utf8 length", K(ret), K(u_errorName(u_error_code)), K(dst_coll));
         } else if (0 == utf8_len) {
           // Keep dst empty.
         } else {
           char *buf = NULL;
           if (OB_ISNULL(buf = static_cast<char *>(alloc.alloc(utf8_len)))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("allocate regexp utf8 buffer failed", K(ret), K(utf8_len));
           } else {
             u_error_code = U_ZERO_ERROR;
             int32_t actual_len = 0;
             u_strToUTF8(buf, utf8_len, &actual_len, u_buf, u_len, &u_error_code);
             if (U_FAILURE(u_error_code)) {
               ret = OB_ERR_INCORRECT_STRING_VALUE;
-              LOG_WARN("failed to convert regexp utf16 string to utf8", K(ret), K(u_errorName(u_error_code)), K(dst_coll));
             } else {
               dst.assign_ptr(buf, actual_len);
             }
@@ -192,7 +179,6 @@ int ObExprRegexContext::convert_from_regexp_utf16(ObIAllocator &alloc,
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected regexp destination collation", K(ret), K(dst_coll));
       }
     }
   }
@@ -211,11 +197,9 @@ int ObExprRegexContext::init(ObExprStringBuf &string_buf,
   ObString origin_pattern_utf16;
   if (OB_UNLIKELY(inited_ && !reusable)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("already inited", K(ret), K(this));
   } else if (origin_pattern.length() < 0 ||
              (origin_pattern.length() > 0 && OB_ISNULL(origin_pattern.ptr()))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid param pattern", K(ret), K(origin_pattern));
   } else if (CS_TYPE_UTF16_BIN != pattern_cs_type &&
             CS_TYPE_UTF16_GENERAL_CI != pattern_cs_type) {
     //pattern is nchar or nvarchar
@@ -236,7 +220,6 @@ int ObExprRegexContext::init(ObExprStringBuf &string_buf,
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(origin_pattern_utf16.length() % sizeof(UChar) != 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid param, source text is null", K(ret), K(origin_pattern_utf16.length()));
   } else if (OB_FAIL(preprocess_pattern(string_buf, origin_pattern_utf16, pattern))) {
   } else if (reusable && inited_ &&
              pattern_ == ObString(0, pattern.length(), pattern.ptr())
@@ -251,7 +234,6 @@ int ObExprRegexContext::init(ObExprStringBuf &string_buf,
     char *pattern_save = static_cast<char *>(pattern_allocator_.alloc(pattern.length()));
     if (NULL == pattern_save) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret));
     } else {
       MEMCPY(pattern_save, pattern.ptr(), pattern.length());
       pattern_.assign_ptr(pattern_save, pattern.length());
@@ -265,13 +247,11 @@ int ObExprRegexContext::init(ObExprStringBuf &string_buf,
     } else if (OB_FAIL(get_valid_unicode_string(string_buf, pattern, u_pattern, u_pattern_length))) {
     } else if (OB_ISNULL(u_pattern)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpcted null", K(ret), K(pattern), K(u_pattern_length));
     } else {
       regexp_engine_ = uregex_open(u_pattern, u_pattern_length, cflags, &parse_error, &u_error_code);
       uregex_setStackLimit(regexp_engine_, regex_vars.regexp_stack_limit_, &u_error_code);
       uregex_setTimeLimit(regexp_engine_, regex_vars.regexp_time_limit_, &u_error_code);
       if (OB_FAIL(check_icu_regexp_status(u_error_code, &parse_error))) {
-        LOG_WARN("failed to check icu regexp status", K(ret));
         if (regexp_engine_ != NULL) {
           uregex_close(regexp_engine_);
           regexp_engine_ = NULL;
@@ -298,7 +278,6 @@ int ObExprRegexContext::match(ObExprStringBuf &string_buf,
   result = false;
   if (OB_UNLIKELY(!inited_) || OB_ISNULL(regexp_engine_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("regexp context not inited yet", K(ret), K(inited_), K(regexp_engine_));
   } else if (OB_FAIL(get_valid_unicode_string(string_buf, text, u_text, u_text_length))) {
   } else {
     uregex_setText(regexp_engine_, u_text, u_text_length, &m_error_code);
@@ -327,7 +306,6 @@ int ObExprRegexContext::find(ObExprStringBuf &string_buf,
   result = 0;
   if (OB_UNLIKELY(!inited_) || OB_ISNULL(regexp_engine_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("regexp context not inited yet", K(ret), K(inited_), K(regexp_engine_));
   } else if (OB_FAIL(get_valid_unicode_string(string_buf, text, u_text, u_text_length))) {
   } else if (0 == u_text_length) {
     //do nothing
@@ -373,7 +351,6 @@ int ObExprRegexContext::substr(ObExprStringBuf &string_buf,
   result.reset();
   if (OB_UNLIKELY(!inited_) || OB_ISNULL(regexp_engine_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("regexp context not inited yet", K(ret), K(inited_), K(regexp_engine_));
   } else if (OB_FAIL(get_valid_unicode_string(string_buf, text, u_text, u_text_length))) {
   } else {
     UErrorCode m_error_code = U_ZERO_ERROR;
@@ -393,7 +370,6 @@ int ObExprRegexContext::substr(ObExprStringBuf &string_buf,
       } else if (sublength > 0) {
         if (OB_UNLIKELY(sizeof(UChar) * end_pos > text.length())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected error", K(ret), K(sizeof(UChar) * end_pos), K(text.length()));
         } else {
           result.assign_ptr(text.ptr() + sizeof(UChar) * start_pos, sublength * sizeof(UChar));
         }
@@ -420,7 +396,6 @@ int ObExprRegexContext::replace(ObExprStringBuf &string_buf,
   result.reset();
   if (OB_UNLIKELY(!inited_) || OB_ISNULL(regexp_engine_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("regexp context not inited yet", K(ret), K(inited_), K(regexp_engine_));
   } else if (OB_FAIL(get_valid_unicode_string(string_buf, text_string, u_text, u_text_length))) {
   } else if (0 == u_text_length) {
     result = text_string;
@@ -443,7 +418,6 @@ int ObExprRegexContext::replace(ObExprStringBuf &string_buf,
       result = text_string;
     } else if (OB_ISNULL(replace_buff = static_cast<UChar *>(string_buf.alloc(text_string.length())))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc memory failed.", K(replace_buff), K(text_string.length()), K(ret));
     } else if (OB_FAIL(get_valid_replace_string(string_buf, replace_string, u_replace, u_replace_length))) {
     } else {
       buff_size = text_string.length() / sizeof(UChar);
@@ -493,13 +467,11 @@ int ObExprRegexContext::append_head(ObExprStringBuf &string_buf,
     if (m_error_code == U_ZERO_ERROR) {
       if (OB_UNLIKELY(current_pos > text_length)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(current_pos), K(text_length));
       } else if (buff_size - buff_pos < current_pos) {
         int32_t required_buffer_size = (buff_pos + current_pos) * 2;
         UChar *tmp_buff = NULL;
         if (OB_ISNULL(tmp_buff = static_cast<UChar *>(string_buf.alloc(required_buffer_size * sizeof(UChar))))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("alloc memory failed.", K(tmp_buff), K(required_buffer_size), K(ret));
         } else {
           MEMCPY(tmp_buff, replace_buff, buff_pos * sizeof(UChar));
           string_buf.free(replace_buff);
@@ -543,7 +515,6 @@ int ObExprRegexContext::append_replace_str(ObExprStringBuf &string_buf,
     UChar *tmp_buff = NULL;
     if (OB_ISNULL(tmp_buff = static_cast<UChar *>(string_buf.alloc(required_buffer_size * sizeof(UChar))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc memory failed.", K(tmp_buff), K(required_buffer_size), K(ret));
     } else {
       MEMCPY(tmp_buff, replace_buff, buff_pos * sizeof(UChar));
       string_buf.free(replace_buff);
@@ -583,7 +554,6 @@ int ObExprRegexContext::append_tail(ObExprStringBuf &string_buf,
     UChar *tmp_buff = NULL;
     if (OB_ISNULL(tmp_buff = static_cast<UChar *>(string_buf.alloc(required_buffer_size * sizeof(UChar))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc memory failed.", K(tmp_buff), K(required_buffer_size), K(ret));
     } else {
       MEMCPY(tmp_buff, replace_buff, buff_pos * sizeof(UChar));
       string_buf.free(replace_buff);
@@ -614,15 +584,12 @@ int ObExprRegexContext::check_icu_regexp_status(UErrorCode u_error_code,
     {
     case U_REGEX_MISMATCHED_PAREN:
       ret = OB_ERR_REGEXP_EPAREN;
-      LOG_WARN("unmatched parentheses in regular expression", K(ret));
       break;
     case U_REGEX_BAD_ESCAPE_SEQUENCE:
       ret = OB_ERR_REGEXP_EESCAPE;
-      LOG_WARN("invalid escape \\ sequence in regular expression", K(ret));
       break;
     case U_REGEX_MISSING_CLOSE_BRACKET:
       ret = OB_ERR_REGEXP_EBRACK;
-      LOG_WARN("nmatched bracket in regular expression", K(ret));
       break;
     case U_REGEX_RULE_SYNTAX:
       if (parse_error != NULL) {
@@ -633,18 +600,15 @@ int ObExprRegexContext::check_icu_regexp_status(UErrorCode u_error_code,
                                        parse_error->offset))) {
         } else {
           ret = OB_ERR_REGEXP_ERROR;
-          LOG_WARN("Syntax error in regular expression", K(ret), K(u_errorName(u_error_code)));
           LOG_USER_ERROR(OB_ERR_REGEXP_ERROR, errmsg.ptr());
         }
       } else {
         ret = OB_ERR_REGEXP_ERROR;
-        LOG_WARN("other error in icu regexp", K(ret), K(u_errorName(u_error_code)));
         LOG_USER_ERROR(OB_ERR_REGEXP_ERROR, u_errorName(u_error_code));
       }
       break;
     default:
       ret = OB_ERR_REGEXP_ERROR;
-      LOG_WARN("other error in icu regexp", K(ret), K(u_errorName(u_error_code)));
       LOG_USER_ERROR(OB_ERR_REGEXP_ERROR, u_errorName(u_error_code));
       break;
     }
@@ -720,10 +684,8 @@ int ObExprRegexContext::get_valid_unicode_string(ObExprStringBuf &string_buf,
   void *tmp_buf = NULL;
   if (OB_UNLIKELY(buf_len % sizeof(UChar) != 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid param, source text is null", K(ret), K(origin_str), K(origin_str.length()));
   } else if (OB_ISNULL(tmp_buf = string_buf.alloc(buf_len))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret), K(tmp_buf));
   } else {
     MEMSET(tmp_buf, 0, buf_len);
     MEMCPY(tmp_buf, origin_str.ptr(), origin_str.length());
@@ -760,7 +722,6 @@ int ObExprRegexContext::check_need_utf8(ObRawExpr *expr, bool &need_utf8)
   if (OB_FAIL(ObRawExprUtils::get_real_expr_without_cast(expr, real_expr))) {
   } else if (OB_ISNULL(real_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("real expr is invalid", K(ret), K(real_expr));
   } else {
     need_utf8 = real_expr->get_result_type().is_blob() ||
                 real_expr->get_result_type().is_binary() ||
@@ -773,7 +734,6 @@ int ObExprRegexContext::check_binary_compatible(const ObExprResType *types, int6
   int ret = OB_SUCCESS;
   if (OB_ISNULL(types)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   } else {
     int64_t binary_param_idx = -1;
     int64_t nobinary_param_idx = -1;
@@ -791,7 +751,6 @@ int ObExprRegexContext::check_binary_compatible(const ObExprResType *types, int6
       ObString collation2 = ObString::make_string(coll_name2);
       ret = OB_ERR_MYSQL_CHARACTER_SET_MISMATCH;
       LOG_USER_ERROR(OB_ERR_MYSQL_CHARACTER_SET_MISMATCH, collation1.length(), collation1.ptr(), collation2.length(), collation2.ptr());
-      LOG_WARN("If one of the params is binary string, all of the params should be implicitly castable to binary charset.", K(ret), K(*types));
     }
   }
   return ret;

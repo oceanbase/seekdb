@@ -45,7 +45,6 @@ int ObTruncateTableResolver::resolve(const ParseNode &parser_tree)
       T_TRUNCATE_TABLE != node->type_ ||
       OB_ISNULL(node->children_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session_info_ is null or parser error", K(ret));
   }
   //create alter table stmt
   if (OB_SUCC(ret)) {
@@ -71,7 +70,6 @@ int ObTruncateTableResolver::resolve(const ParseNode &parser_tree)
         }
       } else {
         ret = OB_ERR_PARSE_SQL;
-        LOG_WARN("relation node should not be null!", K(ret));
       }
     }
   }
@@ -83,7 +81,6 @@ int ObTruncateTableResolver::resolve(const ParseNode &parser_tree)
                                                   truncate_table_stmt->get_table_name(),
                                                   false,
                                                   orig_table_schema))) {
-      LOG_WARN("fail to get table schema", K(ret), K(truncate_table_stmt->get_table_name()));
       if (NULL == orig_table_schema && OB_TABLE_NOT_EXIST == ret) {
         ObCStringHelper helper;
         LOG_USER_ERROR(OB_TABLE_NOT_EXIST,

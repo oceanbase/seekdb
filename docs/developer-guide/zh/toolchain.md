@@ -35,11 +35,12 @@ index = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"
 
 在 Windows 上，从 [Rust 官方安装页面](https://www.rust-lang.org/tools/install) 下载并运行 `rustup-init.exe`，然后重新打开 PowerShell，使 `%USERPROFILE%\.cargo\bin` 出现在 `PATH` 中。
 
-仓库固定使用 Rust `1.97.1`，需要 `clippy` 组件，并声明以下目标：
+仓库固定使用 Rust `1.98.1`，需要 `clippy` 组件，并声明以下目标：
 
 ```text
 x86_64-unknown-linux-gnu
 x86_64-pc-windows-gnu
+aarch64-linux-android
 ```
 
 CMake 编译 `sql-nio` 库时会从 Rust 工作区调用 Cargo，rustup 随后会自动读取 `rust/rust-toolchain.toml`，并安装固定版本的工具链、组件和目标。首次构建还可能下载 Cargo 的锁定依赖；如果主机无法访问默认 registry，请配置 crates.io 镜像。
@@ -94,6 +95,33 @@ brew install zstd lz4 utf8proc thrift re2 brotli
 ```
 
 需要使用镜像时，参见 [Homebrew 优化配置](homebrew.md)。
+
+### macOS 27（Apple Silicon）
+
+macOS 27 及以上使用独立的 `oceanbase.macos27.arm64.deps`，不再下载 LLVM。
+第三方库暂时复用 macOS 15 仓库中的包。请先安装带 macOS 27 SDK 的 Xcode 或
+Command Line Tools；CMake 优先检查当前选中的开发工具，如果 SDK 太旧，再检查
+`/Library/Developer/CommandLineTools`。默认使用选中工具集的 Apple Clang。
+
+```bash
+bash build.sh release --init
+cmake --build build_release -j8
+```
+
+可以用 `-DOB_MACOS_DEVELOPER_DIR=/path/to/Contents/Developer` 指定开发工具，
+或在首次配置时设置 `DEVELOPER_DIR`。显式选择的工具必须提供 SDK 27 或更新版本。
+选定的 SDK、链接器及 Rust/Cargo 开发工具环境会写入构建规则，后续构建无需再次设置环境变量。
+
+如果希望使用 Homebrew LLVM（需兼容 SDK 27 的 C++ 标准库头文件）：
+
+```bash
+brew install llvm
+bash build.sh release --init -DOB_MACOS_LLVM_ROOT="$(brew --prefix llvm)"
+```
+
+此选项选择 Homebrew 的 Clang/Clang++，SDK 和链接器仍来自上述 Apple 开发工具。
+配置阶段会编译并链接一个使用 C++ 标准库的程序，以检查 LLVM 与 SDK 的兼容性。
+从旧编译器切换已有的完整构建目录时，建议使用新的构建目录或先运行 `bash build.sh clean`。
 
 ## Windows 宿主机依赖
 

@@ -77,15 +77,12 @@ int ObDesExecContext::create_my_session()
   ObSQLSessionMgr *session_mgr = get_session_mgr();
   if (OB_UNLIKELY(my_session_ != NULL)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("my_session is not null.");
   } else if (NULL == session_mgr) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session manager is NULL", K(ret));
   } else {
     uint32_t sid = ObSQLSessionInfo::INVALID_SESSID;
     if (OB_FAIL(session_mgr->create_sessid(sid))) {
     } else if (OB_FAIL(session_mgr->create_session(sid, my_session_))) {
-      LOG_WARN("create session failed", K(ret), K(sid));
       my_session_ = NULL;
     } else {
       free_session_ctx_.sessid_ = sid;
@@ -102,7 +99,6 @@ int ObDesExecContext::create_my_session()
         uint32_t tmp_sid = 0;
         if (OB_FAIL(session_mgr->create_sessid(tmp_sid))) {
         } else if (OB_FAIL(local_session->init(tmp_sid, NULL))) {
-          LOG_WARN("my session init failed", K(ret));
           local_session->~ObSQLSessionInfo();
         } else {
           local_session->set_session_manager(session_mgr);

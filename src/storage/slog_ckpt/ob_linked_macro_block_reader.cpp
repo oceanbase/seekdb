@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "config_bridge.h"
 #include "storage/slog_ckpt/ob_linked_macro_block_reader.h"
 
 namespace oceanbase
@@ -39,7 +40,6 @@ int ObLinkedMacroBlockReader::init(const MacroBlockId &entry_block, const ObMemA
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObLinkedMacroBlockReader has been inited twice", K(ret));
   } else if (FALSE_IT(allocator_.set_attr(mem_attr))) {
   } else if (OB_FAIL(get_meta_blocks(entry_block))) {
   } else if (OB_ISNULL(io_buf_[0] =
@@ -71,7 +71,7 @@ int ObLinkedMacroBlockReader::get_meta_blocks(const MacroBlockId &entry_block)
   read_info.size_ = 4096; //make sure include ObMacroBlockCommonHeader and ObLinkedMacroBlockHeader
   read_info.io_desc_.set_mode(ObIOMode::READ);
   read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
-  read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
+  read_info.io_timeout_ms_ = config::_data_storage_io_timeout() / 1000L;
   read_info.io_desc_.set_sys_module_id(ObIOModule::LINKED_MACRO_BLOCK_IO);
   
 
@@ -126,7 +126,7 @@ int ObLinkedMacroBlockReader::prefetch_block()
     read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
     read_info.io_desc_.set_sys_module_id(ObIOModule::LINKED_MACRO_BLOCK_IO);
     read_info.macro_block_id_ = macros_handle_.at(prefetch_macro_block_idx_);
-    read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
+    read_info.io_timeout_ms_ = config::_data_storage_io_timeout() / 1000L;
     
     handles_[handle_pos_].reset();
     read_info.buf_ = io_buf_[handle_pos_];
@@ -166,7 +166,7 @@ int ObLinkedMacroBlockReader::pread_block(const ObMetaDiskAddr &addr, ObStorageO
   handler.reset();
   read_info.io_desc_.set_mode(ObIOMode::READ);
   read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
-  read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
+  read_info.io_timeout_ms_ = config::_data_storage_io_timeout() / 1000L;
   read_info.buf_ = item_buf;
   read_info.io_desc_.set_sys_module_id(ObIOModule::LINKED_MACRO_BLOCK_IO);
   
@@ -189,7 +189,7 @@ int ObLinkedMacroBlockReader::read_block_by_id(
   read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
   read_info.io_desc_.set_sys_module_id(ObIOModule::LINKED_MACRO_BLOCK_IO);
   read_info.macro_block_id_ = block_id;
-  read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
+  read_info.io_timeout_ms_ = config::_data_storage_io_timeout() / 1000L;
   read_info.buf_ = io_buf;
   
   handler.reset();
@@ -207,7 +207,6 @@ int ObLinkedMacroBlockReader::check_data_checksum(const char *buf, const int64_t
     reinterpret_cast<const ObMacroBlockCommonHeader *>(buf);
   if (OB_UNLIKELY(nullptr == buf || buf_len < sizeof(ObMacroBlockCommonHeader))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_len));
   } else {
     const int32_t expected_payload_checksum = common_header->get_payload_checksum();
     const int32_t calc_payload_checksum =
@@ -250,7 +249,6 @@ int ObLinkedMacroBlockReader::get_previous_block_id(
 
   if (OB_UNLIKELY(nullptr == buf || buf_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_len));
   } else if (OB_FAIL(common_header.deserialize(buf, buf_len, pos))) {
   } else if (OB_FAIL(linked_header.deserialize(buf, buf_len, pos))) {
   } else {
@@ -273,10 +271,8 @@ int ObLinkedMacroBlockItemReader::init(const MacroBlockId &entry_block, const Ob
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObLinkedMacroBlockItemReader has been inited twice", K(ret));
   } else if (OB_UNLIKELY(!entry_block.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(entry_block));
   } else if (OB_FAIL(block_reader_.init(entry_block, mem_attr))) {
   } else {
     allocator_.set_attr(mem_attr);
@@ -294,11 +290,9 @@ int ObLinkedMacroBlockItemReader::get_next_item(
   addr.reset();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLinkedMacroBlockItemReader has not been inited", K(ret));
   } else if (buf_pos_ >= buf_len_) {
     if (OB_FAIL(read_item_block())) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("fail to read item block", K(ret));
       }
     }
   }
@@ -345,7 +339,6 @@ int ObLinkedMacroBlockItemReader::read_item_block()
         char *big_buf = nullptr;
         if (OB_ISNULL(big_buf = static_cast<char *>(allocator_.alloc(request_size)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to allocate memory", K(ret), K(item_size));
         } else {
           data_len = buf_len_- buf_pos_;
           MEMCPY(big_buf, buf_ + buf_pos_, data_len);
@@ -482,10 +475,8 @@ int ObLinkedMacroBlockItemReader::get_next_block_id(const ObIArray<MacroBlockId>
   }
   if (OB_UNLIKELY(i >= block_list.count())) {
     ret = OB_SEARCH_NOT_FOUND;
-    LOG_WARN("block id not exist", K(ret), K(block_id), K(i));
   } else if (OB_UNLIKELY(i == block_list.count() - 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("this is last block", K(ret), K(block_id), K(i));
   } else {
     next_block_id = block_list.at(i + 1);
   }
@@ -533,14 +524,10 @@ int ObLinkedMacroBlockItemReader::read_large_item(const ObIArray<MacroBlockId> &
 
       if (OB_UNLIKELY(0 != item_count)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("first item count of large item must be zero", K(ret), K(item_count));
       } else if (OB_UNLIKELY(item_header->payload_size_ != item_buf_len)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("item_buf_len mismatch with header payload_size", K(ret), KPC(item_header),
-          K(item_buf_len));
       } else if (OB_UNLIKELY(data_len > left_item_buf_len)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("data len too large", K(ret), K(data_len), K(left_item_buf_len));
       } else {
         MEMCPY(item_buf, buf + pos, data_len);
         copy_item_buf_pos += data_len;
@@ -562,7 +549,6 @@ int ObLinkedMacroBlockItemReader::read_large_item(const ObIArray<MacroBlockId> &
             } else if (OB_UNLIKELY((data_len = sizeof(ObMacroBlockCommonHeader) + common_header->get_payload_size() - pos)
                 > left_item_buf_len)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("data len too large", K(ret), K(data_len), K(left_item_buf_len));
             } else {
               MEMCPY(item_buf + copy_item_buf_pos, buf + pos, data_len);
               copy_item_buf_pos += data_len;

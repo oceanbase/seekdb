@@ -47,19 +47,15 @@ int ObDBMSLimitCalculator::phy_res_calculate_by_logic_res(
   const char *str = NULL;
   if (OB_UNLIKELY(2 > params.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("params not valid", KR(ret), K(params));
   } else if (OB_FAIL(params.at(0).get_varchar(str_arg))) {
   } else if (str_arg.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(str_arg));
   } else if (OB_ISNULL(ptr = static_cast<char *>(ctx.get_allocator().alloc(MAX_RES_LEN)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret), K(MAX_RES_LEN));
   } else if (OB_FAIL(helper.convert(str_arg, str))) {
   } else if (OB_FAIL(parse_dict_like_args_(str, arg))) {
   } else if (OB_ISNULL(resource_calculator)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("resource limit calculator is not initialized", K(ret));
   } else if (OB_FAIL(resource_calculator->get_min_phy_resource_value(arg, res))) {
   } else if (OB_FAIL(get_json_result_(res, ptr, MAX_RES_LEN, pos))) {
   } else {
@@ -82,7 +78,6 @@ int ObDBMSLimitCalculator::parse_dict_like_args_(
     int64_t type = get_logic_res_type_by_name(key);
     if (!is_valid_logic_res_type(type)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), K(type), K(key));
     } else if (OB_FAIL(arg.set_type_value(type, value))) {
     }
     while (*ptr != '\0' && *ptr != ',') ptr++;

@@ -87,7 +87,6 @@ int ObBatchSelector::get_next(int64_t &offset)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_SYS;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(cursor_ >= count_)) {
     ret = OB_ITER_END;
   } else {
@@ -115,7 +114,6 @@ int ObBatchSelector::get_next(int64_t &offset)
       default:
       {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not support selector type", K(ret), K(type_));
         break;
       }
     }

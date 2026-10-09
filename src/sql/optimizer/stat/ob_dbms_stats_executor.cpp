@@ -74,7 +74,6 @@ int ObDbmsStatsExecutor::gather_table_stats(ObExecContext &ctx,
                                             &partition_id_block_map,
                                             gather_helper,
                                             running_monitor.failed_part_ids_))) {
-    LOG_WARN("failed to gather gather stats", K(ret));
     int tmp_ret = OB_SUCCESS;
      ObSEArray<int64_t, 8> temp_failed_part_ids;
     if (OB_SUCCESS != (tmp_ret = collect_last_part_and_global_if_timeout(ctx,
@@ -137,9 +136,7 @@ int ObDbmsStatsExecutor::gather_partition_stats(ObExecContext &ctx,
           } else if (OB_FAIL(derive_param.assign(param))) {
           } else if (OB_FAIL(derive_param.subpart_infos_.assign(taskInfo.sub_part_infos_))) {
           } else if (!taskInfo.approx_gather_ && OB_FAIL(derive_param.part_infos_.assign(taskInfo.part_infos_))) {
-            LOG_WARN("failed to assign", K(ret));
           } else if (taskInfo.approx_gather_ && OB_FAIL(derive_param.approx_part_infos_.assign(taskInfo.part_infos_))) {
-            LOG_WARN("failed to assign", K(ret));
           } else {
             derive_param.global_stat_param_.need_modify_ = taskInfo.gather_global_;
             if (ERRSIM_FAILED_ANALYZE_TABLE_STATS) {
@@ -260,7 +257,6 @@ int ObDbmsStatsExecutor::collect_last_part_and_global_if_timeout(
                                                        partition_id_block_map,
                                                        gather_helper,
                                                        failed_part_ids))) {
-      LOG_WARN("failed to collect global or part ", K(ret));
     }
     THIS_WORKER.set_session(origin_session);
     THIS_WORKER.set_timeout_ts(origin_duration_time);
@@ -287,7 +283,6 @@ int ObDbmsStatsExecutor::do_split_gather_stats(ObExecContext &ctx,
   if (batch_task_col_infos.count() > 1) {
     if (OB_FAIL(fetch_gather_table_snapshot_read(
             trans.get_connection(), gather_helper.sepcify_scn_))) {
-      LOG_WARN("failed to fetch gather table snapshot read", K(ret));
       // if we failed to get the read snapshot, just skip, not specify the snapshot
       ret = OB_SUCCESS;
     }
@@ -434,7 +429,6 @@ int ObDbmsStatsExecutor::split_column_param(const ObTableStatParam &stat_param,
     while (OB_SUCC(ret) && idx_col < stat_param.column_params_.count()) {
       if (OB_ISNULL(buf = temp_allocator.alloc(sizeof(TaskColumnParam)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to alloc memory", K(ret), K(buf));
       } else {
         task_col_param = new (buf) TaskColumnParam();
         task_col_param->column_params_ = &stat_param.column_params_;
@@ -472,7 +466,6 @@ int ObDbmsStatsExecutor::split_table_part_param(const ObTableStatParam &stat_par
           batch_cnt++;
           if (OB_ISNULL(subparts.at(i))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected error with NULL subpart", K(ret));
           } else if (OB_FAIL(batch_part_infos.at(batch_part_infos.count() - 1).sub_part_infos_.push_back(*subparts.at(i)))) {
           } else if (i == subparts.count() - 1) {
             if (OB_FAIL(add_L0_L1_part_to_task(part_id,
@@ -570,11 +563,9 @@ int ObDbmsStatsExecutor::add_L0_L1_part_to_task(uint64_t part_id,
     if (OB_HASH_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("failed to get part_id_to_approx_part_map", K(ret), K(part_id));
     }
   } else if (OB_ISNULL(part)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret));
   } else {
     gather_info.approx_gather_ = true;
     if (OB_FAIL(gather_info.part_infos_.push_back(*part))) {
@@ -593,10 +584,8 @@ int ObDbmsStatsExecutor::construct_part_to_subpart_map(const ObTableStatParam &s
   // init
   if (!part_id_to_approx_part_map.created() &&
       OB_FAIL(part_id_to_approx_part_map.create(64, "aproxPartMap", "DBMS_STATS"))) {
-    LOG_WARN("create part_id_to_approx_part_map fail", K(ret));
   } else if (!part_id_to_subpart_map.created() &&
              OB_FAIL(part_id_to_subpart_map.create(64, "idToSubMap", "DBMS_STATS"))) {
-    LOG_WARN("create part_id_to_subpart_map fail", K(ret));
   }
 
   // set part_id_to_subpart_map
@@ -607,7 +596,6 @@ int ObDbmsStatsExecutor::construct_part_to_subpart_map(const ObTableStatParam &s
       if (OB_HASH_NOT_EXIST == ret) {  // first time
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("part_id_to_subpart_map get fail", K(ret), K(subpart));
       }
     }
 
@@ -651,16 +639,13 @@ int ObDbmsStatsExecutor::prepare_gather_stats(ObExecContext &ctx,
   } else if (param.need_estimate_block_ &&
              OB_FAIL(ObBasicStatsEstimator::estimate_block_count(
                  ctx, param, partition_id_block_map))) {
-    LOG_WARN("failed to estimate block count", K(ret));
   } else if (OB_FAIL(gather_helper.running_monitor_.audit_.add_flush_block_count_audit(ObTimeUtility::current_time() -
                                                                                        start_time))) {
   } else if (OB_FAIL(determine_auto_sample_table(ctx, const_cast<ObTableStatParam&>(param)))) {
   } else if (param.is_auto_sample_size_ &&
              OB_FAIL(try_use_prefix_index_refine_min_max(ctx, const_cast<ObTableStatParam &>(param)))) {
-    LOG_WARN("failed to parse refine min max options", K(ret));
   } else if (param.is_auto_sample_size_ && OB_FAIL(check_use_single_partition_gather(
                                                partition_id_block_map, param, gather_helper.use_single_part_))) {
-    LOG_WARN("failed to adjust auto gather param", K(ret));
   } else if (OB_FAIL(get_stats_collect_batch_size(ctx.get_sql_proxy(),
                                                   param.table_id_,
                                                   gather_helper.batch_part_size_))) {
@@ -692,7 +677,6 @@ int ObDbmsStatsExecutor::do_gather_stats_with_retry(ObExecContext &ctx,
     gather_param.sepcify_scn_ = gather_helper.sepcify_scn_;
     if (OB_ISNULL(gather_param.allocator_)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid args with null allocator", KR(ret));
     } else if (OB_FAIL(ObDbmsStatsUtils::prepare_gather_stat_param(derive_param,
                                                                    stat_level,
                                                                    partition_id_block_map,
@@ -710,7 +694,6 @@ int ObDbmsStatsExecutor::do_gather_stats_with_retry(ObExecContext &ctx,
                                        all_tstats,
                                        all_cstats))) {
       if (gather_param.sepcify_scn_ > 0 && (ret == OB_TABLE_DEFINITION_CHANGED || ret == OB_SNAPSHOT_DISCARDED)) {
-        LOG_WARN("failed to specify snapshot to gather stats, try no specify snapshot to gather stats", K(ret));
         gather_param.sepcify_scn_ = 0;
         gather_param.allocator_->reuse();
         opt_stats.reset();
@@ -729,7 +712,6 @@ int ObDbmsStatsExecutor::do_gather_stats_with_retry(ObExecContext &ctx,
           gather_param.allocator_->reuse();  // Phased memory release for split gather, in order to reuse memory
         }
       } else {
-        LOG_WARN("failed to do gather stats", K(ret));
       }
     }
   }
@@ -789,7 +771,6 @@ int ObDbmsStatsExecutor::check_need_split_gather(
         ctx.get_query_runtime_environment();
     if (OB_ISNULL(runtime)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("query runtime environment is not bound", K(ret));
     } else if (OB_FAIL(ObDbmsStatsUtils::get_max_work_area_size(
         *runtime, max_wa_memory_size))) {
     } else {
@@ -910,8 +891,6 @@ int ObDbmsStatsExecutor::set_column_stats(ObExecContext &ctx,
   if (OB_UNLIKELY(param.table_param_.column_params_.count() != 1) ||
       OB_ISNULL(alloc = param.table_param_.allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(param.table_param_.column_params_.count()),
-                                     K(param.table_param_.allocator_));
   } else {
     StatLevel stat_level = TABLE_LEVEL;
     
@@ -930,10 +909,8 @@ int ObDbmsStatsExecutor::set_column_stats(ObExecContext &ctx,
     if (OB_FAIL(mgr.get_column_stat(key, col_stat_handle))) {
     } else if (OB_ISNULL(col_stat_handle.stat_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(col_stat_handle.stat_), K(ret));
     } else if (OB_ISNULL(col_stat = ObOptColumnStat::malloc_new_column_stat(*alloc))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to create column stat", K(ret));
     } else if (OB_FAIL(col_stat->deep_copy(*col_stat_handle.stat_))) {
     } else {//reset base infos
       col_stat->set_table_id(key.table_id_);
@@ -974,10 +951,8 @@ int ObDbmsStatsExecutor::do_set_table_stats(const ObSetTableStatParam &param,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(table_stat)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(table_stat));
   } else if (param.is_invalid()) {
     ret = OB_ERR_DBMS_STATS_PL;
-    LOG_WARN("Invalid or inconsistent input values", K(ret), K(param));
     LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL,"Invalid or inconsistent input values");
   } else {
     //1.set numrows_
@@ -1011,10 +986,8 @@ int ObDbmsStatsExecutor::do_set_column_stats(ObIAllocator &allocator,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(column_stat)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(column_stat));
   } else if (param.is_invalid()) {
     ret = OB_ERR_DBMS_STATS_PL;
-    LOG_WARN("Invalid or inconsistent input values", K(ret), K(param));
     LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL,"Invalid or inconsistent input values");
   } else {
     //1.set distcnt_
@@ -1046,7 +1019,6 @@ int ObDbmsStatsExecutor::do_set_column_stats(ObIAllocator &allocator,
           (param.hist_param_.maxval_ != NULL &&
            OB_FAIL(ObObjCaster::to_type(param.col_meta_.get_type(), cast_ctx, *param.hist_param_.maxval_, column_stat->get_max_value())))) {
         ret = OB_ERR_DBMS_STATS_PL;
-        LOG_WARN("Invalid or inconsistent input values", K(ret), K(param));
         LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL,"Invalid or inconsistent input values");
       }
     }
@@ -1134,7 +1106,6 @@ int ObDbmsStatsExecutor::delete_column_stats(ObExecContext &ctx,
   ObSEArray<uint64_t, 4> column_ids;
   if (OB_UNLIKELY(param.column_params_.count() < 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("one column is expected", K(ret), K(param.column_params_));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < param.column_params_.count(); ++i) {
       if (OB_FAIL(column_ids.push_back(param.column_params_.at(i).column_id_))) {
@@ -1195,7 +1166,6 @@ int ObDbmsStatsExecutor::reset_table_locked_state(ObExecContext &ctx,
     /*do nothing*/
   } else if (OB_ISNULL(mysql_proxy = ctx.get_sql_proxy())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(mysql_proxy));
   } else if (OB_FAIL(ObDbmsStatsLockUnlock::get_insert_locked_type_sql(param,
                                                                        no_stats_partition_ids,
                                                                        part_stattypes,
@@ -1225,7 +1195,6 @@ int ObDbmsStatsExecutor::gather_index_stats(ObExecContext &ctx,
                                             ObModIds::OB_HASH_BUCKET_TABLE_STATISTICS))) {
   } else if (param.need_estimate_block_ && OB_FAIL(ObBasicStatsEstimator::estimate_block_count(
                                                ctx, param, partition_id_block_map))) {
-    LOG_WARN("failed to estimate block count", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::prepare_gather_stat_param(param,
                                                                  INVALID_LEVEL,
                                                                  &partition_id_block_map,
@@ -1249,7 +1218,6 @@ int ObDbmsStatsExecutor::gather_index_stats(ObExecContext &ctx,
     } else if (param.part_stat_param_.can_use_approx_ && !param.approx_part_infos_.empty()) {//approx some part stats base on subpart stats
       if (OB_UNLIKELY(all_index_stats.empty())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(param.approx_part_infos_), K(all_index_stats));
       } else if (all_column_stats.empty()) {
         if (OB_FAIL(ObIncrementalStatEstimator::derive_part_index_stat_by_subpart_index_stats(param,
                                                                                               all_index_stats,
@@ -1269,7 +1237,6 @@ int ObDbmsStatsExecutor::gather_index_stats(ObExecContext &ctx,
       }
     } else if (OB_UNLIKELY(!param.approx_part_infos_.empty())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected error", K(ret), K(param));
     }
     if (OB_SUCC(ret) && !param.part_infos_.empty()) {
       if (OB_FAIL(gather_param.partition_infos_.assign(param.part_infos_))) {
@@ -1361,7 +1328,6 @@ int ObDbmsStatsExecutor::update_online_stat(ObExecContext &ctx,
   ObSEArray<ObOptColumnStat *, 4> column_stats;
   bool succ_to_write_stats = false;
   if (OB_FAIL(ObDbmsStatsLockUnlock::check_stat_locked(ctx, param))) {
-    LOG_WARN("fail to check lock stat", K(ret));
     if (ret == OB_ERR_DBMS_STATS_PL) {
       param.global_stat_param_.reset_gather_stat();
       param.part_stat_param_.reset_gather_stat();
@@ -1388,7 +1354,6 @@ int ObDbmsStatsExecutor::update_online_stat(ObExecContext &ctx,
                                                                          conn_guard))) {
       } else if (OB_ISNULL(conn = conn_guard.get_ptr())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("inner sql connection is null", K(ret));
       } else if (OB_FAIL(ObDbmsStatsUtils::get_current_opt_stats(allocator,
                                                                  conn,
                                                                  param,
@@ -1454,7 +1419,6 @@ int ObDbmsStatsExecutor::prepare_conn_and_store_session_for_online_stats(sql::Ob
   int ret = OB_SUCCESS;
   if (OB_ISNULL(session) || OB_ISNULL(schema_guard)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(session));
   //1.save session info
   } else if (OB_FAIL(session->save_session(saved_value))) {
   } else {
@@ -1496,7 +1460,6 @@ int ObDbmsStatsExecutor::restore_session_for_online_stat(sql::ObSQLSessionInfo *
   int ret = OB_SUCCESS;
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(session));
   } else {
     //1.restore sesssion
     if (OB_FAIL(session->restore_session(saved_value))) {
@@ -1526,11 +1489,9 @@ int ObDbmsStatsExecutor::fetch_gather_table_snapshot_read(common::sqlclient::ObI
     sqlclient::ObMySQLResult *result = NULL;
     if (OB_ISNULL(conn)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected error", K(ret), K(conn));
     } else if (OB_FAIL(conn->execute_read(sql_str_fmt, res))) {
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to execute sql", K(ret));
     } else {
       ObObj value;
       int64_t col_idx = 0;
@@ -1541,7 +1502,6 @@ int ObDbmsStatsExecutor::fetch_gather_table_snapshot_read(common::sqlclient::ObI
         if (OB_FAIL(value.get_number(scn_num))) {
         } else if (OB_UNLIKELY(!scn_num.is_valid_uint64(current_scn))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected value value", K(ret), K(value));
         }
       } else if (OB_LIKELY(value.is_uint64())) {
         current_scn = value.get_uint64();
@@ -1549,7 +1509,6 @@ int ObDbmsStatsExecutor::fetch_gather_table_snapshot_read(common::sqlclient::ObI
         current_scn = value.get_int();
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected value type", K(ret), K(value));
       }
     }
   }
@@ -1577,7 +1536,6 @@ int ObDbmsStatsExecutor::gather_system_stats(ObExecContext &ctx)
   OptSystemIoBenchmark &io_benchmark = OptSystemIoBenchmark::get_instance();
   if (OB_ISNULL(runtime_environment)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("query runtime environment is not bound", K(ret));
   } else if (OB_FALSE_IT(cpu_mhz =
                  query::query_cpu_frequency_khz(runtime_environment) / 1000)) {
   } else if (OB_FALSE_IT(network_speed =
@@ -1653,13 +1611,11 @@ int ObDbmsStatsExecutor::determine_auto_sample_table(ObExecContext &ctx, ObTable
   } else if (OB_ISNULL(schema_guard) ||
              OB_ISNULL(ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(schema_guard->get_table_schema(
                                                     param.table_id_,
                                                     table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else {
     param.is_auto_sample_size_ = !table_schema->is_vir_table();
   }
@@ -1679,11 +1635,9 @@ int ObDbmsStatsExecutor::try_use_prefix_index_refine_min_max(ObExecContext &ctx,
   ObSEArray<uint64_t, 4> rowkey_ids;
   if (OB_ISNULL(schema_guard) || OB_ISNULL(ctx.get_my_session()) || OB_ISNULL(param.allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(schema_guard->get_table_schema( param.table_id_, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::get_table_index_infos(schema_guard,
                                                              param.table_id_,
                                                              index_tids,
@@ -1697,7 +1651,6 @@ int ObDbmsStatsExecutor::try_use_prefix_index_refine_min_max(ObExecContext &ctx,
       if (OB_FAIL(schema_guard->get_table_schema( index_tids[i], index_schema))) {
       } else if (OB_ISNULL(index_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(index_schema->get_rowkey_column_ids(rowkey_ids))) {
       } else if (rowkey_ids.empty()) {
         // do nothing
@@ -1708,7 +1661,6 @@ int ObDbmsStatsExecutor::try_use_prefix_index_refine_min_max(ObExecContext &ctx,
       } else if (ObOptimizerUtil::find_item(refine_columns, first_column_id)) {
         // do nothing
       } else if (index_tids[i] != param.table_id_ && OB_FAIL(index_schema->get_index_name(index_name))) {
-        LOG_WARN("failed to get index name", K(ret));
       } else if (OB_FAIL(refine_columns.push_back(first_column_id))) {
       } else if (OB_FAIL(refine_index_names.push_back(index_name))) {
       }
@@ -1750,11 +1702,9 @@ int ObDbmsStatsExecutor::check_use_single_partition_gather(const PartitionIdBloc
       if (OB_LIKELY(OB_HASH_NOT_EXIST == ret)) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("failed to get refactored", K(ret));
       }
     } else if (OB_ISNULL(block_num_stat)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected error", K(ret), K(block_num_stat));
     } else if (OB_FALSE_IT(row_cnt = block_num_stat->sstable_row_cnt_ + block_num_stat->memtable_row_cnt_)) {
     } else if (row_cnt < param.auto_sample_row_cnt_) {
       // do nothing
@@ -1764,11 +1714,9 @@ int ObDbmsStatsExecutor::check_use_single_partition_gather(const PartitionIdBloc
           if (OB_LIKELY(OB_HASH_NOT_EXIST == ret)) {
             ret = OB_SUCCESS;
           } else {
-            LOG_WARN("failed to get refactored", K(ret));
           }
         } else if (OB_ISNULL(block_num_stat)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected error", K(ret), K(block_num_stat));
         } else if (OB_FALSE_IT(row_cnt = block_num_stat->sstable_row_cnt_ + block_num_stat->memtable_row_cnt_)) {
         } else if (row_cnt < param.auto_sample_row_cnt_) {
           // do nothing
@@ -1782,11 +1730,9 @@ int ObDbmsStatsExecutor::check_use_single_partition_gather(const PartitionIdBloc
             if (OB_LIKELY(OB_HASH_NOT_EXIST == ret)) {
               ret = OB_SUCCESS;
             } else {
-              LOG_WARN("failed to get refactored", K(ret));
             }
           } else if (OB_ISNULL(block_num_stat)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected error", K(ret), K(block_num_stat));
           } else if (OB_FALSE_IT(row_cnt = block_num_stat->sstable_row_cnt_ + block_num_stat->memtable_row_cnt_)) {
           } else if (row_cnt < param.auto_sample_row_cnt_) {
             // do nothing
@@ -1846,7 +1792,6 @@ int ObDbmsStatsExecutor::get_stats_collect_batch_size(ObMySQLProxy *mysql_proxy,
     } else if (OB_FAIL(dest_obj.get_number().extract_valid_int64_with_trunc(batch_part_size))) {
     } else if (batch_part_size < 0) {
       ret = OB_ERR_DBMS_STATS_PL;
-      LOG_WARN("Illegal auto gather stats batch size must greater than 0", K(ret), K(batch_part_size));
     } else {
     }
   }

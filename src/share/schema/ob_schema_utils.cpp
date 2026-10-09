@@ -292,7 +292,6 @@ int ObSchemaUtils::get_runtime_variable(ObMultiVersionSchemaService &schema_serv
               var_id, var_schema))) {
   } else if (OB_ISNULL(var_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("var_schema is null");
   } else if (OB_FAIL(var_schema->get_value(NULL, NULL, value))) {
   }
   return ret;
@@ -305,12 +304,10 @@ int ObSchemaUtils::str_to_int(const ObString &str, int64_t &value)
   value = OB_INVALID_ID;
   if (str.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(str));
   } else {
     int n = snprintf(buf, OB_MAX_BIT_LENGTH, "%.*s", str.length(), str.ptr());
     if (n < 0 || n >= OB_MAX_BIT_LENGTH) {
       ret = OB_BUF_NOT_ENOUGH;
-      LOG_WARN("id_buf is not long enough", K(ret), K(n), LITERAL_K(OB_MAX_BIT_LENGTH));
     } else {
       const int64_t base = 10;
       value = strtoll(buf, NULL, base);
@@ -325,7 +322,6 @@ int ObSchemaUtils::str_to_uint(const ObString &str, uint64_t &value)
   int64_t int_value = OB_INVALID_ID;
   if (OB_FAIL(str_to_int(str, int_value))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to translate str to int", K(str), K(ret));
   } else {
     value = static_cast<uint64_t>(int_value);
   }
@@ -348,10 +344,8 @@ int ObSchemaUtils::construct_runtime_space_full_table(
       // do nothing
     } else if (!get_sys_table_lob_aux_table_id(table_id, lob_meta_table_id, lob_piece_table_id)) {
       ret = OB_ENTRY_NOT_EXIST;
-      LOG_WARN("fail to get lob aux table id", KR(ret), K(table_id));
     } else if (lob_meta_table_id == 0 || lob_piece_table_id == 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to get lob aux table id", KR(ret), K(table_id), K(lob_meta_table_id), K(lob_piece_table_id));
     } else {
       table.set_aux_lob_meta_tid(lob_meta_table_id);
       table.set_aux_lob_piece_tid(lob_piece_table_id);
@@ -363,7 +357,6 @@ int ObSchemaUtils::construct_runtime_space_full_table(
     ObColumnSchemaV2 *column = NULL;
     if (NULL == (column = table.get_column_schema_by_idx(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("column is null", K(ret));
     } else {
       column->set_table_id(table.get_table_id());
     }
@@ -414,7 +407,6 @@ int ObSchemaUtils::construct_inner_table_schemas(ObSArray<ObTableSchema> &tables
     }
   }
   if (FAILEDx(tables.prepare_allocate_and_keep_count(capacity, &allocator))) {
-    LOG_WARN("fail to prepare allocate table schemas", KR(ret), K(capacity));
   }
   HEAP_VARS_2((ObTableSchema, table_schema), (ObTableSchema, data_schema)) {
     for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(creator_ptr_arrays); ++i) {
@@ -468,7 +460,6 @@ int ObSchemaUtils::generate_hard_code_schema_version(ObIArray<ObTableSchema> &ta
     FOREACH_CNT_X(table, tables, OB_SUCC(ret)) {
       if (OB_ISNULL(table)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("pointer is null", KR(ret), KP(table));
       } else if (OB_FAIL(tid2table.set_refactored(table->get_table_id(), table))) {
       }
     }
@@ -480,7 +471,6 @@ int ObSchemaUtils::generate_hard_code_schema_version(ObIArray<ObTableSchema> &ta
         }
       }
       if (FAILEDx(table_id_in_schema_version_order.push_back(table.get_table_id()))) {
-        LOG_WARN("failed to push table_id", KR(ret), K(table));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < table_id_in_schema_version_order.count(); i++) {
@@ -489,7 +479,6 @@ int ObSchemaUtils::generate_hard_code_schema_version(ObIArray<ObTableSchema> &ta
       ObTableSchema *table = nullptr;
       if (OB_ISNULL(table_ptr = tid2table.get(table_id)) || OB_ISNULL(table = *table_ptr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("pointer is null", KR(ret), KP(table_ptr), K(table));
       } else if (table->get_schema_version() != OB_INVALID_VERSION) {
         // table schema version is set, ignore
       } else {
@@ -505,7 +494,6 @@ int ObSchemaUtils::generate_hard_code_schema_version(ObIArray<ObTableSchema> &ta
     if (OB_SUCC(ret) && current_schema_version != HARD_CODE_SCHEMA_VERSION_BEGIN *
         ObSchemaVersionGenerator::SCHEMA_VERSION_INC_STEP) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("schema count not match", KR(ret), K(current_schema_version), K(HARD_CODE_SCHEMA_VERSION_BEGIN));
     }
   }
   return ret;
@@ -571,11 +559,9 @@ int ObSchemaUtils::batch_get_table_schemas_by_version(
   ObArray<ObSimpleTableSchemaV2 *> table_schemas_from_inner_table;
   if (OB_UNLIKELY(table_ids.empty() || schema_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(table_ids), K(schema_version));
   } else if (OB_ISNULL(multi_version_schema_service)
       || OB_ISNULL(schema_service = multi_version_schema_service->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("multiversion_schema_service or schema_service is null", KR(ret));
   } else if (OB_FAIL(schema_service->get_table_latest_schema_versions(
       sql_client,
       table_ids,
@@ -605,7 +591,6 @@ int ObSchemaUtils::batch_get_table_schemas_by_version(
     const ObSimpleTableSchemaV2 *table_schema = table_schemas.at(idx);
     if (OB_ISNULL(table_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table_schema can't be null", KR(ret), K(idx), K(table_ids), K(table_schemas));
     }
   }
   return ret;
@@ -622,7 +607,6 @@ int ObSchemaUtils::check_sys_table_exist_by_sql(
       || !is_sys_table(table_id)
       || is_core_table(table_id))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(table_id));
   } else {
     SMART_VAR(ObISQLClient::ReadResult, result) {
       ObSqlString sql;
@@ -634,7 +618,6 @@ int ObSchemaUtils::check_sys_table_exist_by_sql(
       } else if (OB_FAIL(sql_client.read(result, sql.ptr()))) {
       } else if (OB_ISNULL(res = result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get mysql result failed", KR(ret), K(sql));
       } else if (OB_FAIL(res->next())) {
       } else if (OB_FAIL(res->get_bool("exist", exist))) {
       }
@@ -656,7 +639,6 @@ int ObSchemaUtils::get_latest_table_schema(
   ObSEArray<ObSimpleTableSchemaV2 *, 1> table_schemas;
   if (OB_UNLIKELY(OB_INVALID_ID == table_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(table_id));
   } else if (OB_FAIL(table_ids.push_back(table_id))) {
   } else if (OB_FAIL(batch_get_latest_table_schemas(
       schema_service,
@@ -666,10 +648,8 @@ int ObSchemaUtils::get_latest_table_schema(
       table_schemas))) {
   } else if (table_schemas.empty()) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table not exist when get latest table schema", KR(ret), K(table_id));
   } else if (OB_ISNULL(table_schemas.at(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table schema can not be null", KR(ret), K(table_id), K(table_schemas));
   } else {
     table_schema = table_schemas.at(0);
   }
@@ -690,10 +670,8 @@ int ObSchemaUtils::batch_get_table_schemas_from_cache_(
   ObSchemaGetterGuard schema_guard;
   if (OB_UNLIKELY(specified_schema_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(specified_schema_version));
   } else if (OB_ISNULL(multi_version_schema_service)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("multiversion_schema_service is null", KR(ret));
   } else if (OB_FAIL(multi_version_schema_service->get_runtime_schema_guard(
       schema_guard))) {
   } else {
@@ -739,11 +717,9 @@ int ObSchemaUtils::batch_get_table_schemas_from_inner_table_(
   
   if (OB_UNLIKELY(schema_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(schema_version));
   } else if (OB_ISNULL(multi_version_schema_service)
       || OB_ISNULL(schema_service = multi_version_schema_service->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("multiversion_schema_service or schema_service is null", KR(ret));
   } else if (need_refresh_table_schema_keys.empty()) {
     // skip
   } else if (OB_FAIL(schema_service->get_batch_tables(
@@ -769,7 +745,6 @@ int ObSchemaUtils::check_whether_column_exist(common::ObISQLClient &sql_client,
       || !is_sys_table(table_id)
       || is_core_table(table_id))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(table_id), K(column_name));
   } else {
     SMART_VAR(ObISQLClient::ReadResult, result) {
       ObSqlString sql;
@@ -781,7 +756,6 @@ int ObSchemaUtils::check_whether_column_exist(common::ObISQLClient &sql_client,
       } else if (OB_FAIL(sql_client.read(result, sql.ptr()))) {
       } else if (OB_ISNULL(res = result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get mysql result failed", KR(ret), K(sql));
       } else if (OB_FAIL(res->next())) {
       } else if (OB_FAIL(res->get_bool("exist", exist))) {
       }
@@ -800,7 +774,6 @@ int ObSchemaUtils::is_drop_column_only(const AlterTableSchema &alter_table_schem
     const AlterColumnSchema *alter_col = static_cast<AlterColumnSchema*>(*it_begin);
     if (OB_ISNULL(alter_col)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("alter col should not be null", K(ret), K(alter_table_schema));
     } else if (OB_DDL_DROP_COLUMN != alter_col->alter_type_) {
       is_drop_col_only = false;
     }

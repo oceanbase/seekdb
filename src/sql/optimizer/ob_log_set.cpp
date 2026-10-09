@@ -82,13 +82,10 @@ int ObLogSet::compute_const_exprs()
   if (OB_ISNULL(my_plan_) || OB_ISNULL(left_child = get_child(first_child)) ||
       OB_ISNULL(right_child = get_child(second_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpect null", K(ret), K(my_plan_), K(left_child), K(right_child));
   } else if ((ObSelectStmt::EXCEPT == get_set_op() || ObSelectStmt::INTERSECT == get_set_op())
              && OB_FAIL(append(output_const_exprs_, left_child->get_output_const_exprs()))) {
-    LOG_WARN("failed to append exprs", K(ret));
   } else if (ObSelectStmt::INTERSECT == get_set_op() &&
              OB_FAIL(append(output_const_exprs_, right_child->get_output_const_exprs()))) {
-    LOG_WARN("failed to append exprs", K(ret));
   } else if (ObSelectStmt::UNION == get_set_op()) {
     //union, left/right are both const and have equal values add const, temporarily not maintained
     //union may have more than two branches
@@ -106,7 +103,6 @@ int ObLogSet::compute_equal_set()
   ObSEArray<ObRawExpr*, 8> ordering_eset_conditions;
   if (OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null point error", K(ret), K(get_plan()));
   } else if (!is_set_distinct()) {
     // do nothing
   } else if (OB_FAIL(get_equal_set_conditions(ordering_eset_conditions))) {
@@ -121,7 +117,6 @@ int ObLogSet::compute_equal_set()
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(ordering_esets = get_plan()->create_equal_sets())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to create equal sets", K(ret));
     } else if (OB_FAIL(ObEqualAnalysis::compute_equal_set(&get_plan()->get_allocator(),
                                                           ordering_eset_conditions,
                                                           temp_ordering_esets,
@@ -144,7 +139,6 @@ int ObLogSet::get_equal_set_conditions(ObIArray<ObRawExpr*> &equal_conds)
       || OB_ISNULL(session_info = get_plan()->get_optimizer_context().get_session_info())
       || OB_ISNULL(expr_factory = &get_plan()->get_optimizer_context().get_expr_factory())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(get_plan()), K(get_stmt()), K(session_info), K(ret));
   } else if (OB_FALSE_IT(stmt = static_cast<const ObSelectStmt*>(get_stmt()))) {
   } else if (OB_FAIL(stmt->get_pure_set_exprs(set_exprs))) {
   } else if (OB_FAIL(ObTransformUtils::get_equal_set_conditions(*expr_factory, session_info,
@@ -160,7 +154,6 @@ int ObLogSet::deduce_const_exprs_and_ft_item_set(ObFdItemSet &fd_item_set)
   ObSEArray<ObRawExpr *, 8> select_exprs;
   if (OB_ISNULL(my_plan_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   } else if (OB_FAIL(get_set_exprs(select_exprs))) {
   } else if (OB_FAIL(my_plan_->get_fd_item_factory().deduce_fd_item_set(
                                                           get_output_equal_sets(),
@@ -182,7 +175,6 @@ int ObLogSet::compute_fd_item_set()
   if (OB_ISNULL(my_plan_) || OB_ISNULL(left_child = get_child(first_child)) ||
       OB_ISNULL(right_child = get_child(second_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpect null", K(ret), K(my_plan_), K(left_child), K(right_child));
   } else if (!is_set_distinct()) {
     // do nothing
   } else if (OB_FAIL(my_plan_->get_fd_item_factory().create_fd_item_set(fd_item_set))) {
@@ -197,10 +189,8 @@ int ObLogSet::compute_fd_item_set()
   } else if (OB_FAIL(fd_item_set->push_back(fd_item))) {
   } else if ((ObSelectStmt::INTERSECT == set_op_ || ObSelectStmt::EXCEPT == set_op_) &&
             OB_FAIL(append_child_fd_item_set(*fd_item_set, left_child->get_fd_item_set()))) {
-    LOG_WARN("failed to append fd item set", K(ret));
   } else if (ObSelectStmt::INTERSECT == set_op_ &&
             OB_FAIL(append_child_fd_item_set(*fd_item_set, right_child->get_fd_item_set()))) {
-    LOG_WARN("failed to append fd item set", K(ret));
   } else if (OB_FAIL(deduce_const_exprs_and_ft_item_set(*fd_item_set))) {
   } else {
     set_fd_item_set(fd_item_set);
@@ -217,7 +207,6 @@ int ObLogSet::append_child_fd_item_set(ObFdItemSet &all_fd_item_set, const ObFdI
   for (int64_t i = 0; OB_SUCC(ret) && i < child_fd_item_set.count(); ++i) {
     if (OB_ISNULL(fd_item = child_fd_item_set.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (fd_item->is_table_fd_item()) {
       /* do nothing */
     } else if (OB_FAIL(all_fd_item_set.push_back(fd_item))) {
@@ -239,10 +228,8 @@ int ObLogSet::compute_op_ordering()
     ObLogicalOperator *left_child = NULL;
     if (OB_ISNULL(left_child = get_child(ObLogicalOperator::first_child))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (OB_ISNULL(get_stmt()) || OB_UNLIKELY(!get_stmt()->is_select_stmt())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("stmt is null", K(ret), K(get_stmt()));
     } else if (OB_FAIL(static_cast<const ObSelectStmt*>(get_stmt())->get_select_exprs(select_exprs))) {
     } else if (map_array_.count() != select_exprs.count()) {
       ret = OB_ERR_UNEXPECTED;
@@ -267,7 +254,6 @@ int ObLogSet::compute_one_row_info()
   if (OB_ISNULL(left_child = get_child(ObLogicalOperator::first_child)) ||
       OB_ISNULL(right_child = get_child(ObLogicalOperator::second_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(left_child), K(right_child), K(ret));
   } else if (set_op_ == ObSelectStmt::UNION || is_recursive_union()) {
     set_is_at_most_one_row(false);
   } else if (set_op_ == ObSelectStmt::INTERSECT) {
@@ -290,7 +276,6 @@ int ObLogSet::compute_sharding_info()
       OB_ISNULL(first_child = get_child(ObLogicalOperator::first_child)) ||
       OB_ISNULL(second_child = get_child(ObLogicalOperator::second_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(get_plan()), K(ret));
   } else if (DistAlgo::DIST_BASIC_METHOD == set_dist_algo_) {
     if (OB_FAIL(ObOptimizerUtil::compute_basic_sharding_info(
                                     get_plan()->get_optimizer_context().get_local_server_addr(),
@@ -370,7 +355,6 @@ int ObLogSet::est_width()
   ObLogicalOperator *right_child = get_child(ObLogicalOperator::second_child);
   if (OB_ISNULL(left_child) || OB_ISNULL(right_child)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("set op is not inited", K(ret));
   } else {
     width = std::max(left_child->get_width(), right_child->get_width());
     set_width(width);
@@ -403,7 +387,6 @@ int ObLogSet::get_re_est_cost_infos(const EstimateCostInfo &param,
     double origin_child_card = 0;
     if (OB_ISNULL(child)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("set operator i-th child is null", K(ret), K(i));
     } else if (OB_FAIL(cur_param.assign(param))) {
     } else {
       cur_param.need_row_count_ = need_row_count;
@@ -457,7 +440,6 @@ int ObLogSet::do_re_est_cost(EstimateCostInfo &param, double &card, double &op_c
   const ObSelectStmt *stmt = dynamic_cast<const ObSelectStmt*>(get_stmt());
   if (OB_ISNULL(stmt) || OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(get_re_est_cost_infos(param, cost_infos, child_cost, tmp_card))) {
   } else if (is_recursive_union() || !is_set_distinct()) {
     ObCostMergeSetInfo cost_info(cost_infos, get_set_op(), stmt->get_select_item_size());
@@ -475,7 +457,6 @@ int ObLogSet::do_re_est_cost(EstimateCostInfo &param, double &card, double &op_c
     ObSEArray<ObRawExpr*, 8> select_exprs;
     if (OB_UNLIKELY(2 != cost_infos.count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected cost infos count", K(ret), K(cost_infos.count()));
     } else if (OB_FAIL(stmt->get_select_exprs(select_exprs))) {
     } else {
       ObCostHashSetInfo hash_cost_info(cost_infos.at(0).rows_, cost_infos.at(0).width_,
@@ -489,7 +470,6 @@ int ObLogSet::do_re_est_cost(EstimateCostInfo &param, double &card, double &op_c
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected else", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -505,7 +485,6 @@ int ObLogSet::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parameter is NULL", K(ret));
   } else if (OB_FAIL(get_set_exprs(all_exprs))) {
   } else if (OB_FAIL(ObLogicalOperator::get_op_exprs(all_exprs))) {
   } else { /*do nothing*/ }
@@ -623,7 +602,6 @@ int ObLogSet::get_set_exprs(ObIArray<ObRawExpr *> &set_exprs)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(get_stmt()) || OB_UNLIKELY(!get_stmt()->is_select_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(get_stmt()), K(ret));
   } else {
     const ObSelectStmt *sel_stmt = static_cast<const ObSelectStmt *>(get_stmt());
     if (OB_FAIL(sel_stmt->get_select_exprs(set_exprs))) {
@@ -637,7 +615,6 @@ int ObLogSet::get_pure_set_exprs(ObIArray<ObRawExpr *> &set_exprs)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(get_stmt()) || OB_UNLIKELY(!get_stmt()->is_select_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(get_stmt()), K(ret));
   } else {
     const ObSelectStmt *sel_stmt = static_cast<const ObSelectStmt *>(get_stmt());
     if (OB_FAIL(sel_stmt->get_pure_set_exprs(set_exprs))) {
@@ -673,7 +650,6 @@ int ObLogSet::print_outline_data(PlanText &plan_text)
   bool has_push_down = false;
   if (OB_ISNULL(get_plan()) || OB_ISNULL(stmt = get_plan()->get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected NULL", K(ret), K(get_plan()), K(stmt));
   } else if (OB_FAIL(stmt->get_qb_name(qb_name))) {
   } else if (OB_FAIL(check_has_push_down(has_push_down))) {
   } else if (has_push_down &&
@@ -682,13 +658,11 @@ int ObLogSet::print_outline_data(PlanText &plan_text)
                                 ObHint::get_hint_name(T_DISTINCT_PUSHDOWN),
                                 qb_name.length(),
                                 qb_name.ptr()))) {
-    LOG_WARN("fail to print buffer", K(ret), K(buf), K(buf_len), K(pos));
   } else if (HASH_SET == set_algo_ &&
              OB_FAIL(BUF_PRINTF("%s%s(@\"%.*s\")",
                                 ObQueryHint::get_outline_indent(plan_text.is_oneline_),
                                 ObHint::get_hint_name(T_USE_HASH_SET),
                                 qb_name.length(), qb_name.ptr()))) {
-    LOG_WARN("fail to print buffer", K(ret), K(buf), K(buf_len), K(pos));
   } else if (OB_FAIL(construct_pq_set_hint(hint))) {
   } else if (hint.get_dist_methods().empty() && hint.get_left_branch().empty()) {
     /*do nothing*/
@@ -703,7 +677,6 @@ int ObLogSet::print_used_hint(PlanText &plan_text)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected NULL", K(ret), K(get_plan()));
   } else {
     const ObHint *use_hash = get_plan()->get_log_plan_hint().get_normal_hint(T_USE_HASH_SET);
     const ObHint *pushdown = get_plan()->get_log_plan_hint().get_normal_hint(T_DISTINCT_PUSHDOWN);
@@ -712,10 +685,8 @@ int ObLogSet::print_used_hint(PlanText &plan_text)
                              || (MERGE_SET == set_algo_ && use_hash->is_disable_hint()));
     const ObPQSetHint *used_pq_hint = NULL;
     if (algo_match && OB_FAIL(use_hash->print_hint(plan_text))) {
-      LOG_WARN("failed to print use hash hint for set", K(ret), K(*use_hash));
     } else if (OB_FAIL(get_used_pq_set_hint(used_pq_hint))) {
     } else if (NULL != used_pq_hint && OB_FAIL(used_pq_hint->print_hint(plan_text))) {
-      LOG_WARN("failed to print pq_set hint for set", K(ret), K(*used_pq_hint));
     } else if (NULL != pushdown) {
       bool has_push_down = false;
       if (OB_FAIL(check_has_push_down(has_push_down))) {
@@ -723,7 +694,6 @@ int ObLogSet::print_used_hint(PlanText &plan_text)
         bool pushdown_match = has_push_down ? pushdown->is_enable_hint()
                                             : pushdown->is_disable_hint();
         if (pushdown_match && OB_FAIL(pushdown->print_hint(plan_text))) {
-          LOG_WARN("failed to print used push down hint for set", K(ret), KPC(pushdown));
         }
       }
     }
@@ -738,7 +708,6 @@ int ObLogSet::get_used_pq_set_hint(const ObPQSetHint *&used_hint)
   const ObHint *stmt_pq_set = NULL;
   if (OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected NULL", K(ret), K(get_plan()));
   } else if (NULL != (stmt_pq_set = get_plan()->get_log_plan_hint().get_normal_hint(T_PQ_SET))) {
     ObPQSetHint hint;
     used_hint = static_cast<const ObPQSetHint*>(stmt_pq_set);
@@ -766,7 +735,6 @@ int ObLogSet::construct_pq_set_hint(ObPQSetHint &hint)
   ObString left_branch;
   if (OB_ISNULL(stmt) || OB_ISNULL(left_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected NULL", K(ret), K(stmt), K(left_stmt));
   } else if (!stmt->is_set_distinct()
              || 2 < stmt->get_set_query().count()
              || stmt->get_set_query(0) == left_stmt) {
@@ -783,7 +751,6 @@ int ObLogSet::construct_pq_set_hint(ObPQSetHint &hint)
       for (int64_t i = 0; OB_SUCC(ret) && i < get_num_of_child(); ++i) {
         if (OB_ISNULL(child = get_child(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret), K(i), K(child));
         } else if (DistAlgo::DIST_SET_RANDOM == set_dist_algo_
                    && LOG_EXCHANGE != child->get_type()) {
           random_none_idx = i;
@@ -793,7 +760,6 @@ int ObLogSet::construct_pq_set_hint(ObPQSetHint &hint)
     if (OB_SUCC(ret) && OB_FAIL(hint.set_pq_set_hint(set_dist_algo_, 
                                                      get_num_of_child(), 
                                                      random_none_idx))) {
-      LOG_WARN("failed to get dist methods", K(ret), K(set_dist_algo_), K(random_none_idx));
     }
   }
   return ret;
@@ -808,13 +774,11 @@ int ObLogSet::check_has_push_down(bool &has_push_down)
     const ObLogicalOperator *pushdown_op = NULL;
     if (OB_ISNULL(child = get_child(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret), K(i), K(child));
     } else if (OB_FAIL(child->get_pushdown_op(log_op_def::LOG_DISTINCT, pushdown_op))) {
     } else if (NULL == pushdown_op) {
       // do nothing
     } else if (OB_UNLIKELY(log_op_def::LOG_DISTINCT != pushdown_op->get_type())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected pushdown op", K(ret), K(pushdown_op->get_type()));
     } else if (static_cast<const ObLogDistinct*>(pushdown_op)->is_push_down()) {
       has_push_down = true;
     }
@@ -830,7 +794,6 @@ int ObLogSet::compute_op_parallel_info()
     ObLogicalOperator *child = get_child(first_child);
     if (OB_ISNULL(child)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null child op", K(ret));
     } else if (child->get_part_cnt() > 0 &&
                get_parallel() > child->get_part_cnt()) {
       int64_t reduce_parallel = child->get_part_cnt();
@@ -842,7 +805,6 @@ int ObLogSet::compute_op_parallel_info()
     ObLogicalOperator *child = get_child(second_child);
     if (OB_ISNULL(child)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null child op", K(ret));
     } else if (child->get_part_cnt() > 0 &&
                get_parallel() > child->get_part_cnt()) {
       int64_t reduce_parallel = child->get_part_cnt();
@@ -854,7 +816,6 @@ int ObLogSet::compute_op_parallel_info()
     ObLogicalOperator *child = get_child(first_child);
     if (OB_ISNULL(child)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null child op", K(ret));
     } else if (child->get_part_cnt() > 0 &&
                get_parallel() > child->get_part_cnt()) {
       int64_t reduce_parallel = child->get_part_cnt();

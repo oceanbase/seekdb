@@ -82,14 +82,12 @@ int ObExprJsonSet::set_value(ObJsonSeekResult &hit, ObIJsonBase *&json_doc, ObIJ
           ObJsonArrayIndex array_index;
           if (OB_FAIL(path_last->get_first_array_index(arr_len, array_index))) {
           } else if (json_doc->is_bin() && ! json_val->is_bin() && OB_FAIL(ObJsonBaseFactory::transform(allocator, json_val, ObJsonInType::JSON_BIN, json_val))) {
-            LOG_WARN("json tree to bin fail", K(ret));
           } else if (OB_FAIL(pos_node->array_insert(array_index.get_array_index(), json_val))) {
           }
         } else if (!path_last->is_autowrap()) {
           void* array_buf = allocator->alloc(sizeof(ObJsonArray));
           if (OB_ISNULL(array_buf)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("error, alloc jsonarray node failed", K(ret));
           } else {
             ObJsonArray* json_array = (ObJsonArray*)new(array_buf)ObJsonArray(allocator);
             ObIJsonBase *j_parent = nullptr;
@@ -98,24 +96,19 @@ int ObExprJsonSet::set_value(ObJsonSeekResult &hit, ObIJsonBase *&json_doc, ObIJ
             bool is_idx_from_end = path_last->node_content_.array_cell_.is_index_from_end_;
             if (OB_FAIL(pos_node->get_parent(j_parent))) {
             } else if (! pos_node->is_tree() && OB_FAIL(ObJsonBaseFactory::transform(allocator, pos_node, ObJsonInType::JSON_TREE, j_pos_node))) {
-              LOG_WARN("json tree to bin fail", K(ret));
             } else if (!is_idx_from_end && (OB_FAIL(json_array->array_append(j_pos_node))
                 || OB_FAIL(json_array->array_append(json_val)))) {
-              LOG_WARN("error, array append node failed", K(ret));
             } else if (is_idx_from_end && (OB_FAIL(json_array->array_append(json_val))
                 || OB_FAIL(json_array->array_append(j_pos_node)))) {
-              LOG_WARN("error, array append node failed", K(ret));
             } else if (OB_ISNULL(j_parent)){
               json_doc->reset();
               json_doc = json_array;
             } else if (j_parent->is_bin() && OB_FAIL(ObJsonBaseFactory::transform(allocator, j_array, ObJsonInType::JSON_BIN, j_array))) {
-              LOG_WARN("json tree to bin fail", K(ret));
             } else if (OB_FAIL(j_parent->replace(pos_node, j_array))) {
             }
           }
         }
       } else if (json_doc->is_bin() && ! json_val->is_bin() && OB_FAIL(ObJsonBaseFactory::transform(allocator, json_val, ObJsonInType::JSON_BIN, json_val))) {
-        LOG_WARN("json tree to bin fail", K(ret));
       } else if (path_last->get_node_type() == JPN_MEMBER
                  && pos_node->json_type() == ObJsonNodeType::J_OBJECT) {
         ObString key_name;
@@ -124,12 +117,10 @@ int ObExprJsonSet::set_value(ObJsonSeekResult &hit, ObIJsonBase *&json_doc, ObIJ
         }
       } else {}
       if (OB_SUCC(ret) && OB_FAIL(ObJsonExprHelper::refresh_root_when_bin_rebuild_all(json_doc))) {
-        LOG_WARN("refresh_root_when_bin_rebuild_all fail", K(ret));
       }
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Input path seek failed", K(ret));
   }
 
   return ret;
@@ -145,7 +136,6 @@ int ObExprJsonSet::eval_json_set(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   if (expr.datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_BIN) {
     ret = OB_ERR_INVALID_JSON_CHARSET;
-    LOG_WARN("invalid out put charset", K(ret), K(expr.datum_meta_.cs_type_));
   } else if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 0,
                                                     json_doc, is_null_result))) {
   }

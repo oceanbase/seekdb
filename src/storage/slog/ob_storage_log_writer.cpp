@@ -32,12 +32,15 @@ namespace storage
 {
 
 ObStorageLogWriter::ObStorageLogWriter()
-  : is_inited_(false), flush_seq_(0), write_align_size_(0),
-    file_size_(0),  write_offset_(0), cursor_(),
+  : is_registered_(false), is_inited_(false), flush_seq_(0),
+    write_align_size_(0), file_size_(0), write_offset_(0), cursor_(),
     retry_write_policy_(ObLogRetryWritePolicy::INVALID_RETRY_WRITE),
     log_write_policy_(ObLogWritePolicy::INVALID_WRITE), nop_log_(),
-    nop_data_param_(), file_handler_(), batch_write_buf_(), slog_write_runner_()
+    nop_data_param_(), file_handler_(), batch_write_buf_()
 {
+  // Construct the process-wide runner before any static owner of this writer
+  // finishes construction, so those owners are destroyed before the runner.
+  ObSLogWriteRunner::get_instance();
 }
 
 ObStorageLogWriter::~ObStorageLogWriter()
@@ -82,8 +85,9 @@ int ObStorageLogWriter::init(
   } else if (OB_FAIL(nop_log_.init(ObLogConstants::LOG_FILE_ALIGN_SIZE))) {
   } else if (OB_FAIL(batch_write_buf_.init(ObLogConstants::LOG_FILE_ALIGN_SIZE, buf_size))) {
   } else if (OB_FAIL(file_handler_.init(log_dir, log_file_size))) {
-  } else if (OB_FAIL(slog_write_runner_.init(this))) {
+  } else if (OB_FAIL(ObSLogWriteRunner::get_instance().register_writer(this))) {
   } else {
+    is_registered_ = true;
     is_inited_ = true;
     STORAGE_REDO_LOG(INFO, "Successfully init slog writer", K(ret), KP(log_dir),
           K(log_file_size), K(max_log_size), K(log_file_spec));
@@ -108,21 +112,36 @@ int ObStorageLogWriter::start()
   } else if (FALSE_IT(has_stopped_ = false)) {
     // has_stopped_ must be set before flush thread run. Otherwise it might caused thread exit
     // No worry about councurrent slog write, because the ObStorageLogger hasn't started yet.
-  } else if (OB_FAIL(slog_write_runner_.start())) {
+  } else if (OB_FAIL(ObSLogWriteRunner::get_instance().start())) {
+    has_stopped_ = true;
   }
   return ret;
+}
+
+void ObStorageLogWriter::stop()
+{
+  ObSLogWriteRunner::get_instance().notify();
+  ObBaseLogWriter::stop();
+  ObSLogWriteRunner::get_instance().notify();
 }
 
 void ObStorageLogWriter::wait()
 {
   if (has_stopped_ && is_inited_) {
-    slog_write_runner_.stop();
-    slog_write_runner_.wait();
+    ObSLogWriteRunner::get_instance().stop_and_wait_if_idle();
   }
 }
 
 void ObStorageLogWriter::destroy()
 {
+  if (!has_stopped_) {
+    stop();
+  }
+  wait();
+  if (is_registered_) {
+    ObSLogWriteRunner::get_instance().unregister_writer(this);
+    is_registered_ = false;
+  }
   flush_seq_ = 0;
   write_align_size_ = 0;
   file_size_ = 0;
@@ -132,8 +151,16 @@ void ObStorageLogWriter::destroy()
   ObBaseLogWriter::destroy();
   nop_log_.destroy();
   batch_write_buf_.destroy();
-  slog_write_runner_.destroy();
   is_inited_ = false;
+}
+
+int ObStorageLogWriter::append_log(ObIBaseLogItem &log_item, const uint64_t timeout_us)
+{
+  int ret = ObBaseLogWriter::append_log(log_item, timeout_us);
+  if (OB_SUCC(ret)) {
+    ObSLogWriteRunner::get_instance().notify();
+  }
+  return ret;
 }
 
 ObLogCursor ObStorageLogWriter::get_cur_cursor()
@@ -589,62 +616,122 @@ int ObStorageLogWriter::update_log_item_cursor(
 }
 
 ObStorageLogWriter::ObSLogWriteRunner::ObSLogWriteRunner()
-  : lib::ThreadPool(1), log_writer_(nullptr), is_inited_(false)
+  : lib::ThreadPool(1), log_writers_(), next_writer_idx_(0),
+    is_inited_(false), is_started_(false), writer_mutex_(), wakeup_cond_()
 {
+  MEMSET(log_writers_, 0, sizeof(log_writers_));
 }
 
 ObStorageLogWriter::ObSLogWriteRunner::~ObSLogWriteRunner()
 {
-  destroy();
+  stop_and_wait();
+  is_inited_ = false;
 }
 
-int ObStorageLogWriter::ObSLogWriteRunner::init(ObStorageLogWriter *log_writer)
+ObStorageLogWriter::ObSLogWriteRunner &ObStorageLogWriter::ObSLogWriteRunner::get_instance()
+{
+  static ObSLogWriteRunner runner;
+  return runner;
+}
+
+int ObStorageLogWriter::ObSLogWriteRunner::register_writer(ObStorageLogWriter *log_writer)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(is_inited_)) {
-    ret = OB_INIT_TWICE;
-    STORAGE_REDO_LOG(WARN, "ObSLogWriteRunner has been inited.", K(ret));
-  } else if (OB_ISNULL(log_writer)) {
+  bool found = false;
+  if (OB_ISNULL(log_writer)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_REDO_LOG(WARN, "Log_writer is nullptr.", K(ret), KP(log_writer));
-  } else if (OB_FAIL(lib::ThreadPool::init())) {
   } else {
-    log_writer_ = log_writer;
-    is_inited_ = true;
+    {
+      std::lock_guard<std::mutex> guard(writer_mutex_);
+      if (!is_inited_ && OB_FAIL(lib::ThreadPool::init())) {
+        STORAGE_REDO_LOG(WARN, "failed to initialize shared slog writer thread", K(ret));
+      } else {
+        is_inited_ = true;
+        for (int64_t i = 0; !found && i < MAX_LOG_WRITER_COUNT; ++i) {
+          if (log_writers_[i] == log_writer) {
+            found = true;
+          }
+        }
+        for (int64_t i = 0; !found && i < MAX_LOG_WRITER_COUNT; ++i) {
+          if (OB_ISNULL(log_writers_[i])) {
+            log_writers_[i] = log_writer;
+            found = true;
+          }
+        }
+      }
+    }
+    if (OB_SUCC(ret) && !found) {
+      ret = OB_SIZE_OVERFLOW;
+      STORAGE_REDO_LOG(ERROR, "too many slog writers registered", K(ret));
+    }
   }
   return ret;
+}
+
+void ObStorageLogWriter::ObSLogWriteRunner::unregister_writer(ObStorageLogWriter *log_writer)
+{
+  {
+    std::lock_guard<std::mutex> guard(writer_mutex_);
+    for (int64_t i = 0; i < MAX_LOG_WRITER_COUNT; ++i) {
+      if (log_writers_[i] == log_writer) {
+        log_writers_[i] = nullptr;
+        break;
+      }
+    }
+  }
+  notify();
 }
 
 int ObStorageLogWriter::ObSLogWriteRunner::start()
 {
   int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
+  std::lock_guard<std::mutex> guard(writer_mutex_);
+  if (!is_inited_) {
     ret = OB_NOT_INIT;
-    STORAGE_REDO_LOG(WARN, "ObSLogWriteRunner hasn't been inited.", K(ret), K(is_inited_));
-  } else if (OB_FAIL(lib::ThreadPool::start())) {
+    STORAGE_REDO_LOG(WARN, "shared slog writer thread is not initialized", K(ret));
+  } else if (!is_started_) {
+    if (OB_FAIL(lib::ThreadPool::start())) {
+      STORAGE_REDO_LOG(ERROR, "failed to start shared slog writer thread", K(ret));
+    } else {
+      is_started_ = true;
+    }
   }
   return ret;
 }
 
-void ObStorageLogWriter::ObSLogWriteRunner::destroy()
+void ObStorageLogWriter::ObSLogWriteRunner::notify()
 {
-  if (is_inited_) {
-    stop();
-    wait();
-    is_inited_ = false;
+  wakeup_cond_.signal(UINT32_MAX);
+}
+
+void ObStorageLogWriter::ObSLogWriteRunner::stop_and_wait_if_idle()
+{
+  bool has_running_writer = false;
+  {
+    std::lock_guard<std::mutex> guard(writer_mutex_);
+    for (int64_t i = 0; !has_running_writer && i < MAX_LOG_WRITER_COUNT; ++i) {
+      has_running_writer = OB_NOT_NULL(log_writers_[i]) && !log_writers_[i]->has_stopped();
+    }
+  }
+  if (!has_running_writer) {
+    stop_and_wait();
   }
 }
 
-void ObStorageLogWriter::ObSLogWriteRunner::stop()
+void ObStorageLogWriter::ObSLogWriteRunner::stop_and_wait()
 {
-  if (is_inited_) {
-    lib::ThreadPool::stop();
+  bool need_wait = false;
+  {
+    std::lock_guard<std::mutex> guard(writer_mutex_);
+    if (is_started_) {
+      lib::ThreadPool::stop();
+      is_started_ = false;
+      need_wait = true;
+    }
   }
-}
-
-void ObStorageLogWriter::ObSLogWriteRunner::wait()
-{
-  if (is_inited_) {
+  if (need_wait) {
+    notify();
     lib::ThreadPool::wait();
     lib::ThreadPool::destroy();
   }
@@ -652,9 +739,36 @@ void ObStorageLogWriter::ObSLogWriteRunner::wait()
 
 void ObStorageLogWriter::ObSLogWriteRunner::run1()
 {
-  STORAGE_REDO_LOG(INFO, "ObSLogWriteRunner run", K(is_inited_));
-  lib::set_thread_name(log_writer_->get_thread_name());
-  log_writer_->flush_log();
+  run();
+}
+
+void ObStorageLogWriter::ObSLogWriteRunner::run()
+{
+  STORAGE_REDO_LOG(INFO, "shared slog writer thread started");
+  lib::set_thread_name("OB_SLOG");
+  while (!has_set_stop()) {
+    const uint32_t key = wakeup_cond_.get_key();
+    ObStorageLogWriter *log_writer = nullptr;
+    {
+      std::lock_guard<std::mutex> guard(writer_mutex_);
+      for (int64_t i = 0; OB_ISNULL(log_writer) && i < MAX_LOG_WRITER_COUNT; ++i) {
+        const int64_t idx = (next_writer_idx_ + i) % MAX_LOG_WRITER_COUNT;
+        ObStorageLogWriter *candidate = log_writers_[idx];
+        if (OB_NOT_NULL(candidate) && !candidate->has_stopped()
+            && candidate->get_queued_item_cnt() > 0) {
+          log_writer = candidate;
+          next_writer_idx_ = (idx + 1) % MAX_LOG_WRITER_COUNT;
+        }
+      }
+      if (OB_NOT_NULL(log_writer)) {
+        log_writer->flush_log_once();
+      }
+    }
+    if (OB_ISNULL(log_writer) && !has_set_stop()) {
+      wakeup_cond_.wait(key, FLUSH_THREAD_IDLE_INTERVAL_US);
+    }
+  }
+  STORAGE_REDO_LOG(INFO, "shared slog writer thread stopped");
 }
 
 }

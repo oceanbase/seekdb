@@ -41,7 +41,6 @@ static int eval_isvalid_without_strategy(const ObGeometry *g,
   }
   if (OB_ISNULL(geo_condidate)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("geometry can not be null", K(ret));
   } else {
     bg::validity_failure_type reason;
     result = bg::is_valid(*geo_condidate, reason);
@@ -62,7 +61,6 @@ static int eval_isvalid_with_strategy(const ObGeometry *g,
   const ObSrsItem *srs = context.get_srs();
   if (OB_ISNULL(srs)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("geography srs is null", K(ret), K(ret));
   } else {
     bg::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
     bg::strategy::intersection::geographic_segments<> m_geographic_ll_la_aa_strategy(geog_sphere);
@@ -114,7 +112,6 @@ private:
     typename CollectonType::iterator iter;
     if (OB_ISNULL(allocator)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Null allocator", K(ret));
     } else {
       const CollectonType *geo = reinterpret_cast<const CollectonType *>(const_cast<char *>(g->val()));
       iter = geo->begin();

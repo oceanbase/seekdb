@@ -133,10 +133,8 @@ int ObLibXml2SaxHandler::get_parser(void* ctx, ObLibXml2SaxParser*& parser)
   xmlParserCtxt* context = nullptr;
   if (OB_ISNULL(context = static_cast<xmlParserCtxt*>(ctx))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("context is null", K(ret));
   } else if (OB_ISNULL(parser = static_cast<ObLibXml2SaxParser*>(context->_private))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parser is null", K(ret));
   } else if (OB_UNLIKELY(parser->get_libxml2_ctxt() != context)) {
     ret = OB_ERR_PARSER_SYNTAX;
     LOG_INFO("parser ctxt changed");
@@ -327,7 +325,6 @@ void ObLibXml2SaxHandler::structured_error(void *ctx, const xmlError *error)
     LOG_INFO("parser is stopped", K(parser->get_last_errno()));
   } else if (OB_ISNULL(error)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("input error_info is null", K(ret));
   } else if (OB_FAIL(parser->on_error(error->code))) {
   }
 }
@@ -347,10 +344,8 @@ static int create_memory_parser_ctxt(const ObString& xml_text, xmlParserCtxt*& c
     // do nothing
   } else if (OB_ISNULL(ctxt = xmlNewParserCtxt())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("create parser ctxt failed", K(ret));
   } else if (OB_ISNULL(buf = xmlParserInputBufferCreateMem(xml_text.ptr(), xml_text.length(), XML_CHAR_ENCODING_NONE))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("create parser input buffer failed", K(ret));
     // free when error
     xmlFreeParserCtxt(ctxt);
   } else {
@@ -369,12 +364,10 @@ static int create_memory_parser_ctxt(const ObString& xml_text, xmlParserCtxt*& c
       xmlFreeParserCtxt(ctxt);
     } else if (OB_ISNULL(input = xmlNewIOInputStream(ctxt, buf, XML_CHAR_ENCODING_NONE))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("create parser input failed", K(ret));
       xmlFreeParserInputBuffer(buf);
       xmlFreeParserCtxt(ctxt);
     } else if (xmlPushInput(ctxt, input) == -1) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("parser push input failed", K(ret));
       // free when error
       xmlFreeInputStream(input); // this will free buf, so no need free buf
       xmlFreeParserCtxt(ctxt);
@@ -402,7 +395,6 @@ int ObLibXml2SaxParser::init(const ObString& xml_text, bool skip_start_blank)
 
   if (OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("allocator is null", K(ret));
   } else if (OB_FAIL(init_xml_text(xml_text, skip_start_blank))) {
   } else if (xml_text_.empty()) {
     // ignore empty
@@ -419,7 +411,6 @@ int ObLibXml2SaxParser::init_parse_context()
 
   if (OB_FAIL(create_memory_parser_ctxt(xml_text_, ctxt))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("create parser ctxt failed", K(ret));
   } else {
     this->ctxt_ = ctxt;
     ctxt->_private = this;
@@ -471,7 +462,6 @@ int ObLibXml2SaxParser::parse_document(const ObString& xml_text)
   if (OB_FAIL(init(xml_text, true))) {
   } else if (xml_text_.empty()) {
     ret = OB_ERR_PARSER_SYNTAX;
-    LOG_WARN("xml_text_ is empty or blank", K(ret));
   } else {
     xmlParseDocument(ctxt_);
     if (OB_FAIL(this->get_last_errno())) {
@@ -490,7 +480,6 @@ int ObLibXml2SaxParser::parse_content(const ObString& xml_text)
   if (OB_FAIL(init(xml_text, false))) {
   } else if (OB_ISNULL(document_ = OB_NEWx(ObXmlDocument, allocator_, ObMulModeNodeType::M_CONTENT, ctx_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc failed", K(ret));
   } else if (OB_NOT_NULL(ctxt_)) {
     this->set_cur_node(document_);
     document_->set_flags(MEMBER_LAZY_SORTED);
@@ -502,7 +491,6 @@ int ObLibXml2SaxParser::parse_content(const ObString& xml_text)
     if (OB_FAIL(this->get_last_errno())) {
     } else if (OB_UNLIKELY(! is_parsed_all_input())) {
       ret = OB_ERR_PARSER_SYNTAX;
-      LOG_WARN("input not parsed fullly", K(ret), K(xml_text.length()), K(get_parse_byte_num()));
     } else if (OB_FAIL(remove_prev_empty_text())) {
     }
     ObLibXml2SaxHandler::reset_libxml_last_error();
@@ -515,10 +503,8 @@ int ObLibXml2SaxParser::check()
   INIT_SUCC(ret);
   if (OB_ISNULL(ctxt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ctxt is null", K(ret));
   } else if (OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("allocator is null", K(ret));
   }
   return ret;
 }
@@ -563,7 +549,6 @@ int ObLibXml2SaxParser::push_namespace(ObXmlAttribute* ns)
   INIT_SUCC(ret);
   if (ns_cnt_stack_.size() <= 0 || OB_ISNULL(ns)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ns_cnt_stack_ not push init", K(ret), KP(ns));
   } else {
     ns_cnt_stack_[ns_cnt_stack_.size()-1]++;
     if (OB_FAIL(ns_stack_.push_back(ns))) {
@@ -599,7 +584,6 @@ int ObLibXml2SaxParser::get_namespace(const ObString& name, bool use_default_ns,
   }
   if(nullptr == ns && !name.empty() && name.compare(ObXmlConstants::XML_STRING) != 0) {
     ret = OB_ERR_PARSER_SYNTAX;
-    LOG_WARN("non-empty prefix can not find namespace", K(ret), K(name));
   }
   return ret;
 }
@@ -616,11 +600,9 @@ static int get_xml_decl_str(xmlParserCtxt* context, const ObString& xml_text, Ob
       xml_decl.assign_ptr(ptr, end_pos);
     } else {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("end_pos invalid", K(ret), KP(ptr), K(length), K(end_pos));
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("context is null", K(ret), KP(ptr), K(length));
   }
   return ret;
 }
@@ -655,10 +637,8 @@ int ObLibXml2SaxParser::set_xml_decl(const ObString& xml_decl_str)
         int encoding_length = src_encoding_str.length();
         if (version_length > 0 && OB_ISNULL(version_str = static_cast<char*>(allocator->alloc(version_length)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("alloc failed", K(ret), K(version_length));
         } else if (encoding_length > 0 && OB_ISNULL(encoding_str = static_cast<char*>(allocator->alloc(encoding_length)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("alloc failed", K(ret), K(encoding_length));
         } else {
           if (version_length > 0) {
             MEMCPY(version_str, src_version_str.ptr(), version_length);
@@ -675,7 +655,6 @@ int ObLibXml2SaxParser::set_xml_decl(const ObString& xml_decl_str)
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("allocator or document is null", K(ret), KP(allocator), KP(document));
   }
   return ret;
 }
@@ -687,7 +666,6 @@ int ObLibXml2SaxParser::start_document()
   if (OB_FAIL(this->check())) {
   } else if (OB_ISNULL(document_ = OB_NEWx(ObXmlDocument, allocator_, ObMulModeNodeType::M_DOCUMENT, ctx_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc failed", K(ret));
   } else if (OB_FAIL(document_->init())) {
   } else {
     document_->set_flags(MEMBER_LAZY_SORTED);
@@ -711,16 +689,13 @@ int ObLibXml2SaxParser::set_element_name(ObXmlElement& element, const char* src_
 
   if (OB_ISNULL(allocator)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("allocator is null", K(ret));
   } else if (OB_ISNULL(src_name)) {
     // do nothin ignore
   } else if ((elem_name_length = STRLEN(src_name)) > 0) {
     if (src_name[0] == ':') {
       ret = OB_ERR_PARSER_SYNTAX;
-      LOG_WARN("element-start tag is not well formed", K(ret), K(elem_name_length));
     } else if (OB_ISNULL(elem_name = static_cast<char*>(allocator->alloc(elem_name_length)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc failed", K(ret), K(elem_name_length));
     } else {
       MEMCPY(elem_name, src_name, elem_name_length);
       qname.assign_ptr(elem_name, elem_name_length);
@@ -744,7 +719,6 @@ int ObLibXml2SaxParser::escape_xml_text(const ObString& src_attr_value, ObString
   char *attr_value_ptr = nullptr;
   if (OB_ISNULL(attr_value_ptr = static_cast<char*>(allocator_->alloc(dst_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc failed", K(ret), K(dst_len));
   } else if (OB_FALSE_IT(attr_value.assign_buffer(attr_value_ptr, dst_len))) {
   } else if (OB_FAIL(ObXmlParserUtils::escape_xml_text(src_attr_value, attr_value))) {
   } else {
@@ -765,7 +739,6 @@ int ObLibXml2SaxParser::construct_text_value(const ObString &src_attr_value, ObS
     attr_value_len = src_attr_value.length();
     if (OB_ISNULL(attr_value_ptr = static_cast<char*>(allocator_->alloc(attr_value_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc failed", K(ret), K(attr_value_len));
     } else {
       MEMCPY(attr_value_ptr, src_attr_value.ptr(), attr_value_len);
       attr_value.assign_ptr(attr_value_ptr, attr_value_len);
@@ -790,10 +763,8 @@ int ObLibXml2SaxParser::add_element_attr(ObXmlElement& element, const char* src_
 
   if (OB_ISNULL(allocator)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("allocator is null", K(ret));
   } else if (OB_ISNULL(attr = OB_NEWx(ObXmlAttribute, allocator, ObMulModeNodeType::M_ATTRIBUTE, ctx_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc failed", K(ret)); 
   } else {
     attr_name_length = src_attr_name == nullptr ? 0 : STRLEN(src_attr_name);
     attr_value_length = src_attr_value == nullptr ? 0 : STRLEN(src_attr_value);
@@ -802,10 +773,8 @@ int ObLibXml2SaxParser::add_element_attr(ObXmlElement& element, const char* src_
     if (OB_SUCC(ret) && attr_name_length > 0) {
       if (src_attr_name[0] == ':') {
         ret = OB_ERR_PARSER_SYNTAX;
-        LOG_WARN("element-start tag is not well formed", K(ret), KCSTRING(src_attr_name));
       } else if (OB_ISNULL(attr_name = static_cast<char*>(allocator->alloc(attr_name_length)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc failed", K(ret), K(attr_name_length));
       } else {
         MEMCPY(attr_name, src_attr_name, attr_name_length);
         qname.assign_ptr(attr_name, attr_name_length);
@@ -827,16 +796,13 @@ int ObLibXml2SaxParser::add_element_attr(ObXmlElement& element, const char* src_
     if (OB_SUCC(ret)) {
       if (qname.compare("xmlns:") == 0) {
         ret = OB_ERR_PARSER_SYNTAX;
-        LOG_WARN("ns is invalid", K(ret), KPC(attr), K(attr->get_prefix()));
       } else if (ObXmlParserUtils::is_namespace_attribute(attr)) {
         attr->set_xml_type(ObMulModeNodeType::M_NAMESPACE);
         if (this->is_document_parse() && attr_value.empty() && !prefix.empty()) {
           ret = OB_ERR_PARSER_SYNTAX;
-          LOG_WARN("attr_value is empty", K(ret), K(attr_value));
         } else if (!prefix.empty() && (localname.compare("xml") == 0 || (localname.compare("xmlns") == 0))) {
           // "xml" and "xmlns" are reserved words and their use is prohibited
           ret = OB_ERR_PARSER_SYNTAX;
-          LOG_WARN("ns is invalid", K(ret), KPC(attr), K(localname));
         } else if (OB_FAIL(element.add_attribute(attr))) {
         } else if (OB_FAIL(this->push_namespace(attr))) {
         }
@@ -862,7 +828,6 @@ int ObLibXml2SaxParser::set_element_namespace(ObXmlElement& element) {
       if (OB_FAIL(element.get_attribute(attr, i))) {
       } else if (OB_ISNULL(attr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to get attr", K(ret));
       } else if (attr->type() == ObMulModeNodeType::M_ATTRIBUTE) {
         if (OB_FAIL(this->get_namespace(attr->get_prefix(), false, attr_ns))) {
         } else {
@@ -882,7 +847,6 @@ int ObLibXml2SaxParser::start_element(const char* name, const char** attrs)
   if (OB_FAIL(this->check())) {
   } else if (OB_ISNULL(element = OB_NEWx(ObXmlElement, allocator_, ObMulModeNodeType::M_ELEMENT, ctx_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc failed", K(ret));
   } else if (OB_FAIL(element->init())) {
   } else if (FALSE_IT(element->set_flags(MEMBER_LAZY_SORTED))) {
   } else if(OB_FAIL(ns_cnt_stack_.push_back(0))) {
@@ -926,7 +890,6 @@ int ObLibXml2SaxParser::end_element()
   } else if (OB_ISNULL(element = 
                 ObXmlUtil::xml_node_cast<ObXmlElement>(cur_node_, ObMulModeNodeType::M_ELEMENT))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("end element current node not element", K(ret), K(cur_node_->type()));
   } else {
     element->set_empty(is_empty_element_tag(ctxt_));
     if (OB_FAIL(ObXmlParserBase::end_element())) {
@@ -946,11 +909,9 @@ int ObLibXml2SaxParser::alloc_text_node(ObMulModeNodeType type,
   if (OB_FAIL(this->check())) {
   } else if (OB_ISNULL(node = OB_NEWx(ObXmlText, allocator_, type, ctx_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc failed", K(ret));
   } else if (value_len > 0) {
     if (OB_ISNULL(str = static_cast<char*>(allocator_->alloc(value_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc failed", K(ret), K(value_len));
     } else {
       MEMCPY(str, src_value, value_len);
       node->set_value(ObString(value_len, str));
@@ -1032,13 +993,10 @@ int ObLibXml2SaxParser::processing_instruction(const ObString& target, const ObS
   if (OB_FAIL(this->check())) {
   } else if (OB_ISNULL(pi = OB_NEWx(ObXmlAttribute, allocator_, ObMulModeNodeType::M_INSTRUCT, ctx_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc failed", K(ret));          
   } else if (name_len > 0 && OB_ISNULL(name = static_cast<char*>(allocator_->alloc(name_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc failed", K(ret), K(name_len));
   } else if (value_len > 0 && OB_ISNULL(value = static_cast<char*>(allocator_->alloc(value_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc failed", K(ret), K(value_len));          
   } else {
     if (name_len > 0)MEMCPY(name, src_target, name_len);
     if (value_len > 0)MEMCPY(value, src_data, value_len);

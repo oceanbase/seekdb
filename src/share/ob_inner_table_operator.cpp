@@ -93,10 +93,8 @@ int ObInnerTableOperator::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObInnerTableOperator init twice", K(ret));
   } else if (OB_ISNULL(tname) || group_id < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("empty table name", K(ret), K(tname), K(group_id));
   } else if (OB_FAIL(table_name_.assign(tname))) {
   } else {
     
@@ -121,10 +119,8 @@ int ObInnerTableOperator::get_row(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObInnerTableOperator not init", K(ret));
   } else if (!key.is_pkey_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("key not valid", K(ret), K(key));
   } else if (OB_FAIL(do_get_row_(proxy, need_lock, key, row))) {
   }
 
@@ -137,10 +133,8 @@ int ObInnerTableOperator::insert_row(ObISQLClient &proxy, const ObIInnerTableRow
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObInnerTableOperator not init", K(ret));
   } else if (!row.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("row not valid", K(ret), K(row));
   } else if (OB_FAIL(do_insert_row_(proxy, row, affected_rows))) {
   }
 
@@ -153,10 +147,8 @@ int ObInnerTableOperator::update_row(ObISQLClient &proxy, const ObIInnerTableRow
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObInnerTableOperator not init", K(ret));
   } else if (!row.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("row not valid", K(ret), K(row));
   } else if (OB_FAIL(do_update_row_(proxy, row, affected_rows))) {
   }
 
@@ -169,10 +161,8 @@ int ObInnerTableOperator::insert_or_update_row(ObISQLClient &proxy, const ObIInn
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObInnerTableOperator not init", K(ret));
   } else if (!row.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("row not valid", K(ret), K(row));
   } else if (OB_FAIL(do_insert_or_update_row_(proxy, row, affected_rows))) {
   }
 
@@ -184,10 +174,8 @@ int ObInnerTableOperator::delete_row(ObISQLClient &proxy, const ObIInnerTableKey
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObInnerTableOperator not init", K(ret));
   } else if (!key.is_pkey_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("key not valid", K(ret), K(key));
   } else if (OB_FAIL(do_delete_row_(proxy, key, affected_rows))) {
   }
 
@@ -202,13 +190,10 @@ int ObInnerTableOperator::get_int_column(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObInnerTableOperator not init", K(ret));
   } else if (!key.is_pkey_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("key not valid", K(ret), K(key), K(column_name), K(need_lock));
   } else if (OB_ISNULL(column_name)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("empty column_name", K(ret), K(key), K(column_name), K(need_lock));
   } else if (OB_FAIL(do_get_int_column_(proxy, need_lock, key, column_name, value))) {
   }
 
@@ -224,13 +209,10 @@ int ObInnerTableOperator::increase_column_by(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObInnerTableOperator not init", K(ret));
   } else if (!key.is_pkey_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("key not valid", K(ret), K(key), K(column_name), K(value));
   } else if (OB_ISNULL(column_name)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("empty column name", K(ret), K(key), K(column_name), K(value));
   } else if (OB_FAIL(do_increase_column_by_(proxy, key, column_name, value, affected_rows))) {
   }
 
@@ -258,13 +240,10 @@ int ObInnerTableOperator::update_column(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObInnerTableOperator not init", K(ret));
   } else if (!key.is_pkey_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("key not valid", K(ret), K(key), K(assignments));
   } else if (OB_ISNULL(assignments)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid assignments", K(ret), K(key), K(assignments));
   } else if (OB_FAIL(do_update_column_(proxy, key, assignments, affected_rows))) {
   }
 
@@ -282,13 +261,10 @@ int ObInnerTableOperator::update_int_column(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObInnerTableOperator not init", K(ret));
   } else if (!key.is_pkey_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("key not valid", K(ret), K(key), K(column_name), K(value));
   } else if (OB_ISNULL(column_name)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("column_name not valid", K(ret), K(key), K(column_name), K(value));
   } else if (OB_FAIL(sql.assign_fmt("%s=%ld", column_name, value))) {
   } else if (OB_FAIL(do_update_column_(proxy, key, sql.ptr(), affected_rows))) {
   }
@@ -306,13 +282,10 @@ int ObInnerTableOperator::update_uint_column(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObInnerTableOperator not init", K(ret));
   } else if (!key.is_pkey_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("key not valid", K(ret), K(key), K(column_name), K(value));
   } else if (OB_ISNULL(column_name)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("column_name not valid", K(ret), K(key), K(column_name), K(value));
   } else if (OB_FAIL(sql.assign_fmt("%s=%lu", column_name, value))) {
   } else if (OB_FAIL(do_update_column_(proxy, key, sql.ptr(), affected_rows))) {
   }
@@ -329,16 +302,12 @@ int ObInnerTableOperator::update_string_column(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObInnerTableOperator not init", K(ret));
   } else if (!key.is_pkey_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("key not valid", K(ret), K(key), K(column_name), K(value));
   } else if (OB_ISNULL(column_name)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid column_name", K(ret), K(key), K(column_name), K(value));
   } else if (OB_ISNULL(value)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid value", K(ret), K(key), K(column_name), K(value));
   } else if (OB_FAIL(sql.assign_fmt("%s='%s'", column_name, value))) {
   } else if (OB_FAIL(do_update_column_(proxy, key, sql.ptr(), affected_rows))) {
   }
@@ -355,16 +324,12 @@ int ObInnerTableOperator::compare_and_swap(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObInnerTableOperator not init", K(ret));
   } else if (!key.is_pkey_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("key not valid", K(ret), K(key), K(assignments), K(predicates));
   } else if (OB_ISNULL(assignments)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid assignments", K(ret), K(key), K(assignments), K(predicates));
   } else if (OB_ISNULL(predicates)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid predicates", K(ret), K(key), K(assignments), K(predicates));
   } else if (OB_FAIL(do_compare_and_swap_(proxy, key, assignments, predicates, affected_rows))) {
   }
 
@@ -382,13 +347,10 @@ int ObInnerTableOperator::compare_and_swap(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObInnerTableOperator not init", K(ret));
   } else if (!key.is_pkey_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("key not valid", K(ret), K(key), K(column_name), K(old_value), K(new_value));
   } else if (OB_ISNULL(column_name)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid column_name", K(ret), K(key), K(column_name), K(old_value), K(new_value));
   } else if (OB_FAIL(sql.assign_fmt("%s=%ld", column_name, new_value))) {
   } else if (OB_FAIL(predicates.assign_fmt("%s=%ld", column_name, old_value))) {
   } else if (OB_FAIL(do_compare_and_swap_(proxy, key, sql.ptr(), predicates.ptr(), affected_rows))) {
@@ -408,19 +370,14 @@ int ObInnerTableOperator::compare_and_swap(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObInnerTableOperator not init", K(ret));
   } else if (!key.is_pkey_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("key not valid", K(ret), K(key), K(column_name), K(old_value), K(new_value));
   } else if (OB_ISNULL(column_name)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid column_name", K(ret), K(key), K(column_name), K(old_value), K(new_value));
   } else if (OB_ISNULL(old_value)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid old_value", K(ret), K(key), K(column_name), K(old_value), K(new_value));
   } else if (OB_ISNULL(new_value)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid new_value", K(ret), K(key), K(column_name), K(old_value), K(new_value));
   } else if (OB_FAIL(sql.assign_fmt("%s='%s'", column_name, new_value))) {
   } else if (OB_FAIL(predicates.assign_fmt("%s='%s'", column_name, old_value))) {
   } else if (OB_FAIL(do_compare_and_swap_(proxy, key, sql.ptr(), predicates.ptr(), affected_rows))) {
@@ -447,13 +404,10 @@ int ObInnerTableOperator::do_lock_row_(
       if (OB_FAIL(trans.read(res, sql.ptr()))) {
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result is null", K(ret), K(sql));
       } else if (OB_FAIL(result->next())) {
         if (OB_ITER_END == ret) {
           ret = OB_ENTRY_NOT_EXIST;
-          LOG_WARN("row not exist, cannot lock", K(ret), K(sql));
         } else {
-          LOG_WARN("get next failed", K(ret), K(sql));
         }
       } else {
         // lock successfully.
@@ -478,18 +432,15 @@ int ObInnerTableOperator::do_get_row_(
   } else if (OB_FAIL(key.build_pkey_predicates(predicates))) {
   } else if (OB_FAIL(sql.append_fmt(" where %s", predicates.ptr()))) {
   } else if (need_lock && OB_FAIL(sql.append_fmt(" for update"))) {
-    LOG_WARN("failed to append sql", K(ret), K(key));
   } else {
     HEAP_VAR(ObMySQLProxy::ReadResult, res) {
       ObMySQLResult *result = NULL;
       if (OB_FAIL(proxy.read(res, sql.ptr()))) {
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result is null", K(ret), K(sql));
       } else if (OB_FAIL(parse_one_row_(*result, row))) {
       } else if (OB_ITER_END != result->next()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("multi value exist", K(ret), K(sql), K(row));
       } else {
         ret = OB_SUCCESS;
       }
@@ -593,23 +544,19 @@ int ObInnerTableOperator::do_get_column_(
 
   if (OB_ISNULL(column_name)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid col", K(ret), K(key), K(col), K(need_lock));
   } else if (OB_FAIL(sql.assign_fmt("select %s from %s", column_name, tname))) {
   } else if (OB_FAIL(key.build_pkey_predicates(predicates))) {
   } else if (OB_FAIL(sql.append_fmt(" where %s", predicates.ptr()))) {
   } else if (need_lock && OB_FAIL(sql.append_fmt(" for update"))) {
-    LOG_WARN("failed to append sql", K(ret), K(key), K(col), K(need_lock));
   } else {
     HEAP_VAR(ObMySQLProxy::ReadResult, res) {
       ObMySQLResult *result = NULL;
       if (OB_FAIL(proxy.read(res, sql.ptr(), group_id_))) {
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result is null", K(ret), K(sql));
       } else if (OB_FAIL(parse_one_column_(*result, col))) {
       } else if (OB_ITER_END != result->next()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("multi value exist", K(ret), K(sql), K(col));
       }
     }
   }
@@ -632,18 +579,15 @@ int ObInnerTableOperator::do_get_int_column_(
   } else if (OB_FAIL(key.build_pkey_predicates(predicates))) {
   } else if (OB_FAIL(sql.append_fmt(" where %s", predicates.ptr()))) {
   } else if (need_lock && OB_FAIL(sql.append_fmt(" for update"))) {
-    LOG_WARN("failed to append sql", K(ret), K(this), K(key), K(column_name));
   } else {
     HEAP_VAR(ObMySQLProxy::ReadResult, res) {
       ObMySQLResult *result = NULL;
       if (OB_FAIL(proxy.read(res, sql.ptr(), group_id_))) {
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result is null", K(ret), K(sql));
       } else if (OB_FAIL(parse_one_column_(*result, column_name, value))) {
       } else if (OB_ITER_END != result->next()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("multi value exist", K(ret), K(sql), K(value));
       }
     }
   }
@@ -669,18 +613,15 @@ int ObInnerTableOperator::do_get_string_column_(
   } else if (OB_FAIL(key.build_pkey_predicates(predicates))) {
   } else if (OB_FAIL(sql.append_fmt(" where %s", predicates.ptr()))) {
   } else if (need_lock && OB_FAIL(sql.append_fmt(" for update"))) {
-    LOG_WARN("failed to append sql", K(ret), K(this), K(key), K(column_name));
   } else {
     HEAP_VAR(ObMySQLProxy::ReadResult, res) {
       ObMySQLResult *result = NULL;
       if (OB_FAIL(proxy.read(res, sql.ptr(), group_id_))) {
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result is null", K(ret), K(sql));
       } else if (OB_FAIL(parse_one_column_(*result, column_name, value))) {
       } else if (OB_ITER_END != result->next()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("multi value exist", K(ret), K(sql), K(value));
       }
     }
   }
@@ -724,7 +665,6 @@ int ObInnerTableOperator::do_update_column_(
 
   if (OB_ISNULL(assignments)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("assignments not valid ", K(ret), K(key), K(assignments));
   } else if (OB_FAIL(sql.assign_fmt("update %s set %s", tname, assignments))) {
   } else if (OB_FAIL(key.build_pkey_predicates(predicates))) {
   } else if (OB_FAIL(sql.append_fmt(" where %s", predicates.ptr()))) {
@@ -750,10 +690,8 @@ int ObInnerTableOperator::do_compare_and_swap_(
 
   if (OB_ISNULL(assignments)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("assignments not valid ", K(ret), K(key), K(assignments), K(predicates));
   } else if (OB_ISNULL(predicates)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("predicates not valid ", K(ret), K(key), K(assignments), K(predicates));
   } else if (OB_FAIL(sql.assign_fmt("update %s set %s", tname, assignments))) {
   } else if (OB_FAIL(key.build_pkey_predicates(pkey_predicates))) {
   } else if (OB_FAIL(sql.append_fmt(" where %s", pkey_predicates.ptr()))) {
@@ -773,7 +711,6 @@ int ObInnerTableOperator::parse_one_row_(sqlclient::ObMySQLResult &result, ObIIn
     if (OB_ITER_END == ret) {
       ret = OB_ENTRY_NOT_EXIST;
     }
-    LOG_WARN("no row exist", K(ret));
   } else if (OB_FAIL(row.parse_from(result))) {
   }
 
@@ -788,7 +725,6 @@ int ObInnerTableOperator::parse_one_column_(
     if (OB_ITER_END == ret) {
       ret = OB_ENTRY_NOT_EXIST;
     }
-    LOG_WARN("no row exist", K(ret));
   } else {
     EXTRACT_INT_FIELD_MYSQL(result, column_name, value, int64_t);
   }
@@ -804,7 +740,6 @@ int ObInnerTableOperator::parse_one_column_(
     if (OB_ITER_END == ret) {
       ret = OB_ENTRY_NOT_EXIST;
     }
-    LOG_WARN("no row exist", K(ret));
   } else {
     ObString field;
     EXTRACT_VARCHAR_FIELD_MYSQL(result, column_name, field);
@@ -824,7 +759,6 @@ int ObInnerTableOperator::parse_one_column_(
     if (OB_ITER_END == ret) {
       ret = OB_ENTRY_NOT_EXIST;
     }
-    LOG_WARN("no row exist", K(ret));
   } else if (OB_FAIL(col.parse_value_from(result))) {
   }
 

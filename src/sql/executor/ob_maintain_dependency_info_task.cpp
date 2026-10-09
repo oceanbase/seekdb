@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_EXE
+#include "config_bridge.h"
 #include "sql/executor/ob_maintain_dependency_info_task.h"
 #include "query/command/ob_root_service_serialization.h"
 #include "query/command/ob_root_command_service.h"
@@ -51,7 +52,6 @@ int ObMaintainObjDepInfoTask::check_cur_maintain_task_is_valid(
                 dep_obj_key.dep_obj_id_, table_schema))) {
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("schema is null", K(ret));
     } else if (table_schema->get_schema_version() <= dep_obj_schema_version) {
       is_valid = true;
     }
@@ -59,7 +59,6 @@ int ObMaintainObjDepInfoTask::check_cur_maintain_task_is_valid(
   }
   default:
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected type", K(ret));
     break;
   }
   return ret;
@@ -100,7 +99,6 @@ int ObMaintainObjDepInfoTask::check_and_build_dep_info_arg(
         break;
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected type", K(ret));
         break;
       }
     }
@@ -115,10 +113,8 @@ share::ObAsyncTask *ObMaintainObjDepInfoTask::deep_copy(char *buf, const int64_t
   const int64_t need_size = get_deep_copy_size();
   if (OB_ISNULL(buf)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("buffer is null", K(ret));
   } else if (OB_UNLIKELY(buf_size < need_size)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("buffer size is not enough", K(ret), K(buf_size), K(need_size));
   } else {
     task = new (buf) ObMaintainObjDepInfoTask{};
     if (OB_NOT_NULL(root_command_service_)) {
@@ -153,7 +149,6 @@ int ObMaintainObjDepInfoTask::process()
     delete_dep_objs_, share::schema::ObReferenceObjTable::DELETE_OP));
     if (OB_FAIL(ret)) {
     } else if (view_schema_.is_valid() && OB_FAIL(dep_obj_info_arg.schema_.assign(view_schema_))) {
-      LOG_WARN("failed to assign view schema", K(ret));
     } else if (dep_obj_info_arg.insert_dep_objs_.empty()
               && dep_obj_info_arg.update_dep_objs_.empty()
               && dep_obj_info_arg.delete_dep_objs_.empty()
@@ -161,7 +156,6 @@ int ObMaintainObjDepInfoTask::process()
       // do nothing
     } else if (OB_ISNULL(root_command_service_)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("root command service is not bound", K(ret));
     } else if (OB_FAIL(query::serialize_root_service_call(
         [&]{ return root_command_service_->
             maintain_obj_dependency_info(dep_obj_info_arg); }))) {
@@ -195,7 +189,6 @@ void ObMaintainDepInfoTaskQueue::run2()
   LOG_INFO("async task queue start");
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     ObAddr zero_addr;
     while (!stop_) {
@@ -213,11 +206,11 @@ void ObMaintainDepInfoTaskQueue::run2()
         LOG_INFO("[ASYNC TASK QUEUE]", K(queue_.size()), K(sys_view_consistent_.size()));
       }
       if (last_execute_time_ > 0
-         && static_cast<int64_t>(GCONF._ob_obj_dep_maint_task_interval) > 0) {
+         && static_cast<int64_t>(config::_ob_obj_dep_maint_task_interval()) > 0) {
         while (!stop_ && OB_SUCC(ret)) {
           int64_t now = ObTimeUtility::current_time();
           int64_t sleep_time =
-          last_execute_time_ + GCONF._ob_obj_dep_maint_task_interval - now;
+          last_execute_time_ + config::_ob_obj_dep_maint_task_interval() - now;
           if (sleep_time > 0) {
             ob_throttle_usleep(static_cast<int32_t>(MIN(sleep_time, SLEEP_INTERVAL)), 0);
           } else {
@@ -229,11 +222,9 @@ void ObMaintainDepInfoTaskQueue::run2()
       ret = pop(task);
       if (OB_FAIL(ret))  {
         if (OB_ENTRY_NOT_EXIST != ret) {
-          LOG_WARN("pop task from queue failed", K(ret));
         }
       } else if (NULL == task) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("pop return a null task", K(ret));
       } else {
         bool rescheduled = false;
         if (task->get_last_execute_time() > 0) {
@@ -252,15 +243,11 @@ void ObMaintainDepInfoTaskQueue::run2()
         // just do it
         ret = task->process();
         if (OB_FAIL(ret)) {
-          LOG_WARN("task process failed, start retry", "max retry time",
-              task->get_retry_times(), "retry interval", task->get_retry_interval(),
-              K(ret));
           if (task->get_retry_times() > 0) {
             task->set_retry_times(task->get_retry_times() - 1);
             task->set_last_execute_time(ObTimeUtility::current_time());
             if (is_queue_almost_full()) {
               ret = OB_SIZE_OVERFLOW;
-              LOG_WARN("push task to queue failed", K(ret));
             } else if (OB_FAIL(queue_.push(task))) {
             } else {
               rescheduled = true;
@@ -310,7 +297,6 @@ int process_reference_obj_table(share::schema::ObReferenceObjTable &ref_obj_tabl
                               &task.get_delete_dep_objs());
       if (OB_FAIL(ref_obj_table.get_ref_obj_table().foreach_refactored(op))) {
       } else if (nullptr != view_schema && OB_FAIL(task.assign_view_schema(*view_schema))) {
-        LOG_WARN("failed to assign view schema", K(ret));
       } else if (OB_FAIL(op.get_callback_ret())) {
       } else if (task.is_empty_task()) {
         if (OB_INVALID_ID != dep_obj_id) {
@@ -320,7 +306,6 @@ int process_reference_obj_table(share::schema::ObReferenceObjTable &ref_obj_tabl
         ret = OB_SIZE_OVERFLOW;
       } else if (OB_FAIL(task_queue.push(task))) {
         if (OB_UNLIKELY(OB_SIZE_OVERFLOW != ret)) {
-          LOG_WARN("push task failed", K(ret));
         }
       }
     }

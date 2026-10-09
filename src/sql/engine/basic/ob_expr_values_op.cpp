@@ -62,7 +62,6 @@ int ObExprValuesSpec::serialize(char *buf,
               ++array_idx) {
           if (OB_ISNULL(row_id_list = seri_ctx.exec_ctx_->get_row_id_list_array().at(array_idx))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("row id list is null", K(ret));
           } else {
             ARRAY_FOREACH(*row_id_list, idx) {
               int64_t start_idx = row_id_list->at(idx) * col_num;
@@ -204,7 +203,6 @@ int ObExprValuesOp::inner_open()
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
   if (OB_ISNULL(plan_ctx) || OB_ISNULL(ctx_.get_sql_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected NULL ptr", K(ret), KP(plan_ctx), KP(ctx_.get_sql_ctx()));
   } else if (OB_FAIL(datum_caster_.init(eval_ctx_.exec_ctx_))) {
   } else if (OB_FAIL(ObSQLUtils::get_default_cast_mode(is_explicit_cast, result_flag,
                                                        ctx_.get_my_session(), cm_))) {
@@ -218,7 +216,6 @@ int ObExprValuesOp::inner_open()
     }
     if (0 != child_cnt_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected child cnt", K(child_cnt_), K(ret));
     }
     if (OB_SUCC(ret)) {
       const ObExprValuesSpec &my_spec = MY_SPEC;
@@ -232,7 +229,6 @@ int ObExprValuesOp::inner_open()
                  my_spec.array_group_idx_ >= 0) {
         if (OB_UNLIKELY(my_spec.array_group_idx_ >= plan_ctx->get_array_param_groups().count())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected idx", K(ret), K(my_spec.array_group_idx_));
         } else {
           ObArrayParamGroup &array_param_group = plan_ctx->get_array_param_groups().at(my_spec.array_group_idx_);
           real_value_cnt_ = my_spec.get_value_count() * array_param_group.row_count_;
@@ -270,7 +266,6 @@ int ObExprValuesOp::inner_get_next_row()
     clear_evaluated_flag();
     if (OB_FAIL(calc_next_row())) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("get next row from row store failed", K(ret));
       }
     } else {
       LOG_DEBUG("output row", "row", ROWEXPR2STR(eval_ctx_, MY_SPEC.output_));
@@ -304,17 +299,13 @@ int ObExprValuesOp::get_real_batch_obj_type(ObDatumMeta &src_meta,
     const ObSqlArrayObj *array_obj = NULL;
     if (param_idx < 0 || param_idx >= plan_ctx->get_param_store().count()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid param idx", K(ret), K(param_idx));
     } else if (plan_ctx->get_param_store().at(param_idx).is_ext_sql_array()) {
       // If the parameter is is_ext_sql_array
       if (OB_ISNULL(array_obj =
           reinterpret_cast<const ObSqlArrayObj*>(plan_ctx->get_param_store().at(param_idx).get_ext()))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected nullptr", K(ret), K(param_idx), K(plan_ctx->get_param_store()));
       } else if (array_obj->count_ <= group_idx) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected group_idx", K(ret), K(array_obj->count_),
-                 K(group_idx), K(param_idx), K(plan_ctx->get_param_store()));
       } else {
         src_obj_meta = array_obj->data_[group_idx].meta_;
         const ObAccuracy &src_obj_acc = array_obj->data_[group_idx].get_accuracy();
@@ -361,8 +352,6 @@ int ObExprValuesOp::eval_values_op_dynamic_cast_to_lob(ObExpr &real_src_expr,
                                       src_obj_meta,
                                       dst_expr->obj_meta_,
                                       eval_ctx_.exec_ctx_.get_eval_tmp_allocator()))) {
-        LOG_WARN("adjust lob datum failed",
-                K(ret), K(*datum), K(src_obj_meta), K(dst_expr->obj_meta_)); 
       } else if (OB_FAIL(dst_datum.deep_copy(*datum, res_alloc))) {
       }
     }
@@ -433,7 +422,6 @@ OB_INLINE int ObExprValuesOp::calc_next_row()
           ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
           if (param_idx < 0 || param_idx >= plan_ctx->get_param_store().count()) {
             ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("invalid param idx", K(ret), K(param_idx));
           } else {
             src_obj_meta = plan_ctx->get_param_store().at(param_idx).meta_;
             const ObAccuracy &src_obj_acc =
@@ -502,13 +490,10 @@ OB_INLINE int ObExprValuesOp::calc_next_row()
         if (dst_expr->obj_meta_.is_enum_or_set()) {
           if (OB_UNLIKELY(col_idx < 0 || col_idx >= my_spec.str_values_array_.count())) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("col_idx is out of size", K(ret), K(col_idx),
-                     K(my_spec.str_values_array_.count()));
           } else {
             const ObIArray<ObString> &str_values = my_spec.str_values_array_.at(col_idx);
             if (OB_FAIL(datum_caster_.to_type(dst_expr->datum_meta_, str_values,
                                               real_src_expr, cm_, datum))) {
-              LOG_WARN("fail to do to_type", K(ret), K(*dst_expr), K(real_src_expr));
               ObString column_name = my_spec.column_names_.at(col_idx);
               ret = ObDMLService::log_user_error_inner(ret, row_num, column_name, ctx_,
                                                        dst_expr->datum_meta_.type_);
@@ -522,8 +507,6 @@ OB_INLINE int ObExprValuesOp::calc_next_row()
           if (OB_FAIL(datum_caster_.to_type(dst_expr->datum_meta_, real_src_expr,
                                             cm_, datum, 0, dst_expr->obj_meta_.get_subschema_id(),
                                             dst_expr->max_length_))) {
-            LOG_WARN("fail to dynamic cast", K(dst_expr->datum_meta_),
-                                             K(real_src_expr), K(cm_), K(ret));
             if (dst_expr->obj_meta_.is_geometry()) {
               ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
               LOG_USER_WARN(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
@@ -533,8 +516,6 @@ OB_INLINE int ObExprValuesOp::calc_next_row()
           }
         } else { // dst type is lob
           if (OB_FAIL(eval_values_op_dynamic_cast_to_lob(real_src_expr, src_obj_meta, dst_expr))) {
-            LOG_WARN("fail to dynamic cast to lob types", K(dst_expr->datum_meta_),
-                                                          K(real_src_expr), K(cm_), K(ret));
             ObString column_name = my_spec.column_names_.at(col_idx);
             ret = ObDMLService::log_user_error_inner(ret, row_num, column_name, ctx_,
                                                      dst_expr->datum_meta_.type_);

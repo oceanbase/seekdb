@@ -38,7 +38,6 @@ DEF_TO_STRING(ObGlobalContext)
   J_OBJ_START();
   J_KV(K_(self_addr_seq),
        KP_(schema_service),
-       KP_(config),
        KP_(config_mgr),
        KP_(tablet_operator),
        KP_(sql_proxy),

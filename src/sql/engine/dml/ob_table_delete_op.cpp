@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "config_bridge.h"
 #include "sql/engine/dml/ob_table_delete_op.h"
 #include "sql/engine/dml/ob_dml_service.h"
 
@@ -38,7 +39,6 @@ OB_DEF_SERIALIZE(ObTableDeleteSpec)
       ObDelCtDef *del_ctdef = del_ctdefs_.at(i).at(j);
       if (OB_ISNULL(del_ctdef)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("del_ctdef is nullptr", K(ret));
       }
       OB_UNIS_ENCODE(*del_ctdef);
     }
@@ -64,7 +64,6 @@ OB_DEF_DESERIALIZE(ObTableDeleteSpec)
       ObDelCtDef *del_ctdef = del_ctdef_allocator.alloc();
       if (OB_ISNULL(del_ctdef)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc del_ctdef failed", K(ret));
       }
       OB_UNIS_DECODE(*del_ctdef);
       del_ctdefs_.at(i).at(j) = del_ctdef;
@@ -111,7 +110,6 @@ int ObTableDeleteOp::inner_open()
   if (OB_FAIL(ObTableModifyOp::inner_open())) {
   } else if (OB_UNLIKELY(MY_SPEC.del_ctdefs_.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("del ctdef is invalid", K(ret), KP(this));
   } else if (OB_UNLIKELY(iter_end_)) {
     //do nothing
   } else if (OB_FAIL(inner_open_with_das())) {
@@ -251,7 +249,6 @@ OB_INLINE int ObTableDeleteOp::delete_row_to_das()
       } else if (OB_FAIL(calc_tablet_loc(del_ctdef, del_rtdef, tablet_loc))) {
       } else if (OB_FAIL(ObDMLService::delete_row(del_ctdef, del_rtdef, tablet_loc, dml_rtctx_, modify_row.old_row_))) {
       } else if (need_after_row_process(del_ctdef) && OB_FAIL(dml_modify_rows_.push_back(modify_row))) {
-        LOG_WARN("failed to push dml modify row to modified row list", K(ret));
       } else {
         ++del_rtdef.cur_row_num_;
       }
@@ -275,7 +272,7 @@ int ObTableDeleteOp::write_rows_post_proc(int last_errno)
       plan_ctx->add_affected_rows(del_rtdefs_.at(i).at(0).das_rtdef_.affected_rows_);
       LOG_DEBUG("del rows post proc", K(plan_ctx->get_affected_rows()), K(del_rtdefs_.at(i).at(0)));
     }
-    if (OB_SUCC(ret) && GCONF.enable_defensive_check()) {
+    if (OB_SUCC(ret) && (config::_enable_defensive_check() > 0)) {
       if (OB_FAIL(check_delete_affected_row())) {
       }
     }

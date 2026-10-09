@@ -39,7 +39,6 @@ int ObSystemPackageLoadTask::init()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", KR(ret));
   } else {
     inited_ = true;
     fail_count_ = 0;
@@ -53,7 +52,6 @@ int ObSystemPackageLoadTask::start(common::ObTimer &timer)
   const bool did_repeat = true;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("task not inited", KR(ret), K_(inited));
   } else {
     if (timer.task_exist(*this)) {
       // ignore duplicate schedule
@@ -90,7 +88,6 @@ int ObSystemPackageLoadTask::load_system_package_()
   int64_t job_count = 0;
   if (OB_ISNULL(sql_proxy)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql proxy is null", KR(ret), KP(sql_proxy));
   } else if (OB_FAIL(GET_ADMIN_JOB_COUNT(LOAD_MYSQL_SYS_PACKAGE, job_count))) {
   } else if (0 == job_count) {
     // job not exists, try insert inprogress job
@@ -102,7 +99,6 @@ int ObSystemPackageLoadTask::load_system_package_()
       GCTX.sys_package_ready_ = true;
       LOG_INFO("find a success job or job_id not exist", KR(ret), K(job_id));
     } else {
-      LOG_WARN("failed to get INPROGRESS rs job", KR(ret));
     }
   } else if (OB_FAIL(pl::ObPLPackageManager::load_all_common_sys_package(
                          *sql_proxy,
@@ -119,7 +115,6 @@ void ObSystemPackageLoadTask::runTimerTask()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("task not inited", KR(ret), K_(inited));
   } else if (!share::server_is_write_enabled()) {
     LOG_INFO("read-only server skips loading sys package");
   } else if (GCTX.sys_package_ready_) {
@@ -129,7 +124,6 @@ void ObSystemPackageLoadTask::runTimerTask()
     if (fail_count_ >= 5) {
       LOG_ERROR("failed to execute system package load task, will retry", KR(ret), K_(fail_count));
     } else {
-      LOG_WARN("failed to execute system package load task, will retry", KR(ret), K_(fail_count));
     }
   } else {
     fail_count_ = 0;
@@ -148,7 +142,6 @@ int ObSystemPackageLoadTask::wait_system_package_ready(const common::ObTimeoutCt
     int tmp_ret = OB_SUCCESS;
     if (ctx.is_timeouted()) {
       ret = OB_TIMEOUT;
-      LOG_WARN("wait sys package ready failed", KR(ret));
     } else {
       inprogress_job_count = 0;
       if (OB_ENTRY_NOT_EXIST != (tmp_ret = ADMIN_JOB_FIND(LOAD_MYSQL_SYS_PACKAGE, job_id))) {

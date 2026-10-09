@@ -80,7 +80,6 @@ int calc_right_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
   ObDatum *n_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, s_datum)) ||
       OB_FAIL(expr.args_[1]->eval(ctx, n_datum))) {
-    LOG_WARN("eval arg failed", K(ret), KP(s_datum), KP(n_datum));
   } else if (s_datum->is_null() || n_datum->is_null()) {
     res_datum.set_null();
   } else {

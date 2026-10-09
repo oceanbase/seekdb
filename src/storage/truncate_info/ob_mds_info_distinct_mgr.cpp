@@ -45,10 +45,8 @@ int ObMdsInfoDistinctMgr::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("inited twice", KR(ret));
   } else if (OB_UNLIKELY(!read_version_range.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(read_version_range));
   } else if (OB_FAIL(tablet.read_truncate_info_array(allocator, read_version_range, for_access, array_))) {
   } else if (OB_FAIL(build_distinct_array(read_version_range, for_access))) {
   } else {
@@ -87,7 +85,6 @@ int ObMdsInfoDistinctMgr::build_distinct_array(
     bool exist = false;
     if (OB_ISNULL(input_info = input_array.at(idx))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected nullptr in array", KR(ret), K(idx), K_(distinct_array));
     } else if (for_access && input_info->commit_version_ > read_version_range.snapshot_version_) {
       ret = OB_SNAPSHOT_DISCARDED;
       LOG_INFO("refused to old snapshot access before truncate partition DDL", KR(ret), K(read_version_range), KPC(input_info));
@@ -98,7 +95,6 @@ int ObMdsInfoDistinctMgr::build_distinct_array(
       for (int64_t j = 0; OB_SUCC(ret) && !exist && j < distinct_array_.count(); ++j) {
         if (OB_ISNULL(distinct_array_.at(j))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected nullptr in distinct_array", KR(ret), K(j), K_(distinct_array));
         } else {
           bool equal = false;
           const ObTruncateInfo &exist_info = *distinct_array_.at(j);
@@ -107,7 +103,6 @@ int ObMdsInfoDistinctMgr::build_distinct_array(
             if (exist_info.commit_version_ < input_info->commit_version_) {
               if (OB_UNLIKELY(exist_info.schema_version_ >= input_info->schema_version_)) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("truncate info is invalid when compare", KR(ret), K(exist_info), KPC(input_info));
               } else {
                 // use new input info to replace exist info
                 distinct_array_.at(j) = input_array.at(idx);
@@ -140,18 +135,15 @@ int ObMdsInfoDistinctMgr::fill_mds_filter_info(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("truncate info mgr is not inited", KR(ret));
   } else {
     ObSEArray<ObTruncateInfoKey, 8> truncate_info_keys;
     for (int64_t j = 0; OB_SUCC(ret) && j < distinct_array_.count(); ++j) {
       if (OB_ISNULL(distinct_array_.at(j))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected nullptr in distinct_array", KR(ret), K(j), K_(distinct_array));
       } else if (OB_FAIL(truncate_info_keys.push_back(distinct_array_.at(j)->key_))) {
       }
     } // for
     if (FAILEDx(mds_filter_info.init_truncate_keys(allocator, truncate_info_keys))) {
-      LOG_WARN("failed to init truncate info keys", KR(ret), K(truncate_info_keys));
     } else {
       LOG_INFO("[TRUNCATE INFO] success to init mds filter info", KR(ret), K(mds_filter_info));
     }
@@ -171,23 +163,19 @@ int ObMdsInfoDistinctMgr::check_mds_filter_info(
 #endif
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("truncate info mgr is not inited", KR(ret));
   } else if (distinct_array_.empty() && mds_filter_info.is_empty()) {
     // do nothing
   } else if (OB_UNLIKELY(distinct_array_.empty() || mds_filter_info.is_empty())) {
     ret = OB_ERR_SYS;
-    LOG_WARN("mds cnt is unexpected unequal", KR(ret), K(mds_filter_info), K_(distinct_array));
   } else {
     const ObMdsFilterInfo::ObTruncateInfoKeyArray &truncate_keys = mds_filter_info.get_truncate_keys();
     if (OB_UNLIKELY(truncate_keys.count() != distinct_array_.count())) {
       // truncate clog may replayed after medium clog
       ret = OB_EAGAIN;
-      LOG_WARN("truncate keys cnt is unequal", KR(ret), K(truncate_keys), K_(distinct_array));
     }
     for (int64_t j = 0; OB_SUCC(ret) && j < distinct_array_.count(); ++j) {
       if (distinct_array_.at(j)->key_ != truncate_keys.at(j)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unequal key", KR(ret), K(j), K(mds_filter_info), K_(distinct_array));
       }
     } // for
   }
@@ -200,12 +188,10 @@ int ObMdsInfoDistinctMgr::get_distinct_truncate_info_array(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("truncate info mgr is not inited", KR(ret));
   } else {
     for (int64_t idx = 0; OB_SUCC(ret) && idx < distinct_array_.count(); ++idx) {
       if (OB_UNLIKELY(nullptr == distinct_array_.at(idx) || !distinct_array_.at(idx)->is_valid())) {
         ret = OB_INVALID_DATA;
-        LOG_WARN("invalid ptr in distinct array", KR(ret), K(idx), KPC(distinct_array_.at(idx)));
       } else if (OB_FAIL(input_distinct_array.append_with_deep_copy(*distinct_array_.at(idx)))) {
       }
     } // for

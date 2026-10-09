@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS_COMPACTION
 
+#include "config_bridge.h"
 #include "rootserver/freeze/ob_snapshot_gc_scn_renewer.h"
 
 #include "rootserver/freeze/ob_major_merge_info_manager.h"
@@ -46,7 +47,6 @@ int ObSnapshotGcScnRenewer::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", KR(ret));
   } else {
     is_primary_service_ = is_primary_service;
     ATOMIC_STORE(&is_paused_, false);
@@ -94,7 +94,6 @@ int ObSnapshotGcScnRenewer::on_become_primary()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (!is_primary_service_) {
     ret = OB_NOT_SUPPORTED;
   } else if (is_primary_active_) {
@@ -118,7 +117,6 @@ int ObSnapshotGcScnRenewer::try_renew()
   int64_t renew_target_scn = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (ATOMIC_LOAD(&is_paused_)
       || !is_primary_service_
       || !is_primary_active_) {
@@ -127,7 +125,6 @@ int ObSnapshotGcScnRenewer::try_renew()
                  freeze_info_mgr = ::oceanbase::share::server_service<
                      ::oceanbase::storage::ObFreezeInfoMgr>())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("freeze info mgr is null", KR(ret));
   } else if (!need_renew_(now)) {
     // IDLE or waiting for the next scheduled renewal time.
   } else {
@@ -145,7 +142,7 @@ int ObSnapshotGcScnRenewer::try_renew()
       }
       renew_target_scn = freeze_info_mgr->get_snapshot_gc_scn_renewal_state()
           .get_target_scn();
-      const int64_t undo_retention_s = GCONF.undo_retention;
+      const int64_t undo_retention_s = config::undo_retention();
       const int64_t gc_boundary = calc_gc_boundary_(
           last_renewed_snapshot_gc_scn_, undo_retention_s);
       if (renew_target_scn <= 0 || gc_boundary >= renew_target_scn) {
@@ -181,7 +178,7 @@ bool ObSnapshotGcScnRenewer::need_renew_(const int64_t now)
       const int64_t renew_target_scn =
           freeze_info_mgr->get_snapshot_gc_scn_renewal_state().get_target_scn();
       const int64_t gc_boundary = calc_gc_boundary_(
-          last_renewed_snapshot_gc_scn_, GCONF.undo_retention);
+          last_renewed_snapshot_gc_scn_, config::undo_retention());
       if (renew_target_scn <= 0 || gc_boundary >= renew_target_scn) {
         next_renew_ts_ = 0;
       } else if (last_renewed_snapshot_gc_scn_ < renew_target_scn) {
@@ -189,7 +186,7 @@ bool ObSnapshotGcScnRenewer::need_renew_(const int64_t now)
         need_renew = now >= next_renew_ts_;
       } else {
         schedule_next_renew_(
-            calc_next_renew_ts_(renew_target_scn, GCONF.undo_retention), now);
+            calc_next_renew_ts_(renew_target_scn, config::undo_retention()), now);
         need_renew = now >= next_renew_ts_;
       }
     }

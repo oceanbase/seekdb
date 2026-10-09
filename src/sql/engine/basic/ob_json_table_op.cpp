@@ -250,7 +250,6 @@ static int construct_table_func_join_node(ObIAllocator* allocator,
     node_buf = allocator->alloc(sizeof(JoinNode));
     if (OB_ISNULL(node_buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc col node buffer", K(ret));
     }
     jt_node = static_cast<JoinNode*>(new(node_buf)JoinNode());
   } else {
@@ -267,7 +266,6 @@ static int construct_table_func_reg_node(ObIAllocator* allocator,
   void* node_buf = allocator->alloc(sizeof(ObRegCol));
   if (OB_ISNULL(node_buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc col node buffer", K(ret));
   } else {
     jt_node = static_cast<ObRegCol*>(new(node_buf)ObRegCol(col_info));
   }
@@ -282,7 +280,6 @@ static int construct_table_func_union_node(ObIAllocator* allocator,
   void* node_buf = allocator->alloc(sizeof(UnionNode));
   if (OB_ISNULL(node_buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc col node buffer", K(ret));
   } else {
     jt_node = static_cast<UnionNode*>(new(node_buf)UnionNode());
   }
@@ -297,7 +294,6 @@ static int construct_table_func_scan_node(ObIAllocator* allocator,
   void* node_buf = allocator->alloc(sizeof(ScanNode));
   if (OB_ISNULL(node_buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc col node buffer", K(ret));
   } else {
     jt_node = static_cast<ScanNode*>(new(node_buf)ScanNode(col_info));
   }
@@ -385,14 +381,12 @@ OB_DEF_DESERIALIZE(ObJsonTableSpec)
   OB_UNIS_DECODE(column_count);
   
   if (OB_SUCC(ret) && OB_FAIL(cols_def_.init(column_count))) {
-    LOG_WARN("fail to init cols def array.", K(ret), K(column_count));
   }
 
   for (size_t i = 0; OB_SUCC(ret) && i < column_count; ++i) {
     void* col_info_buf = alloc_->alloc(sizeof(ObJtColInfo));
     if (OB_ISNULL(col_info_buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate col node buffer.", K(ret));
     } else {
       ObJtColInfo* col_info = static_cast<ObJtColInfo*>(new (col_info_buf) ObJtColInfo());
       ObJtColInfo& tmp_col_info = *col_info;
@@ -417,7 +411,6 @@ OB_DEF_DESERIALIZE(ObJsonTableSpec)
     for (size_t i = 0; OB_SUCC(ret) && i < value_exprs_count; ++i) {
       OB_UNIS_DECODE(value_expr);
       if (OB_SUCC(ret) && OB_FAIL(value_exprs_.push_back(value_expr))) {
-        LOG_WARN("fail to store value expr.", K(ret));
       }
     }
   } else if (OB_FAIL(value_exprs_.init(1))) {
@@ -504,12 +497,10 @@ int ObJsonTableSpec::dup_origin_column_defs(ObIArray<ObJtColBaseInfo*>& columns)
     void* col_info_buf = alloc_->alloc(sizeof(ObJtColInfo));
     if (OB_ISNULL(col_info_buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate col node buffer.", K(ret));
     } else {
       ObJtColInfo col_info;
       if (OB_FAIL(col_info.from_JtColBaseInfo(*columns.at(i)))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to transform to jtcolinfo", K(ret));
       } else {
         ObJtColInfo* col = static_cast<ObJtColInfo*>(new (col_info_buf) ObJtColInfo());
         if (OB_FAIL(col->deep_copy(col_info, alloc_))) {
@@ -546,7 +537,6 @@ int ObJsonTableOp::find_column(int32_t id, JtColTreeNode* root, JtColTreeNode*& 
           col = nest_col;
         } else if (nest_col->col_base_info_.col_type_ == static_cast<int32_t>(NESTED_COL_TYPE) 
                   && OB_FAIL(col_stack.push_back(nest_col))) {
-          LOG_WARN("fail to store col node tmp", K(ret));
         }
       }
     }
@@ -554,7 +544,6 @@ int ObJsonTableOp::find_column(int32_t id, JtColTreeNode* root, JtColTreeNode*& 
 
   if (OB_SUCC(ret) && !exists) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to find col node", K(ret));
   } 
   return ret;
 }
@@ -571,7 +560,6 @@ int ObJsonTableOp::generate_column_trees(JtColTreeNode*& root)
     JtColTreeNode* col_def = static_cast<JtColTreeNode*>(allocator_->alloc(sizeof(JtColTreeNode)));
     if (OB_ISNULL(col_def)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate col node", K(ret));
     } else {
       col_def = new (col_def) JtColTreeNode(info);
     }
@@ -599,7 +587,6 @@ int ObJsonTableOp::inner_open()
   if (OB_FAIL(init())) {
   } else if (MY_SPEC.value_exprs_.empty()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to open iter, value expr is null.", K(ret));
   } else if (OB_FAIL(root_->open(&jt_ctx_))) {
   } else {
     is_evaled_ = false;
@@ -631,7 +618,6 @@ int ObJsonTableOp::reset_variable()
   if (OB_FAIL(ret)) {
   } else if (MY_SPEC.value_exprs_.empty()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to open iter, value expr is null.", K(ret));
   } else if (OB_FAIL(root_->reset(&jt_ctx_))) {
   } else {
     is_evaled_ = false;
@@ -658,7 +644,6 @@ int ObJsonTableOp::init()
       const sql::ObSQLSessionInfo *session = get_exec_ctx().get_my_session();
       if (OB_ISNULL(session)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("session is NULL", K(ret));
       } else {
         is_inited_ = true;
         jt_ctx_.spec_ptr_ = const_cast<ObJsonTableSpec*>(spec_ptr);
@@ -679,19 +664,15 @@ int ObJsonTableOp::init()
       table_func_buf = jt_ctx_.op_exec_alloc_->alloc(sizeof(JsonTableFunc));
       if (OB_ISNULL(table_func_buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate table func buf", K(ret));
       } else if (OB_ISNULL(jt_ctx_.table_func_ = new (table_func_buf) JsonTableFunc())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to new json array node", K(ret));
       }
     } else if (jt_ctx_.is_unnest_table_func()) {
       table_func_buf = jt_ctx_.op_exec_alloc_->alloc(sizeof(UnnestTableFunc));
       if (OB_ISNULL(table_func_buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate table func buf", K(ret));
       } else if (OB_ISNULL(jt_ctx_.table_func_ = new (table_func_buf) UnnestTableFunc())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to new unnest node", K(ret));
       }
     }
   }
@@ -756,7 +737,6 @@ int RegularCol::check_item_method_json(ObRegCol &col_node, JtScanCtx* ctx)
       LOG_USER_ERROR(OB_ERR_INVALID_DATA_TYPE_RETURNING);
     } else if (OB_ISNULL(col_node.expr_param_.json_path_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get expr param json path is null", K(ret));
     } else if (col_node.expr_param_.json_path_->is_last_func() 
                 && OB_FAIL( ObJsonExprHelper::check_item_func_with_return(col_node.expr_param_.json_path_->get_last_node_type(), 
                               col_node.expr_param_.dst_type_, expr->datum_meta_.cs_type_, 1))) {
@@ -764,14 +744,12 @@ int RegularCol::check_item_method_json(ObRegCol &col_node, JtScanCtx* ctx)
         ret = OB_ERR_INVALID_DATA_TYPE;
         LOG_USER_ERROR(OB_ERR_INVALID_DATA_TYPE, "JSON_TABLE");
       }
-      LOG_WARN("check item func with return type fail", K(ret));
     } else if (OB_FAIL(ObExprJsonQuery::check_item_method_valid_with_wrapper(col_node.expr_param_.json_path_,
                                                                              col_node.expr_param_.wrapper_))) {
     }
   } else if (col_node.type() == COL_TYPE_VALUE) {
     if (OB_ISNULL(col_node.expr_param_.json_path_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get expr param json path is null", K(ret));
     } else if (col_node.expr_param_.json_path_->is_last_func() 
         && OB_FAIL( ObJsonExprHelper::check_item_func_with_return(col_node.expr_param_.json_path_->get_last_node_type(), 
                                                                   col_node.expr_param_.dst_type_, expr->datum_meta_.cs_type_, 0))) {
@@ -779,7 +757,6 @@ int RegularCol::check_item_method_json(ObRegCol &col_node, JtScanCtx* ctx)
         ret = OB_ERR_INVALID_DATA_TYPE;
         LOG_USER_ERROR(OB_ERR_INVALID_DATA_TYPE, "JSON_TABLE");
       }
-      LOG_WARN("check item func with return type fail", K(ret));
     }
   }
   return ret;
@@ -797,11 +774,9 @@ int RegularCol::eval_query_col(ObRegCol &col_node, JtScanCtx* ctx, ObExpr* col_e
               && OB_FAIL(ObExprJsonQuery::get_single_obj_wrapper(col_node.col_info_.wrapper_, 
                                           use_wrapper, in[0][0]->json_type(), col_node.col_info_.allow_scalar_))) {
     SET_COVER_ERROR(ctx, ret);
-    LOG_WARN("result can't be returned without array wrapper", K(ret));
   } else if (in->element_count() > 1 
               && OB_FAIL(ObExprJsonQuery::get_multi_scalars_wrapper_type(col_node.col_info_.wrapper_, use_wrapper))) {
     SET_COVER_ERROR(ctx, ret);
-    LOG_WARN("result can't be returned without array wrapper", K(ret));
   } else if (!use_wrapper) {
     col_node.curr_ = in[0][0];
   }
@@ -819,7 +794,6 @@ int RegularCol::eval_value_col(ObRegCol &col_node, JtScanCtx* ctx, ObExpr* col_e
   } else if (in->json_type() == ObJsonNodeType::J_OBJECT
              || in->json_type() == ObJsonNodeType::J_ARRAY) {
     ret = OB_ERR_JSON_VALUE_NO_SCALAR;
-    LOG_WARN("result can not be object", K(ret));
     SET_COVER_ERROR(ctx, ret);
   } else if ((in->json_type() == ObJsonNodeType::J_INT || in->json_type() == ObJsonNodeType::J_INT)
              && (ob_is_datetime_tc(col_node.col_info_.data_type_.get_obj_type())
@@ -831,14 +805,12 @@ int RegularCol::eval_value_col(ObRegCol &col_node, JtScanCtx* ctx, ObExpr* col_e
       if (OB_ISNULL(j_string = static_cast<ObJsonString*>(ctx->row_alloc_.alloc(sizeof(ObJsonString))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         RESET_COVER_CODE(ctx);
-        LOG_WARN("fail to allocate json string node", K(ret));
       } else {
         col_node.curr_ = new(j_string) ObJsonString(ctx->buf, len);
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
       RESET_COVER_CODE(ctx);
-      LOG_WARN("fail to print int value", K(ret));
     }
   }
   return ret;
@@ -860,7 +832,6 @@ int RegularCol::eval_exist_col(ObRegCol &col_node, JtScanCtx* ctx, ObExpr* col_e
     void* buf = ctx->row_alloc_.alloc(sizeof(ObJsonInt));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("buf allocate failed", K(ret));
     } else {
       col_node.curr_ = static_cast<ObJsonInt*>(new(buf)ObJsonInt(1));
       is_null = false;
@@ -910,10 +881,8 @@ int UnnestTableFunc::eval_input(ObJsonTableOp &jt, JtScanCtx &ctx, ObEvalCtx &ev
   bool is_all_null = true;
   if (!ctx.is_unnest_table_func()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid table func", K(ret));
   } else if (OB_ISNULL(arr_objs = static_cast<ObIArrayType**>(ctx.row_alloc_.alloc(col_num * sizeof(ObIArrayType*))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc memory for array objects", K(ret));
   } else {
     jt.reset_columns();
   }
@@ -929,7 +898,6 @@ int UnnestTableFunc::eval_input(ObJsonTableOp &jt, JtScanCtx &ctx, ObEvalCtx &ev
       is_null = true;
     } else if (!ob_is_collection_sql_type(obj_type)) {
       ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-      LOG_WARN("invalid array data type provided.", K(ret), K(i), K(obj_type));
     } else if (OB_FAIL(value_expr->eval(eval_ctx, datum))) {
     } else if (datum->is_null()) {
       is_null = true;
@@ -1051,9 +1019,7 @@ int UnionNode::open(JtScanCtx* ctx)
   INIT_SUCC(ret);
   if (OB_FAIL(ObMultiModeTableNode::open(ctx))) {
   } else if (left_ && OB_FAIL(left_->open(ctx))) {
-    LOG_WARN("fail to open left node.", K(ret));
   } else if (right_ && OB_FAIL(right_->open(ctx))) {
-    LOG_WARN("fail to open right node.", K(ret));
   }
   return ret;
 }
@@ -1063,9 +1029,7 @@ int UnionNode::reset(JtScanCtx* ctx)
   INIT_SUCC(ret);
   if (OB_FAIL(ObMultiModeTableNode::reset(ctx))) {
   } else if (left_ && OB_FAIL(left_->reset(ctx))) {
-    LOG_WARN("fail to reset left child", K(ret));
   } else if (right_ && OB_FAIL(right_->reset(ctx))) {
-    LOG_WARN("fail to reset right child", K(ret));
   } else {
     is_left_iter_end_ = false;
     is_right_iter_end_ = true;
@@ -1175,12 +1139,10 @@ int ObRegCol::eval_regular_col(void *in, JtScanCtx* ctx, bool& is_null_value)
       EVAL_COVER_CODE(ctx, ret);
     } else if (OB_FAIL(ctx->table_func_->reset_path_iter(*this, in, ctx, ScanType::COL_NODE_TYPE, is_null_res))) {
       RESET_COVER_CODE(ctx);
-      LOG_WARN("fail to init func path", K(ret));
     } else if (is_null_res) {
       is_null_value = true;
     } else if (OB_FAIL(ctx->table_func_->eval_seek_col(*this, in, ctx, is_null_res, need_cast_res))) {
       SET_COVER_ERROR(ctx, ret);
-      LOG_WARN("json seek failed", K(col_info_.path_), K(ret));
     } else if (curr_ == nullptr || is_null_res) {
       is_null_value = true;
     } else {
@@ -1229,7 +1191,6 @@ int ObRegCol::eval_regular_col(void *in, JtScanCtx* ctx, bool& is_null_value)
       is_null_value = true;
       col_expr->locate_datum_for_write(*ctx->eval_ctx_).set_null();
     } else if (need_cast_res && OB_FAIL(ctx->table_func_->cast_to_result(*this, ctx, enable_error))) {
-      LOG_WARN("failed to do cast to res type", K(ret));
     } else if (OB_ISNULL(curr_)) {
       is_null_value = true;
     }
@@ -1259,7 +1220,6 @@ int ScanNode::get_next_iter(void* in, JtScanCtx* ctx, bool& is_null_value)
         seek_node_.total_ = 0;
       } else if (OB_FAIL(ctx->table_func_->reset_path_iter(seek_node_, in_, ctx, ScanType::SCAN_NODE_TYPE, is_null_iter))) {   // reset path & get first result
         RESET_COVER_CODE(ctx);
-        LOG_WARN("fail to init path", K(ret), K(ctx->spec_ptr_->table_type_), K(ctx->table_func_));
       } else if (is_null_iter) {
         is_null_value = is_null_result_ = true;
         seek_node_.curr_ = seek_node_.iter_ = nullptr;
@@ -1284,7 +1244,6 @@ int ScanNode::get_next_iter(void* in, JtScanCtx* ctx, bool& is_null_value)
       if (ret == OB_ITER_END) {
         seek_node_.curr_ = seek_node_.iter_ = nullptr;
       } else {
-        LOG_WARN("fail to get seek value", K(ret));
       }
     } else if (is_null_iter) {
       is_null_value = is_null_result_ = true;
@@ -1339,13 +1298,11 @@ int JoinNode::get_next_row(void* in, JtScanCtx* ctx, bool& is_null_value)
     is_right_iter_end_ = false;
     ret = left_node->get_next_row(in, ctx, is_left_null);
     if (OB_FAIL(ret) && ret != OB_ITER_END) {
-      LOG_WARN("fail to get next row", K(ret));
     } else if (OB_SUCC(ret)) {
       is_null_value = is_left_null;
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to get iter node", K(ret));
   }
 
   bool is_sub_result_null = false; // nested child result is null then 
@@ -1354,7 +1311,6 @@ int JoinNode::get_next_row(void* in, JtScanCtx* ctx, bool& is_null_value)
     if (right_node) {
       if (OB_FAIL(right_node->get_next_row(get_curr_iter_value(), ctx, is_sub_result_null))) {
         if (OB_FAIL(ret) && ret != OB_ITER_END) {
-          LOG_WARN("fail to get column value", K(ret));
         } else if (ret == OB_ITER_END) {
           is_right_iter_end_ = true;
         }
@@ -1376,7 +1332,6 @@ int JoinNode::get_next_row(void* in, JtScanCtx* ctx, bool& is_null_value)
       ret = OB_SUCCESS; // ignore only one null result
     } else if (OB_FAIL(get_next_row(in, ctx, is_null_value))) {
       if (ret != OB_ITER_END) {
-        LOG_WARN("fail to get value", K(ret));
       }
     }
   } else if (OB_FAIL(ret)) { // if return fail, need reset flag
@@ -1403,7 +1358,6 @@ int UnionNode::get_next_row(void* in, JtScanCtx* ctx, bool& is_null_value)
     ret = left_node->get_next_row(in, ctx, is_left_null);
     if (OB_FAIL(ret)) {
       if (ret != OB_ITER_END) {
-        LOG_WARN("fail to get next row", K(ret));
       } else {
         is_left_iter_end_ = true;
       }
@@ -1421,7 +1375,6 @@ int UnionNode::get_next_row(void* in, JtScanCtx* ctx, bool& is_null_value)
     if (is_left_null && OB_NOT_NULL(right_node)) {
       ret = right_node->get_next_row(in, ctx, is_right_null);
       if (OB_FAIL(ret) &&  ret != OB_ITER_END) {
-        LOG_WARN("fail to get next row", K(ret));
       } else if (OB_SUCC(ret)) {
         if (!is_right_null) {
           is_null_value = false;
@@ -1431,7 +1384,6 @@ int UnionNode::get_next_row(void* in, JtScanCtx* ctx, bool& is_null_value)
   } else if (OB_NOT_NULL(right_node) && (ret == OB_ITER_END)) {
     ret = right_node->get_next_row(in, ctx, is_right_null);
     if (OB_FAIL(ret) &&  ret != OB_ITER_END) {
-      LOG_WARN("fail to get next row", K(ret));
     } else if (OB_SUCC(ret) && is_right_null) {
       if (in_ == in) {
         ret = OB_ITER_END;
@@ -1453,23 +1405,19 @@ int ObJsonTableOp::inner_get_next_row()
   if (!(jt_ctx_.is_json_table_func()
         || jt_ctx_.is_unnest_table_func())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unsupport table function", K(ret));
   } else if (is_evaled_) {
     clear_evaluated_flag();
     if (OB_FAIL(root_->get_next_row(input_, &jt_ctx_, is_root_null))) {
       if (ret != OB_ITER_END) {
-        LOG_WARN("failed to open get next row.", K(ret));
       }
     }
   } else {
     clear_evaluated_flag();
     if (OB_FAIL(jt_ctx_.table_func_->eval_input(*this, jt_ctx_, *jt_ctx_.eval_ctx_))) {  // get input value
       if (ret != OB_ITER_END) {
-        LOG_WARN("fail to get input val", K(ret));
       }
     } else if (OB_FAIL(root_->get_next_row(input_, &jt_ctx_, is_root_null))) {
       if (ret != OB_ITER_END) {
-        LOG_WARN("fail to get next row", K(ret));
       }
     } else {
       is_evaled_ = true;
@@ -1521,7 +1469,6 @@ int RegularCol::parse_default_value_2json(ObExpr* default_expr,
   if (OB_SUCC(ret) 
       && OB_FAIL(ObJsonExprHelper::get_json_val(converted_datum, *ctx->exec_ctx_, default_expr,
                                                 ctx->op_exec_alloc_, val_type, cs_type, res))) {
-    LOG_WARN("fail to parse default value", K(ret));
   }
   return ret;
 }
@@ -1571,7 +1518,6 @@ int RegularCol::check_default_value_inner_mysql(JtScanCtx* ctx,
 
   if (OB_ISNULL(j_base)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("json data can not be null", K(ret));
   } else if ((dst_type != ObJsonType && !j_base->is_json_scalar(j_base->json_type()))) {
     ret = OB_INVALID_DEFAULT;
     LOG_USER_ERROR(OB_INVALID_DEFAULT, col_node.col_info_.col_name_.length(), col_node.col_info_.col_name_.ptr());
@@ -1633,7 +1579,6 @@ int JsonTableFunc::get_empty_option(int8_t option_on_empty, bool& res_val)
     } 
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("on_empty_option type error", K(option_on_empty), K(ret));
     }
   }
   return ret;
@@ -1654,7 +1599,6 @@ int JsonTableFunc::set_on_empty(ObRegCol& col_node, JtScanCtx* ctx, bool &need_c
       if (is_cover_by_error) {
         SET_COVER_ERROR(ctx, ret);
       }
-      LOG_WARN("empty cluase report error res", K(ret));
     } else if (is_null) {
       col_node.curr_ = nullptr;
       ret = OB_SUCCESS;
@@ -1671,13 +1615,11 @@ int JsonTableFunc::set_on_empty(ObRegCol& col_node, JtScanCtx* ctx, bool &need_c
       if (is_cover_by_error) {
         SET_COVER_ERROR(ctx, ret);
       }
-      LOG_WARN("empty clause report error opt", K(ret));
     } else if (is_null) {
       col_node.curr_ = nullptr;
     } else {
       if (OB_ISNULL(col_node.emp_val_) || !col_node.is_emp_evaled_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to get err_val", K(ret), K(col_node.is_emp_evaled_));
       } else { // mysql mode
         col_node.curr_ = col_node.emp_val_;
         col_node.res_flag_ = ResultType::NOT_DATUM;
@@ -1700,7 +1642,6 @@ int JsonTableFunc::set_on_empty(ObRegCol& col_node, JtScanCtx* ctx, bool &need_c
         void* buf = ctx->row_alloc_.alloc(sizeof(ObJsonInt));
         if (OB_ISNULL(buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("buf allocate failed", K(ret));
         } else {
           col_node.curr_ = static_cast<ObJsonInt*>(new(buf)ObJsonInt(0));
           is_null = false;
@@ -1730,7 +1671,6 @@ int JsonTableFunc::set_on_error(ObRegCol& col_node, JtScanCtx* ctx, int& ret)
       } else if (has_default_val) {
         if (OB_ISNULL(col_node.err_val_) || !col_node.is_err_evaled_) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("fail to get err_val", K(ret));
         } else { // mysql mode
           col_node.curr_ = col_node.err_val_;
           col_node.res_flag_ = ResultType::NOT_DATUM;
@@ -1780,7 +1720,6 @@ int JsonTableFunc::set_on_error(ObRegCol& col_node, JtScanCtx* ctx, int& ret)
         void* buf = ctx->row_alloc_.alloc(sizeof(ObJsonString));
         if (OB_ISNULL(buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("buf allocate failed", K(ret));
         } else {
           col_node.curr_ = static_cast<ObJsonString*>(new(buf)ObJsonString(value.ptr(), value.length()));
           is_null = false;
@@ -1789,7 +1728,6 @@ int JsonTableFunc::set_on_error(ObRegCol& col_node, JtScanCtx* ctx, int& ret)
         void* buf = ctx->row_alloc_.alloc(sizeof(ObJsonInt));
         if (OB_ISNULL(buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("buf allocate failed", K(ret));
         } else {
           col_node.curr_ = static_cast<ObJsonInt*>(new(buf)ObJsonInt(is_true));
           is_null = false;
@@ -1845,10 +1783,8 @@ int JsonTableFunc::cast_to_result(ObRegCol& col_node, JtScanCtx* ctx, bool enabl
         
         if (OB_ISNULL(js_val)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("empty/error value can not be null", K(ret));
         } else if (OB_FAIL(ObJsonExprHelper::cast_to_res(ctx->row_alloc_, *js_val, *expr, *default_expr, *ctx->eval_ctx_, res, true))) {
           enable_error = false;
-          LOG_WARN("fail to cast to res", K(ret));
         }
       } else {
         ret = ObJsonUtil::cast_to_res(&ctx->row_alloc_, *ctx->eval_ctx_, 
@@ -1869,7 +1805,6 @@ int JsonTableFunc::cast_to_result(ObRegCol& col_node, JtScanCtx* ctx, bool enabl
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect type input", K(ret));
       break;
     }
   }
@@ -1878,7 +1813,6 @@ int JsonTableFunc::cast_to_result(ObRegCol& col_node, JtScanCtx* ctx, bool enabl
     if (tmp_ret != OB_SUCCESS) {
     } else if (OB_SUCC(tmp_ret) && OB_NOT_NULL(col_node.curr_)
                && OB_FAIL(cast_to_result(col_node, ctx, false, false))) { // due of without type calc, so use cast transform default value to res.
-      LOG_WARN("fail to cast default value to res", K(ret));
     }
   }
 
@@ -1900,7 +1834,6 @@ int JsonTableFunc::eval_seek_col(ObRegCol &col_node, void* in, JtScanCtx* ctx, b
   in_val->set_allocator(&ctx->row_alloc_);
   if (OB_FAIL(in_val->seek(*json_path, json_path->path_node_cnt(), true, false, hit))) {
     SET_COVER_ERROR(ctx, ret);
-    LOG_WARN("json seek failed", K(col_node.col_info_.path_), K(ret));
   } else if (hit.size() == 0) {
     col_node.curr_ = nullptr;
     is_null_value = true;
@@ -1921,10 +1854,8 @@ int JsonTableFunc::eval_seek_col(ObRegCol &col_node, void* in, JtScanCtx* ctx, b
     ObIJsonBase* js_arr_ptr = nullptr;
     if (OB_ISNULL(js_arr_buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate json array buf", K(ret));
     } else if (OB_ISNULL(js_arr_ptr = new (js_arr_buf) ObJsonArray(&ctx->row_alloc_))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to new json array node", K(ret));
     } else if (OB_FAIL(ObExprJsonQuery::append_node_into_res(js_arr_ptr, json_path, hit, &ctx->row_alloc_))) {
     }
     
@@ -1950,7 +1881,6 @@ int JsonTableFunc::init_ctx(ObRegCol &scan_node, JtScanCtx*& ctx)
     void* path_buf = ctx->op_exec_alloc_->alloc(sizeof(ObJsonPath));
     if (OB_ISNULL(path_buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate json path buffer", K(ret));
     } else {
       js_path = new (path_buf) ObJsonPath(scan_node.col_info_.path_, ctx->op_exec_alloc_);
       if (OB_FAIL(js_path->parse_path())) {
@@ -2041,9 +1971,7 @@ int JsonTableFunc::reset_path_iter(ObRegCol &scan_node, void* in, JtScanCtx*& ct
     in_val->set_allocator(&ctx->row_alloc_);
     if (OB_ISNULL(in_val) || OB_ISNULL(js_path)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect input", K(ret));
     } else if (OB_FAIL(in_val->seek(*js_path, js_path->path_node_cnt(), true, false, hit))) {
-      LOG_WARN("json seek failed", K(js_path), K(ret));
       SET_COVER_ERROR(ctx, ret);
     } else if (hit.size() == 0) {
       scan_node.cur_pos_ = 0;
@@ -2061,16 +1989,13 @@ int JsonTableFunc::reset_path_iter(ObRegCol &scan_node, void* in, JtScanCtx*& ct
       ObJsonArray* js_arr_ptr = nullptr;
       if (OB_ISNULL(js_arr_buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate json array buf", K(ret));
       } else if (OB_ISNULL(js_arr_ptr = new (js_arr_buf) ObJsonArray(&ctx->row_alloc_))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to new json array node", K(ret));
       } else {
         ObJsonNode *j_node = NULL;
         ObIJsonBase *jb_node = NULL;
         for (int32_t i = 0; OB_SUCC(ret) && i < hit.size(); i++) {
           if (ObJsonBaseFactory::transform(&ctx->row_alloc_, hit[i], ObJsonInType::JSON_TREE, jb_node)) { // to tree
-            LOG_WARN("fail to transform to tree", K(ret), K(i), K(*(hit[i])));
           } else {
             j_node = static_cast<ObJsonNode *>(jb_node);
             if (OB_FAIL(js_arr_ptr->array_append(j_node->clone(&ctx->row_alloc_)))) {
@@ -2126,13 +2051,11 @@ int JsonTableFunc::eval_input(ObJsonTableOp &jt, JtScanCtx& ctx, ObEvalCtx &eval
   } else if (!(doc_type == ObJsonType
                 || ob_is_string_type(doc_type))) {
     ret = OB_ERR_INPUT_JSON_TABLE;
-    LOG_WARN("fail to get json base", K(ret), K(doc_type));
   } else {
     jt.reset_columns();
     if (OB_FAIL(ObJsonExprHelper::get_json_or_str_data(ctx.spec_ptr_->value_exprs_.at(0), eval_ctx,
                                                         tmp_allocator, j_str, is_null))) {
       ret = OB_ERR_INPUT_JSON_TABLE;
-      LOG_WARN("get real data failed", K(ret));
     } else if (is_null) {
       ret = OB_ITER_END;
     } else if (ob_is_string_type(doc_type)
@@ -2146,7 +2069,6 @@ int JsonTableFunc::eval_input(ObJsonTableOp &jt, JtScanCtx& ctx, ObEvalCtx &eval
 
       if (OB_ISNULL(buf = static_cast<char*>(tmp_allocator.alloc(buf_len)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc memory failed", K(ret));
       } else if (OB_FAIL(ObCharset::charset_convert(doc_cs_type, j_str.ptr(),
                                                     j_str.length(), CS_TYPE_UTF8MB4_BIN, buf,
                                                     buf_len, result_len))) {

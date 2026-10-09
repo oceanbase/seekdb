@@ -62,10 +62,8 @@ int ObTmpFileIOHandle::init_write(const ObTmpFileIOInfo &io_info)
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObTmpFileIOHandle has been inited twice", KR(ret), KPC(this));
   } else if (OB_UNLIKELY(!io_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(io_info), KPC(this));
   } else if (OB_FAIL(ctx_.init(io_info.fd_, io_info.dir_id_, false /*is_read*/,
                                io_info.io_desc_, io_info.io_timeout_ms_, io_info.disable_page_cache_,
                                io_info.disable_block_cache_, false /*prefetch*/))) {
@@ -86,13 +84,10 @@ int ObTmpFileIOHandle::init_pread(const ObTmpFileIOInfo &io_info, const int64_t 
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObTmpFileIOHandle has been inited twice", KR(ret), KPC(this));
   } else if (OB_UNLIKELY(!io_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(io_info));
   } else if (OB_UNLIKELY(read_offset < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(read_offset));
   } else if (OB_FAIL(ctx_.init(io_info.fd_, io_info.dir_id_, true /*is_read*/,
                                io_info.io_desc_, io_info.io_timeout_ms_, io_info.disable_page_cache_,
                                io_info.disable_block_cache_, io_info.prefetch_))) {
@@ -114,10 +109,8 @@ int ObTmpFileIOHandle::init_read(const ObTmpFileIOInfo &io_info)
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObTmpFileIOHandle has been inited twice", KR(ret), KPC(this));
   } else if (OB_UNLIKELY(!io_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(io_info));
   } else if (OB_FAIL(ctx_.init(io_info.fd_, io_info.dir_id_, true /*is_read*/,
                                io_info.io_desc_, io_info.io_timeout_ms_, io_info.disable_page_cache_,
                                io_info.disable_block_cache_, io_info.prefetch_))) {
@@ -150,20 +143,16 @@ int ObTmpFileIOHandle::wait()
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", KR(ret));
   } else if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid handle", KR(ret), KPC(this));
   } else if (is_finished() || !ctx_.is_read()) {
     // do nothing
   } else {
     
     if (FAILEDx(ctx_.wait())) {
-      LOG_WARN("fail to wait tmp file io", KR(ret), KPC(this));
     } else if (OB_FAIL(handle_finished_ctx_(ctx_))) {
     } else if (OB_UNLIKELY(done_size_ > buf_size_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("done size is larger than total todo size", KR(ret), KPC(this));
     } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->get_tmp_file(fd_, file_handle))) {
     } else {
       while (OB_SUCC(ret) && !is_finished()) {
@@ -191,7 +180,6 @@ int ObTmpFileIOHandle::handle_finished_ctx_(ObTmpFileIOCtx &ctx)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!ctx.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(ctx));
   } else {
     if (ctx_.is_read()) {
       read_offset_in_file_ = ctx.get_read_offset_in_file();

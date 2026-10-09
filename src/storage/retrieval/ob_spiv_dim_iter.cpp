@@ -57,14 +57,12 @@ int ObSPIVDaaTDimIter::init(const ObSPIVDimIterParam &iter_param)
         KP(mem_context_.ref_context()));
   } else if (need_inv_agg() && (OB_ISNULL(inv_idx_agg_param_) || OB_ISNULL(inv_idx_agg_expr_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("inv_idx_scan_param or inv_idx_agg_expr is NULL", KPC_(inv_idx_agg_param), KPC_(inv_idx_agg_expr));
   } else {
     common::ObDatumBasicFuncs *basic_funcs =
         ObDatumFuncs::get_basic_func(inv_scan_domain_id_expr_->datum_meta_.type_, CS_TYPE_BINARY);
     cmp_func_ = basic_funcs->null_first_cmp_;
     if (OB_ISNULL(cmp_func_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("cmp_func is NULL", K(ret));
     } else if (FALSE_IT(scores_.set_allocator(allocator_))) {
     } else if (OB_FAIL(scores_.init(max_batch_size_))) {
     } else if (OB_FAIL(scores_.prepare_allocate(max_batch_size_))) {
@@ -106,7 +104,6 @@ int ObSPIVDaaTDimIter::save_docids()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(inv_scan_score_expr_) || OB_ISNULL(inv_scan_domain_id_expr_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid score or doc id expr", K(ret));
   } else {
     const ObDatumVector &score_datum = inv_scan_score_expr_->locate_expr_datumvector(*eval_ctx_);
     const ObDatumVector &doc_id_datum = inv_scan_domain_id_expr_->locate_expr_datumvector(*eval_ctx_);
@@ -127,13 +124,11 @@ int ObSPIVDaaTDimIter::get_next_row()
   if (OB_LIKELY(cur_idx_ < count_)) {
   } else if (OB_ISNULL(inv_idx_scan_iter_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("inv_idx_scan_iter is null", K(ret));
   } else {
     if (max_batch_size_ > 1) {
       if (OB_FAIL(query::das_scan_next_rows(
           inv_idx_scan_iter_, count_, max_batch_size_))) {
         if (ret != OB_ITER_END) {
-          LOG_WARN("failed to get next rows", K(ret));
         } else if (count_ != 0) {
           ret = OB_SUCCESS;
           need_save = true;
@@ -144,7 +139,6 @@ int ObSPIVDaaTDimIter::get_next_row()
     } else {
       if (OB_FAIL(query::das_scan_next_row(inv_idx_scan_iter_))) {
         if (ret != OB_ITER_END) {
-          LOG_WARN("failed to get next row", K(ret));
         }
       } else {
         need_save = true;
@@ -166,13 +160,11 @@ int ObSPIVDaaTDimIter::update_scan_param(const ObDatum &id_datum)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(inv_idx_scan_param_->key_ranges_.count() != 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected key range count", K(ret), K(inv_idx_scan_param_->key_ranges_.count()));
   } else {
     ObRowkey start_rowkey = inv_idx_scan_param_->key_ranges_.at(0).start_key_;
     ObRowkey end_rowkey = inv_idx_scan_param_->key_ranges_.at(0).end_key_;
     if (start_rowkey.get_obj_ptr()[0].get_uint32() != end_rowkey.get_obj_ptr()[0].get_uint32()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected rowkey", K(ret), K(start_rowkey), K(end_rowkey));
     }
     // ob_ptr[0] is dim, ob_ptr[1] is docid
     ObObj *obj_ptr = start_rowkey.get_obj_ptr();
@@ -190,7 +182,6 @@ int ObSPIVDaaTDimIter::update_scan_param(const ObDatum &id_datum)
     } else if (OB_FAIL(query::das_scan_reuse(inv_idx_scan_iter_))) {
     } else if (OB_UNLIKELY(!inv_idx_scan_param_->key_ranges_.empty())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected non-empty scan range", K(ret));
     } else if (OB_FAIL(inv_idx_scan_param_->key_ranges_.push_back(scan_range))) {
     } else if (OB_FAIL(query::das_scan_rescan(inv_idx_scan_iter_))) {
     }
@@ -206,7 +197,6 @@ int ObSPIVDaaTDimIter::advance_to(const ObDatum &id_datum)
 
   if (cur_idx_ < 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected cur_idx", K(ret), K(cur_idx_));
   }
   while (OB_SUCC(ret) && !find) {
     if (cur_idx_ < count_) {
@@ -220,20 +210,17 @@ int ObSPIVDaaTDimIter::advance_to(const ObDatum &id_datum)
     } else if (OB_FAIL(update_scan_param(id_datum))) {
     } else if (OB_FAIL(get_next_row())) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
-        LOG_WARN("failed to get batch rows from inverted index", K(ret));
       } else {
         find = true;
       }
     } else if (cur_idx_ != 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected result", K(ret), K(result));
     } else if (OB_FAIL(cmp_func_(
                    id_datum, doc_ids_[cur_idx_].get_datum(), result, nullptr))) {
     } else if (result <= 0) {
       find = true;
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected result", K(ret), K(result));
     }
   }
   return ret;
@@ -244,7 +231,6 @@ int ObSPIVDaaTDimIter::get_curr_score(double &score) const
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(cur_idx_ >= count_)) {
     ret = OB_ARRAY_OUT_OF_RANGE;
-    LOG_WARN("array index out of bounds", K(ret), K_(cur_idx), K_(count));
   } else {
     score = scores_[cur_idx_] * query_value_;
   }
@@ -256,7 +242,6 @@ int ObSPIVDaaTDimIter::get_curr_id(const ObDatum *&id_datum) const
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(cur_idx_ >= count_)) {
     ret = OB_ARRAY_OUT_OF_RANGE;
-    LOG_WARN("array index out of bounds", K(ret), K_(cur_idx), K_(count));
   } else {
     id_datum = &doc_ids_[cur_idx_].get_datum();
   }
@@ -272,7 +257,6 @@ int ObSPIVDaaTDimIter::get_dim_max_score(double &max_score)
   } else {
     if (OB_FAIL(query::das_scan_next_row(inv_idx_agg_iter_))) {
       if (ret != OB_ITER_END) {
-        LOG_WARN("failed to get next row", K(ret));
       } else {
         ret = OB_SUCCESS;
       }
@@ -294,10 +278,8 @@ int ObSPIVBlockMaxDimIter::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("double initialization", K(ret));
   } else if (OB_UNLIKELY(!block_max_iter_param.is_valid() || !scan_param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid iter param", K(ret), K(block_max_iter_param), K(scan_param));
   } else if (OB_FAIL(dim_iter_.init(iter_param))) {
   } else {
     curr_id_ = nullptr;
@@ -345,14 +327,10 @@ int ObSPIVBlockMaxDimIter::get_next_row()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not initialized", K(ret));
   } else if (OB_UNLIKELY(in_shallow_status_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected iter status, can not get next row after shallow advance",
-        K(ret), K_(in_shallow_status));
   } else if (OB_FAIL(dim_iter_.get_next_row())) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("failed to get next row", K(ret));
     }
   } else if (OB_FAIL(dim_iter_.get_curr_id(curr_id_))) {
   }
@@ -369,10 +347,8 @@ int ObSPIVBlockMaxDimIter::advance_to(const ObDatum &id_datum)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not initialized", K(ret));
   } else if (OB_FAIL(dim_iter_.advance_to(id_datum))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("failed to advance to id datum", K(ret));
     }
   } else if (OB_FAIL(dim_iter_.get_curr_id(curr_id_))) {
   } else {
@@ -386,13 +362,10 @@ int ObSPIVBlockMaxDimIter::advance_shallow(const ObDatum &id_datum, const bool i
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not initialized", K(ret));
   } else if (OB_UNLIKELY(!block_max_inited_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected block max iter not calculated", K(ret), K_(block_max_inited));
   } else if (OB_FAIL(block_max_iter_.advance_to(id_datum, inclusive))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("failed to advance to id datum", K(ret));
     }
   } else if (OB_FAIL(block_max_iter_.get_curr_max_score_tuple(max_score_tuple_))) {
   } else {
@@ -408,11 +381,8 @@ int ObSPIVBlockMaxDimIter::get_curr_score(double &score) const
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not initialized", K(ret));
   } else if (OB_UNLIKELY(in_shallow_status_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected iter status, can not get curr score after shallow advance",
-        K(ret), K_(in_shallow_status));
   } else if (OB_FAIL(dim_iter_.get_curr_score(score))) {
   }
   return ret;
@@ -423,10 +393,8 @@ int ObSPIVBlockMaxDimIter::get_curr_id(const ObDatum *&id_datum) const
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not initialized", K(ret));
   } else if (OB_ISNULL(curr_id_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr to curr id", K(ret), KP_(curr_id));
   } else {
     id_datum = curr_id_;
   }
@@ -438,10 +406,8 @@ int ObSPIVBlockMaxDimIter::get_dim_max_score(double &score)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not initialized", K(ret));
   } else if (OB_UNLIKELY(!block_max_inited_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected block max iter not calculated", K(ret), K_(block_max_inited));
   } else {
     score = dim_max_score_;
   }
@@ -453,13 +419,10 @@ int ObSPIVBlockMaxDimIter::get_curr_block_max_info(const ObMaxScoreTuple *&max_s
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not initialized", K(ret));
   } else if (OB_UNLIKELY(!block_max_inited_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected block max iter not calculated", K(ret), K_(block_max_inited));
   } else if (OB_ISNULL(max_score_tuple_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr to max score tuple", K(ret), KP_(max_score_tuple));
   } else {
     max_score_tuple = max_score_tuple_;
   }
@@ -485,11 +448,9 @@ int ObSPIVBlockMaxDimIter::calc_dim_max_score(
     const ObMaxScoreTuple *max_score_tuple = nullptr;
     if (OB_FAIL(block_max_iter_.get_next(max_score_tuple))) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
-        LOG_WARN("failed to get next max score tuple", K(ret));
       }
     } else if (OB_ISNULL(max_score_tuple)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected nullptr to max score tuple", K(ret), KP_(max_score_tuple));
     } else {
       dim_max_score_ = OB_MAX(dim_max_score_, max_score_tuple->max_score_);
     }
@@ -499,7 +460,6 @@ int ObSPIVBlockMaxDimIter::calc_dim_max_score(
     ret = OB_SUCCESS;
     block_max_iter_.reset(); // TODO: reuse or rewind iter
   } else {
-    LOG_WARN("failed to calc dim max score", K(ret));
   }
   return ret;
 }
@@ -509,10 +469,8 @@ int ObSPIVBlockMaxDimIter::init_block_max_iter()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not initialized", K(ret));
   } else if (OB_UNLIKELY(block_max_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("block max iter already initalized", K(ret));
   } else if (OB_FAIL(calc_dim_max_score(*block_max_iter_param_, ranking_param_, *block_max_scan_param_))) {
   } else if (OB_FAIL(block_max_iter_.init(ranking_param_, *block_max_iter_param_, *block_max_scan_param_))) {
   } else {

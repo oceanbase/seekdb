@@ -17,6 +17,7 @@
 #ifndef _OB_WINDOW_FUNCTION_OP_H
 #define _OB_WINDOW_FUNCTION_OP_H 1
 
+#include "config_bridge.h"
 #include "lib/container/ob_array.h"
 #include "lib/container/ob_fixed_array.h"
 #include "lib/lock/ob_scond.h"
@@ -434,7 +435,6 @@ public:
       if (OB_FAIL(ra_rs_.init(mem_limit, mem_ctx_id, label))) {
       } else if (OB_ISNULL(op_.mem_context_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("null memory context", K(ret));
       } else {
         ra_rs_.set_allocator(op_.mem_context_->get_malloc_allocator());
         ra_rs_.set_mem_stat(&(op_.sql_mem_processor_));
@@ -1110,7 +1110,7 @@ int ObWindowFunctionOp::update_mem_limit_version_periodically()
   bool updated = false;
   bool need_inc_version = false;
   const static int64_t UPDATE_MEM_SIZE_PERIODIC_CNT = 1024;
-  if (!GCONF.is_sql_operator_dump_enabled()) {
+  if (!config::enable_sql_operator_dump()) {
     // do nothing, disable dump
   } else if (OB_FAIL(sql_mem_processor_.update_max_available_mem_size_periodically(
       &mem_context_->get_malloc_allocator(),
@@ -1129,7 +1129,6 @@ int ObWindowFunctionOp::update_mem_limit_version_periodically()
                   return sql_mem_processor_.get_data_size() > max_memory_size;
                 },
                 need_inc_version, sql_mem_processor_.get_data_size()))) {
-    LOG_WARN("fail to extend max memory size", K(ret), K(updated), K(need_dump()));
   } else if (need_inc_version) {
     // use the mem_limit_version_ of wf op to trigger updating mem_limit of each ra_rs_
     // using newest global mem bound while add_row to ra_rs_

@@ -343,8 +343,6 @@ int StandbyModule::Impl::prepare_service_start(const bool need_bootstrap)
   if (!is_inited_) {
     ret = OB_NOT_INIT;
   } else if (need_bootstrap && OB_FAIL(state_store_.initialize())) {
-    LOG_WARN("failed to initialize server role state before bootstrap", KR(ret),
-        K(config_.boot_role_));
   } else if (need_bootstrap
              && !standby_profile_
              && OB_FAIL(activate_current_role_())) {
@@ -357,7 +355,7 @@ int StandbyModule::Impl::prepare_service_start(const bool need_bootstrap)
              && !standby_profile_
              && OB_FAIL(host_->bootstrap_primary())) {
     LOG_WARN("failed to bootstrap primary server", KR(ret));
-  } else if (need_bootstrap) {
+  } else {
     const int tmp_ret = host_->report_bootstrap_telemetry();
     if (OB_SUCCESS != tmp_ret) {
       FLOG_WARN("failed to report bootstrap telemetry synchronously", KR(tmp_ret));
@@ -380,9 +378,8 @@ int StandbyModule::Impl::bootstrap_standby_()
 
   param.is_standby_cluster_ = true;
   common::ObArenaAllocator source_allocator("StandbySource");
-  int64_t source_version = 0;
   if (OB_FAIL(host_->load_log_restore_source(
-      source_allocator, param.source_, source_version))) {
+      source_allocator, param.source_))) {
     LOG_WARN("failed to load standby bootstrap source", KR(ret));
   }
   param.bandwidth_throttle_ = config_.bandwidth_throttle_;
