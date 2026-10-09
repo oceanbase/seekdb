@@ -3,7 +3,16 @@
 目标以 [design-storage-schema-boundaries.md](design-storage-schema-boundaries.md) 为准。
 本文件记录实现和验证证据，不缩减已确认范围。2026-10-10 开始实施。
 
-### 当前推进：校验组独立检查与整轮发布恢复
+### 当前推进：移除 freeze 的全局 schema 版本
+
+- 删除 `ObFreezeInfo::schema_version_` 及其构造/有效性/比较/打印/序列化、SQL读写和 `__all_freeze_info` 的列定义。freeze 仅保存 F、数据格式版本及已有时间列；不填占位版本、不做旧版本迁移。
+- 删除 freeze 生成时向默认目录查询版本的 `get_schema_version`；保留最终准备复核使用的既有DDL事务协调。删除无调用方的 `get_freeze_schema_info`、`get_min_dependent_schema_version` 及仅为后者服务的旧 freeze 保留getter；实际布局历史保留协议不变。
+- 原生保留探针改为直接创建不含schema版本的freeze记录；生产真实major用例增加内表列和实际freeze行断言。旧obtest夹具也移除被删字段，但其原有多租户用例未运行。本轮不运行完整mysqltest/sysbench。
+- 原生构建 `/tmp/seekdb-freeze-without-schema-native-build-1.log` 与移除全部探针后的生产构建 `/tmp/seekdb-freeze-without-schema-production-build-1.log` 均通过。生成的内表定义也核对为4列，没有schema版本。
+- `/tmp/seekdb-freeze-without-schema-retention-test-1.log` 通过：F=1791587664891854044 的布局跨mini/minor、kill/restart、暂停且freeze行已消失的持久广播仍受保护；读者交接与完成后释放通过。实例 `namespace_fork_PROTOTYPE_layout_retention_ap9tn0vq` 已停止并归档。
+- 生产真实major `/tmp/seekdb-freeze-without-schema-production-major-test-1.log` 通过：实际列为 `gmt_create,gmt_modified,frozen_scn,data_version`；F=1791587729347542012 的freeze行和物理SSTable均存在，冻结/广播/完成水位一致。实例 `namespace_fork_PROTOTYPE_major_progress_3p5es__z` 已停止并归档。父子不同定义的生产索引回归 `/tmp/seekdb-freeze-without-schema-production-index-test-1.log` 也已通过：F=1791587865997546006，本地/全局/全文辅助比较均实际执行，父V=1791587732270240、孩子V=1791587732604384；实例 `namespace_fork_PROTOTYPE_namespace_checksum_2ikr3_8r` 已停止并归档。
+
+### 先前阶段：校验组独立检查与整轮发布恢复
 
 - 主表及其索引/全文辅助对象按历史定义分组；缺项组返回等待后，继续检查同 Namespace 的其他组和后续 Namespace。完整性仍先由定义确定，不从已到达结果推定。
 - 每组每张表只读取和构建一次 checksum，供组内比较复用，组结束释放；不保存跨调用的 schema/checksum。进度每轮重算，已完成 Namespace 仅保存计数，避免重复累加未完成 Namespace 的计数。
@@ -101,8 +110,9 @@
 - [x] 主库 freeze 准备等待既有后台物化/接管；最终锁后新快照复核；超时结束请求。端到端主备仍归后续验证项。
 - [ ] 物理进度统一使用 C/incarnation/F，并在提交/回放水位达到 F 后重新枚举。
 - [ ] Namespace 上层逻辑 checksum：各表自身历史定义、完整输入、缺项不通过。
+- [ ] 布局正文、G及绑定的引用回收，覆盖仍在使用的物理文件、任务、来源与主备。
 - [ ] MVCC 与 SQL 历史保留、重启顺序、备库本机接管及提升主库。
-- [ ] 删除 freeze.schema_version 和根/子两套旧路径，不保留隐式回退。
+- [x] 删除 freeze.schema_version 和根/子两套旧路径，不保留隐式回退。见物理/逻辑共同检查与移除字段的生产、原生验证记录。
 - [ ] 编译、针对性动态验证、8000 分区成本验证；已执行及失败用例加入四件套。
 - [ ] 提交并推送当前分支；不提 PR。
 

@@ -166,31 +166,6 @@ int64_t ObFreezeInfoMgr::get_latest_frozen_version()
   return frozen_version;
 }
 
-int ObFreezeInfoMgr::get_min_dependent_freeze_info(ObFreezeInfo &freeze_info)
-{
-  int ret = OB_SUCCESS;
-  const int64_t abs_timeout_us = common::ObTimeUtility::current_time() + RLOCK_TIMEOUT_US;
-  RLockGuardWithTimeout lock_guard(lock_, abs_timeout_us, ret);
-
-  if (OB_FAIL(ret)) {
-  } else if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    STORAGE_LOG(WARN, "not init", K(ret));
-  } else {
-    const int64_t info_cnt = freeze_info_mgr_.get_freeze_info_count();
-    int64_t idx = 0;
-    if (info_cnt > MIN_DEPENDENT_FREEZE_INFO_GAP) {
-      idx = info_cnt - MIN_DEPENDENT_FREEZE_INFO_GAP;
-    }
-
-    if (OB_FAIL(freeze_info_mgr_.get_freeze_info_by_idx(idx, freeze_info))) {
-    } else {
-      LOG_INFO("get min dependent freeze info", K(ret), K(freeze_info)); // diagnose code for issue 45841468
-    }
-  }
-  return ret;
-}
-
 int ObFreezeInfoMgr::get_freeze_info_behind_major_snapshot(
     const int64_t major_snapshot_version,
     const bool include_equal,

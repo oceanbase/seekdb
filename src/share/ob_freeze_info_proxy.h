@@ -27,7 +27,6 @@
 #include "common/storage/ob_freeze_define.h"
 #include "share/ob_version_parser.h"
 #include "share/scn.h"
-#include "share/ob_schema_version_info.h"
 
 namespace oceanbase
 {
@@ -46,72 +45,57 @@ namespace share
 {
 /*
  * the columns of __all_freeze_info are as follows:
- * | frozen_scn | schema_version | data_version |
+ * | frozen_scn | data_version |
  * we make sure the row_id of __all_freeze_info equals to frozen_scn
  */
 struct ObFreezeInfo
 {
   ObFreezeInfo()
     : frozen_scn_(),
-      schema_version_(INVALID_SCHEMA_VERSION), 
       data_version_(0)
   {}
-  ObFreezeInfo(const SCN &frozen_scn,
-                       const int64_t schema_version,
-                       const int64_t data_version)
-    : schema_version_(schema_version),
-      data_version_(data_version)
-  {
-    frozen_scn_ = frozen_scn;
-  }
+  ObFreezeInfo(const SCN &frozen_scn, const int64_t data_version)
+    : frozen_scn_(frozen_scn), data_version_(data_version)
+  {}
 
   void assign(const ObFreezeInfo &other)
   {
     frozen_scn_ = other.frozen_scn_;
-    schema_version_ = other.schema_version_;
     data_version_ = other.data_version_;
   }
 
   void reset()
   {
     frozen_scn_.reset();
-    schema_version_ = INVALID_SCHEMA_VERSION;
     data_version_ = 0;
   }
 
   void set_initial_value(const int64_t data_version)
   {
-    schema_version_ = ORIGIN_SCHEMA_VERSION;
     data_version_ = data_version;
     frozen_scn_ = share::SCN::base_scn();
   }
 
   bool is_valid() const
   {
-    return (frozen_scn_.is_valid())
-           && (schema_version_ > INVALID_SCHEMA_VERSION);
+    return frozen_scn_.is_valid() && !frozen_scn_.is_min() && !frozen_scn_.is_max()
+        && data_version_ > 0;
   }
 
   bool operator ==(const ObFreezeInfo &other) const
   {
     return ((this == &other)
             || ((this->frozen_scn_ == other.frozen_scn_)
-            && (this->schema_version_ == other.schema_version_)
             && (this->data_version_ == other.data_version_)));
   }
 
-  TO_STRING_KV(N_FROZEN_VERSION, frozen_scn_, K_(schema_version),
-               K_(data_version));
-
-  static const int64_t INVALID_SCHEMA_VERSION = 0;
-  static const int64_t ORIGIN_SCHEMA_VERSION = 1;
+  TO_STRING_KV(N_FROZEN_VERSION, frozen_scn_, K_(data_version));
 
   static const uint64_t ZERO_FROZEN_SCN_VAL = 0;
   static const uint64_t INITIAL_FROZEN_SCN_VAL = 1;
   static const uint64_t INVALID_FROZEN_SCN_VAL = UINT64_MAX;
 
   SCN frozen_scn_;
-  int64_t schema_version_;
   int64_t data_version_;
 
   OB_UNIS_VERSION(1);
@@ -168,11 +152,6 @@ public:
   // get frozen_status of max frozen_scn
   int get_max_freeze_info(common::ObISQLClient &sql_proxy,
                           ObFreezeInfo &frozen_status);
-
-  int get_freeze_schema_info(common::ObISQLClient &sql_proxy,
-                            const SCN &frozen_scn,
-                            SchemaVersionInfo &schema_version_info);
-
 
 private:
   int get_min_major_available_and_larger_info_inner_(common::ObISQLClient &sql_proxy,

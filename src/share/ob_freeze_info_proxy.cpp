@@ -30,8 +30,7 @@ using namespace palf;
 namespace share
 {
 
-OB_SERIALIZE_MEMBER(ObFreezeInfo, frozen_scn_,
-                    schema_version_, data_version_);
+OB_SERIALIZE_MEMBER(ObFreezeInfo, frozen_scn_, data_version_);
 
 int ObFreezeInfoProxy::get_freeze_info(
     ObISQLClient &sql_proxy,
@@ -199,8 +198,7 @@ int ObFreezeInfoProxy::set_freeze_info(
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("invalid argument", KR(ret), K(frozen_status));
   } else if (OB_FAIL(dml.add_uint64_pk_column("frozen_scn", frozen_status.frozen_scn_.get_val_for_inner_table_field()))
-            || OB_FAIL(dml.add_column("data_version", frozen_status.data_version_))
-            || OB_FAIL(dml.add_column("schema_version", frozen_status.schema_version_))) {
+            || OB_FAIL(dml.add_column("data_version", frozen_status.data_version_))) {
     LOG_WARN("fail to add column", KR(ret), K(frozen_status));
   } else if (OB_FAIL(exec.exec_insert(OB_ALL_FREEZE_INFO_TNAME, dml, affected_rows))) {
   } else if (!(is_single_row(affected_rows) || is_zero_row(affected_rows))) {
@@ -356,7 +354,6 @@ int ObFreezeInfoProxy::construct_frozen_status_(
   uint64_t frozen_scn_val = OB_INVALID_SCN_VAL;
   EXTRACT_UINT_FIELD_MYSQL(result, "frozen_scn", frozen_scn_val, uint64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "data_version", frozen_status.data_version_, int64_t);
-  EXTRACT_INT_FIELD_MYSQL(result, "schema_version", frozen_status.schema_version_, int64_t);
   if (FAILEDx(frozen_status.frozen_scn_.convert_for_inner_table_field(frozen_scn_val))) {
     LOG_WARN("fail to convert val to SCN", KR(ret), K(frozen_scn_val));
   }
@@ -366,43 +363,6 @@ int ObFreezeInfoProxy::construct_frozen_status_(
 ///////////////////////////////////////////////////////////////////////////////
 
 
-
-int ObFreezeInfoProxy::get_freeze_schema_info(
-    ObISQLClient &sql_proxy,
-    const SCN &frozen_scn,
-    SchemaVersionInfo &schema_version_info)
-{
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  ObTimeoutCtx ctx;
-  if (OB_UNLIKELY(false
-      || (!frozen_scn.is_valid()))) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), K(frozen_scn));
-  } else if (OB_FAIL(ObShareUtil::get_rs_default_timeout_ctx(ctx))) {
-  } else if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE frozen_scn = %ld",
-                                    OB_ALL_FREEZE_INFO_TNAME, frozen_scn.get_val_for_inner_table_field()))) {
-  }
-
-  SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-    sqlclient::ObMySQLResult *result = NULL;
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
-    } else if (OB_ISNULL(result = res.get_result())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get result failed", K(ret));
-    } else if (OB_FAIL(result->next())) {
-      if (OB_ITER_END == ret) {
-        ret = OB_ENTRY_NOT_EXIST;
-      }
-      LOG_WARN("fail to get result", KR(ret), K(frozen_scn));
-    } else {
-      
-      EXTRACT_INT_FIELD_MYSQL(*result, "schema_version", schema_version_info.schema_version_, int64_t);
-    }
-  }
-  return ret;
-}
 
 } // end namespace share
 } // end namespace oceanbase

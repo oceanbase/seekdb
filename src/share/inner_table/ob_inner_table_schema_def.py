@@ -2178,8 +2178,7 @@ def_table_schema(
   is_cluster_private = False,
 
   normal_columns = [
-      ('data_version', 'int'),
-      ('schema_version', 'int')
+      ('data_version', 'int')
   ]
   )
 

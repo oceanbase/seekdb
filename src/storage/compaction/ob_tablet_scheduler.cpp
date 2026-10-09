@@ -1087,23 +1087,6 @@ int ObTabletScheduler::user_request_schedule_medium_merge(
   return ret;
 }
 
-int ObTabletScheduler::get_min_dependent_schema_version(int64_t &min_schema_version)
-{
-  int ret = OB_SUCCESS;
-  min_schema_version = OB_INVALID_VERSION;
-  share::ObFreezeInfo freeze_info;
-  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObFreezeInfoMgr>()->get_min_dependent_freeze_info(freeze_info))) {
-    if (OB_ENTRY_NOT_EXIST == ret) {
-      LOG_WARN("freeze info is not exist", K(ret));
-    } else {
-      LOG_WARN("failed to get freeze info", K(ret));
-    }
-  } else {
-    min_schema_version = freeze_info.schema_version_;
-  }
-  return ret;
-}
-
 #ifdef ERRSIM
 void ObTabletScheduler::errsim_after_mini_schedule_adaptive(
     const ObTabletID &tablet_id,

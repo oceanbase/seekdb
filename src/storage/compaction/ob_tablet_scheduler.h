@@ -177,7 +177,6 @@ public:
     const int64_t update_row_cnt,
     const int64_t delete_row_cnt,
     bool &create_dag);
-  int get_min_dependent_schema_version(int64_t &min_schema_version);
   int user_request_schedule_medium_merge(
     const common::ObTabletID &tablet_id);
   OB_INLINE int64_t get_schedule_batch_size() const { return batch_size_mgr_.get_schedule_batch_size(); }

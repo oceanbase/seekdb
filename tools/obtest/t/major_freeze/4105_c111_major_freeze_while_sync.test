@@ -20,7 +20,6 @@ ob1.check_until_timeout select frozen_scn=last_scn from CDB_OB_MAJOR_COMPACTION 
 let $freeze_gmt_create = deploy_get_value(ob1.select select gmt_create from __all_freeze_info, gmt_create, 1);
 let $freeze_gmt_modified = deploy_get_value(ob1.select select gmt_modified from __all_freeze_info, gmt_modified, 1);
 let $freeze_data_version = deploy_get_value(ob1.select select data_version from __all_freeze_info, data_version, 1);
-let $freeze_schema_version = deploy_get_value(ob1.select select schema_version from __all_freeze_info, schema_version, 1);
 
 #############################################################################
 # launch one major freeze to generate a natural frozen_scn
@@ -41,8 +40,8 @@ ob1.check_until_timeout select frozen_scn = last_scn from CDB_OB_MAJOR_COMPACTIO
 eval update oceanbase.__all_merge_info set frozen_scn = 1, global_broadcast_scn = 1, last_merged_scn = 1;
 
 # insert two larger frozen_scn into __all_freeze_info, expect an error but eventually successful major freeze
-eval insert into oceanbase.__all_freeze_info values('$freeze_gmt_create', '$freeze_gmt_modified', $max_frozen_scn + 2, $freeze_data_version, $freeze_schema_version);
-eval insert into oceanbase.__all_freeze_info values('$freeze_gmt_create', '$freeze_gmt_modified', $max_frozen_scn + 3, $freeze_data_version, $freeze_schema_version);
+eval insert into oceanbase.__all_freeze_info(gmt_create,gmt_modified,frozen_scn,data_version) values('$freeze_gmt_create', '$freeze_gmt_modified', $max_frozen_scn + 2, $freeze_data_version);
+eval insert into oceanbase.__all_freeze_info(gmt_create,gmt_modified,frozen_scn,data_version) values('$freeze_gmt_create', '$freeze_gmt_modified', $max_frozen_scn + 3, $freeze_data_version);
 --enable_query_log
 alter system major freeze;
 ob1.check_until_timeout select frozen_scn = last_scn from CDB_OB_MAJOR_COMPACTION where tenant_id = 1 and frozen_scn = ($max_frozen_scn + 3), 1, 600;

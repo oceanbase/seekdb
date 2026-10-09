@@ -86,9 +86,6 @@ private:
   int generate_frozen_scn(
       const share::SCN &snapshot_gc_scn,
       share::SCN &new_frozen_scn);
-  int get_schema_version(
-      const share::SCN &frozen_scn,
-      int64_t &schema_version) const;
 
   int inner_get_min_freeze_info(share::ObFreezeInfo &frozen_status);
 

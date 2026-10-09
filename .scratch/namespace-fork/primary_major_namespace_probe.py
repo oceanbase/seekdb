@@ -10,6 +10,8 @@ a = p.parse_args()
 exp = BootstrapExperiment(a.binary, 'major_progress', prototype=6)
 try:
     exp.start()
+    columns = [row[0] for row in exp.sql('show columns from oceanbase.__all_freeze_info', log=False)]
+    assert 'schema_version' not in columns and 'frozen_scn' in columns and 'data_version' in columns, columns
     exp.sql('create database major_probe')
     exp.sql('create table major_probe.t(id int primary key,v int)')
     exp.sql('insert into major_probe.t values(1,10),(2,20),(3,30)')
@@ -26,6 +28,10 @@ try:
     else:
         raise AssertionError(rows)
     scn = rows[0][0]
+    freeze_row = exp.sql('select frozen_scn,data_version from oceanbase.__all_freeze_info '
+                         f'where frozen_scn={scn}', log=False)
+    assert len(freeze_row) == 1 and freeze_row[0][1] > 0, freeze_row
+    exp.record('freeze_without_global_schema', columns=columns, row=freeze_row)
     for tid in (logical, physical_id(1, logical)):
         found = exp.sql(f"select tablet_id,table_type from oceanbase.V$OB_SSTABLES where tablet_id={tid} and end_log_scn={scn}", log=False)
         assert bool(found) == (tid != logical), (tid, found)

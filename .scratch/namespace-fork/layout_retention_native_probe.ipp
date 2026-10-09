@@ -78,9 +78,6 @@ static int run_layout_retention_native_probe()
     RETENTION_CHECK(frozen > fence);
     ObFreezeInfo info;
     info.frozen_scn_ = frozen;
-    ObSchemaGetterGuard guard;
-    RETENTION_CALL(directory_schema_service()->get_runtime_schema_guard(guard));
-    RETENTION_CALL(guard.get_schema_version(info.schema_version_));
     info.data_version_ = DATA_CURRENT_VERSION;
     RETENTION_CALL(ObFreezeInfoProxy().set_freeze_info(sql, info));
     RETENTION_CALL(sql.end(true));

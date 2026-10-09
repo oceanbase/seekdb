@@ -144,7 +144,6 @@ public:
   // has not loaded a complete fence/freeze view; reclamation must not advance.
   int get_schema_history_retention(share::SCN &snapshot);
 
-  int get_min_dependent_freeze_info(share::ObFreezeInfo &freeze_info);
   int64_t get_snapshot_gc_ts();
   share::SCN get_snapshot_gc_scn();
   ObSnapshotGcScnRenewalState &get_snapshot_gc_scn_renewal_state()
@@ -164,7 +163,6 @@ private:
 
   static const int64_t RELOAD_INTERVAL = 3L * 1000L * 1000L;
   static const int64_t UPDATE_LS_RESERVED_SNAPSHOT_INTERVAL = 10L * 1000L * 1000L;
-  static const int64_t MIN_DEPENDENT_FREEZE_INFO_GAP = 2;
   static const int64_t RLOCK_TIMEOUT_US = 2L * 1000L * 1000L; // 2s
 
   int64_t get_next_idx() { return 1L - cur_idx_; }

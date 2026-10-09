@@ -4,7 +4,7 @@
 
 核对基线：`44b6c98ab`，分支 `codex/namespace-worker-proxy-v20`。
 
-状态：设计已确定，正在实施，尚未整体完成或验证。基础存储、G/C 元数据、上层共同 DDL/物化发布、major/普通 medium 布局消费、持久历史保留及主库 freeze 准备的针对性证据见 [实施记录](implementation-storage-schema-history.md)。meta major、布局回收、统一进度/checksum 和实际主备等仍须完成。本文取代旧方案中“每 tablet 保存完整 MDS 布局历史”、fork 初始时间未定及 freeze.schema_version 依赖未定的部分。旧方案的 DDL 入口收敛清单仍可用，但不是当前代码已经实现这些能力的证明。
+状态：设计已确定，正在实施，尚未整体完成或验证。基础存储、G/C 元数据、共同 DDL/物化发布、major/普通 medium/meta major 布局消费、持久历史保留、主库 freeze 准备、统一物理进度及 Namespace 历史定义/checksum 的针对性证据见 [实施记录](implementation-storage-schema-history.md)。分组独立检查和中途崩溃恢复已有针对性验证；布局回收、8000分区最终验证和实际主备仍未完成，旧freeze字段已移除并完成针对性验证。本文取代旧方案中“每 tablet 保存完整 MDS 布局历史”、fork 初始时间未定及 freeze.schema_version 依赖未定的部分。旧方案的 DDL 入口收敛清单仍可用，但不是当前代码已经实现这些能力的证明。
 
 修订：根据用户对 DDL 负担的质疑，撤销上一版新增 CatalogPublication 记录及为它扩大 Namespace 内元数据事务串行范围的决定。逻辑校验改用 G@F 已携带的表级 schema_version，复用现有单表历史定义读取；不构造整份目录在 F 的版本。
 
@@ -163,6 +163,8 @@ major/普通 medium 按 G@F 选择版本，再在同一读快照取正文；meta
 ## 5. 问题二：freeze schema_version 的代码审计
 
 检索覆盖 ObFreezeInfo、SchemaVersionInfo 的引用、schema_version 字段读取，以及相关 helper 的调用方。以下为当前源码证据，不表示这些路径都已动态执行。
+
+本节表格保留最初审计依据；实施后的删除、接线和验证状态见实施记录，不将表中的旧路径当作仍存在的代码。
 
 | 路径 | 当前用途 | 目标处理 |
 | --- | --- | --- |

@@ -1,5 +1,5 @@
 {
-  "scope": "Foundation, atomic DDL/layout publication, durable retention, physical C membership, major/medium layouts, primary freeze preparation, exact meta-major bodies, SSTable origin, per-row redo versions, physical report identity and Namespace historical checksum now have targeted evidence below. Independent logical group verification and mid-round recovery also have targeted evidence. Updated 8000-partition validation, layout/body/binding GC, legacy freeze.schema_version removal and full standby integration remain incomplete.",
+  "scope": "Foundation, atomic DDL/layout publication, durable retention, physical C membership, major/medium layouts, primary freeze preparation, exact meta-major bodies, SSTable origin, per-row redo versions, physical report identity and Namespace historical checksum now have targeted evidence below. Independent logical group verification and mid-round recovery also have targeted evidence. Updated 8000-partition validation, layout/body/binding GC, and full standby integration remain incomplete. Legacy freeze.schema_version generation/storage/serialization/readers have now been removed and tested, including native retention/recovery and production parent/child index checks.",
   "runs": [
     {
       "name": "layout_history",
@@ -6425,6 +6425,171 @@
           "bytes": 32598681
         }
       ]
+    },
+    {
+      "name": "freeze_without_schema_retention_1",
+      "log": "/tmp/seekdb-freeze-without-schema-retention-test-1.log",
+      "status": "PASS",
+      "note": "PASS: no-schema freeze record, native MVCC mini/minor preservation, crash, paused broadcast without freeze row, reader handoff and release; immutable body survives head MVCC GC.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-freeze-without-schema-native-v1",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_ap9tn0vq",
+          "pid": 1052675,
+          "port": 48963
+        },
+        {
+          "event": "layout_retention_verified",
+          "recovered": 0,
+          "evidence": "LAYOUT_RETENTION_PASS recovered=0 F=1791587664891854044 active=1791587666566167011 durable=1791587664891854044 mini_minor=1 released=0 handoff=0\n"
+        },
+        {
+          "event": "crash_for_recovery",
+          "pid": 1052675
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-freeze-without-schema-native-v1",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_ap9tn0vq",
+          "pid": 1053948,
+          "port": 48963
+        },
+        {
+          "event": "layout_retention_verified",
+          "recovered": 1,
+          "evidence": "LAYOUT_RETENTION_EXACT_BODY V=10 after_head_gc=1\n\nLAYOUT_RETENTION_NEW_TARGET old=1791587664891854044 selected=1791587713725223011 V=12\n\nLAYOUT_RETENTION_PASS recovered=1 F=1791587664891854044 active=1791587685333036000 durable=1791587689288250481 mini_minor=1 released=1 handoff=1\n"
+        },
+        {
+          "event": "PASS",
+          "case": "layout_retention",
+          "no_old_reader": true,
+          "mini_minor": true,
+          "crash_recovery": true,
+          "release_after_completion": true,
+          "paused_broadcast_without_freeze_row": true,
+          "concurrent_reader_handoff": true,
+          "exact_body_after_head_gc": true
+        },
+        {
+          "event": "stopped",
+          "pid": 1053948,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_ap9tn0vq/data.tar.gz",
+          "bytes": 5920491
+        }
+      ]
+    },
+    {
+      "name": "freeze_without_schema_production_major_1",
+      "log": "/tmp/seekdb-freeze-without-schema-production-major-test-1.log",
+      "status": "PASS",
+      "note": "PASS: fresh production schema has only gmt_create/gmt_modified/frozen_scn/data_version, real major row and actual physical SSTable at F.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_3p5es__z",
+          "pid": 1056549,
+          "port": 49143
+        },
+        {
+          "event": "freeze_without_global_schema",
+          "columns": [
+            "gmt_create",
+            "gmt_modified",
+            "frozen_scn",
+            "data_version"
+          ],
+          "row": [
+            [
+              1791587729347542012,
+              4295229440
+            ]
+          ]
+        },
+        {
+          "event": "sstable_identity",
+          "tablet_id": 200001,
+          "rows": []
+        },
+        {
+          "event": "sstable_identity",
+          "tablet_id": 4611686155866541377,
+          "rows": [
+            [
+              4611686155866541377,
+              "MAJOR"
+            ]
+          ]
+        },
+        {
+          "event": "PASS",
+          "case": "major_progress_physical_ids",
+          "rows": [
+            [
+              1791587729347542012,
+              1791587729347542012,
+              1791587729347542012
+            ]
+          ]
+        },
+        {
+          "event": "stopped",
+          "pid": 1056549,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_3p5es__z/data.tar.gz",
+          "bytes": 8905883
+        }
+      ]
+    },
+    {
+      "name": "freeze_without_schema_production_indexes_1",
+      "log": "/tmp/seekdb-freeze-without-schema-production-index-test-1.log",
+      "status": "PASS",
+      "note": "Production without hooks: divergent parent/child definitions and data, local/global/FTS comparisons, actual freeze and completion without any global freeze schema version.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_namespace_checksum_2ikr3_8r",
+          "pid": 1056546,
+          "port": 18621
+        },
+        {
+          "event": "freeze_prepared",
+          "frozen": 1791587865997546006,
+          "elapsed_s": 133.636
+        },
+        {
+          "event": "PASS",
+          "case": "independent_namespace_local_global_indexes",
+          "frozen": 1791587865997546006,
+          "root_version": 1791587732270240,
+          "child_version": 1791587732604384
+        },
+        {
+          "event": "PASS",
+          "case": "namespace_historical_checksum",
+          "native": false
+        },
+        {
+          "event": "stopped",
+          "pid": 1056546,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_namespace_checksum_2ikr3_8r/data.tar.gz",
+          "bytes": 13512077
+        }
+      ]
     }
   ],
   "meta_layout_builds": [
@@ -6482,6 +6647,17 @@
     },
     {
       "log": "/tmp/seekdb-checksum-groups-production-build-1.log",
+      "result": "PASS",
+      "test_hooks_removed": true
+    }
+  ],
+  "freeze_without_schema_builds": [
+    {
+      "log": "/tmp/seekdb-freeze-without-schema-native-build-1.log",
+      "result": "PASS"
+    },
+    {
+      "log": "/tmp/seekdb-freeze-without-schema-production-build-1.log",
       "result": "PASS",
       "test_hooks_removed": true
     }

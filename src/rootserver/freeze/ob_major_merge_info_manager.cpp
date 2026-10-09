@@ -195,8 +195,8 @@ int ObMajorMergeInfoManager::try_set_freeze_info(
   } else if (OB_FAIL(try_reload())) {
   } else {
     ObFreezeInfoProxy freeze_info_proxy{};
-    // freeze get_schema_version need interactive with ddl trans but don't use gen_new_schema_version so no need check_in_rs
-    // freeze disable check_newest_schema so not to use schema_guard
+    // Keep the existing DDL publication coordination for the final baseline
+    // recheck. Freeze publishes a target SCN, not a SQL schema version.
     ObDDLSQLTransaction trans(schema_service_, false/*need_end_signal*/, false/*stash*/, false/*parallel*/, false/*check_in_rs*/, false/*check_newest_schema*/);
 
     // In 'ddl_sql_transaction.start()', it implements the semantics of 'lock_all_ddl_operation'.
@@ -223,7 +223,6 @@ int ObMajorMergeInfoManager::try_set_freeze_info(
       if (needs_recheck) { ret = OB_EAGAIN; }
       LOG_INFO("freeze locked baseline recheck", K(ret), K(status),
           "cost_us", ObTimeUtility::current_time() - check_start);
-      int64_t schema_version_in_frozen_ts = 0;
       // 2. generate new frozen_scn
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(access->storage_schema_store().begin_read(layout_reader,
@@ -232,10 +231,8 @@ int ObMajorMergeInfoManager::try_set_freeze_info(
         if (rc == OB_SUCCESS) { new_frozen_scn = snapshot; }
         return rc;
       }))) {
-      } else if (OB_FAIL(get_schema_version(new_frozen_scn, schema_version_in_frozen_ts))) {
       } else {
         freeze_info.frozen_scn_ = new_frozen_scn;
-        freeze_info.schema_version_ = schema_version_in_frozen_ts;
         freeze_info.data_version_ = DATA_CURRENT_VERSION;
         // 4. insert freeze info
         if (OB_FAIL(freeze_info_proxy.set_freeze_info(trans, freeze_info))) {
@@ -330,33 +327,6 @@ int ObMajorMergeInfoManager::generate_frozen_scn(
 
   return ret;
 }
-
-int ObMajorMergeInfoManager::get_schema_version(
-    const SCN &frozen_scn,
-    int64_t &schema_version) const
-{
-  int ret = OB_SUCCESS;
-  ObSchemaService *server_schema_service = nullptr;
-
-  if (OB_ISNULL(schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_service is null", KR(ret));
-  } else if (OB_ISNULL(server_schema_service = schema_service_->get_schema_service())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("server_schema_service is null", KR(ret));
-  } else {
-    ObRefreshSchemaStatus status;
-    
-    // TODO snapshot_timestamp_ should be SCN
-    status.snapshot_timestamp_ = frozen_scn.get_val_for_inner_table_field();
-
-    if (OB_FAIL(server_schema_service->fetch_schema_version(status, *sql_proxy_, schema_version))) {
-    }
-  }
-
-  return ret;
-}
-
 
 int ObMajorMergeInfoManager::get_local_latest_frozen_scn(SCN &frozen_scn)
 {
