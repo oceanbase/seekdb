@@ -15,6 +15,18 @@ select 'A' collate utf8mb4_unicode_ci = 'a' collate utf8mb4_unicode_ci as case_i
 'ÀÁÅåāă' collate utf8mb4_unicode_ci = 'AAAAAA' collate utf8mb4_unicode_ci as accent_sequence;
 case_insensitive	accent_insensitive	pad_space	sharp_s_expansion	sharp_s_not_s	ligature_expansion	accent_sequence
 1	1	1	1	0	1	1
+select hex(weight_string('ß' collate utf8mb4_unicode_ci)) as sharp_s_weight,
+hex(weight_string('ss' collate utf8mb4_unicode_ci)) as ss_weight,
+hex(weight_string('café' collate utf8mb4_unicode_ci)) as accented_weight,
+hex(weight_string('CAFE' collate utf8mb4_unicode_ci)) as plain_upper_weight;
+sharp_s_weight	ss_weight	accented_weight	plain_upper_weight
+0FEA0FEA	0FEA0FEA	0E600E330EB90E8B	0E600E330EB90E8B
+select weight_string('ß' collate utf8mb4_unicode_ci) =
+weight_string('ss' collate utf8mb4_unicode_ci) as expansion_sortkey_equal,
+weight_string('café' collate utf8mb4_unicode_ci) =
+weight_string('CAFE' collate utf8mb4_unicode_ci) as accent_case_sortkey_equal;
+expansion_sortkey_equal	accent_case_sortkey_equal
+1	1
 create table utf8mb4_unicode_ci_test (
 c1 varchar(100),
 c2 int
