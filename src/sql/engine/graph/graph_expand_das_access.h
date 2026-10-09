@@ -177,7 +177,9 @@ private:
       common::ObIArray<GraphExpandEdge> &edges,
       int64_t &scanned_edges,
       bool &end);
-  int reset_edge_scan(int ret);
+  bool has_live_edge_scan_resources() const;
+  bool edge_scan_resources_released() const;
+  int reset_edge_scan(int ret, bool retain_allocator_page);
   int build_edge_source_index(
       const common::ObIArray<GraphElementIdentity> &sources);
 

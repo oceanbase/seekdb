@@ -1,0 +1,86 @@
+--disable_query_log
+DROP PROPERTY GRAPH IF EXISTS graph_social;
+--disable_warnings
+DROP TABLE IF EXISTS graph_works,graph_knows,graph_company,graph_person;
+--enable_warnings
+--source mysql_test/test_suite/graph/mapping_fixture.sql
+--source mysql_test/include/create_plan_table.inc
+SET @saved_optimizer_dynamic_sampling=@@optimizer_dynamic_sampling;
+SET optimizer_dynamic_sampling=0;
+let $saved_debug_sync_timeout=query_get_value(show parameters like 'debug_sync_timeout', value, 1);
+ALTER SYSTEM SET debug_sync_timeout='60s';
+sleep 3;
+--enable_query_log
+
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='graph_cancellation'
+SELECT COUNT(*) AS paths
+FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)
+  -[e IS knows]->{1,2}(b IS person)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+--enable_result_log
+SELECT COUNT(*)=1 AS uses_native_feedback
+FROM plan_table
+WHERE statement_id='graph_cancellation'
+  AND operator='GRAPH FEEDBACK LOOP'
+  AND special_predicates LIKE '%direction=OUT, hops={1,2}, access=full-scan, mode=WALK, runtime=native%';
+
+--echo kill_query_interrupts_live_das_edge_scan_and_releases_resources
+PREPARE graph_cancellation FROM
+  'SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH (a IS person WHERE a.id=1)-[e IS knows]->{1,2}(b IS person) COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g';
+--disable_query_log
+let $graph_session_id=query_get_value(select connection_id() as id, id, 1);
+connect (conn_admin,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection conn_admin;
+SET ob_global_debug_sync='reset';
+SET ob_global_debug_sync='DAS_GRAPH_EXPAND_AFTER_EDGE_ROW signal graph_cancel_reached wait_for graph_cancel_resume timeout 30000000 execute 1';
+SET ob_global_debug_sync='DAS_GRAPH_EXPAND_AFTER_ERROR_CLEANUP signal graph_cancel_cleanup_reached wait_for graph_cancel_cleanup_resume timeout 30000000 execute 1';
+ALTER SYSTEM SET_TP tp_no=320,error_code=4012,frequency=1;
+connection default;
+--enable_query_log
+# The two sync points check that the live DAS task owns arena capacity and
+# that terminal cleanup releases the task, rtdefs and all arena pages.
+send EXECUTE graph_cancellation;
+--disable_query_log
+connection conn_admin;
+let $edge_row_wait_start=query_get_value(select current_timestamp(6) as ts, ts, 1);
+SET ob_global_debug_sync='NOW wait_for graph_cancel_reached timeout 30000000';
+let $edge_row_wait_timed_out=`select timestampdiff(microsecond,'$edge_row_wait_start',current_timestamp(6)) >= 29000000`;
+if ($edge_row_wait_timed_out)
+{
+  die graph edge-row debug sync timed out;
+}
+eval KILL QUERY $graph_session_id;
+SET ob_global_debug_sync='NOW signal graph_cancel_resume';
+let $cleanup_wait_start=query_get_value(select current_timestamp(6) as ts, ts, 1);
+SET ob_global_debug_sync='NOW wait_for graph_cancel_cleanup_reached timeout 30000000';
+let $cleanup_wait_timed_out=`select timestampdiff(microsecond,'$cleanup_wait_start',current_timestamp(6)) >= 29000000`;
+if ($cleanup_wait_timed_out)
+{
+  die graph edge-scan cleanup debug sync timed out;
+}
+SET ob_global_debug_sync='NOW signal graph_cancel_cleanup_resume';
+SET ob_global_debug_sync='reset';
+connection default;
+--enable_query_log
+--error ER_QUERY_INTERRUPTED
+reap;
+--disable_query_log
+connection conn_admin;
+ALTER SYSTEM SET_TP tp_no=320,error_code=4012,frequency=0;
+connection default;
+--enable_query_log
+EXECUTE graph_cancellation;
+DEALLOCATE PREPARE graph_cancellation;
+
+--disable_query_log
+connection conn_admin;
+disconnect conn_admin;
+connection default;
+SET optimizer_dynamic_sampling=@saved_optimizer_dynamic_sampling;
+eval ALTER SYSTEM SET debug_sync_timeout='$saved_debug_sync_timeout';
+--enable_query_log
+DROP TABLE plan_table;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;

@@ -608,7 +608,7 @@ void ObDASRef::reset()
   }
 }
 
-void ObDASRef::reuse()
+void ObDASRef::reuse(bool retain_one_page)
 {
   das_factory_.cleanup();
   batched_tasks_.destroy();
@@ -623,7 +623,11 @@ void ObDASRef::reuse()
     task_map_.destroy();
   }
   if (reuse_alloc_ != nullptr) {
-    reuse_alloc_->reset_remain_one_page();
+    if (retain_one_page) {
+      reuse_alloc_->reset_remain_one_page();
+    } else {
+      reuse_alloc_->reset();
+    }
   } else {
     reuse_alloc_ = new(&reuse_alloc_buf_) common::ObArenaAllocator();
     reuse_alloc_->set_attr(das_alloc_.get_attr());

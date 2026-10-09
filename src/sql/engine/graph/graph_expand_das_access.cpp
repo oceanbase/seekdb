@@ -18,6 +18,7 @@
 #include "sql/engine/graph/graph_expand_das_access.h"
 
 #include "common/ob_range.h"
+#include "share/ob_debug_sync.h"
 #include "sql/das/ob_das_ref.h"
 #include "sql/das/ob_das_scan_op.h"
 #include "sql/das/ob_das_utils.h"
@@ -255,6 +256,10 @@ GraphExpandDasAccess::GraphExpandDasAccess(
       edge_cursor_allocator_(exec_ctx.get_allocator()),
       edge_source_index_(work_area_allocator)
 {
+  // ObDASRef creates its reusable arena on the first reset. Set the label
+  // before that point so every edge-scan allocation is attributable.
+  edge_das_ref_.set_mem_attr(
+      ObMemAttr("GraphEdgeScan", ObCtxIds::WORK_AREA));
 }
 
 GraphExpandDasAccess::~GraphExpandDasAccess()
@@ -317,7 +322,7 @@ int GraphExpandDasAccess::init(const GraphPathDesc &path_desc,
                                const GraphExpandScanDesc &edge_scan,
                                const GraphExpandScanDesc &target_scan)
 {
-  int ret = reset_edge_scan(OB_SUCCESS);
+  int ret = reset_edge_scan(OB_SUCCESS, false);
   destroy_vertex_routers();
   initialized_ = false;
   path_desc_ = GraphPathDesc();
@@ -375,7 +380,7 @@ int GraphExpandDasAccess::init(const GraphPathDesc &path_desc,
 
 void GraphExpandDasAccess::release()
 {
-  const int ret = reset_edge_scan(OB_SUCCESS);
+  const int ret = reset_edge_scan(OB_SUCCESS, false);
   identity_page_allocator_.reset();
   edge_cursor_allocator_.reset();
   vertex_lookup_memory_bytes_ = 0;
@@ -483,7 +488,24 @@ int64_t GraphExpandDasAccess::used_memory() const
   return used;
 }
 
-int GraphExpandDasAccess::reset_edge_scan(int ret)
+bool GraphExpandDasAccess::has_live_edge_scan_resources() const
+{
+  return edge_scan_active_
+      && edge_scan_rtdef_ != nullptr
+      && edge_das_ref_.has_task()
+      && edge_das_ref_.get_reuse_alloc_total() > 0;
+}
+
+bool GraphExpandDasAccess::edge_scan_resources_released() const
+{
+  return !edge_scan_active_
+      && edge_scan_rtdef_ == nullptr
+      && edge_lookup_rtdef_ == nullptr
+      && !edge_das_ref_.has_task()
+      && edge_das_ref_.get_reuse_alloc_total() == 0;
+}
+
+int GraphExpandDasAccess::reset_edge_scan(int ret, bool retain_allocator_page)
 {
   if (edge_das_ref_.has_task()) {
     ret = close_das_tasks(edge_das_ref_, ret);
@@ -496,7 +518,7 @@ int GraphExpandDasAccess::reset_edge_scan(int ret)
     edge_scan_rtdef_->~ObDASScanRtDef();
     edge_scan_rtdef_ = nullptr;
   }
-  edge_das_ref_.reuse();
+  edge_das_ref_.reuse(retain_allocator_page);
   edge_result_iter_ = DASOpResultIter();
   edge_cursor_allocator_.reuse();
   edge_source_index_.reset();
@@ -1234,7 +1256,6 @@ int GraphExpandDasAccess::init_edge_scan_rtdefs(bool uses_index_back)
   const GraphExpandScanDesc *scan_desc = edge_binding_.scan_desc_;
   const ObDASScanCtDef *scan_ctdef = edge_binding_.access_ctdef_;
   const ObDASScanCtDef *lookup_ctdef = edge_binding_.output_ctdef_;
-  edge_das_ref_.set_mem_attr(ObMemAttr("GraphEdgeScan"));
   void *scan_buffer = nullptr;
   void *lookup_buffer = nullptr;
   if (OB_ISNULL(scan_desc) || OB_ISNULL(scan_ctdef)
@@ -1590,40 +1611,66 @@ int GraphExpandDasAccess::get_edge_page(
       bool source_found = false;
       int64_t source_index = -1;
       GraphExpandEdge edge;
-      // This point is intentionally after DAS has returned a row while the
-      // stateful edge scan is still active. It lets mysqltest verify that a
-      // terminal scan error closes the live DAS tasks rather than only testing
-      // a timeout that fires before GraphExpand starts access.
-      const int simulate_error = EVENT_CALL(
-          EventTable::EN_DAS_GRAPH_EXPAND_AFTER_EDGE_ROW);
-      if (OB_UNLIKELY(OB_SUCCESS != simulate_error)) {
-        ret = simulate_error;
-        LOG_WARN("injected graph edge scan error", K(ret), K(scanned_edges));
-      } else if (OB_FAIL(evaluate_filters(eval_ctx_, scan_desc->filters_,
-                                          filtered))) {
-      } else if (!filtered && OB_FAIL(materialize_edge(edge, matches))) {
-      } else if (!filtered && matches
-                 && OB_FAIL(edge_source_index_.find(
-                     edge.source_identity_, source_index, source_found))) {
-        LOG_WARN("failed to find graph edge frontier source", K(ret), K(edge));
-      } else if (!filtered && matches && access_desc_.uses_adjacency_index()
-                 && !source_found) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("graph adjacency scan returned a non-frontier edge", K(ret),
-                 K(edge), K(sources));
-      } else if (!filtered && matches && source_found) {
-        // edge_cursor_ is a continuity token for this stateful result iterator,
-        // not a global seek key. Tablet task order need not match edge rowkey
-        // order, and no output ordering is exposed without an outer ORDER BY.
-        if (OB_FAIL(edges.push_back(edge))) {
-        } else if (OB_FAIL(save_edge_cursor(edge.edge_identity_))) {
+      // Pause on the first row of a page, after DAS has returned it while the
+      // stateful edge scan is still live. Avoid a debug-sync lookup for every
+      // row; the following status check is needed only because this point can
+      // wait while another session cancels the query.
+      if (scanned_edges == 1) {
+        if (OB_UNLIKELY(!has_live_edge_scan_resources())) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("graph edge scan lost its live DAS resources", K(ret),
+                   K(scanned_edges), K(edge_scan_active_),
+                   KP(edge_scan_rtdef_), "has_task", edge_das_ref_.has_task(),
+                   "das_total", edge_das_ref_.get_reuse_alloc_total());
+        }
+        // Signal even when the invariant above fails, so the mysqltest
+        // handshake completes and the query's distinct error exposes it.
+        const int sync_ret = DEBUG_SYNC(DAS_GRAPH_EXPAND_AFTER_EDGE_ROW);
+        if (OB_SUCCESS != sync_ret) {
+          LOG_WARN("graph edge scan debug sync failed", K(sync_ret),
+                   K(scanned_edges));
+          if (OB_SUCC(ret)) {
+            ret = sync_ret;
+          }
+        }
+        if (OB_SUCC(ret) && OB_FAIL(check_status())) {
+        }
+      }
+      if (OB_SUCC(ret)) {
+        // This point lets mysqltest verify that a terminal scan error closes
+        // live DAS tasks rather than only testing a timeout before access.
+        const int simulate_error = EVENT_CALL(
+            EventTable::EN_DAS_GRAPH_EXPAND_AFTER_EDGE_ROW);
+        if (OB_UNLIKELY(OB_SUCCESS != simulate_error)) {
+          ret = simulate_error;
+          LOG_WARN("injected graph edge scan error", K(ret), K(scanned_edges));
+        } else if (OB_FAIL(evaluate_filters(eval_ctx_, scan_desc->filters_,
+                                            filtered))) {
+        } else if (!filtered && OB_FAIL(materialize_edge(edge, matches))) {
+        } else if (!filtered && matches
+                   && OB_FAIL(edge_source_index_.find(
+                       edge.source_identity_, source_index, source_found))) {
+          LOG_WARN("failed to find graph edge frontier source", K(ret), K(edge));
+        } else if (!filtered && matches && access_desc_.uses_adjacency_index()
+                   && !source_found) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("graph adjacency scan returned a non-frontier edge", K(ret),
+                   K(edge), K(sources));
+        } else if (!filtered && matches && source_found) {
+          // edge_cursor_ is a continuity token for this stateful result
+          // iterator, not a global seek key. Tablet task order need not match
+          // edge rowkey order, and no output ordering is exposed without an
+          // outer ORDER BY.
+          if (OB_FAIL(edges.push_back(edge))) {
+          } else if (OB_FAIL(save_edge_cursor(edge.edge_identity_))) {
+          }
         }
       }
       ++edge_batch_index_;
     }
   }
   if (OB_SUCC(ret) && finished) {
-    ret = reset_edge_scan(ret);
+    ret = reset_edge_scan(ret, true);
     end = OB_SUCC(ret);
   }
   return ret;
@@ -1657,7 +1704,7 @@ int GraphExpandDasAccess::scan_edges(
     identity_page_allocator_.reuse();
   }
   if (OB_SUCC(ret) && after_edge == nullptr
-      && OB_FAIL(reset_edge_scan(OB_SUCCESS))) {
+      && OB_FAIL(reset_edge_scan(OB_SUCCESS, true))) {
     LOG_WARN("failed to reset graph edge scan", K(ret));
   } else if (OB_SUCC(ret) && sources.empty()) {
     end = true;
@@ -1686,9 +1733,23 @@ int GraphExpandDasAccess::scan_edges(
     LOG_WARN("failed to read graph edge page", K(ret));
   }
   if (OB_SUCCESS != ret) {
-    ret = reset_edge_scan(ret);
+    ret = reset_edge_scan(ret, false);
     edges.reset();
     end = false;
+    if (OB_UNLIKELY(!edge_scan_resources_released())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("graph edge scan resources remain after terminal cleanup",
+               K(ret), K(edge_scan_active_), KP(edge_scan_rtdef_),
+               KP(edge_lookup_rtdef_), "has_task", edge_das_ref_.has_task(),
+               "das_total", edge_das_ref_.get_reuse_alloc_total());
+    }
+    // Keep the original scan error. This point only lets mysqltest observe
+    // the checked cleanup invariant before the error reaches the outer
+    // operator's generic close path.
+    const int sync_ret = DEBUG_SYNC(DAS_GRAPH_EXPAND_AFTER_ERROR_CLEANUP);
+    if (OB_SUCCESS != sync_ret) {
+      LOG_WARN("graph edge scan cleanup debug sync failed", K(sync_ret), K(ret));
+    }
   }
   return ret;
 }
