@@ -39,11 +39,18 @@ public:
       english_analyzer_(),
       doc_(),
       token_stream_(nullptr),
+      doc_allocator_(&allocator),
       is_inited_(false)
   {}
   ~ObBEngFTParser() { reset(); }
 
   int init(plugin::ObFTParserParam *param);
+
+  // prepare the (possibly reused) parser for one document; end_document tears
+  // down only per-document state so the instance can start the next one
+  int start_document(plugin::ObFTParserParam *param);
+  int end_document();
+
   void reset();
   virtual int get_next_token(
       const char *&word,
@@ -62,6 +69,10 @@ private:
   share::ObEnglishTextAnalyzer english_analyzer_;
   common::ObDatum doc_;
   share::ObITokenStream *token_stream_;
+  // allocator for per-document/per-token memory (the caller's, dies with the
+  // statement); allocator_ of a cached instance is long-lived and must not be
+  // used for those
+  common::ObIAllocator *doc_allocator_;
   bool is_inited_;
 
   DISALLOW_COPY_AND_ASSIGN(ObBEngFTParser);

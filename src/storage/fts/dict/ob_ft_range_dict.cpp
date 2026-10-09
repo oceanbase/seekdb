@@ -429,21 +429,31 @@ int ObFTRangeDict::match_with_hit(const ObString &single_word,
 int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict *&dict) const
 {
   int ret = OB_SUCCESS;
-  bool found = false;
-  for (int i = 0; OB_SUCC(ret) && !found && i < range_dicts_.size(); ++i) {
+  // ranges are built from a sorted word stream, so they are sorted and
+  // non-overlapping: at most one range can contain the word. Binary search for
+  // the last range whose start_ <= single_word, then verify its end_.
+  int64_t lo = 0;
+  int64_t hi = range_dicts_.size() - 1;
+  int64_t idx = -1;
+  while (lo <= hi) {
+    const int64_t mid = (lo + hi) / 2;
     if (ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                          range_dicts_[i].start_.get_word(),
+                          range_dicts_[mid].start_.get_word(),
                           single_word)
-            <= 0
-        && ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                             range_dicts_[i].end_.get_word(),
-                             single_word)
-               >= 0) {
-      dict = range_dicts_[i].dict_;
-      found = true;
+            <= 0) {
+      idx = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
     }
   }
-  if (!found) {
+  if (idx >= 0
+      && ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
+                           range_dicts_[idx].end_.get_word(),
+                           single_word)
+             >= 0) {
+    dict = range_dicts_[idx].dict_;
+  } else {
     // not found, dis match
     ret = OB_ENTRY_NOT_EXIST;
   }

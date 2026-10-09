@@ -108,6 +108,10 @@ public:
                          const uint8_t char_len,
                          const ObFTCharUtil::CharType type)
       = 0;
+
+  // reset per-document working state before the processor is reused for the
+  // next document (parsers are cached and reused across segment calls)
+  virtual void reset_for_new_document() {}
 };
 
 } // namespace storage

@@ -283,6 +283,7 @@ ob_set_subtarget(ob_storage fts
   fts/ob_ik_ft_parser.cpp
   fts/ob_ngram2_ft_parser.cpp
   fts/ob_beng_ft_parser.cpp
+  fts/ob_ft_parser_cache.cpp
   fts/ob_fts_doc_word_iterator.cpp
   fts/ob_fts_parser_property.cpp
   fts/ob_fts_plugin_helper.cpp

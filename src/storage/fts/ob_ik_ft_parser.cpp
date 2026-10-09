@@ -26,6 +26,7 @@
 #include "storage/fts/ob_fts_struct.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
 #include "storage/fts/ob_fts_literal.h"
+#include "storage/fts/ob_ft_parser_cache.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 #include "storage/fts/dict/ob_ft_dict_hub.h"
@@ -51,6 +52,22 @@ int ObIKFTParser::init(const ObFTParserParam &param)
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("Parser already inited once", K(ret));
+  } else if (OB_FAIL(init_metadata(param))) {
+    LOG_WARN("Failed to init parser metadata", K(ret));
+  } else if (OB_FAIL(start_document(param))) {
+    LOG_WARN("Failed to start document", K(ret));
+  }
+
+  return ret;
+}
+
+int ObIKFTParser::init_metadata(const ObFTParserParam &param)
+{
+  int ret = OB_SUCCESS;
+
+  if (metadata_inited_) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("Parser metadata already inited once", K(ret));
   } else {
     coll_type_ = ObCollationType::CS_TYPE_INVALID;
     if (OB_ISNULL(param.cs_) || OB_ISNULL(param.cs_->name)) {
@@ -61,8 +78,6 @@ int ObIKFTParser::init(const ObFTParserParam &param)
       LOG_WARN("Invalid collation type.", K(ret));
     } else if (OB_FAIL(init_dict(param))) {
       LOG_WARN("Failed to init dict", K(ret));
-    } else if (OB_FAIL(init_ctx(param))) {
-      LOG_WARN("Failed to init ctx", K(ret));
     } else if (OB_FAIL(init_segmenter(param))) {
       LOG_WARN("Failed to init segmenters", K(ret));
     }
@@ -70,10 +85,59 @@ int ObIKFTParser::init(const ObFTParserParam &param)
     if (OB_FAIL(ret)) {
       reset();
     } else {
-      is_inited_ = true;
+      metadata_inited_ = true;
     }
   }
 
+  return ret;
+}
+
+int ObIKFTParser::start_document(const ObFTParserParam &param)
+{
+  int ret = OB_SUCCESS;
+
+  if (!metadata_inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("Parser metadata not inited", K(ret));
+  } else if (OB_ISNULL(param.cs_) || OB_ISNULL(param.cs_->name)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid parser param.", K(ret));
+  } else {
+    const ObCollationType coll_type = ObCharset::collation_type(param.cs_->name);
+    if (OB_UNLIKELY(CS_TYPE_INVALID == coll_type)) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("Invalid collation type.", K(ret));
+    } else if (OB_UNLIKELY(coll_type != coll_type_)) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("collation changed since parser metadata was assembled", K(ret), K(coll_type_), K(coll_type));
+    } else {
+      for (ObIIKProcessor *segmenter : segmenters_) {
+        if (OB_NOT_NULL(segmenter)) {
+          segmenter->reset_for_new_document();
+        }
+      }
+      if (OB_FAIL(init_ctx(param))) {
+        LOG_WARN("Failed to init ctx", K(ret));
+      } else {
+        is_inited_ = true;
+      }
+    }
+  }
+
+  return ret;
+}
+
+int ObIKFTParser::end_document(common::ObIAllocator *doc_allocator)
+{
+  int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(ctx_)) {
+    ctx_->~TokenizeContext();
+    if (OB_NOT_NULL(doc_allocator)) {
+      doc_allocator->free(ctx_);
+    }
+    ctx_ = nullptr;
+  }
+  is_inited_ = false;
   return ret;
 }
 
@@ -236,6 +300,13 @@ int ObIKFTParserDesc::segment(ObFTParserParam *param, ObITokenIterator *&iter) c
     LOG_WARN("invalid argument", K(ret), KPC(param));
   } else if (OB_FAIL(ObFTParsePluginData::instance().get_dict_hub(hub))) {
     LOG_WARN("Failed to get dict hub.", K(ret));
+  } else if (ObFTParserCache::is_ik_param_cacheable(*param)) {
+    // builtin dict config: reuse the fully-assembled parser instance
+    if (OB_FAIL(ObFTParserCache::get_instance().acquire_ik_parser(hub, *param, parser))) {
+      LOG_WARN("fail to acquire ik parser from cache", K(ret));
+    } else {
+      iter = parser;
+    }
   } else if (OB_ISNULL(parser = OB_NEWx(ObIKFTParser, param->allocator_, *(param->allocator_), hub))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate ik ft parser", K(ret));
@@ -255,8 +326,14 @@ int ObIKFTParserDesc::segment(ObFTParserParam *param, ObITokenIterator *&iter) c
 void ObIKFTParserDesc::free_token_iter(ObFTParserParam *param,
                                        ObITokenIterator *&iter) const
 {
-  iter->~ObITokenIterator();
-  param->allocator_->free(iter);
+  if (OB_NOT_NULL(iter) && OB_NOT_NULL(param)
+      && ObFTParserCache::is_ik_param_cacheable(*param)) {
+    ObFTParserCache::get_instance().release_ik_parser(static_cast<ObIKFTParser *>(iter),
+                                                      param->allocator_);
+  } else {
+    iter->~ObITokenIterator();
+    param->allocator_->free(iter);
+  }
 }
 
 
@@ -347,9 +424,9 @@ int ObIKFTParser::init_ctx(const ObFTParserParam &param)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Illegal collation type", K(ret));
   } else if (OB_ISNULL(ctx_ = OB_NEWx(TokenizeContext,
-                                      &allocator_,
+                                      param.allocator_,
                                       coll_type_,
-                                      allocator_,
+                                      *param.allocator_,
                                       param.fulltext_,
                                       param.ft_length_,
                                       param.ik_param_.mode_ == ObFTIKParam::Mode::SMART))) {
@@ -359,7 +436,7 @@ int ObIKFTParser::init_ctx(const ObFTParserParam &param)
     LOG_WARN("Failed to init ctx", K(ret));
   }
   if (OB_FAIL(ret)) {
-    OB_DELETEx(TokenizeContext, &allocator_, ctx_);
+    OB_DELETEx(TokenizeContext, param.allocator_, ctx_);
   }
   return ret;
 }
@@ -447,6 +524,7 @@ void ObIKFTParser::reset()
   }
 
   is_inited_ = false;
+  metadata_inited_ = false;
 }
 
 bool ObIKFTParser::should_read_newest_table() const { return false; }
