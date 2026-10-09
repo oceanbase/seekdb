@@ -3910,8 +3910,22 @@ int ObLogTableScan::generate_filter_monotonicity()
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < get_filter_exprs().count(); ++i) {
       col_exprs.reuse();
-      if (OB_ISNULL(filter_expr = get_filter_exprs().at(i))) {
+      bool monotonicity_generated = false;
+      filter_expr = get_filter_exprs().at(i);
+      if (OB_ISNULL(filter_expr)) {
         ret = OB_ERR_UNEXPECTED;
+      } else {
+        for (int64_t j = 0;
+             !monotonicity_generated && j < filter_monotonicity_.count();
+             ++j) {
+          monotonicity_generated =
+              filter_expr == filter_monotonicity_.at(j).filter_expr_;
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (monotonicity_generated) {
+        // get_op_exprs() can be revisited while graph DAS expressions are
+        // registered. Reuse the existing assist expressions in that case.
       } else if (T_OP_GT != filter_expr->get_expr_type() &&
                  T_OP_GE != filter_expr->get_expr_type() &&
                  T_OP_LT != filter_expr->get_expr_type() &&

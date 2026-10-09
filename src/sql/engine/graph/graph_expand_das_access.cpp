@@ -856,13 +856,11 @@ int GraphExpandDasAccess::lookup_vertices(
              "request_count", requested.count());
   }
   ObDASTableLoc *table_loc = scan_rtdef.table_loc_;
-  if (OB_SUCC(ret) && (OB_ISNULL(table_loc)
-                       || table_loc->get_tablet_locs().empty())) {
+  if (OB_SUCC(ret) && OB_ISNULL(table_loc)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("graph vertex lookup has no tablet location", K(ret),
              KPC(table_loc));
   } else if (OB_SUCC(ret)
-             && table_loc->get_tablet_locs().size() > 1
              && OB_FAIL(get_vertex_router(binding, router))) {
     LOG_WARN("failed to get graph vertex router", K(ret), K(binding));
   }
@@ -921,10 +919,12 @@ int GraphExpandDasAccess::lookup_vertices(
                    K(i), K(requested.at(i)), K(routed_tablet_ids),
                    K(routed_partition_ids));
         } else if (!routed_tablet_ids.empty()
-                   && OB_FAIL(table_loc->get_tablet_loc_by_id(
-                       routed_tablet_ids.at(0), tablet_loc))) {
-          LOG_WARN("failed to find routed graph vertex tablet", K(ret),
-                   K(i), K(routed_tablet_ids.at(0)));
+                   && OB_FAIL(DAS_CTX(exec_ctx_).extended_tablet_loc(
+                       *table_loc, routed_tablet_ids.at(0), tablet_loc,
+                       routed_partition_ids.at(0)))) {
+          LOG_WARN("failed to extend routed graph vertex tablet", K(ret),
+                   K(i), K(routed_tablet_ids.at(0)),
+                   K(routed_partition_ids.at(0)));
         }
       }
       if (OB_SUCC(ret) && tablet_loc != nullptr) {
