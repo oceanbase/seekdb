@@ -172,10 +172,18 @@ int ObAccessService::init(
     } else if (!instance_meta_store_) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else if (OB_FAIL(instance_meta_store_->init(ObTabletID(ObTabletID::LS_INSTANCE_META_TABLET_ID)))) {
-      instance_meta_store_.reset();
+    } else if (FALSE_IT(storage_schema_store_.reset(
+        new (std::nothrow) InstanceMetaStore(*this, *transactions)))) {
+    } else if (!storage_schema_store_) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_FAIL(storage_schema_store_->init(ObTabletID(ObTabletID::LS_STORAGE_SCHEMA_TABLET_ID)))) {
     } else {
       ls_svr_ = ls_service;
       is_inited_ = true;
+    }
+    if (OB_FAIL(ret)) {
+      storage_schema_store_.reset();
+      instance_meta_store_.reset();
     }
   }
   return ret;
@@ -184,6 +192,7 @@ int ObAccessService::init(
 void ObAccessService::destroy()
 {
   if (IS_INIT) {
+    storage_schema_store_.reset();
     instance_meta_store_.reset();
     ls_svr_ = nullptr;
     is_inited_ = false;

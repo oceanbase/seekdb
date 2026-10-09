@@ -16,7 +16,8 @@ static int record_creation_identity(InstanceMetaStore::Transaction &tx,
     ret = handle.get_obj()->get_latest_tablet_status(status, writer, state, version);
   }
   if (ret == OB_SUCCESS && (expected <= 0 || status.create_transaction_id_ != expected
-      || writer.writer_id_ != expected || state == mds::TwoPhaseCommitState::ON_COMMIT)) {
+      || writer.writer_id_ != expected || state == mds::TwoPhaseCommitState::ON_COMMIT
+      || status.physical_create_version_ != transaction::ObTransVersion::INVALID_TRANS_VERSION)) {
     ret = OB_ERR_UNEXPECTED;
   }
   uint64_t id = tablet.id();
@@ -64,9 +65,15 @@ static int verify_creation_identities()
       ret = handle.get_obj()->get_latest_tablet_status(status, writer, state, version);
     }
     if (ret == OB_SUCCESS && (status.create_transaction_id_ != entry.second
-        || state != mds::TwoPhaseCommitState::ON_COMMIT)) { ret = OB_ERR_UNEXPECTED; }
-    fprintf(stderr, "CREATION_IDENTITY_RECOVER tablet=%lu expected=%ld actual=%ld ret=%d\n",
-        entry.first, entry.second, status.create_transaction_id_, ret);
+        || state != mds::TwoPhaseCommitState::ON_COMMIT
+        || status.physical_create_version_ <= status.create_commit_version_
+        // The persisted-cache/SSTable branch of get_latest resets the node's
+        // optional transaction version. Python checks C against the pre-crash
+        // on_commit trace for BOTH memory and persisted reads.
+        || (version.is_valid() && status.physical_create_version_ != version.get_val_for_tx()))) { ret = OB_ERR_UNEXPECTED; }
+    fprintf(stderr, "CREATION_IDENTITY_RECOVER tablet=%lu expected=%ld actual=%ld logical=%ld physical=%ld node_version_valid=%d ret=%d\n",
+        entry.first, entry.second, status.create_transaction_id_, status.create_commit_version_,
+        status.physical_create_version_, version.is_valid(), ret);
   }
   // Also exercise the native status copy and persistence paths after DELETE.
   ObTabletCreateDeleteMdsUserData original(ObTabletStatus::NORMAL,

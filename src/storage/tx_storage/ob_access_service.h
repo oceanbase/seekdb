@@ -83,6 +83,7 @@ public:
 
   void destroy();
   InstanceMetaStore &instance_meta_store() { return *instance_meta_store_; }
+  InstanceMetaStore &storage_schema_store() { return *storage_schema_store_; }
 public:
   // pre_check_lock
   // @param [in] tx_desc, the trans context.
@@ -346,6 +347,7 @@ private:
   bool is_inited_;
   ObLSService *ls_svr_;
   std::unique_ptr<InstanceMetaStore> instance_meta_store_;
+  std::unique_ptr<InstanceMetaStore> storage_schema_store_;
 };
 
 }

@@ -51,6 +51,8 @@ STORAGE_PUBLIC_HEADER_ROOTS = [
     "fts/dict/ob_dic_lock.h",
     "fts/dict/ob_ft_cache.h",
     "fts/dict/ob_gen_dic_loader.h",
+    "instance_meta/instance_meta_store.h",
+    "instance_meta/storage_schema_history.h",
     "lob/ob_lob_manager.h",
     "ls/ob_freezer.h",
     "ls/ob_ls.h",

@@ -268,6 +268,7 @@ public:
   ObCreateTabletSchema()
     : ObStorageSchema(),
       table_id_(common::OB_INVALID_ID),
+      storage_layout_id_(0),
       index_status_(share::schema::ObIndexStatus::INDEX_STATUS_UNAVAILABLE),
       truncate_version_(OB_INVALID_VERSION)
       {}
@@ -282,6 +283,8 @@ public:
   { return table_id_; }
   void set_table_id(const uint64_t table_id)
   { table_id_ = table_id; }
+  uint64_t get_storage_layout_id() const { return storage_layout_id_; }
+  void set_storage_layout_id(uint64_t id) { storage_layout_id_ = id; }
   int64_t get_truncate_version() const
   { return truncate_version_; }
   bool is_valid() const
@@ -293,10 +296,14 @@ public:
       const bool skip_column_info);
   int init(common::ObIAllocator &allocator,
       const ObCreateTabletSchema &old_schema);
-  INHERIT_TO_STRING_KV("ObStorageSchema", ObStorageSchema, K_(table_id), K_(index_status), K_(truncate_version));
+  INHERIT_TO_STRING_KV("ObStorageSchema", ObStorageSchema, K_(table_id), K_(storage_layout_id),
+      K_(index_status), K_(truncate_version));
 private:
   // Persisted table identity for tablet creation.
   uint64_t table_id_;
+  // Opaque physical layout identity selected by the creator. Internal metadata
+  // tablets have fixed engine schemas and do not use layout history (ID zero).
+  uint64_t storage_layout_id_;
   // for create index
   share::schema::ObIndexStatus index_status_;
   // for tablet throttling 

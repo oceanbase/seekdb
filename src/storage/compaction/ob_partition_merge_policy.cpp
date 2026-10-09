@@ -998,9 +998,13 @@ int ObPartitionMergePolicy::get_multi_version_start(
 {
   int ret = OB_SUCCESS;
   snapshot_info.reset();
-  if (tablet.get_tablet_meta().tablet_id_.is_ls_instance_meta_tablet()) {
+  const auto &tablet_id = tablet.get_tablet_meta().tablet_id_;
+  if (tablet_id.is_ls_instance_meta_tablet() || tablet_id.is_ls_storage_schema_tablet()) {
     share::SCN retained;
-    if (OB_FAIL(share::server_service<ObAccessService>()->instance_meta_store().min_retained_snapshot(retained))) {
+    auto &access = *share::server_service<ObAccessService>();
+    auto &store = tablet_id.is_ls_storage_schema_tablet()
+        ? access.storage_schema_store() : access.instance_meta_store();
+    if (OB_FAIL(store.min_retained_snapshot(retained))) {
     } else {
       result_version_range.multi_version_start_ = std::max(
           result_version_range.multi_version_start_,

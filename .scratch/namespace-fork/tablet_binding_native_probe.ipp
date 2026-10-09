@@ -6,6 +6,7 @@ static int run_tablet_binding_native_probe()
   int descriptor_ret = InstanceMetaStore::build_schema(ObTabletID(900001), sql_definition);
   ObCreateTabletSchema physical, copied, decoded;
   if (descriptor_ret == OB_SUCCESS) { descriptor_ret = physical.init(allocator, sql_definition, false); }
+  physical.set_storage_layout_id(8123456);
   if (descriptor_ret == OB_SUCCESS) { descriptor_ret = copied.init(allocator, physical); }
   if (descriptor_ret != OB_SUCCESS) {
     fprintf(stderr, "INSTANCE_META_PROBE_FAIL creation_descriptor_copy ret=%d\n", descriptor_ret);
@@ -20,6 +21,7 @@ static int run_tablet_binding_native_probe()
     if (descriptor_ret == OB_SUCCESS && (read_pos != pos || !decoded.is_valid()
         || !copied.is_valid() || copied.get_table_id() != physical.get_table_id()
         || decoded.get_table_id() != physical.get_table_id()
+        || copied.get_storage_layout_id() != 8123456 || decoded.get_storage_layout_id() != 8123456
         || copied.get_schema_version() != physical.get_schema_version())) {
       descriptor_ret = OB_ERR_UNEXPECTED;
     }

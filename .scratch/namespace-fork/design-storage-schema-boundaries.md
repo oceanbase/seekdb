@@ -4,7 +4,7 @@
 
 核对基线：`44b6c98ab`，分支 `codex/namespace-worker-proxy-v20`。
 
-状态：已确定物理布局历史、freeze 前准备及继承数据校验方案，尚未实现、编译或动态验证。锁顺序、最终复核成本和主备本机接管差异仍须按第 11 节落实。本文取代旧方案中“每 tablet 保存完整 MDS 布局历史”、fork 初始时间未定及 freeze.schema_version 依赖未定的部分。旧方案的 DDL 入口收敛清单仍可用，但不是当前代码已经实现这些能力的证明。
+状态：设计已确定，正在实施，尚未整体完成或验证。基础存储、G/C 元数据及测试进度见 [实施记录](implementation-storage-schema-history.md)；DDL 发布、合并消费、freeze 与 checksum 等接线仍须完成。锁顺序、最终复核成本和主备本机接管差异仍须按第 11 节落实。本文取代旧方案中“每 tablet 保存完整 MDS 布局历史”、fork 初始时间未定及 freeze.schema_version 依赖未定的部分。旧方案的 DDL 入口收敛清单仍可用，但不是当前代码已经实现这些能力的证明。
 
 修订：根据用户对 DDL 负担的质疑，撤销上一版新增 CatalogPublication 记录及为它扩大 Namespace 内元数据事务串行范围的决定。逻辑校验改用 G@F 已携带的表级 schema_version，复用现有单表历史定义读取；不构造整份目录在 F 的版本。
 

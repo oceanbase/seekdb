@@ -1111,6 +1111,7 @@ int ObCreateTabletSchema::serialize(char *buf, const int64_t buf_len, int64_t &p
   BASE_SER((, ObStorageSchema));
   LST_DO_CODE(OB_UNIS_ENCODE,
               table_id_,
+              storage_layout_id_,
               index_status_,
               truncate_version_);
   return ret;
@@ -1123,6 +1124,7 @@ int ObCreateTabletSchema::deserialize(common::ObIAllocator &allocator, const cha
   } else {
     LST_DO_CODE(OB_UNIS_DECODE,
                 table_id_,
+                storage_layout_id_,
                 index_status_,
                 truncate_version_);
   }
@@ -1134,6 +1136,7 @@ int64_t ObCreateTabletSchema::get_serialize_size() const
   int64_t len = ObStorageSchema::get_serialize_size();
   LST_DO_CODE(OB_UNIS_ADD_LEN,
               table_id_,
+              storage_layout_id_,
               index_status_,
               truncate_version_);
   return len;
@@ -1148,6 +1151,7 @@ int ObCreateTabletSchema::init(
   if (OB_FAIL(ObStorageSchema::init(allocator, input_schema, skip_column_info))) {
   } else {
     table_id_ = input_schema.get_table_id();
+    storage_layout_id_ = 0;
     index_status_ = input_schema.get_index_status();
     truncate_version_ = input_schema.get_truncate_version();
   }
@@ -1162,6 +1166,7 @@ int ObCreateTabletSchema::init(
   if (OB_FAIL(ObStorageSchema::init(allocator, old_schema))) {
   } else {
     table_id_ = old_schema.get_table_id();
+    storage_layout_id_ = old_schema.get_storage_layout_id();
     index_status_ = old_schema.get_index_status();
     truncate_version_ = old_schema.get_truncate_version();
   }

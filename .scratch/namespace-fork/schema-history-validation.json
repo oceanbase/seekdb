@@ -1,0 +1,138 @@
+{
+  "scope": "Storage foundation only; DDL, compaction, freeze and checksum integration remain incomplete.",
+  "runs": [
+    {
+      "name": "layout_history",
+      "log": "/tmp/seekdb-layout-history-native-test-2.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-history-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_storage_schema_history_i53hw3f1",
+          "pid": 191450,
+          "port": 16917
+        },
+        {
+          "event": "layout_history_verified",
+          "recovered": 0
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-history-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_storage_schema_history_i53hw3f1",
+          "pid": 192454,
+          "port": 16917
+        },
+        {
+          "event": "layout_history_verified",
+          "recovered": 1
+        },
+        {
+          "event": "PASS",
+          "case": "storage_schema_history",
+          "chunks": true,
+          "shrink": true,
+          "native_mvcc": true,
+          "rollback": true,
+          "dump": true,
+          "minor": true,
+          "shared_sql_tx": true,
+          "crash_recovery": true,
+          "physical_birth_codec": true
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_storage_schema_history_i53hw3f1/data.tar.gz",
+          "bytes": 5716770
+        }
+      ]
+    },
+    {
+      "name": "production_fork_write",
+      "log": "/tmp/seekdb-schema-history-smoke.log",
+      "events": [
+        {
+          "event": "setup",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_kv_startup_30s_15z3z5bv",
+          "pid": 194849,
+          "port": 16711
+        },
+        {
+          "event": "PASS",
+          "elapsed_limit_s": 30
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_kv_startup_30s_15z3z5bv/data.tar.gz",
+          "bytes": 5590771
+        }
+      ]
+    },
+    {
+      "name": "physical_creation_recovery",
+      "log": "/tmp/seekdb-physical-birth-test-3.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-physical-birth-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_zr4xor0k",
+          "pid": 215622,
+          "port": 37543
+        },
+        {
+          "event": "case_pass",
+          "case": "rollback_create",
+          "lob_binding": true,
+          "sequence": true
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-physical-birth-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_zr4xor0k",
+          "pid": 216403,
+          "port": 37543
+        },
+        {
+          "event": "physical_creation_versions_verified",
+          "tablets": 367,
+          "authority": "pre_crash_native_commit",
+          "persisted_mds_tablets": 358
+        },
+        {
+          "event": "case_pass",
+          "case": "crash_committed",
+          "lob_binding": true,
+          "sequence": true
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-physical-birth-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_zr4xor0k",
+          "pid": 216778,
+          "port": 37543
+        },
+        {
+          "event": "physical_creation_versions_verified",
+          "tablets": 370,
+          "authority": "pre_crash_native_commit",
+          "persisted_mds_tablets": 367
+        },
+        {
+          "event": "PASS",
+          "case": "shared_transaction_selected",
+          "selected": [
+            "rollback_create",
+            "crash_committed"
+          ],
+          "flushed_redo": false,
+          "recovered_committed_retry": true
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_zr4xor0k/data.tar.gz",
+          "bytes": 6056352
+        }
+      ]
+    }
+  ]
+}

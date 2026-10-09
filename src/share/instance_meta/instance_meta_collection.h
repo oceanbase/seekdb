@@ -23,6 +23,7 @@ enum class MetaCollection : uint64_t
   PAGES = 5,
   COUNTERS = 6,
   SNAPSHOT_COORDINATION = 7,
+  STORAGE_LAYOUTS = 8,
 };
 
 } // namespace instance_meta

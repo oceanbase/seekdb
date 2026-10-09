@@ -87,7 +87,7 @@ public:
   friend class checkpoint::ObDataCheckpoint;
   friend class ObLSSwitchChecker;
 public:
-  static constexpr int64_t TOTAL_INNER_TABLET_NUM = 4;
+  static constexpr int64_t TOTAL_INNER_TABLET_NUM = 5;
   static const uint64_t INNER_TABLET_ID_LIST[TOTAL_INNER_TABLET_NUM];
   static const share::SCN LS_INNER_TABLET_FROZEN_SCN;
 public:

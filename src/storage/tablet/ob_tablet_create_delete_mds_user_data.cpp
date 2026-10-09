@@ -34,7 +34,8 @@ ObTabletCreateDeleteMdsUserData::ObTabletCreateDeleteMdsUserData()
     create_commit_version_(ObTransVersion::INVALID_TRANS_VERSION),
     delete_commit_scn_(share::SCN::invalid_scn()),
     delete_commit_version_(ObTransVersion::INVALID_TRANS_VERSION),
-    create_transaction_id_(0)
+    create_transaction_id_(0),
+    physical_create_version_(ObTransVersion::INVALID_TRANS_VERSION)
 {
 }
 
@@ -48,7 +49,8 @@ ObTabletCreateDeleteMdsUserData::ObTabletCreateDeleteMdsUserData(
     create_commit_version_(create_commit_version),
     delete_commit_scn_(share::SCN::invalid_scn()),
     delete_commit_version_(ObTransVersion::INVALID_TRANS_VERSION),
-    create_transaction_id_(0)
+    create_transaction_id_(0),
+    physical_create_version_(ObTransVersion::INVALID_TRANS_VERSION)
 {
 }
 
@@ -62,6 +64,7 @@ int ObTabletCreateDeleteMdsUserData::assign(const ObTabletCreateDeleteMdsUserDat
   delete_commit_scn_ = other.delete_commit_scn_;
   delete_commit_version_ = other.delete_commit_version_;
   create_transaction_id_ = other.create_transaction_id_;
+  physical_create_version_ = other.physical_create_version_;
   return ret;
 }
 
@@ -74,6 +77,7 @@ void ObTabletCreateDeleteMdsUserData::reset()
   delete_commit_scn_.set_invalid();
   delete_commit_version_ = ObTransVersion::INVALID_TRANS_VERSION;
   create_transaction_id_ = 0;
+  physical_create_version_ = ObTransVersion::INVALID_TRANS_VERSION;
 }
 
 void ObTabletCreateDeleteMdsUserData::on_init()
@@ -114,6 +118,7 @@ void ObTabletCreateDeleteMdsUserData::on_commit(const share::SCN &commit_version
     // Keep the logical birth recorded in the same transaction as the directory binding.
     // Readers retain their original snapshot; physical creation does not create a new SQL table.
     create_commit_scn_ = commit_scn;
+    physical_create_version_ = commit_version.get_val_for_tx();
     LOG_INFO("prototype tablet materialization commit", KPC(this), K(commit_version));
     break;
   }
@@ -134,6 +139,7 @@ void ObTabletCreateDeleteMdsUserData::create_tablet_on_commit_(
 {
   create_commit_scn_ = commit_scn;
   create_commit_version_ = commit_version.get_val_for_tx();
+  physical_create_version_ = commit_version.get_val_for_tx();
   LOG_INFO("create tablet commit", KPC(this));
 }
 
@@ -178,7 +184,8 @@ OB_SERIALIZE_MEMBER(
     create_commit_version_,
     delete_commit_scn_,
     delete_commit_version_,
-    create_transaction_id_
+    create_transaction_id_,
+    physical_create_version_
 )
 
 } // namespace storage

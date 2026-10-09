@@ -22,6 +22,7 @@ probe = str(Path(args.native_probe_binary).resolve())
 args.log_dir.mkdir(parents=True, exist_ok=True)
 gates = [
     ('bootstrap-native-kv', [
+        [local / 'run_storage_schema_history_probe.py', '--binary', probe],
         [local / 'catalog_batch_probe.py'],
         [local / 'ddl_publication_cost_probe.py', '--binary', probe],
         [local / 'standby_baseline_progress_probe.py', '--binary', probe],
@@ -39,6 +40,8 @@ gates = [
          '--log-dir', args.log_dir / 'catalog-read-view-standby'],
         [local / 'tablet_preparation_probe.py', '--binary', probe, '--instrumented'],
         [local / 'shared_transaction_probe.py', '--binary', probe, '--faults'],
+        [local / 'shared_transaction_probe.py', '--binary', probe, '--faults',
+         '--creation-identities', '--case', 'rollback_create', '--case', 'crash_committed'],
         [local / 'shared_transaction_probe.py', '--binary', probe, '--faults',
          '--case', 'rollback_create', '--case', 'rollback_owned',
          '--case', 'crash_create', '--case', 'crash_owned', '--flush-redo', '--creation-identities'],

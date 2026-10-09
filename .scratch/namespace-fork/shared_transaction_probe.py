@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 import os
 from pathlib import Path
 import resource
+import re
 import tempfile
 import time
 
@@ -73,7 +74,43 @@ def run(binary, faults, selected=None, flush_redo=False):
                 connection.close()
         child = second = experiment.connection = None
         disarm()
+        expected_versions = {}
+        cursors = {}
+        if os.environ.get('SEEKDB_CREATION_IDENTITY_PROBE'):
+            committed = re.compile(r'CREATION_PHYSICAL_COMMIT transaction=(\d+) physical=(\d+) native=(\d+)')
+            for log in (experiment.base / 'log').glob('seekdb.log*'):
+                cursors[log.stat().st_ino] = log.stat().st_size
+                with log.open(errors='replace') as stream:
+                    for line in stream:
+                        if 'CREATION_PHYSICAL_COMMIT' not in line:
+                            continue
+                        match = committed.search(line)
+                        if match:
+                            tx, physical, actual_commit = map(int, match.groups())
+                            assert physical == actual_commit, line
+                            assert tx not in expected_versions or expected_versions[tx] == physical, line
+                            expected_versions[tx] = physical
+            assert expected_versions, 'missing pre-crash native commit evidence'
         experiment.start()
+        if expected_versions:
+            recovered = re.compile(r'CREATION_IDENTITY_RECOVER .*expected=(\d+) actual=(\d+) logical=(\d+) physical=(\d+) node_version_valid=(\d+) ret=0')
+            checked = 0
+            persisted = 0
+            for log in (experiment.base / 'log').glob('seekdb.log*'):
+                with log.open('rb') as stream:
+                    stream.seek(cursors.get(log.stat().st_ino, 0))
+                    for raw in stream:
+                        match = recovered.search(raw.decode(errors='replace'))
+                        if match:
+                            expected_tx, actual_tx, logical, physical, node_version_valid = map(int, match.groups())
+                            assert actual_tx == expected_tx and physical > logical, match.groups()
+                            assert expected_versions.get(actual_tx) == physical, (match.groups(), expected_versions.get(actual_tx))
+                            checked += 1
+                            persisted += node_version_valid == 0
+            assert checked > 0, 'missing recovered physical creation evidence'
+            assert persisted > 0, 'persisted MDS branch was not exercised'
+            experiment.record('physical_creation_versions_verified', tablets=checked,
+                              authority='pre_crash_native_commit', persisted_mds_tablets=persisted)
     def check_data(connection, value):
         assert experiment.sql('SELECT id,v,LENGTH(b),LEFT(b,1) FROM nstrunc_repro.t1 ORDER BY id', connection) == (
             (1, value, 12000 if value == 11 else 10000, 'c' if value == 11 else 'p'),)

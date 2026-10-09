@@ -63,6 +63,7 @@ public:
       const common::ObTabletID &tablet_id,
       const common::ObTabletID &data_tablet_id,
       const uint64_t table_id,
+      const uint64_t storage_layout_id,
       const share::SCN create_scn,
       const int64_t snapshot_version,
       const ObTabletTableStoreFlag &table_store_flag,
@@ -144,6 +145,8 @@ public:
                K_(extra_medium_info),
                K_(last_persisted_committed_tablet_status),
                K_(create_schema_version),
+               K_(create_table_id),
+               K_(storage_layout_id),
                K_(space_usage),
                K_(micro_index_clustered),
                K_(fork_info),
@@ -182,6 +185,9 @@ public:
   int64_t create_schema_version_;
   // Immutable creation identity, also available after the SQL object is dropped.
   uint64_t create_table_id_;
+  // Stable for this physical incarnation. No Namespace or SQL lookup is needed
+  // to read the layout at a compaction snapshot.
+  uint64_t storage_layout_id_;
   lib::Worker::CompatMode compat_mode_; // alignment: 1B, size: 4B
   bool has_next_tablet_; // alignment: 1B, size: 2B
   bool is_empty_shell_; // alignment: 1B, size: 2B

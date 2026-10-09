@@ -32,4 +32,18 @@ if a.action=='enable':
     });
   }''',True)
 p.write_text(s)
+commit_source = root/'src/storage/tablet/ob_tablet_create_delete_mds_user_data.cpp'
+commit_text = re.sub(r'^[ \t]*// LOCAL_CREATION_IDENTITY_BEGIN\n.*?^[ \t]*// LOCAL_CREATION_IDENTITY_END\n', '', commit_source.read_text(), flags=re.M|re.S)
+if a.action == 'enable':
+    anchor = '    LOG_INFO("prototype tablet materialization commit", KPC(this), K(commit_version));\n'
+    assert commit_text.count(anchor) == 1
+    commit_text = commit_text.replace(anchor, '''// LOCAL_CREATION_IDENTITY_BEGIN
+    if (getenv("SEEKDB_CREATION_IDENTITY_PROBE") != nullptr) {
+      fprintf(stderr, "CREATION_PHYSICAL_COMMIT transaction=%ld physical=%ld native=%ld\\n",
+          create_transaction_id_, physical_create_version_, commit_version.get_val_for_tx());
+      fflush(stderr);
+    }
+// LOCAL_CREATION_IDENTITY_END
+''' + anchor)
+commit_source.write_text(commit_text)
 print('Creation identity probes',a.action)

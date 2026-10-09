@@ -47,6 +47,7 @@ public:
   static const uint64_t LS_TX_DATA_TABLET_ID   = MIN_LS_INNER_TABLET_ID + 2;
   static const uint64_t LS_LOCK_TABLET_ID      = MIN_LS_INNER_TABLET_ID + 3;
   static const uint64_t LS_INSTANCE_META_TABLET_ID = MIN_LS_INNER_TABLET_ID + 4;
+  static const uint64_t LS_STORAGE_SCHEMA_TABLET_ID = MIN_LS_INNER_TABLET_ID + 5;
   static const uint64_t MAX_LS_INNER_TABLET_ID = OB_MAX_LS_INNER_TABLE_ID;
 
 public:
@@ -73,6 +74,7 @@ public:
   bool is_ls_tx_ctx_tablet() const { return (LS_TX_CTX_TABLET_ID == id_); }
   bool is_ls_lock_tablet() const { return (LS_LOCK_TABLET_ID == id_); }
   bool is_ls_instance_meta_tablet() const { return LS_INSTANCE_META_TABLET_ID == id_; }
+  bool is_ls_storage_schema_tablet() const { return LS_STORAGE_SCHEMA_TABLET_ID == id_; }
   // These tablets store engine records in specialized memtables. Other
   // LS-owned tablets use ordinary transactional rows and retain MVCC history.
   bool has_internal_memtable() const
@@ -84,7 +86,7 @@ public:
   }
   bool is_mini_and_minor_merge_tablet() const
   { // only do mini merge and minor merge
-    return is_ls_tx_data_tablet() || is_ls_instance_meta_tablet();
+    return is_ls_tx_data_tablet() || is_ls_instance_meta_tablet() || is_ls_storage_schema_tablet();
   }
   bool is_special_merge_tablet() const
   {

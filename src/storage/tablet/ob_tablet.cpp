@@ -195,7 +195,8 @@ ObTablet::ObTablet(const bool is_external_tablet)
 {
 #if defined(__x86_64__) && !defined(_WIN32)
   // Includes the creating transaction and immutable creation table identity.
-  check_size<ObTablet, ObRowkeyReadInfo, 1376>();
+  // Stable layout identity and true physical create version add two uint64s.
+  check_size<ObTablet, ObRowkeyReadInfo, 1392>();
 #endif
   MEMSET(memtables_, 0x0, sizeof(memtables_));
 }
@@ -293,6 +294,7 @@ int ObTablet::init_for_first_time_creation(
   } else if (FALSE_IT(table_store_flag.set_is_user_data_table(create_tablet_schema.is_user_data_table()))) {
   } else if (OB_FAIL(init_shared_params(tablet_id))) {
   } else if (OB_FAIL(tablet_meta_.init(tablet_id, data_tablet_id, create_tablet_schema.get_table_id(),
+      create_tablet_schema.get_storage_layout_id(),
       create_scn, snapshot_version, table_store_flag, create_tablet_schema.get_schema_version()/*create_schema_version*/,
       clog_checkpoint_scn, mds_checkpoint_scn, micro_index_clustered,
       false/*has_truncate_info*/, fork_info))) {
