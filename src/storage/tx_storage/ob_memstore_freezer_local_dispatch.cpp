@@ -117,6 +117,11 @@ static int do_major_freeze_(const ObMemstoreFreezeArg &arg)
       if (OB_FAIL(
               major_freeze_coordinator
                   ->trigger_memstore_pressure_major_freeze())) {
+        if (ret == OB_TIMEOUT) {
+          // Do not keep a timed-out preparation request in the retry slot.
+          // A later memory-pressure observation may initiate a new request.
+          retry_major_info.reset();
+        }
       } else {
         retry_major_info.reset();
       }

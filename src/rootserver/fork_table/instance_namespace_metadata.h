@@ -94,6 +94,10 @@ public:
 
   int initialize_namespace_counter(uint64_t high_watermark);
   int allocate_namespace_id(uint64_t &id);
+  // Freeze takes the existing allocation lock only after DDL coordination.
+  // It must not subsequently acquire Namespace root/watermark row locks:
+  // fork holds those before entering allocation.
+  int lock_namespace_creation();
 
   int initialize_snapshot_gc_watermark(int64_t watermark);
   int get_snapshot_gc_watermark(int64_t &watermark, bool lock = false);

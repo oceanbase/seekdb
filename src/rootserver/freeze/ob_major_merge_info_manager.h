@@ -82,6 +82,7 @@ public:
 
 private:
   // used for set freeze info
+  int try_set_freeze_info(const ObMajorFreezeReason freeze_reason, int64_t deadline, bool &needs_recheck);
   int generate_frozen_scn(
       const share::SCN &snapshot_gc_scn,
       share::SCN &new_frozen_scn);

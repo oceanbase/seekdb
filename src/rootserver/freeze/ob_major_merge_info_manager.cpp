@@ -21,8 +21,11 @@
 #include "lib/time/ob_time_utility.h"
 #include "rootserver/freeze/ob_major_merge_info_manager.h"
 #include "rootserver/fork_table/instance_namespace_metadata.h"
+#include "rootserver/freeze/namespace_freeze_preparation.h"
+#include "query/api/query/session/ob_inner_sql_connection_access.h"
 
 #include "share/ob_global_stat_proxy.h"
+#include "share/ob_share_util.h"
 #include "rootserver/ob_ddl_service.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "share/ob_structured_event_logger.h"
@@ -125,10 +128,58 @@ int ObMajorMergeInfoManager::reload(const bool force_reload_global_info)
   return ret;
 }
 
-// add freeze info to inner_table
 int ObMajorMergeInfoManager::set_freeze_info(const ObMajorFreezeReason freeze_reason)
 {
+  auto *access = share::server_service<storage::ObAccessService>();
+  if (access == nullptr) { return OB_NOT_INIT; }
+  ObTimeoutCtx timeout;
+  int ret = ObShareUtil::set_default_timeout_ctx(timeout, GCONF.internal_sql_execute_timeout);
+  const int64_t deadline = timeout.get_abs_timeout();
+  NamespaceFreezePreparation::Status status;
+  int64_t last_diagnostic = 0;
+  // Neither transaction locks nor this manager's mutex are held while the
+  // existing materializer and takeover scheduler complete the inherited data.
+  while (ret == OB_SUCCESS) {
+    if (OB_FAIL(THIS_WORKER.check_status())) {
+      break;
+    }
+    NamespaceFreezePreparation::Status checked;
+    ret = NamespaceFreezePreparation::check(access->instance_meta_store(), deadline, checked);
+    // Keep the last blocker when the next read cannot start before the deadline.
+    if (ret == OB_SUCCESS || checked.namespace_id != 0) { status = checked; }
+    if (ret != OB_SUCCESS && ret != OB_EAGAIN) { break; }
+    if (ret == OB_SUCCESS && status.ready) {
+      bool needs_recheck = false;
+      ret = try_set_freeze_info(freeze_reason, deadline, needs_recheck);
+      if (!needs_recheck || ret != OB_EAGAIN) { break; }
+    }
+    const int64_t now = ObTimeUtility::current_time();
+    if (now >= deadline) { ret = OB_TIMEOUT; break; }
+    if (now - last_diagnostic >= 1000 * 1000) {
+      LOG_INFO("freeze waits for namespace baselines", K(ret), K(status), K(deadline));
+      last_diagnostic = now;
+    }
+    ret = OB_SUCCESS;
+    ob_usleep(std::min(int64_t(100000), deadline - now));
+  }
+  if (ret != OB_SUCCESS) {
+    LOG_WARN("freeze preparation or publication failed", K(ret), K(status), K(deadline));
+    if (ret == OB_TIMEOUT && !status.ready && status.namespace_id != 0) {
+      OB_LOGGER.log_user_message(ObLogger::USER_ERROR, OB_TIMEOUT,
+          "Freeze preparation timed out: namespace %lu, physical tablet %lu still needs %s; retry the freeze request",
+          status.namespace_id, status.tablet_id,
+          status.needs_materialization ? "materialization" : "local baseline completion");
+    }
+  }
+  return ret;
+}
+
+// Add freeze info in one transaction, after a fresh locked readiness check.
+int ObMajorMergeInfoManager::try_set_freeze_info(
+    const ObMajorFreezeReason freeze_reason, int64_t deadline, bool &needs_recheck)
+{
   int ret = OB_SUCCESS;
+  needs_recheck = false;
   SCN new_frozen_scn;
   ObRecursiveMutexGuard guard(lock_);
 
@@ -136,6 +187,7 @@ int ObMajorMergeInfoManager::set_freeze_info(const ObMajorFreezeReason freeze_re
   SCN remote_snapshot_gc_scn;
   ObFreezeInfo freeze_info;
   storage::InstanceMetaStore::Transaction layout_reader;
+  storage::InstanceMetaStore::Transaction creation_lock;
   auto *access = share::server_service<storage::ObAccessService>();
 
   if (access == nullptr) {
@@ -151,11 +203,31 @@ int ObMajorMergeInfoManager::set_freeze_info(const ObMajorFreezeReason freeze_re
     if (OB_FAIL(trans.start(sql_proxy_, fake_schema_version))) {
     } else if (OB_FAIL(ObGlobalStatProxy::select_snapshot_gc_scn_for_update(
               trans, remote_snapshot_gc_scn))) {
+    } else if (OB_FAIL(query::ObInnerSQLConnectionAccess::with_native_transaction(
+        trans.get_connection(), [&](transaction::ObTxDesc &native) {
+      auto &store = access->instance_meta_store();
+      int rc = store.attach(creation_lock, native, deadline);
+      if (rc == OB_SUCCESS) {
+        rc = InstanceNamespaceMetadata(store, creation_lock).lock_namespace_creation();
+      }
+      return rc;
+    }))) {
     } else {
+      // attach() selected its snapshot BEFORE waiting for the allocation row.
+      // check() starts a separate fresh read only view AFTER the lock. Never
+      // take a Namespace root/watermark lock here: fork owns those first.
+      NamespaceFreezePreparation::Status status;
+      const int64_t check_start = ObTimeUtility::current_time();
+      ret = NamespaceFreezePreparation::check(access->instance_meta_store(), deadline, status);
+      needs_recheck = ret == OB_EAGAIN || (ret == OB_SUCCESS && !status.ready);
+      if (needs_recheck) { ret = OB_EAGAIN; }
+      LOG_INFO("freeze locked baseline recheck", K(ret), K(status),
+          "cost_us", ObTimeUtility::current_time() - check_start);
       int64_t schema_version_in_frozen_ts = 0;
       // 2. generate new frozen_scn
-      if (OB_FAIL(access->storage_schema_store().begin_read(layout_reader,
-          THIS_WORKER.get_timeout_ts(), [&](SCN &snapshot) {
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(access->storage_schema_store().begin_read(layout_reader,
+          deadline, [&](SCN &snapshot) {
         const int rc = generate_frozen_scn(remote_snapshot_gc_scn, snapshot);
         if (rc == OB_SUCCESS) { new_frozen_scn = snapshot; }
         return rc;
@@ -172,6 +244,11 @@ int ObMajorMergeInfoManager::set_freeze_info(const ObMajorFreezeReason freeze_re
     }
 
     ret = trans.handle_trans_in_the_end(ret);
+  }
+
+  if (creation_lock.is_active()) {
+    const int end_ret = access->instance_meta_store().detach(creation_lock);
+    if (ret == OB_SUCCESS) { ret = end_ret; }
   }
 
   // The SQL GC fence remains <= F until the freeze row commits. Subsequent
@@ -191,9 +268,9 @@ int ObMajorMergeInfoManager::set_freeze_info(const ObMajorFreezeReason freeze_re
   }
 
   LOG_INFO("finish set freeze info", KR(ret), K(freeze_info));
-  MANAGEMENT_EVENT_ADD("major_merge", "root_major_freeze",
+  if (!needs_recheck) { MANAGEMENT_EVENT_ADD("major_merge", "root_major_freeze",
                         K(ret), "new_frozen_scn", new_frozen_scn.get_val_for_inner_table_field(),
-                        "freeze_reason", major_freeze_reason_to_str(freeze_reason));
+                        "freeze_reason", major_freeze_reason_to_str(freeze_reason)); }
   return ret;
 }
 

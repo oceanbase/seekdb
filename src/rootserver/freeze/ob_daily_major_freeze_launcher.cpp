@@ -179,9 +179,11 @@ int ObDailyMajorFreezeLauncher::try_launch_major_freeze()
           param.freeze_reason_ = MF_DAILY_MERGE;
           if (OB_FAIL(ObMajorFreezeHelper::major_freeze(param))) {
             if ((OB_TIMEOUT == ret)) {
-              ret = OB_EAGAIN; // in order to try launch major freeze again, set ret = OB_EAGAIN here
-              LOG_WARN("may be ddl confilict, will try to launch major freeze again", KR(ret),
-                       "sleep_us", MAJOR_FREEZE_RETRY_INTERVAL_US * MAJOR_FREEZE_RETRY_LIMIT);
+              // Baseline preparation is bounded by this request. Do not turn
+              // its timeout into a background continuation, including the
+              // next timer tick in the same duty window. The DBA may retry.
+              already_launch_ = true;
+              LOG_WARN("daily major freeze request timed out; explicit retry required", KR(ret));
             } else {
               LOG_ERROR("fail to major freeze", KR(ret));
             }

@@ -28,6 +28,8 @@ gates = [
         [local / 'physical_merge_layout_probe.py', '--binary', probe],
         [local / 'medium_layout_target_probe.py', '--binary', probe],
         [local / 'medium_layout_target_probe.py', '--binary', probe, '--force-old-target'],
+        *[[local / 'freeze_preparation_probe.py', '--binary', probe, '--case', case]
+          for case in ('wait', 'before_lock', 'waited_lock', 'locked', 'daily', 'pressure', 'crash', 'delete')],
         [local / 'ddl_catalog_atomic_probe.py', '--binary', probe, '--owner', 'initial',
          '--fault', 'abort_crash', '--layout-history'],
         [local / 'ddl_catalog_atomic_probe.py', '--binary', probe, '--owner', 'child',
@@ -66,6 +68,7 @@ gates = [
     ('direct', [
         [local / 'native_scan_probe.py', '--binary', binary],
         [local / 'large_partition_fork_probe.py', '--binary', binary],
+        [local / 'freeze_preparation_probe.py', '--binary', binary, '--case', 'large'],
         [local / 'fork_service_latency_probe.py', '--binary', binary,
          '--result', args.log_dir / 'fork-service-latency-results.json'],
         [local / 'fullscan_diagnosis_probe.py', '--binary', binary, '--scaling'],

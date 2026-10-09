@@ -22,6 +22,7 @@ ROOTSERVER_PUBLIC_HEADERS = [
     "fork_table/instance_namespace_metadata.h",
     "fork_table/namespace_maintenance.h",
     "freeze/ob_checksum_validator.h",
+    "freeze/namespace_freeze_preparation.h",
     "freeze/ob_daily_major_freeze_launcher.h",
     "freeze/ob_freeze_info_detector.h",
     "freeze/ob_freeze_reentrant_thread.h",

@@ -1,5 +1,5 @@
 {
-  "scope": "Foundation, DDL/layout publication, durable retention, physical C membership, major/ordinary-medium G@target selection and targeted recovery verified in listed runs. Full progress/checksum, freeze readiness, meta major layout lifetime, layout GC and standby integration remain incomplete.",
+  "scope": "Foundation, DDL/layout publication, durable retention, physical C membership, major/ordinary-medium G@target selection, primary freeze readiness/terminal timeout/DDL-fork races and targeted recovery verified in listed runs. Full progress/checksum, meta major layout lifetime, layout GC and standby integration remain incomplete.",
   "runs": [
     {
       "name": "layout_history",
@@ -1285,6 +1285,987 @@
           "event": "data_archived",
           "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_merge_layout_aqro4e3c/data.tar.gz",
           "bytes": 11177453
+        }
+      ]
+    },
+    {
+      "name": "freeze_preparation_major_initial",
+      "log": "/tmp/seekdb-freeze-preparation-production-major-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_5zoe72cp",
+          "pid": 473216,
+          "port": 24243
+        },
+        {
+          "event": "sstable_identity",
+          "tablet_id": 200001,
+          "rows": []
+        },
+        {
+          "event": "sstable_identity",
+          "tablet_id": 4611686155866541377,
+          "rows": [
+            [
+              4611686155866541377,
+              "MAJOR"
+            ]
+          ]
+        },
+        {
+          "event": "PASS",
+          "case": "major_progress_physical_ids",
+          "rows": [
+            [
+              1791575011778677012,
+              1791575011778677012,
+              1791575011778677012
+            ]
+          ]
+        },
+        {
+          "event": "stopped",
+          "pid": 473216,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_5zoe72cp/data.tar.gz",
+          "bytes": 9083531
+        }
+      ]
+    },
+    {
+      "name": "freeze_preparation_wait_initial",
+      "log": "/tmp/seekdb-freeze-preparation-wait-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-freeze-preparation-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_wait_juchqk6k",
+          "pid": 482616,
+          "port": 57323
+        },
+        {
+          "event": "unmaterialized_timeout",
+          "request": {
+            "error": [
+              4012,
+              "Timeout"
+            ],
+            "seconds": 3.0007694959640503
+          },
+          "concurrent_dml": {
+            "error": null,
+            "seconds": 0.00546891987323761
+          }
+        },
+        {
+          "event": "incomplete_takeover_timeout",
+          "request": {
+            "error": [
+              4012,
+              "Timeout"
+            ],
+            "seconds": 3.000614531338215
+          }
+        },
+        {
+          "event": "background_progress",
+          "owned": [
+            [
+              19,
+              "19"
+            ]
+          ],
+          "expected": 362,
+          "seconds": 0.015818309038877487
+        },
+        {
+          "event": "background_progress",
+          "owned": [
+            [
+              67,
+              "0"
+            ]
+          ],
+          "expected": 362,
+          "seconds": 15.034445818513632
+        },
+        {
+          "event": "background_progress",
+          "owned": [
+            [
+              163,
+              "0"
+            ]
+          ],
+          "expected": 362,
+          "seconds": 30.03695223852992
+        },
+        {
+          "event": "background_progress",
+          "owned": [
+            [
+              211,
+              "0"
+            ]
+          ],
+          "expected": 362,
+          "seconds": 45.044193770736456
+        },
+        {
+          "event": "background_progress",
+          "owned": [
+            [
+              307,
+              "48"
+            ]
+          ],
+          "expected": 362,
+          "seconds": 60.08588666468859
+        },
+        {
+          "event": "background_progress",
+          "owned": [
+            [
+              313,
+              "0"
+            ]
+          ],
+          "expected": 362,
+          "seconds": 75.15448011830449
+        },
+        {
+          "event": "background_progress",
+          "owned": [
+            [
+              313,
+              "0"
+            ]
+          ],
+          "expected": 362,
+          "seconds": 90.20817923173308
+        },
+        {
+          "event": "background_progress",
+          "owned": [
+            [
+              329,
+              "0"
+            ]
+          ],
+          "expected": 362,
+          "seconds": 105.27469030022621
+        },
+        {
+          "event": "background_progress",
+          "owned": [
+            [
+              361,
+              "16"
+            ]
+          ],
+          "expected": 362,
+          "seconds": 120.35748854279518
+        },
+        {
+          "event": "PASS",
+          "case": "freeze_readiness_timeout_retry",
+          "inherited": true,
+          "incomplete": true,
+          "main_index_lob": true,
+          "background_completed": true,
+          "no_automatic_retry": true,
+          "explicit_retry": {
+            "error": null,
+            "seconds": 0.029025163501501083
+          },
+          "recheck": "[2026-10-10 03:49:54.859590] INFO  [RS] try_set_freeze_info (ob_major_merge_info_manager.cpp:244) [483340][T1_ReqWorker][YB427F000001-00065D6D9EEB5C11-0-0] [lt=48] freeze locked baseline recheck(ret=0, status={ready:true, namespace_id:0, tablet_id:0, inspected_tablets:1082, needs_materialization:false}, cost_us=4076)"
+        },
+        {
+          "event": "stopped",
+          "pid": 482616,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_wait_juchqk6k/data.tar.gz",
+          "bytes": 9088104
+        }
+      ]
+    },
+    {
+      "name": "freeze_preparation_wait_diagnostics",
+      "log": "/tmp/seekdb-freeze-preparation-wait-2.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-freeze-preparation-native-v3",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_wait_isk09ben",
+          "pid": 495256,
+          "port": 59229
+        },
+        {
+          "event": "unmaterialized_timeout",
+          "request": {
+            "error": [
+              4012,
+              "Freeze preparation timed out: namespace 3, physical tablet 4611686155866341377 still needs materialization; retry the freeze request"
+            ],
+            "seconds": 3.000775992870331
+          },
+          "concurrent_dml": {
+            "error": null,
+            "seconds": 0.00765720009803772
+          }
+        },
+        {
+          "event": "incomplete_takeover_timeout",
+          "request": {
+            "error": [
+              4012,
+              "Freeze preparation timed out: namespace 3, physical tablet 4611686430744248321 still needs local baseline completion; retry the freeze request"
+            ],
+            "seconds": 3.0007479041814804
+          }
+        },
+        {
+          "event": "background_progress",
+          "owned": [
+            [
+              19,
+              "19"
+            ]
+          ],
+          "expected": 362,
+          "seconds": 0.007998783141374588
+        },
+        {
+          "event": "background_progress",
+          "owned": [
+            [
+              67,
+              "0"
+            ]
+          ],
+          "expected": 362,
+          "seconds": 15.020005866885185
+        },
+        {
+          "event": "background_progress",
+          "owned": [
+            [
+              163,
+              "0"
+            ]
+          ],
+          "expected": 362,
+          "seconds": 30.32423711940646
+        },
+        {
+          "event": "background_progress",
+          "owned": [
+            [
+              211,
+              "0"
+            ]
+          ],
+          "expected": 362,
+          "seconds": 45.338711868971586
+        },
+        {
+          "event": "background_progress",
+          "owned": [
+            [
+              307,
+              "0"
+            ]
+          ],
+          "expected": 362,
+          "seconds": 60.37324295192957
+        },
+        {
+          "event": "background_progress",
+          "owned": [
+            [
+              313,
+              "0"
+            ]
+          ],
+          "expected": 362,
+          "seconds": 75.48743401840329
+        },
+        {
+          "event": "background_progress",
+          "owned": [
+            [
+              313,
+              "0"
+            ]
+          ],
+          "expected": 362,
+          "seconds": 90.55024368315935
+        },
+        {
+          "event": "background_progress",
+          "owned": [
+            [
+              329,
+              "0"
+            ]
+          ],
+          "expected": 362,
+          "seconds": 105.58120907470584
+        },
+        {
+          "event": "background_progress",
+          "owned": [
+            [
+              361,
+              "16"
+            ]
+          ],
+          "expected": 362,
+          "seconds": 120.61992509290576
+        },
+        {
+          "event": "PASS",
+          "case": "freeze_readiness_timeout_retry",
+          "inherited": true,
+          "incomplete": true,
+          "main_index_lob": true,
+          "background_completed": true,
+          "no_automatic_retry": true,
+          "explicit_retry": {
+            "error": null,
+            "seconds": 0.03672461584210396
+          },
+          "recheck": "[2026-10-10 03:54:27.745043] INFO  [RS] try_set_freeze_info (ob_major_merge_info_manager.cpp:253) [496429][T1_ReqWorker][YB427F000001-00065D6DAF518C72-0-0] [lt=43] freeze locked baseline recheck(ret=0, status={ready:true, namespace_id:0, tablet_id:0, inspected_tablets:1082, needs_materialization:false}, cost_us=3410)"
+        },
+        {
+          "event": "stopped",
+          "pid": 495256,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_wait_isk09ben/data.tar.gz",
+          "bytes": 9074030
+        }
+      ]
+    },
+    {
+      "name": "freeze_preparation_before_lock_copy_failure",
+      "log": "/tmp/seekdb-freeze-preparation-before-lock-1.log",
+      "events": [],
+      "failure_tail": [
+        "    exp.start()",
+        "  File \"/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_worker_bootstrap_prototype.py\", line 22, in start",
+        "    self.proc = subprocess.Popen(command, env=env, stdout=self.output, stderr=subprocess.STDOUT)",
+        "  File \"/usr/lib64/python3.8/subprocess.py\", line 858, in __init__",
+        "    self._execute_child(args, executable, preexec_fn, close_fds,",
+        "  File \"/usr/lib64/python3.8/subprocess.py\", line 1720, in _execute_child",
+        "    raise child_exception_type(errno_num, err_msg, err_filename)",
+        "OSError: [Errno 26] Text file busy: '/data/1/nijia.nj/test/seekdb-freeze-preparation-native'"
+      ]
+    },
+    {
+      "name": "freeze_preparation_before_lock_trace_failure",
+      "log": "/tmp/seekdb-freeze-preparation-before-lock-2.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-freeze-preparation-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_before_lock_081n195r",
+          "pid": 483119,
+          "port": 30377
+        },
+        {
+          "event": "stopped",
+          "pid": 483119,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_before_lock_081n195r/data.tar.gz",
+          "bytes": 6117889
+        }
+      ],
+      "failure_tail": [
+        "Traceback (most recent call last):",
+        "  File \".scratch/namespace-fork/freeze_preparation_probe.py\", line 215, in <module>",
+        "    run(a.binary, a.case, a.partitions)",
+        "  File \".scratch/namespace-fork/freeze_preparation_probe.py\", line 114, in run",
+        "    wait_for(lambda: 'FREEZE_PREPARATION_BARRIER phase=' + case in",
+        "  File \"/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/physical_merge_layout_probe.py\", line 60, in wait_for",
+        "    raise AssertionError(message)",
+        "AssertionError: freeze barrier not reached"
+      ]
+    },
+    {
+      "name": "freeze_preparation_before_lock",
+      "log": "/tmp/seekdb-freeze-preparation-before-lock-3.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-freeze-preparation-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_before_lock_qybfq4j1",
+          "pid": 486417,
+          "port": 12933
+        },
+        {
+          "event": "PASS",
+          "case": "freeze_recheck_new_fork",
+          "request": {
+            "error": [
+              4012,
+              "Timeout"
+            ],
+            "seconds": 12.000930469483137
+          },
+          "fork": {
+            "error": null,
+            "seconds": 0.005157019942998886
+          },
+          "recheck": "[2026-10-10 03:48:45.932048] INFO  [RS] try_set_freeze_info (ob_major_merge_info_manager.cpp:244) [486544][T1_ReqWorker][YB427F000001-00065D6DA25EB34C-0-0] [lt=50] freeze locked baseline recheck(ret=-4023, status={ready:false, namespace_id:3, tablet_id:4611686155866341377, inspected_tablets:717, needs_materialization:true}, cost_us=2791)",
+          "unpublished": true
+        },
+        {
+          "event": "stopped",
+          "pid": 486417,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_before_lock_qybfq4j1/data.tar.gz",
+          "bytes": 6272136
+        }
+      ]
+    },
+    {
+      "name": "freeze_preparation_locked_copy_failure",
+      "log": "/tmp/seekdb-freeze-preparation-locked-1.log",
+      "events": [],
+      "failure_tail": [
+        "    exp.start()",
+        "  File \"/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_worker_bootstrap_prototype.py\", line 22, in start",
+        "    self.proc = subprocess.Popen(command, env=env, stdout=self.output, stderr=subprocess.STDOUT)",
+        "  File \"/usr/lib64/python3.8/subprocess.py\", line 858, in __init__",
+        "    self._execute_child(args, executable, preexec_fn, close_fds,",
+        "  File \"/usr/lib64/python3.8/subprocess.py\", line 1720, in _execute_child",
+        "    raise child_exception_type(errno_num, err_msg, err_filename)",
+        "OSError: [Errno 26] Text file busy: '/data/1/nijia.nj/test/seekdb-freeze-preparation-native'"
+      ]
+    },
+    {
+      "name": "freeze_preparation_locked_trace_failure",
+      "log": "/tmp/seekdb-freeze-preparation-locked-2.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-freeze-preparation-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_locked_r79f0aib",
+          "pid": 483082,
+          "port": 13283
+        },
+        {
+          "event": "stopped",
+          "pid": 483082,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_locked_r79f0aib/data.tar.gz",
+          "bytes": 5803811
+        }
+      ],
+      "failure_tail": [
+        "Traceback (most recent call last):",
+        "  File \".scratch/namespace-fork/freeze_preparation_probe.py\", line 215, in <module>",
+        "    run(a.binary, a.case, a.partitions)",
+        "  File \".scratch/namespace-fork/freeze_preparation_probe.py\", line 114, in run",
+        "    wait_for(lambda: 'FREEZE_PREPARATION_BARRIER phase=' + case in",
+        "  File \"/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/physical_merge_layout_probe.py\", line 60, in wait_for",
+        "    raise AssertionError(message)",
+        "AssertionError: freeze barrier not reached"
+      ]
+    },
+    {
+      "name": "freeze_preparation_locked",
+      "log": "/tmp/seekdb-freeze-preparation-locked-3.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-freeze-preparation-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_locked_h4pjlsjy",
+          "pid": 486419,
+          "port": 11701
+        },
+        {
+          "event": "PASS",
+          "case": "freeze_counter_lock_orders_fork",
+          "request": {
+            "error": null,
+            "seconds": 1.8290461897850037
+          },
+          "fork": {
+            "error": null,
+            "seconds": 1.0269684307277203
+          },
+          "frozen": 1791575327222453014,
+          "child_unmaterialized": true
+        },
+        {
+          "event": "stopped",
+          "pid": 486419,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_locked_h4pjlsjy/data.tar.gz",
+          "bytes": 5772131
+        }
+      ]
+    },
+    {
+      "name": "freeze_preparation_locked_ddl_dml",
+      "log": "/tmp/seekdb-freeze-preparation-locked-4.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-freeze-preparation-native-v3",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_locked_wospbjk0",
+          "pid": 495374,
+          "port": 22151
+        },
+        {
+          "event": "PASS",
+          "case": "freeze_counter_lock_orders_fork",
+          "request": {
+            "error": null,
+            "seconds": 1.9855272360146046
+          },
+          "fork": {
+            "error": null,
+            "seconds": 1.0343734920024872
+          },
+          "ddl": {
+            "error": null,
+            "seconds": 1.0957497507333755
+          },
+          "concurrent_dml": {
+            "error": null,
+            "seconds": 0.007637299597263336
+          },
+          "frozen": 1791575532552255042,
+          "child_unmaterialized": true
+        },
+        {
+          "event": "stopped",
+          "pid": 495374,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_locked_wospbjk0/data.tar.gz",
+          "bytes": 5714920
+        }
+      ]
+    },
+    {
+      "name": "freeze_preparation_waited_lock_fresh_snapshot",
+      "log": "/tmp/seekdb-freeze-preparation-waited-lock-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-freeze-preparation-native-v3",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_waited_lock_mt1gy_3m",
+          "pid": 495255,
+          "port": 21411
+        },
+        {
+          "event": "PASS",
+          "case": "freeze_recheck_new_fork",
+          "waited_for_lock": true,
+          "request": {
+            "error": [
+              4012,
+              "Freeze preparation timed out: namespace 3, physical tablet 4611686155866341377 still needs materialization; retry the freeze request"
+            ],
+            "seconds": 12.000919912010431
+          },
+          "fork": {
+            "error": null,
+            "seconds": 1.3578008636832237
+          },
+          "recheck": "[2026-10-10 03:52:12.147931] INFO  [RS] try_set_freeze_info (ob_major_merge_info_manager.cpp:253) [495429][T1_ReqWorker][YB427F000001-00065D6DAE90DB0E-0-0] [lt=86] freeze locked baseline recheck(ret=-4023, status={ready:false, namespace_id:3, tablet_id:4611686155866341377, inspected_tablets:717, needs_materialization:true}, cost_us=9836)",
+          "unpublished": true
+        },
+        {
+          "event": "stopped",
+          "pid": 495255,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_waited_lock_mt1gy_3m/data.tar.gz",
+          "bytes": 6250605
+        }
+      ]
+    },
+    {
+      "name": "freeze_preparation_daily_terminal_timeout",
+      "log": "/tmp/seekdb-freeze-preparation-daily-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-freeze-preparation-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_daily_ntoz_iar",
+          "pid": 488436,
+          "port": 57353
+        },
+        {
+          "event": "PASS",
+          "case": "daily_freeze_terminal_timeout",
+          "attempts": 1,
+          "unpublished": true,
+          "configured_timeout_s": 2
+        },
+        {
+          "event": "stopped",
+          "pid": 488436,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_daily_ntoz_iar/data.tar.gz",
+          "bytes": 6317724
+        }
+      ]
+    },
+    {
+      "name": "freeze_preparation_locked_crash",
+      "log": "/tmp/seekdb-freeze-preparation-crash-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-freeze-preparation-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_crash_ad7oism9",
+          "pid": 490230,
+          "port": 6143
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-freeze-preparation-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_crash_ad7oism9",
+          "pid": 490908,
+          "port": 6143
+        },
+        {
+          "event": "PASS",
+          "case": "freeze_locked_crash_rollback",
+          "lost_request": {
+            "error": [
+              2013,
+              "Lost connection to MySQL server during query"
+            ],
+            "seconds": 0.6241353265941143
+          },
+          "explicit_retry": {
+            "error": null,
+            "seconds": 0.022450394928455353
+          },
+          "allocation_lock_released": true,
+          "fork": {
+            "error": null,
+            "seconds": 0.0036076903343200684
+          }
+        },
+        {
+          "event": "stopped",
+          "pid": 490908,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_crash_ad7oism9/data.tar.gz",
+          "bytes": 5698559
+        }
+      ]
+    },
+    {
+      "name": "freeze_preparation_concurrent_delete",
+      "log": "/tmp/seekdb-freeze-preparation-delete-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-freeze-preparation-native-v3",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_delete_wg4987au",
+          "pid": 497782,
+          "port": 44875
+        },
+        {
+          "event": "PASS",
+          "case": "freeze_concurrent_namespace_delete",
+          "request": {
+            "error": null,
+            "seconds": 0.8418748416006565
+          },
+          "deletion": {
+            "error": null,
+            "seconds": 0.0031372979283332825
+          },
+          "fresh_live_set": true
+        },
+        {
+          "event": "stopped",
+          "pid": 497782,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_delete_wg4987au/data.tar.gz",
+          "bytes": 5694214
+        }
+      ]
+    },
+    {
+      "name": "freeze_preparation_native_8000",
+      "log": "/tmp/seekdb-freeze-preparation-large-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-freeze-preparation-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_large_pd2ey7d5",
+          "pid": 483081,
+          "port": 19495
+        },
+        {
+          "event": "PASS",
+          "case": "freeze_preparation_large",
+          "partitions": 8000,
+          "inspected": 8716,
+          "locked_recheck_us": 38344,
+          "request": {
+            "error": null,
+            "seconds": 0.09462438523769379
+          },
+          "frozen": 1791575281274906039
+        },
+        {
+          "event": "stopped",
+          "pid": 483081,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_large_pd2ey7d5/data.tar.gz",
+          "bytes": 8709144
+        }
+      ]
+    },
+    {
+      "name": "freeze_preparation_production_8000",
+      "log": "/tmp/seekdb-freeze-preparation-production-large-final.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_large_c5_bwhz1",
+          "pid": 498354,
+          "port": 29829
+        },
+        {
+          "event": "PASS",
+          "case": "freeze_preparation_large",
+          "partitions": 8000,
+          "inspected": 8716,
+          "locked_recheck_us": 38107,
+          "request": {
+            "error": null,
+            "seconds": 0.09599852561950684
+          },
+          "frozen": 1791575614782039060
+        },
+        {
+          "event": "stopped",
+          "pid": 498354,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_large_c5_bwhz1/data.tar.gz",
+          "bytes": 9192986
+        }
+      ]
+    },
+    {
+      "name": "freeze_preparation_major_final",
+      "log": "/tmp/seekdb-freeze-preparation-production-major-final.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_ygzruxzl",
+          "pid": 498347,
+          "port": 41777
+        },
+        {
+          "event": "sstable_identity",
+          "tablet_id": 200001,
+          "rows": []
+        },
+        {
+          "event": "sstable_identity",
+          "tablet_id": 4611686155866541377,
+          "rows": [
+            [
+              4611686155866541377,
+              "MAJOR"
+            ]
+          ]
+        },
+        {
+          "event": "PASS",
+          "case": "major_progress_physical_ids",
+          "rows": [
+            [
+              1791575603838019021,
+              1791575603838019021,
+              1791575603838019021
+            ]
+          ]
+        },
+        {
+          "event": "stopped",
+          "pid": 498347,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_ygzruxzl/data.tar.gz",
+          "bytes": 9043876
+        }
+      ]
+    },
+    {
+      "name": "freeze_preparation_pressure_retry_slot_failure",
+      "log": "/tmp/seekdb-freeze-preparation-pressure-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_pressure_m2_1kaf_",
+          "pid": 504506,
+          "port": 44979
+        },
+        {
+          "event": "stopped",
+          "pid": 504506,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_pressure_m2_1kaf_/data.tar.gz",
+          "bytes": 5820376
+        }
+      ],
+      "failure_tail": [
+        "/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.",
+        "  from cryptography.hazmat.backends import default_backend",
+        "Traceback (most recent call last):",
+        "  File \".scratch/namespace-fork/freeze_preparation_probe.py\", line 305, in <module>",
+        "    run(a.binary, a.case, a.partitions)",
+        "  File \".scratch/namespace-fork/freeze_preparation_probe.py\", line 120, in run",
+        "    assert evidence.contains('FREEZE_PREPARATION_PRESSURE ret=-4012 retry=0')",
+        "AssertionError"
+      ]
+    },
+    {
+      "name": "freeze_preparation_pressure_terminal_timeout",
+      "log": "/tmp/seekdb-freeze-preparation-pressure-2.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-freeze-preparation-native-v5",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_pressure_t552x6f0",
+          "pid": 510782,
+          "port": 39033
+        },
+        {
+          "event": "PASS",
+          "case": "pressure_freeze_terminal_timeout",
+          "request": {
+            "error": [
+              4012,
+              "Freeze preparation timed out: namespace 3, physical tablet 4611686155866341377 still needs materialization; retry the freeze request"
+            ],
+            "seconds": 3.0007986687123775
+          },
+          "retry_slot_cleared": true,
+          "unpublished": true
+        },
+        {
+          "event": "stopped",
+          "pid": 510782,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_pressure_t552x6f0/data.tar.gz",
+          "bytes": 5810757
+        }
+      ]
+    },
+    {
+      "name": "freeze_preparation_production_final_after_pressure_fix",
+      "log": "/tmp/seekdb-freeze-preparation-production-major-final-2.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_alstexpr",
+          "pid": 513977,
+          "port": 59087
+        },
+        {
+          "event": "sstable_identity",
+          "tablet_id": 200001,
+          "rows": []
+        },
+        {
+          "event": "sstable_identity",
+          "tablet_id": 4611686155866541377,
+          "rows": [
+            [
+              4611686155866541377,
+              "MAJOR"
+            ]
+          ]
+        },
+        {
+          "event": "PASS",
+          "case": "major_progress_physical_ids",
+          "rows": [
+            [
+              1791575974702086012,
+              1791575974702086012,
+              1791575974702086012
+            ]
+          ]
+        },
+        {
+          "event": "stopped",
+          "pid": 513977,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_alstexpr/data.tar.gz",
+          "bytes": 9023750
         }
       ]
     }

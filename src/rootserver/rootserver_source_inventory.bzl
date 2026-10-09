@@ -167,6 +167,7 @@ ROOTSERVER_UNITY_GROUPS = [
             "src/rootserver/fork_table/ob_fork_table_task.cpp",
             "src/rootserver/freeze/ob_freeze_info_detector.cpp",
             "src/rootserver/freeze/ob_major_merge_info_manager.cpp",
+            "src/rootserver/freeze/namespace_freeze_preparation.cpp",
         ],
         generated_srcs = [],
         external_srcs = [],

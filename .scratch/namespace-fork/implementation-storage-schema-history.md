@@ -10,7 +10,7 @@
 - [ ] 稳定布局身份 G：上层分配和绑定，同表分区共用，存储不解析 SQL 表或 Namespace。
 - [ ] DDL 与完整布局同事务发布；bootstrap、普通创建、fork 首次 DDL/物化均接入。
 - [ ] 合并按 G@F 读取并固定完整布局；普通 medium/meta major 适配；保留现有本地副本。
-- [ ] freeze 准备等待既有后台物化/接管；最终锁后新快照复核；超时结束请求。
+- [x] 主库 freeze 准备等待既有后台物化/接管；最终锁后新快照复核；超时结束请求。端到端主备仍归后续验证项。
 - [ ] 物理进度统一使用 C/incarnation/F，并在提交/回放水位达到 F 后重新枚举。
 - [ ] Namespace 上层逻辑 checksum：各表自身历史定义、完整输入、缺项不通过。
 - [ ] MVCC 与 SQL 历史保留、重启顺序、备库本机接管及提升主库。
@@ -25,7 +25,7 @@
 - 当前 KV 单值上限 64 KiB，完整布局最大尺寸需要处理，不能默认为任意表定义都能放入一行。
 - 新增 `StorageSchemaHistory`：按 `(G, chunk)` 存储完整布局，首块保存大小和来源版本，小布局一行；大布局按固定位置分块，发布/缩小和读取均在同一原生事务快照中完成。拒绝简化 schema 和同 G 的倒退/重复版本，首次创建不会覆盖现有布局。
 - 专用 LS 内部 tablet 已接入创建、删除、mini/minor、活跃读者和持久 freeze 保留。持久保留的故障与恢复证据见后文，完整主备和逻辑校验仍须验证。
-- `ObCreateTabletSchema` 与 `ObTabletMeta` 已增加稳定 G，并覆盖复制及持久化；上层分配/绑定已接入共同 DDL/创建入口。major 和普通 medium 正在切换布局读取；meta major、freeze 准备及完整进度/checksum 尚未完成。
+- `ObCreateTabletSchema` 与 `ObTabletMeta` 已增加稳定 G，并覆盖复制及持久化；上层分配/绑定已接入共同 DDL/创建入口。major 和普通 medium 已切换布局读取；freeze 准备接线及针对性验证见下文。meta major、完整进度/checksum、布局回收与实际主备仍未完成。
 
 ## 后续接线线索
 
@@ -35,6 +35,23 @@
 - G 整体记录的删除必须等待旧物理 incarnation / 任务 / fork 描述引用满足要求；不能只保护活跃读者，也不能永久遗留无主 G。
 
 ## 验证记录
+
+### 主库 freeze 准备、最终复核及请求结束
+
+- 新增 `NamespaceFreezePreparation`，每次用一个原生只读快照遍历所有 live Namespace 的目录，再核对物理 incarnation、数据完整状态及本机接管完成状态。包括默认 Namespace、模板、普通孩子及索引/LOB；无 ns1 特例，无常驻就绪缓存、持久准备任务或新增调度器。
+- 等待阶段不持有 freeze manager 的 mutex 或事务锁。已有 NamespaceMaintenance 和接管 DAG 继续推进；最终现有 DDL 排他协调、SQL snapshot_gc 行锁、KV COUNTERS 分配行锁依次取得。COUNTERS 通过 `attach()` 借用同一个 SQL 原生事务，持有至提交/回滚及连接释放后才 detach。
+- 最终扫描另开锁后新快照，因为 attach 的读快照可能早于分配行锁等待。最终扫描不取 Namespace 根锁或 KV snapshot watermark 锁，避免与 fork 的“源根、KV 水位、分配行”顺序反转。发现新继承对象则回滚释放锁，回到本次请求期限内等待。
+- 用户请求使用原期限；没有外层期限的后台调用使用既有 internal_sql_execute_timeout。超时不续跑，返回最后观察到的 Namespace、physical tablet 及物化/本机基线未完成原因。定时 freeze 不再把超时改成 EAGAIN，也不在相同 duty minute 下一次 tick 重新发起。
+- 首个无注入构建 `/tmp/seekdb-freeze-preparation-build-1.log` 通过，生产大合并 `/tmp/seekdb-freeze-preparation-production-major-1.log` 通过。原生构建第 1/2/3 次均通过。
+- 未物化与已物化未接管分别 3 秒超时，F 均未发布；等待期间父 DML 成功。释放测试暂停后，既有后台完成孩子全部 362 个绑定（包括索引/LOB）；期间不断核对未出现自动 F，DBA 重试成功。日志 `/tmp/seekdb-freeze-preparation-wait-1.log`；第 2 轮另断言客户端返回具体阻塞原因（`/tmp/seekdb-freeze-preparation-wait-2.log`）。
+- 最终锁前提交 fork：锁后复核报告新孩子未就绪，回滚后请求超时且未发布 F（`/tmp/seekdb-freeze-preparation-before-lock-3.log`）。进一步暂停 fork 持有 COUNTERS，让 freeze attach 先取得旧快照并等待，再允许 fork 提交；锁后新快照仍捕获新孩子（`/tmp/seekdb-freeze-preparation-waited-lock-1.log`）。
+- 最终锁内并发 fork/DDL 均等待 freeze 提交，父 DML 仍可执行；随后 fork、DDL 成功，读取新列及 DML 正确（`/tmp/seekdb-freeze-preparation-locked-4.log`）。锁内 kill/restart 不保留未提交 F，重试 freeze 和 fork 均成功（`/tmp/seekdb-freeze-preparation-crash-1.log`）。准备中并发删除未物化 Namespace 后，新快照去掉已删除对象，freeze 成功（`/tmp/seekdb-freeze-preparation-delete-1.log`）。
+- 定时入口配置 2 秒期限后只尝试一次，跨多个 timer tick 未发布 F（`/tmp/seekdb-freeze-preparation-daily-1.log`）。内存压力入口也在准备超时后清空本次重试槽；后续独立的内存压力观察仍可发起新请求。
+- 内存压力专项首次复现旧缺陷：`ObRetryMajorInfo::is_valid()` 恒为 true，reset 后仍报告 `ret=-4012 retry=1`（`/tmp/seekdb-freeze-preparation-pressure-1.log`）。git blame 定位到既有 `3609383cd7`，不是本轮新增。修正为 `frozen_scn_ > 0` 后，真实 dispatcher 的超时返回、未发布 F 及槽位失效均通过（`/tmp/seekdb-freeze-preparation-pressure-2.log`）；第 4/5 次原生构建通过。该失败及回归已加入四件套。
+- 8000 分区：共复核 8716 个绑定。原生版本锁内扫描 38.344 毫秒，请求 94.624 毫秒；移除注入后的生产版本为 38.107 / 95.999 毫秒（`/tmp/seekdb-freeze-preparation-large-1.log`、`/tmp/seekdb-freeze-preparation-production-large-final.log`）。这是一次全就绪扫描成本，不代表 fork 后全部物化/接管的耗时。
+- 失败记录保留：before-lock/locked 首轮在复制二进制尚未结束时启动，报 Text file busy；后续依赖明确等待复制完成。第 2 轮驱动从 process.out 等待暂停标记，但 seekdb 已把 stderr 重定向到 seekdb.log；引擎实际到达暂停点，修正增量日志读取后第 3 轮通过。相应日志 `before-lock-1/2`、`locked-1/2` 与同前缀完整路径均保留。
+- 上述 probe（包括并发和故障场景）已接入四件套，测试暂停控制文件仅由本地注入脚本引入，不进入生产实现。无完整 mysqltest/sysbench。完整主备、物理进度/逻辑 checksum 和 meta major 等目标仍需后续实施，不能把本节视为整体完成。
+- 移除全部注入后最终生产构建通过（`/tmp/seekdb-freeze-preparation-production-final-build-2.log`），包含重试槽修正的生产大合并回归通过（`/tmp/seekdb-freeze-preparation-production-major-final-2.log`），全局 frozen/broadcast/last 均达到 1791575974702086012。
 
 ### 物理合并资格与布局读取（进行中）
 
@@ -51,7 +68,7 @@
 - 原因参数修正后的原生构建通过（`/tmp/seekdb-physical-merge-medium-native-build-3.log`）。真实 tablet freeze 两项均通过：普通目标 B=1791574214151667160/V=1791574214148104（`/tmp/seekdb-medium-layout-target-test-2.log`，实例 `namespace_fork_PROTOTYPE_medium_layout_target_0pcp9nu5`）；测试注入过旧目标 1 后重选 B=1791574214935918076>=C，使用 V=1791574214915232（`/tmp/seekdb-medium-layout-target-old-test-2.log`，实例 `namespace_fork_PROTOTYPE_medium_layout_target_dbiue2j0`）。两项均断言实际 MAJOR 结果位于选定 B、新加列默认值正确；不只断言调度函数返回成功。
 - 扩展历史保留测试通过（`/tmp/seekdb-medium-layout-retention-test-1.log`，实例 `namespace_fork_PROTOTYPE_layout_retention_it0oeg02`）：保留、暂停恢复、原生读者交接以及释放后拒绝旧 F 均通过；旧 F=1791574037475174043 已被回收后，`read_current` 返回新的受保护目标 1791574091456492010 和 V=12，未将新布局作为旧 F 的结果返回。
 - 最终全部本轮生产源码注入已移除，生产构建通过（`/tmp/seekdb-physical-merge-production-final-build-2.log`）。生产真实 major 最终回归通过（`/tmp/seekdb-physical-merge-production-major-final.log`，实例 `namespace_fork_PROTOTYPE_major_progress_ymfwurg1`，F=1791574304026577012）。原因参数修正后再次执行父子/F 后 DDL 回归通过（`/tmp/seekdb-physical-merge-layout-test-final.log`，实例 `namespace_fork_PROTOTYPE_physical_merge_layout_aqro4e3c`，F=1791574305122558023）。只执行针对性用例，未跑完整 mysqltest/sysbench。
-- 尚未完成：上层 SQLite 进度/incarnation 校验、Namespace checksum、freeze 准备、G/绑定回收、meta major 和实际主备。特别是 meta major 现有实现会合入已确定的 minor 并将结果快照推进到 tablet.snapshot_version；现有 medium_info 又会在 MDS minor 中按 <=last_major_snapshot 回收，不能直接假定旧 medium_info 永久存在，也不能无条件拿旧 major 的布局解释后续加列数据。该路径必须补足确定布局及其持久生命周期，再删除剩余 SQL schema helper，不能以本节通过代替完成。
+- 尚未完成：上层 SQLite 进度/incarnation 校验、Namespace checksum、G/绑定回收、meta major 和实际主备。freeze 准备的后续进展见前节。特别是 meta major 现有实现会合入已确定的 minor 并将结果快照推进到 tablet.snapshot_version；现有 medium_info 又会在 MDS minor 中按 <=last_major_snapshot 回收，不能直接假定旧 medium_info 永久存在，也不能无条件拿旧 major 的布局解释后续加列数据。该路径必须补足确定布局及其持久生命周期，再删除剩余 SQL schema helper，不能以本节通过代替完成。
 
 ### 持久布局历史保留（进行中）
 

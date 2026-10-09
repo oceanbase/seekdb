@@ -478,6 +478,14 @@ int InstanceNamespaceMetadata::allocate_namespace_id(uint64_t &id)
                    id_key(MetaCollection::COUNTERS, 1), value, false);
 }
 
+int InstanceNamespaceMetadata::lock_namespace_creation()
+{
+  std::string ignored;
+  const int ret = get_value(store_, transaction_, MetaCollection::COUNTERS,
+      id_key(MetaCollection::COUNTERS, 1), ignored, true);
+  return ret == OB_ENTRY_NOT_EXIST ? OB_NOT_INIT : ret;
+}
+
 int InstanceNamespaceMetadata::initialize_snapshot_gc_watermark(int64_t watermark)
 {
   if (watermark < 0) { return OB_INVALID_ARGUMENT; }
