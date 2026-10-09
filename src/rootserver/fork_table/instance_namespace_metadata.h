@@ -175,12 +175,6 @@ public:
       const storage::InstanceMetaStore::SnapshotAcquirer &acquire,
       ns::NamespaceCatalogViews::Handle &view,
       const ns::NamespaceCatalogViews::Handle &previous = {});
-  // Mark source trees of live/closing Namespaces and protected reader roots.
-  // sources maps incomplete physical copies to their baseline sources. The
-  // caller fences new dependencies through the actual physical reclamation.
-  int filter_unreferenced_tablets(const std::vector<uint64_t> &candidates,
-      const std::map<uint64_t, uint64_t> &sources,
-      int64_t deadline, std::vector<uint64_t> &unreferenced, bool &need_retry);
   int list_live(int64_t deadline, std::vector<InstanceNamespaceRecord> &records);
   int list_deleted(int64_t deadline, std::vector<InstanceNamespaceRecord> &records);
   int rename_live(uint64_t id, const std::string &expected_name,
