@@ -53,12 +53,18 @@ bool is_native_graph_step_supported(
     const ObLogTableScan *target_scan)
 {
   bool supported = root != nullptr;
-  if (supported && (root == edge_scan || root == target_scan)) {
-    // GraphExpand evaluates filters copied into these scan descriptors. Keep
+  if (supported && root == edge_scan) {
+    // GraphExpand evaluates filters copied into the edge scan descriptor. Keep
     // volatile filters on the relational path: their evaluation count and
     // side effects must not change when the recursive child is bypassed.
     supported = are_native_scan_filters_supported(root->get_filter_exprs())
         && are_native_scan_filters_supported(root->get_startup_exprs());
+  } else if (supported && root == target_scan) {
+    // The current vertex lookup validates identity/existence only. Until it
+    // evaluates target scan filters with relational cadence, any such filter
+    // must keep the recursive step on the fallback runtime.
+    supported = root->get_filter_exprs().empty()
+        && root->get_startup_exprs().empty();
   } else if (supported && root->get_type() != LOG_TABLE_SCAN) {
     // Filters owned by joins/sorts/materialization are not represented in a
     // GraphExpandScanDesc, so native execution cannot silently skip them.
@@ -296,6 +302,7 @@ bool GraphFeedbackLoopLogOp::can_use_basic_native_runtime() const
 int GraphFeedbackLoopLogOp::initialize_expand_access()
 {
   int ret = OB_SUCCESS;
+  native_step_supported_ = false;
   ObLogicalOperator *anchor = get_child(first_child);
   ObLogicalOperator *step = get_child(second_child);
   ObLogTableScan *source_scan = nullptr;
