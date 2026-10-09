@@ -13,3 +13,9 @@
 # limitations under the License.
 
 exports_files(["jemalloc.bzl"])
+
+sh_binary(
+    name = "run_pinned_cargo",
+    srcs = ["run_pinned_cargo.sh"],
+    visibility = ["//deps/external:__pkg__"],
+)

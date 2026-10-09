@@ -25,8 +25,6 @@ using namespace common;
 
 namespace lib
 {
-static bool g_memleak_light_backtrace_enabled = false;
-
 ObMallocHookAttrGuard::ObMallocHookAttrGuard(const ObMemAttr& attr)
   : old_attr_(get_tl_mem_attr())
 {
@@ -77,82 +75,5 @@ int64_t ObMemAttr::to_string(char* buf, const int64_t buf_len) const
   return pos;
 }
 
-void Label::fmt(char *buf, int64_t buf_len, int64_t &pos, const char *str)
-{
-  if (OB_UNLIKELY(pos >= buf_len)) {
-  } else {
-    int64_t len = snprintf(buf + pos, buf_len - pos, "%s", str);
-    if (len < buf_len - pos) {
-      pos += len;
-    } else {
-      pos = buf_len;
-    }
-  }
-}
-int64_t ObUnmanagedMemoryStat::get_total_hold()
-{
-  int64_t total_hold = 0;
-  for (int i = 0; i < N; i++) {
-    total_hold += stat_[i].inc_hold_ - stat_[i].dec_hold_;
-  }
-  return total_hold;
-}
-
-void ObUnmanagedMemoryStat::inc(const int64_t size)
-{
-  int ps = get_page_size();
-  int64_t hold = align_up(size, ps);
-  int idx = 64 - __builtin_clzll(hold/ps);
-  __sync_fetch_and_add(&stat_[idx].inc_hold_, hold);
-  __sync_fetch_and_add(&stat_[idx].inc_size_, size);
-  __sync_fetch_and_add(&stat_[idx].inc_cnt_, 1);
-}
-
-void ObUnmanagedMemoryStat::dec(const int64_t size)
-{
-  int ps = get_page_size();
-  int hold = align_up(size, ps);
-  int idx = 64 - __builtin_clzll(hold/ps);
-  __sync_fetch_and_add(&stat_[idx].dec_hold_, hold);
-  __sync_fetch_and_add(&stat_[idx].dec_size_, size);
-  __sync_fetch_and_add(&stat_[idx].dec_cnt_, 1);
-}
-
-int ObUnmanagedMemoryStat::format_dist(char *buf, int64_t buf_len, int64_t &pos)
-{
-  int ret = OB_SUCCESS;
-  int ps = get_page_size();
-  ret = databuff_printf(buf, buf_len, pos, "{");
-  for (int i = 0; OB_SUCC(ret) && i < N; i++) {
-    Stat &stat = stat_[i];
-    if (stat.inc_size_ || stat.dec_size_) {
-      ret = databuff_printf(buf, buf_len, pos, "[%d:%ld-%ld-%ld:%ld-%ld-%ld]", i,
-                            stat.inc_hold_, stat.inc_size_, stat.inc_cnt_,
-                            stat.dec_hold_, stat.dec_size_, stat.dec_cnt_);
-    }
-  }
-  if (OB_SUCC(ret)) {
-    ret = databuff_printf(buf, buf_len, pos, "}");
-  }
-  return ret;
-}
-
-int64_t get_unmanaged_memory_size()
-{
-  return UNMAMAGED_MEMORY_STAT.get_total_hold();
-}
-
-void enable_memleak_light_backtrace(const bool enable)
-{
-#if defined(__x86_64__) || defined(__aarch64__)
-  g_memleak_light_backtrace_enabled = enable;
-#else
-  UNUSED(enable);
-#endif
-}
-bool is_memleak_light_backtrace_enabled()
-{
-  return g_memleak_light_backtrace_enabled;
-}
 } // end of namespace lib
 } // end of namespace oceanbase

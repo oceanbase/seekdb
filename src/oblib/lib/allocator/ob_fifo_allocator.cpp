@@ -65,6 +65,8 @@ int ObFIFOAllocator::init(ObIAllocator *allocator,
            init_size > max_size) {
     ret = OB_INVALID_ARGUMENT;
   } else {
+    const bool use_malloc_usable_size = NULL == allocator
+        || allocator == lib::ObMallocAllocator::get_instance();
     if (NULL == allocator) {
       allocator_ = &malloc_allocator_;
     } else {
@@ -73,7 +75,8 @@ int ObFIFOAllocator::init(ObIAllocator *allocator,
     page_size_ = page_size;
     attr_ = attr;
     page_allocator_.configure(
-        *allocator_, resolve_memory_usage_tracker(attr_.ctx_id_), attr_);
+        *allocator_, resolve_memory_usage_tracker(attr_.ctx_id_),
+        resolve_memory_quota(attr_.ctx_id_), attr_, use_malloc_usable_size);
     // reserve
     if (init_size > 0) {
       if (OB_FAIL(sync_idle(init_size, max_size))) {

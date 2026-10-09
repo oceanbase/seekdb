@@ -642,13 +642,38 @@ static int safe_sd_notify(int unset_environment, const char *state)
 #endif
 }
 
+static int validate_malloc_backend_environment()
+{
+  int ret = OB_SUCCESS;
+  const char *backend = getenv("MALLOC_BACKEND");
+  if (nullptr != backend && '\0' != backend[0]) {
+#if defined(OB_HAVE_BUNDLED_JEMALLOC)
+    if (0 == strcmp(backend, "jemalloc")) {
+      MPRINT("MALLOC_BACKEND=jemalloc is deprecated and has no effect; "
+             "this build always uses bundled jemalloc.");
+    } else {
+      MPRINT("Invalid MALLOC_BACKEND='%s'; this build only accepts the "
+             "deprecated no-op value 'jemalloc'.", backend);
+      ret = 127;
+    }
+#else
+    MPRINT("MALLOC_BACKEND is not supported by this build; the platform "
+           "allocator is fixed at build time.");
+    ret = 127;
+#endif
+  }
+  return ret;
+}
+
 int inner_main(int argc, char *argv[])
 {
-#if defined(__APPLE__)
-  const ObMallocBackend startup_malloc_backend = get_ob_malloc_backend();
-  if (!configure_darwin_malloc_zone(startup_malloc_backend)) {
-    MPRINT("Failed to configure macOS malloc zone for backend '%s'.",
-           ob_malloc_backend_name(startup_malloc_backend));
+  const int malloc_backend_ret = validate_malloc_backend_environment();
+  if (OB_SUCCESS != malloc_backend_ret) {
+    return malloc_backend_ret;
+  }
+#if defined(__APPLE__) && defined(OB_HAVE_BUNDLED_JEMALLOC)
+  if (!configure_darwin_malloc_zone()) {
+    MPRINT("Failed to configure the bundled jemalloc macOS malloc zone.");
     return OB_ERR_UNEXPECTED;
   }
 #endif
@@ -735,9 +760,9 @@ int inner_main(int argc, char *argv[])
     MPRINT("    Start seekdb with --nodaemon if you don't want to start as a daemon process.");
     if (OB_FAIL(start_daemon(PID_FILE_NAME))) {
       MPRINT("Start seekdb as a daemon failed. Did you started seekdb already?");
-    } else if (!restore_malloc_backend_after_fork()) {
+    } else if (!restore_allocator_after_fork()) {
       ret = OB_ERR_UNEXPECTED;
-      MPRINT("Failed to restore malloc backend after starting daemon process.");
+      MPRINT("Failed to restore allocator state after starting daemon process.");
     }
   } else if (opts->nodaemon_) {
     if (OB_FAIL(start_daemon(PID_FILE_NAME, true/*skip_daemon*/))) {
@@ -761,7 +786,6 @@ int inner_main(int argc, char *argv[])
              "default file", LOG_FILE_NAME,
              "max_log_file_size", LOG_FILE_SIZE,
              "enable_async_log", OB_LOGGER.enable_async_log());
-    const ObMallocBackend malloc_backend = get_ob_malloc_backend();
     if (0 == memory_used) {
       _LOG_INFO("Get virtual memory info failed");
     } else {
@@ -776,16 +800,6 @@ int inner_main(int argc, char *argv[])
     print_all_limits();
     dl_iterate_phdr(callback, NULL);
 
-#if defined(__APPLE__) || defined(__ANDROID__)
-    // macOS/Android don't support M_MMAP_MAX and M_ARENA_MAX
-#elif defined(__linux__)
-    if (is_ob_malloc_backend(malloc_backend)) {
-      static const int DEFAULT_MMAP_MAX_VAL = 1024 * 1024 * 1024;
-      mallopt(M_MMAP_MAX, DEFAULT_MMAP_MAX_VAL);
-      mallopt(M_ARENA_MAX, 1); // disable malloc multiple arena pool
-    }
-#endif
-
     // turn warn log on so that there's a observer.log.wf file which
     // records all WARN and ERROR logs in log directory.
     ObWarningBuffer::set_warn_log_on(true);
@@ -796,17 +810,12 @@ int inner_main(int argc, char *argv[])
       ObServer &observer = ObServer::get_instance();
       LOG_INFO("seekdb starts", "seekdb_version", PACKAGE_STRING, "embedded", opts->embedded_);
       if (OB_FAIL(observer.init(*opts, log_cfg))) {
-      } else if (OB_MALLOC_BACKEND_UNKNOWN == malloc_backend) {
-        LOG_WARN("invalid malloc backend",
-                 "env", ob_malloc_backend_env_name(),
-                 "supported", "obmalloc, jemalloc");
-      } else {
-        LOG_INFO("malloc backend initialized",
-                 "backend", ob_malloc_backend_name(malloc_backend));
+        LOG_ERROR("seekdb init fail", K(ret));
       }
       OB_DELETE(ObServerOptions, mem_attr, opts);
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(observer.start())) {
+        LOG_ERROR("seekdb start fail", K(ret));
       } else {
         safe_sd_notify(0, "READY=1\n"
                        "STATUS=seekdb is ready and running\n");
@@ -817,6 +826,7 @@ int inner_main(int argc, char *argv[])
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(observer.wait())) {
+        LOG_ERROR("seekdb wait fail", K(ret));
       }
 
       if (OB_FAIL(ret)) {

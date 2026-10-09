@@ -41,7 +41,6 @@ _STORAGE_RUNTIME_SIMD_GROUP_OBLIB_DEPS = {
         "//src/oblib:oblib_memory_advanced",
         "//src/oblib:oblib_memory_base",
         "//src/oblib:oblib_memory_model",
-        "//src/oblib:oblib_memory_runtime_base",
         "//src/oblib:oblib_memory_utilities",
         "//src/oblib:oblib_mysql_client_domain",
         "//src/oblib:oblib_mysql_client_runtime",

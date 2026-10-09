@@ -3,17 +3,13 @@ title: 内存管理
 ---
 
 # 简介
-内存管理是所有大型C++工程中最重要的模块之一。由于OceanBase seekdb还需要处理多租户内存资源隔离问题，因此seekdb相较于普通的C++工程，内存管理更加复杂。通常，一个良好的内存管理模块需要考虑以下几个问题：
+内存管理是所有大型 C++ 工程中最重要的模块之一。通常，一个良好的内存管理模块需要考虑以下几个问题：
 
 - 易用。设计的接口比较容器理解和使用，否则代码会很难阅读和维护，也会更容易出现内存错误；
 - 高效。高效的内存分配器对性能影响至关重大，尤其是在高并发场景下；
 - 诊断。随着代码量的增长，BUG在所难免。常见的内存错误，比如内存泄露、内存越界、野指针等问题让开发和运维都很头疼，如何编写一个能够帮助我们避免或排查这些问题的功能，也是衡量内存管理模块优劣的重要指标。
 
-对于多租户模式，内存管理设计的影响主要有以下几个方面：
-- 透明的接口设计。如何让开发人员无感、或极少的需要关心不同租户的内存管理工作；
-- 高效准确。内存充足应该必须申请成功，租户内存耗尽应该及时察觉，是多租户内存管理的最基础条件。
-
-本篇文章将会介绍seekdb 中常用的内存分配接口与内存管理相关的习惯用法，关于内存管理的技术细节，请参考[内存管理](https://open.oceanbase.com/blog/8501613072)(中文版）。
+本文介绍 seekdb 当前的内存分配接口、组件额度、诊断方式和内存管理习惯用法。
 
 ## 运行时内存预算
 
@@ -36,10 +32,18 @@ seekdb 针对不同场景，提供了不同的内存分配器。另外为了提�
 
 ## ob_malloc
 
-seekdb数据库自研了一套libc风格的接口函数ob_malloc/ob_free/ob_realloc，这套接口会根据tenant_id、ctx_id、label等属性动态申请大小为size的内存块，并且为内存块打上标记，确定归属。这不仅方便了多租户的资源管理，而且对诊断内存问题有很大帮助。
-ob_malloc会根据tenant_id、ctx_id索引到相应的ObTenantCtxAllocator，ObTenantCtxAllocator会按照当前租户上下文环境分配内存。
-ob_free通过偏移运算求出即将释放的内存所对应的对象分配器，再将内存放回内存池。
-ob_realloc与libc的realloc不同，它不是在原有地址上扩容，而是先通过ob_malloc+memcpy将数据复制到另一块内存上，再调用ob_free释放原有内存。
+seekdb 提供 libc 风格的 `ob_malloc`、`ob_free` 和 `ob_realloc` facade。
+进程分配器在构建期唯一确定：受支持的 Linux、macOS 非 ASAN 构建使用
+Cargo.lock 锁定的 bundled jemalloc；ASAN、Windows 和 Android 使用各自的
+平台分配器，不再提供运行时 allocator 切换。
+
+`ObMemAttr` 继续作为源码层分配契约。需要硬额度的组件为对应 ctx ID 注册
+自己的 tracker 和 quota；label 以及未注册的 ctx ID 只保留描述作用，不再重建
+旧的全进程 label 统计平台。
+
+`ob_realloc` 遵循常规失败语义：非零 resize 失败时原指针仍然有效。
+MemoryContext 的 freeable allocation 会记录真实 owner，因此可从另一个 context
+handle 调用匹配的 free/realloc。
 
 ```cpp
 inline void *ob_malloc(const int64_t nbyte, const ObMemAttr &attr = default_memattr);
@@ -65,7 +69,7 @@ struct ObMemAttr
 {
   uint64_t    tenant_id_;  // 租户
   ObLabel     label_;      // 标签、模块
-  uint64_t    ctx_id_;     // 参考 ob_mod_define.h，每个ctx id都会分配一个ObTenantCtxAllocator
+  uint64_t    ctx_id_;     // 参考 ob_mod_define.h；指定组件会注册 tracker/quota
   uint64_t    sub_ctx_id_; // 忽略
   ObAllocPrio prio_;       // 优先级
 };
@@ -75,7 +79,8 @@ struct ObMemAttr
 
 **tenant_id**
 
-内存分配管理会按照租户维护进行资源统计、限制。
+tenant ID 继续作为 `ObMemAttr` 携带的源码级归因信息。allocator facade 不再提供
+进程级、按租户的通用统计或 quota 层级；硬额度由下文所述的各组件 quota 管理。
 
 **label**
 
@@ -83,19 +88,42 @@ struct ObMemAttr
 
 **ctx_id**
 
-ctx id是预定义的，可以参考 `alloc_struct.h`。每个租户的每个ctx_id都会创建一个`ObTenantCtxAllocator` 对象，可以单独统计相关的内存分配使用情况。通常情况下使用`DEFAULT_CTX_ID`作为ctx id。一些特殊的模块，比如希望更方便的观察内存使用情况或者更方便的排查问题，我们为它定义特殊的ctx id，比如libeasy通讯库(LIBEASY)、Plan Cache缓存使用(PLAN_CACHE_CTX_ID)。我们可以在内存中看到周期性的内存统计信息，比如：
+ctx id 在 `alloc_struct.h` 中预定义。除非组件明确拥有 tracker 或 quota，否则应使用
+`DEFAULT_CTX_ID`。KVCache、SQL WorkArea、Vector 和 Meta Object 分别拥有自己的
+admission、wash/spill/GC 和错误策略；共享 quota 原语只负责原子的
+reserve/reconcile/rollback 记账。
 
-```txt
-[2024-01-02 20:05:50.375549] INFO  [LIB] operator() (ob_malloc_allocator.cpp:537) [47814][MemDumpTimer][T0][Y0-0000000000000000-0-0] [lt=10] [MEMORY] tenant: 500, limit: 9,223,372,036,854,775,807 hold: 800,768,000 rpc_hold: 0 cache_hold: 0 cache_used: 0 cache_item_count: 0
-[MEMORY] ctx_id=           DEFAULT_CTX_ID hold_bytes=    270,385,152 limit=             2,147,483,648
-[MEMORY] ctx_id=                    GLIBC hold_bytes=      8,388,608 limit= 9,223,372,036,854,775,807
-[MEMORY] ctx_id=                 CO_STACK hold_bytes=    106,954,752 limit= 9,223,372,036,854,775,807
-[MEMORY] ctx_id=                  LIBEASY hold_bytes=      4,194,304 limit= 9,223,372,036,854,775,807
-[MEMORY] ctx_id=            LOGGER_CTX_ID hold_bytes=     12,582,912 limit= 9,223,372,036,854,775,807
-[MEMORY] ctx_id=                  PKT_NIO hold_bytes=     17,969,152 limit= 9,223,372,036,854,775,807
-[MEMORY] ctx_id=           SCHEMA_SERVICE hold_bytes=    135,024,640 limit= 9,223,372,036,854,775,807
-[MEMORY] ctx_id=        UNEXPECTED_IN_500 hold_bytes=    245,268,480 limit= 9,223,372,036,854,775,807
-```
+## 组件内存诊断
+
+`V$OB_COMPONENT_MEMORY`（底层表为
+`__all_virtual_component_memory_stat`）在每个 server 固定返回
+`KV_CACHE`、`SQL_WORKAREA`、`VECTOR`、`META_OBJECT` 四行。八个字段为
+`SVR_IP`、`SVR_PORT`、`COMPONENT_NAME`、`LIMIT_BYTES`、
+`COMMITTED_BYTES`、`RESERVED_BYTES`、`REJECT_COUNT` 和
+`RECLAIM_COUNT`。
+
+数值字段分别进行原子采样，同一行没有多字段联合线性化点，不能当作事务一致快照。
+该表用于容量趋势和组件归因；需要验证严格不变量时，必须先停止并 join 组件 worker、
+等待回收完成，并确认没有 in-flight reservation。
+
+`REJECT_COUNT` 统计每次失败的 quota reserve/reconcile 尝试，包括随后被组件重试
+挽救的尝试。`RECLAIM_COUNT` 统计实际回收了至少一个字节或对象的成功
+wash/spill/cleanup/GC 批次；失败尝试只记录日志，不计入该字段。对 SQL
+WorkArea，一次成功的正向物理 spill 写回调计为一次；后续负向统计调整
+不增加该计数。
+
+obmalloc 专用的 `V$OB_MEMORY`、`__all_virtual_memory_info`、
+`__all_virtual_ctx_memory_info`、`__all_virtual_malloc_sample_info`，以及
+`DUMP ENTITY`、`DUMP CHUNK`、`ALTER SYSTEM REFRESH MEMORY STAT` 命令已删除。
+Vector 的 `RAW_MALLOC_SIZE` 兼容列保留为 deprecated，并返回 `NULL`；Vector
+汇总改读组件 tracker。
+
+bundled jemalloc 构建只把 `MALLOC_BACKEND=jemalloc` 接受为 deprecated no-op；
+`MALLOC_BACKEND=obmalloc`、未知值，以及平台 allocator 构建中的任意非空值，都会在
+启动早期失败。以下参数继续支持加载和持久化，但为无效果的兼容项：
+`cache_wash_threshold`、`memory_chunk_cache_size`、
+`_min_malloc_sample_interval`、`_max_malloc_sample_interval`、
+`_ctx_memory_limit`、`_enable_memleak_light_backtrace`。
 
 **prio**
 

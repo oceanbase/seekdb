@@ -80,7 +80,7 @@ void *ProtectedStackAllocator::_alloc(const uint64_t ctx_id,
   int ret = OB_SUCCESS;
   const ssize_t ps = page_size();
   const ssize_t alloc_size = stack_size + ps * 2 + sizeof(ObStackHeader);
-  if (stack_size < ps || ACHUNK_PURE_HEADER_SIZE + sizeof(ObStackHeader) > ps) {
+  if (stack_size < ps || static_cast<ssize_t>(sizeof(ObStackHeader)) > ps) {
     LOG_ERROR("invalid arg", K(stack_size), K(alloc_size));
   } else if (OB_ISNULL(ptr = __alloc(ctx_id, alloc_size, guard_page))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;

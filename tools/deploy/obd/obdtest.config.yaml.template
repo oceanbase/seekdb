@@ -20,7 +20,6 @@
     datafile_disk_percentage: '50'
     datafile_size: '60G'
     cpu_count: '16'
-    cache_wash_threshold: '1G'
     __min_full_resource_pool_memory: "1073741824"
     workers_per_cpu_quota: '10'
     schema_history_expire_time: '1d'

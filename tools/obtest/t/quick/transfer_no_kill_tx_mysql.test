@@ -8,7 +8,7 @@
 
 ob1=OBI(cluster=1:1:1, proxy_num=0, init_unit_cpu=0, locality=HZ:HZ:HZ);
 
-let $extra_conf = "cpu_count=16,memory_budget='100G',stack_size='1536K',cache_wash_threshold='1G',enable_async_syslog=false,_private_buffer_size='16K',_fast_commit_callback_count='1',log_disk_size='150G'";
+let $extra_conf = "cpu_count=16,memory_budget='100G',stack_size='1536K',enable_async_syslog=false,_private_buffer_size='16K',_fast_commit_callback_count='1',log_disk_size='150G'";
 ob1.z1.obs0.set extra_config=$extra_conf;
 ob1.z2.obs0.set extra_config=$extra_conf;
 ob1.z3.obs0.set extra_config=$extra_conf;

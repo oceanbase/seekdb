@@ -26,17 +26,37 @@
 namespace oceanbase {
 namespace share {
 
-int64_t ObVectorAllocator::hold()
+common::MemoryQuota *ObVectorAllocator::resolve_memory_quota(const int64_t ctx_id)
 {
-  return common::is_ob_malloc_backend()
-      ? lib::get_allocator_memory_hold(ObCtxIds::VECTOR_CTX_ID) + get_rb_mem_used()
-      : used();
+  common::MemoryQuota *quota = nullptr;
+  if (ObCtxIds::VECTOR_CTX_ID == ctx_id) {
+    ObSharedMemAllocMgr *manager = server_service<ObSharedMemAllocMgr>();
+    if (nullptr != manager) {
+      quota = &manager->vector_allocator().memory_quota();
+    }
+  }
+  return quota;
 }
 
-int64_t ObVectorAllocator::get_rb_mem_used()
+int64_t ObVectorAllocator::hold()
+{
+  return (memory_context_ != nullptr ? memory_context_->hold() : 0) + get_rb_mem_used();
+}
+
+int64_t ObVectorAllocator::get_rb_mem_used() const
 {
   ObRbMemMgr *rb_mgr = ::oceanbase::share::server_service<::oceanbase::common::ObRbMemMgr>();
   return rb_mgr != nullptr ? rb_mgr->get_vec_idx_used() : 0;
+}
+
+common::MemoryQuotaSample ObVectorAllocator::get_memory_quota_sample() const
+{
+  return quota_.sample();
+}
+
+void ObVectorAllocator::refresh_memory_quota_limit()
+{
+  quota_.set_limit(MAX(GMEMCONF.get_vector_memory_limit(), 0));
 }
 
 int64_t ObVectorAllocator::used()
@@ -130,27 +150,16 @@ int ObVsagMemContext::init(lib::MemoryContext &parent_mem_context,
 
 void* ObVectorMemContext::alloc(int64_t size)
 {
-  int ret = OB_SUCCESS;
   void *ret_ptr = nullptr;
-  if (ATOMIC_LOAD(&check_cnt_) >= ObVectorMemContext::CHECK_USAGE_INTERVAL ||
-      size >= ObVectorMemContext::CHECK_RESOURCE_UNIT_SIZE) {
-    const int64_t vector_limit = GMEMCONF.get_vector_memory_limit();
-    const int64_t vector_hold = vector_allocator_->hold();
-    if (vector_limit <= 0 || vector_hold >= vector_limit || size > vector_limit - vector_hold) {
-      // need check next time
-      ATOMIC_STORE(&check_cnt_, ObVectorMemContext::CHECK_USAGE_INTERVAL);
-      ret = OB_ERR_VSAG_MEM_LIMIT_EXCEEDED;
-      OB_LOG(WARN,"Memory usage exceeds user limit.", K(ret), K(vector_hold), K(vector_limit), K(size));
-    } else {
-      ATOMIC_STORE(&check_cnt_, 0);
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    ret_ptr = memory_context_->get_malloc_allocator().alloc(size);
-    if (OB_NOT_NULL(ret_ptr)) {
-      ATOMIC_INC(&check_cnt_);
-    }
+  ret_ptr = memory_context_->get_malloc_allocator().alloc(size);
+  if (OB_ISNULL(ret_ptr) && size > 0) {
+    const int ret = OB_ERR_VSAG_MEM_LIMIT_EXCEEDED;
+    const common::MemoryQuotaSample sample = vector_allocator_->memory_quota().sample();
+    OB_LOG(WARN, "vector memory admission failed", K(ret), K(size),
+        "vector_limit", GMEMCONF.get_vector_memory_limit(),
+        "bitmap_used", vector_allocator_->get_rb_mem_used(),
+        "committed", sample.committed_bytes_, "reserved", sample.reserved_bytes_,
+        "reject_count", sample.reject_count_);
   }
   return ret_ptr;
 }

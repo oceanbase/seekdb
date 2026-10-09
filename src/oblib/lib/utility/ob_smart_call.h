@@ -26,7 +26,8 @@ namespace oceanbase
 namespace common
 {
 static constexpr int64_t ALL_STACK_LIMIT = 10L << 20;
-static constexpr int64_t STACK_PER_EXTEND = (2L << 20) - ACHUNK_PRESERVE_SIZE * 2;
+static constexpr int64_t STACK_PER_EXTEND =
+    (2L << 20) - ALLOCATOR_SIZE_CLASS_HEADROOM * 2;
 static constexpr int64_t STACK_RESERVED_SIZE = 64L << 10;
 
 // If we use a small thread stack span (e.g. 256 KiB), ~64 KiB is treated as already consumed by TLS,

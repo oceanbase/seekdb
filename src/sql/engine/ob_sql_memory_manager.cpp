@@ -18,6 +18,7 @@
 
 #include "config_bridge.h"
 #include "ob_sql_memory_manager.h"
+#include "lib/alloc/alloc_func.h"
 #include "sql/engine/px/ob_px_util.h"
 #include "share/rc/ob_server_runtime.h"
 
@@ -32,6 +33,27 @@ using namespace oceanbase::observer;
 
 namespace sql {
 
+int64_t calculate_workarea_memory_limit(
+    const int64_t configured_limit,
+    const int64_t manager_limit)
+{
+  return 0 == configured_limit && manager_limit > 0
+      ? manager_limit / 10 * 8 + manager_limit % 10 * 8 / 10
+      : configured_limit;
+}
+
+int64_t effective_workarea_memory_limit(const int64_t configured_limit)
+{
+  int64_t manager_limit = 0;
+  if (0 == configured_limit) {
+    ObSqlMemoryManager *manager = share::server_service<ObSqlMemoryManager>();
+    if (OB_NOT_NULL(manager)) {
+      manager_limit = manager->get_workarea_quota().limit();
+    }
+  }
+  return calculate_workarea_memory_limit(configured_limit, manager_limit);
+}
+
 namespace
 {
 common::MemoryUsageTracker *resolve_sql_memory_usage_tracker(const int64_t ctx_id)
@@ -45,6 +67,18 @@ common::MemoryUsageTracker *resolve_sql_memory_usage_tracker(const int64_t ctx_i
     }
   }
   return tracker;
+}
+
+common::MemoryQuota *resolve_sql_memory_quota(const int64_t ctx_id)
+{
+  common::MemoryQuota *quota = nullptr;
+  if (common::ObCtxIds::WORK_AREA == ctx_id) {
+    ObSqlMemoryManager *manager = share::server_service<ObSqlMemoryManager>();
+    if (nullptr != manager) {
+      quota = &manager->get_workarea_quota();
+    }
+  }
+  return quota;
 }
 }
 
@@ -430,12 +464,16 @@ int ObSqlMemoryManager::server_module_init(ObSqlMemoryManager *&sql_mem_mgr)
   } else {
     common::set_memory_usage_tracker_resolver(
         common::ObCtxIds::WORK_AREA, resolve_sql_memory_usage_tracker);
+    common::set_memory_quota_resolver(
+        common::ObCtxIds::WORK_AREA, resolve_sql_memory_quota);
   }
   return ret;
 }
 
 void ObSqlMemoryManager::server_module_destroy(ObSqlMemoryManager *&sql_mem_mgr)
 {
+  common::set_memory_usage_tracker_resolver(common::ObCtxIds::WORK_AREA, nullptr);
+  common::set_memory_quota_resolver(common::ObCtxIds::WORK_AREA, nullptr);
   if (nullptr != sql_mem_mgr) {
     if (nullptr != sql_mem_mgr->wa_intervals_) {
       sql_mem_mgr->allocator_.free(sql_mem_mgr->wa_intervals_);
@@ -814,6 +852,7 @@ int ObSqlMemoryManager::get_max_work_area_size(
     max_wa_memory_size = MAX(
         work_area_max_size - non_active_workarea_used, MIN_AVAILABLE_MEMORY);
     max_workarea_size_ = work_area_max_size;
+    workarea_quota_.set_limit(work_area_max_size);
     workarea_hold_size_ = workarea_managed_used;
     max_auto_workarea_size_ = max_wa_memory_size;
     if (auto_calc || MIN_AVAILABLE_MEMORY == max_wa_memory_size) {

@@ -22,6 +22,7 @@
 #include "lib/lock/ob_mutex.h"
 #include "lib/allocator/ob_fifo_allocator.h"
 #include "sql/engine/basic/ob_chunk_row_store.h"
+#include "sql/engine/basic/ob_workarea_memory_limit.h"
 #include "sql/engine/ob_phy_operator_type.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/dtl/ob_dtl_linked_buffer.h"
@@ -464,7 +465,7 @@ class ObSqlMemoryTracker : public ObSqlMemoryCallback
 {
 public:
   ObSqlMemoryTracker() :
-    total_alloc_size_(0), total_dump_size_(0)
+    total_alloc_size_(0), total_dump_size_(0), memory_quota_(nullptr)
   {}
 
 public:
@@ -473,11 +474,14 @@ public:
   virtual void dumped(int64_t size) override;
 
   void reset() { total_alloc_size_ = 0; total_dump_size_ = 0; }
+  void set_memory_quota(common::MemoryQuota *memory_quota)
+  { memory_quota_ = memory_quota; }
   int64_t get_total_alloc_size() const { return total_alloc_size_; }
   int64_t get_total_dump_size() const { return total_dump_size_; }
 private:
   int64_t total_alloc_size_;
   int64_t total_dump_size_;
+  common::MemoryQuota *memory_quota_;
 };
 
 class ObSqlWorkAreaInterval
@@ -637,10 +641,10 @@ public:
     enable_auto_memory_mgr_(false), mutex_(common::ObLatchIds::SQL_MEMORY_MGR_MUTEX_LOCK), profile_lists_(nullptr),
     drift_size_(0), profile_cnt_(0), pre_profile_cnt_(0), global_bound_size_(0),
     mem_target_(0), max_workarea_size_(0), workarea_hold_size_(0), max_auto_workarea_size_(0),
-    workarea_managed_tracker_(), active_profile_used_(0),
+    workarea_managed_tracker_(), workarea_quota_(), active_profile_used_(0),
     manual_calc_cnt_(0), wa_start_(0), wa_end_(0), wa_cnt_(0),
     lock_(), global_bound_update_lock_()
-  {}
+  { sql_mem_callback_.set_memory_quota(&workarea_quota_); }
   ~ObSqlMemoryManager() {}
 public:
   static int server_module_new(ObSqlMemoryManager *&sql_mem_mgr);
@@ -683,6 +687,9 @@ public:
   int64_t get_total_mem_used() const { return workarea_managed_tracker_.used(); }
   common::MemoryUsageTracker &get_workarea_managed_tracker()
   { return workarea_managed_tracker_; }
+  common::MemoryQuota &get_workarea_quota() { return workarea_quota_; }
+  common::MemoryQuotaSample get_memory_quota_sample() const
+  { return workarea_quota_.sample(); }
   int64_t get_workarea_managed_used() const { return workarea_managed_tracker_.used(); }
   void adjust_active_profile_used(const int64_t delta)
   { ATOMIC_FAA(&active_profile_used_, delta); }
@@ -784,6 +791,7 @@ private:
   int64_t workarea_hold_size_;
   int64_t max_auto_workarea_size_;
   common::MemoryUsageTracker workarea_managed_tracker_;
+  common::MemoryQuota workarea_quota_;
   int64_t active_profile_used_;
 
   // statistics
@@ -839,6 +847,12 @@ OB_INLINE void ObSqlMemoryTracker::free(int64_t size)
 OB_INLINE void ObSqlMemoryTracker::dumped(int64_t size)
 {
   (ATOMIC_AAF(&total_dump_size_, size));
+  // Each positive callback is issued only after one physical spill write has
+  // completed successfully.  Negative callbacks adjust the historical byte
+  // total when a store is reset and must not create a reclaim event.
+  if (size > 0 && OB_NOT_NULL(memory_quota_)) {
+    memory_quota_->record_reclaim(size);
+  }
 }
 
 } // sql

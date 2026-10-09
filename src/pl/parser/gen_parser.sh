@@ -12,14 +12,6 @@ export BISON_PKGDATADIR=$CURDIR/../../../deps/3rd/usr/local/oceanbase/devtools/s
 CACHE_MD5_FILE=$CURDIR/_MD5
 TEMP_FILE=$(mktemp)
 
-BISON_VERSION=`bison -V| grep 'bison (GNU Bison)'|awk '{ print  $4;}'`
-NEED_VERSION='2.4.1'
-
-if [ "$BISON_VERSION" != "$NEED_VERSION" ]; then
-  echo "bison version not match, please use bison-$NEED_VERSION"
-  exit 1
-fi
-
 # Check if any required output files are missing.
 outputs_missing() {
   local required_files=(
@@ -57,6 +49,13 @@ cat ../../../src/pl/parser/pl_parser_mysql_mode.l >> $TEMP_FILE
 md5sum_value=$(md5sum "$TEMP_FILE" | awk '{ print $1 }')
 
 function generate_parser {
+  local BISON_VERSION=`bison -V| grep 'bison (GNU Bison)'|awk '{ print  $4;}'`
+  local NEED_VERSION='2.4.1'
+  if [ "$BISON_VERSION" != "$NEED_VERSION" ]; then
+    echo "bison version not match, please use bison-$NEED_VERSION"
+    exit 1
+  fi
+
 # generate pl_parser
   bison_parser ../../../src/pl/parser/pl_parser_mysql_mode.y ../../../src/pl/parser/pl_parser_mysql_mode_tab.c
   flex -o ../../../src/pl/parser/pl_parser_mysql_mode_lex.c ../../../src/pl/parser/pl_parser_mysql_mode.l ../../../src/pl/parser/pl_parser_mysql_mode_tab.h

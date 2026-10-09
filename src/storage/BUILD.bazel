@@ -23,7 +23,6 @@ load(
 load(
     ":storage_runtime_group_oblib_deps.bzl",
     "storage_runtime_group_oblib_deps",
-    "storage_test_oblib_deps",
 )
 load(
     ":storage_runtime_simd_group_oblib_deps.bzl",
@@ -467,20 +466,27 @@ cc_library(
     ],
 )
 
-seekdb_test_interface(
-    name = "storage_unit_test_interface",
-    deps = [
-        ":storage_runtime_internal_headers",
-    ] + _STORAGE_HEADER_SHARE_DEPS + storage_test_oblib_deps(),
-    visibility = ["//unittest/storage:__pkg__"],
-)
-
 _STORAGE_RUNTIME_UNITY_GROUPS = STORAGE_UNITY_GROUPS + storage_singleton_unity_groups(
     STORAGE_STANDALONE_SOURCES,
     "storage_runtime_standalone",
 ) + storage_singleton_unity_groups(
     STORAGE_EXTRA_SOURCES,
     "storage_runtime_extra",
+)
+
+_STORAGE_UNIT_TEST_OBLIB_DEPS = sorted(depset(transitive = [
+    depset(group_deps)
+    for group_deps in storage_runtime_group_oblib_deps(
+        _STORAGE_RUNTIME_UNITY_GROUPS,
+    ).values()
+]).to_list())
+
+seekdb_test_interface(
+    name = "storage_unit_test_interface",
+    deps = [
+        ":storage_runtime_internal_headers",
+    ] + _STORAGE_HEADER_SHARE_DEPS + _STORAGE_UNIT_TEST_OBLIB_DEPS,
+    visibility = ["//unittest/storage:__pkg__"],
 )
 
 # Each group declares only the Share semantic owners reached through its

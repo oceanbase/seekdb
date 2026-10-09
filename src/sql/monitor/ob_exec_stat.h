@@ -353,7 +353,6 @@ struct ObAuditRecordData {
   bool is_multi_stmt_; // whether it is multi sql
   bool table_scan_;
   common::ObConsistencyLevel consistency_level_;
-  int64_t request_memory_used_;
   ObExecTimestamp exec_timestamp_;
   ObExecRecord exec_record_;
   ObTableScanStat table_scan_stat_;

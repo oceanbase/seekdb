@@ -20,6 +20,7 @@
 #include "share/ob_io_device_helper.h"
 #include "share/ob_force_print_log.h"
 #include "lib/objectpool/ob_concurrency_objpool.h"
+#include "lib/random/ob_random.h"
 #include "lib/utility/ob_sort.h"
 #include "lib/utility/ob_tracepoint.h"
 

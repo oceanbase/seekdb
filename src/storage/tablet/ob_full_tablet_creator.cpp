@@ -15,6 +15,7 @@
  */
 
 #include "ob_full_tablet_creator.h"
+#include "lib/alloc/alloc_func.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/tablet/ob_tablet.h"
 
@@ -42,11 +43,10 @@ int ObFullTabletCreator::init()
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
   } else if (OB_FAIL(tiny_allocator_.init(lib::ObMallocAllocator::get_instance(),
-      OB_MALLOC_NORMAL_BLOCK_SIZE/2, ObMemAttr("TinyAllocator", ObCtxIds::DEFAULT_CTX_ID)))) {
+      OB_MALLOC_NORMAL_BLOCK_SIZE/2, ObMemAttr("TinyAllocator", ObCtxIds::META_OBJ_CTX_ID)))) {
   } else {
     lib::ContextParam param;
-    param.set_mem_attr("MSTXCTX", common::ObCtxIds::DEFAULT_CTX_ID)
-      .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE)
+    param.set_mem_attr("MSTXCTX", common::ObCtxIds::META_OBJ_CTX_ID)
       .set_properties(lib::ALLOC_THREAD_SAFE);
     if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(mstx_mem_ctx_, param))) {
     } else if (nullptr == mstx_mem_ctx_) {
@@ -132,7 +132,7 @@ int ObFullTabletCreator::create_tablet(ObTabletHandle &tablet_handle)
       ObArenaAllocator, (&tiny_allocator_), mstx_mem_ctx_->get_malloc_allocator(), page_size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (FALSE_IT(allocator->set_label("MSTXAllocator"))) {
-  } else if (FALSE_IT(allocator->set_ctx_id(ObCtxIds::DEFAULT_CTX_ID))) {
+  } else if (FALSE_IT(allocator->set_ctx_id(ObCtxIds::META_OBJ_CTX_ID))) {
   } else if (OB_ISNULL(tablet = OB_NEWx(ObTablet, allocator))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(mem_addr.set_mem_addr(0, sizeof(ObTablet)))) {

@@ -93,6 +93,7 @@ _OBSERVER_NATIVE_DEPS = [
     "//src/oblib/easy:easy",
     "//src/oblib:common_sql_mode",
     "//src/oblib:oblib_foundation",
+    "//src/oblib:oblib_rpc_transport_services",
     "//src/data_plane:data_plane_api_interface",
     "//src/data_plane:disk_report",
     "//src/data_plane:log_service_handler",
@@ -523,7 +524,10 @@ _SEEKDB_ORDERED_LINK_FILES = [
     "//rust:sql_nio_archive",
     "//rust:config_archive",
 ] + select({
-    "//bazel:sanity_enabled": [
+    "@platforms//os:linux": [
+        "//deps/external:jemalloc_archive",
+    ],
+    "@platforms//os:macos": [
         "//deps/external:jemalloc_archive",
     ],
     "//conditions:default": [],
@@ -650,6 +654,31 @@ _SEEKDB_EXECUTABLE_LINKOPTS = select({
     ],
 })
 
+_SEEKDB_ALLOCATOR_HOOK_LINKOPTS = select({
+    "@platforms//os:linux": [
+        "-Wl,--export-dynamic-symbol=" + symbol
+        for symbol in [
+            "malloc", "free", "realloc", "reallocarray", "memalign",
+            "malloc_usable_size", "calloc", "cfree", "strdup", "strndup",
+            "free_sized", "free_aligned_sized", "aligned_alloc",
+            "posix_memalign", "valloc", "pvalloc", "__libc_malloc",
+            "__libc_free", "__libc_realloc", "__libc_reallocarray",
+            "__libc_memalign", "__libc_calloc", "__libc_free_sized",
+            "__libc_free_aligned_sized", "__libc_valloc", "__libc_pvalloc",
+            "__posix_memalign", "_Znwm", "_Znam", "_ZnwmRKSt9nothrow_t",
+            "_ZnamRKSt9nothrow_t", "_ZdlPv", "_ZdaPv",
+            "_ZdlPvRKSt9nothrow_t", "_ZdaPvRKSt9nothrow_t", "_ZdlPvm",
+            "_ZdaPvm", "_ZnwmSt11align_val_t", "_ZnamSt11align_val_t",
+            "_ZnwmSt11align_val_tRKSt9nothrow_t",
+            "_ZnamSt11align_val_tRKSt9nothrow_t", "_ZdlPvSt11align_val_t",
+            "_ZdaPvSt11align_val_t", "_ZdlPvSt11align_val_tRKSt9nothrow_t",
+            "_ZdaPvSt11align_val_tRKSt9nothrow_t",
+            "_ZdlPvmSt11align_val_t", "_ZdaPvmSt11align_val_t",
+        ]
+    ],
+    "//conditions:default": [],
+})
+
 _SEEKDB_SANITY_LINKOPTS = select({
     "//bazel:sanity_enabled": [
         "-Wl,--wrap=memcpy",
@@ -706,7 +735,11 @@ seekdb_final_link(
     ordered_link_files = _SEEKDB_ORDERED_LINK_FILES,
     extra_inputs = _SEEKDB_EXTRA_LINK_INPUTS,
     system_libs = _SEEKDB_SYSTEM_LIBS,
-    linkopts = _SEEKDB_EXECUTABLE_LINKOPTS + _SEEKDB_SANITY_LINKOPTS,
+    linkopts = (
+        _SEEKDB_EXECUTABLE_LINKOPTS +
+        _SEEKDB_ALLOCATOR_HOOK_LINKOPTS +
+        _SEEKDB_SANITY_LINKOPTS
+    ),
     out = "seekdb",
     tags = ["manual"],
     visibility = ["//visibility:public"],

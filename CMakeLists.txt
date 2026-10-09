@@ -28,6 +28,7 @@ endif()
 
 option(OB_ENABLE_STANDBY "Build physical standby support" ON)
 option(ENABLE_SANITY "Build with seekdb memory Sanity instrumentation" OFF)
+option(OB_USE_ASAN "Build with AddressSanitizer and the system allocator" OFF)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 set(SEEKDB_GENERATED_ROOT "${CMAKE_BINARY_DIR}/generated")
@@ -165,6 +166,13 @@ endif()
 if(ENABLE_SANITY AND SEEKDB_CMAKE_PACKAGE_BUILD)
   message(FATAL_ERROR "Sanity instrumentation cannot be combined with packaging")
 endif()
+if(OB_USE_ASAN AND SEEKDB_CMAKE_PACKAGE_BUILD)
+  message(FATAL_ERROR "AddressSanitizer cannot be combined with packaging")
+elseif(OB_USE_ASAN AND ENABLE_SANITY)
+  message(FATAL_ERROR "AddressSanitizer cannot be combined with Sanity instrumentation")
+elseif(OB_USE_ASAN AND (NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" OR ANDROID))
+  message(FATAL_ERROR "The compatibility AddressSanitizer build supports Linux only")
+endif()
 if((ENABLE_AUTO_FDO OR ENABLE_THIN_LTO OR ENABLE_HOTFUNC OR
     OB_STATIC_LINK_LGPL_DEPS) AND NOT SEEKDB_CMAKE_PACKAGE_BUILD)
   message(FATAL_ERROR
@@ -221,6 +229,15 @@ if(APPLE)
   set(STDC_SHARED_LIB_SYMLINK "${DEVTOOLS_DIR}/lib64/libstdc++.dylib")
 elseif(UNIX)
   set(STDC_SHARED_LIB_SYMLINK "${DEVTOOLS_DIR}/lib64/libstdc++.so")
+endif()
+
+if(OB_USE_ASAN)
+  add_compile_definitions(OB_USE_ASAN=1)
+  add_compile_options(
+    "$<$<COMPILE_LANGUAGE:C,CXX>:-fsanitize=address>"
+    "$<$<COMPILE_LANGUAGE:C,CXX>:-fno-omit-frame-pointer>")
+  add_link_options(-fsanitize=address)
+  message(STATUS "AddressSanitizer enabled with the system allocator")
 endif()
 
 add_subdirectory(deps/external)

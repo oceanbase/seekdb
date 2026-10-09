@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "share/rc/ob_server_runtime.h"
+#include "lib/alloc/alloc_func.h"
 #include "share/rc/ob_server_runtime.h"
 #include "ob_dbms_stats_utils.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"

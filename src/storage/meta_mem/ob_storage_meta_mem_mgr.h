@@ -25,6 +25,7 @@
 #include "lib/lock/ob_tc_rwlock.h"
 #include "lib/lock/ob_thread_cond.h"
 #include "lib/queue/ob_link_queue.h"
+#include "lib/resource/ob_memory_quota.h"
 #include "share/resource_limit_calculator/ob_resource_limit_calculator.h"
 #include "storage/blocksstable/ob_macro_block_id.h"
 #include "storage/blocksstable/ob_sstable.h"
@@ -125,8 +126,10 @@ class ObStorageMetaMemMgr final
 {
 public:
   static const int64_t THE_SIZE_OF_HEADERS = sizeof(ObFIFOAllocator::NormalPageHeader) + sizeof(ObMetaObjBufferNode);
-  static const int64_t NORMAL_TABLET_POOL_SIZE = (ABLOCK_SIZE - ABLOCK_HEADER_SIZE) / 2 - AOBJECT_META_SIZE - AOBJECT_EXTRA_INFO_SIZE - THE_SIZE_OF_HEADERS; // 3824B
-  static const int64_t LARGE_TABLET_POOL_SIZE = 64 * 1024L - THE_SIZE_OF_HEADERS; // 65,480B
+  // Together with the current FIFO/resource-pool headers, this keeps 16 normal
+  // tablet buffers in one OB_MALLOC_MIDDLE_BLOCK_SIZE page.
+  static const int64_t NORMAL_TABLET_POOL_SIZE = 3984;
+  static const int64_t LARGE_TABLET_POOL_SIZE = 64 * 1024L - THE_SIZE_OF_HEADERS;
 
   static const int64_t MIN_MODE_MAX_TABLET_CNT_IN_OBJ_POOL = 10000;
   static const int64_t MIN_MODE_MAX_MEMTABLE_CNT_IN_OBJ_POOL = 2 * MIN_MODE_MAX_TABLET_CNT_IN_OBJ_POOL;
@@ -188,6 +191,14 @@ public:
   void stop();
   void wait();
   void destroy();
+  static int64_t calculate_memory_quota_limit(
+      int64_t memory_budget, int64_t configured_percentage);
+  void refresh_memory_quota_limit();
+  common::MemoryQuota &get_memory_quota() { return memory_quota_; }
+  common::MemoryQuotaSample get_memory_quota_sample() const
+  {
+    return memory_quota_.sample();
+  }
   int print_old_chain(
       const ObTabletMapKey &key,
       const ObTabletPointer &tablet_ptr,
@@ -388,13 +399,6 @@ private:
   private:
     ObStorageMetaMemMgr *t3m_;
   };
-  class RefreshConfigTask : public common::ObTimerTask
-  {
-  public:
-    RefreshConfigTask() = default;
-    virtual ~RefreshConfigTask() = default;
-    virtual void runTimerTask() override;
-  };
   class TabletMapDumpOperator
   {
   public:
@@ -492,7 +496,6 @@ private:
   ObExternalTabletCntMap external_tablet_cnt_map_;
   common::ObTimer gc_timer_;
   TableGCTask table_gc_task_;
-  RefreshConfigTask refresh_config_task_;
   TabletGCTask tablet_gc_task_;
   TabletGCQueue tablet_gc_queue_;
   common::ObLinkQueue free_tables_queue_;
@@ -514,6 +517,7 @@ private:
   TabletBufferList large_tablet_header_;
 
   common::ObConcurrentFIFOAllocator meta_cache_io_allocator_;
+  common::MemoryQuota memory_quota_;
   ObT3MResourceLimitCalculatorHandler t3m_limit_calculator_;
 
   bool is_inited_;

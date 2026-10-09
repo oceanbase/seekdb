@@ -118,7 +118,10 @@ static inline void *ob_memmem(const void *haystack, size_t haystacklen,
 #define STRTOK(str, delim) strtok(str, delim)
 #define STRTOK_R(str, delim, saveptr) strtok_r(str, delim, saveptr)
 
-static const uint32_t ACHUNK_PRESERVE_SIZE = 17L << 10;
+// Leave enough room for allocator and caller metadata so allocations intended
+// for a power-of-two size class do not spill into the next class.  This is a
+// sizing policy only; it has no dependency on the removed legacy chunk allocator.
+static const uint32_t ALLOCATOR_SIZE_CLASS_HEADROOM = 17L << 10;
 
 // memory operation wrappers
 

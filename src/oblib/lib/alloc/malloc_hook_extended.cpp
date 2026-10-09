@@ -25,7 +25,8 @@
 #define LIKELY(x) __builtin_expect(!!(x),!!1)
 #define UNLIKELY(x) __builtin_expect(!!(x),!!0)
 #define MALLOC_ATTR(s) __attribute__((s))
-#define MALLOC_EXPORT __attribute__((visibility("default")))
+#define MALLOC_EXPORT __attribute__((visibility("default"), used, retain))
+#define MALLOC_RETAIN __attribute__((used, retain))
 #define MALLOC_ALLOC_SIZE(s) __attribute__((alloc_size(s)))
 #define MALLOC_ALLOC_SIZE2(s1, s2) __attribute__((alloc_size(s1, s2)))
 #define MALLOC_NOTHROW __attribute__((nothrow))
@@ -87,6 +88,19 @@ calloc(size_t nmemb, size_t size)
     }
   }
   return ptr;
+}
+
+MALLOC_EXPORT
+void MALLOC_NOTHROW *
+MALLOC_ALLOC_SIZE2(2, 3)
+reallocarray(void *ptr, size_t nmemb, size_t size)
+{
+  size_t real_size = 0;
+  if (UNLIKELY(__builtin_mul_overflow(nmemb, size, &real_size))) {
+    errno = ENOMEM;
+    return nullptr;
+  }
+  return realloc(ptr, real_size);
 }
 
 MALLOC_EXPORT void MALLOC_NOTHROW
@@ -205,6 +219,7 @@ pvalloc(size_t size)
 }
 
 void *__libc_calloc(size_t n, size_t size) LIBC_ALIAS(calloc);
+void *__libc_reallocarray(void *ptr, size_t n, size_t size) LIBC_ALIAS(reallocarray);
 void __libc_free_sized(void* ptr, size_t size) LIBC_ALIAS(free_sized);
 void __libc_free_aligned_sized(void* ptr, size_t alignment, size_t size) LIBC_ALIAS(free_aligned_sized);
 void *__libc_valloc(size_t size) LIBC_ALIAS(valloc);
@@ -213,7 +228,7 @@ int __posix_memalign(void** r, size_t a, size_t s) LIBC_ALIAS(posix_memalign);
 
 } // extern "C" end
 
-void *operator new(std::size_t size)
+MALLOC_RETAIN void *operator new(std::size_t size)
 {
   void *ptr = malloc(size);
   if (UNLIKELY(nullptr == ptr)) {
@@ -222,7 +237,7 @@ void *operator new(std::size_t size)
   return ptr;
 }
 
-void *operator new[](std::size_t size)
+MALLOC_RETAIN void *operator new[](std::size_t size)
 {
   void *ptr = malloc(size);
   if (UNLIKELY(nullptr == ptr)) {
@@ -231,50 +246,47 @@ void *operator new[](std::size_t size)
   return ptr;
 }
 
-void *operator new(std::size_t size, const std::nothrow_t &) noexcept {
+MALLOC_RETAIN void *operator new(std::size_t size, const std::nothrow_t &) noexcept {
 	return malloc(size);
 }
 
-void *operator new[](std::size_t size, const std::nothrow_t &) noexcept {
+MALLOC_RETAIN void *operator new[](std::size_t size, const std::nothrow_t &) noexcept {
 	return malloc(size);
 }
 
-void operator delete(void *ptr) noexcept
+MALLOC_RETAIN void operator delete(void *ptr) noexcept
 {
   free(ptr);
 }
 
-void operator delete[](void *ptr) noexcept
+MALLOC_RETAIN void operator delete[](void *ptr) noexcept
 {
   free(ptr);
 }
 
-void operator delete(void *ptr, const std::nothrow_t &) noexcept
+MALLOC_RETAIN void operator delete(void *ptr, const std::nothrow_t &) noexcept
 {
   free(ptr);
 }
 
-void operator delete[](void *ptr, const std::nothrow_t &) noexcept
+MALLOC_RETAIN void operator delete[](void *ptr, const std::nothrow_t &) noexcept
 {
   free(ptr);
 }
 
-#if __cpp_sized_deallocation >= 201309
 // C++14 sized-delete operators
-void operator delete(void *ptr, std::size_t size) noexcept
+MALLOC_RETAIN void operator delete(void *ptr, std::size_t size) noexcept
 {
   free(ptr);
 }
 
-void operator delete[](void *ptr, std::size_t size) noexcept
+MALLOC_RETAIN void operator delete[](void *ptr, std::size_t size) noexcept
 {
   free(ptr);
 }
-#endif
-
 #if __cpp_aligned_new >= 201606
 // C++17 aligned operators
-void *operator new(std::size_t size, std::align_val_t alignment) {
+MALLOC_RETAIN void *operator new(std::size_t size, std::align_val_t alignment) {
 	void *ptr = memalign(static_cast<std::size_t>(alignment), size);
   if (UNLIKELY(nullptr == ptr)) {
     throw std::bad_alloc();
@@ -282,7 +294,7 @@ void *operator new(std::size_t size, std::align_val_t alignment) {
   return ptr;
 }
 
-void *operator new[](std::size_t size, std::align_val_t alignment) {
+MALLOC_RETAIN void *operator new[](std::size_t size, std::align_val_t alignment) {
 	void *ptr = memalign(static_cast<std::size_t>(alignment), size);
   if (UNLIKELY(nullptr == ptr)) {
     throw std::bad_alloc();
@@ -290,40 +302,40 @@ void *operator new[](std::size_t size, std::align_val_t alignment) {
   return ptr;
 }
 
-void *operator new(std::size_t size, std::align_val_t alignment, const std::nothrow_t &) noexcept {
+MALLOC_RETAIN void *operator new(std::size_t size, std::align_val_t alignment, const std::nothrow_t &) noexcept {
 	return memalign(static_cast<std::size_t>(alignment), size);
 }
 
-void *operator new[](std::size_t size, std::align_val_t alignment, const std::nothrow_t &) noexcept {
+MALLOC_RETAIN void *operator new[](std::size_t size, std::align_val_t alignment, const std::nothrow_t &) noexcept {
 	return memalign(static_cast<std::size_t>(alignment), size);
 }
 
-void operator delete(void* ptr, std::align_val_t) noexcept
+MALLOC_RETAIN void operator delete(void* ptr, std::align_val_t) noexcept
 {
   free(ptr);
 }
 
-void operator delete(void* ptr, std::align_val_t, const std::nothrow_t &) noexcept
+MALLOC_RETAIN void operator delete(void* ptr, std::align_val_t, const std::nothrow_t &) noexcept
 {
   free(ptr);
 }
 
-void operator delete(void* ptr, std::size_t size, std::align_val_t al) noexcept
+MALLOC_RETAIN void operator delete(void* ptr, std::size_t size, std::align_val_t al) noexcept
 {
   free(ptr);
 }
 
-void operator delete[](void* ptr, std::align_val_t) noexcept
+MALLOC_RETAIN void operator delete[](void* ptr, std::align_val_t) noexcept
 {
   free(ptr);
 }
 
-void operator delete[](void* ptr, std::align_val_t, const std::nothrow_t &) noexcept
+MALLOC_RETAIN void operator delete[](void* ptr, std::align_val_t, const std::nothrow_t &) noexcept
 {
   free(ptr);
 }
 
-void operator delete[](void* ptr, std::size_t size, std::align_val_t al) noexcept
+MALLOC_RETAIN void operator delete[](void* ptr, std::size_t size, std::align_val_t al) noexcept
 {
   free(ptr);
 }

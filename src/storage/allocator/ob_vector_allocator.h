@@ -18,6 +18,7 @@
 #define OCEANBASE_ALLOCATOR_OB_VECTOR_ALLOCATOR_H_
 #include "data_plane/vector/ob_i_vector_memory.h"
 #include "lib/vector/ob_vector_util.h"
+#include "lib/resource/ob_memory_quota.h"
 namespace oceanbase {
 namespace share {
 
@@ -30,6 +31,12 @@ public:
       memory_context_(nullptr),
       vector_allocator_(nullptr) {};
   int init(lib::MemoryContext &mem_context, ObVectorAllocator *vector_allocator);
+  void reset()
+  {
+    check_cnt_ = 0;
+    memory_context_ = nullptr;
+    vector_allocator_ = nullptr;
+  }
 
   void *alloc(int64_t size);
   void free(void *ptr);
@@ -48,10 +55,10 @@ private:
 class ObVectorAllocator : public ObVectorMemContext,
                                 public ObIAllocator {
 public:
-  ObVectorAllocator() : is_inited_(false), all_used_mem_(0), memory_context_(nullptr) {}
+  ObVectorAllocator() : is_inited_(false), all_used_mem_(0), memory_context_(nullptr), quota_() {}
 
   int init();
-  void destroy() { is_inited_ = false; }
+  void destroy();
   virtual void *alloc(const int64_t size) override { return ObVectorMemContext::alloc(size); }
   virtual void *alloc(const int64_t size, const ObMemAttr &attr) override;
   virtual void free(void *ptr) override { ObVectorMemContext::free(ptr); }
@@ -59,13 +66,18 @@ public:
   int64_t used();
   inline lib::MemoryContext get_mem_context() { return memory_context_;}
   inline uint64_t* get_used_mem_ptr() { return &all_used_mem_; }
-  int64_t get_rb_mem_used();
+  int64_t get_rb_mem_used() const;
+  common::MemoryQuota &memory_quota() { return quota_; }
+  common::MemoryQuotaSample get_memory_quota_sample() const;
+  void refresh_memory_quota_limit();
+  static common::MemoryQuota *resolve_memory_quota(const int64_t ctx_id);
   TO_STRING_KV(K(is_inited_), KP(memory_context_.ref_context()));
 
 private:
   bool is_inited_;
   uint64_t all_used_mem_;
   lib::MemoryContext memory_context_;
+  common::MemoryQuota quota_;
 };
 
 class ObVsagMemContext : public vsag::Allocator,

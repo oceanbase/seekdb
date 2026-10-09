@@ -41,7 +41,7 @@ int ObDeviceManager::init_devices_env()
     }
     if (OB_FAIL(device_map_.create(MAX_DEVICE_INSTANCE*2, "DeviceMng", "DeviceMng"))) {
     } else if (OB_FAIL(handle_map_.create(MAX_DEVICE_INSTANCE*2, "DeviceMng", "DeviceMng"))) {
-    } else if (OB_FAIL(allocator_.init(ObMallocAllocator::get_instance(),
+    } else if (OB_FAIL(allocator_.init(lib::ObMallocAllocator::get_instance(),
                                       OB_MALLOC_MIDDLE_BLOCK_SIZE, mem_attr))) {
     } else if (OB_FAIL(lock_.init(mem_attr))) {
     }

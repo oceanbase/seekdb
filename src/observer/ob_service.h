@@ -146,7 +146,6 @@ public:
       const obcall::ObFlushOptStatArg &arg) override;
   int set_tracepoint(const obcall::ObSetTracepointParam &param) override;
   int cancel_sys_task(const share::ObTaskId &task_id) override;
-  int refresh_memory_stat() override;
   int clear_expired_deadlock_events() override;
   ////////////////////////////////////////////////////////////////
   // misc functions

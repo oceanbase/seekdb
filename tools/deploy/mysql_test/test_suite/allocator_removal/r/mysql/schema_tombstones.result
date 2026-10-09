@@ -1,0 +1,16 @@
+SELECT COUNT(*) = 0 AS removed_allocator_tables
+FROM information_schema.tables
+WHERE table_schema = 'oceanbase'
+  AND lower(table_name) IN ('__all_virtual_memory_info',
+'__all_virtual_ctx_memory_info',
+'__all_virtual_malloc_sample_info',
+'v$ob_memory');
+removed_allocator_tables
+1
+SELECT COUNT(*) = 2 AS replacement_objects
+FROM information_schema.tables
+WHERE table_schema = 'oceanbase'
+  AND lower(table_name) IN ('__all_virtual_component_memory_stat',
+'v$ob_component_memory');
+replacement_objects
+1

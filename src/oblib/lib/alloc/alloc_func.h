@@ -21,16 +21,8 @@
 
 namespace oceanbase
 {
-namespace common
-{
-struct ObLabelItem;
-} // end of namespace common
-
 namespace lib
 {
-// statistic relating
-struct ObLabel;
-struct ObMemAttr;
 constexpr int64_t DEFAULT_MEMORY_BUDGET = 1L << 30;
 void set_memory_budget(int64_t bytes);
 int64_t get_memory_budget();
@@ -51,19 +43,6 @@ inline int64_t get_memory_by_percentage(const int64_t memory,
   }
   return result;
 }
-int64_t get_allocator_memory_hold();
-int64_t get_allocator_memory_hold(const uint64_t ctx_id);
-int64_t get_allocator_cache_hold();
-void get_label_memory(
-  ObLabel &label, common::ObLabelItem &item);
-void ob_set_reserved_memory(const int64_t bytes);
-int64_t ob_get_reserved_memory();
-
-int set_ctx_limit(uint64_t ctx_id, const int64_t limit);
-
-bool errsim_alloc(const ObMemAttr &attr);
-
-int set_req_chunkmgr_parallel(uint64_t ctx_id, int32_t parallel);
 } // end of namespace lib
 } // end of namespace oceanbase
 

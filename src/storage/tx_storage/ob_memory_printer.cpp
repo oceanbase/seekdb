@@ -63,9 +63,7 @@ int ObMemoryPrinter::print_memory_usage()
     ret = OB_SUCCESS;
   } else {
     if (OB_FAIL(databuff_printf(print_buf, BUF_LEN, pos,
-                                "=== MEMORY INFO ===\n"
-                                "unmanaged_memory_size=% '15ld\n",
-                                lib::get_unmanaged_memory_size()))) {
+                                "=== MEMORY INFO ===\n"))) {
     } else if (OB_SUCCESS != (tmp_ret = print_memory_usage_(print_buf,
                                                             BUF_LEN,
                                                             pos))) {

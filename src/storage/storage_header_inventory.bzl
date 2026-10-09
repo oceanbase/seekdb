@@ -376,7 +376,6 @@ STORAGE_INTERFACE_CLOSURE_HEADERS = [
     "meta_mem/ob_external_tablet_cnt_map.h",
     "meta_mem/ob_fixed_meta_obj_array.h",
     "meta_mem/ob_flying_tablet_pointer_map.h",
-    "meta_mem/ob_meta_memory_limit.h",
     "meta_mem/ob_meta_obj_struct.h",
     "meta_mem/ob_storage_meta_cache.h",
     "meta_mem/ob_storage_meta_obj_pool.h",

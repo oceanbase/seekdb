@@ -1,0 +1,20 @@
+# owner: wangyunlai.wyl
+# owner group: storage
+# tags: allocator
+
+SELECT COUNT(*) = 4 AS fixed_component_rows
+FROM oceanbase.V$OB_COMPONENT_MEMORY;
+
+SELECT GROUP_CONCAT(COMPONENT_NAME ORDER BY COMPONENT_NAME SEPARATOR ',') AS components
+FROM oceanbase.V$OB_COMPONENT_MEMORY;
+
+SELECT COUNT(*) = 0 AS invalid_atomic_fields
+FROM oceanbase.V$OB_COMPONENT_MEMORY
+WHERE LIMIT_BYTES < 0 OR COMMITTED_BYTES < 0 OR RESERVED_BYTES < 0
+   OR REJECT_COUNT < 0 OR RECLAIM_COUNT < 0;
+
+SELECT COUNT(*) = 0 AS forbidden_consistency_columns
+FROM information_schema.columns
+WHERE table_schema = 'oceanbase'
+  AND lower(table_name) = 'v$ob_component_memory'
+  AND upper(column_name) IN ('IS_CONSISTENT', 'SNAPSHOT_EPOCH');

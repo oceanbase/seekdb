@@ -52,7 +52,6 @@ _OBSERVER_RETRIEVAL_COMPOSITION_GROUP_OBLIB_DEPS = {
         "//src/oblib:oblib_memory_base",
         "//src/oblib:oblib_memory_model",
         "//src/oblib:oblib_memory_primitives",
-        "//src/oblib:oblib_memory_runtime_base",
         "//src/oblib:oblib_memory_utilities",
         "//src/oblib:oblib_mysql_client_domain",
         "//src/oblib:oblib_mysql_client_runtime",

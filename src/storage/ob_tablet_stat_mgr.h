@@ -176,12 +176,11 @@ public:
   void reset();
   bool is_low_resource() const;
   int refresh(const bool force_refresh = false);
-  TO_STRING_KV(K_(min_cpu_cnt), K_(max_cpu_cnt), K_(memory_hold), K_(memory_budget));
+  TO_STRING_KV(K_(min_cpu_cnt), K_(max_cpu_cnt), K_(memory_budget));
 
 public:
   double min_cpu_cnt_;
   double max_cpu_cnt_;
-  int64_t memory_hold_;
   int64_t memory_budget_;
 };
 
