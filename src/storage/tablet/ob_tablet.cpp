@@ -603,8 +603,10 @@ int ObTablet::init_for_sstable_replace(
   } else if (OB_FAIL(old_tablet.load_storage_schema(tmp_arena_allocator, old_storage_schema))) {
   } else if (OB_FAIL(old_tablet.fetch_table_store(old_table_store_wrapper))) {
   } else if (OB_FAIL(old_table_store_wrapper.get_member(old_table_store))) {
-  } else if (FALSE_IT(storage_schema = OB_ISNULL(param.source_storage_schema_)
-      ? old_storage_schema : param.source_storage_schema_)) {
+  } else if (param.storage_layout_id_ != old_tablet.tablet_meta_.storage_layout_id_) {
+    ret = OB_STATE_NOT_MATCH;
+    LOG_WARN("fork result belongs to another tablet layout", K(ret), K(param), K(old_tablet));
+  } else if (FALSE_IT(storage_schema = param.target_storage_schema_)) {
   } else if (OB_FAIL(old_tablet.get_max_sync_storage_schema_version(max_sync_schema_version))) {
   } else if (is_tablet_fork && OB_FAIL(tablet_meta_.init(old_tablet.tablet_meta_,
       param.tablet_fork_param_.snapshot_version_, param.tablet_fork_param_.multi_version_start_,

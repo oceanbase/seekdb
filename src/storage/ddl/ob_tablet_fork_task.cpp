@@ -44,6 +44,9 @@
 #include "storage/ddl/ob_ddl_clog.h" // For ObTableForkInfo
 #include "storage/compaction/ob_schedule_dag_func.h" // For ObScheduleDagFunc
 #include "storage/ddl/ob_tablet_copy_util.h"
+#include "storage/compaction/physical_merge_candidate.h"
+#include "storage/instance_meta/storage_schema_history.h"
+#include "storage/tx_storage/ob_access_service.h"
 
 namespace oceanbase
 {
@@ -1267,7 +1270,6 @@ int ObTabletForkMergeTask::create_sstables()
     if (OB_SUCC(ret) && src_table_cnt > 0) {
       if (OB_FAIL(update_table_store_with_batch_tables(
               context_->ls_,
-              context_->src_tablet_handle_,
               context_->dst_tablet_handle_,
               param_->dest_tablet_id_,
               batch_sstables_handle,
@@ -1281,7 +1283,6 @@ int ObTabletForkMergeTask::create_sstables()
 
 int ObTabletForkMergeTask::update_table_store_with_batch_tables(
     ObLS *ls,
-    const ObTabletHandle &src_tablet_handle,
     const ObTabletHandle &dst_tablet_handle,
     const ObTabletID &dst_tablet_id,
     const ObTablesHandleArray &tables_handle,
@@ -1291,29 +1292,39 @@ int ObTabletForkMergeTask::update_table_store_with_batch_tables(
   ObBatchUpdateTableStoreParam param;
   param.reset();
   ObSEArray<ObITable *, MAX_SSTABLE_CNT_IN_STORAGE> batch_tables;
-  ObArenaAllocator source_schema_allocator("ForkSrcSchema");
-  ObStorageSchema *source_storage_schema = nullptr;
+  ObArenaAllocator schema_allocator("ForkDstSchema");
+  ObStorageSchema target_storage_schema;
+  PhysicalMergeCandidate candidate;
+  SCN created, layout_snapshot;
+  auto *access = share::server_service<ObAccessService>();
 
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(OB_ISNULL(ls)
-      || !src_tablet_handle.is_valid()
       || !dst_tablet_handle.is_valid()
       || !dst_tablet_id.is_valid()
       || !is_valid_merge_type(merge_type))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), KP(ls), K(src_tablet_handle),
+    LOG_WARN("invalid arg", K(ret), KP(ls),
       K(dst_tablet_handle), K(dst_tablet_id), K(merge_type));
+  } else if (OB_ISNULL(access)) {
+    ret = OB_NOT_INIT;
   } else if (OB_FAIL(tables_handle.get_tables(batch_tables))) {
   } else if (OB_FAIL(param.tables_handle_.assign(tables_handle))) {
-  } else if (OB_UNLIKELY(src_tablet_handle.get_obj()->is_empty_shell())) {
-    LOG_WARN("fork table: src tablet is empty shell, skip src storage schema", K(dst_tablet_id), K(src_tablet_handle));
-  } else if (OB_FAIL(src_tablet_handle.get_obj()->load_storage_schema(
-      source_schema_allocator, source_storage_schema))) {
-  } else if (OB_ISNULL(source_storage_schema) || OB_UNLIKELY(!source_storage_schema->is_valid())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fork table: source storage schema is invalid", K(ret), K(dst_tablet_id), KP(source_storage_schema));
+  } else if (OB_FAIL(candidate.load(*dst_tablet_handle.get_obj()))) {
+  } else if (!candidate.is_live()) {
+    ret = OB_STATE_NOT_MATCH;
+  } else if (OB_FAIL(created.convert_for_tx(candidate.create_version))) {
+  } else if (OB_FAIL(StorageSchemaHistory::read_current(access->storage_schema_store(),
+      candidate.layout_id, created, ObTimeUtility::current_time() + 30L * 1000L * 1000L,
+      schema_allocator, layout_snapshot, target_storage_schema))) {
+    LOG_WARN("failed to read destination layout for fork installation", K(ret), K(dst_tablet_id));
   } else {
-    param.source_storage_schema_ = source_storage_schema;
+    // S caps source data. It predates physical creation C for a late child and
+    // is not a valid layout-read timestamp for the destination G. Install a
+    // committed destination descriptor; concurrent local updates are ordered
+    // only within this same G by init_for_sstable_replace.
+    param.storage_layout_id_ = candidate.layout_id;
+    param.target_storage_schema_ = &target_storage_schema;
   }
 
   if (OB_SUCC(ret)) {
@@ -1363,7 +1374,6 @@ int ObTabletForkMergeTask::update_table_store_with_batch_tables(
     }
   }
 
-  ObTabletObjLoadHelper::free(source_schema_allocator, source_storage_schema);
   return ret;
 }
 

@@ -18,13 +18,19 @@ if args.action == 'enable':
         raise SystemExit('Layout probe hook moved; update injection anchors.')
     text = text.replace(anchor, anchor + '// LOCAL_LAYOUT_HISTORY_PROBE_BEGIN\n'
                         '#include "storage/instance_meta/storage_schema_history.h"\n'
+                        '#include "storage/ob_storage_schema_util.h"\n'
                         '#include "storage/tx_storage/ob_access_service.h"\n'
                         '#include "share/tablet/ob_tablet_mapping_operator.h"\n'
                         '// LOCAL_LAYOUT_HISTORY_PROBE_END\n')
     text = text.replace(entry, '// LOCAL_LAYOUT_HISTORY_PROBE_BEGIN\n#include "'
-                        + str(local / 'storage_schema_history_native_probe.ipp') + '"\n'
+                        + str(local / 'storage_schema_history_native_probe.ipp') + '"\n#include "'
+                        + str(local / 'local_storage_schema_native_probe.ipp') + '"\n'
                         '// LOCAL_LAYOUT_HISTORY_PROBE_END\n' + entry
                         + '  // LOCAL_LAYOUT_HISTORY_PROBE_BEGIN\n'
+                          '  if (getenv("SEEKDB_LOCAL_STORAGE_SCHEMA_PROBE") != nullptr) {\n'
+                          '    const int rc = run_local_storage_schema_native_probe();\n'
+                          '    if (rc != OB_SUCCESS) { return rc; }\n'
+                          '  }\n'
                           '  if (getenv("SEEKDB_LAYOUT_HISTORY_PROBE") != nullptr) {\n'
                           '    const int rc = run_storage_schema_history_native_probe();\n'
                           '    if (rc != OB_SUCCESS) { return rc; }\n'

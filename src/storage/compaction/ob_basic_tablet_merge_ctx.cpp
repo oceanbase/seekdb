@@ -1072,10 +1072,11 @@ int ObBasicTabletMergeCtx::update_storage_schema_by_memtable(
   } else if (OB_FAIL(schema_on_tablet.get_store_column_count(column_cnt_in_schema, true/*full_col*/))) {
   } else if (OB_FAIL(get_schema_info_from_tables(merge_tables_handle, column_cnt_in_schema,
       max_column_cnt_in_memtable, max_schema_version_in_memtable))) {
-  } else if (FALSE_IT(column_info_simplified = max_column_cnt_in_memtable > column_cnt_in_schema)) {
-    // can't get new added column info from memtable, need simplify column info
-  } else if (column_info_simplified
-    || max_schema_version_in_memtable > schema_on_tablet.get_schema_version()) {
+  } else if (FALSE_IT(column_info_simplified = max_column_cnt_in_memtable > column_cnt_in_schema
+      || max_schema_version_in_memtable > schema_on_tablet.get_schema_version())) {
+    // Memtables carry a version and column extent, not the complete definition.
+    // A same-width DDL can also change types, defaults or storage settings.
+  } else if (column_info_simplified) {
     // need alloc new storage schema & set column cnt
     ObStorageSchema *storage_schema = nullptr;
     if (OB_FAIL(ObStorageSchemaUtil::alloc_storage_schema(mem_ctx_.get_allocator(), storage_schema))) {
@@ -1084,7 +1085,7 @@ int ObBasicTabletMergeCtx::update_storage_schema_by_memtable(
       ObStorageSchemaUtil::free_storage_schema(mem_ctx_.get_allocator(), storage_schema);
       storage_schema = nullptr;
     } else {
-      // only update column cnt by memtable, use schema version on tablet_schema
+      // Record the observed extent/version without claiming complete columns.
       storage_schema->column_cnt_ = MAX(storage_schema->column_cnt_, max_column_cnt_in_memtable);
       storage_schema->store_column_cnt_ = MAX(column_cnt_in_schema, max_column_cnt_in_memtable);
       storage_schema->schema_version_ = MAX(max_schema_version_in_memtable, schema_on_tablet.get_schema_version());

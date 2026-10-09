@@ -361,13 +361,16 @@ struct ObBatchUpdateTableStoreParam final
   void reset();
 
   TO_STRING_KV(K_(tables_handle),
-      KP_(source_storage_schema), K_(tablet_fork_param));
+      K_(storage_layout_id), KP_(target_storage_schema), K_(tablet_fork_param));
 
   ObTablesHandleArray tables_handle_;
 #ifdef ERRSIM
   ObErrsimBackfillPoint errsim_point_info_;
 #endif
-  const ObStorageSchema *source_storage_schema_;
+  // The installed descriptor belongs to the destination layout. Source
+  // SSTable versions are local to their own layout and cannot order it.
+  uint64_t storage_layout_id_;
+  const ObStorageSchema *target_storage_schema_;
   ObForkTableStoreParam tablet_fork_param_;
 
   DISALLOW_COPY_AND_ASSIGN(ObBatchUpdateTableStoreParam);

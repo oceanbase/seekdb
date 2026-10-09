@@ -36,6 +36,21 @@
 
 ## 验证记录
 
+### tablet 本地描述与接管安装的布局归属
+
+- 原生回归复现 `update_tablet_storage_schema` 的版本/正文混合：本地完整 V=20，旧合并携带完整 V=10，列数相同，输出版本仍是20但正文来自10。现在同一G内按版本整体选择描述，同版本优先完整描述；保留已有物理列数要求时明确标为简化，不拼接另一版本的压缩/行存等参数。
+- 真实SQL回归复现 mini 的另一入口：只修改列默认值、列数不变，再写入并转储，输出提高了V却仍标记完整。现在只要MemTable带来更高V或更多列，就明确生成简化描述；后续同版本完整布局可以补齐。
+- 真实父子DDL回归复现接管跨G污染：子表定义V=1791577063213184，父亲后续DDL V=1791577063380048，原先把后者安装到孩子本地schema。现在批量安装参数显式携带目标G及完整目标布局，在原生受保护读中选择不早于目标C的可读快照；安装时核对目标G，再与孩子本地描述比较。S仅限制源数据，不拿S读取尚未创建的目标G。移除了安装接口中的源schema参数及空源schema回退。
+- 原生六个顺序用例及序列化检查通过：旧合并晚完成、新布局晚到、同版本完整/简化描述两种顺序、新版简化描述与旧版完整描述两种顺序。先失败日志 `/tmp/seekdb-local-schema-test-1.log`，修正后 `/tmp/seekdb-local-schema-test-2.log`。
+- 真实 mini 回归先失败 `/tmp/seekdb-local-schema-mini-test-2.log`，修正后通过 `/tmp/seekdb-local-schema-mini-test-3.log`（实例 `namespace_fork_PROTOTYPE_local_schema_mini_i0dxc1yj`），版本提高、列数相同、简化标志及两种默认值读回均已断言。
+- 真实接管先失败 `/tmp/seekdb-local-schema-fork-test-3.log`；修正后父子分别加列通过 `/tmp/seekdb-local-schema-fork-test-4.log`（实例 `namespace_fork_PROTOTYPE_local_schema_fork_p82z0_jz`），父亲加两列而孩子保持旧定义通过 `/tmp/seekdb-local-schema-fork-wide-test-1.log`（实例 `namespace_fork_PROTOTYPE_local_schema_fork_wide_ucdjmqu2`）。均检查目标安装V、孩子本地更新、未更新的继承行、父亲新列及强制kill重启后的读回。
+- 驱动错误也保留：首轮 mini/fork 将调度周期配置为1s，低于参数允许的3s，进程启动失败；fork第2轮在首次安装前暂停全部接管，也暂停了模板初始化，因此主动终止。驱动已改为3s且SQL登录就绪后才暂停。对应 `/tmp/seekdb-local-schema-mini-test-1.log`、`/tmp/seekdb-local-schema-fork-test-1.log`、`/tmp/seekdb-local-schema-fork-test-2.log` 均保留，不能算作产品回归成功。
+- 原生构建1至5均通过。上述新用例及故障路径已接入四件套；同时扩展既有 `physical_merge_layout_probe.py`，要求F后DDL及写入完成mini安装，再执行旧F的大合并（最终通过记录见下一条）。
+- 移除本轮全部测试注入后，生产构建 `/tmp/seekdb-local-schema-production-build-1.log` 通过；生产大合并 `/tmp/seekdb-local-schema-production-major-1.log` 通过，frozen/broadcast/last 均为1791577530656781012；生产DDL回归 `/tmp/seekdb-local-schema-production-ddl-1.log` 通过。最终原生六个顺序检查 `/tmp/seekdb-local-schema-test-final.log` 通过。
+- 扩展旧F用例的失败保留：`/tmp/seekdb-local-schema-old-freeze-test-1.log`、`test-2.log` 分别在默认/180秒期限内等待继承准备超时，未发布F；后台曾遇到物化事务超时并在后续批次重试。`test-3.log` 已完成准备并发布F=1791577919364844021，F后父子mini都以更高V/简化描述完成安装，但驱动只接受虚拟表类型MINOR，漏掉实际类型MINI，因此断言超时。已修正为MINI/MINOR，并给该正确性用例300秒准备期限。诊断时GDB暂停会干扰2秒后台事务期限，第三轮不作为性能测量。
+- 扩展旧F用例最终通过 `/tmp/seekdb-local-schema-old-freeze-test-5.log`（实例 `namespace_fork_PROTOTYPE_physical_merge_layout_6inukkte`）：F=1791579089907257018，父G=5263/V=1791578965451280、子G=5571/V=1791578965183320。父子F后分别DDL、写入并完成真实MINI安装后，再执行旧F大合并仍使用各自G@F；F后创建对象C>F明确排除，之后两个分支的新列数据均正确。此前长期等待的线程池原因及确定性回归见下一节。
+- 本节尚不覆盖接管重写输入描述的全部生命周期，不能据安装改正就声称跨G所有路径已完成；meta major完整布局、G回收、统一进度/checksum及实际主备仍待整体目标落实。
+
 ### 主库 freeze 准备、最终复核及请求结束
 
 - 新增 `NamespaceFreezePreparation`，每次用一个原生只读快照遍历所有 live Namespace 的目录，再核对物理 incarnation、数据完整状态及本机接管完成状态。包括默认 Namespace、模板、普通孩子及索引/LOB；无 ns1 特例，无常驻就绪缓存、持久准备任务或新增调度器。
@@ -52,6 +67,12 @@
 - 失败记录保留：before-lock/locked 首轮在复制二进制尚未结束时启动，报 Text file busy；后续依赖明确等待复制完成。第 2 轮驱动从 process.out 等待暂停标记，但 seekdb 已把 stderr 重定向到 seekdb.log；引擎实际到达暂停点，修正增量日志读取后第 3 轮通过。相应日志 `before-lock-1/2`、`locked-1/2` 与同前缀完整路径均保留。
 - 上述 probe（包括并发和故障场景）已接入四件套，测试暂停控制文件仅由本地注入脚本引入，不进入生产实现。无完整 mysqltest/sysbench。完整主备、物理进度/逻辑 checksum 和 meta major 等目标仍需后续实施，不能把本节视为整体完成。
 - 移除全部注入后最终生产构建通过（`/tmp/seekdb-freeze-preparation-production-final-build-2.log`），包含重试槽修正的生产大合并回归通过（`/tmp/seekdb-freeze-preparation-production-major-final-2.log`），全局 frozen/broadcast/last 均达到 1791575974702086012。
+
+### freeze 等待期间的请求线程池缩容竞态（进行中）
+
+- 延长旧 F 用例准备预算至 300 秒后仍超时（`/tmp/seekdb-local-schema-old-freeze-test-4.log`，实例 `namespace_fork_PROTOTYPE_physical_merge_layout_plmxk7n7`）。GDB 栈 `/tmp/seekdb-local-schema-maintenance-stack-4.log` 显示 NamespaceMaintenance 在 `get_tablet_binding_mds_by_rpc -> ex_rpc::sync_call` 等待，唯一请求工作线程正在 freeze 准备循环。同期 runtime 日志连续显示 total_worker_cnt=1、idle_worker_cnt=0、req_queue.total_size=1，排除“布局读取慢”与“请求已经出队后执行卡住”这两个解释。
+- `ObAdaptiveWorkerPool::try_shrink_one` 只在缩到零时检查队列，存在最后空闲线程空 pop 后、退出前被入队操作错认为仍可服务的竞态。其余线程仍可能忙于等待后台完成，队列因此无法推进；既有 timeup 救援只覆盖 worker_count>=min，未覆盖该现场的 1<12。
+- 新增 `runtime_shrink_probe.py`，通过测试注入固定真实请求队列的交错顺序：一个 SQL 工作线程仍执行阻塞请求，最后空闲线程 pop 未命中后暂停，另一个已登录连接入队完成且跳过扩容，再允许空闲线程尝试退出。断言新请求在原忙线程释放前完成。用例已加入四件套。修复前 `/tmp/seekdb-runtime-shrink-test-1.log` 已确定性失败，原生日志 `workers=2 idle=1 queued=1`，新请求等待超过2秒而忙线程尚未释放。修复将队列复核应用到任意缩容，不再只检查缩到零；修复后同一用例 `/tmp/seekdb-runtime-shrink-test-2.log` 通过，新请求在原忙线程仍阻塞时返回；日志仍确认 workers=2、idle=1、queued=1 的确定性交错。没有新增常驻线程或 Namespace 特例。原 freeze/旧F合并场景已通过，见上一节最终记录。移除全部注入后生产构建 `/tmp/seekdb-runtime-shrink-production-build-1.log` 通过；生产大合并 `/tmp/seekdb-runtime-shrink-production-major-1.log` 通过，frozen/broadcast/last 均为1791579047069212012，物理ID与实际SSTable同时断言。两项新增注入文件只保存在测试目录，不进入生产源文件。
 
 ### 物理合并资格与布局读取（进行中）
 

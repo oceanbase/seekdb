@@ -21,7 +21,8 @@ scripts = ('native_probe_injection.py', 'storage_schema_history_probe_injection.
            'empty_shell_horizon_injection.py', 'physical_retention_cut_injection.py',
            'physical_gc_plan_injection.py', 'template_baseline_injection.py',
            'standby_copy_pause_injection.py', 'baseline_progress_injection.py', 'freeze_preparation_injection.py',
-           'catalog_gc_boundary_injection.py', 'grpc_stop_injection.py', 'ddl_publication_cost_injection.py')
+           'catalog_gc_boundary_injection.py', 'grpc_stop_injection.py', 'ddl_publication_cost_injection.py',
+           'local_schema_install_injection.py', 'runtime_shrink_injection.py')
 try:
     for script in scripts:
         subprocess.run([sys.executable, str(local / script), args.action], check=True)

@@ -33,6 +33,9 @@ namespace  storage
 class ObStorageSchemaUtil
 {
 public:
+  // Both descriptors must belong to the same stable layout identity. Preserve
+  // the newer version as a whole; a same-version full descriptor can restore
+  // simplified columns. Cross-layout copy callers supply the TARGET layout.
   static int update_tablet_storage_schema(
       const common::ObTabletID &tablet_id,
       common::ObIAllocator &allocator,

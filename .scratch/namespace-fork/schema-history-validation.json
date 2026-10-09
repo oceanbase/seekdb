@@ -2268,6 +2268,1682 @@
           "bytes": 9023750
         }
       ]
+    },
+    {
+      "name": "local_schema_native_red",
+      "log": "/tmp/seekdb-local-schema-test-1.log",
+      "status": "FAIL",
+      "note": "Old merge V10 replaced V20 body while reporting V20.",
+      "events": [
+        {
+          "event": "setup",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_local_storage_schema_7x_x21x8",
+          "pid": 546573,
+          "port": 13757
+        },
+        {
+          "event": "stopped",
+          "pid": 546573,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_local_storage_schema_7x_x21x8/data.tar.gz",
+          "bytes": 3296716
+        }
+      ]
+    },
+    {
+      "name": "local_schema_native_green",
+      "log": "/tmp/seekdb-local-schema-test-2.log",
+      "status": "PASS",
+      "note": "Six real native installation orders and persistence codec.",
+      "events": [
+        {
+          "event": "setup",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_local_storage_schema_4tmjuiy5",
+          "pid": 551031,
+          "port": 5329
+        },
+        {
+          "event": "PASS",
+          "case": "local_storage_schema",
+          "evidence": "LOCAL_SCHEMA_CASE_PASS case=old_merge_after_new_layout\nLOCAL_SCHEMA_CASE_PASS case=new_layout_after_old_merge\nLOCAL_SCHEMA_CASE_PASS case=same_version_fill_columns\nLOCAL_SCHEMA_CASE_PASS case=same_version_keep_columns\nLOCAL_SCHEMA_CASE_PASS case=old_merge_after_new_simplified\nLOCAL_SCHEMA_CASE_PASS case=new_simplified_after_old_merge\nLOCAL_SCHEMA_PASS version_body=1 same_version_full=1 simplified=1 serialization=1\n"
+        },
+        {
+          "event": "stopped",
+          "pid": 551031,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_local_storage_schema_4tmjuiy5/data.tar.gz",
+          "bytes": 3354871
+        }
+      ]
+    },
+    {
+      "name": "local_schema_native_final",
+      "log": "/tmp/seekdb-local-schema-test-final.log",
+      "status": "PASS",
+      "note": "Final native build; six installation orders and persistence codec.",
+      "events": [
+        {
+          "event": "setup",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_local_storage_schema_w0qydcta",
+          "pid": 585359,
+          "port": 23117
+        },
+        {
+          "event": "PASS",
+          "case": "local_storage_schema",
+          "evidence": "LOCAL_SCHEMA_CASE_PASS case=old_merge_after_new_layout\nLOCAL_SCHEMA_CASE_PASS case=new_layout_after_old_merge\nLOCAL_SCHEMA_CASE_PASS case=same_version_fill_columns\nLOCAL_SCHEMA_CASE_PASS case=same_version_keep_columns\nLOCAL_SCHEMA_CASE_PASS case=old_merge_after_new_simplified\nLOCAL_SCHEMA_CASE_PASS case=new_simplified_after_old_merge\nLOCAL_SCHEMA_PASS version_body=1 same_version_full=1 simplified=1 serialization=1\n"
+        },
+        {
+          "event": "stopped",
+          "pid": 585359,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_local_storage_schema_w0qydcta/data.tar.gz",
+          "bytes": 3348165
+        }
+      ]
+    },
+    {
+      "name": "local_schema_mini_invalid_interval",
+      "log": "/tmp/seekdb-local-schema-mini-test-1.log",
+      "status": "FAIL",
+      "note": "Harness used 1s below the supported 3s schedule minimum.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_local_schema_mini_ua8wa3zo",
+          "pid": 557588,
+          "port": 26361
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_local_schema_mini_ua8wa3zo/data.tar.gz",
+          "bytes": 1080
+        }
+      ]
+    },
+    {
+      "name": "local_schema_mini_red",
+      "log": "/tmp/seekdb-local-schema-mini-test-2.log",
+      "status": "FAIL",
+      "note": "Actual same-column-count DDL advanced V but retained a full-description flag.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_local_schema_mini_1k2mrh8s",
+          "pid": 558664,
+          "port": 44805
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE DATABASE local_schema",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE TABLE local_schema.t(id INT PRIMARY KEY,v INT DEFAULT 3)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "INSERT INTO local_schema.t VALUES(1,10)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER TABLE local_schema.t ALTER COLUMN v SET DEFAULT 9",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "INSERT INTO local_schema.t(id) VALUES(2)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER SYSTEM MINOR FREEZE",
+          "rows": []
+        },
+        {
+          "event": "stopped",
+          "pid": 558664,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_local_schema_mini_1k2mrh8s/data.tar.gz",
+          "bytes": 6926910
+        }
+      ]
+    },
+    {
+      "name": "local_schema_mini_green",
+      "log": "/tmp/seekdb-local-schema-mini-test-3.log",
+      "status": "PASS",
+      "note": "Real SQL DDL, write and dump; same count, new V, simplified descriptor, correct rows.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_local_schema_mini_i0dxc1yj",
+          "pid": 577013,
+          "port": 15381
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE DATABASE local_schema",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE TABLE local_schema.t(id INT PRIMARY KEY,v INT DEFAULT 3)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "INSERT INTO local_schema.t VALUES(1,10),(3,12)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER TABLE local_schema.t ALTER COLUMN v SET DEFAULT 9",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "INSERT INTO local_schema.t(id) VALUES(2)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER SYSTEM MINOR FREEZE",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "SELECT * FROM local_schema.t ORDER BY id",
+          "rows": [
+            [
+              1,
+              10
+            ],
+            [
+              2,
+              9
+            ],
+            [
+              3,
+              12
+            ]
+          ]
+        },
+        {
+          "event": "PASS",
+          "case": "local_schema_mini",
+          "version": 1791577240527048,
+          "installations": [
+            {
+              "tablet": 4611686155866541377,
+              "before": 1791577240239056,
+              "observed": 1791577240527048,
+              "result": 1791577240527048,
+              "simplified": 1,
+              "before_columns": 2,
+              "observed_columns": 2,
+              "ret": 0
+            }
+          ]
+        },
+        {
+          "event": "stopped",
+          "pid": 577013,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_local_schema_mini_i0dxc1yj/data.tar.gz",
+          "bytes": 6805320
+        }
+      ]
+    },
+    {
+      "name": "local_schema_fork_invalid_interval",
+      "log": "/tmp/seekdb-local-schema-fork-test-1.log",
+      "status": "FAIL",
+      "note": "Harness used 1s below the supported 3s schedule minimum.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_local_schema_fork_8yldt8ay",
+          "pid": 557572,
+          "port": 30543
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_local_schema_fork_8yldt8ay/data.tar.gz",
+          "bytes": 1109
+        }
+      ]
+    },
+    {
+      "name": "local_schema_fork_initial_pause",
+      "log": "/tmp/seekdb-local-schema-fork-test-2.log",
+      "status": "INTERRUPTED",
+      "note": "Harness paused template takeover during initial installation; explicitly interrupted and moved pause after startup.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_local_schema_fork_3cp2b8kz",
+          "pid": 558651,
+          "port": 24765
+        },
+        {
+          "event": "stopped",
+          "pid": 558651,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_local_schema_fork_3cp2b8kz/data.tar.gz",
+          "bytes": 4315425
+        }
+      ]
+    },
+    {
+      "name": "local_schema_fork_red",
+      "log": "/tmp/seekdb-local-schema-fork-test-3.log",
+      "status": "FAIL",
+      "note": "Child installed its parent subsequent DDL version during baseline takeover.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_local_schema_fork_hdceklcg",
+          "pid": 569060,
+          "port": 8405
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE DATABASE local_schema",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE TABLE local_schema.t(id INT PRIMARY KEY,v INT DEFAULT 3)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "INSERT INTO local_schema.t VALUES(1,10)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "FORK NAMESPACE local_schema_child FROM ns1",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER TABLE local_schema.t ADD COLUMN child_col INT DEFAULT 7",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "UPDATE local_schema.t SET v=20 WHERE id=1",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER TABLE local_schema.t ADD COLUMN parent_col INT DEFAULT 11",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "UPDATE local_schema.t SET parent_col=99 WHERE id=1",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER SYSTEM MINOR FREEZE",
+          "rows": []
+        },
+        {
+          "event": "stopped",
+          "pid": 569060,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_local_schema_fork_hdceklcg/data.tar.gz",
+          "bytes": 7440466
+        }
+      ]
+    },
+    {
+      "name": "local_schema_fork_green",
+      "log": "/tmp/seekdb-local-schema-fork-test-4.log",
+      "status": "PASS",
+      "note": "Independent parent/child columns; target V, inherited and locally changed rows, crash/restart.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_local_schema_fork_p82z0_jz",
+          "pid": 576901,
+          "port": 19833
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE DATABASE local_schema",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE TABLE local_schema.t(id INT PRIMARY KEY,v INT DEFAULT 3)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "INSERT INTO local_schema.t VALUES(1,10),(3,12)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "FORK NAMESPACE local_schema_child FROM ns1",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER TABLE local_schema.t ADD COLUMN child_col INT DEFAULT 7",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "UPDATE local_schema.t SET v=20 WHERE id=1",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER TABLE local_schema.t ADD COLUMN parent_col INT DEFAULT 11",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "UPDATE local_schema.t SET parent_col=99 WHERE id=1",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER SYSTEM MINOR FREEZE",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "SELECT * FROM local_schema.t ORDER BY id",
+          "rows": [
+            [
+              1,
+              20,
+              7
+            ],
+            [
+              3,
+              12,
+              7
+            ]
+          ]
+        },
+        {
+          "event": "sql",
+          "sql": "SELECT id,v,parent_col FROM local_schema.t ORDER BY id",
+          "rows": [
+            [
+              1,
+              10,
+              99
+            ],
+            [
+              3,
+              12,
+              11
+            ]
+          ]
+        },
+        {
+          "event": "crash_for_recovery",
+          "pid": 576901
+        },
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_local_schema_fork_p82z0_jz",
+          "pid": 577919,
+          "port": 19833
+        },
+        {
+          "event": "sql",
+          "sql": "SELECT * FROM local_schema.t ORDER BY id",
+          "rows": [
+            [
+              1,
+              20,
+              7
+            ],
+            [
+              3,
+              12,
+              7
+            ]
+          ]
+        },
+        {
+          "event": "PASS",
+          "case": "local_schema_fork",
+          "version": 1791577240846720,
+          "installations": [
+            {
+              "tablet": 4611686430744448321,
+              "before": 1791577240846720,
+              "incoming": 1791577240846720,
+              "result": 1791577240846720,
+              "simplified": 0,
+              "ret": 0
+            }
+          ]
+        },
+        {
+          "event": "stopped",
+          "pid": 577919,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_local_schema_fork_p82z0_jz/data.tar.gz",
+          "bytes": 7552998
+        }
+      ]
+    },
+    {
+      "name": "local_schema_fork_parent_wider",
+      "log": "/tmp/seekdb-local-schema-fork-wide-test-1.log",
+      "status": "PASS",
+      "note": "Parent adds two columns, child retains original layout; target V and rows survive crash/restart.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_local_schema_fork_wide_ucdjmqu2",
+          "pid": 576899,
+          "port": 5397
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE DATABASE local_schema",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE TABLE local_schema.t(id INT PRIMARY KEY,v INT DEFAULT 3)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "INSERT INTO local_schema.t VALUES(1,10),(3,12)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "FORK NAMESPACE local_schema_child FROM ns1",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "UPDATE local_schema.t SET v=20 WHERE id=1",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER TABLE local_schema.t ADD COLUMN parent_col INT DEFAULT 11",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER TABLE local_schema.t ADD COLUMN parent_extra INT DEFAULT 13",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "UPDATE local_schema.t SET parent_col=99 WHERE id=1",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER SYSTEM MINOR FREEZE",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "SELECT * FROM local_schema.t ORDER BY id",
+          "rows": [
+            [
+              1,
+              20
+            ],
+            [
+              3,
+              12
+            ]
+          ]
+        },
+        {
+          "event": "sql",
+          "sql": "SELECT id,v,parent_col FROM local_schema.t ORDER BY id",
+          "rows": [
+            [
+              1,
+              10,
+              99
+            ],
+            [
+              3,
+              12,
+              11
+            ]
+          ]
+        },
+        {
+          "event": "crash_for_recovery",
+          "pid": 576899
+        },
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_local_schema_fork_wide_ucdjmqu2",
+          "pid": 577886,
+          "port": 5397
+        },
+        {
+          "event": "sql",
+          "sql": "SELECT * FROM local_schema.t ORDER BY id",
+          "rows": [
+            [
+              1,
+              20
+            ],
+            [
+              3,
+              12
+            ]
+          ]
+        },
+        {
+          "event": "PASS",
+          "case": "local_schema_fork_wide",
+          "version": 1791577240007328,
+          "installations": [
+            {
+              "tablet": 4611686430744448321,
+              "before": 1791577240007328,
+              "incoming": 1791577240007328,
+              "result": 1791577240007328,
+              "simplified": 0,
+              "ret": 0
+            }
+          ]
+        },
+        {
+          "event": "stopped",
+          "pid": 577886,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_local_schema_fork_wide_ucdjmqu2/data.tar.gz",
+          "bytes": 6889344
+        }
+      ]
+    },
+    {
+      "name": "local_schema_old_freeze_default_timeout",
+      "log": "/tmp/seekdb-local-schema-old-freeze-test-1.log",
+      "status": "FAIL",
+      "note": "Freeze preparation exhausted original query deadline while inherited system baselines were pending.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-local-schema-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_merge_layout_e5eupif8",
+          "pid": 585403,
+          "port": 23251
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER SYSTEM SET ob_compaction_schedule_interval='3s'",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE DATABASE merge_layout",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE TABLE merge_layout.t(id INT PRIMARY KEY,v INT)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "INSERT INTO merge_layout.t VALUES(1,10)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "FORK NAMESPACE merge_layout_child FROM ns1",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER TABLE merge_layout.t ADD COLUMN child_col INT DEFAULT 7",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "UPDATE merge_layout.t SET v=20",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER TABLE merge_layout.t ADD COLUMN parent_col INT DEFAULT 9",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER SYSTEM SUSPEND MERGE",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER SYSTEM MINOR FREEZE",
+          "rows": []
+        },
+        {
+          "event": "stopped",
+          "pid": 585403,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_merge_layout_e5eupif8/data.tar.gz",
+          "bytes": 8523277
+        }
+      ]
+    },
+    {
+      "name": "local_schema_old_freeze_180s_timeout",
+      "log": "/tmp/seekdb-local-schema-old-freeze-test-2.log",
+      "status": "FAIL",
+      "note": "Freeze preparation exhausted 180s; an inherited binding remained unmaterialized. No F was published.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-local-schema-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_merge_layout_ijljm9m8",
+          "pid": 590135,
+          "port": 9887
+        },
+        {
+          "event": "sql",
+          "sql": "SET ob_query_timeout=180000000",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER SYSTEM SET ob_compaction_schedule_interval='3s'",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE DATABASE merge_layout",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE TABLE merge_layout.t(id INT PRIMARY KEY,v INT)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "INSERT INTO merge_layout.t VALUES(1,10)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "FORK NAMESPACE merge_layout_child FROM ns1",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER TABLE merge_layout.t ADD COLUMN child_col INT DEFAULT 7",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "UPDATE merge_layout.t SET v=20",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER TABLE merge_layout.t ADD COLUMN parent_col INT DEFAULT 9",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER SYSTEM SUSPEND MERGE",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER SYSTEM MINOR FREEZE",
+          "rows": []
+        },
+        {
+          "event": "stopped",
+          "pid": 590135,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_merge_layout_ijljm9m8/data.tar.gz",
+          "bytes": 9038691
+        }
+      ]
+    },
+    {
+      "name": "local_schema_old_freeze_mini_oracle",
+      "log": "/tmp/seekdb-local-schema-old-freeze-test-3.log",
+      "status": "FAIL",
+      "note": "Preparation completed and post-F minis installed. Harness only accepted MINOR; actual installed tables are MINI. Native trace and SQL inspection confirmed post-F data and simplified V. GDB sampling in this diagnostic run can perturb short transaction deadlines.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-local-schema-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_merge_layout_i5gap99o",
+          "pid": 599089,
+          "port": 36041
+        },
+        {
+          "event": "sql",
+          "sql": "SET ob_query_timeout=180000000",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER SYSTEM SET ob_compaction_schedule_interval='3s'",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE DATABASE merge_layout",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE TABLE merge_layout.t(id INT PRIMARY KEY,v INT)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "INSERT INTO merge_layout.t VALUES(1,10)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "FORK NAMESPACE merge_layout_child FROM ns1",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER TABLE merge_layout.t ADD COLUMN child_col INT DEFAULT 7",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "UPDATE merge_layout.t SET v=20",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER TABLE merge_layout.t ADD COLUMN parent_col INT DEFAULT 9",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER SYSTEM SUSPEND MERGE",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER SYSTEM MINOR FREEZE",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER SYSTEM MAJOR FREEZE",
+          "rows": []
+        },
+        {
+          "event": "freeze_selected",
+          "frozen": 1791577919364844021,
+          "parent_tablet": 4611686155866541377,
+          "child_tablet": 4611686430744448321,
+          "parent_version": 1791577754493528,
+          "child_version": 1791577754411320
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER TABLE merge_layout.t ADD COLUMN after_f INT DEFAULT 11",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER TABLE merge_layout.t ADD COLUMN after_f INT DEFAULT 13",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "UPDATE merge_layout.t SET after_f=21",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "UPDATE merge_layout.t SET after_f=23",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER SYSTEM MINOR FREEZE",
+          "rows": []
+        },
+        {
+          "event": "stopped",
+          "pid": 599089,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_merge_layout_i5gap99o/data.tar.gz",
+          "bytes": 10323030
+        }
+      ]
+    },
+    {
+      "name": "local_schema_production_major",
+      "log": "/tmp/seekdb-local-schema-production-major-1.log",
+      "status": "PASS",
+      "note": "Uninstrumented production binary: major freeze/progress and physical IDs.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_s3hbz3w5",
+          "pid": 590575,
+          "port": 10771
+        },
+        {
+          "event": "sql",
+          "sql": "create database major_probe",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "create table major_probe.t(id int primary key,v int)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "insert into major_probe.t values(1,10),(2,20),(3,30)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "alter system set ob_compaction_schedule_interval='3s'",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "alter system minor freeze",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "alter system major freeze",
+          "rows": []
+        },
+        {
+          "event": "sstable_identity",
+          "tablet_id": 200001,
+          "rows": []
+        },
+        {
+          "event": "sstable_identity",
+          "tablet_id": 4611686155866541377,
+          "rows": [
+            [
+              4611686155866541377,
+              "MAJOR"
+            ]
+          ]
+        },
+        {
+          "event": "PASS",
+          "case": "major_progress_physical_ids",
+          "rows": [
+            [
+              1791577530656781012,
+              1791577530656781012,
+              1791577530656781012
+            ]
+          ]
+        },
+        {
+          "event": "stopped",
+          "pid": 590575,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_s3hbz3w5/data.tar.gz",
+          "bytes": 9923128
+        }
+      ]
+    },
+    {
+      "name": "local_schema_production_ddl",
+      "log": "/tmp/seekdb-local-schema-production-ddl-1.log",
+      "status": "PASS",
+      "note": "Uninstrumented production binary: partitions, LOB/index DDL, add/drop/truncate, parallel DDL, inherited views.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_catalog_schema_l_ix8giy",
+          "pid": 590578,
+          "port": 9705
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE DATABASE catalog_ddl",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE TABLE catalog_ddl.t(id INT PRIMARY KEY,v INT,b LONGTEXT) PARTITION BY HASH(id) PARTITIONS 8",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "INSERT INTO catalog_ddl.t VALUES(1,10,REPEAT('x',12000))",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE TABLE catalog_ddl.rp(id INT PRIMARY KEY,b LONGTEXT) PARTITION BY RANGE(id) (PARTITION p0 VALUES LESS THAN(10), PARTITION p1 VALUES LESS THAN(20))",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "INSERT INTO catalog_ddl.rp VALUES(1,REPEAT('a',12000)),(11,REPEAT('b',12000))",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "FORK NAMESPACE catalog_owner FROM ns1",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "FORK NAMESPACE catalog_old FROM catalog_owner",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER TABLE catalog_ddl.t COMMENT='cold description change'",
+          "rows": []
+        },
+        {
+          "event": "case_pass",
+          "statement": "ALTER TABLE catalog_ddl.t COMMENT='cold description change'",
+          "tablets": 30
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER TABLE catalog_ddl.t ADD COLUMN extra INT DEFAULT 7",
+          "rows": []
+        },
+        {
+          "event": "case_pass",
+          "statement": "ALTER TABLE catalog_ddl.t ADD COLUMN extra INT DEFAULT 7",
+          "tablets": 30
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE INDEX by_v ON catalog_ddl.t(v)",
+          "rows": []
+        },
+        {
+          "event": "case_pass",
+          "statement": "CREATE INDEX by_v ON catalog_ddl.t(v)",
+          "tablets": 38
+        },
+        {
+          "event": "sql",
+          "sql": "DROP INDEX by_v ON catalog_ddl.t",
+          "rows": []
+        },
+        {
+          "event": "case_pass",
+          "statement": "DROP INDEX by_v ON catalog_ddl.t",
+          "tablets": 30
+        },
+        {
+          "event": "sql",
+          "sql": "TRUNCATE TABLE catalog_ddl.t",
+          "rows": []
+        },
+        {
+          "event": "case_pass",
+          "statement": "TRUNCATE TABLE catalog_ddl.t",
+          "tablets": 30
+        },
+        {
+          "event": "sql",
+          "sql": "DROP TABLE catalog_ddl.t",
+          "rows": []
+        },
+        {
+          "event": "case_pass",
+          "statement": "DROP TABLE catalog_ddl.t",
+          "tablets": 6
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER TABLE catalog_ddl.rp ADD PARTITION (PARTITION p2 VALUES LESS THAN(30))",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "SELECT id FROM catalog_ddl.rp ORDER BY id",
+          "rows": [
+            [
+              1
+            ],
+            [
+              11
+            ]
+          ]
+        },
+        {
+          "event": "case_pass",
+          "statement": "ALTER TABLE catalog_ddl.rp ADD PARTITION (PARTITION p2 VALUES LESS THAN(30))",
+          "tablets": 9
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER TABLE catalog_ddl.rp TRUNCATE PARTITION p0",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "SELECT id FROM catalog_ddl.rp ORDER BY id",
+          "rows": [
+            [
+              11
+            ]
+          ]
+        },
+        {
+          "event": "case_pass",
+          "statement": "ALTER TABLE catalog_ddl.rp TRUNCATE PARTITION p0",
+          "tablets": 9
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER TABLE catalog_ddl.rp DROP PARTITION p1",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "SELECT id FROM catalog_ddl.rp ORDER BY id",
+          "rows": []
+        },
+        {
+          "event": "case_pass",
+          "statement": "ALTER TABLE catalog_ddl.rp DROP PARTITION p1",
+          "tablets": 6
+        },
+        {
+          "event": "sql",
+          "sql": "INSERT INTO catalog_ddl.rp VALUES(21,REPEAT('c',12000))",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "SELECT id,LENGTH(b) FROM catalog_ddl.rp",
+          "rows": [
+            [
+              21,
+              12000
+            ]
+          ]
+        },
+        {
+          "event": "sql",
+          "sql": "SELECT id,v,LENGTH(b) FROM catalog_ddl.t",
+          "rows": [
+            [
+              1,
+              10,
+              12000
+            ]
+          ]
+        },
+        {
+          "event": "sql",
+          "sql": "SELECT id,LENGTH(b) FROM catalog_ddl.rp ORDER BY id",
+          "rows": [
+            [
+              1,
+              12000
+            ],
+            [
+              11,
+              12000
+            ]
+          ]
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE TABLE catalog_ddl.parallel_1(id INT PRIMARY KEY,b LONGTEXT)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE TABLE catalog_ddl.parallel_0(id INT PRIMARY KEY,b LONGTEXT)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE TABLE catalog_ddl.parallel_3(id INT PRIMARY KEY,b LONGTEXT)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE TABLE catalog_ddl.parallel_2(id INT PRIMARY KEY,b LONGTEXT)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "DROP DATABASE catalog_ddl",
+          "rows": []
+        },
+        {
+          "event": "PASS",
+          "case": "ddl_catalog_schema",
+          "partitioned": true,
+          "lob_bindings": true,
+          "partition_add_drop_truncate": true,
+          "parallel_ddl": 4,
+          "parent_view_retained": true
+        },
+        {
+          "event": "stopped",
+          "pid": 590578,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_catalog_schema_l_ix8giy/data.tar.gz",
+          "bytes": 6950355
+        }
+      ]
+    },
+    {
+      "name": "local_schema_old_freeze_4",
+      "log": "/tmp/seekdb-local-schema-old-freeze-test-4.log",
+      "status": "FAIL",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-local-schema-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_merge_layout_plmxk7n7",
+          "pid": 610465,
+          "port": 60145
+        },
+        {
+          "event": "sql",
+          "sql": "SET ob_query_timeout=300000000",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER SYSTEM SET ob_compaction_schedule_interval='3s'",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE DATABASE merge_layout",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE TABLE merge_layout.t(id INT PRIMARY KEY,v INT)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "INSERT INTO merge_layout.t VALUES(1,10)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "FORK NAMESPACE merge_layout_child FROM ns1",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER TABLE merge_layout.t ADD COLUMN child_col INT DEFAULT 7",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "UPDATE merge_layout.t SET v=20",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER TABLE merge_layout.t ADD COLUMN parent_col INT DEFAULT 9",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER SYSTEM SUSPEND MERGE",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER SYSTEM MINOR FREEZE",
+          "rows": []
+        },
+        {
+          "event": "stopped",
+          "pid": 610465,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_merge_layout_plmxk7n7/data.tar.gz",
+          "bytes": 8037776
+        }
+      ],
+      "notes": "Freeze preparation timed out after 300s. Captured GDB stack shows NamespaceMaintenance waiting in ex_rpc::sync_call; runtime dump shows one busy request worker, zero idle workers and one queued task. Worker retirement/enqueue race under investigation; this is not evidence of slow layout reads. Stack: /tmp/seekdb-local-schema-maintenance-stack-4.log."
+    },
+    {
+      "name": "runtime_shrink_before_fix",
+      "log": "/tmp/seekdb-runtime-shrink-test-1.log",
+      "status": "FAIL",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-runtime-shrink-before",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_runtime_shrink_j6wtksag",
+          "pid": 636765,
+          "port": 34551
+        },
+        {
+          "event": "sql",
+          "sql": "SET ob_query_timeout=60000000",
+          "rows": []
+        },
+        {
+          "event": "FAIL",
+          "case": "runtime_shrink",
+          "queued": true,
+          "busy_still_running": true
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_runtime_shrink_j6wtksag/data.tar.gz",
+          "bytes": 6154795
+        }
+      ],
+      "notes": "Deterministic real request queue interleaving reproduced: workers=2 idle=1 queued=1 before retirement; SELECT 42 remained queued for >2s while SELECT SLEEP was still running."
+    },
+    {
+      "name": "runtime_shrink_after_fix",
+      "log": "/tmp/seekdb-runtime-shrink-test-2.log",
+      "status": "PASS",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-runtime-shrink-after",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_runtime_shrink_1tmvylq5",
+          "pid": 652297,
+          "port": 20083
+        },
+        {
+          "event": "sql",
+          "sql": "SET ob_query_timeout=60000000",
+          "rows": []
+        },
+        {
+          "event": "PASS",
+          "case": "runtime_shrink",
+          "latency_ms": 767.4741633236408,
+          "evidence": "RUNTIME_SHRINK_RACE workers=2 idle=1 queued=1"
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_runtime_shrink_1tmvylq5/data.tar.gz",
+          "bytes": 6133443
+        }
+      ],
+      "notes": "Same real queue interleaving workers=2 idle=1 queued=1 passed while original SQL worker remained blocked. The recorded 767ms includes evidence log loading; driver was subsequently adjusted to measure SQL completion only."
+    },
+    {
+      "name": "local_schema_old_freeze_5",
+      "log": "/tmp/seekdb-local-schema-old-freeze-test-5.log",
+      "status": "PASS",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-runtime-shrink-after",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_merge_layout_6inukkte",
+          "pid": 652368,
+          "port": 19003
+        },
+        {
+          "event": "sql",
+          "sql": "SET ob_query_timeout=300000000",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER SYSTEM SET ob_compaction_schedule_interval='3s'",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE DATABASE merge_layout",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE TABLE merge_layout.t(id INT PRIMARY KEY,v INT)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "INSERT INTO merge_layout.t VALUES(1,10)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "FORK NAMESPACE merge_layout_child FROM ns1",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER TABLE merge_layout.t ADD COLUMN child_col INT DEFAULT 7",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "UPDATE merge_layout.t SET v=20",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER TABLE merge_layout.t ADD COLUMN parent_col INT DEFAULT 9",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER SYSTEM SUSPEND MERGE",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER SYSTEM MINOR FREEZE",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER SYSTEM MAJOR FREEZE",
+          "rows": []
+        },
+        {
+          "event": "freeze_selected",
+          "frozen": 1791579089907257018,
+          "parent_tablet": 4611686155866541377,
+          "child_tablet": 4611686430744448321,
+          "parent_version": 1791578965451280,
+          "child_version": 1791578965183320
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER TABLE merge_layout.t ADD COLUMN after_f INT DEFAULT 11",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER TABLE merge_layout.t ADD COLUMN after_f INT DEFAULT 13",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "UPDATE merge_layout.t SET after_f=21",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "UPDATE merge_layout.t SET after_f=23",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER SYSTEM MINOR FREEZE",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "CREATE TABLE merge_layout.late(id INT PRIMARY KEY,v INT)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "INSERT INTO merge_layout.late VALUES(1,30)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "ALTER SYSTEM RESUME MERGE",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "UPDATE merge_layout.t SET after_f=21",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "UPDATE merge_layout.t SET after_f=23",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "SELECT id,v,parent_col,after_f FROM merge_layout.t",
+          "rows": [
+            [
+              1,
+              10,
+              9,
+              21
+            ]
+          ]
+        },
+        {
+          "event": "sql",
+          "sql": "SELECT id,v,child_col,after_f FROM merge_layout.t",
+          "rows": [
+            [
+              1,
+              20,
+              7,
+              23
+            ]
+          ]
+        },
+        {
+          "event": "PASS",
+          "case": "physical_merge_layout",
+          "frozen": 1791579089907257018,
+          "layouts": {
+            "4611686155866541377": {
+              "tablet": 4611686155866541377,
+              "G": 5263,
+              "C": 1791578964294202029,
+              "F": 1791579089907257018,
+              "V": 1791578965451280,
+              "ret": 0
+            },
+            "4611686430744448321": {
+              "tablet": 4611686430744448321,
+              "G": 5571,
+              "C": 1791578965363414031,
+              "F": 1791579089907257018,
+              "V": 1791578965183320,
+              "ret": 0
+            }
+          },
+          "late": {
+            "tablet": 4611686155866541378,
+            "C": 1791579092887364019,
+            "F": 1791579089907257018,
+            "member": 0,
+            "satisfied": 1,
+            "complete": 1,
+            "state": 0,
+            "ret": 0
+          },
+          "post_freeze_ddl": true,
+          "post_freeze_mini": true,
+          "independent_branches": true
+        },
+        {
+          "event": "stopped",
+          "pid": 652368,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_merge_layout_6inukkte/data.tar.gz",
+          "bytes": 12379755
+        }
+      ],
+      "notes": "PASS after adaptive worker retirement fix: post-F parent/child DDL and actual MINI installation, then old-F major uses each own G@F; C>F table excluded and both branches preserve newer data."
+    },
+    {
+      "name": "runtime_shrink_production_major",
+      "log": "/tmp/seekdb-runtime-shrink-production-major-1.log",
+      "status": "PASS",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_ve_myhsg",
+          "pid": 655594,
+          "port": 13035
+        },
+        {
+          "event": "sql",
+          "sql": "create database major_probe",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "create table major_probe.t(id int primary key,v int)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "insert into major_probe.t values(1,10),(2,20),(3,30)",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "alter system set ob_compaction_schedule_interval='3s'",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "alter system minor freeze",
+          "rows": []
+        },
+        {
+          "event": "sql",
+          "sql": "alter system major freeze",
+          "rows": []
+        },
+        {
+          "event": "sstable_identity",
+          "tablet_id": 200001,
+          "rows": []
+        },
+        {
+          "event": "sstable_identity",
+          "tablet_id": 4611686155866541377,
+          "rows": [
+            [
+              4611686155866541377,
+              "MAJOR"
+            ]
+          ]
+        },
+        {
+          "event": "PASS",
+          "case": "major_progress_physical_ids",
+          "rows": [
+            [
+              1791579047069212012,
+              1791579047069212012,
+              1791579047069212012
+            ]
+          ]
+        },
+        {
+          "event": "stopped",
+          "pid": 655594,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_ve_myhsg/data.tar.gz",
+          "bytes": 10050547
+        }
+      ],
+      "notes": "PASS with all test hooks removed: frozen=broadcast=last; actual MAJOR exists only under the physical tablet ID."
     }
   ]
 }

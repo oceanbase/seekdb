@@ -440,7 +440,8 @@ ObBatchUpdateTableStoreParam::ObBatchUpdateTableStoreParam()
 #ifdef ERRSIM
     errsim_point_info_(),
 #endif
-    source_storage_schema_(nullptr),
+    storage_layout_id_(0),
+    target_storage_schema_(nullptr),
     tablet_fork_param_()
 {
 }
@@ -448,13 +449,16 @@ ObBatchUpdateTableStoreParam::ObBatchUpdateTableStoreParam()
 void ObBatchUpdateTableStoreParam::reset()
 {
   tables_handle_.reset();
-  source_storage_schema_ = nullptr;
+  storage_layout_id_ = 0;
+  target_storage_schema_ = nullptr;
   tablet_fork_param_.reset();
 }
 
 bool ObBatchUpdateTableStoreParam::is_valid() const
 {
-  return tablet_fork_param_.is_valid();
+  return tablet_fork_param_.is_valid() && storage_layout_id_ != 0
+      && storage_layout_id_ != OB_INVALID_ID && target_storage_schema_ != nullptr
+      && target_storage_schema_->is_valid() && !target_storage_schema_->is_column_info_simplified();
 }
 
 

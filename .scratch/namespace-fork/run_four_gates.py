@@ -22,6 +22,10 @@ probe = str(Path(args.native_probe_binary).resolve())
 args.log_dir.mkdir(parents=True, exist_ok=True)
 gates = [
     ('bootstrap-native-kv', [
+        [local / 'runtime_shrink_probe.py', '--binary', probe],
+        [local / 'run_local_storage_schema_probe.py', '--binary', probe],
+        *[[local / 'local_schema_install_probe.py', '--binary', probe, '--case', case]
+          for case in ('mini', 'fork', 'fork_wide')],
         [local / 'run_storage_schema_history_probe.py', '--binary', probe],
         [local / 'run_layout_retention_probe.py', '--binary', probe],
         [local / 'run_table_storage_layout_probe.py', '--binary', probe],

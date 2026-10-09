@@ -274,7 +274,6 @@ private:
   int create_sstables();
   int update_table_store_with_batch_tables(
       ObLS *ls,
-      const ObTabletHandle &src_tablet_handle,
       const ObTabletHandle &dst_tablet_handle,
       const common::ObTabletID &dst_tablet_id,
       const ObTablesHandleArray &tables_handle,

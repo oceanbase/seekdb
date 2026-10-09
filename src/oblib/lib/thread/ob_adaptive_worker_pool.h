@@ -34,7 +34,7 @@ namespace lib
  *
  * ## Derived contract (CRTP)
  *   bool do_add_worker();       // create + start one worker, return success
- *   int64_t queue_size() const;   // for shrink-to-0 safety guard
+ *   int64_t queue_size() const;   // recheck pending work before retirement
  *
  * ## Reaping stopped workers (required)
  * Workers that exit via try_shrink_one() call Worker::stop() and then break
@@ -91,14 +91,17 @@ public:
   }
 
   /// CAS-based shrink down to the given floor.
-  /// Refuses to shrink to 0 when queue is non-empty.
+  /// Refuses to retire when work arrived after the worker's empty pop.
   bool try_shrink_one(int64_t floor)
   {
     int64_t cur = total_cnt_.load(std::memory_order_relaxed);
     while (cur > floor) {
       if (total_cnt_.compare_exchange_weak(cur, cur - 1,
               std::memory_order_acq_rel, std::memory_order_relaxed)) {
-        if (cur - 1 == 0 && self().queue_size() > 0) {
+        // The producer may have observed this worker as idle and skipped
+        // expansion. Remaining workers can all be busy (including waiting
+        // for the queued work), so checking only shrink-to-zero loses progress.
+        if (self().queue_size() > 0) {
           total_cnt_.fetch_add(1, std::memory_order_relaxed);
           return false;
         }
