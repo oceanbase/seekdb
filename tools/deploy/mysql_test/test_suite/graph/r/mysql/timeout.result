@@ -2,9 +2,15 @@ EXPLAIN INTO plan_table SET statement_id='graph_timeout'
 SELECT COUNT(*) AS paths
 FROM GRAPH_TABLE(graph_social MATCH
 (a IS person WHERE a.id=1)
+-[e IS knows]->{1,2}(b IS person)
+COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+EXPLAIN INTO plan_table SET statement_id='graph_volatile_filter_fallback'
+SELECT COUNT(*) AS paths
+FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=1)
 -[e IS knows WHERE SLEEP(0.2 + MOD(e.id,1))=0]->{1,2}(b IS person)
 COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
-EXPLAIN INTO plan_table SET statement_id='graph_timeout_fallback'
+EXPLAIN INTO plan_table SET statement_id='graph_path_output_fallback'
 SELECT COUNT(*) AS paths
 FROM GRAPH_TABLE(graph_social MATCH
 (a IS person WHERE a.id=1)-[e IS knows]->{1,2}(b IS person)
@@ -16,35 +22,41 @@ WHERE statement_id='graph_timeout'
   AND special_predicates LIKE '%direction=OUT, hops={1,2}, access=full-scan, mode=WALK, runtime=native%';
 uses_native_feedback
 1
-SELECT COUNT(*)=1 AS uses_fallback_feedback
+SELECT COUNT(*)=1 AS volatile_filter_uses_fallback
 FROM plan_table
-WHERE statement_id='graph_timeout_fallback'
+WHERE statement_id='graph_volatile_filter_fallback'
   AND operator='GRAPH FEEDBACK LOOP'
   AND special_predicates LIKE '%runtime=fallback%';
-uses_fallback_feedback
+volatile_filter_uses_fallback
 1
-timeout_is_propagated_and_failed_execution_releases_resources
+SELECT COUNT(*)=1 AS path_output_uses_fallback
+FROM plan_table
+WHERE statement_id='graph_path_output_fallback'
+  AND operator='GRAPH FEEDBACK LOOP'
+  AND special_predicates LIKE '%runtime=fallback%';
+path_output_uses_fallback
+1
+das_edge_timeout_is_propagated_and_failed_execution_releases_resources
 PREPARE graph_timeout FROM
-'SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH (a IS person WHERE a.id=1)-[e IS knows WHERE SLEEP(0.2 + MOD(e.id,1))=0]->{1,2}(b IS person) COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g';
-SET ob_query_timeout=100000;
-EXECUTE graph_timeout;
-ERROR HY000: Timeout, query has reached the maximum query timeout: 100000(us), maybe you can adjust the session variable ob_query_timeout or query_timeout hint, and try again.
+'SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH (a IS person WHERE a.id=1)-[e IS knows]->{1,2}(b IS person) COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g';
 SET ob_query_timeout=10000000;
+EXECUTE graph_timeout;
+ERROR HY000: Timeout, query has reached the maximum query timeout: 10000000(us), maybe you can adjust the session variable ob_query_timeout or query_timeout hint, and try again.
 SELECT COUNT(*)=0 AS graph_work_area_released
 FROM oceanbase.V$OB_MEMORY
-WHERE MOD_NAME='GraphFeedback' AND (HOLD<>0 OR USED<>0);
+WHERE MOD_NAME IN ('GraphFeedback','GraphEdgeScan')
+AND (HOLD<>0 OR USED<>0);
 graph_work_area_released
 1
 EXECUTE graph_timeout;
 paths
 4
-SET ob_query_timeout=100000;
 EXECUTE graph_timeout;
-ERROR HY000: Timeout, query has reached the maximum query timeout: 100000(us), maybe you can adjust the session variable ob_query_timeout or query_timeout hint, and try again.
-SET ob_query_timeout=10000000;
+ERROR HY000: Timeout, query has reached the maximum query timeout: 10000000(us), maybe you can adjust the session variable ob_query_timeout or query_timeout hint, and try again.
 SELECT COUNT(*)=0 AS graph_work_area_released
 FROM oceanbase.V$OB_MEMORY
-WHERE MOD_NAME='GraphFeedback' AND (HOLD<>0 OR USED<>0);
+WHERE MOD_NAME IN ('GraphFeedback','GraphEdgeScan')
+AND (HOLD<>0 OR USED<>0);
 graph_work_area_released
 1
 EXECUTE graph_timeout;

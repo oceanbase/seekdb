@@ -149,7 +149,7 @@ private:
 // the recursive CTE operator hierarchy.
 class GraphFeedbackLoopSpec final : public RecursivePumpSpec
 {
-  OB_UNIS_VERSION_V(1);
+  OB_UNIS_VERSION_V(2);
 public:
   explicit GraphFeedbackLoopSpec(common::ObIAllocator &allocator,
                                  const ObPhyOperatorType type);
@@ -162,6 +162,10 @@ public:
   void set_expand_access(const GraphExpandAccessDesc &expand_access_desc)
   {
     expand_access_desc_ = expand_access_desc;
+  }
+  void set_native_step_supported(bool supported)
+  {
+    native_step_supported_ = supported;
   }
   int init_output_row_desc();
   int bind_expand_scans(uint64_t source_scan_op_id,
@@ -196,7 +200,8 @@ public:
   }
   bool can_use_basic_native_runtime() const
   {
-    return output_row_desc_.supports_basic_native_output(
+    return native_step_supported_
+        && output_row_desc_.supports_basic_native_output(
         path_desc_, expand_access_desc_);
   }
 
@@ -204,6 +209,7 @@ private:
   GraphPathDesc path_desc_{};
   GraphExpandAccessDesc expand_access_desc_{};
   GraphFeedbackRowDesc output_row_desc_{};
+  bool native_step_supported_{false};
   // Evaluated after the anchor child produces a row. The expression order is
   // the source element's declared key order, so it can be copied directly into
   // a typed GraphElementIdentity without inspecting generated column names.

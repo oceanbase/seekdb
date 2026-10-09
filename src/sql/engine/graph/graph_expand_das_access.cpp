@@ -1572,7 +1572,17 @@ int GraphExpandDasAccess::get_edge_page(
       bool source_found = false;
       int64_t source_index = -1;
       GraphExpandEdge edge;
-      if (OB_FAIL(evaluate_filters(eval_ctx_, scan_desc->filters_, filtered))) {
+      // This point is intentionally after DAS has returned a row while the
+      // stateful edge scan is still active. It lets mysqltest verify that a
+      // terminal scan error closes the live DAS tasks rather than only testing
+      // a timeout that fires before GraphExpand starts access.
+      const int simulate_error = EVENT_CALL(
+          EventTable::EN_DAS_GRAPH_EXPAND_AFTER_EDGE_ROW);
+      if (OB_UNLIKELY(OB_SUCCESS != simulate_error)) {
+        ret = simulate_error;
+        LOG_WARN("injected graph edge scan error", K(ret), K(scanned_edges));
+      } else if (OB_FAIL(evaluate_filters(eval_ctx_, scan_desc->filters_,
+                                          filtered))) {
       } else if (!filtered && OB_FAIL(materialize_edge(edge, matches))) {
       } else if (!filtered && matches
                  && OB_FAIL(edge_source_index_.find(

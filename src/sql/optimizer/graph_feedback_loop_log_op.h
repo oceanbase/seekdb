@@ -72,6 +72,10 @@ public:
   {
     return step_access_method_;
   }
+  bool is_native_step_supported() const
+  {
+    return native_step_supported_;
+  }
 
   int get_plan_item_info(PlanText &plan_text, ObSqlPlanItem &plan_item) override;
   int get_op_exprs(ObIArray<ObRawExpr *> &all_exprs) override;
@@ -110,6 +114,7 @@ private:
   GraphPathDesc path_desc_{};
   GraphExpandAccessDesc expand_access_desc_{};
   bool pull_to_local_{false};
+  bool native_step_supported_{false};
   GraphFeedbackAccessMethod step_access_method_{GraphFeedbackAccessMethod::UNKNOWN};
 
   DISALLOW_COPY_AND_ASSIGN(GraphFeedbackLoopLogOp);

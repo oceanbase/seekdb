@@ -18,6 +18,7 @@
 
 #include "sql/optimizer/graph_feedback_loop_log_op.h"
 #include "sql/optimizer/ob_join_order.h"
+#include "sql/optimizer/ob_log_join.h"
 #include "sql/optimizer/ob_log_table_scan.h"
 #include "sql/optimizer/ob_opt_est_cost.h"
 #include "sql/resolver/dml/ob_select_stmt.h"
@@ -35,6 +36,45 @@ const int64_t GRAPH_FEEDBACK_DEPTH_COLUMN_COUNT = 1;
 const char *GRAPH_SEED_VERTEX_ALIAS = "__g_seed_vertex";
 const char *GRAPH_STEP_EDGE_ALIAS = "__g_step_edge";
 const char *GRAPH_STEP_VERTEX_ALIAS = "__g_step_vertex";
+
+bool are_native_scan_filters_supported(
+    const ObIArray<ObRawExpr *> &filters)
+{
+  bool supported = true;
+  for (int64_t i = 0; supported && i < filters.count(); ++i) {
+    supported = filters.at(i) != nullptr && filters.at(i)->is_deterministic();
+  }
+  return supported;
+}
+
+bool is_native_graph_step_supported(
+    const ObLogicalOperator *root,
+    const ObLogTableScan *edge_scan,
+    const ObLogTableScan *target_scan)
+{
+  bool supported = root != nullptr;
+  if (supported && (root == edge_scan || root == target_scan)) {
+    // GraphExpand evaluates filters copied into these scan descriptors. Keep
+    // volatile filters on the relational path: their evaluation count and
+    // side effects must not change when the recursive child is bypassed.
+    supported = are_native_scan_filters_supported(root->get_filter_exprs())
+        && are_native_scan_filters_supported(root->get_startup_exprs());
+  } else if (supported && root->get_type() != LOG_TABLE_SCAN) {
+    // Filters owned by joins/sorts/materialization are not represented in a
+    // GraphExpandScanDesc, so native execution cannot silently skip them.
+    supported = root->get_filter_exprs().empty()
+        && root->get_startup_exprs().empty();
+    if (supported && root->get_type() == LOG_JOIN) {
+      const ObLogJoin *join = static_cast<const ObLogJoin *>(root);
+      supported = join->get_other_join_conditions().empty();
+    }
+  }
+  for (int64_t i = 0; supported && i < root->get_num_of_child(); ++i) {
+    supported = is_native_graph_step_supported(
+        root->get_child(i), edge_scan, target_scan);
+  }
+  return supported;
+}
 
 const ObLogTableScan *find_internal_scan(const ObLogicalOperator *root,
                                          const char *table_alias);
@@ -247,7 +287,7 @@ const char *path_mode_name(GraphPathMode path_mode)
 bool GraphFeedbackLoopLogOp::can_use_basic_native_runtime() const
 {
   const ObLogicalOperator *anchor = get_child(first_child);
-  return anchor != nullptr
+  return anchor != nullptr && native_step_supported_
       && supports_basic_native_graph_feedback(
              path_desc_, expand_access_desc_,
              anchor->get_output_exprs().count());
@@ -295,6 +335,8 @@ int GraphFeedbackLoopLogOp::initialize_expand_access()
     step_access_method_ = expand_access_desc_.uses_adjacency_index()
         ? GraphFeedbackAccessMethod::INDEX_SCAN
         : GraphFeedbackAccessMethod::FULL_SCAN;
+    native_step_supported_ = is_native_graph_step_supported(
+        step, edge_scan, target_scan);
   }
   return ret;
 }
