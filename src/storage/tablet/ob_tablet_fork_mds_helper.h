@@ -36,6 +36,7 @@ namespace share
 class SCN;
 }
 
+namespace transaction { class ObTxDesc; }
 namespace storage
 {
 class ObLS;
@@ -74,6 +75,8 @@ public:
   static int on_register(const char* buf, const int64_t len, mds::BufferCtx &ctx);
   static int on_replay(const char* buf, const int64_t len, const share::SCN &scn, mds::BufferCtx &ctx);
   static int register_mds(const ObTabletForkMdsArg &arg, const bool need_flush_redo, ObMySQLTransaction &trans);
+  static int register_mds(const ObTabletForkMdsArg &arg, const bool need_flush_redo,
+      transaction::ObTxDesc &trans);
 
 private:
   static int modify(const ObTabletForkMdsArg &arg, const share::SCN &scn, mds::BufferCtx &ctx);

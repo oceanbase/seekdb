@@ -99,10 +99,11 @@ static int run_catalog_read_view_probe()
   // the historical page version, as it must when primary deletes are replayed.
   auto collect = [&](bool held) {
     InstanceMetaStore::Transaction tx;
-    int rc = store.begin_directory_gc(tx, ObTimeUtility::current_time() + 1000000);
-    rootserver::InstanceNamespaceMetadata metadata(store, tx);
+    rootserver::InstanceNamespaceDirectory directory(store);
     int64_t deleted = 0;
-    if (rc == OB_SUCCESS) { rc = metadata.collect_unreachable_pages(256, deleted); }
+    int rc = directory.collect_catalog_pages(deadline(), deleted);
+    if (rc == OB_SUCCESS) { rc = store.begin(tx, deadline(), true); }
+    rootserver::InstanceNamespaceMetadata metadata(store, tx);
     std::string page;
     if (rc == OB_SUCCESS) {
       const int read = metadata.read_page(old_page, page);

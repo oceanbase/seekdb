@@ -23,6 +23,8 @@
 #include "storage/tx_storage/ob_ls_service.h"
 #include "common/mysqlclient/ob_isql_connection.h"
 #include "storage/tx/ob_multi_data_source.h"
+#include "storage/tx/ob_trans_service.h"
+#include <functional>
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -144,19 +146,15 @@ int ObTabletForkMdsArg::set_truncate_arg(const ObTruncateTabletArg &arg)
   return ret;
 }
 
-int ObTabletForkMdsHelper::register_mds(
-    const ObTabletForkMdsArg &arg,
-    const bool need_flush_redo,
-    ObMySQLTransaction &trans)
+namespace {
+int register_tablet_fork(const ObTabletForkMdsArg &arg, bool need_flush_redo,
+    const std::function<int(const char *, int64_t, const ObRegisterMdsFlag &)> &register_mds)
 {
   int ret = OB_SUCCESS;
-  sqlclient::ObISQLConnection *isql_conn = nullptr;
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid tablet fork mds arg", KR(ret), K(arg));
-  } else if (OB_ISNULL(isql_conn = trans.get_connection())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid connection when register tablet fork mds", KR(ret));
+
   } else {
     const int64_t size = arg.get_serialize_size();
     ObArenaAllocator allocator;
@@ -169,11 +167,34 @@ int ObTabletForkMdsHelper::register_mds(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to allocate buffer for tablet fork mds", KR(ret), K(size));
     } else if (OB_FAIL(arg.serialize(buf, size, pos))) {
-    } else if (OB_FAIL(query::ObInnerSQLConnectionAccess::register_multi_data_source(
-                   isql_conn, ObTxDataSourceType::TABLET_FORK, buf, pos, flag))) {
+    } else if (OB_FAIL(register_mds(buf, pos, flag))) {
     }
   }
   return ret;
+}
+
+} // namespace
+
+int ObTabletForkMdsHelper::register_mds(const ObTabletForkMdsArg &arg,
+    bool need_flush_redo, ObMySQLTransaction &trans)
+{
+  if (trans.get_connection() == nullptr) { return OB_INVALID_ARGUMENT; }
+  return register_tablet_fork(arg, need_flush_redo,
+      [&](const char *buf, int64_t size, const ObRegisterMdsFlag &flag) {
+    return query::ObInnerSQLConnectionAccess::register_multi_data_source(
+        trans.get_connection(), ObTxDataSourceType::TABLET_FORK, buf, size, flag);
+  });
+}
+
+int ObTabletForkMdsHelper::register_mds(const ObTabletForkMdsArg &arg,
+    bool need_flush_redo, ObTxDesc &trans)
+{
+  auto *service = share::server_service<ObTransService>();
+  if (service == nullptr) { return OB_NOT_INIT; }
+  return register_tablet_fork(arg, need_flush_redo,
+      [&](const char *buf, int64_t size, const ObRegisterMdsFlag &flag) {
+    return service->register_mds_into_tx(trans, ObTxDataSourceType::TABLET_FORK, buf, size, flag);
+  });
 }
 
 int ObTabletForkMdsHelper::on_register(const char* buf, const int64_t len, mds::BufferCtx &ctx)

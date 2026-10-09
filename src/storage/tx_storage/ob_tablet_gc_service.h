@@ -16,6 +16,7 @@
 
 #ifndef OCEABASE_STORAGE_OB_TABLET_GC_SERVICE_
 #define OCEABASE_STORAGE_OB_TABLET_GC_SERVICE_
+#include <functional>
 #include "lib/literals/ob_literals.h"
 #include "storage/tx_storage/ob_ls_freeze_thread.h"
 #include "lib/task/ob_timer.h"
@@ -143,6 +144,15 @@ public:
       tablet_shell_task_(*this)
   {}
 
+  using Reclaim = std::function<int(const common::ObIArray<common::ObTabletID> &)>;
+  using GuardedReclaim = std::function<int(common::ObIArray<common::ObTabletID> &, bool &, const Reclaim &)>;
+  // Install before start. The guard must cover both selection and reclamation.
+  void set_reclamation_guard(GuardedReclaim guard) { reclamation_guard_ = std::move(guard); }
+  int reclaim_unreferenced_tablets(common::ObIArray<common::ObTabletID> &tablets,
+      bool &need_retry, const Reclaim &reclaim)
+  {
+    return reclamation_guard_ ? reclamation_guard_(tablets, need_retry, reclaim) : common::OB_NOT_INIT;
+  }
   static int server_module_init(ObTabletGCService *&m);
   int init();
   int start();
@@ -175,6 +185,7 @@ private:
 
   common::ObTimer timer_for_tablet_shell_;
   ObEmptyShellTask tablet_shell_task_;
+  GuardedReclaim reclamation_guard_;
 };
 
 } // checkpoint

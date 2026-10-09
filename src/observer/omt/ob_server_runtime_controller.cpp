@@ -1532,6 +1532,8 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret)) {
     mods_freeze_info_mgr_->set_physical_retention_loader(
         NamespaceForkKernelPrototype::load_physical_retention);
+    mods_tablet_gc_service_->set_reclamation_guard(
+        NamespaceForkKernelPrototype::reclaim_unreferenced_tablets);
   }
   if (OB_SUCC(ret) && OB_FAIL(ObMultiVersionGarbageCollector::server_module_init(mods_multi_version_garbage_collector_))) { SERVER_LOG(WARN, "mods_multi_version_garbage_collector_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObEmptyReadBucket::server_module_init(mods_empty_read_bucket_))) { SERVER_LOG(WARN, "mods_empty_read_bucket_ fail", KR(ret)); }
@@ -1675,11 +1677,16 @@ int ObServer::obs_start_modules()
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_plugin_vector_index_service_))) { SERVER_LOG(WARN, "mods_plugin_vector_index_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_ai_service_))) { SERVER_LOG(WARN, "mods_ai_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_change_stream_mgr_))) { SERVER_LOG(WARN, "mods_change_stream_mgr_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(namespace_maintenance_.start(
+          *mods_shared_timer_, mods_access_service_->instance_meta_store()))) {
+    SERVER_LOG(WARN, "namespace maintenance failed to start", KR(ret));
+  }
   return ret;
 }
 
 void ObServer::obs_stop_modules()
 {
+  namespace_maintenance_.stop();
   server_module_stop_default(mods_shared_macro_block_mgr_);
   server_module_stop_default(mods_change_stream_mgr_);
   server_module_stop_default(mods_ai_service_);
@@ -1776,6 +1783,7 @@ void ObServer::obs_wait_modules()
 
 void ObServer::obs_destroy_modules()
 {
+  namespace_maintenance_.stop();
   server_module_destroy_default(mods_shared_macro_block_mgr_);
   server_module_destroy_default(mods_change_stream_mgr_);
   server_module_destroy_default(mods_ai_service_);

@@ -420,17 +420,9 @@ int namespace_has_physical_tablet(uint64_t namespace_id, bool &has_tablet)
 int collect_metadata() {
   auto *store = directory_kv_store();
   if (store == nullptr) { return OB_NOT_INIT; }
-  InstanceMetaStore::Transaction tx;
-  int ret = store->begin_directory_gc(tx, directory_deadline());
+  rootserver::InstanceNamespaceDirectory directory(*store);
   int64_t deleted = 0;
-  if (ret == OB_SUCCESS) {
-    rootserver::InstanceNamespaceMetadata metadata(*store, tx);
-    ret = metadata.collect_unreachable_pages(256, deleted);
-  }
-  if (tx.is_active()) {
-    const int end = ret == OB_SUCCESS ? store->commit(tx) : store->rollback(tx);
-    if (ret == OB_SUCCESS) { ret = end; }
-  }
+  const int ret = directory.collect_catalog_pages(directory_deadline(), deleted);
   LOG_INFO("PROTOTYPE_V9_METADATA_GC", K(ret), K(deleted));
   return ret;
 }
@@ -441,25 +433,8 @@ int scan_namespace_sources(uint64_t id, const std::string &position, int64_t dea
 {
   auto *store = directory_kv_store();
   if (store == nullptr) { return OB_NOT_INIT; }
-  InstanceMetaStore::Transaction tx;
-  int ret = store->begin(tx, deadline, true);
-  rootserver::InstanceNamespaceMetadata metadata(*store, tx);
-  rootserver::InstanceNamespaceRecord record;
-  if (OB_SUCC(ret)) { ret = metadata.get_namespace(id, record); }
-  if (OB_SUCC(ret) && record.roots.state != 0) { ret = OB_OP_NOT_ALLOW; }
-  if (OB_SUCC(ret)) {
-    rootserver::InstanceCatalogPageStore pages(metadata);
-    ns::NamespaceCatalogTree tree(pages);
-    const auto result = tree.scan(record.roots.directory, position, 64, entries);
-    if (!result.ok()) {
-      ret = result.error == ns::CatalogTreeError::STORE ? result.store_error : OB_CHECKSUM_ERROR;
-    }
-  }
-  if (tx.is_active()) {
-    const int end = store->rollback(tx);
-    if (OB_SUCC(ret)) { ret = end; }
-  }
-  return ret;
+  rootserver::InstanceNamespaceDirectory directory(*store);
+  return directory.scan_sources(id, position, deadline, entries);
 }
 
 }
@@ -1047,96 +1022,6 @@ int NamespaceForkKernelPrototype::complete_initial_baseline(uint64_t id, int64_t
   return ret;
 }
 
-int NamespaceForkKernelPrototype::materialize_inherited_tablets()
-{
-  auto *store = directory_kv_store();
-  if (store == nullptr || !ATOMIC_LOAD(&GCTX.sys_package_ready_)
-      || !share::server_is_write_enabled()) { return OB_SUCCESS; }
-  // Only scan positions live here. Sources and committed physical CREATEs
-  // remain authoritative, so restart and promotion simply start a new sweep.
-  static std::mutex mutex;
-  static uint64_t last_namespace = 0;
-  static std::map<uint64_t, std::string> positions;
-  std::unique_lock<std::mutex> lock(mutex, std::try_to_lock);
-  if (!lock.owns_lock()) { return OB_SUCCESS; }
-  const int64_t previous_timeout = THIS_WORKER.get_timeout_ts();
-  const int64_t deadline = std::min(directory_deadline(),
-      ObTimeUtility::current_time() + 2 * 1000 * 1000L);
-  THIS_WORKER.set_timeout_ts(deadline);
-  rootserver::InstanceNamespaceDirectory directory(*store);
-  std::vector<rootserver::InstanceNamespaceRecord> live;
-  int ret = directory.list_live(deadline, live);
-  uint64_t selected = 0, first = 0;
-  std::unordered_set<uint64_t> ids;
-  if (OB_SUCC(ret)) {
-    for (const auto &record : live) {
-      if (record.parent_namespace == 0) { continue; }
-      ids.insert(record.id);
-      if (first == 0 || record.id < first) { first = record.id; }
-      if (record.id > last_namespace && (selected == 0 || record.id < selected)) {
-        selected = record.id;
-      }
-    }
-    for (auto it = positions.begin(); it != positions.end();) {
-      if (ids.count(it->first) == 0) { it = positions.erase(it); }
-      else { ++it; }
-    }
-    if (selected == 0) { selected = first; }
-  }
-  int64_t materialized = 0;
-  if (OB_SUCC(ret) && selected != 0) {
-    last_namespace = selected;
-    auto &position = positions[selected];
-    std::vector<std::pair<std::string, ns::CatalogValue>> entries;
-    ret = scan_namespace_sources(selected, position, deadline, entries);
-    if (OB_SUCC(ret)) {
-      size_t consumed = 0;
-      for (const auto &entry : entries) {
-        if (materialized >= 16 || ObTimeUtility::current_time() >= deadline) { break; }
-        position = entry.first;
-        ++consumed;
-        ns::CatalogTabletSource source;
-        if (!ns::NamespaceCatalogCodec::decode_source(entry.second.data, source)) {
-          ret = OB_CHECKSUM_ERROR;
-          break;
-        }
-        // A main tablet and its LOB tablets form one creation transaction.
-        // Visiting the main entry suffices; indexes have their own binding unit.
-        if (entry.first != ns::NamespaceCatalogCodec::object_key(source.data_tablet_id)
-            || source.physical_tablet_id == encoded(selected, source.data_tablet_id)) { continue; }
-        const int rc = materialize_source(selected, source.table_id, source.data_tablet_id);
-        ++materialized;
-        if (rc != OB_SUCCESS && rc != OB_TABLET_NOT_EXIST
-            && rc != OB_ENTRY_NOT_EXIST && rc != OB_OP_NOT_ALLOW) {
-          ret = rc;
-          break;
-        }
-      }
-      if (consumed == entries.size() && entries.size() < 64) { position.clear(); }
-    }
-  }
-  THIS_WORKER.set_timeout_ts(previous_timeout);
-  if (materialized != 0 || OB_FAIL(ret)) {
-    LOG_INFO("namespace background materialization", K(ret), K(selected), K(materialized));
-  }
-  return ret;
-}
-
-int NamespaceForkKernelPrototype::collect_catalog_pages()
-{
-  if (directory_kv_store() == nullptr || !ATOMIC_LOAD(&GCTX.sys_package_ready_)
-      || !share::server_is_write_enabled()) { return OB_SUCCESS; }
-  // Reuse the directory transaction guard: publication cannot race the mark
-  // and delete pass, and held read views retain historical page versions.
-  // Keep this periodic pass bounded; a timeout rolls the whole batch back.
-  const int64_t previous_timeout = THIS_WORKER.get_timeout_ts();
-  THIS_WORKER.set_timeout_ts(std::min(directory_deadline(),
-      ObTimeUtility::current_time() + 2 * 1000 * 1000L));
-  const int ret = collect_metadata();
-  THIS_WORKER.set_timeout_ts(previous_timeout);
-  return ret;
-}
-
 int NamespaceForkKernelPrototype::capture_physical_copy_view(const std::function<int()> &capture)
 {
   if (!capture) { return OB_INVALID_ARGUMENT; }
@@ -1144,13 +1029,10 @@ int NamespaceForkKernelPrototype::capture_physical_copy_view(const std::function
   return fence.error() == OB_SUCCESS ? capture() : fence.error();
 }
 
-int NamespaceForkKernelPrototype::collect_dropped_namespace_tablets() {
+int NamespaceForkKernelPrototype::collect_dropped_namespace_tablets(uint64_t &physical_cursor) {
   auto *store = directory_kv_store();
   if (store == nullptr || !ATOMIC_LOAD(&GCTX.sys_package_ready_)) { return OB_SUCCESS; }
   if (!share::server_is_write_enabled()) { return OB_SUCCESS; }
-  static std::mutex scan_mutex;
-  static uint64_t physical_cursor = 0;
-  std::lock_guard<std::mutex> scan_guard(scan_mutex);
   rootserver::InstanceNamespaceDirectory directory(*store);
   std::vector<rootserver::InstanceNamespaceRecord> deleted;
   int ret = directory.list_deleted(directory_deadline(), deleted);
@@ -1204,8 +1086,10 @@ int NamespaceForkKernelPrototype::collect_dropped_namespace_tablets() {
       } else if (OB_FAIL(query::ObInnerSQLConnectionAccess::lock_tablet(
               locks, trans.get_connection()))) {
       } else {
-        observer::namespace_worker_prototype::PhysicalTabletMdsScope physical_mds(true);
-        ret = rootserver::ObTabletDrop::register_delete(trans, candidates);
+        ret = query::ObInnerSQLConnectionAccess::with_native_transaction(
+            trans.get_connection(), [&](transaction::ObTxDesc &native) {
+          return rootserver::ObTabletDrop::register_delete(native, candidates);
+        });
       }
     }
     if (trans.is_started()) {
@@ -1731,10 +1615,16 @@ int NamespaceForkKernelPrototype::ensure_tablet(const ObTabletID &tablet_id) {
       }
     }
     const ObTabletID data_tablet(encoded(db, items.front().local_tablet));
-    auto copy_physical_sequences = [&]() {
-      observer::namespace_worker_prototype::PhysicalTabletMdsScope physical_mds(true);
-      return ObTabletAutoincrementService::get_instance().copy_sequences_for_fork(
-          source_ids, ids, source_snapshot_versions, trans);
+    auto create_physical_tablets = [&]() {
+      return query::ObInnerSQLConnectionAccess::with_native_transaction(
+          trans.get_connection(), [&](transaction::ObTxDesc &native) {
+        int create_ret = creator.execute(native);
+        if (create_ret == OB_SUCCESS) {
+          create_ret = ObTabletAutoincrementService::get_instance().copy_sequences_for_fork(
+              source_ids, ids, source_snapshot_versions, native);
+        }
+        return create_ret;
+      });
     };
     obcall::ObCreateTabletInfo info;
     if (OB_FAIL(ret)) {
@@ -1744,8 +1634,7 @@ int NamespaceForkKernelPrototype::ensure_tablet(const ObTabletID &tablet_id) {
     } else if (OB_FAIL(creator.add_create_tablet_batch(batch))) {
     } else if (FALSE_IT(batch.reset())) {
     } else if (FALSE_IT(creator.set_materialization_for_prototype())) {
-    } else if (OB_FAIL(creator.execute())) {
-    } else if (OB_FAIL(copy_physical_sequences())) {
+    } else if (OB_FAIL(create_physical_tablets())) {
     } else {
       // The physical binding unit is staged; source roots join this same
       // transaction before it can commit.

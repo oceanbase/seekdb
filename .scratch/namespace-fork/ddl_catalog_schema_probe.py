@@ -45,6 +45,10 @@ def run(binary):
         experiment.sql('CREATE TABLE catalog_ddl.t(id INT PRIMARY KEY,v INT,b LONGTEXT) '
                        'PARTITION BY HASH(id) PARTITIONS 8')
         experiment.sql("INSERT INTO catalog_ddl.t VALUES(1,10,REPEAT('x',12000))")
+        experiment.sql('CREATE TABLE catalog_ddl.rp(id INT PRIMARY KEY,b LONGTEXT) '
+                       'PARTITION BY RANGE(id) (PARTITION p0 VALUES LESS THAN(10), '
+                       'PARTITION p1 VALUES LESS THAN(20))')
+        experiment.sql("INSERT INTO catalog_ddl.rp VALUES(1,REPEAT('a',12000)),(11,REPEAT('b',12000))")
         verify(experiment, experiment.connection, 'ns1')
         experiment.sql('FORK NAMESPACE catalog_owner FROM ns1')
         experiment.sql('FORK NAMESPACE catalog_old FROM catalog_owner')
@@ -65,8 +69,24 @@ def run(binary):
                     assert removed not in next_sources, (statement, removed)
                 state, expected, sources = next_state, next_expected, next_sources
                 experiment.record('case_pass', statement=statement, tablets=len(expected))
+            for statement, rows in (
+                ('ALTER TABLE catalog_ddl.rp ADD PARTITION (PARTITION p2 VALUES LESS THAN(30))', ((1,), (11,))),
+                ('ALTER TABLE catalog_ddl.rp TRUNCATE PARTITION p0', ((11,),)),
+                ('ALTER TABLE catalog_ddl.rp DROP PARTITION p1', ()),
+            ):
+                experiment.sql(statement, child)
+                next_state, next_expected, next_sources = verify(experiment, child, 'catalog_owner')
+                assert next_state['schema_version'] > state['schema_version']
+                for removed in expected.keys() - next_expected.keys():
+                    assert removed not in next_sources, (statement, removed)
+                assert experiment.sql('SELECT id FROM catalog_ddl.rp ORDER BY id', child) == rows
+                state, expected, sources = next_state, next_expected, next_sources
+                experiment.record('case_pass', statement=statement, tablets=len(expected))
+            experiment.sql("INSERT INTO catalog_ddl.rp VALUES(21,REPEAT('c',12000))", child)
+            assert experiment.sql('SELECT id,LENGTH(b) FROM catalog_ddl.rp', child) == ((21, 12000),)
         with connect(experiment, 'root@catalog_old') as old:
             assert experiment.sql('SELECT id,v,LENGTH(b) FROM catalog_ddl.t', old) == ((1, 10, 12000),)
+            assert experiment.sql('SELECT id,LENGTH(b) FROM catalog_ddl.rp ORDER BY id', old) == ((1, 12000), (11, 12000))
             verify(experiment, old, 'catalog_old')
         def create(index):
             with connect(experiment, 'root@catalog_owner') as child:
@@ -91,7 +111,7 @@ def run(binary):
             _, dropped, final_sources = verify(experiment, child, 'catalog_owner')
             assert not dropped
         experiment.record('PASS', case='ddl_catalog_schema', partitioned=True,
-                          lob_bindings=True, parallel_ddl=4, parent_view_retained=True)
+                          lob_bindings=True, partition_add_drop_truncate=True, parallel_ddl=4, parent_view_retained=True)
     finally:
         experiment.close()
 

@@ -29,6 +29,7 @@ if args.action == 'enable':
     if text.count(include_anchor) != 1 or text.count(entry_anchor) != 1:
         raise SystemExit('Probe entry moved; update the local hook before building tests.')
     text = text.replace(include_anchor, include_anchor + '// LOCAL_INSTANCE_META_PROBE_BEGIN\n' + '#include <thread>\n'
+        '#include "' + str(Path(__file__).resolve().with_name('catalog_gc_test_hook.h')) + '"\n'
         '#include "storage/instance_meta/instance_meta_store.h"\n'
         '#include "storage/tx/ob_trans_service.h"\n'
         '#include "rootserver/fork_table/namespace_tablet_access.h"\n'

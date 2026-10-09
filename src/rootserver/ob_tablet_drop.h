@@ -26,6 +26,7 @@
 
 namespace oceanbase
 {
+namespace transaction { class ObTxDesc; }
 namespace share
 {
 namespace schema
@@ -60,6 +61,8 @@ public:
   // updates belong to the logical DDL owner, not to physical reclamation.
   static int register_delete(ObMySQLTransaction &trans,
       const common::ObIArray<common::ObTabletID> &tablets);
+  static int register_delete(transaction::ObTxDesc &trans,
+      const common::ObIArray<common::ObTabletID> &physical_tablets);
   // drop tablets in some table:
   // 1. one of which is data table, other are its local indexes,
   // 2. or all are local indexes of a table

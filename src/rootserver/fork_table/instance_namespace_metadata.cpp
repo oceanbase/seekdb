@@ -661,22 +661,31 @@ int InstanceNamespaceMetadata::stage_catalog_delta(uint64_t namespace_id,
   return ret;
 }
 
-int InstanceNamespaceMetadata::collect_unreachable_pages(
-    int64_t max_deletes, int64_t &deleted)
+int InstanceNamespaceMetadata::page_roots(PageRoots &roots)
 {
-  deleted = 0;
-  if (!transaction_.is_directory_gc() || max_deletes <= 0 || max_deletes > 256) {
+  roots.clear();
+  return scan_namespaces([&](const InstanceNamespaceRecord &record) {
+    roots.emplace(record.id, std::make_pair(record.roots.catalog.page, record.roots.directory.page));
+    return OB_SUCCESS;
+  });
+}
+
+int InstanceNamespaceMetadata::find_unreachable_pages(
+    int64_t max_deletes, PageRoots &roots, std::vector<uint64_t> &garbage)
+{
+  garbage.clear();
+  if (max_deletes <= 0 || max_deletes > 256) {
     return OB_INVALID_ARGUMENT;
   }
   // Only table-definition leaves own description objects. Source leaves have
   // physical identities, not object-page references.
   struct PendingTree { ns::CatalogPageRef ref; bool definitions; };
   std::vector<PendingTree> pending;
-  int ret = scan_namespaces([&](const InstanceNamespaceRecord &record) {
-    if (record.roots.catalog.page != 0) { pending.push_back({record.roots.catalog, true}); }
-    if (record.roots.directory.page != 0) { pending.push_back({record.roots.directory, false}); }
-    return OB_SUCCESS;
-  });
+  int ret = page_roots(roots);
+  for (const auto &root : roots) {
+    if (root.second.first != 0) { pending.push_back({{root.second.first, 0}, true}); }
+    if (root.second.second != 0) { pending.push_back({{root.second.second, 0}, false}); }
+  }
   // Active readers retain their KV snapshot, so logical page deletes may
   // proceed. Their historical page versions remain readable until the last
   // holder releases, including when deletes originate on another server.
@@ -734,20 +743,93 @@ int InstanceNamespaceMetadata::collect_unreachable_pages(
       }
     }
   }
-  std::vector<uint64_t> garbage;
   if (ret == OB_SUCCESS) {
-    ret = scan_pages([&](uint64_t page) {
-      if (page == 0) { return OB_CHECKSUM_ERROR; }
-      if (garbage.size() < static_cast<size_t>(max_deletes)
-          && reachable.count(page) == 0) { garbage.push_back(page); }
+    storage::InstanceMetaStore::KeyRange range;
+    ret = store_.scan(transaction_, MetaCollection::PAGES, range,
+        [&](const ObString &key, const ObString &, bool &stop) {
+      uint64_t page = 0;
+      if (!key_id(MetaCollection::PAGES, key, page) || page == 0) { return OB_CHECKSUM_ERROR; }
+      if (reachable.count(page) == 0) { garbage.push_back(page); }
+      stop = garbage.size() >= static_cast<size_t>(max_deletes);
       return OB_SUCCESS;
     });
   }
+  return ret;
+}
+
+int InstanceNamespaceMetadata::erase_unreachable_pages(
+    const PageRoots &roots, const std::vector<uint64_t> &garbage)
+{
+  if (!transaction_.is_directory_gc() || garbage.size() > 256) { return OB_INVALID_ARGUMENT; }
+  PageRoots current;
+  int ret = page_roots(current);
+  // Contents are immutable, including hash-based page reuse. Once every root
+  // still matches, none of the candidates is referenced by a current tree.
+  // Writers remain excluded through the native DELETE commit.
+  if (ret == OB_SUCCESS && roots != current) { ret = OB_EAGAIN; }
   for (const uint64_t page : garbage) {
     if (ret != OB_SUCCESS) { break; }
     ret = erase_page(page);
   }
-  if (ret == OB_SUCCESS) { deleted = garbage.size(); }
+  return ret;
+}
+
+int InstanceNamespaceDirectory::scan_sources(uint64_t id, const std::string &position, int64_t deadline,
+    std::vector<std::pair<std::string, ns::CatalogValue>> &entries)
+{
+  auto *store = &store_;
+  InstanceMetaStore::Transaction tx;
+  int ret = store->begin(tx, deadline, true);
+  rootserver::InstanceNamespaceMetadata metadata(*store, tx);
+  rootserver::InstanceNamespaceRecord record;
+  if (OB_SUCC(ret)) { ret = metadata.get_namespace(id, record); }
+  if (OB_SUCC(ret) && record.roots.state != 0) { ret = OB_OP_NOT_ALLOW; }
+  if (OB_SUCC(ret)) {
+    rootserver::InstanceCatalogPageStore pages(metadata);
+    ns::NamespaceCatalogTree tree(pages);
+    const auto result = tree.scan(record.roots.directory, position, 64, entries);
+    if (!result.ok()) {
+      ret = result.error == ns::CatalogTreeError::STORE ? result.store_error : OB_CHECKSUM_ERROR;
+    }
+  }
+  if (tx.is_active()) {
+    const int end = store->rollback(tx);
+    if (OB_SUCC(ret)) { ret = end; }
+  }
+  return ret;
+}
+
+int InstanceNamespaceDirectory::collect_catalog_pages(int64_t deadline, int64_t &deleted)
+{
+  deleted = 0;
+  InstanceNamespaceMetadata::PageRoots roots;
+  std::vector<uint64_t> garbage;
+  storage::InstanceMetaStore::Transaction scan;
+  int ret = store_.begin(scan, deadline, true);
+  if (ret == OB_SUCCESS) {
+    InstanceNamespaceMetadata metadata(store_, scan);
+    ret = metadata.find_unreachable_pages(256, roots, garbage);
+  }
+  if (scan.is_active()) {
+    const int end = store_.rollback(scan);
+    if (ret == OB_SUCCESS) { ret = end; }
+  }
+  // There is no cross-invocation plan or lease. After the scan transaction
+  // closes, only IDs remain; validation uses a fresh committed snapshot.
+  if (ret == OB_SUCCESS && !garbage.empty()) {
+    storage::InstanceMetaStore::Transaction sweep;
+    const int64_t sweep_deadline = std::min(deadline, ObTimeUtility::current_time() + 1000000);
+    ret = store_.begin_directory_gc(sweep, sweep_deadline);
+    if (ret == OB_SUCCESS) {
+      InstanceNamespaceMetadata metadata(store_, sweep);
+      ret = metadata.erase_unreachable_pages(roots, garbage);
+    }
+    if (sweep.is_active()) {
+      const int end = ret == OB_SUCCESS ? store_.commit(sweep) : store_.rollback(sweep);
+      if (ret == OB_SUCCESS) { ret = end; }
+    }
+    if (ret == OB_SUCCESS) { deleted = garbage.size(); }
+  }
   return ret;
 }
 

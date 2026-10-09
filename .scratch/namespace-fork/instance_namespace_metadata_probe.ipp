@@ -318,7 +318,14 @@ static int run_instance_namespace_metadata_probe()
   gc_child.roots.catalog = snapshot_page;
   META_RECORD_CALL(gc_meta.insert_namespace(gc_child));
   int64_t deleted_pages = 0;
-  META_RECORD_CALL(gc_meta.collect_unreachable_pages(256, deleted_pages));
+  rootserver::InstanceNamespaceDirectory gc_directory(kv);
+  auto collect = [&]() {
+    int rc = kv.commit(gc_tx);
+    if (rc == OB_SUCCESS) { rc = gc_directory.collect_catalog_pages(ObTimeUtility::current_time() + 120000000, deleted_pages); }
+    const int begin = kv.begin(gc_tx, ObTimeUtility::current_time() + 120000000);
+    return rc == OB_SUCCESS ? begin : rc;
+  };
+  META_RECORD_CALL(collect());
   META_RECORD_ASSERT(deleted_pages >= 1);
   ret = gc_meta.read_page(orphan_page, page_read);
   META_RECORD_ASSERT(ret == OB_ENTRY_NOT_EXIST);
@@ -326,8 +333,71 @@ static int run_instance_namespace_metadata_probe()
   META_RECORD_CALL(gc_meta.read_page(snapshot_page.page, page_read));
   META_RECORD_CALL(gc_meta.read_object(object_id, object_read));
   META_RECORD_ASSERT(object_read == object_data);
+  uint64_t concurrent_orphan = 0;
+  META_RECORD_CALL(gc_meta.save_page("concurrent GC root validation", concurrent_orphan));
+  rootserver::catalog_gc_test::after_scan = [&]() {
+    Tx writer;
+    int rc = kv.begin(writer, ObTimeUtility::current_time() + 1000000);
+    InstanceNamespaceMetadata concurrent(kv, writer);
+    InstanceNamespaceRecord changed;
+    if (rc == OB_SUCCESS) { rc = concurrent.get_namespace(gc_namespace.id, changed, true); }
+    if (rc == OB_SUCCESS) {
+      changed.roots.catalog = snapshot_page;
+      rc = concurrent.update_namespace(changed);
+    }
+    if (writer.is_active()) {
+      const int end = rc == OB_SUCCESS ? kv.commit(writer) : kv.rollback(writer);
+      if (rc == OB_SUCCESS) { rc = end; }
+    }
+    return rc;
+  };
+  ret = collect();
+  rootserver::catalog_gc_test::after_scan = {};
+  META_RECORD_ASSERT(ret == OB_EAGAIN && deleted_pages == 0);
+  META_RECORD_CALL(gc_meta.read_page(concurrent_orphan, page_read));
+  META_RECORD_CALL(gc_meta.get_namespace(gc_namespace.id, read));
+  META_RECORD_ASSERT(read.roots.schema_version == gc_namespace.roots.schema_version
+      && read.roots.catalog.page == snapshot_page.page);
+  META_RECORD_CALL(gc_meta.update_namespace(gc_namespace));
+
+  // A newly created namespace with empty roots must also invalidate the set.
+  InstanceNamespaceRecord added;
+  added.id = 500002;
+  added.name = "gc-added";
+  added.roots.schema_version = 5;
+  rootserver::catalog_gc_test::after_scan = [&]() {
+    Tx writer;
+    int rc = kv.begin(writer, ObTimeUtility::current_time() + 1000000);
+    InstanceNamespaceMetadata concurrent(kv, writer);
+    if (rc == OB_SUCCESS) { rc = concurrent.insert_namespace(added); }
+    if (writer.is_active()) {
+      const int end = rc == OB_SUCCESS ? kv.commit(writer) : kv.rollback(writer);
+      if (rc == OB_SUCCESS) { rc = end; }
+    }
+    return rc;
+  };
+  ret = collect();
+  rootserver::catalog_gc_test::after_scan = {};
+  META_RECORD_ASSERT(ret == OB_EAGAIN && deleted_pages == 0);
+  META_RECORD_CALL(gc_meta.read_page(concurrent_orphan, page_read));
+  rootserver::catalog_gc_test::after_scan = [&]() {
+    Tx writer;
+    int rc = kv.begin(writer, ObTimeUtility::current_time() + 1000000);
+    InstanceNamespaceMetadata concurrent(kv, writer);
+    if (rc == OB_SUCCESS) { rc = concurrent.erase_namespace(added.id); }
+    if (writer.is_active()) {
+      const int end = rc == OB_SUCCESS ? kv.commit(writer) : kv.rollback(writer);
+      if (rc == OB_SUCCESS) { rc = end; }
+    }
+    return rc;
+  };
+  ret = collect();
+  rootserver::catalog_gc_test::after_scan = {};
+  META_RECORD_ASSERT(ret == OB_EAGAIN && deleted_pages == 0);
+  META_RECORD_CALL(gc_meta.read_page(concurrent_orphan, page_read));
+  fprintf(stderr, "INSTANCE_CATALOG_GC_CONCURRENT_PASS writer_during_scan=1 same_version_root_change=1 namespace_create=1 namespace_delete=1\n");
   META_RECORD_CALL(gc_meta.erase_namespace(gc_namespace.id));
-  META_RECORD_CALL(gc_meta.collect_unreachable_pages(256, deleted_pages));
+  META_RECORD_CALL(collect());
   ret = gc_meta.read_object(object_id, object_read);
   META_RECORD_ASSERT(ret == OB_ENTRY_NOT_EXIST);
   uint64_t broken_object = 0, protected_orphan = 0;
@@ -339,10 +409,12 @@ static int run_instance_namespace_metadata_probe()
   gc_namespace.roots.catalog = broken_root;
   META_RECORD_CALL(gc_meta.insert_namespace(gc_namespace));
   META_RECORD_CALL(gc_meta.save_page("must survive failed graph traversal", protected_orphan));
-  ret = gc_meta.collect_unreachable_pages(256, deleted_pages);
+  ret = collect();
   META_RECORD_ASSERT(ret == OB_ENTRY_NOT_EXIST && deleted_pages == 0);
   META_RECORD_CALL(gc_meta.read_page(protected_orphan, page_read));
-  META_RECORD_CALL(kv.rollback(gc_tx));
+  META_RECORD_CALL(gc_meta.erase_namespace(gc_namespace.id));
+  META_RECORD_CALL(gc_meta.erase_namespace(gc_child.id));
+  META_RECORD_CALL(kv.commit(gc_tx));
   fprintf(stderr, "INSTANCE_RECORD_PROBE_PASS root_recovered=%d capped_roots=1 watermark_fence=1 source_tree=1 page=1 tree=1 rollback=1\n",
       root_recovered);
 #undef META_RECORD_ASSERT

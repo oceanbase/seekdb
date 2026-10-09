@@ -1,0 +1,225 @@
+{
+  "base_commit": "4194a0cedb8b0b5c7b269adf1389effaec0f5e57",
+  "goal": "完成目录页 GC、长 RPC 关闭、Namespace 维护职责/显式物理事务、DDL 发布增量化四项",
+  "verification": [
+    {
+      "requirement": "gc_native_and_restarts",
+      "log": ".scratch/namespace-fork/four-issues-native-kv-final.log",
+      "sha256": "1347d686b1793ba93001ca6899dc60233a5ad6f358867bd8d6c179a22f7d6e2c",
+      "observations": [
+        "{\"event\": \"native_kv_verified\", \"recovered\": false, \"typed_records\": true, \"physical_retention\": true, \"durable_phase\": \"created\"}",
+        "{\"event\": \"native_kv_verified\", \"recovered\": true, \"typed_records\": true, \"physical_retention\": true, \"durable_phase\": \"marked\"}",
+        "{\"event\": \"native_kv_verified\", \"recovered\": true, \"typed_records\": true, \"physical_retention\": true, \"durable_phase\": \"finished\"}",
+        "{\"event\": \"native_kv_verified\", \"recovered\": true, \"typed_records\": true, \"physical_retention\": true, \"durable_phase\": \"verified\"}",
+        "{\"event\": \"PASS\", \"case\": \"instance_meta_native\", \"rollback\": true, \"cross_collection\": true, \"duplicate_key\": true, \"own_writes\": true, \"snapshot\": true, \"locked_current_read\": true, \"sequential_put_put_scan\": true, \"scan_reentrant_write_rejected\": true, \"binary_value_60000\": true, \"key_512\": true, \"value_65536\": true, \"binary_bounds\": true, \"scan\": true, \"erase\": true, \"snapshot_across_minor\": true, \"writer_conflict\": true, \"typed_records\": true, \"catalog_tree\": true, \"capped_roots\": true, \"obsolete_lineage_removed\": true, \"gc_watermark\": true, \"physical_retention\": true, \"crash_recovery\": true, \"durable_fork_drop\": true}"
+      ],
+      "exit_code": 0
+    },
+    {
+      "requirement": "gc_automatic",
+      "log": ".scratch/namespace-fork/four-issues-automatic-gc-final.log",
+      "sha256": "a09b25a20498ffe2780feccef44e6086392327d58542af7bdebea14d1b98c94c",
+      "observations": [
+        "{\"event\": \"PASS\", \"case\": \"automatic_catalog_gc\", \"old_view\": true, \"parent_drop\": true, \"crash_restart\": true}"
+      ],
+      "exit_code": 0
+    },
+    {
+      "requirement": "grpc_stop_red",
+      "log": ".scratch/namespace-fork/four-issues-service-stop-red.log",
+      "sha256": "82e4575bcbb286dde8907a60eaf84b9befaf256ac393d66193dc1e2f6a6aa442",
+      "observations": [
+        "AssertionError: gRPC service stop hung while peer retained the copy view"
+      ],
+      "exit_code": 1
+    },
+    {
+      "requirement": "grpc_stop_green",
+      "log": ".scratch/namespace-fork/four-issues-service-stop-green.log",
+      "sha256": "ef243064f0b7829a9a2f08247054921ad62c97367df2db6f516e7601b9397347",
+      "observations": [
+        "{\"event\": \"PASS\", \"case\": \"copy_view_primary_shutdown\", \"seconds\": 6.49296348169446, \"source_view_released\": true, \"peer_alive\": true}"
+      ],
+      "exit_code": 0
+    },
+    {
+      "requirement": "ddl_cost_8000",
+      "log": ".scratch/namespace-fork/four-issues-ddl-cost-retry.log",
+      "sha256": "74faa39807afd93676a07676450e68af82431cbcc1e20967f2c5f84519d9895d",
+      "observations": [
+        "{\"event\": \"publication_cost\", \"owner\": \"ns1\", \"statement\": \"ALTER TABLE publication_cost.t COMMENT='description only'\", \"partitions\": 8000, \"seconds\": 1.1124701648950577, \"definitions\": 1, \"source_updates\": 0, \"physical_status_lookups\": 0, \"bindings\": 8000}",
+        "{\"event\": \"publication_cost\", \"owner\": \"ns1\", \"statement\": \"ALTER TABLE publication_cost.t ADD COLUMN extra INT DEFAULT 7\", \"partitions\": 8000, \"seconds\": 1.3902879655361176, \"definitions\": 1, \"source_updates\": 0, \"physical_status_lookups\": 0, \"bindings\": 8000}",
+        "{\"event\": \"publication_cost\", \"owner\": \"cost_child\", \"statement\": \"ALTER TABLE publication_cost.t COMMENT='description only'\", \"partitions\": 8000, \"seconds\": 0.9568691700696945, \"definitions\": 1, \"source_updates\": 0, \"physical_status_lookups\": 0, \"bindings\": 8000}",
+        "{\"event\": \"publication_cost\", \"owner\": \"cost_child\", \"statement\": \"ALTER TABLE publication_cost.t ADD COLUMN extra INT DEFAULT 7\", \"partitions\": 8000, \"seconds\": 2.194976005703211, \"definitions\": 1, \"source_updates\": 0, \"physical_status_lookups\": 0, \"bindings\": 8000}",
+        "{\"event\": \"PASS\", \"case\": \"ddl_publication_cost\", \"partitions\": 8000, \"owners\": 2, \"statements\": 4}"
+      ],
+      "exit_code": 0
+    },
+    {
+      "requirement": "ddl_commit_crash",
+      "log": ".scratch/namespace-fork/four-issues-ddl-atomic.log",
+      "sha256": "93f6ac3fb58228a94bcade8c391e528ad01ec13927612f8e55e932ada2e5085f",
+      "observations": [
+        "{\"event\": \"PASS\", \"case\": \"atomic_ddl_catalog\", \"owner\": \"child\", \"fault\": \"commit_crash\"}"
+      ],
+      "exit_code": 0
+    },
+    {
+      "requirement": "ddl_rollback",
+      "log": ".scratch/namespace-fork/four-issues-ddl-rollback.log",
+      "sha256": "3706428fa7b7c9d4918cbb1d62e774dce0161b89fb2fc62233f187ae6a3b4d0a",
+      "observations": [
+        "{\"event\": \"PASS\", \"case\": \"atomic_ddl_catalog\", \"owner\": \"child\", \"fault\": \"rollback\"}"
+      ],
+      "exit_code": 0
+    },
+    {
+      "requirement": "shared_create_rollback_and_crash",
+      "log": ".scratch/namespace-fork/four-issues-shared-atomic.log",
+      "sha256": "3445efb52685bca093cf48a9706a7ad5341237caf801c059e5d9e2302691e3f0",
+      "observations": [
+        "{\"event\": \"PASS\", \"case\": \"shared_transaction_selected\", \"selected\": [\"rollback_create\", \"crash_create\"], \"flushed_redo\": true, \"recovered_committed_retry\": true}"
+      ],
+      "exit_code": 0
+    },
+    {
+      "requirement": "ddl_bindings_and_partitions",
+      "log": ".scratch/namespace-fork/four-issues-ddl-partitions.log",
+      "sha256": "de45a3120342707167bcf69a47a53e37498ca59b57ccf1a7310b9423d0b5e5f9",
+      "observations": [
+        "{\"event\": \"PASS\", \"case\": \"ddl_catalog_schema\", \"partitioned\": true, \"lob_bindings\": true, \"partition_add_drop_truncate\": true, \"parallel_ddl\": 4, \"parent_view_retained\": true}"
+      ],
+      "exit_code": 0
+    },
+    {
+      "requirement": "cold_families",
+      "log": ".scratch/namespace-fork/four-issues-cold-families.log",
+      "sha256": "48fef577e670f4b1a7255ef80bce5db6c470ff113b76c13e7e69392f3d4e4beb",
+      "observations": [
+        "{\"event\": \"cold_takeover_done\", \"namespace\": 3, \"elapsed_s\": 147.58, \"physical\": [[4611686430744448321, 1, 1, 0], [4611686430744448322, 1, 1, 0], [4611686430744448323, 1, 1, 0], [4611686430744448324, 1, 1, 0], [4611686430744448325, 1, 1, 0], [4611686430744448326, 1, 1, 0], [4611686430744448327, 1, 1, 0], [4611686430744448328, 1, 1, 0], [4611686430744448329, 1, 1, 0], [4611686430744448330, 1, 1, 0], [4611686430744448331, 1, 1, 0], [4611686430744448332, 1, 1, 0], [4611686430744448333, 1, 1, 0], [4611686430744448334, 1, 1, 0], [4611686430744448335, 1, 1, 0], [4611686430744448336, 1, 1, 0], [4611686430744448337, 1, 1, 0]], \"inherited_sources_reclaimed\": true}",
+        "{\"event\": \"PASS\", \"case\": \"background_readonly_materialization\", \"no_child_connection_before_takeover\": true, \"sql_runtime_unloaded\": true, \"parent_dropped\": true, \"main_index_lob\": true, \"sources_reclaimed\": true, \"restart\": true, \"fulltext_and_vector\": true}"
+      ],
+      "exit_code": 0
+    },
+    {
+      "requirement": "production_build",
+      "log": ".scratch/namespace-fork/four-issues-production-final-build.log",
+      "sha256": "9da0dc6286369ab53938b73b676f51543ecea7620a4df3b49c2cc12060729786",
+      "observations": [],
+      "exit_code": 0
+    },
+    {
+      "requirement": "native_build",
+      "log": ".scratch/namespace-fork/four-issues-native-fixture-build.log",
+      "sha256": "5b268a983ceccf4329df8dffa69558c5e90dc44c0b37b7ffe77a2cccd358a165",
+      "observations": [],
+      "exit_code": 0
+    }
+  ],
+  "native_markers": [
+    "INSTANCE_CATALOG_GC_CONCURRENT_PASS writer_during_scan=1 same_version_root_change=1 namespace_create=1 namespace_delete=1",
+    "INSTANCE_RECORD_DURABLE phase=created id=2 snapshot=1791521129231393424",
+    "INSTANCE_RECORD_DURABLE phase=marked id=2",
+    "INSTANCE_RECORD_DURABLE phase=finished id=2",
+    "INSTANCE_RECORD_DURABLE phase=verified id=2"
+  ],
+  "standby": [
+    {
+      "case": "namespace_fork_local",
+      "exit_code": 0,
+      "elapsed_s": 113.92
+    }
+  ],
+  "source_sha256": {
+    "src/oblib/grpc/ob_grpc_server.cpp": "90cf73bbe8971b4ba10d9b51260d22dea017ce3576161bb82d76cde698b43069",
+    "src/observer/namespace_worker_gateway_prototype.ipp": "2d7ec3aba71d48c6232ac2a44db9049e2fb8cfa8b1d802a7cb1763fdd81251a4",
+    "src/observer/namespace_worker_protocol_prototype.h": "3a41a76c397d5bbb60c560571c7506ea97890e89b11eddad9f6e878b34ef1041",
+    "src/observer/namespace_worker_write_prototype.ipp": "a52e19966b4cc5c9e2eaca069fadc4b898f9f034782885a09c0bceaa295ad784",
+    "src/observer/ob_server.h": "d5e186d20c31d4d622c17cfdaa2286e75f058003eda922fb00b16ce54b296d6f",
+    "src/observer/omt/ob_server_runtime_controller.cpp": "e8a5c09d981ec8bb861256fe5c5bc7b7cacab9eae350780dc1200100701fb691",
+    "src/rootserver/fork_table/instance_namespace_metadata.cpp": "7a25ec6abdd64d40e08b9b18e91dc30ef82630ca4293533edffbf1f34637cd65",
+    "src/rootserver/fork_table/instance_namespace_metadata.h": "50bfabcdc6dc26b93f56764b6d60ddc6a36303bf45e8b9d6b910588dda4b38f5",
+    "src/rootserver/fork_table/namespace_fork_kernel_prototype.cpp": "d274cf160c4319a2c059f6514660222c03f449a869fa289e7700aedb84dda834",
+    "src/rootserver/fork_table/namespace_fork_kernel_prototype.h": "d734e2800510a8ad785a12067cc2689d22d8ee724e853210413ea414d3a2bfb8",
+    "src/rootserver/fork_table/namespace_maintenance.cpp": "ec1d41150748794b031313d24732b1e3df0f89d227acfe2dfa9cbcb84de00859",
+    "src/rootserver/fork_table/namespace_maintenance.h": "0a5da4ebf53bbbabb80855d21adc0052a76d69a28009e1c97e3798651fb60f5e",
+    "src/rootserver/fork_table/namespace_schema_publication.cpp": "dc0e68dfb4944752c6e4f8fecf3ebf6a34e4e0414637f4b78a8ba3dab45184ec",
+    "src/rootserver/ob_tablet_creator.cpp": "dd18a3cf4b97e6522c9c8fc3e51a031636669b2efbcffd2b01d89d3aaea733c2",
+    "src/rootserver/ob_tablet_creator.h": "5bdcc6e08593deb7d8c41dd5fd4084b82cc9a98ca54a67b5bd6f84efe2210a30",
+    "src/rootserver/ob_tablet_drop.cpp": "8dc7474e75caa58bff8e1637395ea0089733b4bf967716eae38a6e3d6f7b8a5f",
+    "src/rootserver/ob_tablet_drop.h": "7cf092a3a801fbaba8d0e966393fd5348b761b87744643df0d1abf905febcd6b",
+    "src/rootserver/rootserver_header_inventory.bzl": "13c3b66cbf1fd4ccca410e484888ccd2499021f65f939037384f2e0a12c1b93e",
+    "src/rootserver/rootserver_source_inventory.bzl": "96cf5efcbbf75286093aec78d28fd95c3d77d4742167f1b940feb2d1fe0b94cd",
+    "src/share/autoincrement/ob_i_tablet_autoincrement_admin.h": "7cb076f1394c872e621e35502ea59c3cf6215ef9d67ee55848014b923aafd9be",
+    "src/storage/instance_meta/instance_meta_store.h": "a33f71497d62a01331eeb69a7a48c82cee149df02b04c59e21bf53658a1eaddf",
+    "src/storage/ob_tablet_autoincrement_service.cpp": "68c2ea92ce0cd5906a51dcb18fd431c1839b84f5079adccee69df71f5ff013e7",
+    "src/storage/ob_tablet_autoincrement_service.h": "610f2421633291153298cb252f10f9830f25895c8297f85cfba80406d0f904cd",
+    "src/storage/tablet/ob_tablet_fork_mds_helper.cpp": "f591b768fc00ad19cf7ed103cfcff5c2fa6e94c992ca0b1cb3b7f52e96011815",
+    "src/storage/tablet/ob_tablet_fork_mds_helper.h": "e377b15a12b7f324100f8a6056412633ab4af9f9c4420598501470e9e960200a",
+    "src/storage/tx_storage/ob_empty_shell_task.cpp": "49c6a4895a1a67e5f02f67c3702b52ac116391122646f7cb8d43bda29afd1c00",
+    "src/storage/tx_storage/ob_tablet_gc_service.h": "45ac0935fea78cbc3e84478de0a08b65c1542b0d22ff359f9f06b480babc356c"
+  },
+  "retained_failures": [
+    {
+      "log": ".scratch/namespace-fork/four-issues-physical-maintenance-build.log",
+      "reason": "Incorrect include path for the new maintenance module; corrected.",
+      "exists": true
+    },
+    {
+      "log": ".scratch/namespace-fork/four-issues-native-build.log",
+      "reason": "Test header included inside a namespace and duplicate fixture local; corrected.",
+      "exists": true
+    },
+    {
+      "log": ".scratch/namespace-fork/four-issues-shutdown-red.log",
+      "reason": "SIGTERM raises SIGKILL; did not exercise module stop.",
+      "exists": true
+    },
+    {
+      "log": ".scratch/namespace-fork/four-issues-shutdown-red-sigusr1.log",
+      "reason": "Normal wait calls _Exit; did not exercise module stop.",
+      "exists": true
+    },
+    {
+      "log": ".scratch/namespace-fork/four-issues-shutdown-green.log",
+      "reason": "Same invalid signal-only fixture; superseded by real service-stop red/green.",
+      "exists": true
+    },
+    {
+      "log": ".scratch/namespace-fork/four-issues-automatic-gc.log",
+      "reason": "Started while binary copy still running (ETXTBSY); serialized copy/start and retried.",
+      "exists": true
+    },
+    {
+      "log": ".scratch/namespace-fork/four-issues-ddl-cost.log",
+      "reason": "Fixture read process.out although stderr is redirected to seekdb.log; corrected.",
+      "exists": true
+    },
+    {
+      "log": ".scratch/namespace-fork/four-issues-native-kv.log",
+      "reason": "Runner waited for first-install-only marker on recovery; interrupted after diagnosis and corrected.",
+      "exists": true
+    },
+    {
+      "log": ".scratch/namespace-fork/four-issues-native-kv-retry.log",
+      "reason": "Fixture inferred prior DROP from template existence; GC may already prune its child. Harness now supplies observed restart phase.",
+      "exists": true
+    }
+  ],
+  "limitations": [
+    "GC still performs a full mark in one invocation and may defer under root churn or a scan exceeding its deadline.",
+    "DDL still compares in-memory partition bindings in O(partitions); physical-state probes/source updates are eliminated for unchanged bindings.",
+    "Only targeted gates were run; no full four-gate, mysqltest or sysbench execution."
+  ],
+  "delivery": "Commit code, documentation and tests; push branch only, no PR.",
+  "final_production_binary": {
+    "path": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+    "sha256": "b36993b04c989664b8d8ff39f49352c6625bf9dc36fbde77ca846e1039d61bd1",
+    "test_markers_absent": [
+      "GRPC_STOP_TEST_ENTER",
+      "DDL_PUBLICATION_COST namespace=",
+      "INSTANCE_CATALOG_GC_CONCURRENT_PASS",
+      "SEEKDB_STANDBY_COPY_PAUSE"
+    ]
+  }
+}

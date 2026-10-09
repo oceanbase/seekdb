@@ -73,7 +73,7 @@ struct InProcessStorage {
   InProcessStorage &operator=(const InProcessStorage &) = delete;
   bool owns(StorageSpaceHandle space) const
   {
-    return space == storage_space || space.is_global() || space.is_physical_mds();
+    return space == storage_space || space.is_global();
   }
   data_plane::ObNamespaceAccessMode access_mode(StorageSpaceHandle space) const
   {

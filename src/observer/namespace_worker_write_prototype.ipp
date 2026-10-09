@@ -101,7 +101,6 @@ int route_object_id(StorageSpaceHandle storage_space,
                     uint64_t logical_id, uint64_t &storage_id)
 {
   if (!storage_space.is_valid()) { return OB_INVALID_ARGUMENT; }
-  if (storage_space.is_physical_mds()) { return OB_INVALID_ARGUMENT; }
   return storage::NamespaceForkKernelPrototype::storage_object_id(
       storage_space.tablet_namespace_id(), logical_id, storage_id);
 }
@@ -171,9 +170,6 @@ int route_tablet_mds(StorageSpaceHandle storage_space,
   skip_mds = false;
   if (!storage_space.is_valid()) {
     return OB_INVALID_ARGUMENT;
-  }
-  if (storage_space.is_physical_mds()) {
-    return OB_SUCCESS;
   }
   const uint64_t ns = storage_space.tablet_namespace_id();
   int ret = OB_SUCCESS;
@@ -303,13 +299,11 @@ int worker_mds_storage_space(transaction::ObTxDataSourceType type,
                              int64_t buffer_size,
   StorageSpaceHandle &storage_space)
 {
-  storage_space = uses_physical_tablet_mds_scope()
-      ? StorageSpaceHandle::physical_mds_space()
-      : active_worker_storage_space();
+  storage_space = active_worker_storage_space();
   if (!storage_space.is_valid() || buffer == nullptr || buffer_size <= 0) {
     return OB_INVALID_ARGUMENT;
   }
-  if (storage_space.is_global() || storage_space.is_physical_mds()
+  if (storage_space.is_global()
       || type != transaction::ObTxDataSourceType::CREATE_TABLET_NEW_MDS) {
     return OB_SUCCESS;
   }
@@ -810,7 +804,7 @@ int process_table_lock(
   }
   const bool valid_param = tx_param.is_valid();
   ns::NamespaceRuntime *runtime = nullptr;
-  if (storage_space.is_valid() && !storage_space.is_physical_mds()) {
+  if (storage_space.is_valid()) {
     ns::namespace_registry().get(storage_space.tablet_namespace_id(), runtime);
   }
   ObTableLockService *service = runtime == nullptr ? nullptr

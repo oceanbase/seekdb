@@ -20,6 +20,7 @@ ROOTSERVER_PUBLIC_HEADERS = [
     "fork_table/namespace_fork_kernel_prototype.h",
     "fork_table/namespace_tablet_access.h",
     "fork_table/instance_namespace_metadata.h",
+    "fork_table/namespace_maintenance.h",
     "freeze/ob_checksum_validator.h",
     "freeze/ob_daily_major_freeze_launcher.h",
     "freeze/ob_freeze_info_detector.h",

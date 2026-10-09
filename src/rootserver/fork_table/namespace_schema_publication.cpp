@@ -85,47 +85,21 @@ int publication_schema(ObSchemaService &backend, const ObRefreshSchemaStatus &st
   return ret;
 }
 
-// Prepares complete binding units in one publication. This is transaction-local
-// work, not a persistent schema cache or per-partition copy of table definitions.
-int build_publication(InstanceNamespaceMetadata &metadata,
-    const InstanceNamespaceRecord &record, int64_t version,
-    const Schemas &current, const Schemas &previous,
-    std::vector<uint64_t> &removed_physical)
+using Bindings = std::map<uint64_t, ns::CatalogTabletSource>;
+
+int publication_bindings(const Schemas &schemas, Bindings &bindings)
 {
   int ret = OB_SUCCESS;
-  ns::CatalogChanges definitions, sources;
-  std::map<uint64_t, uint64_t> previous_tablets, current_tablets;
-  std::map<uint64_t, ns::CatalogTabletSource> bindings;
-  for (const auto &entry : previous) {
-    if (ret != OB_SUCCESS) { break; }
-    ObArray<ObTabletID> ids;
-    ret = publication_tablets(*entry.second, ids);
-    for (const auto &id : ids) { previous_tablets[id.id()] = entry.first; }
-    if (current.count(entry.first) == 0 || !current.at(entry.first)->has_tablet()) {
-      definitions[NamespaceCatalogCodec::object_key(entry.first)] = {{}, true};
-    }
-  }
-  for (const auto &entry : current) {
+  for (const auto &entry : schemas) {
     if (ret != OB_SUCCESS) { break; }
     const auto &schema = *entry.second;
-    if (!schema.has_tablet()) { continue; }
-    TableCreationDescriptor description;
-    std::string bytes;
-    uint64_t object = 0;
-    if (OB_FAIL(description.init(schema, DATA_CURRENT_VERSION))) {
-    } else if (OB_FAIL(description.encode(bytes))) {
-    } else if (OB_FAIL(metadata.save_object(bytes, object))) {
-    } else {
-      definitions[NamespaceCatalogCodec::object_key(entry.first)] = {
-          {NamespaceCatalogCodec::encode_entry(object, entry.first, 0), 0}, false};
-    }
-    if (schema.is_aux_lob_table()) { continue; }
+    if (!schema.has_tablet() || schema.is_aux_lob_table()) { continue; }
     const uint64_t ids[] = {entry.first, schema.get_aux_lob_meta_tid(), schema.get_aux_lob_piece_tid()};
     ObArray<ObTabletID> tablets[3];
     for (int i = 0; ret == OB_SUCCESS && i < 3; ++i) {
       if (ids[i] == 0 || ids[i] == OB_INVALID_ID) { continue; }
-      const auto found = current.find(ids[i]);
-      if (found == current.end()) { ret = OB_SCHEMA_EAGAIN; }
+      const auto found = schemas.find(ids[i]);
+      if (found == schemas.end()) { ret = OB_SCHEMA_EAGAIN; }
       else { ret = publication_tablets(*found->second, tablets[i]); }
       if (ret == OB_SUCCESS && tablets[i].count() != tablets[0].count()) { ret = OB_STATE_NOT_MATCH; }
     }
@@ -136,16 +110,63 @@ int build_publication(InstanceNamespaceMetadata &metadata,
       binding.lob_piece_tablet_id = tablets[2].empty() ? 0 : tablets[2].at(i).id();
       for (int j = 0; j < 3; ++j) {
         if (tablets[j].empty()) { continue; }
-        const uint64_t logical = tablets[j].at(i).id();
         binding.table_id = ids[j];
-        if (!bindings.emplace(logical, binding).second) { ret = OB_STATE_NOT_MATCH; break; }
-        current_tablets[logical] = ids[j];
+        if (!bindings.emplace(tablets[j].at(i).id(), binding).second) { ret = OB_STATE_NOT_MATCH; break; }
       }
     }
   }
-  for (const auto &entry : previous_tablets) {
+  return ret;
+}
+
+bool same_binding(const ns::CatalogTabletSource &a, const ns::CatalogTabletSource &b)
+{
+  return a.table_id == b.table_id && a.data_tablet_id == b.data_tablet_id
+      && a.lob_meta_tablet_id == b.lob_meta_tablet_id
+      && a.lob_piece_tablet_id == b.lob_piece_tablet_id;
+}
+
+// Compare the two schema snapshots already owned by this DDL transaction.
+// Descriptor-only changes do no per-tablet storage lookups or source updates.
+// Physical materialization publishes its source change in its own native owner;
+// unchanged logical bindings must preserve that already published identity/cap.
+int build_publication(InstanceNamespaceMetadata &metadata,
+    const InstanceNamespaceRecord &record, int64_t version,
+    const Schemas &current, const Schemas &previous,
+    std::vector<uint64_t> &removed_physical)
+{
+  int ret = OB_SUCCESS;
+  ns::CatalogChanges definitions, sources;
+  Bindings previous_bindings, bindings;
+  if (OB_FAIL(publication_bindings(previous, previous_bindings))) {
+  } else if (OB_FAIL(publication_bindings(current, bindings))) {
+  }
+  for (const auto &entry : previous) {
     if (ret != OB_SUCCESS) { break; }
-    if (current_tablets.count(entry.first) == 0) {
+    if (current.count(entry.first) == 0 || !current.at(entry.first)->has_tablet()) {
+      definitions[NamespaceCatalogCodec::object_key(entry.first)] = {{}, true};
+    }
+  }
+  for (const auto &entry : current) {
+    if (ret != OB_SUCCESS) { break; }
+    const auto &schema = *entry.second;
+    if (!schema.has_tablet()) { continue; }
+    const auto old = previous.find(entry.first);
+    if (old != previous.end() && old->second->has_tablet()
+        && old->second->get_schema_version() == schema.get_schema_version()) { continue; }
+    TableCreationDescriptor description;
+    std::string bytes;
+    uint64_t object = 0;
+    if (OB_FAIL(description.init(schema, DATA_CURRENT_VERSION))) {
+    } else if (OB_FAIL(description.encode(bytes))) {
+    } else if (OB_FAIL(metadata.save_object(bytes, object))) {
+    } else {
+      definitions[NamespaceCatalogCodec::object_key(entry.first)] = {
+          {NamespaceCatalogCodec::encode_entry(object, entry.first, 0), 0}, false};
+    }
+  }
+  for (const auto &entry : previous_bindings) {
+    if (ret != OB_SUCCESS) { break; }
+    if (bindings.count(entry.first) == 0) {
       ns::CatalogTabletSource previous_source;
       int64_t cap = 0;
       ret = metadata.find_tablet_source(record.roots.directory, entry.first, previous_source, cap);
@@ -165,6 +186,8 @@ int build_publication(InstanceNamespaceMetadata &metadata,
   }
   for (const auto &entry : bindings) {
     if (ret != OB_SUCCESS) { break; }
+    const auto old = previous_bindings.find(entry.first);
+    if (old != previous_bindings.end() && same_binding(old->second, entry.second)) { continue; }
     const uint64_t physical = ns::NamespaceObjectKey{record.id, entry.first}.storage_id();
     ns::CatalogTabletSource source = entry.second;
     int64_t cap = 0;
@@ -295,8 +318,10 @@ int NamespaceSchemaPublication::stage(common::ObMySQLTransaction &sql,
       if (OB_FAIL(tablets.push_back(ObTabletID(physical)))) { break; }
     }
     if (ret == OB_SUCCESS) {
-      observer::namespace_worker_prototype::PhysicalTabletMdsScope physical_mds(true);
-      ret = ObTabletDrop::register_delete(sql, tablets);
+      ret = query::ObInnerSQLConnectionAccess::with_native_transaction(
+          sql.get_connection(), [&](transaction::ObTxDesc &native) {
+        return ObTabletDrop::register_delete(native, tablets);
+      });
     }
   }
   for (auto *schema : allocated) { schema->~ObTableSchema(); }

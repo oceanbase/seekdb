@@ -36,6 +36,7 @@ def wait_probe(experiment, recovered, durable_phase):
                 and f'INSTANCE_RECORD_PROBE_PASS root_recovered={int(recovered)} ' in observed
                 and f'INSTANCE_RECORD_DURABLE phase={durable_phase} ' in observed
                 and 'INSTANCE_CATALOG_VIEW_PASS ' in observed
+                and (recovered or 'INSTANCE_CATALOG_GC_CONCURRENT_PASS ' in observed)
                 and 'INSTANCE_DDL_PROBE_PASS' in observed
                 and 'INSTANCE_SHARED_TX_PROBE_PASS' in observed
                 and 'INSTANCE_BINDING_PROBE_PASS partitions=8000 persisted_source=1 sql_released=1' in observed
@@ -89,6 +90,7 @@ def main():
     try:
         phases = ('created', 'marked', 'finished', 'verified')
         for index, phase in enumerate(phases):
+            os.environ['SEEKDB_INSTANCE_DURABLE_PHASE'] = phase
             experiment.start()
             wait_probe(experiment, index > 0, phase)
             if phase != 'verified':

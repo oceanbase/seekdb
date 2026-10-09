@@ -17,6 +17,7 @@
 #ifndef OB_TABLET_CREATOR_H
 #define OB_TABLET_CREATOR_H
 
+#include <functional>
 #include "lib/hash/ob_hashmap.h"
 #include "lib/objectpool/ob_cached_allocator.h"
 #include "lib/container/ob_array.h"
@@ -30,6 +31,7 @@
 
 namespace oceanbase
 {
+namespace transaction { class ObTxDesc; }
 namespace rootserver
 {
 struct ObTabletCreatorArg
@@ -131,6 +133,8 @@ const static int64_t BATCH_ARG_SIZE = 1024 * 1024;  // 1M
   virtual ~ObTabletCreator();
   int init(const bool need_check_tablet_cnt);
   int execute();
+  // The batch already contains physical IDs; register it in the explicit owner.
+  int execute(transaction::ObTxDesc &trans);
   int add_create_tablet_arg(const ObTabletCreatorArg &arg);
   // Takes a private copy of storage-only creation descriptors and bindings.
   // Callers may release the input immediately; execute() registers them in the
@@ -139,6 +143,8 @@ const static int64_t BATCH_ARG_SIZE = 1024 * 1024;  // 1M
   void set_materialization_for_prototype();
   void reset();
 private:
+  int execute_impl(const std::function<int(const obcall::ObBatchCreateTabletArg &, const char *, int64_t, int64_t)> &register_mds,
+      bool logical_binding);
   const share::SCN major_frozen_scn_;
   ObArenaAllocator allocator_;
   ObBatchCreateTabletHelper *single_batch_arg_;

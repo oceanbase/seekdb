@@ -75,7 +75,7 @@ struct RequestTag { uint64_t slot = 0, generation = 0; };
 class StorageSpaceHandle final
 {
 public:
-  enum class Scope : uint8_t { INVALID, NAMESPACE, GLOBAL, PHYSICAL_MDS };
+  enum class Scope : uint8_t { INVALID, NAMESPACE, GLOBAL };
   StorageSpaceHandle() = default;
   static StorageSpaceHandle namespace_space(uint64_t namespace_id)
   {
@@ -86,14 +86,9 @@ public:
   {
     return StorageSpaceHandle(Scope::GLOBAL, 0);
   }
-  static StorageSpaceHandle physical_mds_space()
-  {
-    return StorageSpaceHandle(Scope::PHYSICAL_MDS, 0);
-  }
   bool is_valid() const { return scope_ != Scope::INVALID; }
   bool is_namespace() const { return scope_ == Scope::NAMESPACE; }
   bool is_global() const { return scope_ == Scope::GLOBAL; }
-  bool is_physical_mds() const { return scope_ == Scope::PHYSICAL_MDS; }
   uint64_t namespace_id() const { return is_namespace() ? value_ : 0; }
   uint64_t tablet_namespace_id() const { return is_global() ? 1 : namespace_id(); }
   bool operator==(const StorageSpaceHandle &other) const
@@ -139,23 +134,6 @@ public:
 inline bool uses_global_storage_scope()
 {
   return worker_global_storage_scope_depth != 0;
-}
-inline thread_local uint64_t worker_physical_mds_scope_depth = 0;
-class PhysicalTabletMdsScope final
-{
-public:
-  explicit PhysicalTabletMdsScope(bool active) : active_(active)
-  { if (active_) { ++worker_physical_mds_scope_depth; } }
-  ~PhysicalTabletMdsScope()
-  { if (active_) { --worker_physical_mds_scope_depth; } }
-  PhysicalTabletMdsScope(const PhysicalTabletMdsScope &) = delete;
-  PhysicalTabletMdsScope &operator=(const PhysicalTabletMdsScope &) = delete;
-private:
-  bool active_;
-};
-inline bool uses_physical_tablet_mds_scope()
-{
-  return worker_physical_mds_scope_depth != 0;
 }
 // The namespace this thread currently serves SQL for, published at
 // command/query entry by InProcessServingScope.

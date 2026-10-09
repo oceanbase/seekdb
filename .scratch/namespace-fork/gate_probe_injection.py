@@ -2,7 +2,8 @@
 """Enable/disable every local hook required by run_four_gates.py.
 
 Enable, build and copy the native binary, then disable before the production
-build. No test hooks or test files belong in a production commit.
+build. Hook code must be absent from production sources; probe files are
+archived on this branch with the validation evidence.
 """
 import argparse
 from pathlib import Path
@@ -19,7 +20,8 @@ scripts = ('native_probe_injection.py', 'shared_transaction_fault_injection.py',
            'catalog_gc_probe_injection.py', 'weak_source_gc_probe_injection.py',
            'empty_shell_horizon_injection.py', 'physical_retention_cut_injection.py',
            'physical_gc_plan_injection.py', 'template_baseline_injection.py',
-           'standby_copy_pause_injection.py', 'baseline_progress_injection.py')
+           'standby_copy_pause_injection.py', 'baseline_progress_injection.py',
+           'catalog_gc_boundary_injection.py', 'grpc_stop_injection.py', 'ddl_publication_cost_injection.py')
 try:
     for script in scripts:
         subprocess.run([sys.executable, str(local / script), args.action], check=True)

@@ -42,6 +42,7 @@
 
 
 #include "rootserver/ob_local_management_service.h"
+#include "rootserver/fork_table/namespace_maintenance.h"
 #include "rootserver/ob_debug_sync_broadcaster_adapter.h"
 #include "rootserver/freeze/ob_major_freeze_coordinator_adapter.h"
 
@@ -691,6 +692,7 @@ private:
   // ===== module instances (ObServer is the sole owner; created by
   // obs_construct_modules() at boot and bound into runtime service slots) =====
   omt::ObSharedTimer * mods_shared_timer_ = nullptr;
+  rootserver::NamespaceMaintenance namespace_maintenance_;
   blocksstable::ObSharedMacroBlockMgr * mods_shared_macro_block_mgr_ = nullptr;
   storage::ObStorageMetaMemMgr * mods_storage_meta_mem_mgr_ = nullptr;
   ObTableScanIteratorObjPool * mods_table_scan_iterator_obj_pool_ = nullptr;

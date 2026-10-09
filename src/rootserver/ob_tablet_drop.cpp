@@ -22,6 +22,9 @@
 #include "share/tablet/ob_tablet_to_table_history_operator.h" // ObTabletToTableHistoryOperator
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "storage/tx/ob_multi_data_source.h"
+#include "storage/tx/ob_trans_service.h"
+#include "share/rc/ob_server_runtime.h"
+#include <functional>
 
 namespace oceanbase
 {
@@ -273,19 +276,16 @@ int ObTabletDrop::execute()
   return ret;
 }
 
-int ObTabletDrop::register_delete(ObMySQLTransaction &trans,
-    const ObIArray<ObTabletID> &tablets)
+namespace {
+int register_tablet_delete(const ObIArray<ObTabletID> &tablets,
+    const std::function<int(const char *, int64_t)> &register_mds)
 {
   int ret = OB_SUCCESS;
   ObArenaAllocator allocator("TbtDrop");
   ObTimeoutCtx ctx;
   const int64_t default_timeout_ts = GCONF.rpc_timeout;
   const int64_t SLEEP_INTERVAL = 100 * 1000L; // 100ms
-  common::sqlclient::ObISQLConnection *conn = NULL;
-  if (OB_ISNULL(conn = trans.get_connection())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("conn_ is NULL", KR(ret));
-  } else if (tablets.empty()) {
+  if (tablets.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("batch arg count is invalid", KR(ret));
   } else {
@@ -306,11 +306,7 @@ int ObTabletDrop::register_delete(ObMySQLTransaction &trans,
           if (ctx.is_timeouted()) {
             ret = OB_TIMEOUT;
             LOG_WARN("already timeout", KR(ret), K(ctx));
-          } else if (OB_FAIL(query::ObInnerSQLConnectionAccess::register_multi_data_source(
-                                 conn,
-                                 transaction::ObTxDataSourceType::DELETE_TABLET_NEW_MDS,
-                                 buf,
-                                 buf_len))) {
+          } else if (OB_FAIL(register_mds(buf, buf_len))) {
             LOG_WARN("fail to register_tx_data", KR(ret), K(arg), K(buf), K(buf_len));
             if (OB_LS_LOCATION_LEADER_NOT_EXIST == ret || OB_NOT_MASTER == ret) {
               LOG_INFO("fail to find leader, try again", K(arg));
@@ -322,6 +318,28 @@ int ObTabletDrop::register_delete(ObMySQLTransaction &trans,
     }
   }
   return ret;
+}
+} // namespace
+
+int ObTabletDrop::register_delete(ObMySQLTransaction &trans,
+    const ObIArray<ObTabletID> &tablets)
+{
+  if (trans.get_connection() == nullptr) { return OB_INVALID_ARGUMENT; }
+  return register_tablet_delete(tablets, [&](const char *buf, int64_t size) {
+    return query::ObInnerSQLConnectionAccess::register_multi_data_source(
+        trans.get_connection(), transaction::ObTxDataSourceType::DELETE_TABLET_NEW_MDS, buf, size);
+  });
+}
+
+int ObTabletDrop::register_delete(transaction::ObTxDesc &trans,
+    const ObIArray<ObTabletID> &physical_tablets)
+{
+  auto *service = share::server_service<transaction::ObTransService>();
+  if (service == nullptr) { return OB_NOT_INIT; }
+  return register_tablet_delete(physical_tablets, [&](const char *buf, int64_t size) {
+    return service->register_mds_into_tx(
+        trans, transaction::ObTxDataSourceType::DELETE_TABLET_NEW_MDS, buf, size);
+  });
 }
 
 } // rootserver

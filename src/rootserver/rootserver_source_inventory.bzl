@@ -159,6 +159,7 @@ ROOTSERVER_UNITY_GROUPS = [
             "src/rootserver/fork_table/namespace_tablet_access.cpp",
             "src/rootserver/fork_table/table_creation_descriptor.cpp",
             "src/rootserver/fork_table/namespace_schema_publication.cpp",
+            "src/rootserver/fork_table/namespace_maintenance.cpp",
             "src/rootserver/fork_table/instance_namespace_metadata.cpp",
             "src/rootserver/ob_domain_index_builder_util.cpp",
             "src/rootserver/fork_table/ob_fork_table_service.cpp",

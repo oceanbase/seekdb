@@ -23,10 +23,12 @@ args.log_dir.mkdir(parents=True, exist_ok=True)
 gates = [
     ('bootstrap-native-kv', [
         [local / 'catalog_batch_probe.py'],
+        [local / 'ddl_publication_cost_probe.py', '--binary', probe],
         [local / 'standby_baseline_progress_probe.py', '--binary', probe],
         [local / 'standby_background_copy_probe.py', '--binary', probe,
          '--drop-during-copy', '--compaction-interval', '3s'],
         [local / 'standby_background_copy_probe.py', '--binary', probe, '--cancel-copy'],
+        [local / 'standby_background_copy_probe.py', '--binary', probe, '--shutdown-primary'],
         [local / 'run_weak_source_gc_probe.py', '--binary', probe],
         [local / 'empty_shell_horizon_probe.py', '--binary', probe],
         [local / 'physical_retention_cut_probe.py', '--binary', probe],

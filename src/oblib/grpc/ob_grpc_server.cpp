@@ -159,7 +159,9 @@ int ObGrpcServer::start(int port, const bool tls_enabled)
 void ObGrpcServer::stop()
 {
   if (NULL != server_.get()) {
-    server_->Shutdown();
+    // Copy-view streams live until cancelled. Shutdown must cancel them rather
+    // than wait for a peer to finish copying before this process can exit.
+    server_->Shutdown(std::chrono::system_clock::now());
     if (thread_.joinable()) {
       thread_.join();
     }

@@ -22,7 +22,7 @@
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/tx/ob_trans_service.h"
-#include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
+#include "storage/tx_storage/ob_tablet_gc_service.h"
 
 namespace oceanbase
 {
@@ -77,13 +77,13 @@ void ObEmptyShellTask::runTimerTask()
           need_retry = true;
         } else if (empty_shell_tablet_ids.empty()) {
           // do nothing
-        } else if (OB_FAIL(NamespaceForkKernelPrototype::reclaim_unreferenced_tablets(
+        } else if (OB_FAIL(tablet_gc_service_.reclaim_unreferenced_tablets(
             empty_shell_tablet_ids, need_retry,
             [&](const common::ObIArray<common::ObTabletID> &tablets) {
               return tablet_empty_shell_handler->update_tablets_to_empty_shell(ls, tablets);
             }))) {
           need_retry = true;
-          STORAGE_LOG(WARN, "prototype snapshot protection unavailable; defer GC", KR(ret));
+          STORAGE_LOG(WARN, "physical reclamation guard unavailable; defer GC", KR(ret));
         }
         if (need_retry) {
           STORAGE_LOG(INFO, "[emptytablet] tablet become empty shell error, need retry", KR(ret), KPC(ls), K(empty_shell_tablet_ids));
@@ -96,23 +96,7 @@ void ObEmptyShellTask::runTimerTask()
   if (OB_SUCC(ret)) {
     STORAGE_LOG(INFO, "[emptytablet] succeed to change tablet to empty shell", KR(ret), K(times));
   }
-  const int64_t previous_timeout = THIS_WORKER.get_timeout_ts();
-  THIS_WORKER.set_timeout_ts(INT64_MAX);
-  const int namespace_gc_ret = NamespaceForkKernelPrototype::collect_dropped_namespace_tablets();
-  if (namespace_gc_ret != OB_SUCCESS) {
-    STORAGE_LOG(WARN, "failed to collect dropped namespace tablets", K(namespace_gc_ret));
-  }
-  // Namespace dependency maintenance shares this periodic wakeup. All logical
-  // selection/admission stays in the Namespace layer; native GC is unchanged.
-  const int materialize_ret = NamespaceForkKernelPrototype::materialize_inherited_tablets();
-  if (materialize_ret != OB_SUCCESS) {
-    STORAGE_LOG(WARN, "failed to materialize inherited namespace tablets", K(materialize_ret));
-  }
-  const int catalog_gc_ret = NamespaceForkKernelPrototype::collect_catalog_pages();
-  if (catalog_gc_ret != OB_SUCCESS) {
-    STORAGE_LOG(WARN, "failed to collect namespace catalog pages", K(catalog_gc_ret));
-  }
-  THIS_WORKER.set_timeout_ts(previous_timeout);
+
 }
 
 

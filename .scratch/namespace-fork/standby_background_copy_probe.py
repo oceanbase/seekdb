@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Fresh standby full copy while background-created tablets have flushed MDS."""
-import argparse,json,os,re,resource,socket,subprocess,time
+import argparse,json,os,re,resource,signal,socket,subprocess,time
 from pathlib import Path
 import pymysql
 from fork_parent_truncate_probe import BootstrapExperiment, connect, physical_id, physical_state
@@ -11,13 +11,19 @@ def free_port():
         s.bind(('127.0.0.1',0)); return s.getsockname()[1]
 
 
-def run(binary,drop_parent=False,compaction_interval='5m',drop_during_copy=False,cancel_copy=False):
+def run(binary,drop_parent=False,compaction_interval='5m',drop_during_copy=False,cancel_copy=False,shutdown_primary=False):
     primary=BootstrapExperiment(binary,'background_copy_primary',prototype=6)
     standby=BootstrapExperiment(binary,'background_copy_standby',prototype=6)
     rpc=free_port()
     primary.extra_parameters=[('enable_rpc_service','true'),('rpc_port',str(rpc)),('ob_compaction_schedule_interval',compaction_interval)]
     try:
-        primary.start()
+        previous_stop = os.environ.get('SEEKDB_TEST_GRPC_STOP')
+        if shutdown_primary: os.environ['SEEKDB_TEST_GRPC_STOP'] = '1'
+        try:
+            primary.start()
+        finally:
+            if previous_stop is None: os.environ.pop('SEEKDB_TEST_GRPC_STOP', None)
+            else: os.environ['SEEKDB_TEST_GRPC_STOP'] = previous_stop
         primary.sql('CREATE DATABASE copy_probe')
         primary.sql('CREATE TABLE copy_probe.t(id INT PRIMARY KEY,v INT)')
         primary.sql('INSERT INTO copy_probe.t VALUES(1,7)')
@@ -28,7 +34,7 @@ def run(binary,drop_parent=False,compaction_interval='5m',drop_during_copy=False
         physical = physical_id(1, int(target))
         control = standby.base/'copy-pause'
         environment = os.environ.copy()
-        if drop_during_copy or cancel_copy:
+        if drop_during_copy or cancel_copy or shutdown_primary:
             control.write_text(str(physical))
             environment['SEEKDB_STANDBY_COPY_PAUSE'] = str(control)
             primary.sql('ALTER SYSTEM MINOR FREEZE')
@@ -54,13 +60,29 @@ def run(binary,drop_parent=False,compaction_interval='5m',drop_during_copy=False
                  '--parameter','log_disk_size=2G','--parameter','max_syslog_file_count=16']
         standby.proc=subprocess.Popen(command,env=environment,stdout=standby.output,stderr=subprocess.STDOUT)
         standby.record('setup',base=standby.base,pid=standby.proc.pid,port=standby.port,primary_base=primary.base)
-        if drop_during_copy or cancel_copy:
+        if drop_during_copy or cancel_copy or shutdown_primary:
             deadline=time.monotonic()+60
             while time.monotonic()<deadline and not Path(str(control)+'.ready').exists():
                 if standby.proc.poll() is not None: raise AssertionError('copy exited before controlled pause')
                 time.sleep(.2)
             assert Path(str(control)+'.ready').exists(), 'copy pause was not reached (requires local test binary)'
             standby.record('paused_after_sstable_metadata', physical=physical)
+            if shutdown_primary:
+                started = time.monotonic()
+                primary.proc.send_signal(signal.SIGUSR1)
+                try:
+                    primary.proc.wait(timeout=20)
+                except subprocess.TimeoutExpired:
+                    raise AssertionError('gRPC service stop hung while peer retained the copy view')
+                assert primary.proc.returncode == 0, ('unclean shutdown', primary.proc.returncode)
+                log = '\n'.join(path.read_text(errors='replace') for path in
+                                (primary.base/'log').glob('seekdb.log*') if path.is_file())
+                assert 'physical copy view released' in log, 'service stop did not release the view'
+                assert 'gRPC server stopped' in log, 'service stop was not exercised (requires test hook)'
+                assert standby.proc.poll() is None, 'peer exited before primary shutdown completed'
+                primary.record('PASS', case='copy_view_primary_shutdown', seconds=time.monotonic()-started,
+                               source_view_released=True, peer_alive=True)
+                return
             if cancel_copy:
                 standby.proc.kill(); standby.proc.wait(timeout=15)
                 deadline=time.monotonic()+15
@@ -119,7 +141,8 @@ if __name__=='__main__':
     parser.add_argument('--drop-parent',action='store_true')
     parser.add_argument('--drop-during-copy',action='store_true')
     parser.add_argument('--cancel-copy',action='store_true')
+    parser.add_argument('--shutdown-primary',action='store_true')
     parser.add_argument('--compaction-interval',default='5m')
     args=parser.parse_args()
-    if sum((args.drop_parent,args.drop_during_copy,args.cancel_copy))>1: parser.error('select one controlled boundary')
-    resource.setrlimit(resource.RLIMIT_CORE,(0,0));run(args.binary,args.drop_parent,args.compaction_interval,args.drop_during_copy,args.cancel_copy)
+    if sum((args.drop_parent,args.drop_during_copy,args.cancel_copy,args.shutdown_primary))>1: parser.error('select one controlled boundary')
+    resource.setrlimit(resource.RLIMIT_CORE,(0,0));run(args.binary,args.drop_parent,args.compaction_interval,args.drop_during_copy,args.cancel_copy,args.shutdown_primary)

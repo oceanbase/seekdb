@@ -45,12 +45,8 @@ public:
   static int reclaim_unreferenced_tablets(common::ObIArray<common::ObTabletID> &candidates,
       bool &need_retry,
       const std::function<int(const common::ObIArray<common::ObTabletID> &)> &reclaim);
-  static int collect_dropped_namespace_tablets();
-  static int collect_catalog_pages();
+  static int collect_dropped_namespace_tablets(uint64_t &physical_cursor);
   static int capture_physical_copy_view(const std::function<int()> &capture);
-  // Bounded primary-side creation from persisted sources. Existing physical
-  // tablets subsequently complete takeover through the native scheduler.
-  static int materialize_inherited_tablets();
   // Build from one readable cut without holding the publication fence during
   // tree/native traversal. Failure leaves the caller's previous plan intact.
   static int load_physical_retention(PhysicalSnapshotRetention &plan);
@@ -93,10 +89,11 @@ public:
                        share::schema::ObMultiVersionSchemaService &schema_service,
                        const common::ObISQLClient *trans = nullptr);
   static int schedule_baseline(const ObTablet &tablet);
+  // Explicit Namespace operation; no SQL Runtime is needed to create a binding.
+  static int materialize_source(uint64_t namespace_id, uint64_t table_id, uint64_t data_tablet_id);
 private:
   static int complete_initial_baseline(uint64_t namespace_id, int64_t deadline);
   static int check_initial_baseline(uint64_t namespace_id, int64_t deadline, bool &complete);
-  static int materialize_source(uint64_t namespace_id, uint64_t table_id, uint64_t data_tablet_id);
   friend class ns::TabletAccess;
   friend class TabletAccessProtection;
   static int acquire_namespace(uint64_t id, TabletAccessProtection &protection);

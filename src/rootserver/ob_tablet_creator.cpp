@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 #include "ob_tablet_creator.h"
 #include "share/ob_share_util.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx/ob_trans_service.h"
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "storage/tx/ob_tx_log.h"
@@ -357,6 +358,29 @@ void ObTabletCreator::set_materialization_for_prototype()
 
 int ObTabletCreator::execute()
 {
+  return execute_impl([&](const obcall::ObBatchCreateTabletArg &arg, const char *buf, int64_t size, int64_t deadline) {
+    return query::ObInnerSQLConnectionAccess::register_multi_data_source(
+        trans_.get_connection(), transaction::ObTxDataSourceType::CREATE_TABLET_NEW_MDS, buf, size);
+  }, true);
+}
+
+int ObTabletCreator::execute(transaction::ObTxDesc &trans)
+{
+  auto *service = share::server_service<transaction::ObTransService>();
+  if (service == nullptr) { return OB_NOT_INIT; }
+  return execute_impl([&](const obcall::ObBatchCreateTabletArg &arg, const char *buf, int64_t size, int64_t deadline) {
+    int ret = service->register_mds_into_tx(
+        trans, transaction::ObTxDataSourceType::CREATE_TABLET_NEW_MDS, buf, size);
+    if (ret == OB_SUCCESS && arg.set_binding_info_outside_create()) {
+      ret = ObTabletBindingMdsHelper::modify_tablet_binding_for_create(arg, deadline, trans, *service);
+    }
+    return ret;
+  }, false);
+}
+
+int ObTabletCreator::execute_impl(
+    const std::function<int(const obcall::ObBatchCreateTabletArg &, const char *, int64_t, int64_t)> &register_mds, bool logical_binding)
+{
   int ret = OB_SUCCESS;
   ObTimeoutCtx ctx;
   const int64_t default_timeout_ts = GCONF.rpc_timeout;
@@ -387,19 +411,14 @@ int ObTabletCreator::execute()
           ret = OB_TIMEOUT;
           LOG_WARN("already timeout", KR(ret), K(ctx));
         } else {
-          observer::namespace_worker_prototype::PhysicalTabletMdsScope physical_mds(
-              batch_arg->batch_arg_.create_type_
-                  == storage::ObTabletMdsUserDataType::PROTOTYPE_MATERIALIZE_TABLET);
-          ret = query::ObInnerSQLConnectionAccess::register_multi_data_source(
-              conn, transaction::ObTxDataSourceType::CREATE_TABLET_NEW_MDS,
-              buf, buf_len);
+          ret = register_mds(batch_arg->batch_arg_, buf, buf_len, ctx.get_abs_timeout());
         }
         int64_t end_time = ObTimeUtility::current_time();
         LOG_INFO("generate create arg", KR(ret), K(buf_len), K(batch_arg->batch_arg_.tablets_.count()),
                                         K(batch_arg->batch_arg_), "cost_ts", end_time - start_time);
         // Child namespace storage performs the binding after registering
         // CREATE_TABLET_NEW_MDS with the routed physical tablets.
-        if (OB_SUCC(ret) && batch_arg->batch_arg_.set_binding_info_outside_create()
+        if (OB_SUCC(ret) && logical_binding && batch_arg->batch_arg_.set_binding_info_outside_create()
             && observer::namespace_worker_prototype::in_process_session_ns(
                 query::ObInnerSQLConnectionAccess::get_session(conn)) == 0) {
           const int64_t start_time = ObTimeUtility::current_time();

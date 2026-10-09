@@ -1,4 +1,4 @@
-// Local cross-restart fork and interrupted DROP probe. Never committed.
+// Local cross-restart fork and interrupted DROP probe. Test binary only.
 static int run_instance_namespace_durable_probe()
 {
   auto &kv = share::server_service<storage::ObAccessService>()->instance_meta_store();
@@ -16,9 +16,11 @@ static int run_instance_namespace_durable_probe()
   InstanceNamespaceRecord child;
   ret = meta.get_namespace(2, child);
   if (ret == OB_ENTRY_NOT_EXIST) {
-    uint64_t template_id = 0;
-    const int template_ret = meta.find_namespace("__template__", template_id);
-    if (template_ret == OB_SUCCESS) {
+    // A completed DROP may already have been pruned by maintenance. The
+    // harness supplies the phase it durably observed before the previous kill;
+    // template creation is unrelated to whether this test child existed.
+    const char *expected_phase = getenv("SEEKDB_INSTANCE_DURABLE_PHASE");
+    if (expected_phase != nullptr && strcmp(expected_phase, "verified") == 0) {
       uint64_t former_id = 0;
       META_DURABLE_ASSERT(meta.find_namespace("repo-durable", former_id)
           == OB_ENTRY_NOT_EXIST);
@@ -26,7 +28,7 @@ static int run_instance_namespace_durable_probe()
       fprintf(stderr, "INSTANCE_RECORD_DURABLE phase=verified id=2 pruned=1\n");
       return OB_SUCCESS;
     }
-    META_DURABLE_ASSERT(template_ret == OB_ENTRY_NOT_EXIST);
+    META_DURABLE_ASSERT(expected_phase != nullptr && strcmp(expected_phase, "created") == 0);
     META_DURABLE_CALL(kv.rollback(tx));
     rootserver::InstanceNamespaceDirectory directory(kv);
     META_DURABLE_CALL(directory.fork_namespace("ns1", "repo-durable",

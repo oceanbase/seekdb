@@ -18,6 +18,7 @@
 #define OCEANBASE_ROOTSERVER_INSTANCE_NAMESPACE_METADATA_H_
 
 #include <functional>
+#include <map>
 #include <string>
 #include <vector>
 #include "namespace/catalog.h"
@@ -119,12 +120,16 @@ public:
   int stage_catalog_delta(uint64_t namespace_id, int64_t base_schema_version,
       int64_t schema_version, const ns::CatalogChanges &definitions,
       const ns::CatalogChanges &sources);
-  // Requires a store.begin_directory_gc transaction. Marks current namespace
-  // roots, then stages at most max_deletes page erases.
-  // The caller commits the transaction or rolls it back on any error.
-  int collect_unreachable_pages(int64_t max_deletes, int64_t &deleted);
-
 private:
+  friend class InstanceNamespaceDirectory;
+  // Page reachability depends on page IDs, not SCN caps or schema versions.
+  // Include Namespace IDs so creation/deletion also invalidates a collection.
+  using PageRoots = std::map<uint64_t, std::pair<uint64_t, uint64_t>>;
+  int page_roots(PageRoots &roots);
+  int find_unreachable_pages(int64_t max_deletes, PageRoots &roots,
+                             std::vector<uint64_t> &garbage);
+  int erase_unreachable_pages(const PageRoots &roots,
+                              const std::vector<uint64_t> &garbage);
   storage::InstanceMetaStore &store_;
   Transaction &transaction_;
 };
@@ -175,6 +180,9 @@ public:
       const storage::InstanceMetaStore::SnapshotAcquirer &acquire,
       ns::NamespaceCatalogViews::Handle &view,
       const ns::NamespaceCatalogViews::Handle &previous = {});
+  // Read one bounded batch from the current source root in a single snapshot.
+  int scan_sources(uint64_t id, const std::string &position, int64_t deadline,
+      std::vector<std::pair<std::string, ns::CatalogValue>> &entries);
   int list_live(int64_t deadline, std::vector<InstanceNamespaceRecord> &records);
   int list_deleted(int64_t deadline, std::vector<InstanceNamespaceRecord> &records);
   int rename_live(uint64_t id, const std::string &expected_name,
@@ -190,6 +198,10 @@ public:
   // reclaims unreferenced owned and orphan tablets.
   int finish_drop(uint64_t id, int64_t deadline);
   int schema_version(uint64_t id, int64_t deadline, int64_t &version);
+  // One invocation owns its snapshot, mark set and candidates. Traversal
+  // permits ordinary KV transactions. A short exclusive transaction validates
+  // the complete root set before deleting; concurrent publication yields EAGAIN.
+  int collect_catalog_pages(int64_t deadline, int64_t &deleted);
 private:
   storage::InstanceMetaStore &store_;
 };

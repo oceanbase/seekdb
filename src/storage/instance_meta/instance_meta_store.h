@@ -119,8 +119,8 @@ public:
   // Read at the local horizon available to a newly admitted weak reader.
   // Retention collectors need this view in addition to the latest committed one.
   int begin_weak_read(Transaction &tx, int64_t deadline);
-  // Excludes ordinary KV transactions while a directory page collector marks
-  // roots and removes unreachable pages in this transaction.
+  // Excludes ordinary KV transactions for the collector's final root validation
+  // and bounded page deletion. Full traversal uses an ordinary read transaction.
   int begin_directory_gc(Transaction &tx, int64_t deadline);
   // Borrow an active native RC transaction. Its owner must end it before
   // detaching, so snapshot retention and directory GC protection span commit.

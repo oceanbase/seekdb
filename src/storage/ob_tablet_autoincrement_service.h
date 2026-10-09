@@ -26,6 +26,7 @@
 
 namespace oceanbase
 {
+namespace transaction { class ObTxDesc; }
 namespace share
 {
 namespace schema
@@ -147,7 +148,7 @@ public:
       const common::ObIArray<common::ObTabletID> &source_tablet_ids,
       const common::ObIArray<common::ObTabletID> &destination_tablet_ids,
       const common::ObIArray<int64_t> &source_snapshot_versions,
-      common::ObMySQLTransaction &trans) override;
+      transaction::ObTxDesc &trans) override;
   int collect_table_cache_invalidation(
       schema::ObSchemaGetterGuard &schema_guard,
       const schema::ObTableSchema &table_schema,
