@@ -59,12 +59,25 @@ int ObFTRangeDict::build_cache_from_ik_dict(const ObFTDictDesc &desc, ObFTCacheR
   case ObFTDictType::DICT_IK_STOP: {
     raw_dict = ObIKDictLoader::dict_stop();
   } break;
+  case ObFTDictType::DICT_IK_CUSTOM: {
+    // load the word list from a user dict table (FULLTEXT_DICT) instead of the
+    // built-in dict text; desc.name_ is the fully qualified "db.table" name.
+    SMART_VAR(ObISQLClient::ReadResult, result)
+    {
+      ObFTDictTableIter iter_table(result);
+      if (OB_FAIL(iter_table.init(desc.name_))) {
+        LOG_WARN("Failed to init table dict iterator.", K(ret), K(desc.name_));
+      } else if (OB_FAIL(ObFTRangeDict::build_ranges(desc, iter_table, range_container))) {
+        LOG_WARN("Failed to build ranges from dict table.", K(ret), K(desc.name_));
+      }
+    }
+  } break;
   default:
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("Not supported dict type.", K(ret));
   }
 
-  if (OB_SUCC(ret)) {
+  if (OB_SUCC(ret) && desc.type_ != ObFTDictType::DICT_IK_CUSTOM) {
     ObIKDictIterator iter(raw_dict);
     if (OB_FAIL(iter.init())) {
       LOG_WARN("Failed to init iterator.", K(ret));
@@ -416,21 +429,31 @@ int ObFTRangeDict::match_with_hit(const ObString &single_word,
 int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict *&dict) const
 {
   int ret = OB_SUCCESS;
-  bool found = false;
-  for (int i = 0; OB_SUCC(ret) && !found && i < range_dicts_.size(); ++i) {
+  // ranges are built from a sorted word stream, so they are sorted and
+  // non-overlapping: at most one range can contain the word. Binary search for
+  // the last range whose start_ <= single_word, then verify its end_.
+  int64_t lo = 0;
+  int64_t hi = range_dicts_.size() - 1;
+  int64_t idx = -1;
+  while (lo <= hi) {
+    const int64_t mid = (lo + hi) / 2;
     if (ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                          range_dicts_[i].start_.get_word(),
+                          range_dicts_[mid].start_.get_word(),
                           single_word)
-            <= 0
-        && ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                             range_dicts_[i].end_.get_word(),
-                             single_word)
-               >= 0) {
-      dict = range_dicts_[i].dict_;
-      found = true;
+            <= 0) {
+      idx = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
     }
   }
-  if (!found) {
+  if (idx >= 0
+      && ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
+                           range_dicts_[idx].end_.get_word(),
+                           single_word)
+             >= 0) {
+    dict = range_dicts_[idx].dict_;
+  } else {
     // not found, dis match
     ret = OB_ENTRY_NOT_EXIST;
   }
@@ -467,15 +490,22 @@ int ObFTRangeDict::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer
   int ret = OB_SUCCESS;
 
   ObString table_name;
+  char tname_buf[256];
   switch (desc.type_) {
   case ObFTDictType::DICT_IK_MAIN: {
-    table_name = ObString(share::OB_FT_DICT_IK_UTF8_TNAME);
+    databuff_printf(tname_buf, sizeof(tname_buf), "oceanbase.%s", share::OB_FT_DICT_IK_UTF8_TNAME);
+    table_name.assign_ptr(tname_buf, static_cast<int32_t>(strlen(tname_buf)));
   } break;
   case ObFTDictType::DICT_IK_QUAN: {
-    table_name = ObString(share::OB_FT_QUANTIFIER_IK_UTF8_TNAME);
+    databuff_printf(tname_buf, sizeof(tname_buf), "oceanbase.%s", share::OB_FT_QUANTIFIER_IK_UTF8_TNAME);
+    table_name.assign_ptr(tname_buf, static_cast<int32_t>(strlen(tname_buf)));
   } break;
   case ObFTDictType::DICT_IK_STOP: {
-    table_name = ObString(share::OB_FT_STOPWORD_IK_UTF8_TNAME);
+    databuff_printf(tname_buf, sizeof(tname_buf), "oceanbase.%s", share::OB_FT_STOPWORD_IK_UTF8_TNAME);
+    table_name.assign_ptr(tname_buf, static_cast<int32_t>(strlen(tname_buf)));
+  } break;
+  case ObFTDictType::DICT_IK_CUSTOM: {
+    table_name = desc.name_;
   } break;
   default:
     ret = OB_NOT_SUPPORTED;
@@ -502,7 +532,7 @@ int ObFTRangeDict::try_load_cache(const ObFTDictDesc &desc,
                                   ObFTCacheRangeContainer &range_container)
 {
   int ret = OB_SUCCESS;
-  uint64_t name = static_cast<uint64_t>(desc.type_);
+  uint64_t name = desc.get_cache_name();
 
   for (int64_t i = 0; OB_SUCC(ret) && i < range_count; ++i) {
     ObDictCacheKey key(name, desc.type_, i);

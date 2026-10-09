@@ -37,6 +37,7 @@ public:
   ObIKFTParser(ObIAllocator &allocator, ObFTDictHub *hub)
       : allocator_(allocator),
         is_inited_(false),
+        metadata_inited_(false),
         coll_type_(ObCollationType::CS_TYPE_INVALID),
         ctx_(nullptr),
         hub_(hub),
@@ -53,6 +54,14 @@ public:
   virtual ~ObIKFTParser() { reset(); }
 
   int init(const plugin::ObFTParserParam &param);
+
+  // two-phase init for parser instance reuse: init_metadata assembles dicts and
+  // segmenter chain once (long-lived, from the parser's own allocator);
+  // start_document prepares per-document state (ctx, from the caller allocator);
+  // end_document tears down only the per-document state.
+  int init_metadata(const plugin::ObFTParserParam &param);
+  int start_document(const plugin::ObFTParserParam &param);
+  int end_document(common::ObIAllocator *doc_allocator);
 
   int get_next_token(const char *&word,
                      int64_t &word_len,
@@ -92,6 +101,7 @@ private:
   static constexpr int SEGMENT_LIMIT = 1000;
   ObIAllocator &allocator_;
   bool is_inited_;
+  bool metadata_inited_;
 
   ObCollationType coll_type_;
   TokenizeContext *ctx_;

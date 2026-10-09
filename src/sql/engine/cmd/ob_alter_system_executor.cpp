@@ -35,6 +35,8 @@
 #include "sql/engine/cmd/ob_timezone_importer.h"
 #include "sql/engine/cmd/ob_srs_importer.h"
 #include "share/ob_internal_table_change_notifier.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
+#include "storage/fts/dict/ob_ft_dict_hub.h"
 
 namespace oceanbase
 {
@@ -388,6 +390,38 @@ int ObFlushKVCacheExecutor::execute(ObExecContext &ctx, ObFlushKVCacheStmt &stmt
           LOG_INFO("success erase kvcache", K(ret), K(stmt.cache_name_));
         }
       }
+    }
+  }
+  return ret;
+}
+
+
+int ObRefreshFTDictExecutor::execute(ObExecContext &ctx, ObRefreshFTDictStmt &stmt)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(ctx);
+  storage::ObFTDictHub *hub = NULL;
+  char full_name_buf[common::OB_MAX_DATABASE_NAME_LENGTH + common::OB_MAX_TABLE_NAME_LENGTH + 2];
+  if (OB_FAIL(storage::ObFTParsePluginData::instance().get_dict_hub(hub))) {
+    LOG_WARN("failed to get dict hub", K(ret));
+  } else if (OB_ISNULL(hub)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("dict hub is null", K(ret));
+  } else if (OB_FAIL(databuff_printf(full_name_buf, sizeof(full_name_buf), "%.*s.%.*s",
+                                     static_cast<int>(stmt.db_name_.size()), stmt.db_name_.ptr(),
+                                     static_cast<int>(stmt.table_name_.size()), stmt.table_name_.ptr()))) {
+    LOG_WARN("failed to build full dict table name", K(ret));
+  } else {
+    // evict this dict table's cached entries; the next segmentation rebuilds
+    // them from the table (picking up words inserted since the last REFRESH)
+    storage::ObFTDictDesc desc(ObString(full_name_buf),
+                               storage::ObFTDictType::DICT_IK_CUSTOM,
+                               common::CHARSET_UTF8MB4,
+                               common::CS_TYPE_UTF8MB4_BIN);
+    if (OB_FAIL(hub->erase_cache(desc))) {
+      LOG_WARN("failed to refresh fulltext dict cache", K(ret), K(full_name_buf));
+    } else {
+      LOG_INFO("success refresh fulltext dict", K(ret), K(full_name_buf));
     }
   }
   return ret;

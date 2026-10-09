@@ -256,6 +256,8 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"disconnect", DISCONNECT},
   {"directory", DIRECTORY},
   {"disable", DISABLE},
+  {"dict", DICT},
+  {"fulltext_dict", FULLTEXT_DICT},
   {"discard", DISCARD},
   {"disk", DISK},
   {"diskgroup", DISKGROUP},
@@ -1162,6 +1164,7 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"INCONSISTENT", INCONSISTENT},
   {"INDIVIDUAL", INDIVIDUAL},
   {"hybrid_search", HYBRID_SEARCH},
+  {"ai_split_document", AI_SPLIT_DOCUMENT},
 };
 
 /** https://dev.mysql.com/doc/refman/5.7/en/sql-syntax-prepared-statements.html

@@ -2189,6 +2189,27 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
         }
         break;
       }
+      case T_FULLTEXT_DICT: {
+        ObString fulltext_dict_str;
+        if (nullptr == option_node->children_ || 1 != option_node->num_child_) {
+          ret = common::OB_INVALID_ARGUMENT;
+          SQL_RESV_LOG(WARN, "invalid fulltext_dict arg", K(ret), "num_child", option_node->num_child_);
+        } else if (nullptr == option_node->children_[0]) {
+          ret = OB_ERR_UNEXPECTED;
+          SQL_RESV_LOG(WARN, "option node child is null", K(ret));
+        } else {
+          fulltext_dict_str.assign_ptr(const_cast<char *>(option_node->children_[0]->str_value_),
+                                       static_cast<int32_t>(option_node->children_[0]->str_len_));
+          fulltext_dict_str = fulltext_dict_str.trim();
+          if (0 != fulltext_dict_str.case_compare("Y") && 0 != fulltext_dict_str.case_compare("N")) {
+            ret = OB_INVALID_ARGUMENT;
+            SQL_RESV_LOG(WARN, "fulltext_dict only supports 'Y' or 'N'", K(ret), K(fulltext_dict_str));
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "FULLTEXT_DICT only supports 'Y' or 'N'");
+          }
+          // parse-and-validate only: dict capability is bound at REFRESH / index build time
+        }
+        break;
+      }
       case T_DUPLICATE_READ_CONSISTENCY: {
         ObString duplicate_read_consistency_str;
         share::ObDuplicateReadConsistency read_consistency = share::ObDuplicateReadConsistency::MAX;

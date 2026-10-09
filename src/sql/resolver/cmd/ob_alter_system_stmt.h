@@ -125,6 +125,17 @@ public:
   common::ObFixedLengthString<common::OB_MAX_TENANT_NAME_LENGTH + 1> cache_name_;
 };
 
+class ObRefreshFTDictStmt : public ObSystemCmdStmt
+{
+public:
+  ObRefreshFTDictStmt() : ObSystemCmdStmt(stmt::T_REFRESH_FT_DICT) {}
+  virtual ~ObRefreshFTDictStmt() {}
+
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(db_name), K_(table_name));
+  common::ObFixedLengthString<common::OB_MAX_DATABASE_NAME_LENGTH + 1> db_name_;
+  common::ObFixedLengthString<common::OB_MAX_TABLE_NAME_LENGTH + 1> table_name_;
+};
+
 class ObFlushIlogCacheStmt : public ObSystemCmdStmt
 {
 public:
