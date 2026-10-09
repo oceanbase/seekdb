@@ -924,6 +924,7 @@ int ObMemtable::replay_row(ObStoreCtx &ctx,
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "Unexpected not exist trans node", K(ret), K(dml_flag), K(rowkey));
   } else {
+    ctx.table_version_ = table_version;
     ObMemtableData mtd(dml_flag, row.size_, row.data_);
     ObMemtableKey mtk;
     ObRowData empty_old_row;
@@ -2075,7 +2076,7 @@ int ObMemtable::multi_set_(
   } else if (OB_FAIL(mem_ctx->register_row_commit_cb(param,
                                                      tx_node_args,
                                                      mvcc_results,
-                                                     this))) {
+                                                     this, ctx.table_version_))) {
   } else {
     // The trans_node after ObMvccRow::mvcc_write_ is incomplete, then we need
     // use finish_kvs as the final step of ObMemtable::multi_set. Therefore, it
@@ -2233,7 +2234,7 @@ int ObMemtable::set_(
   } else if (OB_FAIL(mem_ctx->register_row_commit_cb(param,
                                                      tx_node_arg,
                                                      mvcc_result,
-                                                     this))) {
+                                                     this, ctx.table_version_))) {
   } else {
     // The trans_node after ObMvccRow::mvcc_write_ is incomplete, then we need
     // use finish_kvs as the final step of ObMemtable::set. Therefore, it is
@@ -2358,7 +2359,7 @@ int ObMemtable::lock_(
     } else if (OB_FAIL(mem_ctx->register_row_commit_cb(param,
                                                        tx_node_args,
                                                        mvcc_results,
-                                                       this))) {
+                                                       this, ctx.table_version_))) {
     } else {
       // The trans_node after ObMvccRow::mvcc_write_ is incomplete, then we need
       // use finish_kvs as the final step of ObMemtable::lock. Therefore, it is
@@ -2439,7 +2440,8 @@ int ObMemtable::mvcc_replay_(storage::ObStoreCtx &ctx,
                                                      this,
                                                      arg.seq_no_,
                                                      arg.scn_,
-                                                     arg.column_cnt_))) {
+                                                     arg.column_cnt_,
+                                                     ctx.table_version_))) {
   } else if (FALSE_IT(timeguard.click("register_row_replay_cb"))) {
   }
 

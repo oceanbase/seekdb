@@ -58,6 +58,41 @@ using namespace compaction;
 
 namespace storage
 {
+namespace
+{
+int load_fork_input_schema(const ObSSTable &sstable, ObArenaAllocator &allocator,
+    ObStorageSchema *&schema)
+{
+  int ret = OB_SUCCESS;
+  schema = nullptr;
+  ObSSTableMetaHandle meta;
+  auto *access = share::server_service<ObAccessService>();
+  int64_t columns = 0;
+  if (access == nullptr) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(sstable.get_meta(meta))) {
+  } else if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, schema))) {
+  } else {
+    // A source tablet can contain SSTables inherited from a different physical
+    // branch. Its current local schema is not the origin of those definitions.
+    const auto &definition = meta.get_sstable_meta().get_basic_meta();
+    if (OB_FAIL(StorageSchemaHistory::read_published(access->storage_schema_store(),
+        definition.storage_layout_id_, definition.schema_version_,
+        ObTimeUtility::current_time() + 30L * 1000L * 1000L, allocator, *schema))) {
+    } else if (OB_FAIL(schema->get_stored_column_count_in_sstable(columns))) {
+    } else if (columns < definition.column_cnt_) {
+      ret = OB_STATE_NOT_MATCH;
+      LOG_WARN("source definition does not cover SSTable columns", K(ret), K(definition), K(columns));
+    }
+  }
+  if (OB_FAIL(ret) && schema != nullptr) {
+    ObTabletObjLoadHelper::free(allocator, schema);
+    schema = nullptr;
+  }
+  return ret;
+}
+} // namespace
+
 ObForkSnapshotRowScan::ObForkSnapshotRowScan() 
   : is_inited_(false), 
     row_iter_(nullptr), 
@@ -370,8 +405,6 @@ ObTabletForkCtx::ObTabletForkCtx()
     dst_tablet_handle_(),
     snapshot_table_store_(),
     table_store_iterator_(),
-    index_builder_map_(),
-    clipped_schemas_map_(),
     created_sstable_handles_(),
     created_sstable_handles_lock_(),
     row_inserted_(0),
@@ -388,8 +421,6 @@ ObTabletForkCtx::~ObTabletForkCtx()
   dst_tablet_handle_.reset();
   snapshot_table_store_.reset();
   table_store_iterator_.reset();
-  (void)ObTabletCopyUtil::destroy_value_ptr_map<ObForkSSTableTaskKey, ObSSTableIndexBuilder>(allocator_, index_builder_map_);
-  (void)ObTabletCopyUtil::destroy_value_ptr_map<ObITable::TableKey, ObStorageSchema>(allocator_, clipped_schemas_map_);
   created_sstable_handles_.reset();
   range_allocator_.reset();
   allocator_.reset();
@@ -472,82 +503,6 @@ int ObTabletForkCtx::init(const ObTabletForkParam &param)
     is_inited_ = true;
   }
   
-  return ret;
-}
-
-int ObTabletForkCtx::prepare_index_builder(const ObTabletForkParam &param)
-{
-  int ret = OB_SUCCESS;
-  ObSEArray<ObITable *, MAX_SSTABLE_CNT_IN_STORAGE> sstables;
-  const ObStorageSchema *storage_schema = nullptr;
-  
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (OB_UNLIKELY(!param.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(param));
-  } else if (OB_UNLIKELY(index_builder_map_.created())) {
-    ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
-  } else if (OB_FAIL(index_builder_map_.create(8, "ForkSstIdxMap"))) {
-  } else {
-    if (OB_UNLIKELY(!table_store_iterator_.is_valid())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("snapshot table store iterator is invalid", K(ret), K(param));
-    } else if (OB_FAIL(ObTabletForkUtil::get_participants(table_store_iterator_, param.fork_snapshot_version_, sstables))) {
-    } else {
-      ObStorageSchema *tmp_storage_schema = nullptr;
-      if (OB_FAIL(src_tablet_handle_.get_obj()->load_storage_schema(allocator_, tmp_storage_schema))) {
-      } else if (OB_ISNULL(tmp_storage_schema)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("storage schema is null", K(ret));
-      } else {
-        storage_schema = tmp_storage_schema;
-      }
-    }
-  }
-  
-  if (OB_SUCC(ret) && OB_NOT_NULL(storage_schema)) {
-    for (int64_t i = 0; OB_SUCC(ret) && i < sstables.count(); i++) {
-      blocksstable::ObSSTable *sstable = static_cast<blocksstable::ObSSTable *>(sstables.at(i));
-      void *buf = nullptr;
-      ObWholeDataStoreDesc data_desc;
-      ObSSTableIndexBuilder *sstable_index_builder = nullptr;
-      ObForkSSTableTaskKey key;
-      key.src_sst_key_ = sstable->get_key();
-      key.dest_tablet_id_ = param.dest_tablet_id_;
-      
-      const ObMergeType merge_type = sstable->is_major_sstable() ? MAJOR_MERGE : MINOR_MERGE;
-      // For fork table, use fork_snapshot_version instead of sstable's snapshot_version
-      const int64_t snapshot_version = param.fork_snapshot_version_;
-
-      if (OB_FAIL(data_desc.init(
-          true/*is_ddl*/, *storage_schema,
-          param.dest_tablet_id_, merge_type, snapshot_version, param.data_format_version_,
-          dst_tablet_handle_.get_obj()->get_tablet_meta().micro_index_clustered_,
-          0/*concurrent_cnt*/,
-          sstable->get_end_scn()))) {
-      } else if (OB_ISNULL(buf = allocator_.alloc(sizeof(ObSSTableIndexBuilder)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc memory failed", K(ret));
-      } else if (FALSE_IT(sstable_index_builder = new (buf) ObSSTableIndexBuilder(false/*use double write buffer*/))) {
-      } else if (OB_FAIL(sstable_index_builder->init(data_desc.get_desc()))) {
-      } else if (OB_FAIL(index_builder_map_.set_refactored(key, sstable_index_builder))) {
-      }
-
-      if (OB_FAIL(ret)) {
-        if (nullptr != sstable_index_builder) {
-          sstable_index_builder->~ObSSTableIndexBuilder();
-          sstable_index_builder = nullptr;
-        }
-        if (nullptr != buf) {
-          allocator_.free(buf);
-          buf = nullptr;
-        }
-      }
-    }
-  }
   return ret;
 }
 
@@ -752,17 +707,6 @@ int ObTabletForkPrepareTask::init(ObTabletForkParam &param, ObTabletForkCtx &ctx
   return ret;
 }
 
-int ObTabletForkPrepareTask::prepare_context()
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(context_->prepare_index_builder(*param_))) {
-  }
-  return ret;
-}
-
 int ObTabletForkPrepareTask::process()
 {
   int ret = OB_SUCCESS;
@@ -783,7 +727,6 @@ int ObTabletForkPrepareTask::process()
   } else if (OB_FAIL(ObTabletForkUtil::check_fork_data_complete(param_->dest_tablet_id_, is_fork_data_complete))) {
   } else if (is_fork_data_complete) {
     LOG_INFO("fork table task has already finished", KPC(param_));
-  } else if (OB_FAIL(prepare_context())) {
   } else if (OB_FAIL(dag->calc_total_row_count())) {
   }
   
@@ -930,7 +873,6 @@ int ObTabletForkRewriteTask::process()
   ObMacroBlockWriter *macro_block_writer = nullptr;
   ObSSTableIndexBuilder *sst_idx_builder = nullptr;
   ObITable::TableKey src_table_key = sstable_->get_key();
-  ObForkSSTableTaskKey task_key(src_table_key, param_->dest_tablet_id_);
   ObSSTableMergeRes merge_res;
   
   if (OB_UNLIKELY(!is_inited_)) {
@@ -940,11 +882,11 @@ int ObTabletForkRewriteTask::process()
   } else if (OB_FAIL(ObTabletForkUtil::check_fork_data_complete(param_->dest_tablet_id_, is_fork_data_complete))) {
   } else if (is_fork_data_complete) {
   } else if (OB_FAIL(prepare_context(clipped_storage_schema))) {
-  } else if (OB_FAIL(prepare_macro_block_writer(*clipped_storage_schema, data_desc, macro_block_writer))) {
+  } else if (OB_FAIL(prepare_macro_block_writer(*clipped_storage_schema, data_desc,
+      sst_idx_builder, macro_block_writer))) {
   } else if (OB_FAIL(process_rewrite_sstable_task(macro_block_writer, *clipped_storage_schema))) {
   } else if (OB_NOT_NULL(macro_block_writer)) {
     if (OB_FAIL(macro_block_writer->close())) {
-    } else if (OB_FAIL(context_->index_builder_map_.get_refactored(task_key, sst_idx_builder))) {
     } else if (OB_ISNULL(sst_idx_builder)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("index builder is null", K(ret));
@@ -961,7 +903,7 @@ int ObTabletForkRewriteTask::process()
         share::SCN max_end_scn;
         if (OB_FAIL(max_end_scn.convert_for_tx(param_->fork_snapshot_version_))) {
         } else if (OB_FAIL(create_param.init_for_fork(param_->dest_tablet_id_, src_table_key, basic_meta,
-            basic_meta.schema_version_, merge_res, max_end_scn))) {
+            merge_res, max_end_scn))) {
         } else if (OB_FAIL(context_->create_sstable(create_param, table_handle))) {
         }
         if (OB_SUCC(ret)) {
@@ -981,6 +923,10 @@ int ObTabletForkRewriteTask::process()
     macro_block_writer = nullptr;
   }
   
+  if (sst_idx_builder != nullptr) {
+    sst_idx_builder->~ObSSTableIndexBuilder();
+    allocator_.free(sst_idx_builder);
+  }
   if (OB_FAIL(ret) && OB_NOT_NULL(context_)) {
     context_->complement_data_ret_ = ret;
     ret = OB_SUCCESS;
@@ -997,8 +943,7 @@ int ObTabletForkRewriteTask::prepare_context(const ObStorageSchema *&clipped_sto
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(context_->src_tablet_handle_.get_obj()->load_storage_schema(
-      allocator_, storage_schema))) {
+  } else if (OB_FAIL(load_fork_input_schema(*sstable_, allocator_, storage_schema))) {
   } else if (OB_ISNULL(storage_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("storage schema is null", K(ret));
@@ -1011,21 +956,21 @@ int ObTabletForkRewriteTask::prepare_context(const ObStorageSchema *&clipped_sto
 int ObTabletForkRewriteTask::prepare_macro_block_writer(
     const ObStorageSchema &clipped_storage_schema,
     ObWholeDataStoreDesc &data_desc,
+    ObSSTableIndexBuilder *&sst_idx_builder,
     ObMacroBlockWriter *&macro_block_writer)
 {
   int ret = OB_SUCCESS;
   macro_block_writer = nullptr;
+  sst_idx_builder = nullptr;
+  void *builder_buf = nullptr;
   ObSSTableMetaHandle meta_handle;
   ObMacroDataSeq macro_start_seq(0);
-  ObForkSSTableTaskKey task_key(sstable_->get_key(), param_->dest_tablet_id_);
-  ObSSTableIndexBuilder *sst_idx_builder = nullptr;
   
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(sstable_->get_meta(meta_handle))) {
   } else if (OB_FAIL(macro_start_seq.set_sstable_seq(meta_handle.get_sstable_meta().get_sstable_seq()))) {
-  } else if (OB_FAIL(context_->index_builder_map_.get_refactored(task_key, sst_idx_builder))) {
   } else {
     const ObMergeType merge_type = sstable_->is_major_sstable() ? MAJOR_MERGE : MINOR_MERGE;
     // For fork table, use fork_snapshot_version instead of sstable's snapshot_version
@@ -1040,6 +985,10 @@ int ObTabletForkRewriteTask::prepare_macro_block_writer(
         micro_index_clustered,
         0/*concurrent_cnt*/,
         sstable_->get_end_scn()))) {
+    } else if (OB_ISNULL(builder_buf = allocator_.alloc(sizeof(ObSSTableIndexBuilder)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (FALSE_IT(sst_idx_builder = new (builder_buf) ObSSTableIndexBuilder(false))) {
+    } else if (OB_FAIL(sst_idx_builder->init(data_desc.get_desc()))) {
     } else if (FALSE_IT(data_desc.get_desc().sstable_index_builder_ = sst_idx_builder)) {
     } else if (FALSE_IT(data_desc.get_static_desc().is_ddl_ = true)) {
     } else {

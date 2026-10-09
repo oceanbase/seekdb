@@ -194,6 +194,7 @@ public:
 private:
   int init_sstable_param(
       const ObStorageSchema &storage_schema,
+      const uint64_t storage_layout_id,
       const ObITable::TableKey &table_key,
       const share::SCN &ddl_start_scn,
       ObTabletCreateSSTableParam &sstable_param);

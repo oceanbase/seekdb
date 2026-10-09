@@ -3,7 +3,24 @@
 目标以 [design-storage-schema-boundaries.md](design-storage-schema-boundaries.md) 为准。
 本文件记录实现和验证证据，不缩减已确认范围。2026-10-10 开始实施。
 
-### 当前推进：meta major 的确定布局
+### 当前推进：SSTable 来源布局与行 redo 版本
+
+- `ObSSTableBasicMeta` 持久化来源 G，与自身 V 一起定位完整正文。普通创建、合并、DDL、直接复用、重写、空 minor、defrag 及物理恢复参数均传递该身份；固定格式 LS/MDS 文件沿用其定义。
+- fork 重写按输入 SSTable 自身 `(G,V)` 读取完整定义，输出保留这个来源。来源 tablet 自己的 G 可能不同，不能用其当前本地描述代替；目标基线安装仍使用目标 G 的完整定义。
+- 已删掉 fork context 的索引构建器共享映射、无使用者的 clipped schema 映射及统一预创建步骤。索引构建器归单个重写任务；直接复用文件不读取完整布局，重写只读取一次，不增加缓存。
+- 第一版生产编译 `/tmp/seekdb-sstable-layout-build-1.log` 通过。生产启动/fork 写入、DDL（分区、LOB、索引、并发）和真实大合并通过，日志分别为 `/tmp/seekdb-sstable-layout-smoke-1.log`、`/tmp/seekdb-sstable-layout-ddl-1.log`、`/tmp/seekdb-sstable-layout-major-1.log`，大合并 F=1791581451075893007。
+- 专项探针首次编译因错误调用 `ObSSTable::get_tablet_id()` 失败，已改为 `get_key().tablet_id_`；第二次编译通过。三代 fork、父子分别加列、实际重写、删除原父表及 kill/restart 通过（`/tmp/seekdb-sstable-layout-native-test-1.log`），重启审计1046个SSTable，其中613个来源G不同于所属tablet。
+- 删除共享映射后的第三次原生编译通过。扩展用例增加实际 CREATE INDEX 和两个目标均执行重写的日志断言，通过 `/tmp/seekdb-sstable-layout-native-test-2.log`：重启审计1091个SSTable，658个保留跨G来源。
+- 新增 `--compact-mixed`（父比孩子多一列、混合来源普通 minor、两次重启）复现真实缺陷：第二次重启审计 G22/V1050720 返回 OB_ENTRY_NOT_EXIST。首次重启该系统tablet的V为1048744，可正确读取正文；之后重放数据又转储时变成了属于其他表的1050720。失败日志 `/tmp/seekdb-sstable-layout-mixed-test-1.log`；确认探针失败后停止反复重试的测试进程，驱动记录 exit -9，不算成功。
+- 根因是 `ObRedoLogGenerator::fill_row_redo_` 用整个事务的 `get_max_table_version()` 写入每行日志。原来的全局版本上界用法不能表示新的精确物理定义，重启/备库重放会让不同表的版本混入。本次改为行 callback 捕获实际 `ctx.table_version_`，单行、批量及行锁路径统一传入；redo 和重放 callback 保留同一版本。修正后的回归结果见下一项。
+- 修正后的混合来源minor用例 `/tmp/seekdb-sstable-layout-mixed-test-2.log` 通过，两次重启后审计1072个SSTable、575个跨G来源全部可读，父比孩子多一列的物理输入、实际CREATE INDEX、孩子写入和孙子隔离均正确。
+- 新增最小行redo回归 `row_layout_replay_probe.py`：同一事务批量写A、写较新V的B、再更新A并取得行锁，kill重放后转储，再kill核对持久版本。旧版本重跑 `/tmp/seekdb-row-layout-replay-red-2.log` 仍在重启审计失败；停止已确认失败的实例后驱动记录-9。修正后 `/tmp/seekdb-row-layout-replay-green-2.log` 通过，A的所有文件保持V1791582224594248，B保持V1791582224780712，数据两次恢复均正确。
+- 最小回归第一轮驱动没有在重启后推进活跃memtable，等不到用户tablet的MINI而超时：`/tmp/seekdb-row-layout-replay-red.log`、`/tmp/seekdb-row-layout-replay-green.log`。后续明确新增写入，等待可读水位再冻结；这些驱动失败不作为产品错误的证据，也不算成功。
+- 四次原生构建中第1次探针接口错误失败，第2/3/4次通过；全部注入移除后的最终生产构建 `/tmp/seekdb-sstable-layout-production-final-build-2.log` 通过（清理了临时RedoDataNode中不使用的重复字段，版本仅由callback持有）。最终生产实际major回归 `/tmp/seekdb-sstable-layout-production-major-final.log` 通过，F/广播/完成均为1791582229216858012。未运行完整mysqltest或sysbench。
+- 成本：每个SSTable增加一个8字节G；每个未释放的行事务callback增加一个8字节版本，日志复用已有版本字段，没有新增常驻schema缓存或Namespace规则。
+- 新用例及失败场景加入四件套。本节不代表正文/G/绑定GC、统一物理进度/逻辑checksum、旧freeze字段移除或实际主备已经完成。
+
+### meta major 的确定布局
 
 - 将 G 的快照版本选择与不可变 `(G,V)` 正文分开，仍在同一原生事务写入；major/普通 medium 的 G@F 语义不变。旧 head 的 MVCC 回收不再自动消灭仍需被物理描述引用的正文。
 - meta major 改为使用 tablet 已记录的 G、V 取完整正文。删除仅由它调用的 `get_table_schema_to_merge` 和 SQL tablet->table 历史查找 helper；不再加载 Namespace SchemaService，不取 MIN 截断版本或最新定义回退。
@@ -19,7 +36,7 @@
 - 第5轮父、子完整通过：`/tmp/seekdb-meta-layout-initial-test-5.log` 使用 G5037/V1791580562758872（head=1791580572782104）；`/tmp/seekdb-meta-layout-child-test-5.log` 使用 G5255/V1791580572566200（head=1791580582393464）。实际 META SSTable 到达各自目标快照，新增列/默认值及父子隔离正确，kill/restart 后读回相同。未改生产输入/调度规则，仅测试控制小规模 meta 触发。
 - 新增 `meta_layout_probe.py --owner child --cold-parent`，在四件套保留“父尚无已合并 major 的 fork”路径，单独验证上述 NO_MAJOR_SSTABLE 时序。不能把只建立过父 major 的成功用例替代它。
 - 冷父专项 `/tmp/seekdb-meta-layout-cold-child-test-1.log` 通过，未预先建立父 major：等待原生就绪后，孩子实际建立 major，随后按自己的旧 V 完成 META；父子新列读回、kill/restart 后结果正确。前述4109是请求时的未就绪状态，当前没有证明是持续缺失基线的缺陷。驱动继续等待实际首份 major，并保留有界失败，未在生产路径伪造基线或新增特例。
-- 正文/G/绑定 GC、fork 源重写归属、统一进度和逻辑 checksum、实际主备仍未完成。
+- 本节完成时，正文/G/绑定 GC、fork 源重写归属、统一进度和逻辑 checksum、实际主备仍未完成；后续来源布局进展见文件开头。
 
 
 ## 必须完成

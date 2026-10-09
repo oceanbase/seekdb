@@ -759,7 +759,8 @@ int ObTabletDDLUtil::create_ddl_sstable(
     const int64_t create_schema_version_on_tablet = tablet.get_tablet_meta().create_schema_version_;
     ObTabletCreateSSTableParam param;
     if (OB_FAIL(param.init_for_ddl(sstable_index_builder, ddl_param, first_ddl_sstable,
-        *storage_schema, macro_block_column_count, create_schema_version_on_tablet, macro_id_array))) {
+        *storage_schema, macro_block_column_count, create_schema_version_on_tablet,
+        tablet.get_tablet_meta().storage_layout_id_, macro_id_array))) {
     } else if (OB_FAIL(ObTabletCreateDeleteHelper::create_sstable<ObSSTable>(param, allocator, sstable_handle))) {
     }
     if (OB_SUCC(ret)) {

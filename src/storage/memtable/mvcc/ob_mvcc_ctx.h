@@ -159,12 +159,14 @@ public:
     const storage::ObTableIterParam &param,
     ObTxNodeArg &arg,
     ObMvccWriteResult &res,
-    ObMemtable *memtable);
+    ObMemtable *memtable,
+    const int64_t schema_version);
   int register_row_commit_cb(
     const storage::ObTableIterParam &param,
     ObTxNodeArgs &tx_node_args,
     ObMvccWriteResults &mvcc_results,
-    ObMemtable *memtable);
+    ObMemtable *memtable,
+    const int64_t schema_version);
   int register_row_replay_cb(
       const ObMemtableKey *key,
       ObMvccRow *value,
@@ -173,7 +175,8 @@ public:
       ObMemtable *memtable,
       const transaction::ObTxSEQ seq_no,
       const share::SCN scn,
-      const int64_t column_cnt);
+      const int64_t column_cnt,
+      const int64_t schema_version);
   int register_table_lock_cb(
       transaction::tablelock::ObLockMemtable *memtable,
       ObMemCtxLockOpLinkNode *lock_op);

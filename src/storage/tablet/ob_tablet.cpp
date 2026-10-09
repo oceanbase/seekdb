@@ -307,7 +307,8 @@ int ObTablet::init_for_first_time_creation(
   if (OB_FAIL(ret)) {
   } else if (need_create_empty_major_sstable
       && OB_FAIL(ObTabletCreateDeleteHelper::create_empty_sstable(
-          allocator, *storage_schema_addr_.get_ptr(), tablet_id, snapshot_version, table_handle))) {
+          allocator, *storage_schema_addr_.get_ptr(), tablet_id, snapshot_version,
+          tablet_meta_.storage_layout_id_, table_handle))) {
     LOG_WARN("failed to make empty co sstable", K(ret), K(snapshot_version));
   } else {
     ALLOC_AND_INIT(allocator, table_store_addr_, (*this), static_cast<ObSSTable *>(table_handle.get_table()));

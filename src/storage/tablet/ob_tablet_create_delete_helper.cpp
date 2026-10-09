@@ -479,6 +479,7 @@ int ObTabletCreateDeleteHelper::create_empty_sstable(
     const ObStorageSchema &storage_schema,
     const common::ObTabletID &tablet_id,
     const int64_t snapshot_version,
+    const uint64_t storage_layout_id,
     ObTableHandleV2 &table_handle)
 {
   int ret = OB_SUCCESS;
@@ -488,7 +489,7 @@ int ObTabletCreateDeleteHelper::create_empty_sstable(
   if (OB_UNLIKELY(!storage_schema.is_valid() || snapshot_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("get invalid arguments", K(ret), K(snapshot_version), K(storage_schema));
-  } else if (OB_FAIL(param.init_for_empty_major_sstable(tablet_id, storage_schema, snapshot_version))) {
+  } else if (OB_FAIL(param.init_for_empty_major_sstable(tablet_id, storage_schema, snapshot_version, storage_layout_id))) {
   } else if (OB_FAIL(create_sstable(param, allocator, table_handle))) {
   }
 

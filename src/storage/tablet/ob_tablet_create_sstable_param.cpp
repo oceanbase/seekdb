@@ -33,6 +33,7 @@ ObTabletCreateSSTableParam::ObTabletCreateSSTableParam()
   : table_key_(),
     sstable_logic_seq_(-1),
     schema_version_(-1),
+    storage_layout_id_(0),
     create_snapshot_version_(-1),
     progressive_merge_round_(-1),
     progressive_merge_step_(-1),
@@ -78,6 +79,10 @@ bool ObTabletCreateSSTableParam::is_valid() const
   if (OB_UNLIKELY(!table_key_.is_valid())) {
     ret = false;
     LOG_WARN("invalid table key", K(table_key_));
+  } else if (!table_key_.tablet_id_.is_ls_inner_tablet() && !table_key_.is_mds_sstable()
+      && (storage_layout_id_ == 0 || storage_layout_id_ == OB_INVALID_ID)) {
+    ret = false;
+    LOG_WARN("data SSTable has no physical definition identity", K(table_key_), K(storage_layout_id_));
   } else if (OB_UNLIKELY(!table_mode_.is_valid())) {
     ret = false;
     LOG_WARN("invalid table mode", K(table_mode_));
@@ -169,6 +174,7 @@ void ObTabletCreateSSTableParam::inner_init_for_physical_restore(
   table_key_ = table_key;
   sstable_logic_seq_ = basic_meta.sstable_logic_seq_;
   schema_version_ = basic_meta.schema_version_;
+  storage_layout_id_ = basic_meta.storage_layout_id_;
   create_snapshot_version_ = basic_meta.create_snapshot_version_;
   progressive_merge_round_ = basic_meta.progressive_merge_round_;
   progressive_merge_step_ = basic_meta.progressive_merge_step_;
@@ -251,7 +257,8 @@ int ObTabletCreateSSTableParam::init_for_physical_restore(
 
 int ObTabletCreateSSTableParam::init_for_empty_major_sstable(const ObTabletID &tablet_id,
                                                              const ObStorageSchema &storage_schema,
-                                                             const int64_t snapshot_version)
+                                                             const int64_t snapshot_version,
+                                                             const uint64_t storage_layout_id)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!storage_schema.is_valid() || !tablet_id.is_valid() 
@@ -267,6 +274,7 @@ int ObTabletCreateSSTableParam::init_for_empty_major_sstable(const ObTabletID &t
     max_merged_trans_version_ = snapshot_version;
 
     schema_version_ = storage_schema.get_schema_version();
+    storage_layout_id_ = storage_layout_id;
     create_snapshot_version_ = 0;
     progressive_merge_round_ = storage_schema.get_progressive_merge_round();
     progressive_merge_step_ = 0;
@@ -320,6 +328,7 @@ int ObTabletCreateSSTableParam::init_for_empty_minor_sstable(const ObTabletID &t
   max_merged_trans_version_ = 0;
 
   schema_version_ = basic_meta.schema_version_;
+  storage_layout_id_ = basic_meta.storage_layout_id_;
   progressive_merge_round_ = basic_meta.progressive_merge_round_;
   progressive_merge_step_ = basic_meta.progressive_merge_step_;
   sstable_logic_seq_ = basic_meta.sstable_logic_seq_;
@@ -330,6 +339,7 @@ int ObTabletCreateSSTableParam::init_for_empty_minor_sstable(const ObTabletID &t
   latest_row_store_type_ = basic_meta.latest_row_store_type_;
   recycle_version_ = basic_meta.recycle_version_;
   schema_version_ = basic_meta.schema_version_;
+  storage_layout_id_ = basic_meta.storage_layout_id_;
   create_snapshot_version_ = basic_meta.create_snapshot_version_;
   ddl_scn_ = basic_meta.ddl_scn_;
   progressive_merge_round_ = basic_meta.progressive_merge_round_;
@@ -375,6 +385,7 @@ int ObTabletCreateSSTableParam::init_for_small_sstable(
   table_mode_ = basic_meta.table_mode_;
   index_type_ = static_cast<share::schema::ObIndexType>(basic_meta.index_type_);
   schema_version_ = basic_meta.schema_version_;
+  storage_layout_id_ = basic_meta.storage_layout_id_;
   create_snapshot_version_ = basic_meta.create_snapshot_version_;
   progressive_merge_round_ = basic_meta.progressive_merge_round_;
   progressive_merge_step_ = basic_meta.progressive_merge_step_;
@@ -431,6 +442,7 @@ int ObTabletCreateSSTableParam::init_for_merge(const compaction::ObBasicTabletMe
                    ? static_param.version_range_.base_version_
                    : 0;
   schema_version_ = ctx.get_schema()->get_schema_version();
+  storage_layout_id_ = ctx.get_tablet()->get_tablet_meta().storage_layout_id_;
   create_snapshot_version_ = static_param.create_snapshot_version_;
   progressive_merge_round_ = ctx.get_progressive_merge_round();
   progressive_merge_step_ = ctx.get_result_progressive_merge_step();
@@ -461,6 +473,7 @@ int ObTabletCreateSSTableParam::init_for_ddl(blocksstable::ObSSTableIndexBuilder
                                              const ObStorageSchema &storage_schema,
                                              const int64_t macro_block_column_count,
                                              const int64_t create_schema_version_on_tablet,
+                                             const uint64_t storage_layout_id,
                                              const ObIArray<blocksstable::MacroBlockId> &macro_id_array)
 {
   int ret = OB_SUCCESS;
@@ -503,6 +516,7 @@ int ObTabletCreateSSTableParam::init_for_ddl(blocksstable::ObSSTableIndexBuilder
       index_type_ = index_type;
       rowkey_column_cnt_ = rowkey_column_cnt;
       schema_version_ = create_schema_version_on_tablet;
+      storage_layout_id_ = storage_layout_id;
       latest_row_store_type_ = row_store_type;
       create_snapshot_version_ = ddl_param.snapshot_version_;
       ddl_scn_ = ddl_param.start_scn_;
@@ -547,6 +561,7 @@ int ObTabletCreateSSTableParam::init_for_ddl(blocksstable::ObSSTableIndexBuilder
 int ObTabletCreateSSTableParam::init_for_ddl_mem(const ObITable::TableKey &table_key,
                                                  const share::SCN &ddl_start_scn,
                                                  const ObStorageSchema &storage_schema,
+                                                 const uint64_t storage_layout_id,
                                                  ObBlockMetaTree &block_meta_tree)
 {
   int ret = OB_SUCCESS;
@@ -568,6 +583,7 @@ int ObTabletCreateSSTableParam::init_for_ddl_mem(const ObITable::TableKey &table
     table_mode_ = storage_schema.get_table_mode_struct();
     index_type_ = storage_schema.get_index_type();
     schema_version_ = storage_schema.get_schema_version();
+    storage_layout_id_ = storage_layout_id;
     latest_row_store_type_ = storage_schema.get_row_store_type();
     create_snapshot_version_ = table_key.get_snapshot_version();
     max_merged_trans_version_ = table_key.get_snapshot_version();
@@ -620,7 +636,6 @@ int ObTabletCreateSSTableParam::init_for_ddl_mem(const ObITable::TableKey &table
 int ObTabletCreateSSTableParam::init_for_fork(const ObTabletID &dst_tablet_id,
                                                const ObITable::TableKey &src_table_key,
                                                const blocksstable::ObSSTableBasicMeta &basic_meta,
-                                               const int64_t schema_version,
                                                const blocksstable::ObSSTableMergeRes &res,
                                                const share::SCN &max_end_scn)
 {
@@ -638,7 +653,8 @@ int ObTabletCreateSSTableParam::init_for_fork(const ObTabletID &dst_tablet_id,
   rowkey_column_cnt_ = basic_meta.rowkey_column_count_;
   latest_row_store_type_ = basic_meta.latest_row_store_type_;
   recycle_version_ = basic_meta.recycle_version_;
-  schema_version_ = schema_version; // use new schema version.
+  schema_version_ = basic_meta.schema_version_;
+  storage_layout_id_ = basic_meta.storage_layout_id_;
   create_snapshot_version_ = basic_meta.create_snapshot_version_;
   ddl_scn_ = basic_meta.ddl_scn_;
   progressive_merge_round_ = basic_meta.progressive_merge_round_;
@@ -683,6 +699,7 @@ int ObTabletCreateSSTableParam::init_for_fork(
   
   sstable_logic_seq_ = sstable_param.basic_meta_.sstable_logic_seq_;
   schema_version_ = sstable_param.basic_meta_.schema_version_;
+  storage_layout_id_ = sstable_param.basic_meta_.storage_layout_id_;
   create_snapshot_version_ = sstable_param.basic_meta_.create_snapshot_version_;
   table_mode_ = sstable_param.basic_meta_.table_mode_;
   index_type_ = static_cast<share::schema::ObIndexType>(sstable_param.basic_meta_.index_type_);

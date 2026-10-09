@@ -47,6 +47,7 @@ ObSSTableBasicMeta::ObSSTableBasicMeta()
     index_macro_block_count_(0),
     sstable_format_version_(SSTABLE_FORMAT_VERSION_1),
     schema_version_(0),
+    storage_layout_id_(0),
     create_snapshot_version_(0),
     progressive_merge_round_(0),
     progressive_merge_step_(0),
@@ -93,6 +94,7 @@ bool ObSSTableBasicMeta::check_basic_meta_equality(const ObSSTableBasicMeta &oth
       && index_macro_block_count_ == other.index_macro_block_count_
       && sstable_format_version_ == other.sstable_format_version_
       && schema_version_ == other.schema_version_
+      && storage_layout_id_ == other.storage_layout_id_
       && create_snapshot_version_ == other.create_snapshot_version_
       && progressive_merge_round_ == other.progressive_merge_round_
       && progressive_merge_step_ == other.progressive_merge_step_
@@ -159,6 +161,7 @@ void ObSSTableBasicMeta::reset()
   index_macro_block_count_ = 0;
   sstable_format_version_ = SSTABLE_FORMAT_VERSION_1;
   schema_version_ = 0;
+  storage_layout_id_ = 0;
   create_snapshot_version_ = 0;
   progressive_merge_round_ = 0;
   progressive_merge_step_ = 0;
@@ -208,6 +211,7 @@ DEFINE_SERIALIZE(ObSSTableBasicMeta)
                   index_macro_block_count_,
                   sstable_format_version_,
                   schema_version_,
+                  storage_layout_id_,
                   create_snapshot_version_,
                   progressive_merge_round_,
                   progressive_merge_step_,
@@ -280,6 +284,7 @@ int ObSSTableBasicMeta::decode_fields(const char *buf, const int64_t data_len, i
               index_macro_block_count_,
               sstable_format_version_,
               schema_version_,
+              storage_layout_id_,
               create_snapshot_version_,
               progressive_merge_round_,
               progressive_merge_step_,
@@ -320,6 +325,7 @@ DEFINE_GET_SERIALIZE_SIZE(ObSSTableBasicMeta)
               index_macro_block_count_,
               sstable_format_version_,
               schema_version_,
+              storage_layout_id_,
               create_snapshot_version_,
               progressive_merge_round_,
               progressive_merge_step_,
@@ -582,6 +588,7 @@ int ObSSTableMeta::init_base_meta(
     basic_meta_.index_macro_block_count_ = param.index_blocks_cnt_;
     basic_meta_.sstable_format_version_ = ObSSTableBasicMeta::SSTABLE_FORMAT_VERSION_1;
     basic_meta_.schema_version_ = param.schema_version_;
+    basic_meta_.storage_layout_id_ = param.storage_layout_id_;
     basic_meta_.create_snapshot_version_ = param.create_snapshot_version_;
     basic_meta_.progressive_merge_round_ = param.progressive_merge_round_;
     basic_meta_.progressive_merge_step_ = param.progressive_merge_step_;
@@ -915,6 +922,10 @@ int ObSSTableMetaChecker::check_sstable_basic_meta(
   if (!old_sstable_basic_meta.is_valid() || !new_sstable_basic_meta.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("check sstable meta get invalid argument", K(ret), K(old_sstable_basic_meta), K(new_sstable_basic_meta));
+  } else if (new_sstable_basic_meta.storage_layout_id_ != old_sstable_basic_meta.storage_layout_id_
+      || new_sstable_basic_meta.schema_version_ != old_sstable_basic_meta.schema_version_) {
+    ret = OB_INVALID_DATA;
+    LOG_WARN("physical definition not match", K(ret), K(old_sstable_basic_meta), K(new_sstable_basic_meta));
   } else if (new_sstable_basic_meta.row_count_ != old_sstable_basic_meta.row_count_) {
     ret = OB_INVALID_DATA;
     LOG_WARN("row_count_ not match", K(ret), K(old_sstable_basic_meta), K(new_sstable_basic_meta));

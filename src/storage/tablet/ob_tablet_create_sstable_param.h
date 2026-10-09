@@ -64,7 +64,8 @@ public:
   // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
   int init_for_empty_major_sstable(const ObTabletID &tablet_id,
                                    const ObStorageSchema &storage_schema,
-                                   const int64_t snapshot_version);
+                                   const int64_t snapshot_version,
+                                   const uint64_t storage_layout_id);
 
   // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
   int init_for_small_sstable(const blocksstable::ObSSTableMergeRes &res,
@@ -83,19 +84,20 @@ public:
                    const ObStorageSchema &storage_schema,
                    const int64_t macro_block_column_count,
                    const int64_t create_schema_version_on_tablet,
+                   const uint64_t storage_layout_id,
                    const ObIArray<blocksstable::MacroBlockId> &macro_id_array);
 
   // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
   int init_for_ddl_mem(const ObITable::TableKey &table_key,
                        const share::SCN &ddl_start_scn,
                        const ObStorageSchema &storage_schema,
+                       const uint64_t storage_layout_id,
                        ObBlockMetaTree &block_meta_tree);
 
   // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
   int init_for_fork(const ObTabletID &dst_tablet_id,
                      const ObITable::TableKey &src_table_key,
                      const blocksstable::ObSSTableBasicMeta &basic_meta,
-                     const int64_t schema_version,
                      const blocksstable::ObSSTableMergeRes &res,
                      const share::SCN &max_end_scn);
 
@@ -148,6 +150,7 @@ public:
   TO_STRING_KV(K_(table_key),
       K_(sstable_logic_seq),
       K_(schema_version),
+      K_(storage_layout_id),
       K_(create_snapshot_version),
       K_(progressive_merge_round),
       K_(progressive_merge_step),
@@ -203,6 +206,7 @@ public:
   ObITable::TableKey table_key_;
   int16_t sstable_logic_seq_;
   int64_t schema_version_;
+  uint64_t storage_layout_id_;
   int64_t create_snapshot_version_;
   int64_t progressive_merge_round_;
   int64_t progressive_merge_step_;

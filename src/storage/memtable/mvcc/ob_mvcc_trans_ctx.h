@@ -436,7 +436,8 @@ public:
       not_calc_checksum_(false),
       is_non_unique_local_index_cb_(false),
       seq_no_(),
-      column_cnt_(0)
+      column_cnt_(0),
+      schema_version_(-1)
   {}
   ObMvccRowCallback(ObMvccRowCallback &cb, ObMemtable *memtable) :
       ObITransCallback(cb.need_submit_log_),
@@ -449,7 +450,8 @@ public:
       not_calc_checksum_(cb.not_calc_checksum_),
       is_non_unique_local_index_cb_(cb.is_non_unique_local_index_cb_),
       seq_no_(cb.seq_no_),
-      column_cnt_(cb.column_cnt_)
+      column_cnt_(cb.column_cnt_),
+      schema_version_(cb.schema_version_)
   {
     (void)key_.encode(cb.key_.get_rowkey());
   }
@@ -465,6 +467,7 @@ public:
            const bool is_replay,
            const transaction::ObTxSEQ seq_no,
            const int64_t column_cnt,
+           const int64_t schema_version,
            const bool is_non_unique_local_index_cb)
   {
     UNUSED(is_replay);
@@ -481,6 +484,7 @@ public:
       tnode_->set_seq_no(seq_no_);
     }
     column_cnt_ = column_cnt;
+    schema_version_ = schema_version;
     is_non_unique_local_index_cb_ = is_non_unique_local_index_cb;
   }
   bool on_memtable(const storage::ObIMemtable * const memtable) override;
@@ -488,6 +492,7 @@ public:
   bool is_non_unique_local_index_cb() const { return is_non_unique_local_index_cb_;}
   virtual MutatorType get_mutator_type() const override;
   int get_redo(RedoDataNode &node);
+  int64_t get_schema_version() const { return schema_version_; }
   ObIMvccCtx &get_ctx() const { return ctx_; }
   const ObRowData &get_old_row() const { return old_row_; }
   const ObMvccRow &get_mvcc_row() const { return value_; }
@@ -551,6 +556,8 @@ private:
   };
   transaction::ObTxSEQ seq_no_;
   int64_t column_cnt_;
+  // The definition used by this row, retained until its redo is generated.
+  int64_t schema_version_;
 };
 
 }; // end namespace memtable

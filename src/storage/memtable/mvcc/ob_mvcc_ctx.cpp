@@ -41,7 +41,8 @@ bool ObIMvccCtx::is_prepared() const
 int ObIMvccCtx::register_row_commit_cb(const storage::ObTableIterParam &param,
                                        ObTxNodeArg &arg,
                                        ObMvccWriteResult &res,
-                                       ObMemtable *memtable)
+                                       ObMemtable *memtable,
+                                       const int64_t schema_version)
 {
   int ret = OB_SUCCESS;
   const bool is_replay = false;
@@ -65,7 +66,7 @@ int ObIMvccCtx::register_row_commit_cb(const storage::ObTableIterParam &param,
         || OB_ISNULL(node)
         || data_size <= 0
         || OB_ISNULL(memtable)
-        || column_cnt <= 0) {
+        || column_cnt <= 0 || schema_version < 0) {
       ret = OB_INVALID_ARGUMENT;
       TRANS_LOG(WARN, "invalid argument", K(stored_key), K(value), K(node),
                 K(data_size), K(memtable), K(column_cnt));
@@ -83,6 +84,7 @@ int ObIMvccCtx::register_row_commit_cb(const storage::ObTableIterParam &param,
               is_replay,
               seq_no,
               column_cnt,
+              schema_version,
               is_non_unique_local_index);
       cb->set_is_link();
 
@@ -101,7 +103,8 @@ int ObIMvccCtx::register_row_commit_cb(const storage::ObTableIterParam &param,
 int ObIMvccCtx::register_row_commit_cb(const storage::ObTableIterParam &param,
                                        ObTxNodeArgs &tx_node_args,
                                        ObMvccWriteResults &mvcc_results,
-                                       ObMemtable *memtable)
+                                       ObMemtable *memtable,
+                                       const int64_t schema_version)
 {
   int ret = OB_SUCCESS;
   const bool is_replay = false;
@@ -131,7 +134,7 @@ int ObIMvccCtx::register_row_commit_cb(const storage::ObTableIterParam &param,
           || OB_ISNULL(node)
           || data_size <= 0
           || OB_ISNULL(memtable)
-          || column_cnt <= 0) {
+          || column_cnt <= 0 || schema_version < 0) {
         ret = OB_INVALID_ARGUMENT;
         TRANS_LOG(WARN, "invalid argument", K(tx_node_arg), K(res), K(ret));
       } else if (OB_ISNULL(cb = alloc_row_callback(*this, *value, memtable))) {
@@ -148,6 +151,7 @@ int ObIMvccCtx::register_row_commit_cb(const storage::ObTableIterParam &param,
                 is_replay,
                 seq_no,
                 column_cnt,
+                schema_version,
                 is_non_unique_local_index);
         cb->set_is_link();
 
@@ -193,13 +197,14 @@ int ObIMvccCtx::register_row_replay_cb(
     ObMemtable *memtable,
     const transaction::ObTxSEQ seq_no,
     const SCN scn,
-    const int64_t column_cnt)
+    const int64_t column_cnt,
+    const int64_t schema_version)
 {
   int ret = OB_SUCCESS;
   const bool is_replay = true;
   ObMvccRowCallback *cb = NULL;
   if (OB_ISNULL(key) || OB_ISNULL(value) || OB_ISNULL(node)
-      || data_size <= 0 || OB_ISNULL(memtable)) {
+      || data_size <= 0 || OB_ISNULL(memtable) || schema_version < 0) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", K(key), K(value), K(node), K(data_size), K(memtable));
   } else if (OB_ISNULL(cb = alloc_row_callback(*this, *value, memtable))) {
@@ -214,6 +219,7 @@ int ObIMvccCtx::register_row_replay_cb(
             is_replay,
             seq_no,
             column_cnt,
+            schema_version,
             false/*is_non_unique_local_index_cb, not setted correctly now, fix later*/);
     {
       ObRowLatchGuard guard(value->latch_);

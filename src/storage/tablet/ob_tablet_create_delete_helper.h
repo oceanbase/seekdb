@@ -133,6 +133,7 @@ public:
       const ObStorageSchema &storage_schema,
       const common::ObTabletID &tablet_id,
       const int64_t snapshot_version,
+      const uint64_t storage_layout_id,
       ObTableHandleV2 &table_handle);
 
   template <typename T = blocksstable::ObSSTable>

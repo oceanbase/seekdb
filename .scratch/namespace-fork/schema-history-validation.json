@@ -1,5 +1,5 @@
 {
-  "scope": "Foundation, atomic DDL/layout publication, durable retention, physical C membership, major/ordinary medium G@target, primary freeze preparation and meta-major exact G/V bodies have targeted evidence below. Unified progress/checksum, layout/body/binding GC, fork rewrite input provenance, legacy freeze.schema_version removal and full standby integration remain incomplete.",
+  "scope": "Foundation, atomic DDL/layout publication, durable retention, physical C membership, major/ordinary medium G@target, primary freeze preparation, meta-major exact G/V bodies, SSTable origin G and per-row redo versions have targeted evidence below. Unified progress/checksum, layout/body/binding GC, legacy freeze.schema_version removal and full standby integration remain incomplete.",
   "runs": [
     {
       "name": "layout_history",
@@ -4537,6 +4537,875 @@
         }
       ],
       "outcome": "PASS"
+    },
+    {
+      "name": "sstable_layout_production_fork",
+      "log": "/tmp/seekdb-sstable-layout-smoke-1.log",
+      "outcome": "PASS",
+      "events": [
+        {
+          "event": "setup",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_kv_startup_30s_zeotcv5g",
+          "pid": 758381,
+          "port": 35629
+        },
+        {
+          "event": "PASS",
+          "elapsed_limit_s": 30
+        },
+        {
+          "event": "stopped",
+          "pid": 758381,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_kv_startup_30s_zeotcv5g/data.tar.gz",
+          "bytes": 5718130
+        }
+      ]
+    },
+    {
+      "name": "sstable_layout_production_ddl",
+      "log": "/tmp/seekdb-sstable-layout-ddl-1.log",
+      "outcome": "PASS",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-sstable-layout-production",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_catalog_schema_ml2sdah8",
+          "pid": 761871,
+          "port": 63717
+        },
+        {
+          "event": "case_pass",
+          "statement": "ALTER TABLE catalog_ddl.t COMMENT='cold description change'",
+          "tablets": 30
+        },
+        {
+          "event": "case_pass",
+          "statement": "ALTER TABLE catalog_ddl.t ADD COLUMN extra INT DEFAULT 7",
+          "tablets": 30
+        },
+        {
+          "event": "case_pass",
+          "statement": "CREATE INDEX by_v ON catalog_ddl.t(v)",
+          "tablets": 38
+        },
+        {
+          "event": "case_pass",
+          "statement": "DROP INDEX by_v ON catalog_ddl.t",
+          "tablets": 30
+        },
+        {
+          "event": "case_pass",
+          "statement": "TRUNCATE TABLE catalog_ddl.t",
+          "tablets": 30
+        },
+        {
+          "event": "case_pass",
+          "statement": "DROP TABLE catalog_ddl.t",
+          "tablets": 6
+        },
+        {
+          "event": "case_pass",
+          "statement": "ALTER TABLE catalog_ddl.rp ADD PARTITION (PARTITION p2 VALUES LESS THAN(30))",
+          "tablets": 9
+        },
+        {
+          "event": "case_pass",
+          "statement": "ALTER TABLE catalog_ddl.rp TRUNCATE PARTITION p0",
+          "tablets": 9
+        },
+        {
+          "event": "case_pass",
+          "statement": "ALTER TABLE catalog_ddl.rp DROP PARTITION p1",
+          "tablets": 6
+        },
+        {
+          "event": "PASS",
+          "case": "ddl_catalog_schema",
+          "partitioned": true,
+          "lob_bindings": true,
+          "partition_add_drop_truncate": true,
+          "parallel_ddl": 4,
+          "parent_view_retained": true
+        },
+        {
+          "event": "stopped",
+          "pid": 761871,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_catalog_schema_ml2sdah8/data.tar.gz",
+          "bytes": 6723450
+        }
+      ]
+    },
+    {
+      "name": "sstable_layout_production_major_initial",
+      "log": "/tmp/seekdb-sstable-layout-major-1.log",
+      "outcome": "PASS",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-sstable-layout-production",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_vrlh60j4",
+          "pid": 765591,
+          "port": 47647
+        },
+        {
+          "event": "sstable_identity",
+          "tablet_id": 200001,
+          "rows": []
+        },
+        {
+          "event": "sstable_identity",
+          "tablet_id": 4611686155866541377,
+          "rows": [
+            [
+              4611686155866541377,
+              "MAJOR"
+            ]
+          ]
+        },
+        {
+          "event": "PASS",
+          "case": "major_progress_physical_ids",
+          "rows": [
+            [
+              1791581451075893007,
+              1791581451075893007,
+              1791581451075893007
+            ]
+          ]
+        },
+        {
+          "event": "stopped",
+          "pid": 765591,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_vrlh60j4/data.tar.gz",
+          "bytes": 10439326
+        }
+      ]
+    },
+    {
+      "name": "sstable_layout_generations_initial",
+      "log": "/tmp/seekdb-sstable-layout-native-test-1.log",
+      "outcome": "PASS",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-sstable-layout-native-v1",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_sstable_layout_a21bpj9q",
+          "pid": 765379,
+          "port": 60735
+        },
+        {
+          "event": "crash_for_recovery",
+          "pid": 765379
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-sstable-layout-native-v1",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_sstable_layout_a21bpj9q",
+          "pid": 767060,
+          "port": 60735
+        },
+        {
+          "event": "PASS",
+          "case": "sstable_layout",
+          "parent_g": 7995,
+          "initial_v": 1791581451357968,
+          "parent_v": 1791581451667248,
+          "child_v": 1791581465017528,
+          "audit": {
+            "count": 1046,
+            "inherited": 613,
+            "ret": 0
+          },
+          "persisted": [
+            {
+              "tablet": 4611686568183401793,
+              "owned": 8972,
+              "origin": 7995,
+              "V": 1791581451357968,
+              "columns": 4,
+              "body_columns": 4,
+              "ret": 0
+            },
+            {
+              "tablet": 4611686568183401793,
+              "owned": 8972,
+              "origin": 7995,
+              "V": 1791581451667248,
+              "columns": 5,
+              "body_columns": 5,
+              "ret": 0
+            },
+            {
+              "tablet": 4611686568183401793,
+              "owned": 8972,
+              "origin": 8198,
+              "V": 1791581451357968,
+              "columns": 4,
+              "body_columns": 4,
+              "ret": 0
+            },
+            {
+              "tablet": 4611686568183401793,
+              "owned": 8972,
+              "origin": 8198,
+              "V": 1791581465017528,
+              "columns": 5,
+              "body_columns": 5,
+              "ret": 0
+            },
+            {
+              "tablet": 4611686568183401793,
+              "owned": 8972,
+              "origin": 8972,
+              "V": 1791581451357968,
+              "columns": 4,
+              "body_columns": 4,
+              "ret": 0
+            },
+            {
+              "tablet": 4611686430744448321,
+              "owned": 8198,
+              "origin": 7995,
+              "V": 1791581451357968,
+              "columns": 4,
+              "body_columns": 4,
+              "ret": 0
+            },
+            {
+              "tablet": 4611686430744448321,
+              "owned": 8198,
+              "origin": 7995,
+              "V": 1791581451667248,
+              "columns": 5,
+              "body_columns": 5,
+              "ret": 0
+            },
+            {
+              "tablet": 4611686430744448321,
+              "owned": 8198,
+              "origin": 8198,
+              "V": 1791581451357968,
+              "columns": 4,
+              "body_columns": 4,
+              "ret": 0
+            },
+            {
+              "tablet": 4611686430744448321,
+              "owned": 8198,
+              "origin": 8198,
+              "V": 1791581465017528,
+              "columns": 5,
+              "body_columns": 5,
+              "ret": 0
+            }
+          ],
+          "source_drop": true,
+          "crash_recovery": true
+        },
+        {
+          "event": "stopped",
+          "pid": 767060,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_sstable_layout_a21bpj9q/data.tar.gz",
+          "bytes": 9560254
+        }
+      ]
+    },
+    {
+      "name": "sstable_layout_generations_local_builder",
+      "log": "/tmp/seekdb-sstable-layout-native-test-2.log",
+      "outcome": "PASS",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-sstable-layout-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_sstable_layout_gagegt4m",
+          "pid": 775909,
+          "port": 8665
+        },
+        {
+          "event": "crash_for_recovery",
+          "pid": 775909
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-sstable-layout-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_sstable_layout_gagegt4m",
+          "pid": 777800,
+          "port": 8665
+        },
+        {
+          "event": "PASS",
+          "case": "sstable_layout",
+          "compact_mixed": false,
+          "parent_g": 6298,
+          "initial_v": 1791581717190760,
+          "parent_v": 1791581717548448,
+          "child_v": 1791581733946184,
+          "audit": {
+            "count": 1091,
+            "inherited": 658,
+            "ret": 0
+          },
+          "persisted": [
+            {
+              "tablet": 4611686568183401793,
+              "owned": 7391,
+              "origin": 6298,
+              "V": 1791581717190760,
+              "columns": 4,
+              "body_columns": 4,
+              "ret": 0
+            },
+            {
+              "tablet": 4611686568183401793,
+              "owned": 7391,
+              "origin": 6298,
+              "V": 1791581717548448,
+              "columns": 5,
+              "body_columns": 5,
+              "ret": 0
+            },
+            {
+              "tablet": 4611686568183401793,
+              "owned": 7391,
+              "origin": 6501,
+              "V": 1791581717190760,
+              "columns": 4,
+              "body_columns": 4,
+              "ret": 0
+            },
+            {
+              "tablet": 4611686568183401793,
+              "owned": 7391,
+              "origin": 6501,
+              "V": 1791581733946184,
+              "columns": 5,
+              "body_columns": 5,
+              "ret": 0
+            },
+            {
+              "tablet": 4611686568183401793,
+              "owned": 7391,
+              "origin": 7391,
+              "V": 1791581717190760,
+              "columns": 4,
+              "body_columns": 4,
+              "ret": 0
+            },
+            {
+              "tablet": 4611686430744448321,
+              "owned": 6501,
+              "origin": 6298,
+              "V": 1791581717190760,
+              "columns": 4,
+              "body_columns": 4,
+              "ret": 0
+            },
+            {
+              "tablet": 4611686430744448321,
+              "owned": 6501,
+              "origin": 6501,
+              "V": 1791581733946184,
+              "columns": 5,
+              "body_columns": 5,
+              "ret": 0
+            }
+          ],
+          "source_drop": true,
+          "ddl_index": true,
+          "actual_rewrites": true,
+          "crash_recovery": true
+        },
+        {
+          "event": "stopped",
+          "pid": 777800,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_sstable_layout_gagegt4m/data.tar.gz",
+          "bytes": 9843614
+        }
+      ]
+    },
+    {
+      "name": "sstable_layout_mixed_before_row_redo_fix",
+      "log": "/tmp/seekdb-sstable-layout-mixed-test-1.log",
+      "outcome": "FAIL: audit G22 V1050720 missing, stopped after confirmed failure",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-sstable-layout-native-v1",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_sstable_layout_mixed_u4dwud24",
+          "pid": 773515,
+          "port": 45371
+        },
+        {
+          "event": "crash_for_recovery",
+          "pid": 773515
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-sstable-layout-native-v1",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_sstable_layout_mixed_u4dwud24",
+          "pid": 775442,
+          "port": 45371
+        },
+        {
+          "event": "crash_after_mixed_minor",
+          "pid": 775442
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-sstable-layout-native-v1",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_sstable_layout_mixed_u4dwud24",
+          "pid": 776433,
+          "port": 45371
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_sstable_layout_mixed_u4dwud24/data.tar.gz",
+          "bytes": 12542287
+        }
+      ]
+    },
+    {
+      "name": "sstable_layout_mixed_after_row_redo_fix",
+      "log": "/tmp/seekdb-sstable-layout-mixed-test-2.log",
+      "outcome": "PASS",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-sstable-layout-native-v3",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_sstable_layout_mixed_5n2uiezd",
+          "pid": 798071,
+          "port": 47817
+        },
+        {
+          "event": "crash_for_recovery",
+          "pid": 798071
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-sstable-layout-native-v3",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_sstable_layout_mixed_5n2uiezd",
+          "pid": 802640,
+          "port": 47817
+        },
+        {
+          "event": "crash_after_mixed_minor",
+          "pid": 802640
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-sstable-layout-native-v3",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_sstable_layout_mixed_5n2uiezd",
+          "pid": 804820,
+          "port": 47817
+        },
+        {
+          "event": "PASS",
+          "case": "sstable_layout",
+          "compact_mixed": true,
+          "parent_g": 4500,
+          "initial_v": 1791582086502728,
+          "parent_v": 1791582086978056,
+          "child_v": 1791582099554160,
+          "audit": {
+            "count": 1072,
+            "inherited": 575,
+            "ret": 0
+          },
+          "persisted": [
+            {
+              "tablet": 4611686568183401793,
+              "owned": 5544,
+              "origin": 4500,
+              "V": 1791582086502728,
+              "columns": 4,
+              "body_columns": 4,
+              "ret": 0
+            },
+            {
+              "tablet": 4611686568183401793,
+              "owned": 5544,
+              "origin": 4500,
+              "V": 1791582086978056,
+              "columns": 6,
+              "body_columns": 6,
+              "ret": 0
+            },
+            {
+              "tablet": 4611686568183401793,
+              "owned": 5544,
+              "origin": 4713,
+              "V": 1791582086502728,
+              "columns": 4,
+              "body_columns": 4,
+              "ret": 0
+            },
+            {
+              "tablet": 4611686568183401793,
+              "owned": 5544,
+              "origin": 4713,
+              "V": 1791582099554160,
+              "columns": 5,
+              "body_columns": 5,
+              "ret": 0
+            },
+            {
+              "tablet": 4611686568183401793,
+              "owned": 5544,
+              "origin": 5544,
+              "V": 1791582086502728,
+              "columns": 4,
+              "body_columns": 4,
+              "ret": 0
+            },
+            {
+              "tablet": 4611686430744448321,
+              "owned": 4713,
+              "origin": 4500,
+              "V": 1791582086502728,
+              "columns": 4,
+              "body_columns": 4,
+              "ret": 0
+            },
+            {
+              "tablet": 4611686430744448321,
+              "owned": 4713,
+              "origin": 4500,
+              "V": 1791582086978056,
+              "columns": 6,
+              "body_columns": 6,
+              "ret": 0
+            },
+            {
+              "tablet": 4611686430744448321,
+              "owned": 4713,
+              "origin": 4713,
+              "V": 1791582086502728,
+              "columns": 4,
+              "body_columns": 4,
+              "ret": 0
+            },
+            {
+              "tablet": 4611686430744448321,
+              "owned": 4713,
+              "origin": 4713,
+              "V": 1791582099554160,
+              "columns": 5,
+              "body_columns": 5,
+              "ret": 0
+            }
+          ],
+          "source_drop": true,
+          "ddl_index": true,
+          "actual_rewrites": true,
+          "crash_recovery": true
+        },
+        {
+          "event": "stopped",
+          "pid": 804820,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_sstable_layout_mixed_5n2uiezd/data.tar.gz",
+          "bytes": 12898119
+        }
+      ]
+    },
+    {
+      "name": "row_layout_replay_initial_old_driver",
+      "log": "/tmp/seekdb-row-layout-replay-red.log",
+      "outcome": "FAIL: driver did not advance recovered active memtables",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-sstable-layout-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_row_layout_replay_5wwbxtd_",
+          "pid": 796458,
+          "port": 9861
+        },
+        {
+          "event": "crash_for_recovery",
+          "pid": 796458
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-sstable-layout-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_row_layout_replay_5wwbxtd_",
+          "pid": 797092,
+          "port": 9861
+        },
+        {
+          "event": "stopped",
+          "pid": 797092,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_row_layout_replay_5wwbxtd_/data.tar.gz",
+          "bytes": 6768981
+        }
+      ]
+    },
+    {
+      "name": "row_layout_replay_initial_new_driver",
+      "log": "/tmp/seekdb-row-layout-replay-green.log",
+      "outcome": "FAIL: driver did not advance recovered active memtables",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-sstable-layout-native-v3",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_row_layout_replay_1l4vqyu6",
+          "pid": 800110,
+          "port": 41515
+        },
+        {
+          "event": "crash_for_recovery",
+          "pid": 800110
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-sstable-layout-native-v3",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_row_layout_replay_1l4vqyu6",
+          "pid": 801700,
+          "port": 41515
+        },
+        {
+          "event": "stopped",
+          "pid": 801700,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_row_layout_replay_1l4vqyu6/data.tar.gz",
+          "bytes": 6649499
+        }
+      ]
+    },
+    {
+      "name": "row_layout_replay_before_fix",
+      "log": "/tmp/seekdb-row-layout-replay-red-2.log",
+      "outcome": "FAIL: persisted definition audit after replay",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-sstable-layout-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_row_layout_replay_crz6vgun",
+          "pid": 808415,
+          "port": 52545
+        },
+        {
+          "event": "crash_for_recovery",
+          "pid": 808415
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-sstable-layout-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_row_layout_replay_crz6vgun",
+          "pid": 809059,
+          "port": 52545
+        },
+        {
+          "event": "crash_for_recovery",
+          "pid": 809059
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-sstable-layout-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_row_layout_replay_crz6vgun",
+          "pid": 809759,
+          "port": 52545
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_row_layout_replay_crz6vgun/data.tar.gz",
+          "bytes": 6710529
+        }
+      ]
+    },
+    {
+      "name": "row_layout_replay_after_fix",
+      "log": "/tmp/seekdb-row-layout-replay-green-2.log",
+      "outcome": "PASS",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-sstable-layout-native-v3",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_row_layout_replay_q57zeg5u",
+          "pid": 809520,
+          "port": 57455
+        },
+        {
+          "event": "crash_for_recovery",
+          "pid": 809520
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-sstable-layout-native-v3",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_row_layout_replay_q57zeg5u",
+          "pid": 810289,
+          "port": 57455
+        },
+        {
+          "event": "crash_for_recovery",
+          "pid": 810289
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-sstable-layout-native-v3",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_row_layout_replay_q57zeg5u",
+          "pid": 810940,
+          "port": 57455
+        },
+        {
+          "event": "PASS",
+          "case": "row_layout_replay",
+          "versions": [
+            1791582224594248,
+            1791582224780712
+          ],
+          "rows": [
+            {
+              "tablet": 4611686155866541378,
+              "owned": 5283,
+              "origin": 5283,
+              "V": 1791582224780712,
+              "columns": 5,
+              "body_columns": 5,
+              "ret": 0
+            },
+            {
+              "tablet": 4611686155866541378,
+              "owned": 5283,
+              "origin": 5283,
+              "V": 1791582224780712,
+              "columns": 5,
+              "body_columns": 5,
+              "ret": 0
+            },
+            {
+              "tablet": 4611686155866541377,
+              "owned": 5199,
+              "origin": 5199,
+              "V": 1791582224594248,
+              "columns": 4,
+              "body_columns": 4,
+              "ret": 0
+            },
+            {
+              "tablet": 4611686155866541378,
+              "owned": 5283,
+              "origin": 5283,
+              "V": 1791582224780712,
+              "columns": 5,
+              "body_columns": 5,
+              "ret": 0
+            },
+            {
+              "tablet": 4611686155866541377,
+              "owned": 5199,
+              "origin": 5199,
+              "V": 1791582224594248,
+              "columns": 4,
+              "body_columns": 4,
+              "ret": 0
+            },
+            {
+              "tablet": 4611686155866541377,
+              "owned": 5199,
+              "origin": 5199,
+              "V": 1791582224594248,
+              "columns": 4,
+              "body_columns": 4,
+              "ret": 0
+            }
+          ],
+          "batch_insert": true,
+          "single_update": true,
+          "row_lock": true,
+          "replay_dump_recovery": true
+        },
+        {
+          "event": "stopped",
+          "pid": 810940,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_row_layout_replay_q57zeg5u/data.tar.gz",
+          "bytes": 7150896
+        }
+      ]
+    },
+    {
+      "name": "sstable_layout_production_major_final",
+      "log": "/tmp/seekdb-sstable-layout-production-major-final.log",
+      "outcome": "PASS",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-sstable-layout-production-final",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_qr2xyxda",
+          "pid": 809707,
+          "port": 58893
+        },
+        {
+          "event": "sstable_identity",
+          "tablet_id": 200001,
+          "rows": []
+        },
+        {
+          "event": "sstable_identity",
+          "tablet_id": 4611686155866541377,
+          "rows": [
+            [
+              4611686155866541377,
+              "MAJOR"
+            ]
+          ]
+        },
+        {
+          "event": "PASS",
+          "case": "major_progress_physical_ids",
+          "rows": [
+            [
+              1791582229216858012,
+              1791582229216858012,
+              1791582229216858012
+            ]
+          ]
+        },
+        {
+          "event": "stopped",
+          "pid": 809707,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_qr2xyxda/data.tar.gz",
+          "bytes": 9129487
+        }
+      ]
     }
   ],
   "meta_layout_builds": [
@@ -4550,6 +5419,39 @@
     },
     {
       "log": "/tmp/seekdb-meta-layout-production-build-1.log",
+      "result": "PASS",
+      "test_hooks_removed": true
+    }
+  ],
+  "sstable_layout_builds": [
+    {
+      "log": "/tmp/seekdb-sstable-layout-build-1.log",
+      "result": "PASS",
+      "test_hooks_removed": true
+    },
+    {
+      "log": "/tmp/seekdb-sstable-layout-native-build-1.log",
+      "result": "FAIL: invalid probe API"
+    },
+    {
+      "log": "/tmp/seekdb-sstable-layout-native-build-2.log",
+      "result": "PASS"
+    },
+    {
+      "log": "/tmp/seekdb-sstable-layout-native-build-3.log",
+      "result": "PASS"
+    },
+    {
+      "log": "/tmp/seekdb-sstable-layout-native-build-4.log",
+      "result": "PASS"
+    },
+    {
+      "log": "/tmp/seekdb-sstable-layout-production-final-build-1.log",
+      "result": "PASS",
+      "test_hooks_removed": true
+    },
+    {
+      "log": "/tmp/seekdb-sstable-layout-production-final-build-2.log",
       "result": "PASS",
       "test_hooks_removed": true
     }

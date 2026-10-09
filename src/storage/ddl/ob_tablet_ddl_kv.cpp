@@ -77,6 +77,7 @@ int ObBlockMetaTree::init(const ObTablet &tablet,
 
 int ObDDLMemtable::init_sstable_param(
     const ObStorageSchema &storage_schema,
+    const uint64_t storage_layout_id,
     const ObITable::TableKey &table_key,
     const share::SCN &ddl_start_scn,
     ObTabletCreateSSTableParam &sstable_param)
@@ -91,7 +92,7 @@ int ObDDLMemtable::init_sstable_param(
     const ObDataStoreDesc &data_desc = block_meta_tree_.get_data_desc();
     if (OB_FAIL(storage_schema.get_stored_column_count_in_sstable(column_count))) {
     } else if (OB_FAIL(sstable_param.init_for_ddl_mem(
-        table_key, ddl_start_scn, storage_schema, block_meta_tree_))) {
+        table_key, ddl_start_scn, storage_schema, storage_layout_id, block_meta_tree_))) {
     }
   }
   return ret;
@@ -681,7 +682,8 @@ int ObDDLMemtable::init(
           && OB_FAIL(ddl_table_iter.get_boundary_table(false/*is_last*/, first_ddl_sstable))) {
         LOG_WARN("failed to get boundary table", K(ret));
       } else if (OB_FAIL(block_meta_tree_.init(tablet, table_key, ddl_start_scn, data_format_version, storage_schema, static_cast<ObSSTable *>(first_ddl_sstable)))) {
-      } else if (OB_FAIL(init_sstable_param(*storage_schema, table_key, ddl_start_scn, sstable_param))) {
+      } else if (OB_FAIL(init_sstable_param(*storage_schema, tablet.get_tablet_meta().storage_layout_id_,
+          table_key, ddl_start_scn, sstable_param))) {
       } else if (OB_FAIL(ObSSTable::init(sstable_param, &allocator))) {
       } else {
         ddl_kv_type_ = ddl_kv_type;

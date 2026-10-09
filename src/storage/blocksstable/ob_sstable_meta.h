@@ -138,7 +138,7 @@ public:
   TO_STRING_KV(K_(version), K_(length), K(row_count_), K(occupy_size_), K(original_size_),
       K(data_checksum_), K(index_type_), K(rowkey_column_count_), K(column_cnt_),
       K(data_macro_block_count_), K(data_micro_block_count_), K(use_old_macro_block_count_),
-      K(index_macro_block_count_), K(sstable_format_version_), K(schema_version_),
+      K(index_macro_block_count_), K(sstable_format_version_), K(schema_version_), K(storage_layout_id_),
       K(create_snapshot_version_), K(progressive_merge_round_),
       K(progressive_merge_step_), K(data_index_tree_height_), K(table_mode_),
       K(upper_trans_version_), K(max_merged_trans_version_), K_(recycle_version),
@@ -163,6 +163,7 @@ public:
   int64_t index_macro_block_count_;
   int64_t sstable_format_version_;
   int64_t schema_version_;
+  uint64_t storage_layout_id_; // Origin of this SSTable definition; preserved by fork copies.
   int64_t create_snapshot_version_;
   int64_t progressive_merge_round_;
   int64_t progressive_merge_step_;

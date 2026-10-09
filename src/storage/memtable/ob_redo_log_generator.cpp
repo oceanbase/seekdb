@@ -156,7 +156,7 @@ private:
       if (OB_ISNULL(memtable)) {
         TRANS_LOG(ERROR, "memtable is null", K(riter));
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(mmw_.append_row_kv(mem_ctx_->get_max_table_version(),
+      } else if (OB_FAIL(mmw_.append_row_kv(riter->get_schema_version(),
                                             redo,
                                             false))) {
         if (OB_BUF_NOT_ENOUGH != ret) {

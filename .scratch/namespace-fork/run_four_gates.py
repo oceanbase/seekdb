@@ -29,6 +29,9 @@ gates = [
         *[[local / 'meta_layout_probe.py', '--binary', probe, '--owner', owner]
           for owner in ('initial', 'child')],
         [local / 'meta_layout_probe.py', '--binary', probe, '--owner', 'child', '--cold-parent'],
+        [local / 'sstable_layout_probe.py', '--binary', probe],
+        [local / 'sstable_layout_probe.py', '--binary', probe, '--compact-mixed'],
+        [local / 'row_layout_replay_probe.py', '--binary', probe],
         [local / 'run_storage_schema_history_probe.py', '--binary', probe],
         [local / 'run_layout_retention_probe.py', '--binary', probe],
         [local / 'run_table_storage_layout_probe.py', '--binary', probe],

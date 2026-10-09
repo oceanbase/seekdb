@@ -103,8 +103,6 @@ private:
   int64_t fork_snapshot_version_;
 };
 
-using ObForkSSTableTaskKey = ObDdlSSTableTaskKey;
-
 struct ObTabletForkParam : public share::ObIDagInitParam
 {
   OB_UNIS_VERSION(1);
@@ -139,7 +137,6 @@ public:
   bool is_valid() const;
   TO_STRING_KV(K_(is_inited), K_(complement_data_ret), K_(row_inserted));
 public:
-  int prepare_index_builder(const ObTabletForkParam &param);
   common::ObIAllocator &get_allocator() { return allocator_; }
   // Thread-safe wrapper methods for created_sstable_handles_
   int add_created_sstable(const ObTableHandleV2 &handle);
@@ -160,7 +157,6 @@ private:
   common::ObArenaAllocator allocator_;
   common::ObSpinLock allocator_lock_;  // Protect concurrent access to allocator_
 public:
-  typedef common::hash::ObHashMap<ObForkSSTableTaskKey, ObSSTableIndexBuilder*> INDEX_BUILDER_MAP;
   bool is_inited_;
   int complement_data_ret_;
   ObLS *ls_;
@@ -168,8 +164,6 @@ public:
   ObTabletHandle dst_tablet_handle_;
   ObTabletMemberWrapper<ObTabletTableStore> snapshot_table_store_;
   ObTableStoreIterator table_store_iterator_;
-  INDEX_BUILDER_MAP index_builder_map_;
-  common::hash::ObHashMap<ObITable::TableKey, ObStorageSchema*> clipped_schemas_map_;
   ObTablesHandleArray created_sstable_handles_;
   lib::ObMutex created_sstable_handles_lock_;  // Protect concurrent access to created_sstable_handles_
   int64_t row_inserted_;
@@ -209,8 +203,6 @@ public:
   int init(ObTabletForkParam &param, ObTabletForkCtx &ctx);
   virtual int process() override;
 private:
-  int prepare_context();
-private:
   bool is_inited_;
   ObTabletForkParam *param_;
   ObTabletForkCtx *context_;
@@ -248,6 +240,7 @@ private:
   int prepare_macro_block_writer(
       const ObStorageSchema &clipped_storage_schema,
       ObWholeDataStoreDesc &data_desc,
+      ObSSTableIndexBuilder *&sst_idx_builder,
       ObMacroBlockWriter *&macro_block_writer);
   int process_rewrite_sstable_task(
       ObMacroBlockWriter *macro_block_writer,
