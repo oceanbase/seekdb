@@ -30,7 +30,8 @@ def main():
                     output += '\n'.join(line.decode(errors='replace') for line in stream
                                         if b'LAYOUT_RETENTION_' in line)
             expected = f'LAYOUT_RETENTION_PASS recovered={recovered} '
-            if 'LAYOUT_RETENTION_FAIL' in output or expected not in output:
+            if ('LAYOUT_RETENTION_FAIL' in output or expected not in output
+                    or (recovered and 'LAYOUT_RETENTION_EXACT_BODY V=10 after_head_gc=1' not in output)):
                 raise AssertionError(output[-10000:])
             experiment.record('layout_retention_verified', recovered=recovered, evidence=output)
             if not recovered:
@@ -41,7 +42,7 @@ def main():
                 experiment.record('crash_for_recovery', pid=experiment.proc.pid)
         experiment.record('PASS', case='layout_retention', no_old_reader=True,
                           mini_minor=True, crash_recovery=True, release_after_completion=True,
-                          paused_broadcast_without_freeze_row=True, concurrent_reader_handoff=True)
+                          paused_broadcast_without_freeze_row=True, concurrent_reader_handoff=True, exact_body_after_head_gc=True)
     finally:
         experiment.close()
 

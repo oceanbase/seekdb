@@ -15,9 +15,11 @@ namespace storage
 class ObStorageSchema;
 
 // Complete physical layouts, addressed only by an opaque identity. The caller
-// owns the transaction: DDL borrows its native transaction, compaction reads at
-// an already protected target SCN. Neither SQL catalogs nor Namespace services
-// are consulted here. A large layout uses several rows in the SAME MVCC view.
+// owns the transaction: DDL atomically publishes a MVCC head and immutable
+// (identity, definition version) bodies. Snapshot compaction selects the head
+// at its protected SCN; physical rewrites can retain an exact body reference
+// independently of that head's MVCC lifetime. Bodies remain until no physical
+// reference needs them. Neither SQL catalogs nor Namespace services are used.
 class StorageSchemaHistory final
 {
 public:
@@ -27,6 +29,14 @@ public:
   int publish(uint64_t layout_id, const ObStorageSchema &schema);
   int read(uint64_t layout_id, common::ObIAllocator &allocator, ObStorageSchema &schema);
   int read_version(uint64_t layout_id, int64_t &schema_version);
+  int read_published(uint64_t layout_id, int64_t schema_version,
+      common::ObIAllocator &allocator, ObStorageSchema &schema);
+  // Load an exact, still-referenced physical definition. A newer publication
+  // cannot substitute for it. The caller holds the tablet/SSTable reference
+  // which prevents retirement of this body while the read is registered.
+  static int read_published(InstanceMetaStore &store, uint64_t layout_id,
+      int64_t schema_version, int64_t deadline,
+      common::ObIAllocator &allocator, ObStorageSchema &schema);
   // Read a historical merge target protected by persisted freeze/GC state.
   // Registers the reader before checking that protection and local replay.
   static int read_at(InstanceMetaStore &store, uint64_t layout_id,

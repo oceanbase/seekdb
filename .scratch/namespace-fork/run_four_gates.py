@@ -26,6 +26,9 @@ gates = [
         [local / 'run_local_storage_schema_probe.py', '--binary', probe],
         *[[local / 'local_schema_install_probe.py', '--binary', probe, '--case', case]
           for case in ('mini', 'fork', 'fork_wide')],
+        *[[local / 'meta_layout_probe.py', '--binary', probe, '--owner', owner]
+          for owner in ('initial', 'child')],
+        [local / 'meta_layout_probe.py', '--binary', probe, '--owner', 'child', '--cold-parent'],
         [local / 'run_storage_schema_history_probe.py', '--binary', probe],
         [local / 'run_layout_retention_probe.py', '--binary', probe],
         [local / 'run_table_storage_layout_probe.py', '--binary', probe],

@@ -3,6 +3,25 @@
 目标以 [design-storage-schema-boundaries.md](design-storage-schema-boundaries.md) 为准。
 本文件记录实现和验证证据，不缩减已确认范围。2026-10-10 开始实施。
 
+### 当前推进：meta major 的确定布局
+
+- 将 G 的快照版本选择与不可变 `(G,V)` 正文分开，仍在同一原生事务写入；major/普通 medium 的 G@F 语义不变。旧 head 的 MVCC 回收不再自动消灭仍需被物理描述引用的正文。
+- meta major 改为使用 tablet 已记录的 G、V 取完整正文。删除仅由它调用的 `get_table_schema_to_merge` 和 SQL tablet->table 历史查找 helper；不再加载 Namespace SchemaService，不取 MIN 截断版本或最新定义回退。
+- 原生编译 `/tmp/seekdb-meta-layout-native-build-1.log` 通过。新增实际 meta 合并测试，并扩展历史、保留、重启探针，已加入四件套；结果如下。
+- 首次实际 meta 用例的调度注入放在 adaptive 入口，而普通模式 tablet 的后台不会进入该入口，因而首轮未实际触发 meta。已将测试触发点移到既有 minor 轮询；只绕过小数据的行数阈值，保留输入资格及真实 DAG、SSTable 安装。该修正仅在测试注入脚本，生产逻辑不加入特殊调度。
+- 历史正文测试 `/tmp/seekdb-meta-layout-history-test-1.log` 通过：多块正文、缩小后旧快照、最新事务精确读取旧 V、回滚 V 不可见、SQL 同事务、强制 mini/minor 和 kill/restart 均通过。
+- 保留测试 `/tmp/seekdb-meta-layout-retention-test-1.log` 通过：暂停且 freeze 行消失后的重启保护、读者交接仍有效。第二阶段推进 MVS 越过 F，旧 F 被拒绝，当前读取得 V=12，但精确 (G,10) 正文仍可读；标记 `LAYOUT_RETENTION_EXACT_BODY V=10 after_head_gc=1`。这证明正文不会随旧 head MVCC 回收消失，不表示正文 GC 已完成。
+- 生产源码全部注入已移除；构建 `/tmp/seekdb-meta-layout-production-build-1.log`、实际大合并 `/tmp/seekdb-meta-layout-production-major-test-1.log` 通过，冻结/广播/完成均为1791580286821641082，并核对实际物理 SSTable。
+- meta 测试初始 Namespace 第2轮因立即转储时弱读快照尚未覆盖新写入，原生输入策略报 `first minor upper trans version is bigger than tablet snapshot version`。驱动改为读取 current_scn 后等待实际 LS weak_read_scn，再发 minor freeze；没有更改生产输入资格。第3轮重复请求遇到合法的4213“上一轮未完成”，驱动改为继续检查实际 SSTable，其他错误仍立即失败。
+- 孩子第1/2轮在没有已合并的父 major 基线时请求单 tablet medium，返回4109，日志明确 `NO_MAJOR_SSTABLE`。当前 meta 用例改为先建立真实父基线再 fork，这是 meta 输入场景的准备条件；**当时只证明请求时尚无 major，不能据此判断会永久缺失；已保留冷父场景单独验证，结果见下。** 第3轮同样修正4213等待。
+- 第4轮父、子均实际生成 META SSTable，日志确认 selected=local V 且 head>V；驱动误用内部枚举字符串 META_MAJOR 查询虚拟表，视图实际展示 META，导致结果检查超时。已修正视图断言并保留该轮失败证据，继续端到端读回/重启验证。
+- 新正文表示下，父子旧 F 合并回归 `/tmp/seekdb-meta-layout-old-freeze-test-1.log` 通过：F=1791580493089887012，父 G4762/V1791580368662672，子 G5070/V1791580368525136；F 后 DDL 和实际 mini 完成后仍取各自 G@F，C>F 的新 tablet 明确排除，合并后新列读写正确。
+- 第5轮父、子完整通过：`/tmp/seekdb-meta-layout-initial-test-5.log` 使用 G5037/V1791580562758872（head=1791580572782104）；`/tmp/seekdb-meta-layout-child-test-5.log` 使用 G5255/V1791580572566200（head=1791580582393464）。实际 META SSTable 到达各自目标快照，新增列/默认值及父子隔离正确，kill/restart 后读回相同。未改生产输入/调度规则，仅测试控制小规模 meta 触发。
+- 新增 `meta_layout_probe.py --owner child --cold-parent`，在四件套保留“父尚无已合并 major 的 fork”路径，单独验证上述 NO_MAJOR_SSTABLE 时序。不能把只建立过父 major 的成功用例替代它。
+- 冷父专项 `/tmp/seekdb-meta-layout-cold-child-test-1.log` 通过，未预先建立父 major：等待原生就绪后，孩子实际建立 major，随后按自己的旧 V 完成 META；父子新列读回、kill/restart 后结果正确。前述4109是请求时的未就绪状态，当前没有证明是持续缺失基线的缺陷。驱动继续等待实际首份 major，并保留有界失败，未在生产路径伪造基线或新增特例。
+- 正文/G/绑定 GC、fork 源重写归属、统一进度和逻辑 checksum、实际主备仍未完成。
+
+
 ## 必须完成
 
 - [ ] 真实物理创建提交版本 C：所有创建、复制、持久化和恢复路径；统一合并资格判断。
@@ -23,7 +42,7 @@
 - 创建/删除 MDS 数据独立保存 physical_create_version_；物化仍保留原来的逻辑可见性。基础编译、物化回滚与崩溃恢复验证已通过（见后文）；物理调度资格正在接线，上层进度/checksum 尚未统一。
 - 已确认 InstanceMetaStore 可按 tablet ID 创建独立存储实例，支持借用 SQL 原生事务；布局存储复用该基础。
 - 当前 KV 单值上限 64 KiB，完整布局最大尺寸需要处理，不能默认为任意表定义都能放入一行。
-- 新增 `StorageSchemaHistory`：按 `(G, chunk)` 存储完整布局，首块保存大小和来源版本，小布局一行；大布局按固定位置分块，发布/缩小和读取均在同一原生事务快照中完成。拒绝简化 schema 和同 G 的倒退/重复版本，首次创建不会覆盖现有布局。
+- 新增 `StorageSchemaHistory`：现按 `(G,-1,0)` 保存 MVCC 版本选择，按 `(G,V,chunk)` 保存完整正文，首块含大小和来源版本；大布局按固定位置分块，发布及读取均在同一原生事务快照中完成。旧版 `(G,chunk)` 表示已由上节方案取代。拒绝简化 schema 和同 G 的倒退/重复版本，首次创建不会覆盖现有布局。
 - 专用 LS 内部 tablet 已接入创建、删除、mini/minor、活跃读者和持久 freeze 保留。持久保留的故障与恢复证据见后文，完整主备和逻辑校验仍须验证。
 - `ObCreateTabletSchema` 与 `ObTabletMeta` 已增加稳定 G，并覆盖复制及持久化；上层分配/绑定已接入共同 DDL/创建入口。major 和普通 medium 已切换布局读取；freeze 准备接线及针对性验证见下文。meta major、完整进度/checksum、布局回收与实际主备仍未完成。
 

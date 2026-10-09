@@ -58,12 +58,6 @@ public:
     const ObTablet &tablet,
     const ObMediumCompactionInfoList &medium_list,
     int64_t &max_sync_medium_scn);
-  static int get_table_schema_to_merge(
-    const ObTablet &tablet,
-    const int64_t schema_version,
-    ObIAllocator &allocator,
-    storage::ObStorageSchema &storage_schema,
-    bool &is_skip_merge_index);
   static int read_layout_for_merge(
     const ObTablet &tablet,
     const share::SCN &target,
@@ -78,11 +72,6 @@ public:
   int schedule_next_medium_for_leader(
     const int64_t major_snapshot,
     bool &medium_clog_submitted);
-  static int get_table_id(
-      ObMultiVersionSchemaService &schema_service,
-      const ObTabletID &tablet_id,
-      const int64_t schema_version,
-      uint64_t &table_id);
   static int check_if_schema_changed(
     const ObTablet &tablet,
     const ObStorageSchema &storage_schema,

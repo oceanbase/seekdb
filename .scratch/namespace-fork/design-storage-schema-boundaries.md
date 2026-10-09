@@ -13,7 +13,7 @@
 ## 1. 已确定的整体结构
 
 - SQL 目录继续归所属 Namespace；schema ID 不编码 Namespace。本轮适配既有的Namespace目录归属，不新增Namespace独立DDL调度能力，不改变已有DDL并发模式。
-- 一个专用内部元数据 tablet 复用 InstanceMetaStore、原生事务与 MVCC。一个物理表对象 G 一条布局 key，同一表的分区共享 G；G 是稳定对象身份，布局版本随 DDL 改变。
+- 一个专用内部元数据 tablet 复用 InstanceMetaStore、原生事务与 MVCC。一个物理表对象 G 具有一个 MVCC 版本选择记录和按 (G,V) 保存的完整正文，同一表的分区共享 G；G 是稳定对象身份，布局版本随 DDL 改变。
 - DDL 在同一个原生事务中修改 SQL 目录、已有目录发布信息、受影响对象的完整 ObStorageSchema 和相应物理对象元数据。版本号标识定义，提交 SCN 决定可见性。不另加一份目录发布记录。
 - 物理合并输入为物理对象与目标 F，通过 `read_layout(G, F)` 获得布局，随后固定到已有 medium_info 中。存储层不解析 Namespace，也不反查 SQL SchemaService。
 - mini/minor 复用原生多版本保留能力；完整历史在磁盘，按需装载。各tablet已有storage_schema副本及其本地装载方式继续保留，不改成共享对象；其本地描述与DDL发布的完整布局历史职责不同，见4.1，不把本地描述更新反向当作一次DDL历史发布。
@@ -136,7 +136,21 @@
 
 存储层的输入为物理tablet中保存的布局ID与目标F，读取接口为 `read_layout(G, F)`，输出完整物理描述。它不反查tablet属于哪张SQL表，不枚举表的分区，不解析Namespace或父链。新增加的是布局引用及其持久化/保留约束，不能把这些真实成本说成只是换了变量名；按表组织共享关系和逻辑checksum校验继续归上层。现有各tablet的本地schema地址与这个新布局ID并存，分别承担上述职责。
 
-### 4.3 上层绑定的实现与锁顺序
+### 4.3 快照选版本与物理正文的生命周期
+
+实施核对发现 meta major 会合入确定事务的 minor，将结果快照推进到 tablet.snapshot_version；tablet 本地 schema 又可能已被 mini 简化。已完成 major 的 medium_info 会被回收，因此不能永久借用它，也不能使用最新 SQL 定义或把新定义标成旧版本。
+
+存储表示分为：
+
+- `(G,-1,0)`：MVCC 版本选择记录，保存定义 V 和正文长度。按 F 读取它，得到 F 时已提交的定义。
+- `(G,V,chunk)`：该版不可变的完整 ObStorageSchema 正文。较新的 DDL 不覆盖或删除它；较大的正文仍分块保存在同一 tablet。
+- DDL 在同一个原生事务中发布选择记录和全部正文；V 包括合法的 bootstrap 版本 0。同一个 G 的定义 V 不复用。
+
+major/普通 medium 按 G@F 选择版本，再在同一读快照取正文；meta major 持有物理 tablet，按其本地描述中明确的 G、V 取得完整正文，恢复被 mini 简化的列描述。它的物理输入选择和目标快照仍按已有 meta major 规则，不因布局读取改为最新快照。
+
+这增加了每次发布一条小型 head 写入及读取正文前的一次版本选择。正文按表版本保存，保留现有各 tablet 本地副本，不增加常驻历史缓存。旧 head 的 MVCC 版本可以回收，仍被物理对象引用的正文须继续存在；正文和 G 的最终回收必须核对物理对象、任务及 fork 来源。**当前实现尚未完成正文/G 的引用回收，不把永久保留视为完成方案。** fork 重写所用源 SSTable 描述归属也须继续核对，不能假设来源 tablet 的当前 G、V 永远等于所有输入 SSTable 的原始布局。
+
+### 4.4 上层绑定的实现与锁顺序
 
 实施补充：上层 `TableStorageLayouts` 在专用 schema tablet 中维护不可变的 `(Namespace, table_id) -> G` 绑定。它只表示对象身份，不记录目录发布版本或串行前缀；fork 不复制这些行。首次绑定用非等待原生 INSERT 裁决竞争，失败事务整体回滚，已有绑定读取不加锁，从而避免“先取绑定再等根锁”与物化“持根锁再取绑定”形成等待环。SQL 事务保留借用 KV 的资源直到提交/回滚及连接释放之后。绑定与 G 的最终删除仍须纳入本轮引用回收，当前接线没有把永久保留这些行当作完成方案。
 

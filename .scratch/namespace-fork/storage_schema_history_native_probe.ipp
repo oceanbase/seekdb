@@ -37,11 +37,12 @@ static int run_storage_schema_history_native_probe()
     if (rc == OB_SUCCESS) { rc = physical.init(allocator, sql, false); }
     return rc;
   };
-  auto read_equal = [&](Tx &tx, uint64_t id, const ObStorageSchema &expected) -> int {
+  auto read_equal = [&](Tx &tx, uint64_t id, const ObStorageSchema &expected, bool exact = false) -> int {
     ObArenaAllocator memory(ObMemAttr("LayoutCompare"));
     ObStorageSchema actual;
     StorageSchemaHistory history(store, tx);
-    int rc = history.read(id, memory, actual);
+    int rc = exact ? history.read_published(id, expected.get_schema_version(), memory, actual)
+                   : history.read(id, memory, actual);
     if (rc != OB_SUCCESS) { return rc; }
     std::string left(expected.get_serialize_size(), '\0'), right(actual.get_serialize_size(), '\0');
     int64_t a = 0, b = 0;
@@ -84,7 +85,7 @@ static int run_storage_schema_history_native_probe()
     LAYOUT_CALL(read_equal(old_reader, layout_id, large));
 
     // Dump both generations and ask minor merge to retain the large old value,
-    // including chunks that the new smaller value has deleted.
+    // including the old version's chunks after a smaller publication.
     ObLS *ls = nullptr;
     LAYOUT_CALL(share::server_service<ObLSService>()->get_ls(ls));
     const ObTabletID tablet_id(ObTabletID::LS_STORAGE_SCHEMA_TABLET_ID);
@@ -188,6 +189,13 @@ static int run_storage_schema_history_native_probe()
   Tx reader;
   LAYOUT_CALL(store.begin(reader, deadline(), true));
   LAYOUT_CALL(read_equal(reader, layout_id, small));
+  // A fresh reader can resolve a retained physical definition independently of
+  // which head it sees. Equal versions under different G remain independent.
+  LAYOUT_CALL(read_equal(reader, layout_id, large, true));
+  LAYOUT_CALL(read_equal(reader, layout_id + 1, large, true));
+  ObStorageSchema absent;
+  LAYOUT_CHECK(StorageSchemaHistory(store, reader).read_published(
+      layout_id, 12, allocator, absent) == OB_ENTRY_NOT_EXIST);
   LAYOUT_CALL(store.commit(reader));
 
   // C is commit visibility, not inherited S or the commit log SCN. Preserve it
@@ -218,7 +226,7 @@ static int run_storage_schema_history_native_probe()
   LAYOUT_CHECK(status.create_commit_version_ == 200 && status.physical_create_version_ == 200);
   restored.reset();
   LAYOUT_CHECK(restored.physical_create_version_ == transaction::ObTransVersion::INVALID_TRANS_VERSION);
-  fprintf(stderr, "LAYOUT_HISTORY_PASS recovered=%d large_bytes=%ld shrink=1 rollback=1 snapshot=1 minor=1 shared_sql_tx=1 physical_birth_codec=1\n",
+  fprintf(stderr, "LAYOUT_HISTORY_PASS recovered=%d large_bytes=%ld shrink=1 exact_old_body=1 aborted_body_absent=1 rollback=1 snapshot=1 minor=1 shared_sql_tx=1 physical_birth_codec=1\n",
       recovered, large.get_serialize_size());
 #undef LAYOUT_CALL
 #undef LAYOUT_CHECK

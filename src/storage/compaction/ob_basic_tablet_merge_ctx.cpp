@@ -24,7 +24,8 @@
 #include "storage/ob_gc_upper_trans_helper.h"
 #include "ob_medium_list_checker.h"
 #include "data_plane/report/ob_tablet_report.h"
-#include "share/schema/ob_schema_runtime_service.h"
+#include "storage/instance_meta/storage_schema_history.h"
+#include "storage/tx_storage/ob_access_service.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
 #include "storage/tablet/ob_mds_scan_param_helper.h"
 #include "share/ob_structured_event_logger.h"
@@ -1246,23 +1247,27 @@ int ObBasicTabletMergeCtx::get_meta_compaction_info()
   int64_t full_stored_col_cnt = 0;
   int64_t schema_version = 0;
   ObStorageSchema *storage_schema = nullptr;
-  bool is_building_index = false; // placeholder
+  auto *access = share::server_service<storage::ObAccessService>();
+  const uint64_t layout_id = tablet->get_tablet_meta().storage_layout_id_;
   const uint64_t data_version = DATA_CURRENT_VERSION;
 
   if (OB_UNLIKELY(!is_meta_major_merge(get_merge_type())
                || nullptr != static_param_.schema_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected static param", K(ret), K(static_param_), KPC(static_param_.schema_));
+  } else if (OB_ISNULL(access)) {
+    ret = OB_NOT_INIT;
   } else if (OB_FAIL(ObStorageSchemaUtil::alloc_storage_schema(mem_ctx_.get_allocator(), storage_schema))) {
-  } else if (OB_FAIL(tablet->get_schema_version_from_storage_schema(schema_version))){
-  } else if (OB_FAIL(ObMediumCompactionScheduleFunc::get_table_schema_to_merge(*tablet,
-                                                                               schema_version,
-                                                                               mem_ctx_.get_allocator(),
-                                                                               *storage_schema,
-                                                                               is_building_index))) {
-    if (OB_TABLE_IS_DELETED != ret) {
-      LOG_WARN("failed to get table schema", KR(ret), KPC(this));
-    }
+  } else if (OB_FAIL(tablet->get_schema_version_from_storage_schema(schema_version))) {
+  } else if (OB_FAIL(storage::StorageSchemaHistory::read_published(
+      access->storage_schema_store(), layout_id, schema_version,
+      ObTimeUtility::current_time() + 30L * 1000 * 1000,
+      mem_ctx_.get_allocator(), *storage_schema))) {
+    // The held tablet owns this definition reference. Mini may have retained
+    // only a simplified body; recover the exact complete definition without
+    // replacing its version with a newer catalog or publication head.
+    LOG_WARN("failed to read physical definition for meta merge", KR(ret),
+        K(layout_id), K(schema_version), KPC(this));
   } else if (OB_FAIL(storage_schema->get_stored_column_count_in_sstable(full_stored_col_cnt))) {
   } else if (OB_UNLIKELY(tablet->get_last_major_column_count() > full_stored_col_cnt)) {
     ret = OB_ERR_UNEXPECTED;

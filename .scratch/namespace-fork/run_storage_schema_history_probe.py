@@ -30,9 +30,10 @@ def main():
                     output += '\n'.join(line.decode(errors='replace') for line in stream
                                         if b'LAYOUT_HISTORY_' in line)
             expected = f'LAYOUT_HISTORY_PASS recovered={recovered} '
-            if 'LAYOUT_HISTORY_FAIL' in output or expected not in output:
+            if ('LAYOUT_HISTORY_FAIL' in output or expected not in output
+                    or 'exact_old_body=1 aborted_body_absent=1' not in output):
                 raise AssertionError(output[-10000:])
-            experiment.record('layout_history_verified', recovered=recovered)
+            experiment.record('layout_history_verified', recovered=recovered, evidence=output)
             if not recovered:
                 experiment.connection.close()
                 experiment.connection = None
@@ -41,7 +42,7 @@ def main():
                 experiment.record('crash_for_recovery', pid=experiment.proc.pid)
         experiment.record('PASS', case='storage_schema_history', chunks=True, shrink=True,
                           native_mvcc=True, rollback=True, dump=True, minor=True, shared_sql_tx=True, crash_recovery=True,
-                          physical_birth_codec=True)
+                          physical_birth_codec=True, exact_old_body=True, aborted_body_absent=True)
     finally:
         experiment.close()
 

@@ -17,7 +17,6 @@
 #include "storage/compaction/ob_medium_compaction_func.h"
 #include "share/rc/ob_server_runtime.h"
 #include "share/tablet/ob_tablet_table_operator.h"
-#include "share/schema/ob_schema_runtime_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ob_partition_range_spliter.h"
 #include "storage/truncate_info/ob_mds_info_distinct_mgr.h"
@@ -849,115 +848,6 @@ int ObMediumCompactionScheduleFunc::choose_encoding_limit(ObMediumCompactionInfo
 {
   int ret = OB_SUCCESS;
   medium_info.encoding_granularity_ = GCONF.ob_encoding_granularity;
-  return ret;
-}
-
-int ObMediumCompactionScheduleFunc::get_table_id(
-    ObMultiVersionSchemaService &schema_service,
-    const ObTabletID &tablet_id,
-    const int64_t schema_version,
-    uint64_t &table_id)
-{
-  int ret = OB_SUCCESS;
-  table_id = OB_INVALID_ID;
-
-  ObSEArray<ObTabletID, 1> tablet_ids;
-  ObSEArray<uint64_t, 1> table_ids;
-  if (OB_FAIL(tablet_ids.push_back(tablet_id))) {
-  } else if (OB_FAIL(schema_service.get_tablet_to_table_history(tablet_ids, schema_version, table_ids))) {
-  } else if (OB_UNLIKELY(table_ids.empty())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected empty table id", K(ret), K(table_ids));
-  } else if (table_ids.at(0) == OB_INVALID_ID){
-    ret = OB_TABLE_IS_DELETED;
-    LOG_WARN("table is deleted", K(ret), K(tablet_id), K(schema_version));
-  } else {
-    table_id = table_ids.at(0);
-  }
-  return ret;
-}
-
-int ObMediumCompactionScheduleFunc::get_table_schema_to_merge(
-    const ObTablet &tablet,
-    const int64_t schema_version,
-    ObIAllocator &allocator,
-    ObStorageSchema &storage_schema,
-    bool &is_skip_merge_index)
-{
-  int ret = OB_SUCCESS;
-  
-  const ObTabletID &tablet_id = tablet.get_tablet_meta().tablet_id_;
-  ObMultiVersionSchemaService *resolved_schema_service = nullptr;
-  uint64_t schema_tablet_id = tablet_id.id();
-  auto *schema_runtime = share::server_service<schema::ObSchemaRuntimeService>();
-  int64_t effective_schema_version = schema_version;
-  uint64_t table_id = OB_INVALID_ID;
-  schema::ObSchemaGetterGuard schema_guard;
-  const ObTableSchema *table_schema = nullptr;
-  int64_t save_schema_version = schema_version;
-  is_skip_merge_index = false;
-
-  if (OB_ISNULL(schema_runtime)) {
-    ret = OB_NOT_INIT;
-  } else if (OB_FAIL(schema_runtime->resolve_tablet_schema(
-                 tablet_id.id(), resolved_schema_service, schema_tablet_id))) {
-    LOG_WARN("failed to resolve tablet schema", K(ret), K(tablet_id));
-  } else if (OB_FAIL(resolved_schema_service->get_live_runtime_refreshed_schema_version(
-                 save_schema_version))) {
-    LOG_WARN("failed to get namespace schema version", K(ret), K(tablet_id));
-  } else if (FALSE_IT(effective_schema_version = MIN(schema_version, save_schema_version))) {
-  } else if (OB_FAIL(get_table_id(*resolved_schema_service,
-                                 tablet_id, effective_schema_version, table_id))) {
-    if (OB_TABLE_IS_DELETED != ret) {
-      LOG_WARN("failed to get table id", K(ret), K(tablet_id));
-    }
-  } else if (OB_FAIL(resolved_schema_service->retry_get_schema_guard(effective_schema_version,
-                                                            table_id,
-                                                            schema_guard,
-                                                            save_schema_version))) {
-    if (OB_TABLE_IS_DELETED == ret) {
-      LOG_WARN("table is deleted", K(ret), K(table_id));
-    } else if (OB_ERR_SCHEMA_HISTORY_EMPTY == ret) {
-      LOG_WARN("schema history may recycle", K(ret));
-    } else {
-      LOG_WARN("Fail to get schema", K(ret), K(schema_version), K(table_id));
-    }
-  } else if (OB_UNLIKELY(save_schema_version < effective_schema_version)) {
-    ret = OB_SCHEMA_ERROR;
-    LOG_WARN("can not use older schema version", K(ret), K(schema_version), K(save_schema_version), K(table_id));
-  } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
-  } else if (NULL == table_schema) {
-    ret = OB_TABLE_IS_DELETED;
-    LOG_WARN("table is deleted", K(ret), K(table_id));
-  }
-
-#ifdef ERRSIM
-  if (OB_SUCC(ret)) {
-    static bool have_set_errno = false;
-    static ObTabletID errno_tablet_id;
-    ret = OB_E(EventTable::EN_SCHEDULE_MAJOR_GET_TABLE_SCHEMA) ret;
-    if (OB_FAIL(ret)) {
-      if (tablet_id.id() > ObTabletID::MIN_USER_TABLET_ID
-        && tablet_id != tablet.get_tablet_meta().data_tablet_id_
-        && ATOMIC_BCAS(&have_set_errno, false, true)) {
-        LOG_INFO("ERRSIM EN_SCHEDULE_MAJOR_GET_TABLE_SCHEMA", K(ret), K(table_id), K(tablet_id), K(storage_schema));
-        errno_tablet_id = tablet_id;
-        return ret;
-      } else {
-        ret = OB_SUCCESS;
-      }
-    }
-  }
-#endif
-  // Build the storage schema used by the scheduled merge.
-  if (FAILEDx(storage_schema.init(allocator, *table_schema, false/*skip_column_info*/))) {
-    LOG_WARN("failed to init storage schema", K(ret), K(schema_version), K(tablet), KPC(table_schema));
-  } else {
-    LOG_INFO("get schema to merge", K(tablet_id), K(table_id), K(schema_version), K(save_schema_version),
-              K(storage_schema), K(*reinterpret_cast<const ObPrintableTableSchema*>(table_schema)), K(is_skip_merge_index),
-              "is_hidden_table", table_schema->is_user_hidden_table(),
-              "is_invalid_index", table_schema->is_index_table() && !table_schema->can_read_index());
-  }
   return ret;
 }
 

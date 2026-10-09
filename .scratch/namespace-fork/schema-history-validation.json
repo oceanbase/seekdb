@@ -1,5 +1,5 @@
 {
-  "scope": "Foundation, DDL/layout publication, durable retention, physical C membership, major/ordinary-medium G@target selection, primary freeze readiness/terminal timeout/DDL-fork races and targeted recovery verified in listed runs. Full progress/checksum, meta major layout lifetime, layout GC and standby integration remain incomplete.",
+  "scope": "Foundation, atomic DDL/layout publication, durable retention, physical C membership, major/ordinary medium G@target, primary freeze preparation and meta-major exact G/V bodies have targeted evidence below. Unified progress/checksum, layout/body/binding GC, fork rewrite input provenance, legacy freeze.schema_version removal and full standby integration remain incomplete.",
   "runs": [
     {
       "name": "layout_history",
@@ -3944,6 +3944,614 @@
         }
       ],
       "notes": "PASS with all test hooks removed: frozen=broadcast=last; actual MAJOR exists only under the physical tablet ID."
+    },
+    {
+      "name": "version_addressed_layout_bodies",
+      "log": "/tmp/seekdb-meta-layout-history-test-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-meta-layout-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_storage_schema_history_dem2jfot",
+          "pid": 694787,
+          "port": 12807
+        },
+        {
+          "event": "layout_history_verified",
+          "recovered": 0
+        },
+        {
+          "event": "crash_for_recovery",
+          "pid": 694787
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-meta-layout-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_storage_schema_history_dem2jfot",
+          "pid": 697362,
+          "port": 12807
+        },
+        {
+          "event": "layout_history_verified",
+          "recovered": 1
+        },
+        {
+          "event": "PASS",
+          "case": "storage_schema_history",
+          "chunks": true,
+          "shrink": true,
+          "native_mvcc": true,
+          "rollback": true,
+          "dump": true,
+          "minor": true,
+          "shared_sql_tx": true,
+          "crash_recovery": true,
+          "physical_birth_codec": true
+        },
+        {
+          "event": "stopped",
+          "pid": 697362,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_storage_schema_history_dem2jfot/data.tar.gz",
+          "bytes": 5854042
+        }
+      ],
+      "outcome": "PASS",
+      "native_evidence": [
+        "LAYOUT_HISTORY_PASS recovered=0 large_bytes=140127 shrink=1 exact_old_body=1 aborted_body_absent=1 rollback=1 snapshot=1 minor=1 shared_sql_tx=1 physical_birth_codec=1",
+        "LAYOUT_HISTORY_PASS recovered=1 large_bytes=140127 shrink=1 exact_old_body=1 aborted_body_absent=1 rollback=1 snapshot=1 minor=1 shared_sql_tx=1 physical_birth_codec=1"
+      ]
+    },
+    {
+      "name": "exact_body_after_head_gc",
+      "log": "/tmp/seekdb-meta-layout-retention-test-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-meta-layout-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_h_yrr25t",
+          "pid": 694895,
+          "port": 57669
+        },
+        {
+          "event": "layout_retention_verified",
+          "recovered": 0,
+          "evidence": "LAYOUT_RETENTION_PASS recovered=0 F=1791579965946405018 active=1791579967435766004 durable=1791579965946405018 mini_minor=1 released=0 handoff=0\n"
+        },
+        {
+          "event": "crash_for_recovery",
+          "pid": 694895
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-meta-layout-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_h_yrr25t",
+          "pid": 697312,
+          "port": 57669
+        },
+        {
+          "event": "layout_retention_verified",
+          "recovered": 1,
+          "evidence": "LAYOUT_RETENTION_EXACT_BODY V=10 after_head_gc=1\n\nLAYOUT_RETENTION_NEW_TARGET old=1791579965946405018 selected=1791580015227820011 V=12\n\nLAYOUT_RETENTION_PASS recovered=1 F=1791579965946405018 active=1791579986126394000 durable=1791579990049525981 mini_minor=1 released=1 handoff=1\n"
+        },
+        {
+          "event": "PASS",
+          "case": "layout_retention",
+          "no_old_reader": true,
+          "mini_minor": true,
+          "crash_recovery": true,
+          "release_after_completion": true,
+          "paused_broadcast_without_freeze_row": true,
+          "concurrent_reader_handoff": true
+        },
+        {
+          "event": "stopped",
+          "pid": 697312,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_h_yrr25t/data.tar.gz",
+          "bytes": 6022104
+        }
+      ],
+      "outcome": "PASS"
+    },
+    {
+      "name": "production_major_versioned_bodies",
+      "log": "/tmp/seekdb-meta-layout-production-major-test-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_uovg4fs8",
+          "pid": 713250,
+          "port": 55961
+        },
+        {
+          "event": "sstable_identity",
+          "tablet_id": 200001,
+          "rows": []
+        },
+        {
+          "event": "sstable_identity",
+          "tablet_id": 4611686155866541377,
+          "rows": [
+            [
+              4611686155866541377,
+              "MAJOR"
+            ]
+          ]
+        },
+        {
+          "event": "PASS",
+          "case": "major_progress_physical_ids",
+          "rows": [
+            [
+              1791580286821641082,
+              1791580286821641082,
+              1791580286821641082
+            ]
+          ]
+        },
+        {
+          "event": "stopped",
+          "pid": 713250,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_uovg4fs8/data.tar.gz",
+          "bytes": 9039037
+        }
+      ],
+      "outcome": "PASS"
+    },
+    {
+      "name": "old_freeze_versioned_bodies",
+      "log": "/tmp/seekdb-meta-layout-old-freeze-test-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-meta-layout-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_merge_layout_pahbs22j",
+          "pid": 717199,
+          "port": 19841
+        },
+        {
+          "event": "freeze_selected",
+          "frozen": 1791580493089887012,
+          "parent_tablet": 4611686155866541377,
+          "child_tablet": 4611686430744448321,
+          "parent_version": 1791580368662672,
+          "child_version": 1791580368525136
+        },
+        {
+          "event": "PASS",
+          "case": "physical_merge_layout",
+          "frozen": 1791580493089887012,
+          "layouts": {
+            "4611686155866541377": {
+              "tablet": 4611686155866541377,
+              "G": 4762,
+              "C": 1791580367958091029,
+              "F": 1791580493089887012,
+              "V": 1791580368662672,
+              "ret": 0
+            },
+            "4611686430744448321": {
+              "tablet": 4611686430744448321,
+              "G": 5070,
+              "C": 1791580368602955014,
+              "F": 1791580493089887012,
+              "V": 1791580368525136,
+              "ret": 0
+            }
+          },
+          "late": {
+            "tablet": 4611686155866541378,
+            "C": 1791580496453073053,
+            "F": 1791580493089887012,
+            "member": 0,
+            "satisfied": 1,
+            "complete": 1,
+            "state": 0,
+            "ret": 0
+          },
+          "post_freeze_ddl": true,
+          "post_freeze_mini": true,
+          "independent_branches": true
+        },
+        {
+          "event": "stopped",
+          "pid": 717199,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_merge_layout_pahbs22j/data.tar.gz",
+          "bytes": 11854476
+        }
+      ],
+      "outcome": "PASS"
+    },
+    {
+      "name": "meta_layout_initial_1",
+      "log": "/tmp/seekdb-meta-layout-initial-test-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-meta-layout-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_initial_7qxbnz5s",
+          "pid": 694793,
+          "port": 24615
+        },
+        {
+          "event": "stopped",
+          "pid": 694793,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_initial_7qxbnz5s/data.tar.gz",
+          "bytes": 7810277
+        }
+      ],
+      "outcome": "FAIL",
+      "failure_tail": "{\"event\": \"setup\", \"binary\": \"/data/1/nijia.nj/test/seekdb-meta-layout-native\", \"base\": \"/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_initial_7qxbnz5s\", \"pid\": 694793, \"port\": 24615}\n{\"event\": \"sql\", \"sql\": \"CREATE DATABASE merge_layout\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"CREATE TABLE merge_layout.t(id INT PRIMARY KEY,v INT)\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"INSERT INTO merge_layout.t VALUES(1,10)\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"ALTER SYSTEM MINOR FREEZE\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"ALTER SYSTEM MAJOR FREEZE TABLET_ID=4611686155866541377\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"ALTER SYSTEM MAJOR FREEZE TABLET_ID=4611686155866541377\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"ALTER SYSTEM MAJOR FREEZE TABLET_ID=4611686155866541377\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"ALTER TABLE merge_layout.t ADD COLUMN extra INT DEFAULT 7\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"INSERT INTO merge_layout.t VALUES(2,30,8)\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"ALTER SYSTEM MINOR FREEZE\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"ALTER TABLE merge_layout.t ADD COLUMN late_col INT DEFAULT 11\", \"rows\": []}\n{\"event\": \"stopped\", \"pid\": 694793, \"returncode\": -9}\n{\"event\": \"data_archived\", \"path\": \"/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_initial_7qxbnz5s/data.tar.gz\", \"bytes\": 7810277}\n/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.\n  from cryptography.hazmat.backends import default_backend\nTraceback (most recent call last):\n  File \".scratch/namespace-fork/meta_layout_probe.py\", line 130, in <module>\n    p.add_argument('--binary', required=True)\n  File \".scratch/namespace-fork/meta_layout_probe.py\", line 93, in run\n    assert head > version > initial\n  File \"/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/physical_merge_layout_probe.py\", line 64, in wait_for\n    raise AssertionError(message)\nAssertionError: meta did not select a layout\n"
+    },
+    {
+      "name": "meta_layout_initial_2",
+      "log": "/tmp/seekdb-meta-layout-initial-test-2.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-meta-layout-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_initial_drst4j26",
+          "pid": 701985,
+          "port": 14293
+        },
+        {
+          "event": "stopped",
+          "pid": 701985,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_initial_drst4j26/data.tar.gz",
+          "bytes": 7981683
+        }
+      ],
+      "outcome": "FAIL",
+      "failure_tail": "{\"event\": \"setup\", \"binary\": \"/data/1/nijia.nj/test/seekdb-meta-layout-native-v2\", \"base\": \"/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_initial_drst4j26\", \"pid\": 701985, \"port\": 14293}\n{\"event\": \"sql\", \"sql\": \"CREATE DATABASE merge_layout\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"CREATE TABLE merge_layout.t(id INT PRIMARY KEY,v INT)\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"INSERT INTO merge_layout.t VALUES(1,10)\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"ALTER SYSTEM MINOR FREEZE\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"ALTER SYSTEM MAJOR FREEZE TABLET_ID=4611686155866541377\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"ALTER SYSTEM MAJOR FREEZE TABLET_ID=4611686155866541377\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"ALTER SYSTEM MAJOR FREEZE TABLET_ID=4611686155866541377\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"ALTER TABLE merge_layout.t ADD COLUMN extra INT DEFAULT 7\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"INSERT INTO merge_layout.t VALUES(2,30,8)\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"ALTER SYSTEM MINOR FREEZE\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"ALTER TABLE merge_layout.t ADD COLUMN late_col INT DEFAULT 11\", \"rows\": []}\n{\"event\": \"stopped\", \"pid\": 701985, \"returncode\": -9}\n{\"event\": \"data_archived\", \"path\": \"/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_initial_drst4j26/data.tar.gz\", \"bytes\": 7981683}\n/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.\n  from cryptography.hazmat.backends import default_backend\nTraceback (most recent call last):\n  File \".scratch/namespace-fork/meta_layout_probe.py\", line 130, in <module>\n    exp.record('crash_for_recovery', pid=exp.proc.pid)\n  File \".scratch/namespace-fork/meta_layout_probe.py\", line 93, in run\n    _, version = definition(exp, child)\n  File \"/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/physical_merge_layout_probe.py\", line 64, in wait_for\n    raise AssertionError(message)\nAssertionError: meta did not select a layout\n"
+    },
+    {
+      "name": "meta_layout_initial_3",
+      "log": "/tmp/seekdb-meta-layout-initial-test-3.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-meta-layout-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_initial_pijwzgw6",
+          "pid": 713227,
+          "port": 45821
+        },
+        {
+          "event": "stopped",
+          "pid": 713227,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_initial_pijwzgw6/data.tar.gz",
+          "bytes": 6417595
+        }
+      ],
+      "outcome": "FAIL",
+      "failure_tail": "ography. The next release of cryptography will remove support for Python 3.8.\n  from cryptography.hazmat.backends import default_backend\nTraceback (most recent call last):\n  File \".scratch/namespace-fork/meta_layout_probe.py\", line 149, in <module>\n    run(a.binary, a.owner)\n  File \".scratch/namespace-fork/meta_layout_probe.py\", line 76, in run\n    base = baseline(tablet)\n  File \".scratch/namespace-fork/meta_layout_probe.py\", line 72, in baseline\n    return wait_for(installed, 'initial major not installed', 180)\n  File \"/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/physical_merge_layout_probe.py\", line 60, in wait_for\n    value = check()\n  File \".scratch/namespace-fork/meta_layout_probe.py\", line 69, in installed\n    exp.sql(f'ALTER SYSTEM MAJOR FREEZE TABLET_ID={tablet}')\n  File \"/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_fork_prototype.py\", line 116, in sql\n    cur.execute(statement)\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/cursors.py\", line 153, in execute\n    result = self._query(query)\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/cursors.py\", line 322, in _query\n    conn.query(q)\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py\", line 575, in query\n    self._affected_rows = self._read_query_result(unbuffered=unbuffered)\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py\", line 826, in _read_query_result\n    result.read()\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py\", line 1203, in read\n    first_packet = self.connection._read_packet()\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py\", line 782, in _read_packet\n    packet.raise_for_error()\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/protocol.py\", line 219, in raise_for_error\n    err.raise_mysql_exception(self._data)\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/err.py\", line 150, in raise_mysql_exception\n    raise errorclass(errno, errval)\npymysql.err.OperationalError: (4213, 'last major freeze not finish')\n"
+    },
+    {
+      "name": "meta_layout_initial_4",
+      "log": "/tmp/seekdb-meta-layout-initial-test-4.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-meta-layout-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_initial_nnvwqcm_",
+          "pid": 717262,
+          "port": 35283
+        },
+        {
+          "event": "stopped",
+          "pid": 717262,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_initial_nnvwqcm_/data.tar.gz",
+          "bytes": 7544375
+        }
+      ],
+      "outcome": "FAIL",
+      "failure_tail": "{\"event\": \"setup\", \"binary\": \"/data/1/nijia.nj/test/seekdb-meta-layout-native-v2\", \"base\": \"/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_initial_nnvwqcm_\", \"pid\": 717262, \"port\": 35283}\n{\"event\": \"sql\", \"sql\": \"CREATE DATABASE merge_layout\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"CREATE TABLE merge_layout.t(id INT PRIMARY KEY,v INT)\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"INSERT INTO merge_layout.t VALUES(1,10)\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"ALTER SYSTEM MINOR FREEZE\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"ALTER SYSTEM MAJOR FREEZE TABLET_ID=4611686155866541377\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"ALTER TABLE merge_layout.t ADD COLUMN extra INT DEFAULT 7\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"INSERT INTO merge_layout.t VALUES(2,30,8)\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"ALTER SYSTEM MINOR FREEZE\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"ALTER TABLE merge_layout.t ADD COLUMN late_col INT DEFAULT 11\", \"rows\": []}\n{\"event\": \"stopped\", \"pid\": 717262, \"returncode\": -9}\n{\"event\": \"data_archived\", \"path\": \"/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_initial_nnvwqcm_/data.tar.gz\", \"bytes\": 7544375}\n/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.\n  from cryptography.hazmat.backends import default_backend\nTraceback (most recent call last):\n  File \".scratch/namespace-fork/meta_layout_probe.py\", line 155, in <module>\n    run(a.binary, a.owner)\n  File \".scratch/namespace-fork/meta_layout_probe.py\", line 121, in run\n    wait_for(lambda: exp.sql(\"SELECT tablet_id FROM oceanbase.V$OB_SSTABLES \"\n  File \"/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/physical_merge_layout_probe.py\", line 64, in wait_for\n    raise AssertionError(message)\nAssertionError: selected meta result not installed\n"
+    },
+    {
+      "name": "meta_layout_initial_5",
+      "log": "/tmp/seekdb-meta-layout-initial-test-5.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-meta-layout-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_initial_4d9p1bdq",
+          "pid": 724916,
+          "port": 39935
+        },
+        {
+          "event": "crash_for_recovery",
+          "pid": 724916
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-meta-layout-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_initial_4d9p1bdq",
+          "pid": 726683,
+          "port": 39935
+        },
+        {
+          "event": "PASS",
+          "case": "meta_layout",
+          "owner": "initial",
+          "selected": {
+            "tablet": 4611686155866541377,
+            "G": 5037,
+            "local": 1791580562758872,
+            "selected": 1791580562758872,
+            "head": 1791580572782104,
+            "snapshot": 1791580563544446021,
+            "full": 1,
+            "ret": 0
+          },
+          "actual_meta_major": true,
+          "latest_head_not_substituted": true,
+          "crash_recovery": true
+        },
+        {
+          "event": "stopped",
+          "pid": 726683,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_initial_4d9p1bdq/data.tar.gz",
+          "bytes": 7360220
+        }
+      ],
+      "outcome": "PASS"
+    },
+    {
+      "name": "meta_layout_child_1",
+      "log": "/tmp/seekdb-meta-layout-child-test-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-meta-layout-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_child_a46_q609",
+          "pid": 702014,
+          "port": 19645
+        },
+        {
+          "event": "stopped",
+          "pid": 702014,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_child_a46_q609/data.tar.gz",
+          "bytes": 5913628
+        }
+      ],
+      "outcome": "FAIL",
+      "failure_tail": " is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.\n  from cryptography.hazmat.backends import default_backend\nTraceback (most recent call last):\n  File \".scratch/namespace-fork/meta_layout_probe.py\", line 130, in <module>\n    run(a.binary, a.owner)\n  File \".scratch/namespace-fork/meta_layout_probe.py\", line 73, in run\n    base = wait_for(baseline, 'initial major not installed', 180)\n  File \"/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/physical_merge_layout_probe.py\", line 60, in wait_for\n    value = check()\n  File \".scratch/namespace-fork/meta_layout_probe.py\", line 70, in baseline\n    exp.sql(f'ALTER SYSTEM MAJOR FREEZE TABLET_ID={tablet}')\n  File \"/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_fork_prototype.py\", line 116, in sql\n    cur.execute(statement)\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/cursors.py\", line 153, in execute\n    result = self._query(query)\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/cursors.py\", line 322, in _query\n    conn.query(q)\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py\", line 575, in query\n    self._affected_rows = self._read_query_result(unbuffered=unbuffered)\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py\", line 826, in _read_query_result\n    result.read()\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py\", line 1203, in read\n    first_packet = self.connection._read_packet()\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py\", line 782, in _read_packet\n    packet.raise_for_error()\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/protocol.py\", line 219, in raise_for_error\n    err.raise_mysql_exception(self._data)\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/err.py\", line 150, in raise_mysql_exception\n    raise errorclass(errno, errval)\npymysql.err.OperationalError: (4109, 'Server state or role not the same as expected')\n"
+    },
+    {
+      "name": "meta_layout_child_2",
+      "log": "/tmp/seekdb-meta-layout-child-test-2.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-meta-layout-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_child_mgp6youh",
+          "pid": 709438,
+          "port": 58121
+        },
+        {
+          "event": "stopped",
+          "pid": 709438,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_child_mgp6youh/data.tar.gz",
+          "bytes": 5915488
+        }
+      ],
+      "outcome": "FAIL",
+      "failure_tail": " is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.\n  from cryptography.hazmat.backends import default_backend\nTraceback (most recent call last):\n  File \".scratch/namespace-fork/meta_layout_probe.py\", line 134, in <module>\n    run(a.binary, a.owner)\n  File \".scratch/namespace-fork/meta_layout_probe.py\", line 77, in run\n    base = wait_for(baseline, 'initial major not installed', 180)\n  File \"/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/physical_merge_layout_probe.py\", line 60, in wait_for\n    value = check()\n  File \".scratch/namespace-fork/meta_layout_probe.py\", line 74, in baseline\n    exp.sql(f'ALTER SYSTEM MAJOR FREEZE TABLET_ID={tablet}')\n  File \"/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_fork_prototype.py\", line 116, in sql\n    cur.execute(statement)\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/cursors.py\", line 153, in execute\n    result = self._query(query)\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/cursors.py\", line 322, in _query\n    conn.query(q)\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py\", line 575, in query\n    self._affected_rows = self._read_query_result(unbuffered=unbuffered)\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py\", line 826, in _read_query_result\n    result.read()\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py\", line 1203, in read\n    first_packet = self.connection._read_packet()\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py\", line 782, in _read_packet\n    packet.raise_for_error()\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/protocol.py\", line 219, in raise_for_error\n    err.raise_mysql_exception(self._data)\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/err.py\", line 150, in raise_mysql_exception\n    raise errorclass(errno, errval)\npymysql.err.OperationalError: (4109, 'Server state or role not the same as expected')\n"
+    },
+    {
+      "name": "meta_layout_child_3",
+      "log": "/tmp/seekdb-meta-layout-child-test-3.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-meta-layout-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_child_emazblz0",
+          "pid": 713296,
+          "port": 28263
+        },
+        {
+          "event": "stopped",
+          "pid": 713296,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_child_emazblz0/data.tar.gz",
+          "bytes": 6405054
+        }
+      ],
+      "outcome": "FAIL",
+      "failure_tail": "ography. The next release of cryptography will remove support for Python 3.8.\n  from cryptography.hazmat.backends import default_backend\nTraceback (most recent call last):\n  File \".scratch/namespace-fork/meta_layout_probe.py\", line 149, in <module>\n    run(a.binary, a.owner)\n  File \".scratch/namespace-fork/meta_layout_probe.py\", line 76, in run\n    base = baseline(tablet)\n  File \".scratch/namespace-fork/meta_layout_probe.py\", line 72, in baseline\n    return wait_for(installed, 'initial major not installed', 180)\n  File \"/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/physical_merge_layout_probe.py\", line 60, in wait_for\n    value = check()\n  File \".scratch/namespace-fork/meta_layout_probe.py\", line 69, in installed\n    exp.sql(f'ALTER SYSTEM MAJOR FREEZE TABLET_ID={tablet}')\n  File \"/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/excluded-from-branch/tools/obtest/namespace_fork_prototype.py\", line 116, in sql\n    cur.execute(statement)\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/cursors.py\", line 153, in execute\n    result = self._query(query)\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/cursors.py\", line 322, in _query\n    conn.query(q)\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py\", line 575, in query\n    self._affected_rows = self._read_query_result(unbuffered=unbuffered)\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py\", line 826, in _read_query_result\n    result.read()\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py\", line 1203, in read\n    first_packet = self.connection._read_packet()\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/connections.py\", line 782, in _read_packet\n    packet.raise_for_error()\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/protocol.py\", line 219, in raise_for_error\n    err.raise_mysql_exception(self._data)\n  File \"/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/err.py\", line 150, in raise_mysql_exception\n    raise errorclass(errno, errval)\npymysql.err.OperationalError: (4213, 'last major freeze not finish')\n"
+    },
+    {
+      "name": "meta_layout_child_4",
+      "log": "/tmp/seekdb-meta-layout-child-test-4.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-meta-layout-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_child_knjio7p6",
+          "pid": 717253,
+          "port": 29667
+        },
+        {
+          "event": "stopped",
+          "pid": 717253,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_child_knjio7p6/data.tar.gz",
+          "bytes": 9524213
+        }
+      ],
+      "outcome": "FAIL",
+      "failure_tail": "6\", \"pid\": 717253, \"port\": 29667}\n{\"event\": \"sql\", \"sql\": \"CREATE DATABASE merge_layout\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"CREATE TABLE merge_layout.t(id INT PRIMARY KEY,v INT)\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"INSERT INTO merge_layout.t VALUES(1,10)\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"ALTER SYSTEM MINOR FREEZE\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"ALTER SYSTEM MAJOR FREEZE TABLET_ID=4611686155866541377\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"FORK NAMESPACE meta_child FROM ns1\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"UPDATE merge_layout.t SET v=20\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"ALTER SYSTEM MINOR FREEZE\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"ALTER SYSTEM MINOR FREEZE\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"ALTER TABLE merge_layout.t ADD COLUMN extra INT DEFAULT 7\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"INSERT INTO merge_layout.t VALUES(2,30,8)\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"ALTER SYSTEM MINOR FREEZE\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"ALTER TABLE merge_layout.t ADD COLUMN late_col INT DEFAULT 11\", \"rows\": []}\n{\"event\": \"sql\", \"sql\": \"ALTER TABLE merge_layout.t ADD COLUMN parent_only INT DEFAULT 99\", \"rows\": []}\n{\"event\": \"stopped\", \"pid\": 717253, \"returncode\": -9}\n{\"event\": \"data_archived\", \"path\": \"/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_child_knjio7p6/data.tar.gz\", \"bytes\": 9524213}\n/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.\n  from cryptography.hazmat.backends import default_backend\nTraceback (most recent call last):\n  File \".scratch/namespace-fork/meta_layout_probe.py\", line 155, in <module>\n    run(a.binary, a.owner)\n  File \".scratch/namespace-fork/meta_layout_probe.py\", line 121, in run\n    wait_for(lambda: exp.sql(\"SELECT tablet_id FROM oceanbase.V$OB_SSTABLES \"\n  File \"/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/.scratch/namespace-fork/physical_merge_layout_probe.py\", line 64, in wait_for\n    raise AssertionError(message)\nAssertionError: selected meta result not installed\n"
+    },
+    {
+      "name": "meta_layout_child_5",
+      "log": "/tmp/seekdb-meta-layout-child-test-5.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-meta-layout-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_child_bh1l2y2h",
+          "pid": 724856,
+          "port": 29341
+        },
+        {
+          "event": "crash_for_recovery",
+          "pid": 724856
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-meta-layout-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_child_bh1l2y2h",
+          "pid": 726874,
+          "port": 29341
+        },
+        {
+          "event": "PASS",
+          "case": "meta_layout",
+          "owner": "child",
+          "selected": {
+            "tablet": 4611686430744448321,
+            "G": 5255,
+            "local": 1791580572566200,
+            "selected": 1791580572566200,
+            "head": 1791580582393464,
+            "snapshot": 1791580573329617025,
+            "full": 1,
+            "ret": 0
+          },
+          "actual_meta_major": true,
+          "latest_head_not_substituted": true,
+          "crash_recovery": true
+        },
+        {
+          "event": "stopped",
+          "pid": 726874,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_child_bh1l2y2h/data.tar.gz",
+          "bytes": 8382130
+        }
+      ],
+      "outcome": "PASS"
+    },
+    {
+      "name": "meta_layout_cold_child",
+      "log": "/tmp/seekdb-meta-layout-cold-child-test-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-meta-layout-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_child_cold_w7382e9u",
+          "pid": 728683,
+          "port": 62129
+        },
+        {
+          "event": "crash_for_recovery",
+          "pid": 728683
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-meta-layout-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_child_cold_w7382e9u",
+          "pid": 731528,
+          "port": 62129
+        },
+        {
+          "event": "PASS",
+          "case": "meta_layout",
+          "owner": "child",
+          "cold_parent": true,
+          "selected": {
+            "tablet": 4611686430744448321,
+            "G": 5089,
+            "local": 1791580682256376,
+            "selected": 1791580682256376,
+            "head": 1791580694087392,
+            "snapshot": 1791580684214724077,
+            "full": 1,
+            "ret": 0
+          },
+          "actual_meta_major": true,
+          "latest_head_not_substituted": true,
+          "crash_recovery": true
+        },
+        {
+          "event": "stopped",
+          "pid": 731528,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_meta_layout_child_cold_w7382e9u/data.tar.gz",
+          "bytes": 9198789
+        }
+      ],
+      "outcome": "PASS"
+    }
+  ],
+  "meta_layout_builds": [
+    {
+      "log": "/tmp/seekdb-meta-layout-native-build-1.log",
+      "result": "PASS"
+    },
+    {
+      "log": "/tmp/seekdb-meta-layout-native-build-2.log",
+      "result": "PASS"
+    },
+    {
+      "log": "/tmp/seekdb-meta-layout-production-build-1.log",
+      "result": "PASS",
+      "test_hooks_removed": true
     }
   ]
 }

@@ -229,6 +229,11 @@ static int run_layout_retention_native_probe()
     RETENTION_CALL(StorageSchemaHistory::read_current(store, layout_id, frozen,
         deadline(), allocator, selected, current));
     RETENTION_CHECK(selected > frozen && current.get_schema_version() == 12);
+    ObStorageSchema referenced;
+    RETENTION_CALL(StorageSchemaHistory::read_published(store, layout_id, 10,
+        deadline(), allocator, referenced));
+    RETENTION_CHECK(referenced.get_schema_version() == 10);
+    fprintf(stderr, "LAYOUT_RETENTION_EXACT_BODY V=10 after_head_gc=1\n");
     fprintf(stderr, "LAYOUT_RETENTION_NEW_TARGET old=%ld selected=%ld V=%ld\n",
         frozen.get_val_for_tx(), selected.get_val_for_tx(), current.get_schema_version());
   } else {
