@@ -1,5 +1,11 @@
 # Namespace 服务归属后续 TODO（本地，不提交）
 
+## 2026-10-09 新确认：分区扫描重复复制整表 schema（待修复）
+
+- 8000 分区 COUNT/SUM 父、子均慢，正式二进制无采样复测为 38.12、45.44 秒。每个 tablet 的 `EngineScan::open` 都通过 `copy_scan_schema` 复制两份含全部分区的 schema，准备为 O(访问分区数 × 全表分区数)；该函数占 CPU 样本约 72%。此前创建/DDL/写准备优化没有覆盖此扫描入口。
+- 方向：扫描期持有固定版本 schema 的 guard；当前物理 tablet 路由与表级描述分离；跨分区复用本次扫描准备，删除遗留的整表 RPC 大小检查。无须新增全局缓存或长期状态。
+- [完整定位、控制变量证据及验收边界](fullscan-diagnosis.md)。父子分区扫描用例已加入四件套 direct，当前只完成诊断。
+
 2026-10-03：当前未完成事项及已关闭事项见 [主要问题清单](current-major-architecture-problems.md)，已按 `a11059085` 更新。下文保留过程记录；标为已完成的条目不再计入待办。整体职责及接口建议见 [架构重构方案](design-namespace-architecture-rebuild.md)，其中未落地的建议不算已实现。
 
 - **事务共用（2026-10-02，用户指定代号，已完成并推送 a9bf8740a）**：让需要原子完成的物理 tablet 创建与实例 KV 元数据更新使用同一个底层事务。评估时物化使用 `ObMySQLTransaction trans` 提交物理创建、相关映射和序列状态，再由 `InstanceMetaStore::Transaction directory_tx` 提交 EXCEPTIONS owned；两者使用原生事务系统，但接口各自创建事务，存在物理已提交、owned 未登记的中间状态。

@@ -1,0 +1,25 @@
+{"round": 0, "namespace": "parent", "table_partitions": 256, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.1203494481742382}
+{"round": 0, "namespace": "child", "table_partitions": 256, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.16219926998019218}
+{"round": 0, "namespace": "parent", "table_partitions": 1024, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.21383605152368546}
+{"round": 0, "namespace": "child", "table_partitions": 1024, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.22926753759384155}
+{"round": 0, "namespace": "parent", "table_partitions": 8000, "scanned_partitions": 256, "rows": 256, "elapsed_s": 2.0314025916159153}
+{"round": 0, "namespace": "child", "table_partitions": 8000, "scanned_partitions": 256, "rows": 256, "elapsed_s": 2.2754442989826202}
+{"round": 1, "namespace": "parent", "table_partitions": 256, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.08522725850343704}
+{"round": 1, "namespace": "child", "table_partitions": 256, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.09967843443155289}
+{"round": 1, "namespace": "parent", "table_partitions": 1024, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.2094310112297535}
+{"round": 1, "namespace": "child", "table_partitions": 1024, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.22827360406517982}
+{"round": 1, "namespace": "parent", "table_partitions": 8000, "scanned_partitions": 256, "rows": 256, "elapsed_s": 1.580271229147911}
+{"round": 1, "namespace": "child", "table_partitions": 8000, "scanned_partitions": 256, "rows": 256, "elapsed_s": 2.375651191920042}
+{"round": 2, "namespace": "parent", "table_partitions": 256, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.08526064828038216}
+{"round": 2, "namespace": "child", "table_partitions": 256, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.11142744868993759}
+{"round": 2, "namespace": "parent", "table_partitions": 1024, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.2850966900587082}
+{"round": 2, "namespace": "child", "table_partitions": 1024, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.21481359004974365}
+{"round": 2, "namespace": "parent", "table_partitions": 8000, "scanned_partitions": 256, "rows": 256, "elapsed_s": 1.359973020851612}
+{"round": 2, "namespace": "child", "table_partitions": 8000, "scanned_partitions": 256, "rows": 256, "elapsed_s": 1.4414069019258022}
+{"amplification": {"parent": 18.53459082261658, "child": 20.420859722942783}, "maximum": 8.0}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File ".scratch/namespace-fork/fullscan-diagnosis/scaling.py", line 59, in <module>
+    assert max(amplification.values()) <= args.max_amplification, amplification
+AssertionError: {'parent': 18.53459082261658, 'child': 20.420859722942783}

@@ -1,0 +1,74 @@
+{
+  "source_head": "7a5f822c70e9af4fdde80535690fac2c4be87eed",
+  "production_changes": false,
+  "full_scans_unprofiled": [
+    {
+      "user": "root",
+      "elapsed_s": 38.12443448975682,
+      "rows": [
+        [
+          8000,
+          "80000"
+        ]
+      ]
+    },
+    {
+      "user": "root@scan_child",
+      "elapsed_s": 45.44357888773084,
+      "rows": [
+        [
+          8000,
+          "80000"
+        ]
+      ]
+    }
+  ],
+  "scaling_median_seconds": {
+    "parent": {
+      "256": 0.09559578448534012,
+      "1024": 0.20351561158895493,
+      "8000": 1.5421395488083363
+    },
+    "child": {
+      "256": 0.09602542966604233,
+      "1024": 0.2174103707075119,
+      "8000": 2.566710539162159
+    }
+  },
+  "scaling_scanned_partitions": 256,
+  "scaling_scanned_rows": 256,
+  "scaling_repeats": 3,
+  "cpu_profile_summary": {
+    "parent": [
+      "85.39%     0.05%  T1_ReqWorker     seekdb              [.] oceanbase::observer::namespace_worker_prototype::EngineScan::open",
+      "72.09%     0.00%  T1_ReqWorker     seekdb              [.] oceanbase::observer::namespace_worker_prototype::copy_scan_schema",
+      "59.92%     0.00%  T1_ReqWorker     seekdb              [.] oceanbase::share::schema::ObTableSchema::assign",
+      "4.79%     0.05%  T1_ReqWorker     seekdb              [.] oceanbase::storage::NamespaceForkKernelPrototype::resolve_read_tablet",
+      "4.15%     1.81%  T1_ReqWorker     seekdb              [.] oceanbase::observer::namespace_worker_prototype::ScanSchema::~ScanSchema",
+      "2.79%     0.00%  T1_ReqWorker     seekdb              [.] oceanbase::rootserver::InstanceNamespaceMetadata::find_tablet_source"
+    ],
+    "child": [
+      "84.92%     0.26%  T1_ReqWorker     seekdb              [.] oceanbase::observer::namespace_worker_prototype::EngineScan::open",
+      "72.65%     0.00%  T1_ReqWorker     seekdb              [.] oceanbase::observer::namespace_worker_prototype::copy_scan_schema",
+      "58.94%     0.00%  T1_ReqWorker     seekdb              [.] oceanbase::share::schema::ObTableSchema::assign",
+      "4.31%     0.00%  T1_ReqWorker     seekdb              [.] oceanbase::storage::NamespaceForkKernelPrototype::resolve_read_tablet",
+      "4.24%     1.96%  T1_ReqWorker     seekdb              [.] oceanbase::observer::namespace_worker_prototype::ScanSchema::~ScanSchema",
+      "2.35%     0.00%  T1_ReqWorker     seekdb              [.] oceanbase::rootserver::InstanceNamespaceMetadata::find_tablet_source"
+    ]
+  },
+  "profile_note": "Inclusive percentages from process CPU samples; not additive wall-time fractions.",
+  "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_fullscan_diagnosis_j3xp7zqs",
+  "original_binary_sha256": "b36993b04c989664b8d8ff39f49352c6625bf9dc36fbde77ca846e1039d61bd1",
+  "perf_files": [
+    "/data/1/nijia.nj/test/namespace_fork_fullscan_perf.data",
+    "/data/1/nijia.nj/test/namespace_fork_fullscan_child_perf.data"
+  ],
+  "scaling_assertion": {
+    "command": "python3 .scratch/namespace-fork/fullscan-diagnosis/scaling.py --reuse --max-amplification 8",
+    "exit_code": 1,
+    "parent_amplification": 18.53459082261658,
+    "child_amplification": 20.420859722942783,
+    "expected": "FAIL until schema preparation is fixed"
+  },
+  "harness_stop": "Interrupted optional diagnostic hold after all measurements; finally stopped owned instance and archived data."
+}
