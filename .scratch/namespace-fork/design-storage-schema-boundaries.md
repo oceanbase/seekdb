@@ -12,11 +12,11 @@
 
 ## 1. 已确定的整体结构
 
-- SQL 目录继续归所属 Namespace；schema ID 不编码 Namespace。
+- SQL 目录继续归所属 Namespace；schema ID 不编码 Namespace。本轮适配既有的Namespace目录归属，不新增Namespace独立DDL调度能力，不改变已有DDL并发模式。
 - 一个专用内部元数据 tablet 复用 InstanceMetaStore、原生事务与 MVCC。一个物理表对象 G 一条布局 key，同一表的分区共享 G；G 是稳定对象身份，布局版本随 DDL 改变。
 - DDL 在同一个原生事务中修改 SQL 目录、已有目录发布信息、受影响对象的完整 ObStorageSchema 和相应物理对象元数据。版本号标识定义，提交 SCN 决定可见性。不另加一份目录发布记录。
 - 物理合并输入为物理对象与目标 F，通过 `read_layout(G, F)` 获得布局，随后固定到已有 medium_info 中。存储层不解析 Namespace，也不反查 SQL SchemaService。
-- mini/minor 复用原生多版本保留能力；完整历史在磁盘，按需装载。已有 tablet storage_schema 的当前/基线描述仍需与新发布入口统一角色，不能继续作为第二个独立发布源。
+- mini/minor 复用原生多版本保留能力；完整历史在磁盘，按需装载。各tablet已有storage_schema副本及其本地装载方式继续保留，不改成共享对象；其本地描述与DDL发布的完整布局历史职责不同，见4.1，不把本地描述更新反向当作一次DDL历史发布。
 - 不新增每轮 freeze 的 Namespace 版本向量、全实例版本发号器或常驻历史 schema 缓存。
 - 主库 freeze 发布前完成继承数据准备；不扫描逻辑行另算 checksum，不因继承缺项跳过该轮校验。准备期间普通读写和后台转储/接管继续，最终复核与发布窗口才通过已有事务锁协调 fork、DDL。
 
@@ -119,6 +119,22 @@
 8. G 绑定对同一物理 incarnation 稳定。需要更换物理对象的重建创建新 incarnation，并明确新 G/绑定；普通加列不改 8000 个 tablet 的 G。
 
 删除不能立刻删除 G：当前/历史物理对象、已固定任务、仍使用的基线描述及 fork 创建描述的生命周期需覆盖其引用。已保存的完整创建描述允许未来冷物化初始化子 G，不要求永久保留一个已经删除的父 G 的所有 MVCC 版本。
+
+### 4.1 完整布局历史与tablet本地storage_schema的关系
+
+两者的描述主体均复用 `ObStorageSchema`。专用元数据tablet存储按G组织的完整布局历史，由上层DDL事务发布，按原生MVCC读取F时可见的版本。每个用户tablet已有的 `storage_schema_addr_` 则指向该tablet本地维护的描述，用于既有存储操作；创建、转储、合并和接管等路径可以更新它，并不提供按任意F读取完整DDL历史的接口。
+
+本地描述不能笼统称为“G最新版本的缓存”：mini可能只提高列数和schema版本，并将列信息标记为简化，无法从MemTable补齐新列的完整类型、默认值等定义；不同tablet的描述也可随各自维护进度不同。SSTable、MemTable及已固定合并任务各自已有的版本/格式信息继续保留，不能把一个tablet当前描述说成其所有历史数据的唯一schema。
+
+目标数据流：DDL同事务发布完整布局到G；合并准备读取G@F，将描述固定到现有 `medium_info.storage_schema_`；合并执行继续使用任务中的描述，安装结果时沿现有规则维护tablet本地schema。不得用较旧目标F的描述直接覆盖已经推进的本地描述，也不得将mini生成的简化信息写回完整布局历史。fork接管涉及源/目标不同布局身份时的版本比较仍按第4节第7项适配。
+
+因此一次普通加列只新增该表分支的一份历史布局，不立即为所有分区刷新本地storage_schema；各tablet继续按既有路径维护本地副本。这不等于把现有副本共享化，也不新增跨tablet内存缓存。当前依据：`ob_medium_compaction_func.cpp::get_table_schema_to_merge`、`ob_basic_tablet_merge_ctx.cpp::update_storage_schema_by_memtable/prepare_from_medium_compaction_info`、`ob_storage_schema_util.cpp::update_tablet_storage_schema`。
+
+### 4.2 谁知道SQL表，谁只使用布局引用
+
+上层DDL知道Namespace、SQL表及分区关系，负责创建/选择G，在创建物理tablet时传入并持久化该绑定。同一物理表分支的分区共用G；主表、索引及需要独立定义的分支分别具有适用的布局身份。G是稳定的布局对象身份，不是SQL table_id、Namespace编码或某次DDL版本号。
+
+存储层的输入为物理tablet中保存的布局ID与目标F，读取接口为 `read_layout(G, F)`，输出完整物理描述。它不反查tablet属于哪张SQL表，不枚举表的分区，不解析Namespace或父链。新增加的是布局引用及其持久化/保留约束，不能把这些真实成本说成只是换了变量名；按表组织共享关系和逻辑checksum校验继续归上层。现有各tablet的本地schema地址与这个新布局ID并存，分别承担上述职责。
 
 ## 5. 问题二：freeze schema_version 的代码审计
 
