@@ -4,7 +4,7 @@
 
 核对基线：`44b6c98ab`，分支 `codex/namespace-worker-proxy-v20`。
 
-状态：设计已确定，正在实施，尚未整体完成或验证。基础存储、G/C 元数据及测试进度见 [实施记录](implementation-storage-schema-history.md)；DDL 发布、合并消费、freeze 与 checksum 等接线仍须完成。锁顺序、最终复核成本和主备本机接管差异仍须按第 11 节落实。本文取代旧方案中“每 tablet 保存完整 MDS 布局历史”、fork 初始时间未定及 freeze.schema_version 依赖未定的部分。旧方案的 DDL 入口收敛清单仍可用，但不是当前代码已经实现这些能力的证明。
+状态：设计已确定，正在实施，尚未整体完成或验证。基础存储、G/C 元数据、上层共同 DDL/物化发布入口及针对性验证进度见 [实施记录](implementation-storage-schema-history.md)；合并消费、持久历史保留、布局回收、freeze 与 checksum 等接线仍须完成。锁顺序、最终复核成本和主备本机接管差异仍须按第 11 节落实。本文取代旧方案中“每 tablet 保存完整 MDS 布局历史”、fork 初始时间未定及 freeze.schema_version 依赖未定的部分。旧方案的 DDL 入口收敛清单仍可用，但不是当前代码已经实现这些能力的证明。
 
 修订：根据用户对 DDL 负担的质疑，撤销上一版新增 CatalogPublication 记录及为它扩大 Namespace 内元数据事务串行范围的决定。逻辑校验改用 G@F 已携带的表级 schema_version，复用现有单表历史定义读取；不构造整份目录在 F 的版本。
 
@@ -135,6 +135,10 @@
 上层DDL知道Namespace、SQL表及分区关系，负责创建/选择G，在创建物理tablet时传入并持久化该绑定。同一物理表分支的分区共用G；主表、索引及需要独立定义的分支分别具有适用的布局身份。G是稳定的布局对象身份，不是SQL table_id、Namespace编码或某次DDL版本号。
 
 存储层的输入为物理tablet中保存的布局ID与目标F，读取接口为 `read_layout(G, F)`，输出完整物理描述。它不反查tablet属于哪张SQL表，不枚举表的分区，不解析Namespace或父链。新增加的是布局引用及其持久化/保留约束，不能把这些真实成本说成只是换了变量名；按表组织共享关系和逻辑checksum校验继续归上层。现有各tablet的本地schema地址与这个新布局ID并存，分别承担上述职责。
+
+### 4.3 上层绑定的实现与锁顺序
+
+实施补充：上层 `TableStorageLayouts` 在专用 schema tablet 中维护不可变的 `(Namespace, table_id) -> G` 绑定。它只表示对象身份，不记录目录发布版本或串行前缀；fork 不复制这些行。首次绑定用非等待原生 INSERT 裁决竞争，失败事务整体回滚，已有绑定读取不加锁，从而避免“先取绑定再等根锁”与物化“持根锁再取绑定”形成等待环。SQL 事务保留借用 KV 的资源直到提交/回滚及连接释放之后。绑定与 G 的最终删除仍须纳入本轮引用回收，当前接线没有把永久保留这些行当作完成方案。
 
 ## 5. 问题二：freeze schema_version 的代码审计
 

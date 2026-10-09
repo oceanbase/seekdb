@@ -59,6 +59,17 @@ int ObMySQLTransaction::start_transaction(
   return ret;
 }
 
+int ObMySQLTransaction::retain_until_end(const std::shared_ptr<void> &resource)
+{
+  if (!in_trans_ || resource == nullptr) { return OB_INVALID_ARGUMENT; }
+  auto *entry = new (std::nothrow) RetainedResource;
+  if (entry == nullptr) { return OB_ALLOCATE_MEMORY_FAILED; }
+  entry->resource = resource;
+  entry->next = std::move(transaction_resources_);
+  transaction_resources_.reset(entry);
+  return OB_SUCCESS;
+}
+
 int ObMySQLTransaction::start(
     ObISQLClient *sql_client,
     bool with_snapshot/* = false*/,
@@ -193,6 +204,10 @@ int ObMySQLTransaction::end(const bool want_commit)
     in_trans_ = false;
   }
   close();
+  while (transaction_resources_ != nullptr) {
+    auto released = std::move(transaction_resources_);
+    transaction_resources_ = std::move(released->next);
+  }
   return ret;
 }
 

@@ -22,6 +22,7 @@
 #include "lib/oblog/ob_log_module.h"
 #include "common/mysqlclient/ob_isql_client.h"
 #include "common/mysqlclient/ob_single_connection_proxy.h"
+#include <memory>
 
 namespace oceanbase
 {
@@ -74,6 +75,11 @@ public:
   virtual int end(const bool commit);
   virtual bool is_started() const { return in_trans_; }
 
+  // Retain participants' read/GC guards until the native transaction has ended
+  // and its connection has been released. No ownership of the native descriptor
+  // is transferred to a participant.
+  int retain_until_end(const std::shared_ptr<void> &resource);
+
   // get_stash_query for query batch buf
   int get_stash_query(const char* table_name, ObSqlTransQueryStashDesc *&desc);
   bool get_enable_query_stash() {
@@ -96,6 +102,12 @@ protected:
   // inner sql now not support multi query, enable_query_stash now just enable for batch insert values
   bool enable_query_stash_;
   hash::ObHashMap<const char*, ObSqlTransQueryStashDesc*> query_stash_desc_;
+private:
+  struct RetainedResource {
+    std::shared_ptr<void> resource;
+    std::unique_ptr<RetainedResource> next;
+  };
+  std::unique_ptr<RetainedResource> transaction_resources_;
 };
 
 } // end namespace commmon

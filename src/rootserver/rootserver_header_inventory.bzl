@@ -78,6 +78,7 @@ ROOTSERVER_PRIVATE_HEADERS = [
     "fork_table/ob_fork_table_helper.h",
     "fork_table/ob_fork_table_info_builder.h",
     "fork_table/ob_fork_table_task.h",
+    "fork_table/table_storage_layouts.h",
     "ob_ai_model_ddl_operator.h",
     "ob_ai_model_ddl_service.h",
     "ob_alter_table_constraint_checker.h",

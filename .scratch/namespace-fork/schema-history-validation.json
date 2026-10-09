@@ -1,5 +1,5 @@
 {
-  "scope": "Storage foundation only; DDL, compaction, freeze and checksum integration remain incomplete.",
+  "scope": "Storage foundation and DDL/layout binding integration; compaction, durable retention, freeze and checksum integration remain incomplete.",
   "runs": [
     {
       "name": "layout_history",
@@ -131,6 +131,377 @@
           "event": "data_archived",
           "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_shared_transaction_zr4xor0k/data.tar.gz",
           "bytes": 6056352
+        }
+      ]
+    },
+    {
+      "name": "table_storage_layout",
+      "log": "/tmp/seekdb-table-layout-test-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-table-layout-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_table_storage_layout__hwllbbt",
+          "pid": 265866,
+          "port": 7693
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-table-layout-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_table_storage_layout__hwllbbt",
+          "pid": 268174,
+          "port": 7693
+        },
+        {
+          "event": "PASS",
+          "case": "table_storage_layout",
+          "owner_definitions": 7,
+          "checked_physical": 56,
+          "parent_child_independent": true,
+          "late_partition_no_overwrite": true,
+          "index_and_lob": true,
+          "conflict_nowait": true,
+          "rollback": true,
+          "participant_lifetime": true,
+          "crash_recovery": true
+        },
+        {
+          "event": "stopped",
+          "pid": 268174,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_table_storage_layout__hwllbbt/data.tar.gz",
+          "bytes": 6064954
+        }
+      ]
+    },
+    {
+      "name": "layout_abort_crash",
+      "log": "/tmp/seekdb-layout-abort-crash-test-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-table-layout-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_catalog_initial_abort_crash__ghr8pc1",
+          "pid": 268710,
+          "port": 48109
+        },
+        {
+          "event": "physical_delete_boundary",
+          "fault": "abort_crash",
+          "physical": [
+            [
+              4611686155866541377,
+              3,
+              0,
+              0
+            ]
+          ]
+        },
+        {
+          "event": "atomic_boundary",
+          "owner": "initial",
+          "fault": "abort_crash",
+          "schema_before": 1791570858550480,
+          "schema_visible": 1791570858550480,
+          "old_tablet": 200001,
+          "visible_tablet": 200001,
+          "source_count": 359
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-table-layout-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_catalog_initial_abort_crash__ghr8pc1",
+          "pid": 270546,
+          "port": 48109
+        },
+        {
+          "event": "layout_recovery_atomic",
+          "namespace": 1,
+          "table": 500003,
+          "version": 1791570858550472,
+          "fault": "abort_crash"
+        },
+        {
+          "event": "PASS",
+          "case": "atomic_ddl_catalog",
+          "owner": "initial",
+          "fault": "abort_crash"
+        },
+        {
+          "event": "stopped",
+          "pid": 270546,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_catalog_initial_abort_crash__ghr8pc1/data.tar.gz",
+          "bytes": 5802317
+        }
+      ]
+    },
+    {
+      "name": "layout_commit_crash",
+      "log": "/tmp/seekdb-layout-commit-crash-test-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-table-layout-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_catalog_child_commit_crash_dzw9hess",
+          "pid": 268713,
+          "port": 29963
+        },
+        {
+          "event": "physical_delete_boundary",
+          "fault": "commit_crash",
+          "physical": [
+            [
+              4611686430744448321,
+              3,
+              1,
+              0
+            ]
+          ]
+        },
+        {
+          "event": "atomic_boundary",
+          "owner": "child",
+          "fault": "commit_crash",
+          "schema_before": 1791570858541136,
+          "schema_visible": 1791570859762136,
+          "old_tablet": 200001,
+          "visible_tablet": 200002,
+          "source_count": 359
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-table-layout-native",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_catalog_child_commit_crash_dzw9hess",
+          "pid": 270607,
+          "port": 29963
+        },
+        {
+          "event": "layout_recovery_atomic",
+          "namespace": 3,
+          "table": 500003,
+          "version": 1791570859762128,
+          "fault": "commit_crash"
+        },
+        {
+          "event": "PASS",
+          "case": "atomic_ddl_catalog",
+          "owner": "child",
+          "fault": "commit_crash"
+        },
+        {
+          "event": "stopped",
+          "pid": 270607,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_catalog_child_commit_crash_dzw9hess/data.tar.gz",
+          "bytes": 6161455
+        }
+      ]
+    },
+    {
+      "name": "layout_production_ddl",
+      "log": "/tmp/seekdb-layout-production-ddl-test-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_catalog_schema_hzkw5ofk",
+          "pid": 280813,
+          "port": 9557
+        },
+        {
+          "event": "case_pass",
+          "statement": "ALTER TABLE catalog_ddl.t COMMENT='cold description change'",
+          "tablets": 30
+        },
+        {
+          "event": "case_pass",
+          "statement": "ALTER TABLE catalog_ddl.t ADD COLUMN extra INT DEFAULT 7",
+          "tablets": 30
+        },
+        {
+          "event": "case_pass",
+          "statement": "CREATE INDEX by_v ON catalog_ddl.t(v)",
+          "tablets": 38
+        },
+        {
+          "event": "case_pass",
+          "statement": "DROP INDEX by_v ON catalog_ddl.t",
+          "tablets": 30
+        },
+        {
+          "event": "case_pass",
+          "statement": "TRUNCATE TABLE catalog_ddl.t",
+          "tablets": 30
+        },
+        {
+          "event": "case_pass",
+          "statement": "DROP TABLE catalog_ddl.t",
+          "tablets": 6
+        },
+        {
+          "event": "case_pass",
+          "statement": "ALTER TABLE catalog_ddl.rp ADD PARTITION (PARTITION p2 VALUES LESS THAN(30))",
+          "tablets": 9
+        },
+        {
+          "event": "case_pass",
+          "statement": "ALTER TABLE catalog_ddl.rp TRUNCATE PARTITION p0",
+          "tablets": 9
+        },
+        {
+          "event": "case_pass",
+          "statement": "ALTER TABLE catalog_ddl.rp DROP PARTITION p1",
+          "tablets": 6
+        },
+        {
+          "event": "PASS",
+          "case": "ddl_catalog_schema",
+          "partitioned": true,
+          "lob_bindings": true,
+          "partition_add_drop_truncate": true,
+          "parallel_ddl": 4,
+          "parent_view_retained": true
+        },
+        {
+          "event": "stopped",
+          "pid": 280813,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_ddl_catalog_schema_hzkw5ofk/data.tar.gz",
+          "bytes": 6475141
+        }
+      ]
+    },
+    {
+      "name": "layout_production_8000",
+      "log": "/tmp/seekdb-layout-production-8000-test-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_large_partition_fork_uljy562p",
+          "pid": 280816,
+          "port": 38991
+        },
+        {
+          "event": "fork_cost",
+          "namespace": 3,
+          "seconds": 0.0024927034974098206,
+          "added": {
+            "1": 1,
+            "2": 1,
+            "5": 0,
+            "6": 0,
+            "7": 0
+          },
+          "physical_delta": 0,
+          "directory_shared": true
+        },
+        {
+          "event": "fork_cost",
+          "namespace": 4,
+          "seconds": 0.00403352826833725,
+          "added": {
+            "1": 1,
+            "2": 1,
+            "5": 0,
+            "6": 0,
+            "7": 0
+          },
+          "physical_delta": 0,
+          "directory_shared": true
+        },
+        {
+          "event": "fork_cost",
+          "namespace": 5,
+          "seconds": 0.0031283460557460785,
+          "added": {
+            "1": 1,
+            "2": 1,
+            "5": 0,
+            "6": 0,
+            "7": 0
+          },
+          "physical_delta": 0,
+          "directory_shared": true
+        },
+        {
+          "event": "single_partition_cow",
+          "changed": [
+            200002
+          ],
+          "seconds": 0.014407776296138763,
+          "new_pages": 2,
+          "physical_delta": 1
+        },
+        {
+          "event": "PASS",
+          "case": "large_partition_fork",
+          "partitions": 8000,
+          "create_seconds": 12.438059203326702,
+          "forks": [
+            {
+              "namespace": 3,
+              "seconds": 0.0024927034974098206,
+              "added": {
+                "1": 1,
+                "2": 1,
+                "5": 0,
+                "6": 0,
+                "7": 0
+              },
+              "physical_delta": 0,
+              "directory_shared": true
+            },
+            {
+              "namespace": 4,
+              "seconds": 0.00403352826833725,
+              "added": {
+                "1": 1,
+                "2": 1,
+                "5": 0,
+                "6": 0,
+                "7": 0
+              },
+              "physical_delta": 0,
+              "directory_shared": true
+            },
+            {
+              "namespace": 5,
+              "seconds": 0.0031283460557460785,
+              "added": {
+                "1": 1,
+                "2": 1,
+                "5": 0,
+                "6": 0,
+                "7": 0
+              },
+              "physical_delta": 0,
+              "directory_shared": true
+            }
+          ]
+        },
+        {
+          "event": "stopped",
+          "pid": 280816,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_large_partition_fork_uljy562p/data.tar.gz",
+          "bytes": 8555510
         }
       ]
     }

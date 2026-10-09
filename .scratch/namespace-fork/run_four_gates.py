@@ -23,6 +23,11 @@ args.log_dir.mkdir(parents=True, exist_ok=True)
 gates = [
     ('bootstrap-native-kv', [
         [local / 'run_storage_schema_history_probe.py', '--binary', probe],
+        [local / 'run_table_storage_layout_probe.py', '--binary', probe],
+        [local / 'ddl_catalog_atomic_probe.py', '--binary', probe, '--owner', 'initial',
+         '--fault', 'abort_crash', '--layout-history'],
+        [local / 'ddl_catalog_atomic_probe.py', '--binary', probe, '--owner', 'child',
+         '--fault', 'commit_crash', '--layout-history'],
         [local / 'catalog_batch_probe.py'],
         [local / 'ddl_publication_cost_probe.py', '--binary', probe],
         [local / 'standby_baseline_progress_probe.py', '--binary', probe],

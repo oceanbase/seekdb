@@ -24,6 +24,7 @@ enum class MetaCollection : uint64_t
   COUNTERS = 6,
   SNAPSHOT_COORDINATION = 7,
   STORAGE_LAYOUTS = 8,
+  TABLE_STORAGE_LAYOUTS = 9,
 };
 
 } // namespace instance_meta

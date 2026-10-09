@@ -14,7 +14,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('action', choices=('enable', 'disable'))
 args = parser.parse_args()
 local = Path(__file__).resolve().parent
-scripts = ('native_probe_injection.py', 'storage_schema_history_probe_injection.py', 'shared_transaction_fault_injection.py',
+scripts = ('native_probe_injection.py', 'storage_schema_history_probe_injection.py', 'table_storage_layout_probe_injection.py', 'shared_transaction_fault_injection.py',
            'preparation_probe_injection.py', 'creation_identity_probe_injection.py',
            'ddl_catalog_fault_injection.py', 'cold_materialization_probe_injection.py',
            'catalog_gc_probe_injection.py', 'weak_source_gc_probe_injection.py',

@@ -28,7 +28,7 @@ static int initialize_fixture_catalog()
   }
   if (ret == OB_SUCCESS) {
     rootserver::NamespaceSchemaPublication publication(store, 1);
-    ret = publication.initialize(guard);
+    ret = publication.initialize(guard, *directory_sql_proxy());
   }
   fprintf(stderr, "INSTANCE_FIXTURE_CATALOG version=%ld ret=%d\n", version, ret);
   return ret;

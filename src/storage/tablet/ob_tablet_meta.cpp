@@ -161,10 +161,12 @@ int ObTabletMeta::init(
     LOG_WARN("init twice", K(ret), K_(is_inited));
   } else if (OB_UNLIKELY(!tablet_id.is_valid())
       || OB_UNLIKELY(!data_tablet_id.is_valid())
+      || OB_UNLIKELY(!tablet_id.is_ls_inner_tablet()
+          && (storage_layout_id == 0 || storage_layout_id == OB_INVALID_ID))
       //|| OB_UNLIKELY(create_scn <= OB_INVALID_TIMESTAMP)
       || OB_UNLIKELY(OB_INVALID_VERSION == snapshot_version)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(tablet_id), K(data_tablet_id),
+    LOG_WARN("invalid args", K(ret), K(tablet_id), K(data_tablet_id), K(storage_layout_id),
         K(create_scn), K(snapshot_version), K(clog_checkpoint_scn));
   } else if (OB_FAIL(local_status_.init_status())) {
   } else {

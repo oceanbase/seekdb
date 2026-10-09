@@ -134,7 +134,7 @@ const static int64_t BATCH_ARG_SIZE = 1024 * 1024;  // 1M
   int init(const bool need_check_tablet_cnt);
   int execute();
   // The batch already contains physical IDs; register it in the explicit owner.
-  int execute(transaction::ObTxDesc &trans);
+  int execute(transaction::ObTxDesc &trans, uint64_t namespace_id);
   int add_create_tablet_arg(const ObTabletCreatorArg &arg);
   // Takes a private copy of storage-only creation descriptors and bindings.
   // Callers may release the input immediately; execute() registers them in the
@@ -143,6 +143,7 @@ const static int64_t BATCH_ARG_SIZE = 1024 * 1024;  // 1M
   void set_materialization_for_prototype();
   void reset();
 private:
+  int prepare_layouts(transaction::ObTxDesc &native, uint64_t namespace_id);
   int execute_impl(const std::function<int(const obcall::ObBatchCreateTabletArg &, const char *, int64_t, int64_t)> &register_mds,
       bool logical_binding);
   const share::SCN major_frozen_scn_;

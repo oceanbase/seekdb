@@ -24,6 +24,7 @@ public:
   bool is_valid() const;
   void reset();
   const storage::ObCreateTabletSchema &schema() const { return schema_; }
+  storage::ObCreateTabletSchema &schema() { return schema_; }
   uint64_t data_table_id() const { return data_table_id_; }
   uint64_t lob_meta_table_id() const { return lob_meta_table_id_; }
   uint64_t lob_piece_table_id() const { return lob_piece_table_id_; }

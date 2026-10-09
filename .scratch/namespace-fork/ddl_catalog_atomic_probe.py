@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import resource
+import re
 import struct
 import time
 
@@ -61,7 +62,11 @@ def graph(experiment, state):
     return entries
 
 
-def run(binary, owner_kind, fault):
+def run(binary, owner_kind, fault, layout_history=False):
+    if layout_history:
+        if fault == 'rollback':
+            raise ValueError('layout recovery audit requires a crash case')
+        os.environ['SEEKDB_TABLE_LAYOUT_PROBE'] = '1'
     experiment = BootstrapExperiment(binary, 'ddl_catalog_' + owner_kind + '_' + fault, prototype=6)
     control = experiment.base / 'ddl-catalog-control'
     os.environ['SEEKDB_DDL_CATALOG_CONTROL'] = str(control)
@@ -108,6 +113,13 @@ def run(binary, owner_kind, fault):
             visible = roots(experiment, owner_id)
             visible_tablet = tablet_id(experiment, 't1', observer)
             visible_graph = graph(experiment, visible)
+            if layout_history:
+                visible_definitions = experiment.sql("SELECT table_id,schema_version FROM oceanbase.__all_table "
+                    "WHERE table_name='t1' AND database_id=(SELECT database_id FROM oceanbase.__all_database "
+                    "WHERE database_name='nstrunc_repro')", observer, log=False)
+                assert len(visible_definitions) == 1, visible_definitions
+                layout_cursors = {p.stat().st_ino: p.stat().st_size
+                                  for p in (experiment.base / 'log').glob('seekdb.log*')}
             if fault == 'commit_crash':
                 assert visible['schema_version'] > before['schema_version'], (before, visible)
                 assert visible_tablet != original
@@ -153,6 +165,16 @@ def run(binary, owner_kind, fault):
                 connection.close()
             owner = observer = child = experiment.connection = None
             experiment.start()
+            if layout_history:
+                from run_table_storage_layout_probe import log_tail
+                audit = log_tail(experiment, layout_cursors)
+                versions = {(int(ns), int(table)): int(version)
+                            for ns, table, version in re.findall(
+                                r'TABLE_LAYOUT_AUDIT ns=(\d+) table=(\d+) layout=\d+ version=(\d+) ret=0', audit)}
+                table, version = visible_definitions[0]
+                assert versions.get((owner_id, int(table))) == int(version), (owner_id, visible_definitions, audit[-4000:])
+                experiment.record('layout_recovery_atomic', namespace=owner_id, table=table,
+                                  version=version, fault=fault)
             # Check persisted roots before loading the owner Namespace Runtime.
             recovered = roots(experiment, owner_id)
             for key in ('schema_version', 'directory_page', 'catalog_page'):
@@ -185,6 +207,7 @@ if __name__ == '__main__':
     parser.add_argument('--binary', required=True)
     parser.add_argument('--owner', choices=('initial', 'child'), required=True)
     parser.add_argument('--fault', choices=('rollback', 'abort_crash', 'commit_crash'), required=True)
+    parser.add_argument('--layout-history', action='store_true')
     args = parser.parse_args()
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-    run(args.binary, args.owner, args.fault)
+    run(args.binary, args.owner, args.fault, args.layout_history)

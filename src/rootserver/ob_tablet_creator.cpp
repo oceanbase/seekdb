@@ -23,6 +23,8 @@
 #include "storage/tx/ob_tx_log.h"
 #include "storage/tablet/ob_tablet_ddl_complete_mds_helper.h"
 #include "observer/namespace_worker_protocol_prototype.h"
+#include "rootserver/fork_table/table_storage_layouts.h"
+#include "storage/tx_storage/ob_access_service.h"
 
 namespace oceanbase
 {
@@ -358,16 +360,23 @@ void ObTabletCreator::set_materialization_for_prototype()
 
 int ObTabletCreator::execute()
 {
+  int ret = query::ObInnerSQLConnectionAccess::with_native_transaction(
+      trans_.get_connection(), [&](transaction::ObTxDesc &native) {
+    return prepare_layouts(native, trans_.target_namespace());
+  });
+  if (ret != OB_SUCCESS) { reset(); return ret; }
   return execute_impl([&](const obcall::ObBatchCreateTabletArg &arg, const char *buf, int64_t size, int64_t deadline) {
     return query::ObInnerSQLConnectionAccess::register_multi_data_source(
         trans_.get_connection(), transaction::ObTxDataSourceType::CREATE_TABLET_NEW_MDS, buf, size);
   }, true);
 }
 
-int ObTabletCreator::execute(transaction::ObTxDesc &trans)
+int ObTabletCreator::execute(transaction::ObTxDesc &trans, uint64_t namespace_id)
 {
   auto *service = share::server_service<transaction::ObTransService>();
   if (service == nullptr) { return OB_NOT_INIT; }
+  int ret = prepare_layouts(trans, namespace_id);
+  if (ret != OB_SUCCESS) { reset(); return ret; }
   return execute_impl([&](const obcall::ObBatchCreateTabletArg &arg, const char *buf, int64_t size, int64_t deadline) {
     int ret = service->register_mds_into_tx(
         trans, transaction::ObTxDataSourceType::CREATE_TABLET_NEW_MDS, buf, size);
@@ -376,6 +385,26 @@ int ObTabletCreator::execute(transaction::ObTxDesc &trans)
     }
     return ret;
   }, false);
+}
+
+int ObTabletCreator::prepare_layouts(transaction::ObTxDesc &native, uint64_t namespace_id)
+{
+  auto *access = share::server_service<storage::ObAccessService>();
+  if (!inited_ || access == nullptr) { return OB_NOT_INIT; }
+  if (single_batch_arg_ == nullptr || namespace_id == 0) { return OB_INVALID_ARGUMENT; }
+  auto &store = access->storage_schema_store();
+  std::shared_ptr<storage::InstanceMetaStore::Transaction> tx;
+  int ret = TableStorageLayouts::attach(trans_, native, store, tx);
+  if (ret == OB_SUCCESS) {
+    TableStorageLayouts layouts(store, *tx, namespace_id);
+    for (auto *batch = single_batch_arg_; ret == OB_SUCCESS && batch != nullptr; batch = batch->next_) {
+      for (auto *schema : batch->batch_arg_.create_tablet_schemas_) {
+        if (ret != OB_SUCCESS) { break; }
+        ret = schema == nullptr ? OB_ERR_UNEXPECTED : layouts.prepare_create(*schema);
+      }
+    }
+  }
+  return ret;
 }
 
 int ObTabletCreator::execute_impl(

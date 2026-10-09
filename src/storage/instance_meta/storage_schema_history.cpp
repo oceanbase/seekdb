@@ -55,6 +55,20 @@ int StorageSchemaHistory::publish(uint64_t layout_id, const ObStorageSchema &sch
   return write(layout_id, schema, false);
 }
 
+int StorageSchemaHistory::read_version(uint64_t layout_id, int64_t &schema_version)
+{
+  ObArenaAllocator allocator(ObMemAttr("SchemaHistory"));
+  char key_buf[16];
+  ObString row;
+  int64_t size = 0;
+  schema_version = OB_INVALID_VERSION;
+  int ret = layout_id == 0 || layout_id == OB_INVALID_ID ? OB_INVALID_ARGUMENT
+      : store_.get(tx_, MetaCollection::STORAGE_LAYOUTS,
+          layout_key(layout_id, 0, key_buf), allocator, row);
+  if (ret == OB_SUCCESS) { ret = decode_layout_header(row, size, schema_version); }
+  return ret;
+}
+
 int StorageSchemaHistory::write(uint64_t layout_id, const ObStorageSchema &schema, bool create)
 {
   int ret = OB_SUCCESS;

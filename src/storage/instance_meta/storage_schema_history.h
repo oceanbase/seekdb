@@ -26,6 +26,7 @@ public:
   int create(uint64_t layout_id, const ObStorageSchema &schema);
   int publish(uint64_t layout_id, const ObStorageSchema &schema);
   int read(uint64_t layout_id, common::ObIAllocator &allocator, ObStorageSchema &schema);
+  int read_version(uint64_t layout_id, int64_t &schema_version);
 
 private:
   int write(uint64_t layout_id, const ObStorageSchema &schema, bool create);

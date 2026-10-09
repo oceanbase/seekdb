@@ -465,7 +465,7 @@ int NamespaceForkKernelPrototype::ensure_control_schema(bool initial_install) {
   }
   if (OB_SUCC(ret) && created) {
     rootserver::NamespaceSchemaPublication publication(access->instance_meta_store(), proxy->target_namespace());
-    ret = publication.initialize(guard);
+    ret = publication.initialize(guard, *proxy);
   }
   if (OB_SUCC(ret)) {
     ret = observer::namespace_worker_prototype::complete_namespace_schema_bootstrap(*schema_service);
@@ -1618,7 +1618,7 @@ int NamespaceForkKernelPrototype::ensure_tablet(const ObTabletID &tablet_id) {
     auto create_physical_tablets = [&]() {
       return query::ObInnerSQLConnectionAccess::with_native_transaction(
           trans.get_connection(), [&](transaction::ObTxDesc &native) {
-        int create_ret = creator.execute(native);
+        int create_ret = creator.execute(native, db);
         if (create_ret == OB_SUCCESS) {
           create_ret = ObTabletAutoincrementService::get_instance().copy_sequences_for_fork(
               source_ids, ids, source_snapshot_versions, native);

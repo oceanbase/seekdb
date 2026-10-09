@@ -5,7 +5,7 @@
 #include "storage/instance_meta/instance_meta_store.h"
 
 namespace oceanbase {
-namespace common { class ObMySQLTransaction; }
+namespace common { class ObMySQLTransaction; class ObMySQLProxy; }
 namespace share { namespace schema {
 class ObMultiVersionSchemaService;
 class ObSchemaGetterGuard;
@@ -23,7 +23,7 @@ public:
              share::schema::ObMultiVersionSchemaService &schema_service,
              int64_t schema_version);
   // Explicit installation boundary, before the template or user forks exist.
-  int initialize(share::schema::ObSchemaGetterGuard &guard);
+  int initialize(share::schema::ObSchemaGetterGuard &guard, common::ObMySQLProxy &proxy);
   int detach();
 private:
   storage::InstanceMetaStore &store_;

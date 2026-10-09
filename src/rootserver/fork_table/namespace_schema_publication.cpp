@@ -3,6 +3,9 @@
 #include "rootserver/ob_tablet_drop.h"
 #include "rootserver/fork_table/instance_namespace_metadata.h"
 #include "rootserver/fork_table/table_creation_descriptor.h"
+#include "rootserver/fork_table/table_storage_layouts.h"
+#include "storage/tx_storage/ob_access_service.h"
+#include "share/rc/ob_server_runtime.h"
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/schema/ob_schema_getter_guard.h"
@@ -129,7 +132,7 @@ bool same_binding(const ns::CatalogTabletSource &a, const ns::CatalogTabletSourc
 // Descriptor-only changes do no per-tablet storage lookups or source updates.
 // Physical materialization publishes its source change in its own native owner;
 // unchanged logical bindings must preserve that already published identity/cap.
-int build_publication(InstanceNamespaceMetadata &metadata,
+int build_publication(InstanceNamespaceMetadata &metadata, TableStorageLayouts &layouts,
     const InstanceNamespaceRecord &record, int64_t version,
     const Schemas &current, const Schemas &previous,
     std::vector<uint64_t> &removed_physical)
@@ -157,6 +160,7 @@ int build_publication(InstanceNamespaceMetadata &metadata,
     std::string bytes;
     uint64_t object = 0;
     if (OB_FAIL(description.init(schema, DATA_CURRENT_VERSION))) {
+    } else if (OB_FAIL(layouts.publish(description.schema()))) {
     } else if (OB_FAIL(description.encode(bytes))) {
     } else if (OB_FAIL(metadata.save_object(bytes, object))) {
     } else {
@@ -219,14 +223,28 @@ int build_publication(InstanceNamespaceMetadata &metadata,
 }
 } // namespace
 
-int NamespaceSchemaPublication::initialize(share::schema::ObSchemaGetterGuard &guard)
+int NamespaceSchemaPublication::initialize(share::schema::ObSchemaGetterGuard &guard,
+    common::ObMySQLProxy &proxy)
 {
   using namespace common;
   InstanceNamespaceMetadata metadata(store_, transaction_);
   InstanceNamespaceRecord record;
   common::ObArray<const share::schema::ObTableSchema *> tables;
-  int ret = store_.begin(transaction_, ObTimeUtility::current_time() + 120000000);
-  if (ret == OB_SUCCESS) { ret = metadata.get_namespace(namespace_id_, record, true); }
+  ObMySQLTransaction sql;
+  auto *access = share::server_service<ObAccessService>();
+  std::shared_ptr<InstanceMetaStore::Transaction> layout_tx;
+  int ret = access == nullptr ? OB_NOT_INIT : sql.start(&proxy);
+  if (ret == OB_SUCCESS) {
+    ret = query::ObInnerSQLConnectionAccess::with_native_transaction(sql.get_connection(),
+        [&](transaction::ObTxDesc &native) {
+      int rc = store_.attach(transaction_, native, THIS_WORKER.get_timeout_ts());
+      if (rc == OB_SUCCESS) { rc = metadata.get_namespace(namespace_id_, record, true); }
+      if (rc == OB_SUCCESS) {
+        rc = TableStorageLayouts::attach(sql, native, access->storage_schema_store(), layout_tx);
+      }
+      return rc;
+    });
+  }
   if (ret == OB_SUCCESS && (record.roots.catalog.page != 0 || record.roots.directory.page != 0)) {
     ret = OB_INIT_TWICE;
   }
@@ -235,12 +253,15 @@ int NamespaceSchemaPublication::initialize(share::schema::ObSchemaGetterGuard &g
   for (const auto *table : tables) { if (table->has_tablet()) { current[table->get_table_id()] = table; } }
   if (ret == OB_SUCCESS) {
     std::vector<uint64_t> removed;
-    ret = build_publication(metadata, record, record.roots.schema_version, current, {}, removed);
+    TableStorageLayouts layouts(access->storage_schema_store(), *layout_tx, namespace_id_);
+    ret = build_publication(metadata, layouts, record, record.roots.schema_version, current, {}, removed);
   }
-  if (transaction_.is_active()) {
-    const int end = ret == OB_SUCCESS ? store_.commit(transaction_) : store_.rollback(transaction_);
+  if (sql.is_started()) {
+    const int end = sql.end(ret == OB_SUCCESS);
     if (ret == OB_SUCCESS) { ret = end; }
   }
+  const int detach_ret = detach();
+  if (ret == OB_SUCCESS) { ret = detach_ret; }
   return ret;
 }
 
@@ -251,10 +272,16 @@ int NamespaceSchemaPublication::stage(common::ObMySQLTransaction &sql,
   using namespace share::schema;
   InstanceNamespaceMetadata metadata(store_, transaction_);
   InstanceNamespaceRecord record;
+  auto *access = share::server_service<ObAccessService>();
+  if (access == nullptr) { return OB_NOT_INIT; }
+  std::shared_ptr<InstanceMetaStore::Transaction> layout_tx;
   int ret = query::ObInnerSQLConnectionAccess::with_native_transaction(sql.get_connection(),
       [&](transaction::ObTxDesc &native) -> int {
     int rc = store_.attach(transaction_, native, THIS_WORKER.get_timeout_ts());
     if (rc == OB_SUCCESS) { rc = metadata.get_namespace(namespace_id_, record, true); }
+    if (rc == OB_SUCCESS) {
+      rc = TableStorageLayouts::attach(sql, native, access->storage_schema_store(), layout_tx);
+    }
     return rc;
   });
   if (ret == OB_SUCCESS && (record.roots.state != 0 || version <= record.roots.schema_version)) {
@@ -307,7 +334,10 @@ int NamespaceSchemaPublication::stage(common::ObMySQLTransaction &sql,
     include_family(schema);
   }
   std::vector<uint64_t> removed_physical;
-  if (ret == OB_SUCCESS) { ret = build_publication(metadata, record, version, current, previous, removed_physical); }
+  if (ret == OB_SUCCESS) {
+    TableStorageLayouts layouts(access->storage_schema_store(), *layout_tx, namespace_id_);
+    ret = build_publication(metadata, layouts, record, version, current, previous, removed_physical);
+  }
   // Native mapping/history SQL has already run in this DDL transaction. Only
   // register physical DELETE here, for the local incarnations removed from its
   // source tree. Inherited sources remain owned by their original physical copy.
