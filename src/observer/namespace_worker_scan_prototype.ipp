@@ -11,6 +11,5 @@ using namespace share;
 using namespace share::schema;
 using namespace storage;
 #include "observer/namespace_inprocess_scan_schema.ipp"
-#include "observer/namespace_inprocess_scan_engine.ipp"
 #include "observer/namespace_inprocess_scan_service.ipp"
 } } }

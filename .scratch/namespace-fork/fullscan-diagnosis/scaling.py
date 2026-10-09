@@ -11,16 +11,13 @@ from fork_service_latency_probe import query
 
 root = Path(__file__).resolve().parent
 parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--port', type=int, help='ready diagnostic instance; otherwise use live.json')
 parser.add_argument('--reuse', action='store_true', help='reuse the prepared diagnostic tables')
 parser.add_argument('--max-amplification', type=float)
 parser.add_argument('--rounds', type=int, default=3)
 args = parser.parse_args()
-state = json.loads((root / 'live.json').read_text())
-deadline = time.monotonic() + 180
-while 'hold_for_diagnostics' not in (root / 'repro.log').read_text():
-    if time.monotonic() > deadline: raise TimeoutError('full scans still running')
-    time.sleep(1)
-parent = pymysql.connect(host='127.0.0.1', port=state['port'], user='root',
+port = args.port or json.loads((root / 'live.json').read_text())['port']
+parent = pymysql.connect(host='127.0.0.1', port=port, user='root',
                          autocommit=True, read_timeout=300)
 query(parent, 'SET ob_query_timeout=300000000')
 if not args.reuse:
@@ -29,7 +26,7 @@ if not args.reuse:
         with parent.cursor() as cur:
             cur.executemany(f'INSERT INTO scan_diag.t{count} VALUES(%s,%s)', [(i, 10) for i in range(count)])
     query(parent, 'FORK NAMESPACE scaling_child FROM ns1')
-child = pymysql.connect(host='127.0.0.1', port=state['port'], user='root@scaling_child',
+child = pymysql.connect(host='127.0.0.1', port=port, user='root@scaling_child',
                         autocommit=True, read_timeout=300)
 query(child, 'SET ob_query_timeout=300000000')
 measurements = []
@@ -48,12 +45,12 @@ for repeat in range(args.rounds):
             print(json.dumps(sample), flush=True)
 child.close()
 parent.close()
+amplification = {}
+for name in ('parent', 'child'):
+    def median(count):
+        return statistics.median(s['elapsed_s'] for s in measurements
+            if s['namespace'] == name and s['table_partitions'] == count)
+    amplification[name] = median(8000) / median(256)
+print(json.dumps(dict(amplification=amplification, maximum=args.max_amplification)), flush=True)
 if args.max_amplification is not None:
-    amplification = {}
-    for name in ('parent', 'child'):
-        def median(count):
-            return statistics.median(s['elapsed_s'] for s in measurements
-                if s['namespace'] == name and s['table_partitions'] == count)
-        amplification[name] = median(8000) / median(256)
-    print(json.dumps(dict(amplification=amplification, maximum=args.max_amplification)), flush=True)
     assert max(amplification.values()) <= args.max_amplification, amplification

@@ -38,26 +38,8 @@ int ObDASScanIter::inner_init(ObDASIterParam &param)
   } else {
     const ObDASScanCtDef *scan_ctdef = (static_cast<ObDASScanIterParam&>(param)).scan_ctdef_;
     output_ = &scan_ctdef->result_output_;
-    // Session warnings and schema-description virtual tables need the live
-    // session or its namespace schema guard in this process.
-    const uint64_t table_id = scan_ctdef->ref_table_id_;
-    const bool native_virtual = table_id == share::OB_ALL_VIRTUAL_WARNING_TID
-        || table_id == share::OB_ALL_VIRTUAL_GLOBAL_VARIABLE_TID
-        || table_id == share::OB_ALL_VIRTUAL_SESSION_VARIABLE_TID
-        || table_id == share::OB_ALL_VIRTUAL_TABLE_COLUMN_TID
-        || table_id == share::OB_ALL_VIRTUAL_TABLE_INDEX_TID
-        || table_id == share::OB_ALL_VIRTUAL_COLLATION_TID
-        || table_id == share::OB_ALL_VIRTUAL_CHARSET_TID
-        || table_id == share::OB_ALL_VIRTUAL_SHOW_CREATE_DATABASE_TID
-        || table_id == share::OB_ALL_VIRTUAL_SHOW_CREATE_TABLE_TID
-        || table_id == share::OB_ALL_VIRTUAL_SHOW_TABLES_TID
-        || table_id == share::OB_ALL_VIRTUAL_CORE_ALL_TABLE_TID
-        || table_id == share::OB_ALL_VIRTUAL_CORE_COLUMN_TABLE_TID;
-    tsc_service_ = native_virtual
-        ? observer::namespace_worker_prototype::effective_virtual_table_scan(
-              THIS_WORKER.get_session())
-        : observer::namespace_worker_prototype::effective_tablet_scan(
-              THIS_WORKER.get_session());
+    tsc_service_ = observer::namespace_worker_prototype::effective_tablet_scan(
+        THIS_WORKER.get_session());
     if (OB_ISNULL(tsc_service_)) {
       ret = OB_NOT_INIT;
       LOG_WARN("tablet scan service is not bound", K(ret), K(scan_ctdef->ref_table_id_));
@@ -90,8 +72,6 @@ int ObDASScanIter::inner_release()
     }
     result_ = nullptr;
   }
-  tablet_access_.reset();
-  namespace_id_ = 0;
   return ret;
 }
 
@@ -104,28 +84,6 @@ int ObDASScanIter::do_table_scan()
   } else if (OB_UNLIKELY(nullptr != result_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected not null result iter ptr before do table scan", K(ret), KP_(result));
-  } else if (((scan_param_->op_ == nullptr && scan_param_->output_exprs_ == nullptr)
-              || (scan_param_->aggregate_exprs_ != nullptr
-                  && !scan_param_->aggregate_exprs_->empty())
-              || (scan_param_->table_param_ != nullptr
-                  && scan_param_->table_param_->is_fts_index()))
-             && observer::namespace_worker_prototype::in_process_session_ns(
-                    THIS_WORKER.get_session()) > 0) {
-    namespace_id_ = observer::namespace_worker_prototype::in_process_session_ns(
-        THIS_WORKER.get_session());
-    requested_snapshot_ = scan_param_->fb_snapshot_;
-    data_plane::ObNamespaceAccessMode mode;
-    ns::NamespaceCatalogViews::Handle read_view;
-    if (OB_FAIL(observer::namespace_worker_prototype::find_statement_read_view(
-            namespace_id_, scan_param_->snapshot_.core_.version_.get_val_for_tx(), read_view))) {
-    } else if (OB_FAIL(observer::namespace_worker_prototype::storage_access_mode(
-            observer::namespace_worker_prototype::StorageSpaceHandle::namespace_space(namespace_id_), mode))) {
-    } else if (OB_FAIL(tablet_access_.prepare_scan(namespace_id_, mode, *scan_param_, read_view))) {
-    } else {
-      tsc_service_ = share::server_service<common::ObITabletScan>();
-      ret = OB_ISNULL(tsc_service_) ? OB_NOT_INIT
-          : tsc_service_->table_scan(*scan_param_, result_);
-    }
   } else if (OB_FAIL(tsc_service_->table_scan(*scan_param_, result_))) {
     if (OB_SNAPSHOT_DISCARDED == ret && scan_param_->fb_snapshot_.is_valid()) {
       ret = OB_INVALID_QUERY_TIMESTAMP;
@@ -143,22 +101,6 @@ int ObDASScanIter::rescan()
   if (OB_ISNULL(scan_param_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr scan param", K(ret));
-  } else {
-    if (namespace_id_ != 0 && scan_param_->need_switch_param_) {
-      if (scan_param_->tablet_id_ == tablet_access_.tablet()) {
-        scan_param_->tablet_id_ = tablet_access_.schema_tablet();
-      }
-      scan_param_->fb_snapshot_ = requested_snapshot_;
-      data_plane::ObNamespaceAccessMode mode;
-      ns::NamespaceCatalogViews::Handle read_view;
-      if (OB_FAIL(observer::namespace_worker_prototype::find_statement_read_view(
-              namespace_id_, scan_param_->snapshot_.core_.version_.get_val_for_tx(), read_view))) {
-      } else if (OB_FAIL(observer::namespace_worker_prototype::storage_access_mode(
-              observer::namespace_worker_prototype::StorageSpaceHandle::namespace_space(namespace_id_), mode))) {
-      } else {
-        ret = tablet_access_.prepare_scan(namespace_id_, mode, *scan_param_, read_view);
-      }
-    }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(tsc_service_->table_rescan(*scan_param_, result_))) {

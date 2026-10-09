@@ -1,0 +1,26 @@
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_native_scan_su0vgbbr", "pid": 2882586, "port": 55251}
+{"event": "sql", "sql": "CREATE DATABASE native_scan", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE native_scan.t(id INT PRIMARY KEY,v INT,d DECIMAL(12,2),c CHAR(5),body LONGTEXT) PARTITION BY HASH(id) PARTITIONS 8", "rows": []}
+{"event": "sql", "sql": "CREATE INDEX by_v ON native_scan.t(v)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO native_scan.t SELECT seq,seq*10,seq+0.25,'abc',REPEAT(CHAR(65+seq),12000+seq) FROM (SELECT 0 seq UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7) x", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE native_scan.keys_t(k INT PRIMARY KEY)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO native_scan.keys_t VALUES(0),(1),(2),(3),(4),(5),(6),(7)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE native_scan_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "UPDATE native_scan.t SET v=v+1000", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*),SUM(v) FROM native_scan.t", "rows": [[8, "280"]]}
+{"event": "sql", "sql": "BEGIN", "rows": []}
+{"event": "sql", "sql": "UPDATE native_scan.t SET v=111 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "DELETE FROM native_scan.t WHERE id=2", "rows": []}
+{"event": "sql", "sql": "INSERT INTO native_scan.t VALUES(9,99,9.25,'xyz',REPEAT('z',16000))", "rows": []}
+{"event": "sql", "sql": "SELECT  id,v FROM native_scan.t ORDER BY id", "rows": [[0, 0], [1, 111], [3, 30], [4, 40], [5, 50], [6, 60], [7, 70], [9, 99]]}
+{"event": "sql", "sql": "SELECT  COUNT(*),SUM(v) FROM native_scan.t", "rows": [[8, "460"]]}
+{"event": "stopped", "pid": 2882586, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_native_scan_su0vgbbr/data.tar.gz", "bytes": 5629271}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File ".scratch/namespace-fork/native_scan_probe.py", line 72, in <module>
+    run(args.binary)
+  File ".scratch/namespace-fork/native_scan_probe.py", line 37, in run
+    assert exp.sql(f'SELECT {hint} COUNT(*),SUM(v) FROM native_scan.t', child) == ((8,560),)
+AssertionError

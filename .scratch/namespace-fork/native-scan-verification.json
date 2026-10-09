@@ -1,0 +1,194 @@
+{
+  "source_base": "90184bcc4cba45e12dc234f448740f15750b218f",
+  "source_diff_sha256": "bbc7506db7bd076399118a82c5af1d6ce909a72518d31732851d8a8d892b9160",
+  "binary_sha256": "b2dde8679339bc0e59359d033435fd69dee73b90ea3c81b91fa50aebe192afdf",
+  "source_modified_at_measurement": true,
+  "checks": [
+    {
+      "case": "release_build",
+      "exit_code": 0,
+      "log": "native-scan-build-1.log",
+      "sha256": "1b1efc2e736c38ac501a1912d4c7466840b8110f527f286e2695013f44427c42"
+    },
+    {
+      "case": "native_scan_initial_wrong_expected_sum",
+      "exit_code": 1,
+      "log": "native-scan-semantics-1.log",
+      "sha256": "925709d2e539e2ab8b19193b0eee791051299f7627b2a2b7032a82bc6a36a832"
+    },
+    {
+      "case": "native_scan_corrected_expected_sum",
+      "exit_code": 0,
+      "log": "native-scan-semantics-2.log",
+      "sha256": "8e21330dad9e9e13e0ee952503c48050c8bab75f378a8b70e796d50ca29eaf4a"
+    },
+    {
+      "case": "read_view_and_procedures",
+      "exit_code": 0,
+      "log": "native-scan-read-view-1.log",
+      "sha256": "26af62a68cd0d9bb14ddd8d666bd1e8714a167d0cfcfc66d46e9408aa45452a9"
+    },
+    {
+      "case": "inherited_fts_lob",
+      "exit_code": 0,
+      "log": "native-scan-fts-lob.log",
+      "sha256": "8d567cff26c57824e5492c4823032249c2b139f3849b22afd161f85d61a925b6"
+    },
+    {
+      "case": "bootstrap",
+      "exit_code": 0,
+      "log": "native-scan-bootstrap.log",
+      "sha256": "c9cf3170ace5bc89b57168f75def0f3c975197852193c0bd1f66c1e0d7465dd4"
+    },
+    {
+      "case": "direct_matrix",
+      "exit_code": 0,
+      "log": "native-scan-direct.log",
+      "sha256": "24151c4ec289b9f877eee86a4136a6ca73cb3e5bf4d74b8206fa0a597099db11"
+    },
+    {
+      "case": "standby_namespace_fork_local",
+      "exit_code": 0,
+      "log": "native-scan-standby/namespace_fork_local.log",
+      "sha256": "5526a9622cb61a7f25ea223947816dd7416f2fceb49c165690be67c5db90be35"
+    },
+    {
+      "case": "latency_8000_five_children",
+      "exit_code": 0,
+      "log": "native-scan-latency-8000.log",
+      "sha256": "43736c97f078d7aa224667215350f15b3580e26b5a33944243bdaf28754697dd"
+    },
+    {
+      "case": "scaling_initial_threshold_failure",
+      "exit_code": 1,
+      "log": "native-scan-scaling-1.log",
+      "sha256": "ba7e2aa9d25d2ea0cb7ed351e1e4fa90a16673270df76db3ffbad5aa26ff0348"
+    },
+    {
+      "case": "independent_fullscan_second_instance",
+      "exit_code": 0,
+      "log": "native-scan-diagnosis-2.log",
+      "sha256": "35576e9a262075a1a544b592fa4a60785b2b6ba959868ae42ea5f3acf7acf3a0"
+    },
+    {
+      "case": "scaling_five_rounds",
+      "exit_code": 0,
+      "log": "native-scan-scaling-2.log",
+      "sha256": "495cba9020ad98c877f92c86e084d1afe7c9ee997158f0c3a544c4250eb3e473"
+    },
+    {
+      "case": "scaling_profile_forty_rounds",
+      "exit_code": 0,
+      "log": "native-scan-scaling-profile.log",
+      "sha256": "9e1738f6b886f94e353bfb0749b54bbe2b55ee95005688ed6fc9a5bc56a09788"
+    },
+    {
+      "case": "integrated_scaling_and_fullscan_final",
+      "exit_code": 0,
+      "log": "native-scan-scaling-final.log",
+      "sha256": "55693bb4e06d18c3a58d1cce0e516d48558ab0bb14043d10026e4ba71a217af2"
+    }
+  ],
+  "regression_failures": [
+    {
+      "case": "native_scan_initial_wrong_expected_sum",
+      "classification": "fixture expectation error",
+      "actual_sum": 460,
+      "wrong_expected_sum": 560
+    },
+    {
+      "case": "scaling_initial_threshold_failure",
+      "classification": "remaining pre-fork SQL plan partition preparation and timing variation",
+      "amplification": {
+        "amplification": {
+          "parent": 8.005098890004671,
+          "child": 5.340181572142128
+        },
+        "maximum": 8.0
+      }
+    }
+  ],
+  "final_fullscan": [
+    {
+      "event": "scan_end",
+      "namespace": "parent",
+      "partitions": 8000,
+      "elapsed_s": 3.2148124650120735,
+      "rows": [
+        [
+          8000,
+          "80000"
+        ]
+      ],
+      "slow": false
+    },
+    {
+      "event": "scan_end",
+      "namespace": "child",
+      "partitions": 8000,
+      "elapsed_s": 3.398005209863186,
+      "rows": [
+        [
+          8000,
+          "80000"
+        ]
+      ],
+      "slow": false
+    }
+  ],
+  "final_scaling": {
+    "amplification": {
+      "parent": 7.647172479213998,
+      "child": 5.932157188208879
+    },
+    "maximum": 8.0
+  },
+  "profile": {
+    "data": "/data/1/nijia.nj/test/namespace_fork_native_scan_perf.data",
+    "duration_seconds": 20,
+    "frequency_hz": 99,
+    "workload": "40 rounds, scan 256 partitions of 256/1024/8000-partition tables, parent and child",
+    "functions": [
+      {
+        "inclusive_percent": 48.99,
+        "self_percent": 0.0,
+        "symbol": "oceanbase::sql::ObTableLocation::calculate_tablet_ids"
+      },
+      {
+        "inclusive_percent": 48.03,
+        "self_percent": 0.0,
+        "symbol": "oceanbase::sql::ObPlanMatchHelper::calc_table_locations"
+      },
+      {
+        "inclusive_percent": 47.72,
+        "self_percent": 23.94,
+        "symbol": "oceanbase::sql::ObDASTabletMapper::get_all_tablet_and_object_id"
+      },
+      {
+        "inclusive_percent": 23.73,
+        "self_percent": 23.38,
+        "symbol": "oceanbase::sql::ObDASTabletMapper::get_tablet_and_object_id"
+      },
+      {
+        "inclusive_percent": 16.85,
+        "self_percent": 0.1,
+        "symbol": "oceanbase::observer::namespace_worker_prototype::NamespaceScanIterator::prepare"
+      },
+      {
+        "inclusive_percent": 16.3,
+        "self_percent": 0.0,
+        "symbol": "oceanbase::storage::NamespaceForkKernelPrototype::resolve_read_tablet"
+      },
+      {
+        "inclusive_percent": 12.8,
+        "self_percent": 0.05,
+        "symbol": "oceanbase::rootserver::InstanceNamespaceMetadata::find_tablet_source"
+      }
+    ]
+  },
+  "limitations": [
+    "Shared host, no CPU isolation; five latency samples are not P95/P99.",
+    "No full mysqltest, sysbench, or full four-gate suite.",
+    "Plan partition-list duplicate checks remain a separate TODO; timing ratio is recorded but optional in four gates."
+  ]
+}

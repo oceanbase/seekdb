@@ -1,0 +1,63 @@
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_fullscan_diagnosis_iibflu93", "pid": 2905049, "port": 5787}
+{"event": "sql", "sql": "SET ob_query_timeout=300000000", "rows": []}
+{"event": "sql", "sql": "SET ob_trx_timeout=300000000", "rows": []}
+{"event": "sql", "sql": "CREATE DATABASE scan_diag", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE scan_diag.t(id INT PRIMARY KEY,v INT) PARTITION BY HASH(id) PARTITIONS 8000", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE scan_child FROM ns1", "rows": []}
+{"event": "fixture_ready", "pid": 2905049, "port": 5787, "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_fullscan_diagnosis_iibflu93", "partitions": 8000}
+{"event": "explain", "namespace": "parent", "plan": [["================================================================="], ["|ID|OPERATOR                     |NAME    |EST.ROWS|EST.TIME(us)|"], ["-----------------------------------------------------------------"], ["|0 |SCALAR GROUP BY              |        |1       |17462       |"], ["|1 |└─PX COORDINATOR             |        |1       |17462       |"], ["|2 |  └─EXCHANGE OUT DISTR       |:EX10000|1       |17462       |"], ["|3 |    └─MERGE GROUP BY         |        |1       |17461       |"], ["|4 |      └─PX PARTITION ITERATOR|        |8000    |17192       |"], ["|5 |        └─TABLE FULL SCAN    |t       |8000    |17192       |"], ["================================================================="], ["Outputs & filters:"], ["-------------------------------------"], ["  0 - output([T_FUN_COUNT_SUM(T_FUN_COUNT(*))], [T_FUN_SUM(T_FUN_SUM(t.v))]), filter(nil), rowset=256"], ["      group(nil), agg_func([T_FUN_COUNT_SUM(T_FUN_COUNT(*))], [T_FUN_SUM(T_FUN_SUM(t.v))])"], ["  1 - output([T_FUN_COUNT(*)], [T_FUN_SUM(t.v)]), filter(nil), rowset=256"], ["  2 - output([T_FUN_COUNT(*)], [T_FUN_SUM(t.v)]), filter(nil), rowset=256"], ["      dop=1"], ["  3 - output([T_FUN_COUNT(*)], [T_FUN_SUM(t.v)]), filter(nil), rowset=256"], ["      group(nil), agg_func([T_FUN_COUNT(*)], [T_FUN_SUM(t.v)])"], ["  4 - output([t.v]), filter(nil), rowset=256"], ["      force partition granule"], ["  5 - output([t.v]), filter(nil), rowset=256"], ["      access([t.v]), partitions(p[0-7999])"], ["      is_index_back=false, is_global_index=false, "], ["      range_key([t.id]), range(MIN ; MAX)always true"]]}
+{"event": "explain", "namespace": "child", "plan": [["================================================================="], ["|ID|OPERATOR                     |NAME    |EST.ROWS|EST.TIME(us)|"], ["-----------------------------------------------------------------"], ["|0 |SCALAR GROUP BY              |        |1       |16802       |"], ["|1 |└─PX COORDINATOR             |        |1       |16802       |"], ["|2 |  └─EXCHANGE OUT DISTR       |:EX10000|1       |16802       |"], ["|3 |    └─MERGE GROUP BY         |        |1       |16801       |"], ["|4 |      └─PX PARTITION ITERATOR|        |1       |16801       |"], ["|5 |        └─TABLE FULL SCAN    |t       |1       |16801       |"], ["================================================================="], ["Outputs & filters:"], ["-------------------------------------"], ["  0 - output([T_FUN_COUNT_SUM(T_FUN_COUNT(*))], [T_FUN_SUM(T_FUN_SUM(t.v))]), filter(nil), rowset=16"], ["      group(nil), agg_func([T_FUN_COUNT_SUM(T_FUN_COUNT(*))], [T_FUN_SUM(T_FUN_SUM(t.v))])"], ["  1 - output([T_FUN_COUNT(*)], [T_FUN_SUM(t.v)]), filter(nil), rowset=16"], ["  2 - output([T_FUN_COUNT(*)], [T_FUN_SUM(t.v)]), filter(nil), rowset=16"], ["      dop=1"], ["  3 - output([T_FUN_COUNT(*)], [T_FUN_SUM(t.v)]), filter(nil), rowset=16"], ["      group(nil), agg_func([T_FUN_COUNT(*)], [T_FUN_SUM(t.v)])"], ["  4 - output([t.v]), filter(nil), rowset=16"], ["      force partition granule"], ["  5 - output([t.v]), filter(nil), rowset=16"], ["      access([t.v]), partitions(p[0-7999])"], ["      is_index_back=false, is_global_index=false, "], ["      range_key([t.id]), range(MIN ; MAX)always true"]]}
+{"event": "scan_begin", "namespace": "parent", "partitions": 64}
+{"event": "scan_end", "namespace": "parent", "partitions": 64, "elapsed_s": 0.2879433147609234, "rows": [[64, "640"]], "slow": false}
+{"event": "scan_begin", "namespace": "child", "partitions": 64}
+{"event": "scan_end", "namespace": "child", "partitions": 64, "elapsed_s": 0.3908305950462818, "rows": [[64, "640"]], "slow": false}
+{"event": "scan_begin", "namespace": "parent", "partitions": 256}
+{"event": "scan_end", "namespace": "parent", "partitions": 256, "elapsed_s": 0.30911028012633324, "rows": [[256, "2560"]], "slow": false}
+{"event": "scan_begin", "namespace": "child", "partitions": 256}
+{"event": "scan_end", "namespace": "child", "partitions": 256, "elapsed_s": 0.3854063041508198, "rows": [[256, "2560"]], "slow": false}
+{"event": "scan_begin", "namespace": "parent", "partitions": 1024}
+{"event": "scan_end", "namespace": "parent", "partitions": 1024, "elapsed_s": 0.5379871279001236, "rows": [[1024, "10240"]], "slow": false}
+{"event": "scan_begin", "namespace": "child", "partitions": 1024}
+{"event": "scan_end", "namespace": "child", "partitions": 1024, "elapsed_s": 0.9268783330917358, "rows": [[1024, "10240"]], "slow": false}
+{"event": "scan_begin", "namespace": "parent", "partitions": 8000}
+{"event": "scan_end", "namespace": "parent", "partitions": 8000, "elapsed_s": 2.1568773053586483, "rows": [[8000, "80000"]], "slow": false}
+{"event": "scan_begin", "namespace": "child", "partitions": 8000}
+{"event": "scan_end", "namespace": "child", "partitions": 8000, "elapsed_s": 1.8019807934761047, "rows": [[8000, "80000"]], "slow": false}
+{"event": "PASS", "case": "fullscan_result_correctness", "full_scan_seconds": [2.1568773053586483, 1.8019807934761047]}
+{"round": 0, "namespace": "parent", "table_partitions": 256, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.05154739320278168}
+{"round": 0, "namespace": "child", "table_partitions": 256, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.07097230106592178}
+{"round": 0, "namespace": "parent", "table_partitions": 1024, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.0449666790664196}
+{"round": 0, "namespace": "child", "table_partitions": 1024, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.05403278023004532}
+{"round": 0, "namespace": "parent", "table_partitions": 8000, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.22552913427352905}
+{"round": 0, "namespace": "child", "table_partitions": 8000, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.547738716006279}
+{"round": 1, "namespace": "parent", "table_partitions": 256, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.02774849534034729}
+{"round": 1, "namespace": "child", "table_partitions": 256, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.03950703144073486}
+{"round": 1, "namespace": "parent", "table_partitions": 1024, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.028057631105184555}
+{"round": 1, "namespace": "child", "table_partitions": 1024, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.03418850898742676}
+{"round": 1, "namespace": "parent", "table_partitions": 8000, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.2221294492483139}
+{"round": 1, "namespace": "child", "table_partitions": 8000, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.24725691974163055}
+{"round": 2, "namespace": "parent", "table_partitions": 256, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.027039531618356705}
+{"round": 2, "namespace": "child", "table_partitions": 256, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.04630121961236}
+{"round": 2, "namespace": "parent", "table_partitions": 1024, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.0274125374853611}
+{"round": 2, "namespace": "child", "table_partitions": 1024, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.042045142501592636}
+{"round": 2, "namespace": "parent", "table_partitions": 8000, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.12837523221969604}
+{"round": 2, "namespace": "child", "table_partitions": 8000, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.13580674305558205}
+{"amplification": {"parent": 8.005098890004671, "child": 5.340181572142128}, "maximum": 8.0}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File ".scratch/namespace-fork/fullscan-diagnosis/scaling.py", line 56, in <module>
+    assert max(amplification.values()) <= args.max_amplification, amplification
+AssertionError: {'parent': 8.005098890004671, 'child': 5.340181572142128}
+{"event": "stopped", "pid": 2905049, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_fullscan_diagnosis_iibflu93/data.tar.gz", "bytes": 11593594}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
+Traceback (most recent call last):
+  File ".scratch/namespace-fork/fullscan_diagnosis_probe.py", line 86, in <module>
+    main()
+  File ".scratch/namespace-fork/fullscan_diagnosis_probe.py", line 72, in main
+    subprocess.run([sys.executable, str(evidence / 'scaling.py'), '--port', str(exp.port),
+  File "/usr/lib64/python3.8/subprocess.py", line 516, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/bin/python3', '.scratch/namespace-fork/fullscan-diagnosis/scaling.py', '--port', '5787', '--max-amplification', '8']' returned non-zero exit status 1.

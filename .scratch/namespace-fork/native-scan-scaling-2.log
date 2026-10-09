@@ -1,0 +1,33 @@
+{"round": 0, "namespace": "parent", "table_partitions": 256, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.09785441309213638}
+{"round": 0, "namespace": "child", "table_partitions": 256, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.11398950591683388}
+{"round": 0, "namespace": "parent", "table_partitions": 1024, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.05882178246974945}
+{"round": 0, "namespace": "child", "table_partitions": 1024, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.07204252853989601}
+{"round": 0, "namespace": "parent", "table_partitions": 8000, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.3893629163503647}
+{"round": 0, "namespace": "child", "table_partitions": 8000, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.4082641042768955}
+{"round": 1, "namespace": "parent", "table_partitions": 256, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.0558471642434597}
+{"round": 1, "namespace": "child", "table_partitions": 256, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.059674035757780075}
+{"round": 1, "namespace": "parent", "table_partitions": 1024, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.039413273334503174}
+{"round": 1, "namespace": "child", "table_partitions": 1024, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.050870057195425034}
+{"round": 1, "namespace": "parent", "table_partitions": 8000, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.23008711263537407}
+{"round": 1, "namespace": "child", "table_partitions": 8000, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.3233942650258541}
+{"round": 2, "namespace": "parent", "table_partitions": 256, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.08107450976967812}
+{"round": 2, "namespace": "child", "table_partitions": 256, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.09965776279568672}
+{"round": 2, "namespace": "parent", "table_partitions": 1024, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.0766964964568615}
+{"round": 2, "namespace": "child", "table_partitions": 1024, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.1081315129995346}
+{"round": 2, "namespace": "parent", "table_partitions": 8000, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.1612279713153839}
+{"round": 2, "namespace": "child", "table_partitions": 8000, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.13083072379231453}
+{"round": 3, "namespace": "parent", "table_partitions": 256, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.025269120931625366}
+{"round": 3, "namespace": "child", "table_partitions": 256, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.04941129311919212}
+{"round": 3, "namespace": "parent", "table_partitions": 1024, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.03307180479168892}
+{"round": 3, "namespace": "child", "table_partitions": 1024, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.04989031329751015}
+{"round": 3, "namespace": "parent", "table_partitions": 8000, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.12301040813326836}
+{"round": 3, "namespace": "child", "table_partitions": 8000, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.24135681986808777}
+{"round": 4, "namespace": "parent", "table_partitions": 256, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.026005778461694717}
+{"round": 4, "namespace": "child", "table_partitions": 256, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.036899369210004807}
+{"round": 4, "namespace": "parent", "table_partitions": 1024, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.031577251851558685}
+{"round": 4, "namespace": "child", "table_partitions": 1024, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.04437108337879181}
+{"round": 4, "namespace": "parent", "table_partitions": 8000, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.12849290668964386}
+{"round": 4, "namespace": "child", "table_partitions": 8000, "scanned_partitions": 256, "rows": 256, "elapsed_s": 0.2341623157262802}
+{"amplification": {"parent": 2.8869500090018523, "child": 4.0445868425552325}, "maximum": 8.0}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend

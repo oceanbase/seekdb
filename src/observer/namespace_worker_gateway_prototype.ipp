@@ -45,7 +45,6 @@ struct InProcessStorage {
   std::shared_ptr<StorageSessionState> session_state;
   sql::ObSQLSessionInfo &session; // storage-side native session
   std::unique_ptr<EngineWrites> writes;
-  ReadScans scans;
   DirectInsertRoute direct_insert;
   DirectInsertRegistry *direct_insert_registry = nullptr;
   RequestTag direct_insert_tag;
@@ -55,8 +54,7 @@ struct InProcessStorage {
       : ns(namespace_id),
         storage_space(StorageSpaceHandle::namespace_space(namespace_id)),
         session_state(std::make_shared<StorageSessionState>()),
-        session(session_state->session),
-        scans(storage_space) {
+        session(session_state->session) {
     storage_access_mode(storage_space, namespace_access_mode);
     ::oceanbase::ns::NamespaceRuntime *runtime = nullptr;
     if (::oceanbase::ns::namespace_registry().get(namespace_id, runtime) && runtime != nullptr) {
@@ -273,23 +271,23 @@ int in_process_open(InProcessStorage &ctx, uint32_t sid, bool internal)
   }
   return ret;
 }
-int open_in_process_scan(StorageSpaceHandle storage_space,
-                         const ObVTableScanParam &param,
-                         const ObTableSchema &logical_schema, uint64_t &handle)
+// SQL owns the request and its descriptors. Only the transaction pointer needs
+// bridging to the session's native owner while storage opens/rescans an iterator.
+int invoke_native_scan(sql::ObSQLSessionInfo &session, ObTableScanParam &param,
+                       const std::function<int()> &operation)
 {
-  handle = 0;
+  StorageSessionScope scope(&session);
   InProcessStorage *ctx = in_process_storage;
-  if (ctx == nullptr || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
-  if (ctx->ns != serving_namespace() || !ctx->owns(storage_space)) {
+  if (scope.error() != OB_SUCCESS) { return scope.error(); }
+  if (ctx == nullptr || !ctx->initialized || !ctx->writes || !ctx->writes->tx
+      || ctx->ns != in_process_session_ns(&session)
+      || ctx->writes->tx->get_tx_id() != param.tx_id_) {
     return OB_INVALID_ARGUMENT;
   }
-  const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
-  auto *old_session = THIS_WORKER.get_session();
-  THIS_WORKER.set_session(&ctx->session);
-  const int ret = ctx->scans.open(storage_space, ctx->access_mode(storage_space), param, logical_schema,
-      ctx->writes->tx, &ctx->session, handle);
-  THIS_WORKER.set_session(old_session);
-  THIS_WORKER.set_timeout_ts(old_timeout);
+  ObTxDesc *sql_tx = param.trans_desc_;
+  param.trans_desc_ = ctx->writes->tx;
+  const int ret = operation();
+  param.trans_desc_ = sql_tx;
   return ret;
 }
 int capture_statement_read_view(sql::ObSQLSessionInfo &session,
@@ -815,7 +813,6 @@ void close_session(SessionBinding *binding) {
     auto *old_session = THIS_WORKER.get_session();
     THIS_WORKER.set_session(&ctx->session);
     ctx->direct_insert.reset();
-    ctx->scans.scans.clear();
     ctx->session.reset_reserved_snapshot_version();
     ctx->writes.reset();
     ctx->initialized = false;

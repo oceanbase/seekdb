@@ -3,6 +3,8 @@
 import argparse
 import json
 import resource
+import subprocess
+import sys
 import time
 from pathlib import Path
 import pymysql
@@ -15,9 +17,14 @@ def main():
     parser.add_argument('--binary', required=True)
     parser.add_argument('--partitions', type=int, default=8000)
     parser.add_argument('--hold', type=int, default=0)
+    parser.add_argument('--scaling', action='store_true', help='also scan 256 partitions of differently sized tables')
+    parser.add_argument('--max-amplification', type=float,
+                        help='optional scaling budget for 8000 vs 256 total partitions, with 256 scanned')
     parser.add_argument('--max-scan-seconds', type=float,
                         help='optional performance budget; raises on a slow full scan')
     args = parser.parse_args()
+    if args.scaling and args.partitions != 8000:
+        parser.error('--scaling requires --partitions 8000')
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     exp = BootstrapExperiment(args.binary, 'fullscan_diagnosis', prototype=6)
     exp.extra_parameters = [('memory_budget', '8G'), ('datafile_size', '512M'),
@@ -61,6 +68,12 @@ def main():
                 exp.record('scan_end', namespace=name, partitions=count, elapsed_s=elapsed, rows=rows,
                            slow=elapsed > max(1.0, count * .001))
         exp.record('PASS', case='fullscan_result_correctness', full_scan_seconds=full_scan_seconds)
+        if args.scaling:
+            command = [sys.executable, str(evidence / 'scaling.py'), '--port', str(exp.port)]
+            if args.max_amplification is not None:
+                command.extend(['--max-amplification', str(args.max_amplification)])
+            subprocess.run(command, check=True)
+            exp.record('PASS', case='fullscan_schema_scaling')
         if args.hold:
             exp.record('hold_for_diagnostics', seconds=args.hold)
             time.sleep(args.hold)

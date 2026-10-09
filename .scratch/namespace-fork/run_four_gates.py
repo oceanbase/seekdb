@@ -52,10 +52,11 @@ gates = [
     ]),
     ('sql', [[tools / 'namespace_sql_worker_prototype.py', '--binary', binary, '--case', 'full']]),
     ('direct', [
+        [local / 'native_scan_probe.py', '--binary', binary],
         [local / 'large_partition_fork_probe.py', '--binary', binary],
         [local / 'fork_service_latency_probe.py', '--binary', binary,
          '--result', args.log_dir / 'fork-service-latency-results.json'],
-        [local / 'fullscan_diagnosis_probe.py', '--binary', binary],
+        [local / 'fullscan_diagnosis_probe.py', '--binary', binary, '--scaling'],
         [local / 'automatic_catalog_gc_probe.py', '--binary', binary],
         [local / 'sql_read_view_probe.py', '--binary', binary],
         [local / 'physical_retention_mvcc_probe.py', '--binary', binary],

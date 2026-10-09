@@ -1,0 +1,129 @@
+{
+  "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+  "binary_sha256": "b2dde8679339bc0e59359d033435fd69dee73b90ea3c81b91fa50aebe192afdf",
+  "source_head": "90184bcc4cba45e12dc234f448740f15750b218f",
+  "partitions": 8000,
+  "rows": 8000,
+  "samples": 5,
+  "cpu_count": 4,
+  "memory_budget": "8G",
+  "background_maintenance": true,
+  "point_read": "SELECT id,v FROM latency_fork.t WHERE id=1",
+  "first_write": "UPDATE latency_fork.t SET v=11 WHERE id=1 (autocommit)",
+  "all_partition_read": "SELECT COUNT(*),SUM(v) FROM latency_fork.t",
+  "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_fork_service_latency_cgxz3l98",
+  "host_loadavg_before": [
+    7.03,
+    8.57,
+    7.11
+  ],
+  "instance_bootstrap_s": 15.563508942723274,
+  "create_table_s": 8.894428834319115,
+  "load_rows_s": 6.982947509735823,
+  "verified_table_physical_tablets": 8000,
+  "measurements": [
+    {
+      "namespace": "latency_child_0",
+      "fork_s": 0.008298646658658981,
+      "first_login_s": 0.28867287933826447,
+      "first_point_read_s": 0.0729205273091793,
+      "first_write_commit_s": 0.01616755872964859,
+      "read_after_write_s": 0.011818192899227142,
+      "fork_to_read_s": 0.36989205330610275,
+      "fork_to_write_commit_s": 0.38605961203575134,
+      "all_partition_scan_s": 3.1856266148388386
+    },
+    {
+      "namespace": "latency_child_1",
+      "fork_s": 0.022411193698644638,
+      "first_login_s": 0.2369912639260292,
+      "first_point_read_s": 0.07390297949314117,
+      "first_write_commit_s": 0.025648508220911026,
+      "read_after_write_s": 0.006447542458772659,
+      "fork_to_read_s": 0.333305437117815,
+      "fork_to_write_commit_s": 0.35895394533872604,
+      "all_partition_scan_s": 3.445776514708996
+    },
+    {
+      "namespace": "latency_child_2",
+      "fork_s": 0.0042686499655246735,
+      "first_login_s": 0.21814482659101486,
+      "first_point_read_s": 0.07961007952690125,
+      "first_write_commit_s": 0.01389751210808754,
+      "read_after_write_s": 0.00567515566945076,
+      "fork_to_read_s": 0.3020235560834408,
+      "fork_to_write_commit_s": 0.3159210681915283,
+      "all_partition_scan_s": 2.6629992201924324
+    },
+    {
+      "namespace": "latency_child_3",
+      "fork_s": 0.003977946937084198,
+      "first_login_s": 0.1780942976474762,
+      "first_point_read_s": 0.05658544600009918,
+      "first_write_commit_s": 0.010643642395734787,
+      "read_after_write_s": 0.006445888429880142,
+      "fork_to_read_s": 0.23865769058465958,
+      "fork_to_write_commit_s": 0.24930133298039436,
+      "all_partition_scan_s": 1.8611687012016773
+    },
+    {
+      "namespace": "latency_child_4",
+      "fork_s": 0.0025801584124565125,
+      "first_login_s": 0.17861676961183548,
+      "first_point_read_s": 0.06450456753373146,
+      "first_write_commit_s": 0.010680772364139557,
+      "read_after_write_s": 0.0044508203864097595,
+      "fork_to_read_s": 0.24570149555802345,
+      "fork_to_write_commit_s": 0.256382267922163,
+      "all_partition_scan_s": 2.407575063407421
+    }
+  ],
+  "summary_seconds": {
+    "fork_s": {
+      "min": 0.0025801584124565125,
+      "median": 0.0042686499655246735,
+      "max": 0.022411193698644638
+    },
+    "first_login_s": {
+      "min": 0.1780942976474762,
+      "median": 0.21814482659101486,
+      "max": 0.28867287933826447
+    },
+    "first_point_read_s": {
+      "min": 0.05658544600009918,
+      "median": 0.0729205273091793,
+      "max": 0.07961007952690125
+    },
+    "first_write_commit_s": {
+      "min": 0.010643642395734787,
+      "median": 0.01389751210808754,
+      "max": 0.025648508220911026
+    },
+    "read_after_write_s": {
+      "min": 0.0044508203864097595,
+      "median": 0.006445888429880142,
+      "max": 0.011818192899227142
+    },
+    "fork_to_read_s": {
+      "min": 0.23865769058465958,
+      "median": 0.3020235560834408,
+      "max": 0.36989205330610275
+    },
+    "fork_to_write_commit_s": {
+      "min": 0.24930133298039436,
+      "median": 0.3159210681915283,
+      "max": 0.38605961203575134
+    },
+    "all_partition_scan_s": {
+      "min": 1.8611687012016773,
+      "median": 2.6629992201924324,
+      "max": 3.445776514708996
+    }
+  },
+  "host_loadavg_after": [
+    7.77,
+    8.46,
+    7.15
+  ],
+  "result": "PASS"
+}

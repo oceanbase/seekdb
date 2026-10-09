@@ -1,0 +1,51 @@
+{"event": "setup", "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb", "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_native_scan_339g_e_3", "pid": 2884680, "port": 32139}
+{"event": "sql", "sql": "CREATE DATABASE native_scan", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE native_scan.t(id INT PRIMARY KEY,v INT,d DECIMAL(12,2),c CHAR(5),body LONGTEXT) PARTITION BY HASH(id) PARTITIONS 8", "rows": []}
+{"event": "sql", "sql": "CREATE INDEX by_v ON native_scan.t(v)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO native_scan.t SELECT seq,seq*10,seq+0.25,'abc',REPEAT(CHAR(65+seq),12000+seq) FROM (SELECT 0 seq UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7) x", "rows": []}
+{"event": "sql", "sql": "CREATE TABLE native_scan.keys_t(k INT PRIMARY KEY)", "rows": []}
+{"event": "sql", "sql": "INSERT INTO native_scan.keys_t VALUES(0),(1),(2),(3),(4),(5),(6),(7)", "rows": []}
+{"event": "sql", "sql": "FORK NAMESPACE native_scan_child FROM ns1", "rows": []}
+{"event": "sql", "sql": "UPDATE native_scan.t SET v=v+1000", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*),SUM(v) FROM native_scan.t", "rows": [[8, "280"]]}
+{"event": "sql", "sql": "BEGIN", "rows": []}
+{"event": "sql", "sql": "UPDATE native_scan.t SET v=111 WHERE id=1", "rows": []}
+{"event": "sql", "sql": "DELETE FROM native_scan.t WHERE id=2", "rows": []}
+{"event": "sql", "sql": "INSERT INTO native_scan.t VALUES(9,99,9.25,'xyz',REPEAT('z',16000))", "rows": []}
+{"event": "sql", "sql": "SELECT  id,v FROM native_scan.t ORDER BY id", "rows": [[0, 0], [1, 111], [3, 30], [4, 40], [5, 50], [6, 60], [7, 70], [9, 99]]}
+{"event": "sql", "sql": "SELECT  COUNT(*),SUM(v) FROM native_scan.t", "rows": [[8, "460"]]}
+{"event": "sql", "sql": "SELECT /*+ PARALLEL(2) */ id,v FROM native_scan.t ORDER BY id", "rows": [[0, 0], [1, 111], [3, 30], [4, 40], [5, 50], [6, 60], [7, 70], [9, 99]]}
+{"event": "sql", "sql": "SELECT /*+ PARALLEL(2) */ COUNT(*),SUM(v) FROM native_scan.t", "rows": [[8, "460"]]}
+{"event": "sql", "sql": "COMMIT", "rows": []}
+{"event": "sql", "sql": "SELECT id,d,c,LENGTH(body) FROM native_scan.t WHERE id IN(1,9) ORDER BY id", "rows": [[1, "1.25", "abc", 12001], [9, "9.25", "xyz", 16000]]}
+{"event": "sql", "sql": "SELECT id,SUBSTR(body,1,3) FROM native_scan.t FORCE INDEX(by_v) WHERE v>=60 ORDER BY id", "rows": [[1, "BBB"], [6, "GGG"], [7, "HHH"], [9, "zzz"]]}
+{"event": "sql", "sql": "EXPLAIN SELECT /*+ LEADING(k t) USE_NL(t) NO_USE_HASH(t) NO_USE_MERGE(t) */ k.k,t.v FROM native_scan.keys_t k JOIN native_scan.t t ON t.id=k.k ORDER BY k.k", "rows": [["======================================================="], ["|ID|OPERATOR               |NAME|EST.ROWS|EST.TIME(us)|"], ["-------------------------------------------------------"], ["|0 |NESTED-LOOP JOIN       |    |8       |132         |"], ["|1 |├─TABLE FULL SCAN      |k   |8       |3           |"], ["|2 |└─DISTRIBUTED TABLE GET|t   |1       |123         |"], ["======================================================="], ["Outputs & filters:"], ["-------------------------------------"], ["  0 - output([k.k], [t.v]), filter(nil), rowset=16"], ["      conds(nil), nl_params_([k.k(:0)]), use_batch=true"], ["  1 - output([k.k]), filter(nil), rowset=16"], ["      access([k.k]), partitions(p0)"], ["      is_index_back=false, is_global_index=false, "], ["      range_key([k.k]), range(MIN ; MAX)always true"], ["  2 - output([t.v]), filter(nil), rowset=16"], ["      access([GROUP_ID], [t.v]), partitions(p[0-7])"], ["      is_index_back=false, is_global_index=false, "], ["      range_key([t.id]), range(MIN ; MAX), "], ["      range_cond([t.id = :0])"]]}
+{"event": "sql", "sql": "SELECT /*+ LEADING(k t) USE_NL(t) NO_USE_HASH(t) NO_USE_MERGE(t) */ k.k,t.v FROM native_scan.keys_t k JOIN native_scan.t t ON t.id=k.k ORDER BY k.k", "rows": [[0, 0], [1, 111], [3, 30], [4, 40], [5, 50], [6, 60], [7, 70]]}
+{"event": "sql", "sql": "PREPARE scan_ps FROM 'SELECT id,v FROM native_scan.t WHERE id=?'", "rows": []}
+{"event": "sql", "sql": "SET @scan_key=0", "rows": []}
+{"event": "sql", "sql": "EXECUTE scan_ps USING @scan_key", "rows": [[0, 0]]}
+{"event": "sql", "sql": "SET @scan_key=1", "rows": []}
+{"event": "sql", "sql": "EXECUTE scan_ps USING @scan_key", "rows": [[1, 111]]}
+{"event": "sql", "sql": "SET @scan_key=3", "rows": []}
+{"event": "sql", "sql": "EXECUTE scan_ps USING @scan_key", "rows": [[3, 30]]}
+{"event": "sql", "sql": "SET @scan_key=4", "rows": []}
+{"event": "sql", "sql": "EXECUTE scan_ps USING @scan_key", "rows": [[4, 40]]}
+{"event": "sql", "sql": "SET @scan_key=5", "rows": []}
+{"event": "sql", "sql": "EXECUTE scan_ps USING @scan_key", "rows": [[5, 50]]}
+{"event": "sql", "sql": "SET @scan_key=6", "rows": []}
+{"event": "sql", "sql": "EXECUTE scan_ps USING @scan_key", "rows": [[6, 60]]}
+{"event": "sql", "sql": "SET @scan_key=7", "rows": []}
+{"event": "sql", "sql": "EXECUTE scan_ps USING @scan_key", "rows": [[7, 70]]}
+{"event": "sql", "sql": "SET @scan_key=9", "rows": []}
+{"event": "sql", "sql": "EXECUTE scan_ps USING @scan_key", "rows": [[9, 99]]}
+{"event": "sql", "sql": "DEALLOCATE PREPARE scan_ps", "rows": []}
+{"event": "sql", "sql": "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='native_scan' AND table_name='t'", "rows": [[5]]}
+{"event": "sql", "sql": "ALTER TABLE native_scan.t ADD COLUMN extra INT DEFAULT 17", "rows": []}
+{"event": "sql", "sql": "SELECT id,extra FROM native_scan.t ORDER BY id", "rows": [[0, 17], [1, 17], [3, 17], [4, 17], [5, 17], [6, 17], [7, 17], [9, 17]]}
+{"event": "sql", "sql": "SELECT id,v FROM native_scan.t ORDER BY id", "rows": [[0, 0], [1, 111], [3, 30], [4, 40], [5, 50], [6, 60], [7, 70], [9, 99]]}
+{"event": "PASS", "case": "native_scan", "partition_switch": true, "own_writes": true, "native_descriptors": true, "local_index_lookup": true, "nlj": true, "lob": true, "ddl": true}
+{"event": "sql", "sql": "SELECT SUM(v) FROM native_scan.t", "rows": [["8280"]]}
+{"event": "stopped", "pid": 2884680, "returncode": -9}
+{"event": "data_archived", "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_native_scan_339g_e_3/data.tar.gz", "bytes": 5852416}
+/home/nijia.nj/.local/lib/python3.8/site-packages/pymysql/_auth.py:9: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  from cryptography.hazmat.backends import default_backend
