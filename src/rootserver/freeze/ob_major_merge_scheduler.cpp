@@ -101,10 +101,7 @@ int ObMajorMergeScheduler::init(
     }
   }
 
-  if (FAILEDx(progress_checker_->init(is_primary_service,
-                                      sql_proxy,
-                                      schema_service,
-                                      merge_info_mgr))) {
+  if (FAILEDx(progress_checker_->init(is_primary_service))) {
     LOG_WARN("fail to init progress_checker", KR(ret));
   } else if (OB_FAIL(idling_.init())) {
   } else {

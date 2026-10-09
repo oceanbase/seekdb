@@ -73,15 +73,13 @@ int StorageSchemaHistory::read_version(uint64_t layout_id, int64_t &schema_versi
   return ret;
 }
 
-int StorageSchemaHistory::read_at(InstanceMetaStore &store, uint64_t layout_id,
-    const share::SCN &target, int64_t deadline,
-    common::ObIAllocator &allocator, ObStorageSchema &schema)
+int StorageSchemaHistory::begin_read_at(InstanceMetaStore &store, InstanceMetaStore::Transaction &tx,
+    const share::SCN &target, int64_t deadline)
 {
   auto *freezes = share::server_service<ObFreezeInfoMgr>();
   auto *transactions = share::server_service<transaction::ObTransService>();
   if (freezes == nullptr || transactions == nullptr) { return OB_NOT_INIT; }
-  InstanceMetaStore::Transaction tx;
-  int ret = store.begin_read(tx, deadline, [&](share::SCN &snapshot) {
+  return store.begin_read(tx, deadline, [&](share::SCN &snapshot) {
     share::SCN retained, readable;
     int rc = freezes->get_schema_history_retention(retained);
     if (rc == OB_SUCCESS && target < retained) { rc = OB_SNAPSHOT_DISCARDED; }
@@ -90,6 +88,14 @@ int StorageSchemaHistory::read_at(InstanceMetaStore &store, uint64_t layout_id,
     if (rc == OB_SUCCESS) { snapshot = target; }
     return rc;
   });
+}
+
+int StorageSchemaHistory::read_at(InstanceMetaStore &store, uint64_t layout_id,
+    const share::SCN &target, int64_t deadline,
+    common::ObIAllocator &allocator, ObStorageSchema &schema)
+{
+  InstanceMetaStore::Transaction tx;
+  int ret = begin_read_at(store, tx, target, deadline);
   if (ret == OB_SUCCESS) { ret = StorageSchemaHistory(store, tx).read(layout_id, allocator, schema); }
   if (tx.is_active()) {
     const int end = store.commit(tx);

@@ -117,6 +117,7 @@ gen_sqlite_table_def(
 gen_sqlite_table_def(
   table_name = '__all_column_checksum_error_info',
   columns = [
+      ('namespace_id', 'INTEGER', 'NOT NULL', None),
       ('frozen_scn', 'INTEGER', 'NOT NULL', None),
       ('index_type', 'INTEGER', 'NOT NULL', None),
       ('data_table_id', 'INTEGER', 'NOT NULL', None),
@@ -127,7 +128,7 @@ gen_sqlite_table_def(
       ('data_column_checksum', 'INTEGER', 'NOT NULL', None),
       ('index_column_checksum', 'INTEGER', 'NOT NULL', None)
   ],
-  primary_key = ['frozen_scn', 'index_type', 'data_table_id', 'index_table_id', 'data_tablet_id', 'index_tablet_id']
+  primary_key = ['namespace_id', 'frozen_scn', 'index_type', 'data_table_id', 'index_table_id', 'data_tablet_id', 'index_tablet_id']
   )
 
 # __all_deadlock_event_history: SQLite table for deadlock event history

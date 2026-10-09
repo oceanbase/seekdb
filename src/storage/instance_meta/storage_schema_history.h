@@ -42,6 +42,10 @@ public:
   static int read_at(InstanceMetaStore &store, uint64_t layout_id,
       const share::SCN &target, int64_t deadline,
       common::ObIAllocator &allocator, ObStorageSchema &schema);
+  // Open the same protected historical view for a batch of layout references.
+  // The caller ends tx before entering SQL or activating owner services.
+  static int begin_read_at(InstanceMetaStore &store, InstanceMetaStore::Transaction &tx,
+      const share::SCN &target, int64_t deadline);
   // Select a new locally readable target after registering retention. Used by
   // non-global compactions when their tentative old snapshot is no longer
   // protected. The returned target belongs to this exact layout read.

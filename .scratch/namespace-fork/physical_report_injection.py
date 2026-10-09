@@ -13,7 +13,7 @@ changes = (
      '  DEBUG_SYNC(RS_VALIDATE_CHECKSUM);\n',
      '''  if (const char *path = getenv("SEEKDB_PHYSICAL_REPORT_GATE")) {
     FILE *gate = fopen(path, "r");
-    if (gate != nullptr) { fclose(gate); return OB_EAGAIN; }
+    if (gate != nullptr) { fclose(gate); return OB_SUCCESS; }
     fprintf(stderr, "PHYSICAL_ROUND_CHECK F=%ld\\n", global_broadcast_scn.get_val_for_tx());
     fflush(stderr);
   }

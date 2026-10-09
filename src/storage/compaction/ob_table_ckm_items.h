@@ -123,23 +123,18 @@ public:
   const common::ObIArray<common::ObTabletID> &get_tablet_ids() const { return tablet_ids_; }
   const common::ObIArray<share::ObTabletLocalChecksumItem> &get_ckm_items() const { return ckm_items_.get_array(); }
   int build(
-    share::schema::ObSchemaGetterGuard &schema_guard,
-    const share::schema::ObSimpleTableSchemaV2 &simple_schema,
+    const share::schema::ObTableSchema &schema,
     const common::ObIArray<common::ObTabletID> &input_tablet_ids,
     const share::ObLocalTabletChecksumArray &input_ckm_items);
-  int build(
-    const uint64_t table_id,
-    const share::SCN &compaction_scn,
-    share::schema::ObSchemaGetterGuard &schema_guard);
   int build_column_ckm_sum_array(
     const share::SCN &compaction_scn,
     const share::schema::ObTableSchema &table_schema,
     int64_t &row_cnt);
   typedef int (*VALIDATE_CKM_FUNC)(
     const share::ObFreezeInfo &freeze_info,
-    common::ObMySQLProxy &sql_proxy,
     ObTableCkmItems &data_ckm,
-    ObTableCkmItems &index_ckm);
+    ObTableCkmItems &index_ckm,
+    share::ObColumnChecksumErrorInfo &error_info);
   static const int64_t FUNC_CNT = 2;
   static VALIDATE_CKM_FUNC validate_ckm_func[FUNC_CNT];
   TO_STRING_KV(K_(is_inited), K_(table_id), "tablet_cnt", tablet_ids_.count(),
@@ -149,14 +144,14 @@ public:
 private:
   static int validate_column_ckm_sum(
     const share::ObFreezeInfo &freeze_info,
-    common::ObMySQLProxy &sql_proxy,
     ObTableCkmItems &data_ckm,
-    ObTableCkmItems &index_ckm);
+    ObTableCkmItems &index_ckm,
+    share::ObColumnChecksumErrorInfo &error_info);
   static int validate_tablet_column_ckm(
     const share::ObFreezeInfo &freeze_info,
-    common::ObMySQLProxy &sql_proxy,
     ObTableCkmItems &data_ckm,
-    ObTableCkmItems &index_ckm);
+    ObTableCkmItems &index_ckm,
+    share::ObColumnChecksumErrorInfo &error_info);
   static int compare_ckm_by_column_ids(
     ObTableCkmItems &data_ckm,
     ObTableCkmItems &index_ckm,
@@ -165,14 +160,6 @@ private:
     const ObIArray<int64_t> &data_local_ckm_array,
     const ObIArray<int64_t> &index_local_ckm_array,
     share::ObColumnChecksumErrorInfo &ckm_error_info);
-  int prepare_build(
-    const uint64_t table_id,
-    share::schema::ObSchemaGetterGuard &schema_guard,
-    common::ObIArray<common::ObTabletID> &tablet_id_array);
-  static int check_schema_change_after_major_freeze(
-    const share::ObFreezeInfo &freeze_info,
-    ObTableCkmItems &data_ckm,
-    ObTableCkmItems &index_ckm);
   static const int64_t DEFAULT_COLUMN_CNT = 64;
   static const int64_t DEFAULT_TABLET_CNT = 16;
   bool is_inited_;

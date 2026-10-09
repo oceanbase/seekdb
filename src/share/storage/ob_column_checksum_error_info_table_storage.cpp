@@ -77,11 +77,12 @@ int ObColumnChecksumErrorInfoTableStorage::insert(const ObColumnChecksumErrorInf
   } else {
     const char *insert_sql =
       "INSERT INTO __all_column_checksum_error_info "
-      "(frozen_scn, index_type, data_table_id, index_table_id, "
+      "(namespace_id, frozen_scn, index_type, data_table_id, index_table_id, "
       " data_tablet_id, index_tablet_id, column_id, data_column_checksum, index_column_checksum) "
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);";
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
 
     auto binder = [&](ObSQLiteBinder &b) -> int {
+      b.bind_int64(error_info.namespace_id_);
       b.bind_int64(error_info.frozen_scn_.get_val_for_inner_table_field());
       b.bind_int64(error_info.is_global_index_ ? 1 : 0);
       b.bind_int64(error_info.data_table_id_);
@@ -115,9 +116,9 @@ int ObColumnChecksumErrorInfoTableStorage::insert_all(const ObIArray<ObColumnChe
   } else {
     const char *insert_sql =
       "INSERT INTO __all_column_checksum_error_info "
-      "(frozen_scn, index_type, data_table_id, index_table_id, "
+      "(namespace_id, frozen_scn, index_type, data_table_id, index_table_id, "
       " data_tablet_id, index_tablet_id, column_id, data_column_checksum, index_column_checksum) "
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);";
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
 
     ObSQLiteConnectionGuard guard(pool_);
     if (!guard) {
@@ -133,6 +134,7 @@ int ObColumnChecksumErrorInfoTableStorage::insert_all(const ObIArray<ObColumnChe
           for (int64_t i = 0; OB_SUCC(ret) && i < error_infos.count(); ++i) {
             const ObColumnChecksumErrorInfo &error_info = error_infos.at(i);
             auto binder = [&](ObSQLiteBinder &b) -> int {
+              b.bind_int64(error_info.namespace_id_);
               b.bind_int64(error_info.frozen_scn_.get_val_for_inner_table_field());
               b.bind_int64(error_info.is_global_index_ ? 1 : 0);
               b.bind_int64(error_info.data_table_id_);
@@ -169,6 +171,7 @@ int ObColumnChecksumErrorInfoTableStorage::insert_all(const ObIArray<ObColumnChe
 }
 
 int ObColumnChecksumErrorInfoTableStorage::get(
+    const uint64_t namespace_id,
     const SCN &frozen_scn,
     const bool is_global_index,
     const int64_t data_table_id,
@@ -184,15 +187,16 @@ int ObColumnChecksumErrorInfoTableStorage::get(
     LOG_WARN("not init", K(ret));
   } else {
     const char *select_sql =
-      "SELECT frozen_scn, index_type, data_table_id, index_table_id, "
+      "SELECT namespace_id, frozen_scn, index_type, data_table_id, index_table_id, "
       "       data_tablet_id, index_tablet_id, column_id, data_column_checksum, index_column_checksum "
       "FROM __all_column_checksum_error_info "
-      "WHERE frozen_scn = ? AND index_type = ? "
+      "WHERE namespace_id = ? AND frozen_scn = ? AND index_type = ? "
       "  AND data_table_id = ? AND index_table_id = ? "
       "  AND data_tablet_id = ? AND index_tablet_id = ? "
       "ORDER BY column_id;";
 
     auto binder = [&](ObSQLiteBinder &b) -> int {
+      b.bind_int64(namespace_id);
       b.bind_int64(frozen_scn.get_val_for_inner_table_field());
       b.bind_int64(is_global_index ? 1 : 0);
       b.bind_int64(data_table_id);
@@ -204,6 +208,7 @@ int ObColumnChecksumErrorInfoTableStorage::get(
 
     auto row_processor = [&](ObSQLiteRowReader &reader) -> int {
       ObColumnChecksumErrorInfo error_info;
+      error_info.namespace_id_ = reader.get_int64();
       uint64_t frozen_scn_val = reader.get_int64();
       int64_t index_type = reader.get_int64();
       int64_t data_table_id_val = reader.get_int64();

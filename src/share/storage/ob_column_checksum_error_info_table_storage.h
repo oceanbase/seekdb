@@ -44,7 +44,8 @@ public:
   int insert_all(const ObIArray<ObColumnChecksumErrorInfo> &error_infos);
 
   // Get column checksum error infos
-  int get(const SCN &frozen_scn,
+  int get(const uint64_t namespace_id,
+          const SCN &frozen_scn,
           const bool is_global_index,
           const int64_t data_table_id,
           const int64_t index_table_id,

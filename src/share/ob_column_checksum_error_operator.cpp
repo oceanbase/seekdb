@@ -46,7 +46,7 @@ int ObColumnChecksumErrorOperator::init(ObSQLiteConnectionPool &meta_db_pool)
 
 bool ObColumnChecksumErrorInfo::is_valid() const
 {
-  return (true) && (frozen_scn_.is_valid())
+  return namespace_id_ > 0 && namespace_id_ != OB_INVALID_ID && (frozen_scn_.is_valid())
          && (data_table_id_ != OB_INVALID_ID) && (index_table_id_ != OB_INVALID_ID);
 }
 

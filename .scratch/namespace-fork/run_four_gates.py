@@ -37,6 +37,7 @@ gates = [
         [local / 'run_table_storage_layout_probe.py', '--binary', probe],
         [local / 'physical_merge_layout_probe.py', '--binary', probe],
         [local / 'physical_report_probe.py', '--binary', probe],
+        [local / 'namespace_checksum_probe.py', '--binary', probe, '--native', '--fts'],
         [local / 'medium_layout_target_probe.py', '--binary', probe],
         [local / 'medium_layout_target_probe.py', '--binary', probe, '--force-old-target'],
         *[[local / 'freeze_preparation_probe.py', '--binary', probe, '--case', case]

@@ -1,5 +1,5 @@
 {
-  "scope": "Foundation, atomic DDL/layout publication, durable retention, physical C membership, major/ordinary medium G@target, primary freeze preparation, meta-major exact G/V bodies, SSTable origin G, per-row redo versions and native physical progress/report identity have targeted evidence below. Namespace logical checksum groups/history, layout/body/binding GC, legacy freeze.schema_version removal and full standby integration remain incomplete.",
+  "scope": "Foundation, atomic DDL/layout publication, durable retention, physical C membership, major/medium layouts, primary freeze preparation, exact meta-major bodies, SSTable origin, per-row redo versions, physical report identity and Namespace historical checksum now have targeted evidence below. Logical group-level progress/recovery, layout/body/binding GC, legacy freeze.schema_version removal and full standby integration remain incomplete.",
   "runs": [
     {
       "name": "layout_history",
@@ -5865,6 +5865,332 @@
           "event": "data_archived",
           "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_physical_report_2472__ly/data.tar.gz",
           "bytes": 37250005
+        }
+      ]
+    },
+    {
+      "name": "namespace_checksum_build_1",
+      "log": "/tmp/seekdb-namespace-checksum-build-1.log",
+      "status": "FAIL",
+      "note": "Incorrect AccessService header path; fixed.",
+      "events": []
+    },
+    {
+      "name": "namespace_checksum_build_2",
+      "log": "/tmp/seekdb-namespace-checksum-build-2.log",
+      "status": "FAIL",
+      "note": "Incorrect LSService header path; fixed.",
+      "events": []
+    },
+    {
+      "name": "namespace_checksum_build_3",
+      "log": "/tmp/seekdb-namespace-checksum-build-3.log",
+      "status": "PASS",
+      "note": "Production compile of the owner/history checker replacement.",
+      "events": []
+    },
+    {
+      "name": "namespace_checksum_production_1",
+      "log": "/tmp/seekdb-namespace-checksum-test-1.log",
+      "status": "PASS",
+      "note": "Divergent parent/child definitions and data; local and global index verification; initial/template/child owners.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_namespace_checksum_ojv2myfo",
+          "pid": 927880,
+          "port": 39031
+        },
+        {
+          "event": "freeze_prepared",
+          "frozen": 1791585055243099015,
+          "elapsed_s": 125.29
+        },
+        {
+          "event": "PASS",
+          "case": "independent_namespace_local_global_indexes",
+          "frozen": 1791585055243099015,
+          "root_version": 1791584929789936,
+          "child_version": 1791584930278728
+        },
+        {
+          "event": "PASS",
+          "case": "namespace_historical_checksum",
+          "native": false
+        },
+        {
+          "event": "stopped",
+          "pid": 927880,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_namespace_checksum_ojv2myfo/data.tar.gz",
+          "bytes": 13169114
+        }
+      ]
+    },
+    {
+      "name": "namespace_checksum_native_build_1",
+      "log": "/tmp/seekdb-namespace-checksum-native-build-1.log",
+      "status": "PASS",
+      "note": "Includes explicit owner in persisted error diagnostics; removable report controls.",
+      "events": []
+    },
+    {
+      "name": "namespace_checksum_native_1",
+      "log": "/tmp/seekdb-namespace-checksum-native-test-1.log",
+      "status": "FAIL",
+      "note": "Post-F DDL and FTS positive cases passed. Missing input returned EAGAIN and activated 600-second scheduler failure backoff; fixed as normal incomplete progress. Pause control was corrected too.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-namespace-checksum-native-v1",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_namespace_checksum_9fgz2a90",
+          "pid": 948305,
+          "port": 24963
+        },
+        {
+          "event": "freeze_prepared",
+          "frozen": 1791585508702937006,
+          "elapsed_s": 131.017
+        },
+        {
+          "event": "PASS",
+          "case": "independent_namespace_local_global_indexes",
+          "frozen": 1791585508702937006,
+          "root_version": 1791585376865712,
+          "child_version": 1791585377455056
+        },
+        {
+          "event": "freeze_prepared",
+          "frozen": 1791585548483578000,
+          "elapsed_s": 0.675
+        },
+        {
+          "event": "stopped",
+          "pid": 948305,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_namespace_checksum_9fgz2a90/data.tar.gz",
+          "bytes": 21324063
+        }
+      ]
+    },
+    {
+      "name": "namespace_checksum_native_build_2",
+      "log": "/tmp/seekdb-namespace-checksum-native-build-2.log",
+      "status": "PASS",
+      "note": "Normal incomplete verification no longer activates failure backoff.",
+      "events": []
+    },
+    {
+      "name": "namespace_checksum_native_2",
+      "log": "/tmp/seekdb-namespace-checksum-native-test-2.log",
+      "status": "FAIL",
+      "note": "Missing and wrong-V faults passed. Row-count mismatch set native is_merge_error=1 and persisted namespace_id=3; driver incorrectly waited for ERROR in DBA_OB_MAJOR_COMPACTION.status, which stays COMPACTING. Own probe interrupted after reading authoritative error state; assertion corrected.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-namespace-checksum-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_namespace_checksum_hq0ee60w",
+          "pid": 969465,
+          "port": 41461
+        },
+        {
+          "event": "freeze_prepared",
+          "frozen": 1791585923167265041,
+          "elapsed_s": 133.215
+        },
+        {
+          "event": "PASS",
+          "case": "independent_namespace_local_global_indexes",
+          "frozen": 1791585923167265041,
+          "root_version": 1791585789813736,
+          "child_version": 1791585790022880
+        },
+        {
+          "event": "freeze_prepared",
+          "frozen": 1791585946664774032,
+          "elapsed_s": 0.943
+        },
+        {
+          "event": "PASS",
+          "case": "child_global_index_report_fault",
+          "fault": "missing",
+          "frozen": 1791585946664774032,
+          "tablet": 4611686430744448325
+        },
+        {
+          "event": "freeze_prepared",
+          "frozen": 1791585969494892032,
+          "elapsed_s": 10.347
+        },
+        {
+          "event": "PASS",
+          "case": "child_global_index_report_fault",
+          "fault": "schema_version",
+          "frozen": 1791585969494892032,
+          "tablet": 4611686430744448325
+        },
+        {
+          "event": "freeze_prepared",
+          "frozen": 1791586000567443030,
+          "elapsed_s": 10.35
+        },
+        {
+          "event": "stopped",
+          "pid": 969465,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_namespace_checksum_hq0ee60w/data.tar.gz",
+          "bytes": 28423317
+        }
+      ]
+    },
+    {
+      "name": "namespace_checksum_production_final_build",
+      "log": "/tmp/seekdb-namespace-checksum-production-final-build.log",
+      "status": "PASS",
+      "note": "Production sources with all report controls removed.",
+      "events": []
+    },
+    {
+      "name": "namespace_checksum_production_final_major",
+      "log": "/tmp/seekdb-namespace-checksum-production-major.log",
+      "status": "PASS",
+      "note": "Actual major completed at F=1791585925463628006 using final production binary.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_3rq1q3tr",
+          "pid": 975702,
+          "port": 37743
+        },
+        {
+          "event": "PASS",
+          "case": "major_progress_physical_ids",
+          "rows": [
+            [
+              1791585925463628006,
+              1791585925463628006,
+              1791585925463628006
+            ]
+          ]
+        },
+        {
+          "event": "stopped",
+          "pid": 975702,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_3rq1q3tr/data.tar.gz",
+          "bytes": 8898252
+        }
+      ]
+    },
+    {
+      "name": "namespace_checksum_native_3",
+      "log": "/tmp/seekdb-namespace-checksum-native-test-3.log",
+      "status": "PASS",
+      "note": "Native-v2 complete regression: post-F comment and new index, divergent owner definitions, local/global and both-owner FTS comparisons, missing/wrong-V inputs, row-count mismatch with explicit owner diagnostic and clear-error recovery, same-count partition replacement. All report controls absent from final production sources.",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-namespace-checksum-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_namespace_checksum_58gtch33",
+          "pid": 982609,
+          "port": 53511
+        },
+        {
+          "event": "freeze_prepared",
+          "frozen": 1791586249838726027,
+          "elapsed_s": 133.315
+        },
+        {
+          "event": "PASS",
+          "case": "independent_namespace_local_global_indexes",
+          "frozen": 1791586249838726027,
+          "root_version": 1791586116832192,
+          "child_version": 1791586117212728
+        },
+        {
+          "event": "freeze_prepared",
+          "frozen": 1791586272505358041,
+          "elapsed_s": 0.636
+        },
+        {
+          "event": "PASS",
+          "case": "child_global_index_report_fault",
+          "fault": "missing",
+          "frozen": 1791586272505358041,
+          "tablet": 4611686430744448325
+        },
+        {
+          "event": "freeze_prepared",
+          "frozen": 1791586294732374006,
+          "elapsed_s": 10.632
+        },
+        {
+          "event": "PASS",
+          "case": "child_global_index_report_fault",
+          "fault": "schema_version",
+          "frozen": 1791586294732374006,
+          "tablet": 4611686430744448325
+        },
+        {
+          "event": "freeze_prepared",
+          "frozen": 1791586325539070006,
+          "elapsed_s": 0.948
+        },
+        {
+          "event": "checksum_error_diagnostic",
+          "rows": [
+            [
+              3,
+              500003,
+              500011
+            ]
+          ]
+        },
+        {
+          "event": "PASS",
+          "case": "child_global_index_report_fault",
+          "fault": "row_count",
+          "frozen": 1791586325539070006,
+          "tablet": 4611686430744448325
+        },
+        {
+          "event": "freeze_prepared",
+          "frozen": 1791586352503264012,
+          "elapsed_s": 0.973
+        },
+        {
+          "event": "PASS",
+          "case": "post_freeze_same_count_partition_replacement",
+          "frozen": 1791586352503264012
+        },
+        {
+          "event": "PASS",
+          "case": "namespace_historical_checksum",
+          "native": true
+        },
+        {
+          "event": "stopped",
+          "pid": 982609,
+          "returncode": -9
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_namespace_checksum_58gtch33/data.tar.gz",
+          "bytes": 34246466
         }
       ]
     }

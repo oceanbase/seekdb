@@ -3,6 +3,7 @@
 #define OCEANBASE_ROOTSERVER_TABLE_STORAGE_LAYOUTS_H_
 
 #include "storage/instance_meta/instance_meta_store.h"
+#include "lib/container/ob_array.h"
 
 namespace oceanbase {
 namespace common { class ObMySQLTransaction; }
@@ -16,6 +17,18 @@ namespace rootserver {
 class TableStorageLayouts final
 {
 public:
+  struct Definition
+  {
+    uint64_t namespace_id = 0;
+    uint64_t table_id = 0;
+    uint64_t layout_id = 0;
+    int64_t schema_version = -1;
+    TO_STRING_KV(K(namespace_id), K(table_id), K(layout_id), K(schema_version));
+  };
+  // Enumerate complete expected SQL objects independently of arrived reports.
+  // Each V is selected from its own G in the same retained snapshot F.
+  static int read_at(storage::InstanceMetaStore &store, const share::SCN &target,
+      int64_t deadline, common::ObIArray<Definition> &definitions);
   TableStorageLayouts(storage::InstanceMetaStore &store,
       storage::InstanceMetaStore::Transaction &tx, uint64_t namespace_id)
     : store_(store), tx_(tx), namespace_id_(namespace_id) {}

@@ -11,6 +11,44 @@ namespace rootserver {
 using namespace common;
 using namespace storage;
 
+int TableStorageLayouts::read_at(InstanceMetaStore &store, const share::SCN &target,
+    int64_t deadline, ObIArray<Definition> &definitions)
+{
+  definitions.reuse();
+  InstanceMetaStore::Transaction tx;
+  int ret = StorageSchemaHistory::begin_read_at(store, tx, target, deadline);
+  if (ret == OB_SUCCESS) {
+    ret = store.scan(tx, MetaCollection::TABLE_STORAGE_LAYOUTS, {},
+        [&](const ObString &key, const ObString &value, bool &) {
+      Definition item;
+      int64_t ns = 0, table = 0, layout = 0, pos = 0;
+      int rc = key.length() != 16 || value.length() != 8 ? OB_CHECKSUM_ERROR : OB_SUCCESS;
+      if (rc == OB_SUCCESS) { rc = serialization::decode_i64(key.ptr(), key.length(), pos, &ns); }
+      if (rc == OB_SUCCESS) { rc = serialization::decode_i64(key.ptr(), key.length(), pos, &table); }
+      pos = 0;
+      if (rc == OB_SUCCESS) { rc = serialization::decode_i64(value.ptr(), value.length(), pos, &layout); }
+      if (rc == OB_SUCCESS && (ns <= 0 || table <= 0 || layout <= 0)) { rc = OB_CHECKSUM_ERROR; }
+      item.namespace_id = ns;
+      item.table_id = table;
+      item.layout_id = layout;
+      if (rc == OB_SUCCESS) { rc = definitions.push_back(item); }
+      return rc;
+    });
+  }
+  // A scan visitor cannot reenter its transaction. Read heads after closing
+  // the scan, while the very same native snapshot is still retained.
+  StorageSchemaHistory history(store, tx);
+  for (int64_t i = 0; ret == OB_SUCCESS && i < definitions.count(); ++i) {
+    ret = history.read_version(definitions.at(i).layout_id, definitions.at(i).schema_version);
+  }
+  if (tx.is_active()) {
+    const int end = store.commit(tx);
+    if (ret == OB_SUCCESS) { ret = end; }
+  }
+  if (ret != OB_SUCCESS) { definitions.reuse(); }
+  return ret;
+}
+
 int TableStorageLayouts::attach(ObMySQLTransaction &owner, transaction::ObTxDesc &native,
     InstanceMetaStore &store, std::shared_ptr<InstanceMetaStore::Transaction> &tx)
 {
