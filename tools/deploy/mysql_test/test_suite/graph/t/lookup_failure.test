@@ -1,0 +1,63 @@
+--disable_query_log
+DROP PROPERTY GRAPH IF EXISTS graph_social;
+--disable_warnings
+DROP TABLE IF EXISTS graph_works,graph_knows,graph_company,graph_person;
+--enable_warnings
+--source mysql_test/test_suite/graph/mapping_fixture.sql
+--source mysql_test/include/create_plan_table.inc
+SET @saved_optimizer_dynamic_sampling=@@optimizer_dynamic_sampling;
+SET optimizer_dynamic_sampling=0;
+--enable_query_log
+
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='graph_lookup_failure'
+SELECT COUNT(*) AS paths
+FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)
+  -[e IS knows]->{1,2}(b IS person)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+--enable_result_log
+SELECT COUNT(*)=1 AS uses_native_feedback
+FROM plan_table
+WHERE statement_id='graph_lookup_failure'
+  AND operator='GRAPH FEEDBACK LOOP'
+  AND special_predicates LIKE '%direction=OUT, hops={1,2}, access=full-scan, mode=WALK, runtime=native%';
+
+--echo das_vertex_lookup_error_is_propagated_and_failed_execution_releases_resources
+PREPARE graph_lookup_failure FROM
+  'SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH (a IS person WHERE a.id=1)-[e IS knows]->{1,2}(b IS person) COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g';
+--disable_query_log
+connect (conn_admin,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection conn_admin;
+ALTER SYSTEM SET_TP tp_no=321,error_code=4016,frequency=1;
+connection default;
+--enable_query_log
+--echo source_only_lookup_does_not_consume_target_lookup_error
+SELECT COUNT(*) AS paths
+FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=5)
+  -[e IS knows]->{1,2}(b IS person)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+--error 4016
+EXECUTE graph_lookup_failure;
+--disable_query_log
+connection conn_admin;
+ALTER SYSTEM SET_TP tp_no=321,error_code=4016,frequency=0;
+connection default;
+--enable_query_log
+SELECT COUNT(*)=0 AS graph_work_area_released
+FROM oceanbase.V$OB_MEMORY
+WHERE MOD_NAME IN ('GraphFeedback','GraphVtxLookup')
+  AND (HOLD<>0 OR USED<>0);
+EXECUTE graph_lookup_failure;
+DEALLOCATE PREPARE graph_lookup_failure;
+
+--disable_query_log
+connection conn_admin;
+disconnect conn_admin;
+connection default;
+SET optimizer_dynamic_sampling=@saved_optimizer_dynamic_sampling;
+--enable_query_log
+DROP TABLE plan_table;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;

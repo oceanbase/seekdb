@@ -718,7 +718,8 @@ int GraphExpandDasAccess::validate_requested(
 
 int GraphExpandDasAccess::lookup_vertices(
     const ObIArray<GraphElementIdentity> &requested,
-    ObIArray<GraphElementIdentity> &existing)
+    ObIArray<GraphElementIdentity> &existing,
+    GraphVertexLookupPhase phase)
 {
   int ret = OB_SUCCESS;
   const VertexLookupBinding *binding = nullptr;
@@ -726,13 +727,17 @@ int GraphExpandDasAccess::lookup_vertices(
   existing.reset();
   if (OB_UNLIKELY(!initialized_)) {
     ret = OB_NOT_INIT;
+  } else if (OB_UNLIKELY(phase != GraphVertexLookupPhase::SOURCE
+                         && phase != GraphVertexLookupPhase::TARGET)) {
+    ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(check_status())) {
   } else if (OB_FAIL(validate_requested(requested, binding))) {
     LOG_WARN("invalid graph vertex lookup request", K(ret), K(requested));
   } else if (requested.empty()) {
   } else {
     identity_page_allocator_.reuse();
-    if (OB_FAIL(lookup_vertices(*binding, requested, existing))) {
+    if (OB_FAIL(lookup_vertices(
+            *binding, requested, existing, phase))) {
       LOG_WARN("failed to look up graph vertices", K(ret), K(requested),
                KPC(binding));
     }
@@ -820,7 +825,8 @@ int GraphExpandDasAccess::init_scan_rtdef(
 int GraphExpandDasAccess::lookup_vertices(
     const VertexLookupBinding &binding,
     const ObIArray<GraphElementIdentity> &requested,
-    ObIArray<GraphElementIdentity> &existing)
+    ObIArray<GraphElementIdentity> &existing,
+    GraphVertexLookupPhase phase)
 {
   int ret = OB_SUCCESS;
   ObDASRef das_ref(eval_ctx_, exec_ctx_);
@@ -1037,6 +1043,18 @@ int GraphExpandDasAccess::lookup_vertices(
                        K(identity), K(result_entry));
             } else if (OB_FAIL(existing.push_back(stable_identity))) {
             }
+          }
+        }
+        // The source-existence lookup happens before edge access. Inject only
+        // after a target result has been appended, while this multi-get's DAS
+        // tasks and a partial output array are both live.
+        if (OB_SUCC(ret) && phase == GraphVertexLookupPhase::TARGET) {
+          const int simulate_error = EVENT_CALL(
+              EventTable::EN_DAS_GRAPH_TARGET_LOOKUP_AFTER_VERTEX_ROW);
+          if (OB_UNLIKELY(OB_SUCCESS != simulate_error)) {
+            ret = simulate_error;
+            LOG_WARN("injected graph target vertex lookup error", K(ret),
+                     "existing_count", existing.count());
           }
         }
       }

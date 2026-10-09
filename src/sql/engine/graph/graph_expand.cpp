@@ -752,7 +752,8 @@ int GraphExpand::lookup_source_vertices()
                K(start), K(end));
     } else if (OB_SUCC(ret)
                && OB_FAIL(access_.lookup_vertices(
-                   source_lookup_batch_, source_lookup_results_))) {
+                   source_lookup_batch_, source_lookup_results_,
+                   GraphVertexLookupPhase::SOURCE))) {
       LOG_WARN("failed to look up graph source vertices", K(ret),
                K(start), K(end));
     } else if (OB_SUCC(ret) && OB_FAIL(access_.check_status())) {
@@ -1143,7 +1144,9 @@ int GraphExpand::load_next_page()
   }
   if (OB_SUCC(ret) && !edge_page_.empty()) {
     stats_.looked_up_vertices_ += target_identities_.count();
-    if (OB_FAIL(access_.lookup_vertices(target_identities_, existing_targets_))) {
+    if (OB_FAIL(access_.lookup_vertices(
+            target_identities_, existing_targets_,
+            GraphVertexLookupPhase::TARGET))) {
     } else if (OB_FAIL(access_.check_status())) {
     } else if (OB_FAIL(stabilize_identities(existing_targets_))) {
     } else if (OB_FAIL(check_memory_limit())) {

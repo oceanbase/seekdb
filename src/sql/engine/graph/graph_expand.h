@@ -141,6 +141,15 @@ bool supports_basic_native_graph_feedback(
     const GraphExpandAccessDesc &access_desc,
     int64_t output_expr_count);
 
+// Distinguishes the anchor-existence lookup from the target-existence lookup
+// performed after an edge page. Access implementations may share machinery,
+// but failure injection and diagnostics must retain the actual phase.
+enum class GraphVertexLookupPhase : uint8_t
+{
+  SOURCE = 0,
+  TARGET
+};
+
 // The DAS-facing access adapter owns the transaction descriptor, statement
 // snapshot and schema guard. It must return an error for scan/RPC failures and
 // must never encode a failed read as an empty successful page.
@@ -159,7 +168,8 @@ public:
 
   virtual int lookup_vertices(
       const common::ObIArray<GraphElementIdentity> &requested,
-      common::ObIArray<GraphElementIdentity> &existing) = 0;
+      common::ObIArray<GraphElementIdentity> &existing,
+      GraphVertexLookupPhase phase) = 0;
 
   // scanned_edges is the number of rows delivered by DAS during this call,
   // before graph SQL filters and full-scan frontier matching.

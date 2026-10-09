@@ -57,7 +57,8 @@ public:
   { return access_desc_.uses_adjacency_index(); }
   int lookup_vertices(
       const common::ObIArray<GraphElementIdentity> &requested,
-      common::ObIArray<GraphElementIdentity> &existing) override;
+      common::ObIArray<GraphElementIdentity> &existing,
+      GraphVertexLookupPhase phase) override;
   int scan_edges(
       const common::ObIArray<GraphElementIdentity> &sources,
       GraphPathDirection direction,
@@ -134,7 +135,8 @@ private:
       const VertexLookupBinding *&binding) const;
   int lookup_vertices(const VertexLookupBinding &binding,
                       const common::ObIArray<GraphElementIdentity> &requested,
-                      common::ObIArray<GraphElementIdentity> &existing);
+                      common::ObIArray<GraphElementIdentity> &existing,
+                      GraphVertexLookupPhase phase);
   int get_vertex_router(const VertexLookupBinding &binding,
                         ObTableLocation *&router);
   void destroy_vertex_routers();
