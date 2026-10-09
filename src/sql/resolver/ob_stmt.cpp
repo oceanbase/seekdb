@@ -197,6 +197,7 @@ ObQueryCtx *ObStmtFactory::get_query_ctx()
   if (NULL == query_ctx_) {
     if ((ptr = allocator_.alloc(sizeof(ObQueryCtx))) != NULL) {
       query_ctx_ = new(ptr) ObQueryCtx();
+      query_ctx_->set_allocator(allocator_);
     } else {
       LOG_WARN_RET(OB_ALLOCATE_MEMORY_FAILED, "create query ctx failed", "query_ctx size", sizeof(ObQueryCtx));
     }
