@@ -31,6 +31,7 @@ int ObIvfCacheUtil::ObIvfWriteCacheFunc::operator()(const common::ObString &cent
 {
   int ret = OB_SUCCESS;
   uint64_t center_prefix = ObVectorKmeansClusterHelper::get_center_prefix(center_id, is_pq_centroid_);
+  ObPqCenterId pq_center_id;
   if (OB_UNLIKELY(center_prefix == 0)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (cent_cache_.get_center_prefix() == 0 &&
@@ -38,8 +39,18 @@ int ObIvfCacheUtil::ObIvfWriteCacheFunc::operator()(const common::ObString &cent
   } else if (OB_UNLIKELY(cent_cache_.get_center_prefix() != center_prefix)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("center prefix mismatch", K(ret), K(center_id), K(cent_cache_.get_center_prefix()), K(center_prefix));
+  } else if (is_pq_centroid_) {
+    if (OB_FAIL(ObVectorKmeansClusterHelper::get_pq_center_id_from_string(pq_center_id, center_id))) {
+      LOG_WARN("failed to parse pq center id", K(ret), K(center_id));
+    } else if (OB_UNLIKELY(!pq_center_id.is_valid())) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid pq center id", K(ret), K(pq_center_id));
+    } else if (OB_FAIL(cent_cache_.write_pq_centroid(pq_center_id.m_id_, pq_center_id.center_id_,
+                                                     data, dim * sizeof(float)))) {
+    }
   } else if (OB_FAIL(cent_cache_.write_centroid_with_real_idx(cent_idx_, data, dim * sizeof(float)))) {
-  } else {
+  }
+  if (OB_SUCC(ret)) {
     ++cent_idx_;
   }
   return ret;
@@ -59,7 +70,8 @@ int ObIvfCacheUtil::scan_and_write_ivf_cent_cache(ObPluginVectorIndexService &se
     if (OB_FAIL(service.process_ivf_aux_info(table_id, tablet_id, tmp_allocator, write_func))) {
       cent_cache.reuse();
     } else {
-      if (cent_cache.is_full_cache()) {
+      // A ready IVF index may contain fewer PQ centers than the cache capacity.
+      if (cent_cache.get_count() > 0) {
         cent_cache.set_completed();
       } else {
         cent_cache.reuse();
