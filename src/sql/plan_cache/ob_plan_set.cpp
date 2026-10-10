@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_PC
 
 #include "config_bridge.h"
+#include "lib/time/ob_time_utility.h"
 #include "ob_plan_set.h"
 #include "sql/plan_cache/ob_pcv_set.h"
 
@@ -128,7 +129,8 @@ int ObPlanSet::match_params_info(const ParamStore *params,
       }
     }
 
-    //pre calculate
+    // Use the same clock precision as an uncached plan. A coarse clock can
+    // repeat NOW(6) across statements and make metadata updates affect no rows.
     if (OB_SUCC(ret) && is_same) {
       ObPhysicalPlanCtx *plan_ctx = exec_ctx.get_physical_plan_ctx();
       ObSQLSessionInfo *session = exec_ctx.get_my_session();
@@ -138,7 +140,7 @@ int ObPlanSet::match_params_info(const ParamStore *params,
       } else if (OB_ISNULL(plan_ctx)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (fetch_cur_time_ && FALSE_IT(plan_ctx->set_cur_time(
-                                ObClockGenerator::getClock(), *session))) {
+                                ObTimeUtility::current_time(), *session))) {
         // never reach
       } else if (FALSE_IT(plan_ctx->set_last_trace_id(session->get_last_trace_id()))) {
       } else if (params->count() != params_info_.count()) {
