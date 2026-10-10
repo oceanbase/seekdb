@@ -1,5 +1,5 @@
 {
-  "scope": "Targeted evidence covers native layout history, atomic DDL publication and binding retirement, physical creation identity, retention and recovery, major/medium/meta layouts, per-row redo, physical reports and Namespace historical checksum groups. Global freeze.schema_version has been removed. Current production binary has 8000-partition first-service and full-major evidence, plus actual primary/standby independent DDL, replica major, crash recovery, promotion and post-promotion DDL/major/checksum evidence. The 8000 full-major case does not cover 8000-partition indexes or inherited takeover pressure. Layout body/G physical reclamation and the final requirement-by-requirement completion audit remain incomplete; this manifest does not prove the whole goal complete.",
+  "scope": "Targeted evidence covers native layout history, atomic DDL publication and binding retirement, physical creation identity, retention and recovery, major/medium/meta layouts, per-row redo, physical reports and Namespace historical checksum groups. Global freeze.schema_version has been removed. Current production binary has 8000-partition first-service and full-major evidence, plus actual primary/standby independent DDL, replica major, crash recovery, promotion and post-promotion DDL/major/checksum evidence. The 8000 full-major case does not cover 8000-partition indexes or inherited takeover pressure. Layout body/G reclamation still requires the broader physical-reference/replica/scale verification and final requirement-by-requirement audit; this manifest does not prove the whole goal complete. Local schema-tablet minor reclamation is now implemented; targeted native evidence proves unfinished-freeze retention, unreferenced body deletion, whole-G deletion after ownership retirement and restart persistence. Retained physical/flying objects across actual reclamation, different replica-local states and copy, publication churn, large-scale cost and final production audit still need verification.",
   "runs": [
     {
       "name": "layout_history",
@@ -7078,6 +7078,426 @@
       "source_commit": "91f75cecc",
       "binary_sha256": "2ff41a5c576ec5ffc3484292d22233569ffd9e8965b72702a17afdf33b5fea80",
       "test_hooks_removed": true
+    },
+    {
+      "name": "external_roots_v2",
+      "log": "/tmp/seekdb-layout-external-roots-test-2.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-external-roots-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_table_storage_layout_yr96xshk",
+          "pid": 1234841,
+          "port": 28599
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-external-roots-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_table_storage_layout_yr96xshk",
+          "pid": 1235737,
+          "port": 28599
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-external-roots-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_table_storage_layout_yr96xshk",
+          "pid": 1236079,
+          "port": 28599
+        },
+        {
+          "event": "PASS",
+          "case": "table_storage_layout",
+          "owner_definitions": 7,
+          "checked_physical": 56,
+          "parent_child_independent": true,
+          "late_partition_no_overwrite": true,
+          "index_and_lob": true,
+          "conflict_nowait": true,
+          "rollback": true,
+          "participant_lifetime": true,
+          "crash_recovery": true,
+          "retire_mvcc": true,
+          "cross_store_atomic": true,
+          "exact_without_head": true,
+          "external_layout_roots": true,
+          "external_destruction_waits": true,
+          "drop_table": true,
+          "drop_namespace": true,
+          "surviving_descendant": true
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_table_storage_layout_yr96xshk/data.tar.gz",
+          "bytes": 6022546
+        }
+      ]
+    },
+    {
+      "name": "physical_layout_roots_v3",
+      "log": "/tmp/seekdb-layout-external-roots-test-3.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-external-roots-native-v3",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_table_storage_layout_lqd47fia",
+          "pid": 1254909,
+          "port": 33099
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-external-roots-native-v3",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_table_storage_layout_lqd47fia",
+          "pid": 1255941,
+          "port": 33099
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-external-roots-native-v3",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_table_storage_layout_lqd47fia",
+          "pid": 1256163,
+          "port": 33099
+        },
+        {
+          "event": "PASS",
+          "case": "table_storage_layout",
+          "owner_definitions": 7,
+          "checked_physical": 56,
+          "parent_child_independent": true,
+          "late_partition_no_overwrite": true,
+          "index_and_lob": true,
+          "conflict_nowait": true,
+          "rollback": true,
+          "participant_lifetime": true,
+          "crash_recovery": true,
+          "retire_mvcc": true,
+          "cross_store_atomic": true,
+          "exact_without_head": true,
+          "external_layout_roots": true,
+          "external_destruction_waits": true,
+          "drop_table": true,
+          "drop_namespace": true,
+          "surviving_descendant": true
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_table_storage_layout_lqd47fia/data.tar.gz",
+          "bytes": 6015796
+        }
+      ]
+    },
+    {
+      "name": "layout_reclamation_v1",
+      "log": "/tmp/seekdb-layout-reclamation-native-test-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-reclamation-native-v1",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_hmnngm5g",
+          "pid": 1275817,
+          "port": 60987
+        },
+        {
+          "event": "layout_retention_verified",
+          "recovered": 0,
+          "evidence": "LAYOUT_RETENTION_PASS recovered=0 F=1791592528493450047 active=1791592530021679010 durable=1791592528493450047 mini_minor=1 released=0 handoff=0\n"
+        },
+        {
+          "event": "crash_for_recovery",
+          "pid": 1275817
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-reclamation-native-v1",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_hmnngm5g",
+          "pid": 1277022,
+          "port": 60987
+        },
+        {
+          "event": "layout_retention_verified",
+          "recovered": 1,
+          "evidence": "LAYOUT_RECLAMATION_OLD_BODY V=10 absent=1 current=12\n\nLAYOUT_RETENTION_NEW_TARGET old=1791592528493450047 selected=1791592580035236002 V=12\n\nLAYOUT_RECLAMATION_RETIRED head_absent=1 bodies_absent=1\n\nLAYOUT_RETENTION_PASS recovered=1 F=1791592528493450047 active=1791592586075458002 durable=1791592562917145283 mini_minor=1 released=1 handoff=1\n"
+        },
+        {
+          "event": "crash_for_recovery",
+          "pid": 1277022
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-reclamation-native-v1",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_hmnngm5g",
+          "pid": 1280268,
+          "port": 60987
+        },
+        {
+          "event": "layout_retention_verified",
+          "recovered": 2,
+          "evidence": "LAYOUT_RECLAMATION_RECOVERED head_absent=1 bodies_absent=1\n"
+        },
+        {
+          "event": "PASS",
+          "case": "layout_retention",
+          "no_old_reader": true,
+          "mini_minor": true,
+          "crash_recovery": true,
+          "release_after_completion": true,
+          "paused_broadcast_without_freeze_row": true,
+          "concurrent_reader_handoff": true,
+          "unreferenced_body_gc": true,
+          "retired_layout_gc": true,
+          "reclamation_crash_recovery": true
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_hmnngm5g/data.tar.gz",
+          "bytes": 5921632
+        }
+      ]
+    },
+    {
+      "name": "reclamation_binding_regression_v1",
+      "log": "/tmp/seekdb-layout-reclamation-bindings-test-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-reclamation-native-v1",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_table_storage_layout_a9ostoyi",
+          "pid": 1276366,
+          "port": 3797
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-reclamation-native-v1",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_table_storage_layout_a9ostoyi",
+          "pid": 1277457,
+          "port": 3797
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-reclamation-native-v1",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_table_storage_layout_a9ostoyi",
+          "pid": 1278888,
+          "port": 3797
+        },
+        {
+          "event": "PASS",
+          "case": "table_storage_layout",
+          "owner_definitions": 7,
+          "checked_physical": 56,
+          "parent_child_independent": true,
+          "late_partition_no_overwrite": true,
+          "index_and_lob": true,
+          "conflict_nowait": true,
+          "rollback": true,
+          "participant_lifetime": true,
+          "crash_recovery": true,
+          "retire_mvcc": true,
+          "cross_store_atomic": true,
+          "exact_without_head": true,
+          "external_layout_roots": true,
+          "external_destruction_waits": true,
+          "drop_table": true,
+          "drop_namespace": true,
+          "surviving_descendant": true
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_table_storage_layout_a9ostoyi/data.tar.gz",
+          "bytes": 6133238
+        }
+      ]
+    },
+    {
+      "name": "layout_reclamation_v2_failed_driver_assumption",
+      "log": "/tmp/seekdb-layout-reclamation-native-test-2.log",
+      "result": "failed",
+      "cause": "Final minor returned EAGAIN from coherent reference capture and correctly retained bodies; native fixture asserted immediate absence after one minor and persisted its completion marker too early. Evidence: LAYOUT_RETENTION_FAIL line=296; reclamation not prepared rc=-4023. The disposable instance was intentionally stopped after identifying the assertion.",
+      "fix": "Bounded retries drive real later mini/minor until absence is observed; write the test completion marker only after checking head and bodies. Both paths remain in the four-gate retention case.",
+      "resolution": "Corrected fixture passed run 3; whole-G deletion took two real dump/minor attempts. No production concurrency check was relaxed."
+    },
+    {
+      "name": "reclamation_binding_regression_v2",
+      "log": "/tmp/seekdb-layout-reclamation-bindings-test-2.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-reclamation-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_table_storage_layout_qbli4a94",
+          "pid": 1286905,
+          "port": 23939
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-reclamation-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_table_storage_layout_qbli4a94",
+          "pid": 1288477,
+          "port": 23939
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-reclamation-native-v2",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_table_storage_layout_qbli4a94",
+          "pid": 1288796,
+          "port": 23939
+        },
+        {
+          "event": "PASS",
+          "case": "table_storage_layout",
+          "owner_definitions": 7,
+          "checked_physical": 56,
+          "parent_child_independent": true,
+          "late_partition_no_overwrite": true,
+          "index_and_lob": true,
+          "conflict_nowait": true,
+          "rollback": true,
+          "participant_lifetime": true,
+          "crash_recovery": true,
+          "retire_mvcc": true,
+          "cross_store_atomic": true,
+          "exact_without_head": true,
+          "external_layout_roots": true,
+          "external_destruction_waits": true,
+          "retained_pool_object": true,
+          "concurrent_publication_rejected": true,
+          "physical_layout_versions": true,
+          "capture_timeout": true,
+          "drop_table": true,
+          "drop_namespace": true,
+          "surviving_descendant": true
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_table_storage_layout_qbli4a94/data.tar.gz",
+          "bytes": 6013919
+        }
+      ]
+    },
+    {
+      "name": "reclamation_production_major",
+      "log": "/tmp/seekdb-layout-reclamation-production-major-1.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-reclamation-production",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_inwylp7c",
+          "pid": 1299964,
+          "port": 44977
+        },
+        {
+          "event": "freeze_without_global_schema",
+          "columns": [
+            "gmt_create",
+            "gmt_modified",
+            "frozen_scn",
+            "data_version"
+          ],
+          "row": [
+            [
+              1791593004657870088,
+              4295229440
+            ]
+          ]
+        },
+        {
+          "event": "sstable_identity",
+          "tablet_id": 200001,
+          "rows": []
+        },
+        {
+          "event": "sstable_identity",
+          "tablet_id": 4611686155866541377,
+          "rows": [
+            [
+              4611686155866541377,
+              "MAJOR"
+            ]
+          ]
+        },
+        {
+          "event": "PASS",
+          "case": "major_progress_physical_ids",
+          "rows": [
+            [
+              1791593004657870088,
+              1791593004657870088,
+              1791593004657870088
+            ]
+          ]
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_major_progress_inwylp7c/data.tar.gz",
+          "bytes": 9847531
+        }
+      ]
+    },
+    {
+      "name": "layout_reclamation_v3_final",
+      "log": "/tmp/seekdb-layout-reclamation-native-test-3.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-reclamation-native-v3",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_8sdyvbyl",
+          "pid": 1303168,
+          "port": 34253
+        },
+        {
+          "event": "layout_retention_verified",
+          "recovered": 0,
+          "evidence": "LAYOUT_RETENTION_PASS recovered=0 F=1791593095290161043 active=1791593102623035001 durable=1791593095290161043 mini_minor=1 released=0 handoff=0\n"
+        },
+        {
+          "event": "crash_for_recovery",
+          "pid": 1303168
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-reclamation-native-v3",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_8sdyvbyl",
+          "pid": 1305742,
+          "port": 34253
+        },
+        {
+          "event": "layout_retention_verified",
+          "recovered": 1,
+          "evidence": "LAYOUT_RECLAMATION_ATTEMPTS whole=0 attempts=1\n\nLAYOUT_RECLAMATION_OLD_BODY V=10 absent=1 current=12\n\nLAYOUT_RETENTION_NEW_TARGET old=1791593095290161043 selected=1791593154961926011 V=12\n\nLAYOUT_RECLAMATION_ATTEMPTS whole=1 attempts=2\n\nLAYOUT_RECLAMATION_RETIRED head_absent=1 bodies_absent=1\n\nLAYOUT_RETENTION_PASS recovered=1 F=1791593095290161043 active=1791593157226259016 durable=1791593129415092983 mini_minor=1 released=1 handoff=1\n"
+        },
+        {
+          "event": "crash_for_recovery",
+          "pid": 1305742
+        },
+        {
+          "event": "setup",
+          "binary": "/data/1/nijia.nj/test/seekdb-layout-reclamation-native-v3",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_8sdyvbyl",
+          "pid": 1308153,
+          "port": 34253
+        },
+        {
+          "event": "layout_retention_verified",
+          "recovered": 2,
+          "evidence": "LAYOUT_RECLAMATION_RECOVERED head_absent=1 bodies_absent=1\n"
+        },
+        {
+          "event": "PASS",
+          "case": "layout_retention",
+          "no_old_reader": true,
+          "mini_minor": true,
+          "crash_recovery": true,
+          "release_after_completion": true,
+          "paused_broadcast_without_freeze_row": true,
+          "concurrent_reader_handoff": true,
+          "unreferenced_body_gc": true,
+          "retired_layout_gc": true,
+          "reclamation_crash_recovery": true
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_layout_retention_8sdyvbyl/data.tar.gz",
+          "bytes": 5884905
+        }
+      ],
+      "covers": "Native MVCC freeze/reader retention, real minor old-body deletion, whole-G retirement, later minor retry after capture EAGAIN, and two crash/restart cycles."
     }
   ],
   "meta_layout_builds": [

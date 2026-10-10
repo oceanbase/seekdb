@@ -2,6 +2,22 @@
 
 目标以 [design-storage-schema-boundaries.md](design-storage-schema-boundaries.md) 为准。
 
+### 当前推进：本机布局正文/G回收
+
+- 外部 tablet 登记从同 ID 的计数改为实际对象列表。扫描期间登记锁阻止最后一个句柄析构；释放按对象地址匹配，不把同 ID 的另一副本误删。保留原有防止物理 ID 过早复用的检查。
+- `ObStorageMetaMemMgr::scan_tablet_references` 覆盖当前对象、旧版本链、flying map 和外部副本。临时复制 flying pointer 句柄后才取 T3M 锁，避免颠倒删除路径的锁顺序。两个进程内计数器检测遍历期间的创建/替换/删除；重叠返回 EAGAIN，丢弃本次全部结果，不增加持久 GC 进度。
+- `StorageSchemaHistory::collect_physical_references` 读取这些对象的本地布局及各数据 SSTable 自身的来源 G/V，按 G 收敛为最小物理版本。覆盖源 G 与当前 tablet G 不同的文件；保留该下界及更新版本也覆盖持有输入 tablet 的 merge 在准备后推进输出版本。列表只存于本次收集/合并，不新增常驻缓存。
+- `StorageSchemaHistoryFilter` 已接入 schema tablet 覆盖最老文件的 minor。本机完整复制恢复结束后，按受保护的回收边界 R 扫描既有布局归属行（存储只读取值 G，不解析 Namespace/table key），取这些 G 在 R 的版本，与本机物理引用合并。对 R 之前提交的布局行，仅删除无根 G 的 head/正文或小于该 G 下界的正文；R 之后及未提交行保留。主库不产生复制的正文 DELETE，备库使用自己的本机引用。
+- 收集与发布重叠时，本次 minor 继续保留全部正文；后续 minor 再尝试。历史保护尚未恢复、目标已失效及资源/时间不足也不做正文过滤。其他读取/数据错误仍向上传递。新增收集期限，在对象/文件之间检查；不能把它解释为单次磁盘 IO 的硬超时。持续元数据变化下的回收进展和8000分区成本仍待专项验证。
+- 原生外部副本/遍历测试第2轮通过 `/tmp/seekdb-layout-external-roots-test-2.log`。第3轮 `/tmp/seekdb-layout-external-roots-test-3.log` 增加真实持久替换后的旧池对象、同地址重新发布的并发拒绝，以及逐G精确正文读取，首次启动和两次强杀重启均通过。遍历366个描述为641微秒，重启后的842个描述为126078/165491微秒；包括逐G正文读取的整段收集验证分别为64819/182815/226361微秒，不能当作纯收集耗时。
+- 本机真实 minor 回收第1轮通过 `/tmp/seekdb-layout-reclamation-native-test-1.log`：F=1791592528493450047受保护时V=10仍可读；F完成并释放最后读者后，minor 删除未被物理对象引用的V=10，保留当前V=12；删除最后归属并推进原有GC栅栏后，该G的head和10/11/12正文全部消失；第二次强杀重启确认仍已回收。夹具现在显式建立布局归属；先前“没有物理引用仍永久读V=10”的断言被替换为真实回收断言，不能继续把旧断言称为物理引用保护证据。
+- 同一二进制的DDL/绑定/外部引用回归 `/tmp/seekdb-layout-reclamation-bindings-test-1.log` 通过，包含父子独立DDL、索引/LOB、删除父表及中间Namespace后后代读写、两次强杀重启。以上两项已在四件套现有入口内，未运行完整mysqltest/sysbench。
+- 后续必须补齐：删除后的flying对象仍有句柄、物理旧G/文件跨回收保留及最终释放、主备不同本机进度/复制期间的回收交错、8000分区成本和持续发布下进展，以及逐项最终验收。当前已有本机删除实现和有限动态证据，不能据此宣布整体GC或整个goal完成。
+
+第2轮回收测试发现并修正驱动假设：`/tmp/seekdb-layout-reclamation-native-test-2.log` 中最后minor因并发发布返回EAGAIN，按设计未过滤；夹具却在一次minor后即断言head必须消失（line=296），并提前写了测试完成标记。定位后主动停止该实例，不能把随后harness的-9退出当作数据库崩溃。修正为限时继续驱动真实mini/minor直到观察到删除，并只在完整检查head/正文后记录测试完成。该失败路径留在四件套原有保留/回收用例中，第3轮 `/tmp/seekdb-layout-reclamation-native-test-3.log` 已通过：旧正文删除用一轮dump/minor，完整G删除在第一次因并发未过滤后，经第二轮真实dump/minor完成；第二次强杀重启仍确认head和全部正文消失。没有放宽生产并发检查。
+
+加入期限检查及临时列表去重后的绑定/引用回归第2轮通过：`/tmp/seekdb-layout-reclamation-bindings-test-2.log`，包括三次启动的超时清空断言。移除测试注入后的生产构建通过，二进制 `/data/1/nijia.nj/test/seekdb-layout-reclamation-production` SHA256=`3b70c37cb45bc63d12404a5b59ce6042dce3e55e903f274c028e0f7e961d9298`。真实生产major回归 `/tmp/seekdb-layout-reclamation-production-major-1.log` 通过，frozen/broadcast/last均为1791593004657870088，真实用户MAJOR文件已核对。最终移除全部本轮测试注入后的生产构建 `/tmp/seekdb-layout-reclamation-production-build-3.log` 也已通过。
+
 ### 当前证据：布局绑定退休、8000分区及实际主备验证
 
 - 普通 DDL 从目录移除表/辅助对象时，在共同发布事务内删除 `(Namespace, table_id) -> G` 绑定。删除尚未独立物化的继承对象允许本来就没有绑定。Namespace 删除在清除目录根的同一个原生事务内删除其全部绑定；使用受限前缀扫描，结束扫描后才逐行删除。
@@ -38,7 +54,7 @@
 | 已替换/已删除但仍被持有的tablet | `scan_all_version_tablets` 遍历单个键的旧链及最新对象；`del_tablet` 可能把指针移入 `flying_tablet_map_`；外部分配副本另由 `external_tablet_cnt_map_` 计数 | 最新tablet键集合不包含全部引用；单键扫描也不提供跨键原子视图，外部副本计数并不保存其布局 |
 | 备库物理复制 | `StandbyGrpcService::fetch_ls_view` 固定所有tablet句柄，后续RPC读取同一 `PhysicalCopyView`；`ObStandbySSTableCopier::copy` 完成全量复制后才 `finish_ls_restore_` | 可以复用现有复制视图和恢复状态，不能把刚复制完schema tablet当作全实例引用已经齐备；源端视图中的旧tablet同样是引用根 |
 
-下一步回收实现须同时保护目标快照选择记录、物理精确版本及引用交接。考察本机minor filter时，必须证明捕获期间跨tablet移动的引用不会漏标、旧句柄仍可读、复制恢复期间不会提前删正文；不得先接入删除再依靠重试补救。复制视图已有完整句柄所有权，不需要先增加新的持久复制会话或远端GC名单。当前尚未实现正文删除/filter，本节不是GC通过证据。
+下一步回收实现须同时保护目标快照选择记录、物理精确版本及引用交接。考察本机minor filter时，必须证明捕获期间跨tablet移动的引用不会漏标、旧句柄仍可读、复制恢复期间不会提前删正文；不得先接入删除再依靠重试补救。复制视图已有完整句柄所有权，不需要先增加新的持久复制会话或远端GC名单。该审计阶段尚未实现正文删除/filter；后续接线和有限动态证据见本文开头，本节自身不是GC通过证据。
 
 本文件记录实现和验证证据，不缩减已确认范围。2026-10-10 开始实施。
 

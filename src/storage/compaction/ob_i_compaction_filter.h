@@ -66,6 +66,7 @@ public:
     TX_DATA_MINOR,
     MDS_MINOR_FILTER_DATA,
     MDS_IN_MEDIUM_INFO,
+    STORAGE_SCHEMA_HISTORY,
     FILTER_TYPE_MAX
   };
   const static char *ObFilterTypeStr[];

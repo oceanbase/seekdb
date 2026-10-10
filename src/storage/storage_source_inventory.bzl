@@ -413,6 +413,7 @@ STORAGE_UNITY_GROUPS = [
         language = "c++",
         srcs = [
             "src/storage/compaction/filter/ob_tx_data_minor_filter.cpp",
+            "src/storage/compaction/filter/storage_schema_history_filter.cpp",
             "src/storage/compaction/filter/ob_mds_info_compaction_filter.cpp",
             "src/storage/compaction/ob_compaction_progress.cpp",
             "src/storage/compaction/ob_freeze_info_mgr.cpp",

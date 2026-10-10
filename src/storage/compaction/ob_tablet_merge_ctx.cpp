@@ -21,6 +21,8 @@
 #include "storage/compaction/ob_schedule_tablet_func.h"
 #include "storage/compaction/ob_freeze_info_mgr.h"
 #include "storage/compaction/filter/ob_tx_data_minor_filter.h"
+#include "storage/compaction/filter/storage_schema_history_filter.h"
+#include "storage/tx_storage/ob_access_service.h"
 #include "storage/tablet/ob_tablet_medium_info_reader.h"
 
 namespace oceanbase
@@ -349,7 +351,36 @@ int ObTabletExeMergeCtx::prepare_compaction_filter()
 {
   int ret = OB_SUCCESS;
   void *buf = nullptr;
-  if (!get_tablet_id().is_ls_tx_data_tablet()) {
+  if (get_tablet_id().is_ls_storage_schema_tablet()) {
+    ObRestoreStatus restore;
+    share::SCN cutoff;
+    if (OB_FAIL(get_ls()->get_restore_status(restore))) {
+    } else if (!restore.is_none() || !static_param_.scn_range_.start_scn_.is_base_scn()
+        || static_param_.version_range_.multi_version_start_ <= share::SCN::base_scn().get_val_for_tx()) {
+      // Full-copy restore has not yet installed every referencing tablet, or
+      // this merge does not cover the oldest rows. Ordinary minor is still safe.
+    } else if (OB_FAIL(cutoff.convert_for_tx(static_param_.version_range_.multi_version_start_))) {
+    } else if (OB_ISNULL(buf = mem_ctx_.alloc(sizeof(StorageSchemaHistoryFilter)))) {
+      // Reclamation is optional under memory pressure; preserve every body.
+    } else {
+      auto *filter = new (buf) StorageSchemaHistoryFilter();
+      auto &store = share::server_service<ObAccessService>()->storage_schema_store();
+      const int rc = filter->init(store, cutoff, ObTimeUtility::current_time() + 5000000);
+      if (rc == OB_SUCCESS) {
+        filter_ctx_.compaction_filter_ = filter;
+        FLOG_INFO("schema layout reclamation prepared", K(cutoff), "layouts", filter->layout_count());
+      } else {
+        filter->~StorageSchemaHistoryFilter();
+        mem_ctx_.free(buf);
+        buf = nullptr;
+        if (rc != OB_EAGAIN && rc != OB_SNAPSHOT_DISCARDED && rc != OB_NOT_INIT
+            && rc != OB_TIMEOUT && rc != OB_ALLOCATE_MEMORY_FAILED) {
+          ret = rc;
+        }
+        FLOG_INFO("schema layout reclamation not prepared", K(rc), K(cutoff));
+      }
+    }
+  } else if (!get_tablet_id().is_ls_tx_data_tablet()) {
     // Transaction-status filtering applies only to the transaction data table.
   } else if (!static_param_.scn_range_.start_scn_.is_base_scn()) {
     FLOG_INFO ("Skip filtering because this minor merge does not contain the oldest minor sstable",

@@ -46,6 +46,29 @@ static int run_layout_retention_native_probe()
     RETENTION_CALL(frozen.convert_for_tx(value));
   }
   RETENTION_CALL(store.commit(state));
+  char owner_key[16], owner_value[8];
+  int64_t owner_pos = 0;
+  RETENTION_CALL(serialization::encode_i64(owner_key, sizeof(owner_key), owner_pos, 10042));
+  RETENTION_CALL(serialization::encode_i64(owner_key, sizeof(owner_key), owner_pos, 900000102));
+  owner_pos = 0;
+  RETENTION_CALL(serialization::encode_i64(owner_value, sizeof(owner_value), owner_pos, layout_id));
+  RETENTION_CALL(store.begin(state, deadline(), true));
+  ret = store.get(state, collection, ObString::make_string("retired"), allocator, saved);
+  const bool retired = ret == OB_SUCCESS;
+  RETENTION_CHECK(retired || ret == OB_ENTRY_NOT_EXIST);
+  if (retired) {
+    int64_t version = 0;
+    RETENTION_CHECK(StorageSchemaHistory(store, state).read_version(layout_id, version) == OB_ENTRY_NOT_EXIST);
+    for (int64_t v : {10, 11, 12}) {
+      ObStorageSchema absent;
+      RETENTION_CHECK(StorageSchemaHistory(store, state).read_published(layout_id, v, allocator, absent)
+          == OB_ENTRY_NOT_EXIST);
+    }
+    RETENTION_CALL(store.commit(state));
+    fprintf(stderr, "LAYOUT_RECLAMATION_RECOVERED head_absent=1 bodies_absent=1\n");
+    return OB_SUCCESS;
+  }
+  RETENTION_CALL(store.commit(state));
   auto publish = [&](int64_t version) -> int {
     ObTableSchema logical(&allocator);
     ObStorageSchema layout;
@@ -57,6 +80,10 @@ static int run_layout_retention_native_probe()
     if (rc == OB_SUCCESS) {
       StorageSchemaHistory history(store, tx);
       rc = version == 10 ? history.create(layout_id, layout) : history.publish(layout_id, layout);
+      if (rc == OB_SUCCESS && version == 10) {
+        rc = store.insert(tx, MetaCollection::TABLE_STORAGE_LAYOUTS,
+            ObString(sizeof(owner_key), owner_key), ObString(sizeof(owner_value), owner_value));
+      }
     }
     if (tx.is_active()) {
       const int end = rc == OB_SUCCESS ? store.commit(tx) : store.rollback(tx);
@@ -157,6 +184,30 @@ static int run_layout_retention_native_probe()
     RETENTION_CHECK(compacted);
     return OB_SUCCESS;
   };
+  // A concurrent tablet publication deliberately leaves this minor unfiltered.
+  // Verify eventual reclamation across actual later minor attempts, without
+  // changing the production collector's concurrency decision.
+  auto wait_reclaimed = [&](bool whole_layout) -> int {
+    const int64_t until = deadline();
+    int64_t attempts = 0;
+    while (ObTimeUtility::current_time() < until) {
+      RETENTION_CALL(dump_and_minor());
+      ++attempts;
+      Tx check;
+      RETENTION_CALL(store.begin(check, deadline(), true));
+      int64_t version = 0;
+      ObStorageSchema body;
+      int rc = whole_layout ? StorageSchemaHistory(store, check).read_version(layout_id, version)
+          : StorageSchemaHistory(store, check).read_published(layout_id, 10, allocator, body);
+      RETENTION_CHECK(rc == OB_SUCCESS || rc == OB_ENTRY_NOT_EXIST);
+      RETENTION_CALL(store.commit(check));
+      if (rc == OB_ENTRY_NOT_EXIST) {
+        fprintf(stderr, "LAYOUT_RECLAMATION_ATTEMPTS whole=%d attempts=%ld\n", whole_layout, attempts);
+        return OB_SUCCESS;
+      }
+    }
+    return OB_TIMEOUT;
+  };
   RETENTION_CALL(dump_and_minor());
   {
     ObStorageSchema layout;
@@ -214,7 +265,7 @@ static int run_layout_retention_native_probe()
     RETENTION_CALL(freezes.get_schema_history_retention(retained));
     RETENTION_CHECK(retained > frozen);
     RETENTION_CALL(publish(12));
-    RETENTION_CALL(dump_and_minor());
+    RETENTION_CALL(wait_reclaimed(false));
     ObTabletHandle handle;
     RETENTION_CALL(ls->get_tablet(tablet_id, handle));
     RETENTION_CHECK(handle.get_obj()->get_multi_version_start() > frozen.get_val_for_tx());
@@ -226,13 +277,57 @@ static int run_layout_retention_native_probe()
     RETENTION_CALL(StorageSchemaHistory::read_current(store, layout_id, frozen,
         deadline(), allocator, selected, current));
     RETENTION_CHECK(selected > frozen && current.get_schema_version() == 12);
-    ObStorageSchema referenced;
-    RETENTION_CALL(StorageSchemaHistory::read_published(store, layout_id, 10,
-        deadline(), allocator, referenced));
-    RETENTION_CHECK(referenced.get_schema_version() == 10);
-    fprintf(stderr, "LAYOUT_RETENTION_EXACT_BODY V=10 after_head_gc=1\n");
+    // No physical object references this fixture's V=10. Once F and its last
+    // reader are released, real minor must reclaim the immutable old body.
+    ObStorageSchema unreferenced;
+    RETENTION_CHECK(StorageSchemaHistory::read_published(store, layout_id, 10,
+        deadline(), allocator, unreferenced) == OB_ENTRY_NOT_EXIST);
+    fprintf(stderr, "LAYOUT_RECLAMATION_OLD_BODY V=10 absent=1 current=12\n");
     fprintf(stderr, "LAYOUT_RETENTION_NEW_TARGET old=%ld selected=%ld V=%ld\n",
         frozen.get_val_for_tx(), selected.get_val_for_tx(), current.get_schema_version());
+    // Retiring the last logical owner permits full G/head/body reclamation.
+    Tx retire;
+    bool existed = false;
+    RETENTION_CALL(store.begin(retire, deadline()));
+    RETENTION_CALL(store.erase(retire, MetaCollection::TABLE_STORAGE_LAYOUTS,
+        ObString(sizeof(owner_key), owner_key), existed));
+    RETENTION_CHECK(existed);
+    RETENTION_CALL(store.commit(retire));
+    ObMySQLTransaction sql;
+    SCN previous, after_retire;
+    int64_t affected = 0;
+    RETENTION_CALL(sql.start(&proxy));
+    RETENTION_CALL(ObGlobalStatProxy::select_snapshot_gc_scn_for_update(sql, previous));
+    RETENTION_CALL(transactions.get_read_snapshot_version(deadline(), after_retire));
+    RETENTION_CALL(ObGlobalStatProxy::update_snapshot_gc_scn(sql, after_retire, affected));
+    RETENTION_CALL(sql.end(true));
+    RETENTION_CALL(freezes.reload_for_test());
+    const int64_t weak_until = deadline();
+    do {
+      RETENTION_CALL(store.min_retained_snapshot(active));
+      if (active < after_retire) { usleep(100000); }
+    } while (active < after_retire && ObTimeUtility::current_time() < weak_until);
+    RETENTION_CHECK(active >= after_retire);
+    // Drop the old schema-tablet handle before collecting the next physical view.
+    handle.reset();
+    before_release.reset();
+    RETENTION_CALL(wait_reclaimed(true));
+    Tx check;
+    RETENTION_CALL(store.begin(check, deadline(), true));
+    int64_t version = 0;
+    RETENTION_CHECK(StorageSchemaHistory(store, check).read_version(layout_id, version) == OB_ENTRY_NOT_EXIST);
+    for (int64_t v : {10, 11, 12}) {
+      ObStorageSchema absent;
+      RETENTION_CHECK(StorageSchemaHistory(store, check).read_published(layout_id, v, allocator, absent)
+          == OB_ENTRY_NOT_EXIST);
+    }
+    RETENTION_CALL(store.commit(check));
+    // The persisted test marker means reclamation has actually been observed.
+    RETENTION_CALL(store.begin(check, deadline()));
+    RETENTION_CALL(store.put(check, collection, ObString::make_string("retired"),
+        ObString::make_string("yes")));
+    RETENTION_CALL(store.commit(check));
+    fprintf(stderr, "LAYOUT_RECLAMATION_RETIRED head_absent=1 bodies_absent=1\n");
   } else {
     // Model a paused replica whose primary has already retired this freeze.
     // Its local persisted broadcast is still unfinished, even though the

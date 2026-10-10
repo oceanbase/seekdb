@@ -19,7 +19,7 @@ def main():
     experiment = BootstrapExperiment(args.binary, 'layout_retention', prototype=6)
     experiment.extra_parameters = [('minor_compact_trigger', '2')]
     try:
-        for recovered in (0, 1):
+        for recovered in (0, 1, 2):
             cursors = {log.stat().st_ino: log.stat().st_size
                        for log in (experiment.base / 'log').glob('seekdb.log*')}
             experiment.start()
@@ -28,13 +28,15 @@ def main():
                 with log.open('rb') as stream:
                     stream.seek(cursors.get(log.stat().st_ino, 0))
                     output += '\n'.join(line.decode(errors='replace') for line in stream
-                                        if b'LAYOUT_RETENTION_' in line)
-            expected = f'LAYOUT_RETENTION_PASS recovered={recovered} '
+                                        if b'LAYOUT_RETENTION_' in line or b'LAYOUT_RECLAMATION_' in line)
+            expected = (f'LAYOUT_RETENTION_PASS recovered={recovered} ' if recovered < 2
+                        else 'LAYOUT_RECLAMATION_RECOVERED head_absent=1 bodies_absent=1')
             if ('LAYOUT_RETENTION_FAIL' in output or expected not in output
-                    or (recovered and 'LAYOUT_RETENTION_EXACT_BODY V=10 after_head_gc=1' not in output)):
+                    or (recovered == 1 and 'LAYOUT_RECLAMATION_OLD_BODY V=10 absent=1 current=12' not in output)
+                    or (recovered == 1 and 'LAYOUT_RECLAMATION_RETIRED head_absent=1 bodies_absent=1' not in output)):
                 raise AssertionError(output[-10000:])
             experiment.record('layout_retention_verified', recovered=recovered, evidence=output)
-            if not recovered:
+            if recovered < 2:
                 experiment.connection.close()
                 experiment.connection = None
                 experiment.proc.kill()
@@ -42,7 +44,8 @@ def main():
                 experiment.record('crash_for_recovery', pid=experiment.proc.pid)
         experiment.record('PASS', case='layout_retention', no_old_reader=True,
                           mini_minor=True, crash_recovery=True, release_after_completion=True,
-                          paused_broadcast_without_freeze_row=True, concurrent_reader_handoff=True, exact_body_after_head_gc=True)
+                          paused_broadcast_without_freeze_row=True, concurrent_reader_handoff=True,
+                          unreferenced_body_gc=True, retired_layout_gc=True, reclamation_crash_recovery=True)
     finally:
         experiment.close()
 
