@@ -48,8 +48,9 @@ public:
   int read_published(uint64_t layout_id, int64_t schema_version,
       common::ObIAllocator &allocator, ObStorageSchema &schema);
   // Load an exact, still-referenced physical definition. A newer publication
-  // cannot substitute for it. The caller holds the tablet/SSTable reference
-  // which prevents retirement of this body while the read is registered.
+  // cannot substitute for it. The caller retains the tablet containing the
+  // referenced description/file through this read. An isolated SSTable handle
+  // is not a GC root: reference collection enumerates retained tablets/stores.
   static int read_published(InstanceMetaStore &store, uint64_t layout_id,
       int64_t schema_version, int64_t deadline,
       common::ObIAllocator &allocator, ObStorageSchema &schema);

@@ -23,7 +23,7 @@ scripts = ('native_probe_injection.py', 'storage_schema_history_probe_injection.
            'standby_copy_pause_injection.py', 'baseline_progress_injection.py', 'freeze_preparation_injection.py',
            'catalog_gc_boundary_injection.py', 'grpc_stop_injection.py', 'ddl_publication_cost_injection.py',
            'local_schema_install_injection.py', 'runtime_shrink_injection.py', 'meta_layout_injection.py',
-           'sstable_layout_injection.py', 'physical_report_injection.py')
+           'sstable_layout_injection.py', 'physical_report_injection.py', 'layout_reference_gc_injection.py')
 try:
     for script in scripts:
         subprocess.run([sys.executable, str(local / script), args.action], check=True)
