@@ -300,8 +300,8 @@ public:
 
   TO_STRING_KV(K_(is_inited), "tablet count", tablet_map_.count());
 
-  int inc_external_tablet_cnt(const uint64_t tablet_id);
-  int dec_external_tablet_cnt(const uint64_t tablet_id);
+  int register_external_tablet(ObTablet &tablet);
+  int unregister_external_tablet(ObTablet &tablet);
 public:
   class ObT3MResourceLimitCalculatorHandler final : public share::ObIResourceLimitCalculatorHandler
   {

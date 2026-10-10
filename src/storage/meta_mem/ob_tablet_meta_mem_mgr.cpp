@@ -1832,21 +1832,21 @@ int ObTabletMetaMemMgr::get_meta_mem_status(common::ObIArray<ObTabletMetaMemStat
   return ret;
 }
 
-int ObTabletMetaMemMgr::inc_external_tablet_cnt(const uint64_t tablet_id)
+int ObTabletMetaMemMgr::register_external_tablet(ObTablet &tablet)
 {
   int ret = OB_SUCCESS;
-  const ObDieingTabletMapKey dieing_key(tablet_id);
-  if (OB_FAIL(external_tablet_cnt_map_.reg_tablet(dieing_key))) {
+  const ObDieingTabletMapKey dieing_key(tablet.get_tablet_id().id());
+  if (OB_FAIL(external_tablet_cnt_map_.reg_tablet(tablet))) {
     LOG_WARN("fail to inc external tablet cnt", K(ret), K(dieing_key));
   }
   return ret;
 }
 
-int ObTabletMetaMemMgr::dec_external_tablet_cnt(const uint64_t tablet_id)
+int ObTabletMetaMemMgr::unregister_external_tablet(ObTablet &tablet)
 {
   int ret = OB_SUCCESS;
-  const ObDieingTabletMapKey dieing_key(tablet_id);
-  if (OB_FAIL(external_tablet_cnt_map_.unreg_tablet(dieing_key))) {
+  const ObDieingTabletMapKey dieing_key(tablet.get_tablet_id().id());
+  if (OB_FAIL(external_tablet_cnt_map_.unreg_tablet(tablet))) {
     LOG_WARN("fail to dec external tablet cnt", K(ret), K(dieing_key));
   }
   return ret;

@@ -19,13 +19,18 @@ if args.action == 'enable':
                         '#include "rootserver/fork_table/table_storage_layouts.h"\n'
                         '#include "storage/instance_meta/storage_schema_history.h"\n'
                         '#include "storage/tablet/ob_tablet_iterator.h"\n'
+                        '#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"\n'
+                        '#include "storage/ls/ob_ls_tablet_service.h"\n'
+                        '#include <atomic>\n#include <thread>\n'
                         '// LOCAL_TABLE_LAYOUT_END\n')
     text = text.replace(entry, '// LOCAL_TABLE_LAYOUT_BEGIN\n#include "'
+                        + str(local / 'external_layout_roots_native_probe.ipp') + '"\n#include "'
                         + str(local / 'table_storage_layout_native_probe.ipp') + '"\n'
                         '// LOCAL_TABLE_LAYOUT_END\n' + entry
                         + '  // LOCAL_TABLE_LAYOUT_BEGIN\n'
                           '  if (getenv("SEEKDB_TABLE_LAYOUT_PROBE") != nullptr) {\n'
                           '    int rc = initial_install ? run_table_storage_layout_native_probe() : OB_SUCCESS;\n'
+                          '    if (rc == OB_SUCCESS) { rc = run_external_layout_roots_native_probe(); }\n'
                           '    if (rc == OB_SUCCESS) { rc = audit_table_storage_layouts(); }\n'
                           '    if (rc != OB_SUCCESS) { return rc; }\n'
                           '  }\n'

@@ -9,6 +9,12 @@
 #include "lib/allocator/ob_allocator.h"
 #include "storage/compaction/ob_freeze_info_mgr.h"
 #include "storage/tx/ob_trans_service.h"
+#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
+#include "storage/tablet/ob_tablet.h"
+#include "storage/tablet/ob_tablet_table_store.h"
+#include "storage/blocksstable/ob_sstable.h"
+#include "storage/blocksstable/ob_sstable_meta.h"
+#include <algorithm>
 
 namespace oceanbase
 {
@@ -48,6 +54,65 @@ int decode_layout_header(const ObString &row, bool head, int64_t &size, int64_t 
   return ret;
 }
 } // namespace
+
+int StorageSchemaHistory::collect_physical_references(ObIArray<PhysicalReference> &references,
+    int64_t deadline)
+{
+  references.reuse();
+  if (ObTimeUtility::current_time() >= deadline) { return OB_TIMEOUT; }
+  auto *manager = share::server_service<ObStorageMetaMemMgr>();
+  if (manager == nullptr) { return OB_NOT_INIT; }
+  ObArray<PhysicalReference> found;
+  auto add = [&](uint64_t id, int64_t version) {
+    if (id == 0 || id == OB_INVALID_ID || version < 0) { return OB_STATE_NOT_MATCH; }
+    PhysicalReference reference;
+    reference.layout_id = id;
+    reference.minimum_version = version;
+    return found.push_back(reference);
+  };
+  int ret = manager->scan_tablet_references([&](const ObTablet &tablet) {
+    if (ObTimeUtility::current_time() >= deadline) { return OB_TIMEOUT; }
+    // Engine metadata tablets have fixed schemas. Empty shells no longer
+    // contain data files or a local schema; retained old descriptions do.
+    if (tablet.is_ls_inner_tablet() || tablet.is_empty_shell()) { return OB_SUCCESS; }
+    int64_t version = -1;
+    int rc = tablet.get_schema_version_from_storage_schema(version);
+    if (rc == OB_SUCCESS) { rc = add(tablet.get_tablet_meta().storage_layout_id_, version); }
+    ObTabletMemberWrapper<ObTabletTableStore> store;
+    ObTableStoreIterator files;
+    if (rc == OB_SUCCESS) { rc = tablet.fetch_table_store(store); }
+    if (rc == OB_SUCCESS) { rc = store.get_member()->get_all_sstable(files); }
+    ObITable *file = nullptr;
+    while (rc == OB_SUCCESS) {
+      if (ObTimeUtility::current_time() >= deadline) { rc = OB_TIMEOUT; break; }
+      rc = files.get_next(file);
+      if (rc == OB_ITER_END) { rc = OB_SUCCESS; break; }
+      if (rc == OB_SUCCESS && (file == nullptr || !file->is_sstable())) { rc = OB_ERR_UNEXPECTED; }
+      if (rc == OB_SUCCESS && !file->is_mds_sstable()) {
+        blocksstable::ObSSTableMetaHandle meta;
+        rc = static_cast<blocksstable::ObSSTable *>(file)->get_meta(meta);
+        if (rc == OB_SUCCESS) {
+          const auto &definition = meta.get_sstable_meta().get_basic_meta();
+          rc = add(definition.storage_layout_id_, definition.schema_version_);
+        }
+      }
+    }
+    return rc;
+  });
+  if (ret == OB_SUCCESS && found.count() != 0) {
+    std::sort(found.begin(), found.end(), [](const PhysicalReference &left, const PhysicalReference &right) {
+      return left.layout_id < right.layout_id
+          || (left.layout_id == right.layout_id && left.minimum_version < right.minimum_version);
+    });
+    for (int64_t i = 0; ret == OB_SUCCESS && i < found.count(); ++i) {
+      if (i == 0 || found.at(i).layout_id != found.at(i - 1).layout_id) {
+        ret = references.push_back(found.at(i));
+      }
+    }
+  }
+  if (ret != OB_SUCCESS) { references.reuse(); }
+  return ret;
+}
 
 int StorageSchemaHistory::create(uint64_t layout_id, const ObStorageSchema &schema)
 {

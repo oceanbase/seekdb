@@ -34,6 +34,11 @@ def run(binary):
         initial = log_tail(exp, {})
         assert 'TABLE_LAYOUT_PASS ' in initial and 'TABLE_LAYOUT_FAIL' not in initial, initial[-5000:]
         assert 'retire_mvcc=1 cross_store_atomic=1 exact_without_head=1' in initial
+        assert 'TABLE_LAYOUT_EXTERNAL_ROOTS_PASS copies=2 duplicate_rejected=1 exact_unregister=1 destruction_waits=1' in initial
+        assert 'TABLE_LAYOUT_ALL_ROOTS_PASS ' in initial
+        assert 'TABLE_LAYOUT_CAPTURE_RACE_PASS ' in initial
+        assert 'TABLE_LAYOUT_PHYSICAL_REFS_PASS ' in initial
+        assert 'TABLE_LAYOUT_CAPTURE_TIMEOUT_PASS ' in initial
         initial_physical = re.findall(r'TABLET_LAYOUT_AUDIT tablet=(\d+) table=(\d+) layout=(\d+)', initial)
         assert initial_physical and all(int(row[2]) > 0 for row in initial_physical), initial_physical
         exp.sql('CREATE DATABASE layout_sql')
@@ -64,6 +69,9 @@ def run(binary):
         exp.proc.wait(timeout=15)
         exp.start()
         recovered = log_tail(exp, cursors)
+        assert 'TABLE_LAYOUT_EXTERNAL_ROOTS_PASS ' in recovered, recovered[-5000:]
+        assert 'TABLE_LAYOUT_CAPTURE_RACE_PASS ' in recovered, recovered[-5000:]
+        assert 'TABLE_LAYOUT_PHYSICAL_REFS_PASS ' in recovered, recovered[-5000:]
         assert 'TABLE_LAYOUT_AUDIT_END ' in recovered and 'ret=0' in recovered, recovered[-5000:]
         bindings = {(int(ns), int(table)): (int(layout), int(version))
                     for ns, table, layout, version in re.findall(
@@ -101,6 +109,7 @@ def run(binary):
         exp.proc.wait(timeout=15)
         exp.start()
         retired = log_tail(exp, cursors)
+        assert 'TABLE_LAYOUT_EXTERNAL_ROOTS_PASS ' in retired, retired[-5000:]
         remaining = {(int(ns), int(table)) for ns, table in re.findall(
             r'TABLE_LAYOUT_AUDIT ns=(\d+) table=(\d+)', retired)}
         assert 'TABLE_LAYOUT_AUDIT_END ' in retired, retired[-5000:]
@@ -115,6 +124,9 @@ def run(binary):
                    late_partition_no_overwrite=True, index_and_lob=True,
                    conflict_nowait=True, rollback=True, participant_lifetime=True, crash_recovery=True,
                    retire_mvcc=True, cross_store_atomic=True, exact_without_head=True,
+                   external_layout_roots=True, external_destruction_waits=True,
+                   retained_pool_object=True, concurrent_publication_rejected=True,
+                   physical_layout_versions=True, capture_timeout=True,
                    drop_table=True, drop_namespace=True, surviving_descendant=True)
     finally:
         exp.close()

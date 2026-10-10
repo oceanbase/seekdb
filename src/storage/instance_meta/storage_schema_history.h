@@ -7,6 +7,7 @@
 #define OCEANBASE_STORAGE_STORAGE_SCHEMA_HISTORY_H_
 
 #include "storage/instance_meta/instance_meta_store.h"
+#include "lib/container/ob_iarray.h"
 
 namespace oceanbase
 {
@@ -23,6 +24,21 @@ class ObStorageSchema;
 class StorageSchemaHistory final
 {
 public:
+  struct PhysicalReference
+  {
+    uint64_t layout_id = 0;
+    int64_t minimum_version = -1;
+    TO_STRING_KV(K(layout_id), K(minimum_version));
+  };
+  // Collect a temporary per-layout lower bound from all retained tablet
+  // descriptions and their files, including files inherited from other Gs.
+  // Holding a tablet also protects an in-flight merge's input description;
+  // keeping versions >= its bound covers memtable/output version advancement.
+  // This is only the physical part of retention: owners, snapshot heads and
+  // replay/restore must also be accounted for before any body can be removed.
+  // On error the output is empty; EAGAIN means publication overlapped capture.
+  static int collect_physical_references(common::ObIArray<PhysicalReference> &references,
+      int64_t deadline = INT64_MAX);
   StorageSchemaHistory(InstanceMetaStore &store, InstanceMetaStore::Transaction &tx)
     : store_(store), tx_(tx) {}
   int create(uint64_t layout_id, const ObStorageSchema &schema);

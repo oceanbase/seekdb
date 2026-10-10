@@ -201,6 +201,11 @@ public:
       share::SCN &min_end_scn_from_latest,
       share::SCN &min_end_scn_from_old);
   int scan_all_version_tablets(const ObTabletMapKey &key, const ObFunction<int(ObTablet &)> &op);
+  // Visits current, retained old and external tablet descriptions. The visitor
+  // may load their immutable schema/SSTable metadata, but must not acquire or
+  // mutate tablets. Duplicate visits are possible. A concurrent publication
+  // returns EAGAIN; the caller must discard all partial results on any error.
+  int scan_tablet_references(const std::function<int(const ObTablet &)> &visit);
 
   // garbage collector for sstable and memtable.
   int push_table_into_gc_queue(ObITable *table, const ObITable::TableType table_type);
@@ -300,8 +305,9 @@ public:
 
   TO_STRING_KV(K_(is_inited), "tablet count", tablet_map_.count());
 
-  int inc_external_tablet_cnt(const uint64_t tablet_id);
-  int dec_external_tablet_cnt(const uint64_t tablet_id);
+  int register_external_tablet(ObTablet &tablet);
+  int unregister_external_tablet(ObTablet &tablet);
+  int scan_external_tablets(const std::function<int(const ObTablet &)> &visit);
 
 public:
   class ObT3MResourceLimitCalculatorHandler final : public share::ObIResourceLimitCalculatorHandler
@@ -442,6 +448,16 @@ private:
   typedef common::hash::ObHashSet<ObTabletMapKey, hash::NoPthreadDefendMode> PinnedTabletSet;
 
 private:
+  class TabletReferenceChange final
+  {
+  public:
+    explicit TabletReferenceChange(ObStorageMetaMemMgr &owner);
+    ~TabletReferenceChange();
+  private:
+    ObStorageMetaMemMgr &owner_;
+    DISALLOW_COPY_AND_ASSIGN(TabletReferenceChange);
+  };
+  int scan_retired_tablets(const ObFunction<int(ObTablet &)> &visit);
   int acquire_tablet(const ObTabletPoolType type, ObTabletHandle &tablet_handle);
   int acquire_tablet(ObIStorageMetaObjPool *pool, ObTablet *&tablet);
   int acquire_tablet_ddl_kv_mgr(ObDDLKvMgrHandle &handle);
@@ -490,6 +506,10 @@ private:
   ObTabletPointerMap tablet_map_;
   ObFlyingTabletPointerMap flying_tablet_map_;
   ObExternalTabletCntMap external_tablet_cnt_map_;
+  // Count overlapping publications without serializing unrelated tablet work.
+  // These are process-local observation counters, not persistent GC progress.
+  int64_t tablet_reference_changes_started_;
+  int64_t tablet_reference_changes_finished_;
   common::ObTimer gc_timer_;
   TableGCTask table_gc_task_;
   RefreshConfigTask refresh_config_task_;

@@ -88,7 +88,7 @@ void ObTabletHandle::reset()
           if (allow_copy_and_assign_) {
             tmp_ret = OB_ERR_UNEXPECTED;
             LOG_ERROR("allow_copy_and_assign_ of external_tablet must be false", K(tmp_ret), KPC(this), KPC(obj_), K(lbt()));
-          } else if (OB_TMP_FAIL(t3m_->dec_external_tablet_cnt(obj_->get_tablet_id().id()))) {
+          } else if (OB_TMP_FAIL(t3m_->unregister_external_tablet(*obj_))) {
           }
         }
         if (OB_FAIL(ret)) {

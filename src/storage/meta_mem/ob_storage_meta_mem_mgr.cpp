@@ -165,6 +165,8 @@ ObStorageMetaMemMgr::ObStorageMetaMemMgr()
     tablet_map_(),
     flying_tablet_map_(FLYING_TABLET_THRESHOLD),
     external_tablet_cnt_map_(),
+    tablet_reference_changes_started_(0),
+    tablet_reference_changes_finished_(0),
     gc_timer_(),
     table_gc_task_(this),
     refresh_config_task_(),
@@ -942,6 +944,86 @@ int ObStorageMetaMemMgr::scan_all_version_tablets(const ObTabletMapKey &key, con
   return ret;
 }
 
+ObStorageMetaMemMgr::TabletReferenceChange::TabletReferenceChange(ObStorageMetaMemMgr &owner)
+  : owner_(owner)
+{
+  ATOMIC_INC(&owner_.tablet_reference_changes_started_);
+}
+
+ObStorageMetaMemMgr::TabletReferenceChange::~TabletReferenceChange()
+{
+  ATOMIC_INC(&owner_.tablet_reference_changes_finished_);
+}
+
+int ObStorageMetaMemMgr::scan_retired_tablets(const ObFunction<int(ObTablet &)> &visit)
+{
+  struct PointerSnapshot
+  {
+    uint64_t hash = 0;
+    ObTabletPointerHandle pointer;
+    TO_STRING_KV(K(hash));
+  };
+  int ret = OB_SUCCESS;
+  ObArenaAllocator allocator(ObMemAttr("TabletRefScan"));
+  ObSEArray<PointerSnapshot *, 16> pointers;
+  // Copy handles while the flying-map entry is protected. Release its hash
+  // lock before taking the T3M bucket lock: deletion takes them in that order.
+  auto capture = [&](auto &entry) {
+    int rc = OB_SUCCESS;
+    void *buffer = allocator.alloc(sizeof(PointerSnapshot));
+    if (buffer == nullptr) { return OB_ALLOCATE_MEMORY_FAILED; }
+    auto *snapshot = new (buffer) PointerSnapshot();
+    snapshot->hash = entry.first.hash();
+    if (OB_SUCCESS != (rc = snapshot->pointer.assign(entry.second))) {
+    } else { rc = pointers.push_back(snapshot); }
+    if (rc != OB_SUCCESS) { snapshot->~PointerSnapshot(); }
+    return rc;
+  };
+  ret = flying_tablet_map_.map_.foreach_refactored(capture);
+  for (int64_t i = 0; OB_SUCC(ret) && i < pointers.count(); ++i) {
+    const auto &snapshot = *pointers.at(i);
+    // TabletMapKey and DieingTabletMapKey both hash the same physical ID.
+    ObBucketHashRLockGuard guard(bucket_lock_, snapshot.hash);
+    ObTabletPointer *pointer = snapshot.pointer.get_resource_ptr();
+    if (pointer == nullptr) { ret = OB_ERR_UNEXPECTED; }
+    else { ret = pointer->scan_all_tablets_on_chain(visit); }
+  }
+  for (int64_t i = 0; i < pointers.count(); ++i) {
+    pointers.at(i)->~PointerSnapshot();
+  }
+  return ret;
+}
+
+int ObStorageMetaMemMgr::scan_tablet_references(
+    const std::function<int(const ObTablet &)> &visit)
+{
+  int ret = OB_SUCCESS;
+  const int64_t before = ATOMIC_LOAD(&tablet_reference_changes_started_);
+  if (!is_inited_) { return OB_NOT_INIT; }
+  if (!visit) { return OB_INVALID_ARGUMENT; }
+  if (before != ATOMIC_LOAD(&tablet_reference_changes_finished_)) { return OB_EAGAIN; }
+  ObT3mTabletMapIterator keys(*this);
+  ObFunction<int(ObTablet &)> apply([&](ObTablet &tablet) { return visit(tablet); });
+  if (!apply.is_valid()) { return OB_ALLOCATE_MEMORY_FAILED; }
+  if (OB_FAIL(keys.fetch_tablet_item())) {
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < keys.tablet_items_.count(); ++i) {
+      ret = scan_all_version_tablets(keys.tablet_items_.at(i), apply);
+      if (ObT3mTabletMapIterator::ignore_err_code(ret)) { ret = OB_EAGAIN; }
+    }
+  }
+  if (OB_SUCC(ret)) { ret = scan_retired_tablets(apply); }
+  if (OB_SUCC(ret)) { ret = external_tablet_cnt_map_.scan(visit); }
+  // A tablet may transfer old file references to another tablet while being
+  // scanned. Per-key locks alone cannot detect that cross-key handoff. Reject
+  // a traversal overlapping any create/swap/delete, including an active writer.
+  if (OB_SUCC(ret) && (before != ATOMIC_LOAD(&tablet_reference_changes_started_)
+      || before != ATOMIC_LOAD(&tablet_reference_changes_finished_))) {
+    ret = OB_EAGAIN;
+  }
+  return ret;
+}
+
 int ObStorageMetaMemMgr::acquire_ddl_kv(ObDDLKVHandle &handle)
 {
   int ret = OB_SUCCESS;
@@ -1428,6 +1510,7 @@ int ObStorageMetaMemMgr::create_tablet(
     ObLS *tenant_ls,
     ObTabletHandle &tablet_handle)
 {
+  TabletReferenceChange reference_change(*this);
   int ret = OB_SUCCESS;
   ObMemtableMgrHandle memtable_mgr_hdl;
   if (OB_UNLIKELY(!is_inited_)) {
@@ -1748,22 +1831,20 @@ int ObStorageMetaMemMgr::get_meta_mem_status(common::ObIArray<ObStorageMetaMemSt
   return ret;
 }
 
-int ObStorageMetaMemMgr::inc_external_tablet_cnt(const uint64_t tablet_id)
+int ObStorageMetaMemMgr::register_external_tablet(ObTablet &tablet)
 {
-  int ret = OB_SUCCESS;
-  const ObDieingTabletMapKey dieing_key(tablet_id);
-  if (OB_FAIL(external_tablet_cnt_map_.reg_tablet(dieing_key))) {
-  }
-  return ret;
+  return external_tablet_cnt_map_.reg_tablet(tablet);
 }
 
-int ObStorageMetaMemMgr::dec_external_tablet_cnt(const uint64_t tablet_id)
+int ObStorageMetaMemMgr::unregister_external_tablet(ObTablet &tablet)
 {
-  int ret = OB_SUCCESS;
-  const ObDieingTabletMapKey dieing_key(tablet_id);
-  if (OB_FAIL(external_tablet_cnt_map_.unreg_tablet(dieing_key))) {
-  }
-  return ret;
+  return external_tablet_cnt_map_.unreg_tablet(tablet);
+}
+
+int ObStorageMetaMemMgr::scan_external_tablets(
+    const std::function<int(const ObTablet &)> &visit)
+{
+  return external_tablet_cnt_map_.scan(visit);
 }
 
 int ObStorageMetaMemMgr::push_tablet_pointer_to_fly_map_if_need_(
@@ -1827,6 +1908,7 @@ int ObStorageMetaMemMgr::push_tablet_pointer_to_fly_map_if_need_(
 
 int ObStorageMetaMemMgr::del_tablet(const ObTabletMapKey &key)
 {
+  TabletReferenceChange reference_change(*this);
   int ret = OB_SUCCESS;
   // use tmp_handle to ensure the tablet is finally released by handle,
   // since ObMetaObjGuard && ObMetaObj is not adapted to gc_tablet()
@@ -1860,6 +1942,7 @@ int ObStorageMetaMemMgr::compare_and_swap_tablet(
     const ObTabletHandle &new_handle,
     const ObUpdateTabletPointerParam &update_pointer_param)
 {
+  TabletReferenceChange reference_change(*this);
   TIMEGUARD_INIT(STORAGE, 10_ms);
   int ret = OB_SUCCESS;
   const ObMetaDiskAddr &new_addr = new_handle.get_obj()->get_tablet_addr();
@@ -1924,6 +2007,7 @@ int ObStorageMetaMemMgr::compare_and_swap_tablet(
     const ObTabletPoolType &pool_type,
     const bool set_pool /* whether to set tablet pool */)
 {
+  TabletReferenceChange reference_change(*this);
   int ret = OB_SUCCESS;
   bool is_exist = false;
   if (OB_UNLIKELY(!is_inited_)) {

@@ -18,13 +18,16 @@
 #define OCEANBASE_STORAGE_OB_EXTERNAL_TABLET_CNT_MAP_H_
 
 #include "lib/hash/ob_hashmap.h"
+#include "lib/container/ob_se_array.h"
 #include "lib/lock/ob_bucket_lock.h"
 #include "storage/meta_mem/ob_tablet_map_key.h"
+#include <functional>
 
 namespace oceanbase
 {
 namespace storage
 {
+class ObTablet;
 
 class ObExternalTabletCntMap
 {
@@ -32,14 +35,19 @@ public:
   ObExternalTabletCntMap();
   int init(const int64_t bucket_num);
   int check_exist(const ObDieingTabletMapKey &key, bool &exist);
-  int reg_tablet(const ObDieingTabletMapKey &key);
-  int unreg_tablet(const ObDieingTabletMapKey &key);
+  int reg_tablet(ObTablet &tablet);
+  int unreg_tablet(ObTablet &tablet);
+  // Visits borrowed objects while unregister/destruction is
+  // excluded. The callback must not register/unregister or load another
+  // tablet. This covers external copies only, not the main/retired maps.
+  int scan(const std::function<int(const ObTablet &)> &visit);
   int64_t count() const { return ex_tablet_map_.size(); }
   void destroy();
 private:
   bool is_inited_;
   common::ObBucketLock bucket_lock_;
-  common::hash::ObHashMap<ObDieingTabletMapKey, int64_t> ex_tablet_map_;
+  using Tablets = common::ObSEArray<ObTablet *, 1>;
+  common::hash::ObHashMap<ObDieingTabletMapKey, Tablets> ex_tablet_map_;
   DISALLOW_COPY_AND_ASSIGN(ObExternalTabletCntMap);
 };
 
