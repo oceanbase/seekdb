@@ -2141,6 +2141,19 @@ int ObServer::init_server_runtime()
   }
 
   if (OB_SUCC(ret)) {
+    SERVER_MODULE_SCOPE {
+      ObSqlMemoryManager *sql_mem_mgr =
+          share::server_service<ObSqlMemoryManager>();
+      if (OB_ISNULL(sql_mem_mgr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_ERROR("SQL memory manager is null", KR(ret));
+      } else if (OB_FAIL(sql_mem_mgr->calculate_global_bound_size(nullptr, false))) {
+        LOG_ERROR("initialize SQL workarea memory quota failed", KR(ret));
+      }
+    }
+  }
+
+  if (OB_SUCC(ret)) {
     if (OB_FAIL(sql_mem_task_.schedule(sql_mem_timer_))) {
       LOG_ERROR("schedule SQL memory manager task fail", KR(ret));
     }

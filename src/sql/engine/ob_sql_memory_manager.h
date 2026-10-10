@@ -638,7 +638,8 @@ private:
 public:
   ObSqlMemoryManager() :
     wa_intervals_(nullptr), min_bound_size_(0),
-    enable_auto_memory_mgr_(false), mutex_(common::ObLatchIds::SQL_MEMORY_MGR_MUTEX_LOCK), profile_lists_(nullptr),
+    enable_auto_memory_mgr_(false), pre_enable_auto_memory_mgr_(false),
+    mutex_(common::ObLatchIds::SQL_MEMORY_MGR_MUTEX_LOCK), profile_lists_(nullptr),
     drift_size_(0), profile_cnt_(0), pre_profile_cnt_(0), global_bound_size_(0),
     mem_target_(0), max_workarea_size_(0), workarea_hold_size_(0), max_auto_workarea_size_(0),
     workarea_managed_tracker_(), workarea_quota_(), active_profile_used_(0),
@@ -666,6 +667,11 @@ public:
     const int64_t wa_max_memory_size,
     const bool auto_calc);
   int calculate_global_bound_size(common::ObIAllocator *allocator = nullptr, bool auto_calc = true);
+  int calculate_global_bound_size(
+      const bool auto_memory_mgr,
+      const int64_t work_area_max_size,
+      common::ObIAllocator *allocator,
+      const bool auto_calc);
   OB_INLINE int64_t get_global_bound_size() { return ATOMIC_LOAD(&global_bound_size_); }
 
   OB_INLINE bool enable_auto_memory_mgr() { return enable_auto_memory_mgr_; }
@@ -709,7 +715,11 @@ private:
   int try_push_profiles_work_area_size(int64_t global_bound_size);
   int calc_work_area_size_by_profile(int64_t global_bound_size, ObSqlWorkAreaProfile &profile);
   bool enable_auto_sql_memory_manager();
-  int get_max_work_area_size(int64_t &max_wa_memory_size, const bool auto_calc);
+  int get_work_area_hard_limit(int64_t &work_area_max_size);
+  int get_max_work_area_size(
+      const int64_t work_area_max_size,
+      int64_t &max_wa_memory_size,
+      const bool auto_calc);
   int find_interval_index(const int64_t cache_size, int64_t &idx, int64_t &out_cache_size);
   int count_profile_into_work_area_intervals(
     ObSqlWorkAreaInterval *wa_intervals,

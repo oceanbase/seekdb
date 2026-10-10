@@ -880,16 +880,14 @@ int ObSqlMemoryManager::unregister_work_area_profile(ObSqlWorkAreaProfile &profi
   return ret;
 }
 
-int ObSqlMemoryManager::get_max_work_area_size(
-  int64_t &max_wa_memory_size, const bool auto_calc)
+int ObSqlMemoryManager::get_work_area_hard_limit(int64_t &work_area_max_size)
 {
   int ret = OB_SUCCESS;
-  const int64_t MIN_AVAILABLE_MEMORY = 1;
   ObSchemaGetterGuard schema_guard;
   const ObSysVarSchema *var_schema = NULL;
   ObObj value;
   int64_t pctg = 0;
-  max_wa_memory_size = 0;
+  work_area_max_size = 0;
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
@@ -901,20 +899,31 @@ int ObSqlMemoryManager::get_max_work_area_size(
   } else if (OB_FAIL(value.get_int(pctg))) {
   } else {
     const int64_t memory_budget = lib::get_memory_budget();
-    const int64_t work_area_max_size = memory_budget / 100 * pctg;
+    work_area_max_size = memory_budget / 100 * pctg;
+  }
+  return ret;
+}
+
+int ObSqlMemoryManager::get_max_work_area_size(
+  const int64_t work_area_max_size,
+  int64_t &max_wa_memory_size,
+  const bool auto_calc)
+{
+  int ret = OB_SUCCESS;
+  const int64_t MIN_AVAILABLE_MEMORY = 1;
+  if (work_area_max_size < 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
     const int64_t workarea_managed_used = get_workarea_managed_used();
     const int64_t active_profile_used = MAX(get_active_profile_used(), 0);
     const int64_t non_active_workarea_used =
         MAX(workarea_managed_used - active_profile_used, 0);
     max_wa_memory_size = MAX(
         work_area_max_size - non_active_workarea_used, MIN_AVAILABLE_MEMORY);
-    max_workarea_size_ = work_area_max_size;
-    workarea_quota_.set_limit(work_area_max_size);
     workarea_hold_size_ = workarea_managed_used;
     max_auto_workarea_size_ = max_wa_memory_size;
     if (auto_calc || MIN_AVAILABLE_MEMORY == max_wa_memory_size) {
-      LOG_INFO("trace max work area", K(auto_calc), K(memory_budget), K(pctg),
-          K(work_area_max_size), K(workarea_managed_used),
+      LOG_INFO("trace max work area", K(auto_calc), K(work_area_max_size), K(workarea_managed_used),
           K(active_profile_used), K(non_active_workarea_used), K(max_wa_memory_size));
     }
   }
@@ -1164,10 +1173,32 @@ int ObSqlMemoryManager::calculate_global_bound_size_by_interval_info(
 int ObSqlMemoryManager::calculate_global_bound_size(ObIAllocator *allocator, bool auto_calc)
 {
   int ret = OB_SUCCESS;
+  int64_t work_area_max_size = 0;
+  const bool auto_memory_mgr = enable_auto_sql_memory_manager();
+  if (OB_FAIL(get_work_area_hard_limit(work_area_max_size))) {
+  } else if (OB_FAIL(calculate_global_bound_size(
+      auto_memory_mgr, work_area_max_size, allocator, auto_calc))) {
+  }
+  return ret;
+}
+
+int ObSqlMemoryManager::calculate_global_bound_size(
+  const bool auto_memory_mgr,
+  const int64_t work_area_max_size,
+  ObIAllocator *allocator,
+  const bool auto_calc)
+{
+  int ret = OB_SUCCESS;
   int64_t wa_max_memory_size = 0;
-  // set enable_auto_sql_memory_mgr after calculate global bound size
-  bool auto_memory_mgr = enable_auto_sql_memory_manager();
-  if (!auto_memory_mgr) {
+  if (work_area_max_size < 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    max_workarea_size_ = work_area_max_size;
+    workarea_quota_.set_limit(work_area_max_size);
+  }
+  // Set enable_auto_memory_mgr_ after calculating the policy-specific bound.
+  if (OB_FAIL(ret)) {
+  } else if (!auto_memory_mgr) {
     // manually memory manager
     lib::ObMutexGuard guard(mutex_);
     enable_auto_memory_mgr_ = false;
@@ -1187,7 +1218,8 @@ int ObSqlMemoryManager::calculate_global_bound_size(ObIAllocator *allocator, boo
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(get_max_work_area_size(wa_max_memory_size, auto_calc))) {
+    } else if (OB_FAIL(get_max_work_area_size(
+        work_area_max_size, wa_max_memory_size, auto_calc))) {
     } else if (0 == wa_max_memory_size) {
       lib::ObMutexGuard guard(mutex_);
       global_bound_size_ = min_bound_size_;

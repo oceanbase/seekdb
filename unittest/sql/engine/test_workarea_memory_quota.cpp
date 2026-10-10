@@ -84,6 +84,31 @@ public:
   }
 };
 
+class TestSqlMemoryManagerGuard final
+{
+public:
+  TestSqlMemoryManagerGuard() : manager_(nullptr) {}
+
+  int init()
+  {
+    int ret = ObSqlMemoryManager::server_module_new(manager_);
+    if (OB_SUCCESS == ret) {
+      ret = ObSqlMemoryManager::server_module_init(manager_);
+    }
+    return ret;
+  }
+
+  ~TestSqlMemoryManagerGuard()
+  {
+    ObSqlMemoryManager::server_module_destroy(manager_);
+  }
+
+  ObSqlMemoryManager &get() { return *manager_; }
+
+private:
+  ObSqlMemoryManager *manager_;
+};
+
 class TestStoredRow final
 {
 public:
@@ -249,6 +274,69 @@ TEST(TestWorkareaMemoryQuota, explicit_limit_is_preserved)
   EXPECT_EQ(123, calculate_workarea_memory_limit(123, 1000));
   EXPECT_EQ(UNLIMITED_WORKAREA_MEMORY,
             calculate_workarea_memory_limit(UNLIMITED_WORKAREA_MEMORY, 1000));
+}
+
+TEST(TestWorkareaMemoryQuota, manual_startup_establishes_hard_quota)
+{
+  TestSqlMemoryManagerGuard manager_guard;
+  ASSERT_EQ(OB_SUCCESS, manager_guard.init());
+  ObSqlMemoryManager &manager = manager_guard.get();
+  const int64_t hard_limit = 8L << 20;
+
+  ASSERT_EQ(OB_SUCCESS, manager.calculate_global_bound_size(
+      false, hard_limit, nullptr, false));
+  EXPECT_FALSE(manager.enable_auto_memory_mgr());
+  EXPECT_EQ(hard_limit, manager.get_max_workarea_size());
+  EXPECT_EQ(hard_limit, manager.get_memory_quota_sample().limit_bytes_);
+  EXPECT_EQ(hard_limit * 80 / 100,
+            calculate_workarea_memory_limit(
+                0, manager.get_memory_quota_sample().limit_bytes_));
+
+  MemoryQuota &quota = manager.get_workarea_quota();
+  EXPECT_TRUE(quota.reserve(hard_limit));
+  EXPECT_FALSE(quota.reserve(1));
+  quota.rollback(hard_limit);
+  EXPECT_EQ(0, quota.reserved());
+}
+
+TEST(TestWorkareaMemoryQuota, auto_manual_transitions_refresh_hard_quota)
+{
+  TestSqlMemoryManagerGuard manager_guard;
+  ASSERT_EQ(OB_SUCCESS, manager_guard.init());
+  ObSqlMemoryManager &manager = manager_guard.get();
+  const int64_t initial_manual_limit = 16L << 20;
+  const int64_t auto_limit = 12L << 20;
+  const int64_t final_manual_limit = 4L << 20;
+
+  ASSERT_EQ(OB_SUCCESS, manager.calculate_global_bound_size(
+      false, initial_manual_limit, nullptr, false));
+  EXPECT_EQ(initial_manual_limit,
+            manager.get_memory_quota_sample().limit_bytes_);
+
+  ASSERT_EQ(OB_SUCCESS, manager.calculate_global_bound_size(
+      true, auto_limit, nullptr, false));
+  EXPECT_TRUE(manager.enable_auto_memory_mgr());
+  EXPECT_EQ(auto_limit, manager.get_max_workarea_size());
+  EXPECT_EQ(auto_limit, manager.get_memory_quota_sample().limit_bytes_);
+  EXPECT_EQ(auto_limit * 80 / 100,
+            calculate_workarea_memory_limit(
+                0, manager.get_memory_quota_sample().limit_bytes_));
+
+  ASSERT_EQ(OB_SUCCESS, manager.calculate_global_bound_size(
+      false, final_manual_limit, nullptr, false));
+  EXPECT_FALSE(manager.enable_auto_memory_mgr());
+  EXPECT_EQ(final_manual_limit, manager.get_max_workarea_size());
+  EXPECT_EQ(final_manual_limit,
+            manager.get_memory_quota_sample().limit_bytes_);
+  EXPECT_EQ(final_manual_limit * 80 / 100,
+            calculate_workarea_memory_limit(
+                0, manager.get_memory_quota_sample().limit_bytes_));
+
+  MemoryQuota &quota = manager.get_workarea_quota();
+  EXPECT_TRUE(quota.reserve(final_manual_limit));
+  EXPECT_FALSE(quota.reserve(1));
+  quota.rollback(final_manual_limit);
+  EXPECT_EQ(0, quota.reserved());
 }
 
 TEST(TestWorkareaMemoryQuota, successful_spill_write_records_one_reclaim)
