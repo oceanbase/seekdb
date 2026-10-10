@@ -409,6 +409,12 @@ private:
   bool enable_trace_cost_model_;
 };
 
+template <>
+int ObOptimizerTraceImpl::append(const ObIArrayWrap<ObDSResultItem>& value);
+
+template <>
+int ObOptimizerTraceImpl::append(const ObIArrayWrap<ColumnItem>& value);
+
 //for class ObRawExpr
 template <typename T>
 typename std::enable_if<std::is_base_of<ObRawExpr, T>::value, int>::type

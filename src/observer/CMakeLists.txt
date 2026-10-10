@@ -74,7 +74,6 @@ target_link_libraries(ob_main PUBLIC ob_base)
 
 add_executable(seekdb)
 if(WIN32)
-  target_link_options(seekdb PRIVATE /FORCE:MULTIPLE)
   get_filename_component(CLANG_BIN_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
   get_filename_component(LLVM_ROOT ${CLANG_BIN_DIR} DIRECTORY)
   file(GLOB CLANG_RT_BUILTINS

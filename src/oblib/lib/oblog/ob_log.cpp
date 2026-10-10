@@ -1766,7 +1766,23 @@ void ObLogger::issue_dba_error(const int errcode, const char *file, const int li
                       "[suggestion] You can seek help from official technical personnel.");
 }
 
-bool ObLogger::need_to_print_dba(const int32_t level, bool force)
+bool OB_WEAK_SYMBOL ObLogger::need_to_print(const int32_t level)
+{
+  return (level <= get_log_level());
+}
+
+bool OB_WEAK_SYMBOL ObLogger::need_to_print(const uint64_t par_mod_id, const int32_t level)
+{
+  return (level <= get_log_level(par_mod_id));
+}
+
+bool OB_WEAK_SYMBOL ObLogger::need_to_print(const uint64_t par_mod_id, const uint64_t sub_mod_id,
+                             const int32_t level)
+{
+  return (level <= get_log_level(par_mod_id, sub_mod_id));
+}
+
+bool OB_WEAK_SYMBOL ObLogger::need_to_print_dba(const int32_t level, bool force)
 {
   static thread_local ObCurTraceId::TraceId dba_log_trace_id[OB_LOG_LEVEL_DBA_WARN + 1];
   static thread_local int64_t dba_log_count[OB_LOG_LEVEL_DBA_WARN + 1];
