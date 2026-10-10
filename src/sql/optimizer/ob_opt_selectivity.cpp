@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_OPT
 #include "ob_opt_selectivity.h"
 #include "sql/rewrite/ob_query_range_define.h"
+#include "lib/oblog/ob_warning_buffer.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
@@ -2611,11 +2612,16 @@ int ObOptSelectivity::get_column_query_range(const OptSelectivityCtx &ctx,
       OB_ISNULL(ctx.get_stmt()) || OB_ISNULL(ctx.get_stmt()->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(column_items.push_back(*column_item))) {
-  } else if (OB_FAIL(pre_range_graph.preliminary_extract_query_range(column_items, quals, exec_ctx,
-                                                                     NULL, params, true))) {
-  } else if (OB_FAIL(pre_range_graph.get_tablet_ranges(alloc, *exec_ctx, ranges,
+  } else {
+    // These ranges only estimate selectivity. Keep speculative conversion
+    // diagnostics out of EXPLAIN and the statement's execution warnings.
+    ObWarningBufferIgnoreScope ignore_estimation_diagnostics;
+    if (OB_FAIL(pre_range_graph.preliminary_extract_query_range(column_items, quals, exec_ctx,
+                                                               NULL, params, true))) {
+    } else if (OB_FAIL(pre_range_graph.get_tablet_ranges(alloc, *exec_ctx, ranges,
                                                        dummy_all_single_value_ranges,
                                                        dtc_params))) {
+    }
   }
   return ret;
 }
