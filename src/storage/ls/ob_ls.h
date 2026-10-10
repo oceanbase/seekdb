@@ -456,7 +456,6 @@ public:
   DELEGATE_WITH_RET(log_handler_, append, int);
   DELEGATE_WITH_RET(log_handler_, get_end_scn, int);
   DELEGATE_WITH_RET(log_handler_, get_end_lsn, int);
-  void close_replay_tx_ctx_cache() { ls_tx_svr_.close_replay_tx_ctx_cache(); }
 
   // Create a TxCtx whose tx_id is specified
   // @param [in] tx_id: transaction ID

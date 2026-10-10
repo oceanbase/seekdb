@@ -141,14 +141,6 @@ int ObLogStorageAdapter::wait_append_sync()
   return ret;
 }
 
-void ObLogStorageAdapter::replay_idle()
-{
-  ObLS *ls = nullptr;
-  if (is_inited_ && OB_SUCCESS == ls_service_->get_ls(ls) && nullptr != ls) {
-    ls->close_replay_tx_ctx_cache();
-  }
-}
-
 bool ObLogStorageAdapter::is_replay_pending_log_too_large(
     const int64_t pending_size)
 {

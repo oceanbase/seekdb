@@ -88,8 +88,10 @@ class Node:
 
     def cache_state(self, label):
         slot = "'oceanbase::share::ObServerServiceSlot<oceanbase::storage::ObLSService>::service_'"
+        replay_cache = f'{slot}->ls_->ls_tx_svr_.replay_tx_ctx_cache_'
         commands = [
-            f'printf "REPLAY_CACHE=%p\\n", {slot}->ls_->ls_tx_svr_.replay_tx_ctx_cache_',
+            f'printf "REPLAY_CACHE=%p\\n", {replay_cache}',
+            f'printf "REPLAY_FREE_COUNT=%ld\\n", {replay_cache} ? {replay_cache}->free_count_ : 0',
             f'printf "RECOVER_CACHE=%p\\n", {slot}->ls_->tx_table_.tx_ctx_table_.recover_helper_.tx_ctx_cache_',
             'printf "ACTIVE_TX_CTX=%ld\\n", *(long *)&\'oceanbase::transaction::ObTxCtxFactory::active_tx_ctx_count_\'',
             'detach']
@@ -100,13 +102,21 @@ class Node:
         result = subprocess.run(command, capture_output=True, text=True, timeout=60)
         text = result.stdout + result.stderr
         (self.directory / f'{label}.txt').write_text(text)
-        for key in ('REPLAY_CACHE', 'RECOVER_CACHE', 'ACTIVE_TX_CTX'):
+        for key in ('REPLAY_CACHE', 'REPLAY_FREE_COUNT', 'RECOVER_CACHE', 'ACTIVE_TX_CTX'):
             if key + '=' not in text:
                 raise RuntimeError(f'gdb failed to read {key}: {text[-1000:]}')
-        values = dict(re.findall(r'(REPLAY_CACHE|RECOVER_CACHE|ACTIVE_TX_CTX)=([^\n]+)', text))
+        values = dict(re.findall(r'(REPLAY_CACHE|REPLAY_FREE_COUNT|RECOVER_CACHE|ACTIVE_TX_CTX)=([^\n]+)', text))
         emit(phase='cache_state', role=self.role, label=label, values=values)
-        if values['REPLAY_CACHE'] not in ('(nil)', '0x0') or values['RECOVER_CACHE'] not in ('(nil)', '0x0'):
-            raise RuntimeError('idle replay or recover cache retained')
+        if values['RECOVER_CACHE'] not in ('(nil)', '0x0'):
+            raise RuntimeError('completed recovery scan retained its cache')
+        if not 0 <= int(values['REPLAY_FREE_COUNT']) <= 64:
+            raise RuntimeError('replay cache exceeded its free-context bound')
+        if self.role == 'PRIMARY' and values['REPLAY_CACHE'] not in ('(nil)', '0x0'):
+            raise RuntimeError('primary retained its startup replay cache')
+        if self.role == 'STANDBY' and int(values['ACTIVE_TX_CTX']) != 0:
+            raise RuntimeError('caught-up standby retained an active transaction')
+        # Standby catch-up cleanup will belong to a unified resource-release
+        # action; this change intentionally retains only its bounded LS cache.
         return values
 
     def replay_markers(self):
@@ -288,7 +298,7 @@ def standby_test(args):
             write_batch(primary, 250)
             live_sync = sync(primary, standby)
             # Online tablet creation and schema DDL exercise replay barriers
-            # after bootstrap, when the standby cache must close on its own.
+            # after bootstrap while reusing the bounded standby cache.
             primary.query('create table barrier_guard(id int primary key, v int)')
             primary.query('insert into barrier_guard values(1,123)')
             primary.query('alter table live_guard add column barrier_value bigint not null default 0')

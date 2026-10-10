@@ -115,7 +115,6 @@ public:
   int diagnose(ReplayDiagnoseInfo &diagnose_info);
   void inc_pending_task_size(const int64_t log_size);
   void dec_pending_task_size(const int64_t log_size);
-  void notify_replay_idle();
   int64_t get_pending_task_size() const;
   void *alloc_replay_task(const int64_t size);
   void free_replay_task(ObLogReplayTask *task);

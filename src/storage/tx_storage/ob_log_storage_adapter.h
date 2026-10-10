@@ -38,7 +38,6 @@ public:
   void destroy();
 
   int replay(logservice::ObLogReplayTask *replay_task) override;
-  void replay_idle() override;
   int wait_append_sync() override;
   bool is_replay_pending_log_too_large(int64_t pending_size) override;
   int get_log_handler(logservice::ObLogHandler *&log_handler) override;
