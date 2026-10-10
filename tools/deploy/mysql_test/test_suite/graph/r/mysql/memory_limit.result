@@ -1,0 +1,25 @@
+EXPLAIN INTO plan_table SET statement_id='graph_memory_limit'
+SELECT COUNT(*) AS paths
+FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=1)
+-[e IS knows]->{1}(b IS person)
+COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+SELECT COUNT(*)=1 AS uses_native_feedback
+FROM plan_table
+WHERE statement_id='graph_memory_limit'
+  AND operator='GRAPH FEEDBACK LOOP'
+  AND special_predicates LIKE '%direction=OUT, hops={1,1}, access=full-scan, mode=WALK, runtime=native%';
+uses_native_feedback
+1
+graph_walk_stops_at_the_hard_work_area_limit_and_recovers
+PREPARE graph_memory_limit FROM
+'SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH (a IS person WHERE a.id=1)-[e IS knows]->{1}(b IS person) COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g';
+EXECUTE graph_memory_limit;
+ERROR HY000: Exceed query memory limit
+EXECUTE graph_memory_limit;
+paths
+20002
+DEALLOCATE PREPARE graph_memory_limit;
+DROP TABLE plan_table;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_digit,graph_works,graph_knows,graph_company,graph_person;
