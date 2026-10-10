@@ -94,13 +94,14 @@ struct ModulePageAllocator: public ObIAllocator
   ModulePageAllocator(const lib::ObLabel &label = ObModIds::OB_MODULE_PAGE_ALLOCATOR,
                       int64_t ctx_id = 0)
     : ModulePageAllocator(ObMemAttr(label, ctx_id)) {}
-  ModulePageAllocator(const lib::ObMemAttr &attr)
-    : allocator_(NULL), attr_(attr) {}
+  ModulePageAllocator(const lib::ObMemAttr &attr,
+                      MemoryQuota *quota = nullptr)
+    : allocator_(NULL), attr_(attr), quota_(quota) {}
   ModulePageAllocator(const ModulePageAllocator &that)
-    : allocator_(that.allocator_), attr_(that.attr_) {}
+    : allocator_(that.allocator_), attr_(that.attr_), quota_(that.quota_) {}
   explicit ModulePageAllocator(ObIAllocator &allocator,
                                const lib::ObLabel &label = ObModIds::OB_MODULE_PAGE_ALLOCATOR)
-      : allocator_(&allocator), attr_()
+      : allocator_(&allocator), attr_(), quota_(nullptr)
    {
      attr_.label_ = label;
      attr_.ctx_id_ = 0;
@@ -127,7 +128,8 @@ struct ModulePageAllocator: public ObIAllocator
           ? allocator_->alloc(sz) : allocator_->alloc(sz, attr_);
     } else {
       MemoryUsageTracker *tracker = resolve_memory_usage_tracker(attr_.ctx_id_);
-      MemoryQuota *quota = resolve_memory_quota(attr_.ctx_id_);
+      MemoryQuota *quota = nullptr != quota_
+          ? quota_ : resolve_memory_quota(attr_.ctx_id_);
       ptr = tracked_alloc(sz, attr_, tracker, quota);
     }
     return ptr;
@@ -139,7 +141,8 @@ struct ModulePageAllocator: public ObIAllocator
       ptr = allocator_->alloc(size, attr);
     } else {
       MemoryUsageTracker *tracker = resolve_memory_usage_tracker(attr.ctx_id_);
-      MemoryQuota *quota = resolve_memory_quota(attr.ctx_id_);
+      MemoryQuota *quota = nullptr != quota_
+          ? quota_ : resolve_memory_quota(attr.ctx_id_);
       ptr = tracked_alloc(size, attr, tracker, quota);
     }
     return ptr;
@@ -150,7 +153,8 @@ struct ModulePageAllocator: public ObIAllocator
       allocator_->free(p);
     } else {
       MemoryUsageTracker *tracker = resolve_memory_usage_tracker(attr_.ctx_id_);
-      MemoryQuota *quota = resolve_memory_quota(attr_.ctx_id_);
+      MemoryQuota *quota = nullptr != quota_
+          ? quota_ : resolve_memory_quota(attr_.ctx_id_);
       tracked_free(p, tracker, quota);
     }
     p = NULL;
@@ -161,6 +165,7 @@ struct ModulePageAllocator: public ObIAllocator
     if (this != &that) {
       allocator_ = that.allocator_;
       attr_ = that.attr_;
+      quota_ = that.quota_;
     }
     return *this;
   }
@@ -201,6 +206,7 @@ protected:
 
   ObIAllocator *allocator_;
   lib::ObMemAttr attr_;
+  MemoryQuota *quota_;
 };
 
 /**
@@ -1002,8 +1008,9 @@ public:
                    const int64_t page_size = OB_MALLOC_NORMAL_BLOCK_SIZE)
     : arena_(page_size, ModulePageAllocator(allocator)), tracker_(nullptr) {};
   ObArenaAllocator(const lib::ObMemAttr &attr,
-                   const int64_t page_size = OB_MALLOC_NORMAL_BLOCK_SIZE)
-    : arena_(page_size, ModulePageAllocator(attr)), tracker_(nullptr) {}
+                   const int64_t page_size = OB_MALLOC_NORMAL_BLOCK_SIZE,
+                   MemoryQuota *quota = nullptr)
+    : arena_(page_size, ModulePageAllocator(attr, quota)), tracker_(nullptr) {}
   virtual ~ObArenaAllocator()
   {
     update_tracker(-arena_.total());

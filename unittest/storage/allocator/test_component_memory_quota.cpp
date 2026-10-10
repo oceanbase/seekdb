@@ -17,13 +17,7 @@ using namespace oceanbase::storage;
 namespace
 {
 
-MemoryQuota *test_meta_quota = nullptr;
 MemoryQuota *test_vector_quota = nullptr;
-
-MemoryQuota *resolve_test_meta_quota(const int64_t ctx_id)
-{
-  return ObCtxIds::META_OBJ_CTX_ID == ctx_id ? test_meta_quota : nullptr;
-}
 
 MemoryQuota *resolve_test_vector_quota(const int64_t ctx_id)
 {
@@ -111,25 +105,41 @@ TEST(TestMetaMemoryQuota, preserves_double_percentage_rule)
   EXPECT_EQ(0, ObStorageMetaMemMgr::calculate_memory_quota_limit(0, 20));
 }
 
-TEST(TestMetaMemoryQuota, pool_backing_is_released_before_quota_owner)
+TEST(TestMetaMemoryQuota, production_order_charges_inner_and_overflow_allocations)
 {
-  MemoryQuota quota(4L << 20);
-  test_meta_quota = &quota;
-  set_memory_quota_resolver(ObCtxIds::META_OBJ_CTX_ID,
-                            resolve_test_meta_quota);
+  // Production constructs all pools before installing the META_OBJECT
+  // resolver.  Explicit ownership must therefore work with no resolver.
+  set_memory_quota_resolver(ObCtxIds::META_OBJ_CTX_ID, nullptr);
+  MemoryQuota quota(16L << 20);
   {
     ObStorageMetaObjPool<TestMetaPoolObject> pool(
-        16, "MetaQuotaTest", ObCtxIds::META_OBJ_CTX_ID);
-    TestMetaPoolObject *object = nullptr;
-    ASSERT_EQ(OB_SUCCESS, pool.acquire(object));
-    ASSERT_NE(nullptr, object);
-    pool.release(object);
-    EXPECT_GT(quota.committed(), 0);
+        1, "MetaQuotaTest", ObCtxIds::META_OBJ_CTX_ID, quota);
+    const int64_t construction_charge = quota.committed();
+    EXPECT_GT(construction_charge, 0);
+
+    TestMetaPoolObject *inner_object = nullptr;
+    ASSERT_EQ(OB_SUCCESS, pool.acquire(inner_object));
+    ASSERT_NE(nullptr, inner_object);
+    const int64_t inner_charge = quota.committed();
+    EXPECT_GT(inner_charge, construction_charge);
+
+    TestMetaPoolObject *overflow_object = nullptr;
+    ASSERT_EQ(OB_SUCCESS, pool.acquire(overflow_object));
+    ASSERT_NE(nullptr, overflow_object);
+    const int64_t overflow_charge = quota.committed();
+    EXPECT_GT(overflow_charge, inner_charge);
+
+    quota.set_limit(overflow_charge);
+    TestMetaPoolObject *rejected_object = nullptr;
+    EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, pool.acquire(rejected_object));
+    EXPECT_EQ(nullptr, rejected_object);
+    EXPECT_GT(quota.reject_count(), 0);
+
+    pool.release(overflow_object);
+    pool.release(inner_object);
 
     pool.destroy();
     EXPECT_EQ(0, quota.committed());
     EXPECT_EQ(0, quota.reserved());
   }
-  set_memory_quota_resolver(ObCtxIds::META_OBJ_CTX_ID, nullptr);
-  test_meta_quota = nullptr;
 }

@@ -489,6 +489,7 @@ private:
 private:
   common::SpinRWLock wash_lock_;
   TryWashTabletFunc wash_func_;
+  common::MemoryQuota memory_quota_;
   ObBucketLock bucket_lock_;
   ObFullTabletCreator full_tablet_creator_;
   ObTabletPointerMap tablet_map_;
@@ -517,7 +518,6 @@ private:
   TabletBufferList large_tablet_header_;
 
   common::ObConcurrentFIFOAllocator meta_cache_io_allocator_;
-  common::MemoryQuota memory_quota_;
   ObT3MResourceLimitCalculatorHandler t3m_limit_calculator_;
 
   bool is_inited_;

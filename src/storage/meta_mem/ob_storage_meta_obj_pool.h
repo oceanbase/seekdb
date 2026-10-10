@@ -176,6 +176,7 @@ public:
       const int64_t max_free_list_num,
       const lib::ObLabel &label,
       const uint64_t ctx_id,
+      common::MemoryQuota &memory_quota,
       TryWashTabletFunc *wash_func = nullptr,
       const bool allow_over_max_free_num = true);
   virtual ~ObStorageMetaObjPool();
@@ -199,6 +200,7 @@ public:
 private:
   TryWashTabletFunc *wash_func_;
   common::ObFIFOAllocator allocator_;
+  common::TrackedAllocator direct_allocator_;
   int64_t used_obj_cnt_;
   bool allow_over_max_free_num_;
 };
@@ -273,8 +275,7 @@ void ObStorageMetaObjPool<T>::free_node_(typename BasePool::Node *ptr)
       }
       (void)ATOMIC_AAF(&(BasePool::inner_used_num_), -1);
     } else if (BasePool::ALLOC_BY_BACKING_ALLOCATOR == ptr->flag) {
-      ptr->~Node();
-      common::ob_free(ptr);
+      BasePool::free_backing_node_(ptr);
     } else {
       _COMMON_LOG_RET(ERROR, OB_INVALID_ARGUMENT, "invalid flag=%lu ptr=%p", ptr->flag, ptr);
     }
@@ -286,17 +287,25 @@ ObStorageMetaObjPool<T>::ObStorageMetaObjPool(
     const int64_t max_free_list_num,
     const lib::ObLabel &label,
     const uint64_t ctx_id,
+    common::MemoryQuota &memory_quota,
     TryWashTabletFunc *wash_func,
     const bool allow_over_max_free_num)
   : ObBaseResourcePool<T, RPMetaObjLabel>(max_free_list_num, &allocator_,
-      lib::ObMemAttr(label, ctx_id)),
+      lib::ObMemAttr(label, ctx_id), &memory_quota),
       wash_func_(wash_func),
+      allocator_(),
+      direct_allocator_(),
       used_obj_cnt_(0),
       allow_over_max_free_num_(allow_over_max_free_num)
 {
   int ret = OB_SUCCESS;
+  lib::ObMallocAllocator *malloc_allocator = lib::ObMallocAllocator::get_instance();
+  abort_unless(nullptr != malloc_allocator);
+  direct_allocator_.configure(*malloc_allocator, nullptr, &memory_quota,
+      lib::ObMemAttr(label, ctx_id), true);
+  BasePool::set_backing_allocator(&direct_allocator_);
   if (OB_FAIL(allocator_.init(lib::ObMallocAllocator::get_instance(), common::OB_MALLOC_MIDDLE_BLOCK_SIZE,
-      lib::ObMemAttr(label, ctx_id)))) {
+      lib::ObMemAttr(label, ctx_id), memory_quota))) {
   }
   abort_unless(OB_SUCCESS == ret);
 }

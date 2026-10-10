@@ -166,6 +166,7 @@ int ObStorageMetaMemMgr::TabletGCQueue::push(ObTablet *tablet)
 ObStorageMetaMemMgr::ObStorageMetaMemMgr()
   : wash_lock_(common::ObLatchIds::STORAGE_META_MEM_MGR_LOCK),
     wash_func_(*this),
+    memory_quota_(),
     bucket_lock_(),
     full_tablet_creator_(),
     tablet_map_(),
@@ -179,16 +180,15 @@ ObStorageMetaMemMgr::ObStorageMetaMemMgr()
     gc_queue_lock_(common::ObLatchIds::STORAGE_META_MEM_MGR_LOCK),
     gc_memtable_set_(nullptr),
     gc_uninit_memtable_set_(nullptr),
-    memtable_pool_(get_default_memtable_pool_count(), "MemTblObj", ObCtxIds::META_OBJ_CTX_ID),
-    tablet_buffer_pool_(get_default_normal_tablet_pool_count(), "N_TabletPool", ObCtxIds::META_OBJ_CTX_ID, &wash_func_),
-    large_tablet_buffer_pool_(get_default_large_tablet_pool_count(), "L_TabletPool", ObCtxIds::META_OBJ_CTX_ID, &wash_func_, false/*allow_over_max_free_num*/),
-    ddl_kv_pool_(MAX_DDL_KV_IN_OBJ_POOL, "DDLKVObj", ObCtxIds::META_OBJ_CTX_ID),
-    tablet_ddl_kv_mgr_pool_(get_default_tablet_pool_count(), "DDLKvMgrObj", ObCtxIds::META_OBJ_CTX_ID),
-    tx_data_memtable_pool_(MAX_TX_DATA_MEMTABLE_CNT_IN_OBJ_POOL, "TxDataMemObj", ObCtxIds::META_OBJ_CTX_ID),
-    tx_ctx_memtable_pool_(MAX_TX_CTX_MEMTABLE_CNT_IN_OBJ_POOL, "TxCtxMemObj", ObCtxIds::META_OBJ_CTX_ID),
-    lock_memtable_pool_(MAX_LOCK_MEMTABLE_CNT_IN_OBJ_POOL, "LockMemObj", ObCtxIds::META_OBJ_CTX_ID),
+    memtable_pool_(get_default_memtable_pool_count(), "MemTblObj", ObCtxIds::META_OBJ_CTX_ID, memory_quota_),
+    tablet_buffer_pool_(get_default_normal_tablet_pool_count(), "N_TabletPool", ObCtxIds::META_OBJ_CTX_ID, memory_quota_, &wash_func_),
+    large_tablet_buffer_pool_(get_default_large_tablet_pool_count(), "L_TabletPool", ObCtxIds::META_OBJ_CTX_ID, memory_quota_, &wash_func_, false/*allow_over_max_free_num*/),
+    ddl_kv_pool_(MAX_DDL_KV_IN_OBJ_POOL, "DDLKVObj", ObCtxIds::META_OBJ_CTX_ID, memory_quota_),
+    tablet_ddl_kv_mgr_pool_(get_default_tablet_pool_count(), "DDLKvMgrObj", ObCtxIds::META_OBJ_CTX_ID, memory_quota_),
+    tx_data_memtable_pool_(MAX_TX_DATA_MEMTABLE_CNT_IN_OBJ_POOL, "TxDataMemObj", ObCtxIds::META_OBJ_CTX_ID, memory_quota_),
+    tx_ctx_memtable_pool_(MAX_TX_CTX_MEMTABLE_CNT_IN_OBJ_POOL, "TxCtxMemObj", ObCtxIds::META_OBJ_CTX_ID, memory_quota_),
+    lock_memtable_pool_(MAX_LOCK_MEMTABLE_CNT_IN_OBJ_POOL, "LockMemObj", ObCtxIds::META_OBJ_CTX_ID, memory_quota_),
     meta_cache_io_allocator_(),
-    memory_quota_(),
     t3m_limit_calculator_(*this),
     is_inited_(false)
 {
@@ -222,20 +222,22 @@ int ObStorageMetaMemMgr::init()
   const int64_t mem_limit = 4 * 1024 * 1024 * 1024LL;
   const int64_t bucket_num = cal_adaptive_bucket_num();
   const int64_t pin_set_bucket_num = common::hash::cal_next_prime(DEFAULT_BUCKET_NUM);
+  if (!is_inited_) {
+    common::set_memory_quota_resolver(common::ObCtxIds::META_OBJ_CTX_ID,
+                                      resolve_meta_memory_quota);
+    refresh_memory_quota_limit();
+  }
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObStorageMetaMemMgr has been initialized", K(ret));
   } else if (OB_FAIL(bucket_lock_.init(bucket_num, ObLatchIds::BLOCK_MANAGER_LOCK, "T3MBucket"))) {
-  } else if (OB_FAIL(full_tablet_creator_.init())) {
+  } else if (OB_FAIL(full_tablet_creator_.init(&memory_quota_))) {
   } else if (OB_FAIL(tablet_map_.init(bucket_num, map_attr, TOTAL_LIMIT, HOLD_LIMIT,
         common::OB_MALLOC_NORMAL_BLOCK_SIZE))) {
   } else if (OB_FAIL(external_tablet_cnt_map_.init(193))) {
   } else if (OB_FAIL(flying_tablet_map_.init())) {
   } else if (OB_FAIL(meta_cache_io_allocator_.init(OB_MALLOC_MIDDLE_BLOCK_SIZE, "StorMetaCacheIO", mem_limit))) {
   } else {
-    common::set_memory_quota_resolver(common::ObCtxIds::META_OBJ_CTX_ID,
-                                      resolve_meta_memory_quota);
-    refresh_memory_quota_limit();
     init_pool_arr();
   }
 

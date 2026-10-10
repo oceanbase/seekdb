@@ -39,7 +39,7 @@ public:
   ObFullTabletCreator();
   ~ObFullTabletCreator() = default;
 public:
-  int init();
+  int init(common::MemoryQuota *memory_quota = nullptr);
   void reset();
   int create_tablet(ObTabletHandle &tablet_handle);
   /* ATTENTION: below functions should be called without any ls_tablet or t3m locks */

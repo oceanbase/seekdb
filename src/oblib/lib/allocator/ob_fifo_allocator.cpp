@@ -52,6 +52,31 @@ int ObFIFOAllocator::init(ObIAllocator *allocator,
          const int64_t idle_size,
          const int64_t max_size)
 {
+  return init_(allocator, page_size, attr,
+               resolve_memory_quota(attr.ctx_id_),
+               init_size, idle_size, max_size);
+}
+
+int ObFIFOAllocator::init(ObIAllocator *allocator,
+         const int64_t page_size,
+         const ObMemAttr &attr,
+         MemoryQuota &quota,
+         const int64_t init_size,
+         const int64_t idle_size,
+         const int64_t max_size)
+{
+  return init_(allocator, page_size, attr, &quota,
+               init_size, idle_size, max_size);
+}
+
+int ObFIFOAllocator::init_(ObIAllocator *allocator,
+         const int64_t page_size,
+         const ObMemAttr &attr,
+         MemoryQuota *quota,
+         const int64_t init_size,
+         const int64_t idle_size,
+         const int64_t max_size)
+{
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
@@ -76,7 +101,7 @@ int ObFIFOAllocator::init(ObIAllocator *allocator,
     attr_ = attr;
     page_allocator_.configure(
         *allocator_, resolve_memory_usage_tracker(attr_.ctx_id_),
-        resolve_memory_quota(attr_.ctx_id_), attr_, use_malloc_usable_size);
+        quota, attr_, use_malloc_usable_size);
     // reserve
     if (init_size > 0) {
       if (OB_FAIL(sync_idle(init_size, max_size))) {
