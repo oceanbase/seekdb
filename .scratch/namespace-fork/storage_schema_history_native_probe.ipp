@@ -50,10 +50,12 @@ static int run_storage_schema_history_native_probe()
     if (rc == OB_SUCCESS) { rc = actual.serialize(&right[0], right.size(), b); }
     return rc == OB_SUCCESS && (left != right || a != b) ? OB_ERR_UNEXPECTED : rc;
   };
-  ObStorageSchema large, small, newer;
+  ObStorageSchema large, small, newer, slow_definition, fast_definition;
   LAYOUT_CALL(definition(10, 140000, large));
   LAYOUT_CALL(definition(11, 800, small));
   LAYOUT_CALL(definition(12, 180000, newer));
+  LAYOUT_CALL(definition(20, 32, slow_definition));
+  LAYOUT_CALL(definition(21, 64, fast_definition));
   LAYOUT_CHECK(large.get_serialize_size() > InstanceMetaStore::MAX_VALUE_LENGTH * 2);
   Tx seed;
   LAYOUT_CALL(store.begin(seed, deadline()));
@@ -124,6 +126,29 @@ static int run_storage_schema_history_native_probe()
     LAYOUT_CALL(store.commit(old_reader));
     retained.reset();
 
+    // Allocate A's lower definition first, but commit B's higher definition
+    // first. A single global version would incorrectly expose A@20 at F.
+    Tx baseline, slow, fast, between;
+    LAYOUT_CALL(store.begin(baseline, deadline()));
+    LAYOUT_CALL(StorageSchemaHistory(store, baseline).create(layout_id + 20, small));
+    LAYOUT_CALL(StorageSchemaHistory(store, baseline).create(layout_id + 21, small));
+    LAYOUT_CALL(store.commit(baseline));
+    LAYOUT_CALL(store.begin(slow, deadline()));
+    LAYOUT_CALL(StorageSchemaHistory(store, slow).publish(layout_id + 20, slow_definition));
+    LAYOUT_CALL(store.begin(fast, deadline()));
+    LAYOUT_CALL(StorageSchemaHistory(store, fast).publish(layout_id + 21, fast_definition));
+    LAYOUT_CALL(store.commit(fast));
+    LAYOUT_CALL(store.begin(between, deadline(), true));
+    const int64_t between_scn = between.snapshot_version().get_val_for_tx();
+    LAYOUT_CALL(read_equal(between, layout_id + 20, small));
+    LAYOUT_CALL(read_equal(between, layout_id + 21, fast_definition));
+    LAYOUT_CALL(store.commit(slow));
+    LAYOUT_CALL(read_equal(between, layout_id + 20, small));
+    LAYOUT_CALL(read_equal(between, layout_id + 21, fast_definition));
+    LAYOUT_CALL(store.commit(between));
+    fprintf(stderr, "LAYOUT_HISTORY_COMMIT_ORDER_PASS F=%ld lower_version_committed_later=1 old_reader_unchanged=1\n",
+        between_scn);
+
     // Layout rows and actual SQL metadata must share commit and rollback.
     const uint64_t mapping_id = 900000099;
     auto mapping_exists = [&](bool &found) -> int {
@@ -175,6 +200,8 @@ static int run_storage_schema_history_native_probe()
   Tx shared_recovery;
   LAYOUT_CALL(store.begin(shared_recovery, deadline(), true));
   LAYOUT_CALL(read_equal(shared_recovery, layout_id + 1, large));
+  LAYOUT_CALL(read_equal(shared_recovery, layout_id + 20, slow_definition));
+  LAYOUT_CALL(read_equal(shared_recovery, layout_id + 21, fast_definition));
   LAYOUT_CALL(store.commit(shared_recovery));
 
   // Failed/aborted publication must leave the entire old layout intact.

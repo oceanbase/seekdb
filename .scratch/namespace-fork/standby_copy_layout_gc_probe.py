@@ -26,6 +26,16 @@ class CopyNode(Node):
         return self.experiment.proc.pid
 
 
+def describe_ready(controller):
+    def ready():
+        # SQL/data can become readable before the async freeze-info reload has
+        # installed its history-retention view. Wait for that real view; do not
+        # synthesize a retention boundary or suppress other errors.
+        result = controller.command('describe', retryable=(-4006,))
+        return result if result['ret'] == 0 else None
+    return wait(ready)
+
+
 def run(binary):
     with tempfile.TemporaryDirectory(prefix='seekdb-copy-layout-gc-') as directory:
         controls = Path(directory)
@@ -105,7 +115,7 @@ def run(binary):
             assert [row[0] for row in replica.user_tables('copy_layout_gc')] == ['witness']
             replica_controller = CopyNode(replica, controls)
             replica_controller.physical = (1 << 62) | (1 << 37) | tables['witness']
-            copied = replica_controller.command('describe')
+            copied = describe_ready(replica_controller)
             assert copied['body'] == copied['head'] == 0, copied
             record('copy_layout_readable', witness=copied)
 
@@ -127,7 +137,7 @@ def run(binary):
             replica.record('crash_after_full_copy')
             start_replica()
             wait(readable, 180)
-            recovered = replica_controller.command('describe')
+            recovered = describe_ready(replica_controller)
             assert recovered['body'] == recovered['head'] == 0, recovered
             assert [row[0] for row in replica.user_tables('copy_layout_gc')] == ['witness']
             replica_controller.command('clear')

@@ -30,6 +30,8 @@ def main():
                     output += '\n'.join(line.decode(errors='replace') for line in stream
                                         if b'LAYOUT_HISTORY_' in line)
             expected = f'LAYOUT_HISTORY_PASS recovered={recovered} '
+            if not recovered:
+                assert 'LAYOUT_HISTORY_COMMIT_ORDER_PASS ' in output, output[-10000:]
             if ('LAYOUT_HISTORY_FAIL' in output or expected not in output
                     or 'exact_old_body=1 aborted_body_absent=1' not in output):
                 raise AssertionError(output[-10000:])
@@ -42,7 +44,8 @@ def main():
                 experiment.record('crash_for_recovery', pid=experiment.proc.pid)
         experiment.record('PASS', case='storage_schema_history', chunks=True, shrink=True,
                           native_mvcc=True, rollback=True, dump=True, minor=True, shared_sql_tx=True, crash_recovery=True,
-                          physical_birth_codec=True, exact_old_body=True, aborted_body_absent=True)
+                          physical_birth_codec=True, exact_old_body=True, aborted_body_absent=True,
+                          reversed_definition_commit_order=True)
     finally:
         experiment.close()
 

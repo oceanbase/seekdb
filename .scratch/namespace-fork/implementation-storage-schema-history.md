@@ -2,6 +2,19 @@
 
 目标以 [design-storage-schema-boundaries.md](design-storage-schema-boundaries.md) 为准。
 
+
+### 收尾验收：2026-10-10
+
+逐项证据及边界集中在 [完成审计](schema-history-completion-audit.md)。下面各阶段的“待完成/进行中”保留当时状态，当前结论以本节和完成审计为准。
+
+- 持续发布修复最终8000分区测试 `/tmp/seekdb-layout-gc-publication-fixed-8000-1.log` 通过：627次CREATE/DROP与真实GC并发，一次引用收集1972780微秒；完整minor等待周期39.303秒后无引用哨兵删除、活跃布局保留。与此前全量失效导致78次尝试/约120秒超时形成直接对照。
+- 最终算法的跨G来源文件、独立外部副本、同地址CAS补扫、元数据读取失败传播已分别通过。实际主备本机回收 `/tmp/seekdb-layout-gc-incremental-standby-2/layout_gc.log` 及完整复制视图 `/tmp/seekdb-layout-gc-incremental-copy-2.log` 通过，均含真实minor、最后引用释放和强杀恢复，主备用例还执行提升后DDL/major。
+- 两次驱动失败也保留：新备库尚未提交首次checkpoint便被驱动强杀，现等待实际复制seed与该PID的bootstrap checkpoint提交；复制后SQL可读但异步freeze view尚未装载，describe仅对OB_NOT_INIT等待实际就绪。未增加首次安装自动修复，没有伪造保留水位。
+- `/tmp/seekdb-layout-history-cold-major-final-1.log` 验证无人登录的子空间main/index/LOB后台物化与接管不激活完整SQL服务，随后第一次major由上层checksum正常完整激活，数据、索引读及重启通过。
+- `/tmp/seekdb-layout-history-commit-order-test-1.log` 补齐不同G版本号分配与提交顺序相反的原生事务断言：V21先提交时F只看到另一对象旧V11；V20后来提交不改变旧读者，当前读和恢复各得到V20/V21。仍使用原有历史测试入口。
+- 最终生产构建 `/tmp/seekdb-layout-history-production-final-build.log` 通过，无测试注入；SHA256 `3c1ee2c2c29cb96a48febbc55f82fa70bf50ccddd77d05c78df678450fdc1d1c`。`/tmp/seekdb-layout-history-production-final-major.log` 实际major和全局完成通过。
+- 候选枚举 `/tmp/seekdb-merge-candidates-test-2.log` 通过：部分旧名单跨轮重新枚举包含新对象，低水位不枚举、不提前完成，水位恢复后实际major和全局完成。首轮驱动读错trace文件的失败亦已保留。20项验收对应见完成审计，当前仅剩本次备份提交推送。新/失败用例已加入四件套，未跑完整mysqltest/sysbench。
+
 ### 持续发布缺陷：已复现，修复验证中
 
 `publication_layout_gc_probe.py` 真实创建8000分区并完成major，然后由一条SQL连接连续CREATE/DROP另一张表。第2轮 `/tmp/seekdb-layout-gc-publication-test-2.log` 失败：2242次DDL在162.6秒内完成，布局引用收集78次尝试、119988675微秒后超时。空闲对照收集为1.71—1.75秒。
@@ -193,19 +206,19 @@
 
 ## 必须完成
 
-- [ ] 真实物理创建提交版本 C：所有创建、复制、持久化和恢复路径；统一合并资格判断。
+- [x] 真实物理创建提交版本 C：所有创建、复制、持久化和恢复路径；统一合并资格判断。
 - [x] 专用布局元数据 tablet：复用 InstanceMetaStore、原生事务和 MVCC；只做 mini/minor。
-- [ ] 稳定布局身份 G：上层分配和绑定，同表分区共用，存储不解析 SQL 表或 Namespace。
-- [ ] DDL 与完整布局同事务发布；bootstrap、普通创建、fork 首次 DDL/物化均接入。
-- [ ] 合并按 G@F 读取并固定完整布局；普通 medium/meta major 适配；保留现有本地副本。
-- [x] 主库 freeze 准备等待既有后台物化/接管；最终锁后新快照复核；超时结束请求。端到端主备仍归后续验证项。
-- [ ] 物理进度统一使用 C/incarnation/F，并在提交/回放水位达到 F 后重新枚举。
-- [ ] Namespace 上层逻辑 checksum：各表自身历史定义、完整输入、缺项不通过。
-- [ ] 布局正文、G及绑定的引用回收，覆盖仍在使用的物理文件、任务、来源与主备。
-- [ ] MVCC 与 SQL 历史保留、重启顺序、备库本机接管及提升主库。
+- [x] 稳定布局身份 G：上层分配和绑定，同表分区共用，存储不解析 SQL 表或 Namespace。
+- [x] DDL 与完整布局同事务发布；bootstrap、普通创建、fork 首次 DDL/物化均接入。
+- [x] 合并按 G@F 读取并固定完整布局；普通 medium/meta major 适配；保留现有本地副本。
+- [x] 主库 freeze 准备等待既有后台物化/接管；最终锁后新快照复核；超时结束请求。端到端主备/提升验证见完成审计。
+- [x] 物理进度统一使用 C/incarnation/F，并在提交/回放水位达到 F 后重新枚举。
+- [x] Namespace 上层逻辑 checksum：各表自身历史定义、完整输入、缺项不通过。
+- [x] 布局正文、G及绑定的引用回收，覆盖仍在使用的物理文件、任务、来源与主备。
+- [x] MVCC 与 SQL 历史保留、重启顺序、备库本机接管及提升主库。
 - [x] 删除 freeze.schema_version 和根/子两套旧路径，不保留隐式回退。见物理/逻辑共同检查与移除字段的生产、原生验证记录。
-- [ ] 编译、针对性动态验证、8000 分区成本验证；已执行及失败用例加入四件套。
-- [ ] 提交并推送当前分支；不提 PR。
+- [x] 编译、针对性动态验证、8000 分区成本验证；已执行及失败用例加入四件套。
+- [ ] 提交并推送本次收尾备份；此前生产代码已推送，当前不提 PR。
 
 ## 当前证据
 

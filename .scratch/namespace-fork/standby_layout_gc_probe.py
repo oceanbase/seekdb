@@ -106,7 +106,7 @@ class Node:
             return c
         self.connection = wait(ready)
 
-    def command(self, action, orphan=0):
+    def command(self, action, orphan=0, retryable=()):
         self.sequence += 1
         pid = self.pid()
         control = self.controls / str(pid)
@@ -123,7 +123,7 @@ class Node:
                     result = dict((k, int(v)) for k, v in (field.split('=') for field in line.split()))
                     if result.get('seq') == self.sequence:
                         record('layout_gc_command', node=self.name, action=action, **result)
-                        assert result['ret'] == 0, (self.name, action, result)
+                        assert result['ret'] == 0 or result['ret'] in retryable, (self.name, action, result)
                         return result
             time.sleep(.1)
         raise TimeoutError((self.name, action, str(control)))
@@ -152,6 +152,20 @@ def run():
         try:
             # The obtest fixture owns these exact directories. Restart both with
             # explicit per-process controls; no production control interface.
+            # Its setup script only sleeps after starting a fresh replica. Wait
+            # for the actual bootstrap checkpoint before testing crash recovery.
+            replica.connect()
+            wait(lambda: sql(replica.connection, 'SELECT id,v FROM replica_ns.t') == ((1, 10),))
+            pid = replica.pid()
+            def checkpoint_committed():
+                for path in (replica.base / 'log').glob('seekdb.log*'):
+                    with path.open(errors='replace') as stream:
+                        for line in stream:
+                            if 'bootstrap checkpoints committed' in line and f'[{pid}]' in line:
+                                return True
+                return False
+            wait(checkpoint_committed)
+            record('fixture_replica_bootstrap_complete', pid=pid)
             replica.kill()
             primary.kill()
             primary.start()
