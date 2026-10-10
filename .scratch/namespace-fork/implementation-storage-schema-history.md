@@ -2,7 +2,7 @@
 
 目标以 [design-storage-schema-boundaries.md](design-storage-schema-boundaries.md) 为准。
 
-### 当前推进：布局绑定退休及实际主备验证
+### 当前证据：布局绑定退休、8000分区及实际主备验证
 
 - 普通 DDL 从目录移除表/辅助对象时，在共同发布事务内删除 `(Namespace, table_id) -> G` 绑定。删除尚未独立物化的继承对象允许本来就没有绑定。Namespace 删除在清除目录根的同一个原生事务内删除其全部绑定；使用受限前缀扫描，结束扫描后才逐行删除。
 - `InstanceMetaStore::attach` 可借用另一个 KV tablet 的原生事务，调用者仍负责先结束 owner 再释放 participant。Namespace 删除不额外经过 SQL，也没有第二个提交。
@@ -12,6 +12,34 @@
 - 第2轮原生测试完整通过：`/tmp/seekdb-layout-retirement-native-test-2.log`，实例 `namespace_fork_PROTOTYPE_table_storage_layout_td5zo2t4`；核对7个逻辑对象、56个物理对象，两个重启均通过，最终删除的 Namespace 无剩余绑定，后代读回8行并继续更新。生产回归 `/tmp/seekdb-layout-retirement-baseline-test-1.log` 也通过：父表和中间 Namespace 删除后强制重启，后代继续读主表/索引/LOB，旧来源最终完成接管并被物理 GC 回收。此处物理来源 GC 通过不表示布局正文 GC 已实现。
 - 生产8000分区 freeze 复核通过：`/tmp/seekdb-layout-history-freeze-8000-test-1.log`，检查8716个tablet，最终持锁复核38396微秒，完整请求88.51毫秒，F=1791588924216136012。此用例暂停后续major，只证明准备/复核成本，不证明8000分区整轮合并及checksum完成；首次服务性能仍单独验证。
 - 实际 obtest `standby_sstable_replay` 第1轮在固定启动等待后执行初始化SQL时握手失败，未进入复制验证。第2轮等待误用了框架的 admin 连接，而 admin 尚待初始化创建；第3轮 root 轮询因 `deploy_get_value` 对暂时的null立即抛错而退出。最终复用已有 `namespace_setup_template_local.test` 的30秒启动等待，并明确给冷继承准备300秒SQL请求预算。前三次日志在 `/tmp/seekdb-layout-history-standby-{1,2,3}`，第4轮已经执行真实主库major并进入备库启动，结果待补充。该实际用例由四件套的 `run_standby_suite.py` 覆盖。
+
+后续证据：第4轮 `standby_sstable_replay` 已完整通过，耗时152.47秒，F=1791588931270244006，主库major、备库实际SSTable复制、复制后日志续放均成立。它使用绑定退休前的生产二进制，不能替代当前分支的提升验证。
+
+8000分区、8000行首次服务测试通过：`/tmp/seekdb-layout-history-service-8000-test-1.log`，原始结果 `/tmp/seekdb-layout-history-service-8000-results.json`。五个新Namespace的中位数：fork 5.16毫秒，首次登录443.63毫秒，首个点查125.09毫秒，首写提交15.17毫秒；从fork开始到首读614.55毫秒，到首写提交628.60毫秒；全分区聚合3.67秒。每次均核对父子数据隔离及8000行聚合，后台维护保持开启。生产二进制SHA256=`2ff41a5c576ec5ffc3484292d22233569ffd9e8965b72702a17afdf33b5fea80`，包含随后提交的91f75cecc改动。
+
+正在补强两个已有gate：8000分区用例增加每分区一行、恢复major后等待整轮完成及逐tablet核对真实SSTable；实际主备suite新增 `schema_history`，覆盖父子独立DDL、本地/全局索引、备库本机major、强杀重启、主库丢失后提升及提升后的DDL/major/checksum。前者第1轮因异步日志观测过早失败（归档日志实际有46853微秒成功复核），后者第1轮因备库SQL端口尚未开放失败；分别改为等待真实日志和连接，正在第2轮重跑。两者的初次失败均已记录到验证清单。
+
+8000分区整轮major第2轮已通过：`/tmp/seekdb-layout-history-major-8000-test-2.log`，实例 `namespace_fork_PROTOTYPE_freeze_preparation_large_prcxeh8d`，F=1791589362994853023，最终复核53259微秒，freeze请求192.99毫秒；恢复调度至完成并通过最终数据/文件检查共136.87秒（不是纯DAG执行时间），逐个核对8000个用户tablet均存在该F的真实major，聚合为8000行、SUM(v)=31996000。中途采样仅7个完成，后续自然推进至全部8716个参与对象，未出现任务错误或调整生产调度。诊断SQL在脚本成功关闭实例时断连不计为数据库失败。该用例不包含8000分区索引表或对8000个继承分区的接管压力；首次服务/父子隔离由上述另一用例覆盖。
+
+实际主备 `schema_history` 第2轮所有功能断言通过，但脚本清理失败，不能算完整运行通过：`/tmp/seekdb-layout-history-standby-final-2/schema_history.log`。F=1791589637151170018的12个主表/本地索引/全局索引tablet在备库均有实际major；强杀重启备库后复核成功；随后强杀主库并提升备库，新DDL和写入、F=1791589685692995308的新major，以及Namespace 1、4的历史索引checksum均通过。退出时旧备库连接被显式关闭后又由ExitStack重复关闭，报Already closed；已改为只关闭仍打开的连接、清理后才打印PASS。第3轮重跑中，并删除共享夹具中无关的 `replica_seed` Namespace以减少无关冷空间准备。完整功能场景仍保留父子独立DDL和实际提升。
+第3轮 `/tmp/seekdb-layout-history-standby-final-3/schema_history.log` 完成了备库12个物理major、强杀恢复和提升，但提升后的新freeze未执行，最终超时退出1。源码及服务日志证明：上一轮本机校验尚未收尾时 `ObLocalMajorFreeze::check_freeze_info` 返回4213；`ObFreezeExecutor` 将其转换为成功加warning，驱动漏查warning并等待不存在的新F。第4轮驱动先等待上一轮 frozen/broadcast/last 相等，再请求新freeze并断言无warning；增加请求阶段事件，不更改生产返回语义。
+
+第4轮实际主备完整通过：`/tmp/seekdb-layout-history-standby-final-4/schema_history.log`，suite退出0，耗时371.11秒。F1=1791590576301182006：父子12个主表/本地索引/全局索引tablet在备库完成真实major并通过数据、默认值和强制索引读回；备库强杀重启后再次核对。随后强杀原主库并提升备库，在孩子执行新DDL/写入，F2=1791590679617018271完成12个物理major及Namespace 1、4的历史索引checksum，最终清理正常。使用91f75cecc业务代码、无测试注入的生产二进制（SHA256见上）。驱动等待旧轮持久完成并检查warning，解决第3轮请求未执行的问题；第1/2/3轮失败均保留在验证清单。实例已停止。此结果证明本次实际主备场景，不代表尚未实现的布局正文/G回收已通过。
+
+### 布局正文回收：当前引用审计
+
+本节记录实现前必须覆盖的真实引用，不把一次最新tablet遍历当作安全回收证明。
+
+| 引用来源 | 当前源码证据 | 回收约束 |
+| --- | --- | --- |
+| meta major 的本地描述 | `ob_basic_tablet_merge_ctx.cpp::get_meta_compaction_info` 按持有tablet的G、V读取完整正文 | 当前对象及任务持有的旧tablet都可能引用旧V |
+| fork输入文件 | `ob_tablet_fork_task.cpp::load_fork_input_schema` 按每个输入SSTable自己的G、V读取；`ObTabletForkCtx` 持有源/目标tablet及源table store到任务结束 | 来源G可以不同于当前tablet所属G；直接复用后仍须保留原G、V |
+| 尚未转储的MemTable | `get_schema_info_from_tables/update_storage_schema_by_memtable` 可以把MemTable中更高的V带入下一份本地描述和SSTable | 仅枚举当前本地schema及落盘SSTable会漏掉将来mini要发布的版本；需要覆盖输入版本或证明适用的版本下界保护 |
+| 已替换/已删除但仍被持有的tablet | `scan_all_version_tablets` 遍历单个键的旧链及最新对象；`del_tablet` 可能把指针移入 `flying_tablet_map_`；外部分配副本另由 `external_tablet_cnt_map_` 计数 | 最新tablet键集合不包含全部引用；单键扫描也不提供跨键原子视图，外部副本计数并不保存其布局 |
+| 备库物理复制 | `StandbyGrpcService::fetch_ls_view` 固定所有tablet句柄，后续RPC读取同一 `PhysicalCopyView`；`ObStandbySSTableCopier::copy` 完成全量复制后才 `finish_ls_restore_` | 可以复用现有复制视图和恢复状态，不能把刚复制完schema tablet当作全实例引用已经齐备；源端视图中的旧tablet同样是引用根 |
+
+下一步回收实现须同时保护目标快照选择记录、物理精确版本及引用交接。考察本机minor filter时，必须证明捕获期间跨tablet移动的引用不会漏标、旧句柄仍可读、复制恢复期间不会提前删正文；不得先接入删除再依靠重试补救。复制视图已有完整句柄所有权，不需要先增加新的持久复制会话或远端GC名单。当前尚未实现正文删除/filter，本节不是GC通过证据。
+
 本文件记录实现和验证证据，不缩减已确认范围。2026-10-10 开始实施。
 
 ### 当前推进：移除 freeze 的全局 schema 版本

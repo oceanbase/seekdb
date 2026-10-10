@@ -16,7 +16,7 @@ cases = ['catalog_read_view', 'basic', 'cascade_standby', 'one_primary_multi_sta
          'standby_sstable_replay', 'switchover_roundtrip',
          'failover_switchover_reentry', 'tls_standby', 'namespace_fork_local',
          'publication_initial', 'publication_child',
-         'publication_restart_initial', 'publication_restart_child']
+         'publication_restart_initial', 'publication_restart_child', 'schema_history']
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--binary', required=True)
 parser.add_argument('--case', action='append', choices=cases)
@@ -54,7 +54,7 @@ for case in args.case or [name for name in cases if name != 'catalog_read_view']
             subprocess.run(['./generate_wallet.sh'], cwd=obtest, stdout=log, stderr=subprocess.STDOUT, check=True)
             subprocess.run(['openssl', 'verify', '-CAfile', 'wallet/ca.pem', 'wallet/cert.pem'], cwd=obtest, stdout=log, stderr=subprocess.STDOUT, check=True)
     started = time.monotonic()
-    extended = case in ('namespace_fork_local', 'catalog_read_view') or case.startswith('publication_')
+    extended = case in ('namespace_fork_local', 'catalog_read_view', 'schema_history') or case.startswith('publication_')
     file = 'namespace_setup_template_local' if extended else case
     if case == 'catalog_read_view':
         os.environ['SEEKDB_CATALOG_GC_TRIGGER'] = str((args.log_dir / 'gc-trigger').resolve())
@@ -65,6 +65,10 @@ for case in args.case or [name for name in cases if name != 'catalog_read_view']
             result = subprocess.run(['python3', str(local / 'standby_catalog_view_probe.py')], cwd=project, stdout=log, stderr=subprocess.STDOUT)
         if result.returncode == 0 and case == 'standby_sstable_replay':
             result = subprocess.run(['python3', str(local / 'standby_major_progress_probe.py')], cwd=project, stdout=log, stderr=subprocess.STDOUT)
+        if result.returncode == 0 and case == 'schema_history':
+            result = subprocess.run(['python3', str(local / 'standby_schema_history_probe.py'),
+                                    '--binary', str(Path(args.binary).resolve())],
+                                   cwd=project, stdout=log, stderr=subprocess.STDOUT)
         if result.returncode == 0 and case == 'namespace_fork_local':
             result = subprocess.run(['python3', str(local / 'standby_refresh_race_probe.py')], cwd=project, stdout=log, stderr=subprocess.STDOUT)
             if result.returncode == 0:

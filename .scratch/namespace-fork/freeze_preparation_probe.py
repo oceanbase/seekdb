@@ -98,17 +98,48 @@ def run(binary, case, partitions):
             exp.sql('CREATE DATABASE freeze_cost')
             exp.sql('CREATE TABLE freeze_cost.t(id INT PRIMARY KEY,v INT) '
                     'PARTITION BY HASH(id) PARTITIONS %d' % partitions)
+            with exp.connection.cursor() as cursor:
+                for offset in range(0, partitions, 500):
+                    cursor.executemany('INSERT INTO freeze_cost.t VALUES(%s,%s)',
+                        [(i, i) for i in range(offset, min(offset + 500, partitions))])
             result = request(exp, 'ALTER SYSTEM MAJOR FREEZE', 120)
             assert result['error'] is None, result
             assert frozen(exp) > initial
+            wait_for(lambda: evidence.contains('freeze locked baseline recheck', 'ready:true'),
+                     'freeze final recheck log did not arrive', 10)
             checks = evidence.contains('freeze locked baseline recheck', 'ready:true')
             assert len(checks) == 1, checks
             fields = {key: int(value) for key, value in re.findall(r'(\w+):\s*(\d+)', checks[0])}
             cost = int(re.search(r'cost_us=(\d+)', checks[0])[1])
             assert fields['inspected_tablets'] >= partitions, checks
+            target = frozen(exp)
+            exp.record('freeze_preparation_measured', partitions=partitions,
+                       inspected=fields['inspected_tablets'], locked_recheck_us=cost,
+                       request=result, frozen=target)
+            exp.sql('ALTER SYSTEM RESUME MERGE')
+            def major_complete():
+                row = exp.sql('SELECT frozen_scn,global_broadcast_scn,last_scn '
+                              'FROM oceanbase.DBA_OB_MAJOR_COMPACTION', log=False)[0]
+                return row == (target, target, target)
+            started = time.monotonic()
+            wait_for(major_complete, '8000-partition major did not complete', 300)
+            expected = (partitions, partitions * (partitions - 1) // 2)
+            actual = exp.sql('SELECT COUNT(*),SUM(v) FROM freeze_cost.t', log=False)[0]
+            assert tuple(map(int, actual)) == expected, actual
+            table = int(exp.sql("SELECT table_id FROM oceanbase.__all_table WHERE "
+                "table_name='t' AND database_id=(SELECT database_id FROM oceanbase.__all_database "
+                "WHERE database_name='freeze_cost')", log=False)[0][0])
+            logical = {int(row[0]) for row in exp.sql(
+                f'SELECT tablet_id FROM oceanbase.__all_part WHERE table_id={table}', log=False)}
+            expected_physical = {physical_id(1, tablet) for tablet in logical}
+            completed = {int(row[0]) for row in exp.sql(
+                "SELECT tablet_id FROM oceanbase.V$OB_SSTABLES WHERE table_type IN ('MAJOR','CO_MAJOR') "
+                f'AND end_log_scn={target}', log=False)}
+            assert len(expected_physical) == partitions and expected_physical <= completed
             exp.record('PASS', case='freeze_preparation_large', partitions=partitions,
                        inspected=fields['inspected_tablets'], locked_recheck_us=cost,
-                       request=result, frozen=frozen(exp))
+                       request=result, frozen=target, major_seconds=time.monotonic()-started,
+                       checked_major_tablets=len(expected_physical), rows=actual)
             return
 
         baseline_pause.write_text('0\n')

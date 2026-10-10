@@ -20,6 +20,7 @@ subprocess.run(['cp','--reflink=auto',str(pathlib.Path(opts.binary).resolve()),s
 os.replace(replacement,root/'bin/observer')
 label=opts.label
 log=pathlib.Path('.scratch/namespace-fork/standby-results')/(label+'.log')
+log.parent.mkdir(parents=True,exist_ok=True)
 env=os.environ.copy(); env['LD_LIBRARY_PATH']=str(root/'lib')+':'+env.get('LD_LIBRARY_PATH','')
 args=[str(root/'bin/observer'),'--nodaemon','--port','42036','--data-dir',str(root/'store'),'--redo-dir',str(root/'store/clog'),'--role=STANDBY']
 for opt in ['log_restore_source=6.12.232.130:42000','enable_rpc_service=true','rpc_port=42001','datafile_size=2G','log_disk_size=2G','cpu_count=4','memory_limit=8G']:

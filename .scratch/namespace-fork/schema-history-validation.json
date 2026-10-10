@@ -1,5 +1,5 @@
 {
-  "scope": "Foundation, atomic DDL/layout publication, durable retention, physical C membership, major/medium layouts, primary freeze preparation, exact meta-major bodies, SSTable origin, per-row redo versions, physical report identity and Namespace historical checksum now have targeted evidence below. Independent logical group verification and mid-round recovery also have targeted evidence. Updated 8000-partition validation, layout/body/binding GC, and full standby integration remain incomplete. Legacy freeze.schema_version generation/storage/serialization/readers have now been removed and tested, including native retention/recovery and production parent/child index checks. Logical table and Namespace bindings now retire atomically with catalog deletion; native MVCC/rollback/restart and production retired-source takeover/reclamation passed. The 8000-partition freeze preparation scan has measured evidence; full performance and major/checksum scope remain separate. Body/G physical reclamation and full current-branch standby/promotion remain incomplete.",
+  "scope": "Targeted evidence covers native layout history, atomic DDL publication and binding retirement, physical creation identity, retention and recovery, major/medium/meta layouts, per-row redo, physical reports and Namespace historical checksum groups. Global freeze.schema_version has been removed. Current production binary has 8000-partition first-service and full-major evidence, plus actual primary/standby independent DDL, replica major, crash recovery, promotion and post-promotion DDL/major/checksum evidence. The 8000 full-major case does not cover 8000-partition indexes or inherited takeover pressure. Layout body/G physical reclamation and the final requirement-by-requirement completion audit remain incomplete; this manifest does not prove the whole goal complete.",
   "runs": [
     {
       "name": "layout_history",
@@ -6778,6 +6778,306 @@
           "bytes": 8747913
         }
       ]
+    },
+    {
+      "name": "layout_history_8000_first_service",
+      "log": "/tmp/seekdb-layout-history-service-8000-test-1.log",
+      "result": {
+        "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+        "binary_sha256": "2ff41a5c576ec5ffc3484292d22233569ffd9e8965b72702a17afdf33b5fea80",
+        "source_head": "b1f9fb59c9d765f9230a427b33bd78fc2853139d",
+        "partitions": 8000,
+        "rows": 8000,
+        "samples": 5,
+        "cpu_count": 4,
+        "memory_budget": "8G",
+        "background_maintenance": true,
+        "point_read": "SELECT id,v FROM latency_fork.t WHERE id=1",
+        "first_write": "UPDATE latency_fork.t SET v=11 WHERE id=1 (autocommit)",
+        "all_partition_read": "SELECT COUNT(*),SUM(v) FROM latency_fork.t",
+        "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_fork_service_latency_y2eue1k9",
+        "host_loadavg_before": [
+          7.39,
+          7.98,
+          9.52
+        ],
+        "instance_bootstrap_s": 17.105315908789635,
+        "create_table_s": 13.001757841557264,
+        "load_rows_s": 10.90360964462161,
+        "verified_table_physical_tablets": 8000,
+        "measurements": [
+          {
+            "namespace": "latency_child_0",
+            "fork_s": 0.02004997432231903,
+            "first_login_s": 0.44362707808613777,
+            "first_point_read_s": 0.1798516996204853,
+            "first_write_commit_s": 0.015166621655225754,
+            "read_after_write_s": 0.01823236048221588,
+            "fork_to_read_s": 0.6435287520289421,
+            "fork_to_write_commit_s": 0.6586953736841679,
+            "all_partition_scan_s": 4.748919542878866
+          },
+          {
+            "namespace": "latency_child_1",
+            "fork_s": 0.0051566846668720245,
+            "first_login_s": 0.3147192969918251,
+            "first_point_read_s": 0.11251601949334145,
+            "first_write_commit_s": 0.018493976444005966,
+            "read_after_write_s": 0.006774872541427612,
+            "fork_to_read_s": 0.4323920011520386,
+            "fork_to_write_commit_s": 0.45088597759604454,
+            "all_partition_scan_s": 3.6674393489956856
+          },
+          {
+            "namespace": "latency_child_2",
+            "fork_s": 0.010246790945529938,
+            "first_login_s": 0.4112381972372532,
+            "first_point_read_s": 0.1930600218474865,
+            "first_write_commit_s": 0.01405205950140953,
+            "read_after_write_s": 0.006246544420719147,
+            "fork_to_read_s": 0.6145450100302696,
+            "fork_to_write_commit_s": 0.6285970695316792,
+            "all_partition_scan_s": 2.4331214241683483
+          },
+          {
+            "namespace": "latency_child_3",
+            "fork_s": 0.0033448562026023865,
+            "first_login_s": 0.5583297684788704,
+            "first_point_read_s": 0.12381744384765625,
+            "first_write_commit_s": 0.011759757995605469,
+            "read_after_write_s": 0.004856079816818237,
+            "fork_to_read_s": 0.685492068529129,
+            "fork_to_write_commit_s": 0.6972518265247345,
+            "all_partition_scan_s": 2.6703983172774315
+          },
+          {
+            "namespace": "latency_child_4",
+            "fork_s": 0.004643406718969345,
+            "first_login_s": 0.44590169191360474,
+            "first_point_read_s": 0.12509015947580338,
+            "first_write_commit_s": 0.01790522038936615,
+            "read_after_write_s": 0.011455617845058441,
+            "fork_to_read_s": 0.5756352581083775,
+            "fork_to_write_commit_s": 0.5935404784977436,
+            "all_partition_scan_s": 4.4445360116660595
+          }
+        ],
+        "summary_seconds": {
+          "fork_s": {
+            "min": 0.0033448562026023865,
+            "median": 0.0051566846668720245,
+            "max": 0.02004997432231903
+          },
+          "first_login_s": {
+            "min": 0.3147192969918251,
+            "median": 0.44362707808613777,
+            "max": 0.5583297684788704
+          },
+          "first_point_read_s": {
+            "min": 0.11251601949334145,
+            "median": 0.12509015947580338,
+            "max": 0.1930600218474865
+          },
+          "first_write_commit_s": {
+            "min": 0.011759757995605469,
+            "median": 0.015166621655225754,
+            "max": 0.018493976444005966
+          },
+          "read_after_write_s": {
+            "min": 0.004856079816818237,
+            "median": 0.006774872541427612,
+            "max": 0.01823236048221588
+          },
+          "fork_to_read_s": {
+            "min": 0.4323920011520386,
+            "median": 0.6145450100302696,
+            "max": 0.685492068529129
+          },
+          "fork_to_write_commit_s": {
+            "min": 0.45088597759604454,
+            "median": 0.6285970695316792,
+            "max": 0.6972518265247345
+          },
+          "all_partition_scan_s": {
+            "min": 2.4331214241683483,
+            "median": 3.6674393489956856,
+            "max": 4.748919542878866
+          }
+        },
+        "host_loadavg_after": [
+          11.57,
+          8.96,
+          9.75
+        ],
+        "result": "PASS"
+      },
+      "source_note": "Production build includes the subsequently committed 91f75cecc changes; source_head captured before that commit."
+    },
+    {
+      "name": "layout_history_standby_sstable_bootstrap",
+      "log": "/tmp/seekdb-layout-history-standby-4/standby_sstable_replay.log",
+      "results": [
+        {
+          "case": "standby_sstable_replay",
+          "exit_code": 0,
+          "elapsed_s": 152.47
+        }
+      ],
+      "source": "b1f9fb59c production binary, before ownership retirement; proves real copied SSTables and continued replay, not final promotion coverage"
+    },
+    {
+      "name": "full_major_8000_after_layout_history",
+      "log": "/tmp/seekdb-layout-history-major-8000-test-2.log",
+      "events": [
+        {
+          "event": "setup",
+          "binary": "/home/nijia.nj/.herdr/worktrees/seekdb/herdr-fork/build_release/src/observer/seekdb",
+          "base": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_large_prcxeh8d",
+          "pid": 1132384,
+          "port": 30395
+        },
+        {
+          "event": "freeze_preparation_measured",
+          "partitions": 8000,
+          "inspected": 8716,
+          "locked_recheck_us": 53259,
+          "request": {
+            "error": null,
+            "seconds": 0.19298699870705605
+          },
+          "frozen": 1791589362994853023
+        },
+        {
+          "event": "PASS",
+          "case": "freeze_preparation_large",
+          "partitions": 8000,
+          "inspected": 8716,
+          "locked_recheck_us": 53259,
+          "request": {
+            "error": null,
+            "seconds": 0.19298699870705605
+          },
+          "frozen": 1791589362994853023,
+          "major_seconds": 136.87047885730863,
+          "checked_major_tablets": 8000,
+          "rows": [
+            8000,
+            "31996000"
+          ]
+        },
+        {
+          "event": "data_archived",
+          "path": "/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_freeze_preparation_large_prcxeh8d/data.tar.gz",
+          "bytes": 34981071
+        }
+      ],
+      "timing_note": "major_seconds measures from resuming merge through completion and final row/SSTable checks; not pure DAG execution time."
+    },
+    {
+      "name": "standby_history_functional_then_cleanup_error",
+      "log": "/tmp/seekdb-layout-history-standby-final-2/schema_history.log",
+      "events": [
+        {
+          "event": "major_completed",
+          "port": 42035,
+          "frozen": 1791589637151170018
+        },
+        {
+          "event": "standby_layout_major",
+          "frozen": 1791589637151170018,
+          "tablets": 12,
+          "namespace": 4
+        },
+        {
+          "event": "standby_layout_crash_recovered",
+          "frozen": 1791589637151170018
+        },
+        {
+          "event": "major_completed",
+          "port": 42036,
+          "frozen": 1791589685692995308
+        },
+        {
+          "event": "PASS",
+          "case": "standby_schema_history",
+          "before": 1791589637151170018,
+          "after": 1791589685692995308,
+          "physical_tablets": 12,
+          "independent_ddl": true,
+          "standby_major": true,
+          "crash_recovery": true,
+          "promoted_ddl": true,
+          "promoted_major": true,
+          "historical_checksums": [
+            1,
+            4
+          ]
+        }
+      ],
+      "exit_code": 1,
+      "note": "All functional assertions reached PASS, then ExitStack closed an already closed pre-crash connection. Not a passing whole-script run."
+    },
+    {
+      "name": "standby_schema_history_recovery_promotion",
+      "log": "/tmp/seekdb-layout-history-standby-final-4/schema_history.log",
+      "results": [
+        {
+          "case": "schema_history",
+          "exit_code": 0,
+          "elapsed_s": 371.11
+        }
+      ],
+      "events": [
+        {
+          "event": "major_requested",
+          "port": 42035,
+          "previous": 1
+        },
+        {
+          "event": "major_completed",
+          "port": 42035,
+          "frozen": 1791590576301182006
+        },
+        {
+          "event": "standby_layout_major",
+          "frozen": 1791590576301182006,
+          "tablets": 12,
+          "namespace": 4
+        },
+        {
+          "event": "standby_layout_crash_recovered",
+          "frozen": 1791590576301182006
+        },
+        {
+          "event": "major_requested",
+          "port": 42036,
+          "previous": 1791590576301182006
+        },
+        {
+          "event": "major_completed",
+          "port": 42036,
+          "frozen": 1791590679617018271
+        },
+        {
+          "event": "PASS",
+          "case": "standby_schema_history",
+          "before": 1791590576301182006,
+          "after": 1791590679617018271,
+          "physical_tablets": 12,
+          "independent_ddl": true,
+          "standby_major": true,
+          "crash_recovery": true,
+          "promoted_ddl": true,
+          "promoted_major": true,
+          "historical_checksums": [
+            1,
+            4
+          ]
+        }
+      ],
+      "source_commit": "91f75cecc",
+      "binary_sha256": "2ff41a5c576ec5ffc3484292d22233569ffd9e8965b72702a17afdf33b5fea80",
+      "test_hooks_removed": true
     }
   ],
   "meta_layout_builds": [
@@ -6860,17 +7160,45 @@
     {
       "name": "standby_sstable_replay_startup_1",
       "log": "/tmp/seekdb-layout-history-standby-1/standby_sstable_replay.log",
-      "cause": "Fixed startup delay expired before root handshake was ready."
+      "cause": "Fixed startup delay expired before root handshake was ready.",
+      "resolved_by": "/tmp/seekdb-layout-history-standby-4/standby_sstable_replay.log"
     },
     {
       "name": "standby_sstable_replay_startup_2",
       "log": "/tmp/seekdb-layout-history-standby-2/standby_sstable_replay.log",
-      "cause": "Generic framework poll authenticates as admin before exec_init_sql creates that user."
+      "cause": "Generic framework poll authenticates as admin before exec_init_sql creates that user.",
+      "resolved_by": "/tmp/seekdb-layout-history-standby-4/standby_sstable_replay.log"
     },
     {
       "name": "standby_sstable_replay_startup_3",
       "log": "/tmp/seekdb-layout-history-standby-3/standby_sstable_replay.log",
-      "cause": "deploy_get_value aborts on a transient null; it cannot be used to poll the root handshake."
+      "cause": "deploy_get_value aborts on a transient null; it cannot be used to poll the root handshake.",
+      "resolved_by": "/tmp/seekdb-layout-history-standby-4/standby_sstable_replay.log"
+    },
+    {
+      "name": "standby_schema_history_initial_listener",
+      "log": "/tmp/seekdb-layout-history-standby-final-1/schema_history.log",
+      "cause": "Setup returned before standby SQL listener opened; the probe now waits for an actual connection.",
+      "resolved_by": "/tmp/seekdb-layout-history-standby-final-4/schema_history.log"
+    },
+    {
+      "name": "large_major_async_log_observation",
+      "log": "/tmp/seekdb-layout-history-major-8000-test-1.log",
+      "cause": "Driver checked the final-recheck log before asynchronous flush/rotation. The archived log contains the successful check at cost_us=46853; driver now waits for the record before asserting.",
+      "resolved_by": "/tmp/seekdb-layout-history-major-8000-test-2.log"
+    },
+    {
+      "name": "standby_history_repeated_connection_close",
+      "log": "/tmp/seekdb-layout-history-standby-final-2/schema_history.log",
+      "cause": "Driver explicitly closes old standby connection before restart, then ExitStack calls non-idempotent Connection.__exit__. Use ownership callback checking connection.open and print PASS after cleanup.",
+      "resolved_by": "/tmp/seekdb-layout-history-standby-final-4/schema_history.log"
+    },
+    {
+      "name": "standby_history_previous_round_not_finished",
+      "log": "/tmp/seekdb-layout-history-standby-final-3/schema_history.log",
+      "exit_code": 1,
+      "cause": "After promotion, major freeze returned OK plus warning for unfinished prior round (internal 4213); the driver ignored the warning and timed out awaiting a new F that was never published. Wait for previous durable completion and assert no warnings before waiting for the next F.",
+      "resolved_by": "/tmp/seekdb-layout-history-standby-final-4/schema_history.log"
     }
   ]
 }
