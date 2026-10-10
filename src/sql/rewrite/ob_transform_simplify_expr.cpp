@@ -1686,7 +1686,8 @@ int ObTransformSimplifyExpr::try_remove_subquery_in_expr(ObDMLStmt* stmt, ObRawE
     }
   }
   if (OB_SUCC(ret) && trans_happened) {
-    if (OB_FAIL(expr->formalize(ctx_->session_info_))) {
+    if (OB_FAIL(ObRawExprUtils::erase_operand_implicit_cast(expr, expr))) {
+    } else if (OB_FAIL(expr->formalize(ctx_->session_info_))) {
     }
   }
   return ret;
