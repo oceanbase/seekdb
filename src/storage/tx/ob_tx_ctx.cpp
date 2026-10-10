@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX TRANS
 
+#include "config_bridge.h"
 #include "ob_tx_ctx.h"
 #include "share/ob_debug_sync.h"
 #include "share/rc/ob_server_runtime.h"
@@ -111,7 +112,7 @@ int ObTxCtx::init(const uint32_t session_id,
 
     mt_ctx_.set_trans_ctx(this);
     mt_ctx_.set_for_replay(is_for_replay());
-    if (!GCONF.enable_record_trace_log) {
+    if (!config::enable_record_trace_log()) {
       tlog_ = NULL;
     } else {
       tlog_ = &trace_log_;
@@ -1294,8 +1295,8 @@ int ObTxCtx::serial_submit_redo_after_write_(int &submitted_cnt)
 bool ObTxCtx::should_switch_to_parallel_logging_()
 {
   bool ok = false;
-  if (GCONF._enable_parallel_redo_logging) {
-    const int64_t switch_size = GCONF._parallel_redo_logging_trigger;
+  if (config::_enable_parallel_redo_logging()) {
+    const int64_t switch_size = config::_parallel_redo_logging_trigger();
     ok = pending_write_ > 1 && mt_ctx_.get_pending_log_size() > switch_size;
 #ifdef ENABLE_DEBUG_LOG
     if (!ok) {
@@ -1551,7 +1552,7 @@ int ObTxCtx::on_success(ObTxLogCb *log_cb)
 
     log_sync_used_time = cur_ts - log_cb->get_submit_ts();
     ctx_lock_wait_time = guard.get_lock_acquire_used_time();
-    if (log_sync_used_time + ctx_lock_wait_time >= ObServerConfig::get_instance().clog_sync_time_warn_threshold) {
+    if (log_sync_used_time + ctx_lock_wait_time >= ::oceanbase::config::clog_sync_time_warn_threshold()) {
       TRANS_LOG_RET(WARN, OB_ERR_TOO_MUCH_TIME, "transaction log sync use too much time", KPC(log_cb),
                     K(log_sync_used_time), K(ctx_lock_wait_time));
     }
@@ -2001,7 +2002,7 @@ int ObTxCtx::on_failure(ObTxLogCb *log_cb)
       const int64_t log_sync_used_time = ObTimeUtility::current_time() - log_cb->get_submit_ts();
       CtxLockGuard guard(lock_);
       const int64_t ctx_lock_wait_time = guard.get_lock_acquire_used_time();
-      if (log_sync_used_time + ctx_lock_wait_time >= ObServerConfig::get_instance().clog_sync_time_warn_threshold) {
+      if (log_sync_used_time + ctx_lock_wait_time >= ::oceanbase::config::clog_sync_time_warn_threshold()) {
         TRANS_LOG_RET(WARN, OB_ERR_TOO_MUCH_TIME, "transaction log sync use too much time", KPC(log_cb),
                       K(log_sync_used_time), K(ctx_lock_wait_time));
       }
@@ -2098,7 +2099,7 @@ int ObTxCtx::get_gts_(SCN &gts)
 {
   int ret = OB_SUCCESS;
   MonotonicTs receive_gts_ts;
-  const int64_t GET_GTS_AHEAD_INTERVAL = 0; //GCONF._ob_get_gts_ahead_interval;
+  const int64_t GET_GTS_AHEAD_INTERVAL = 0;
   const MonotonicTs stc_ahead = get_stc_() - MonotonicTs(GET_GTS_AHEAD_INTERVAL);
   ObTsMgr *ts_mgr = trans_service_->get_ts_mgr();
 
@@ -5257,7 +5258,7 @@ int ObTxCtx::check_pending_log_overflow(const int64_t stmt_timeout)
   const int64_t MAX_PENDING_LOG_SIZE = 32L * 1024 * 1024;
 
   if (OB_SUCC(ret)) {
-    const int64_t trx_max_log_cb_limit = GCONF._trx_max_log_cb_limit;
+    const int64_t trx_max_log_cb_limit = config::_trx_max_log_cb_limit();
     // smaller than 16  || no limit with tx_log_cb =>  disable the check of pending logs
     if (trx_max_log_cb_limit >= 16) {
       const int64_t start_wait_us = ObTimeUtility::current_time();

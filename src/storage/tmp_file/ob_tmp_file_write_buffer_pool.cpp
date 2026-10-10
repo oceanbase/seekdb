@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "config_bridge.h"
 #include "share/ob_server_struct.h"
 #include "storage/tmp_file/ob_tmp_file_write_buffer_pool.h"
 
@@ -984,11 +985,11 @@ int64_t ObTmpWriteBufferPool::get_memory_limit()
   } else if (last_access_ts > 0 && common::ObClockGenerator::getClock() - last_access_ts < 10000000) { // 10s
     memory_limit = ATOMIC_LOAD(&wbp_memory_limit_);
   } else {
-    if (0 == GCONF._temporary_file_io_area_size) {
+    if (0 == config::_temporary_file_io_area_size()) {
       memory_limit = WBP_BLOCK_SIZE;
     } else {
       int64_t config_memory_budget =
-        lib::get_memory_budget() / 50 * GCONF._temporary_file_io_area_size;
+        lib::get_memory_budget() / 50 * config::_temporary_file_io_area_size();
       memory_limit = config_memory_budget;
     }
     memory_limit = ((memory_limit + WBP_BLOCK_SIZE - 1) / WBP_BLOCK_SIZE) * WBP_BLOCK_SIZE;

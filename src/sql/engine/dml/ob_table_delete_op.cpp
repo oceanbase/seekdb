@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "config_bridge.h"
 #include "sql/engine/dml/ob_table_delete_op.h"
 #include "sql/engine/dml/ob_dml_service.h"
 
@@ -271,7 +272,7 @@ int ObTableDeleteOp::write_rows_post_proc(int last_errno)
       plan_ctx->add_affected_rows(del_rtdefs_.at(i).at(0).das_rtdef_.affected_rows_);
       LOG_DEBUG("del rows post proc", K(plan_ctx->get_affected_rows()), K(del_rtdefs_.at(i).at(0)));
     }
-    if (OB_SUCC(ret) && GCONF.enable_defensive_check()) {
+    if (OB_SUCC(ret) && (config::_enable_defensive_check() > 0)) {
       if (OB_FAIL(check_delete_affected_row())) {
       }
     }

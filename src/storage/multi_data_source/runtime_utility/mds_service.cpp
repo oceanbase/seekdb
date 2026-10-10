@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "share/ob_server_struct.h"
 #include "mds_service.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -83,7 +84,7 @@ void ObMdsService::server_module_wait(ObMdsService *&mds_service)
 
 void ObMdsService::run_recyle_timer_task()
 {
-  ObCurTraceId::init(GCONF.self_addr_);
+  ObCurTraceId::init(GCTX.self_addr());
   if (REACH_TIME_INTERVAL(30_s)) {
     ObMdsEventBuffer::dump_statistics();
   }
@@ -94,7 +95,7 @@ void ObMdsService::try_recycle_mds_table_task()
   #define PRINT_WRAPPER KR(ret)
   int ret = OB_SUCCESS;
   MDS_TG(1_s);
-  ObCurTraceId::init(GCONF.self_addr_);
+  ObCurTraceId::init(GCTX.self_addr());
   if (MDS_FAIL(ObMdsService::for_each_ls([](ObLS &ls) -> int {
     (void) ObMdsService::for_each_mds_table_in_ls(ls, [](ObTablet &tablet) -> int {// FIXME: there is no need scan all tablets
       (void) process_with_tablet_(tablet);
@@ -109,7 +110,7 @@ void ObMdsService::try_recycle_mds_table_task()
 
 void ObMdsService::run_dump_status_timer_task()
 {
-  ObCurTraceId::init(GCONF.self_addr_);
+  ObCurTraceId::init(GCTX.self_addr());
   dump_special_mds_table_status_task();
 }
 
@@ -118,7 +119,7 @@ void ObMdsService::dump_special_mds_table_status_task()
   #define PRINT_WRAPPER KR(ret)
   int ret = OB_SUCCESS;
   MDS_TG(1_s);
-  ObCurTraceId::init(GCONF.self_addr_);
+  ObCurTraceId::init(GCTX.self_addr());
   ObMdsService::for_each_ls([](ObLS &ls) -> int {
     int ret = OB_SUCCESS;
     MDS_TG(1_s);

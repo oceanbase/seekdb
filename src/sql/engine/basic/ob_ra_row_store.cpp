@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "config_bridge.h"
 #include "ob_ra_row_store.h"
 #include "data_plane/tmp_file/ob_tmp_file.h"
 
@@ -347,7 +348,7 @@ int ObRARowStore::switch_block(const int64_t min_size)
     const bool finish_add = (0 == min_size);
     BlockBuf new_blkbuf;
     const bool force_new_block = (min_size > blkbuf_.buf_.capacity())
-        || !GCONF.is_sql_operator_dump_enabled();
+        || !config::enable_sql_operator_dump();
     BlockIndex bi;
     bi.is_idx_block_ = false;
     bi.on_disk_ = false;
@@ -489,7 +490,7 @@ int ObRARowStore::switch_idx_block(bool finish_add /* = false */)
     bool dump = need_dump();
     if (!finish_add && !dump) {
       if (OB_FAIL(alloc_idx_block(ib))) {
-        if (GCONF.is_sql_operator_dump_enabled()) {
+        if (config::enable_sql_operator_dump()) {
           ret = OB_SUCCESS;
           dump = true;
         }
@@ -921,7 +922,7 @@ bool ObRARowStore::need_dump()
     if (mem_hold_ > mem_limit_) {
       dump = true;
     }
-  } else if (!GCONF.is_sql_operator_dump_enabled()) {
+  } else if (!config::enable_sql_operator_dump()) {
     // no dump
   } else {
     const int64_t mem_ctx_pct_trigger = 80;

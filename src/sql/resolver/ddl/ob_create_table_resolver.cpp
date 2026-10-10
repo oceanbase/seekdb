@@ -284,7 +284,7 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
         // resolve table organizations before resolve table elements
         if (OB_FAIL(ret)) {
           //do nothing
-        } else if (OB_FAIL(resolve_table_organization(&GCONF, create_table_node->children_[4]))) {
+        } else if (OB_FAIL(resolve_table_organization(create_table_node->children_[4]))) {
         }
 
         //consider index can be defined before column, so column should be

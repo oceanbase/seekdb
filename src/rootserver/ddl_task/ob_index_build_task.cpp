@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 
+#include "config_bridge.h"
 #include "ob_index_build_task.h"
 #include "share/rc/ob_server_runtime.h"
 #include "rootserver/ddl_task/ob_ddl_task_util.h"
@@ -906,7 +907,7 @@ int ObIndexBuildTask::wait_data_complement()
     }
 #ifdef ERRSIM
     // when the major compaction is delayed, skip verify column checksum
-    if (0 != GCONF.errsim_ddl_major_delay_time) {
+    if (0 != ::oceanbase::common::errsim_config().errsim_ddl_major_delay_time.load()) {
       need_verify_checksum = false;
     }
 #endif
@@ -990,7 +991,7 @@ int ObIndexBuildTask::wait_local_index_data_complement()
     bool need_verify_checksum = true;
 #ifdef ERRSIM
     // when the major compaction is delayed, skip verify column checksum
-    need_verify_checksum = 0 == GCONF.errsim_ddl_major_delay_time;
+    need_verify_checksum = 0 == ::oceanbase::common::errsim_config().errsim_ddl_major_delay_time.load();
 #endif
     if (share::schema::is_fts_index_aux(create_index_arg_.index_type_) ||
         share::schema::is_fts_doc_word_aux(create_index_arg_.index_type_)) {
@@ -1345,7 +1346,7 @@ int ObIndexBuildTask::update_index_status_in_schema(const ObTableSchema &index_s
       } else {
         obcall::ObParallelDDLRes res;
         ObTimeoutCtx ctx;
-        if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, GCONF._ob_ddl_timeout))) {
+        if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, config::_ob_ddl_timeout()))) {
         } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->parallel_update_index_status(arg, res))) {
         } else {
           published_schema_version_ = res.schema_version_;

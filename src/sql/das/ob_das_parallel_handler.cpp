@@ -27,7 +27,7 @@ using namespace oceanbase::share;
 int64_t ObDASParallelTaskFactory::alloc_count_;
 int64_t ObDASParallelTaskFactory::free_count_;
 
-void OB_WEAK_SYMBOL request_finish_callback();
+void request_finish_callback();
 
 int ObDASParallelHandler::init(rpc::ObSrvTask *task)
 {

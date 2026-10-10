@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_OPT
+#include "config_bridge.h"
 #include "ob_logical_operator.h"
 #include "sql/engine/ob_operator_factory.h"
 #include "sql/rewrite/ob_transform_utils.h"
@@ -4808,7 +4809,7 @@ int ObLogicalOperator::allocate_normal_join_filter(const ObIArray<JoinFilterInfo
   int64_t valied_join_filter_count = 0;
   int64_t extra_hash_count = 1; // at least one for hash join
   bool has_shared_join_filter = false;
-  bool realistic_runtime_bloom_filter_size = !GCONF._preset_runtime_bloom_filter_size;
+  bool realistic_runtime_bloom_filter_size = !config::_preset_runtime_bloom_filter_size();
   if (realistic_runtime_bloom_filter_size && enable_bloom_filter) {
     can_join_filter_material = true;
   }

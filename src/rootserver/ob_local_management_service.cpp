@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX RS
 
+#include "config_bridge.h"
+#include "share/config/ob_config_helper.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_local_management_service.h"
 #include "data_plane/ddl/ob_ddl_coordinator.h"
@@ -90,7 +92,7 @@ ObLocalManagementService::ObLocalManagementService()
 : inited_(false), need_bootstrap_(false), service_started_(false),
     local_services_ready_(false),
     debug_(false),
-    self_addr_(), config_(NULL), config_mgr_(NULL),
+    self_addr_(), config_mgr_(NULL),
     sql_proxy_(),
     schema_service_(NULL),
     local_command_service_(NULL),
@@ -117,8 +119,7 @@ ObLocalManagementService::~ObLocalManagementService()
   }
 }
 
-int ObLocalManagementService::init(ObServerConfig &config,
-                        ObConfigManager &config_mgr,
+int ObLocalManagementService::init(ObConfigManager &config_mgr,
                         ObAddr &self,
                         ObMySQLProxy &sql_proxy,
                         ObMultiVersionSchemaService *schema_service,
@@ -139,7 +140,6 @@ int ObLocalManagementService::init(ObServerConfig &config,
     ret = OB_INVALID_ARGUMENT;
     FLOG_WARN("local command service must not null", KR(ret));
   } else {
-    config_ = &config;
     config_mgr_ = &config_mgr;
 
     self_addr_ = self;
@@ -412,8 +412,7 @@ int ObLocalManagementService::execute_bootstrap()
     FLOG_INFO("try to get local-service lock in execute_bootstrap");
     ObLatchWGuard guard(bootstrap_lock_, ObLatchIds::RS_BOOTSTRAP_LOCK);
     FLOG_INFO("success to get local-service lock in execute_bootstrap");
-    ObBootstrap bootstrap(ddl_service_, runtime_ddl_service_,
-        *config_);
+    ObBootstrap bootstrap(ddl_service_, runtime_ddl_service_);
     if (OB_FAIL(bootstrap.execute_bootstrap())) {
     }
 
@@ -438,8 +437,8 @@ int ObLocalManagementService::execute_bootstrap()
       LOG_DBA_INFO_V2(OB_BOOTSTRAP_WAIT_SYS_PACKAGE_BEGIN,
                       DBA_STEP_INC_INFO(bootstrap),
                       "bootstrap wait sys package begin.");
-      if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, GCONF._ob_ddl_timeout))) {
-      } else if (!GCONF._enable_async_load_sys_package &&
+      if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, config::_ob_ddl_timeout()))) {
+      } else if (!config::_enable_async_load_sys_package() &&
           OB_FAIL(local_command_service_->wait_system_package_ready(ctx))) {
       } else {
         LOG_DBA_INFO_V2(OB_BOOTSTRAP_WAIT_SYS_PACKAGE_SUCCESS,
@@ -2351,7 +2350,7 @@ int ObLocalManagementService::refresh_schema(const bool load_frozen_status)
     ObTimeoutCtx ctx;
     int64_t schema_version = OB_INVALID_VERSION;
     if (load_frozen_status) {
-      ctx.set_timeout(config_->rpc_timeout);
+      ctx.set_timeout(config::rpc_timeout());
     }
     // The local management service depends on the system schema during startup.
     if (OB_FAIL(schema_service_->refresh_and_add_schema())) {
@@ -2392,9 +2391,11 @@ int ObLocalManagementService::request_time_zone_info(const ObRequestTZInfoArg &a
   return ret;
 }
 
-bool ObLocalManagementService::check_config(const ObConfigItem &item, const char *&err_info)
+bool ObLocalManagementService::check_config(const char *name, const char *value, const char *&err_info)
 {
   bool bret = true;
+  UNUSED(name);
+  UNUSED(value);
   err_info = NULL;
   if (!inited_) {
     bret = false;
@@ -2592,7 +2593,7 @@ int ObLocalManagementService::check_data_disk_write_limit_(obcall::ObAdminSetCon
     ret = OB_INVALID_ARGUMENT;
   } else if (value == 0) {
     // does not need check data disk write limit percentage
-  } else if (value < GCONF.data_disk_usage_limit_percentage) {
+  } else if (value < config::data_disk_usage_limit_percentage()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, warn_log);
   }
@@ -2611,9 +2612,9 @@ int ObLocalManagementService::check_data_disk_usage_limit_(obcall::ObAdminSetCon
   } else if (!is_valid) {
     // invalid argument
     ret = OB_INVALID_ARGUMENT;
-  } else if (0 == GCONF.data_disk_write_limit_percentage) {
+  } else if (0 == config::data_disk_write_limit_percentage()) {
     // does not need check data disk write limit percentage
-  } else if (value > GCONF.data_disk_write_limit_percentage) {
+  } else if (value > config::data_disk_write_limit_percentage()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, warn_log);
   }
@@ -2682,7 +2683,7 @@ int ObLocalManagementService::purge_recyclebin_objects(int64_t purge_each_time)
 {
   int ret = OB_SUCCESS;
   // always passed
-  int64_t expire_timeval = GCONF.recyclebin_object_expire_time;
+  int64_t expire_timeval = config::recyclebin_object_expire_time();
   ObSchemaGetterGuard guard;
   if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -2692,7 +2693,7 @@ int ObLocalManagementService::purge_recyclebin_objects(int64_t purge_each_time)
     const obcall::Int64 expire_time = current_time - expire_timeval;
     const int64_t SLEEP_INTERVAL_US = 100 * 1000;
     const int64_t PURGE_EACH_BATCH = 10;
-    const int64_t purge_interval = GCONF._recyclebin_object_purge_frequency;
+    const int64_t purge_interval = config::_recyclebin_object_purge_frequency();
     int64_t purge_sum = purge_each_time;
     const ObSimpleServerRuntimeSchema *simple_runtime = NULL;
     if (purge_interval <= 0 || !service_started_ || purge_sum <= 0) {

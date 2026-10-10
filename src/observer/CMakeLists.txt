@@ -3,6 +3,7 @@ seekdb_apply_standalone_inventory(ob_server SEEKDB_OBSERVER_STANDALONE)
 seekdb_apply_standalone_inventory(
   ob_server SEEKDB_OBSERVER_RETRIEVAL_COMPOSITION)
 ob_server_add_target(ob_server)
+target_link_libraries(ob_server PUBLIC config)
 
 add_library(oceanbase_static STATIC EXCLUDE_FROM_ALL
   ${CMAKE_CURRENT_BINARY_DIR}/ob_version.cpp)
@@ -73,7 +74,6 @@ target_link_libraries(ob_main PUBLIC ob_base)
 
 add_executable(seekdb)
 if(WIN32)
-  target_link_options(seekdb PRIVATE /FORCE:MULTIPLE)
   get_filename_component(CLANG_BIN_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
   get_filename_component(LLVM_ROOT ${CLANG_BIN_DIR} DIRECTORY)
   file(GLOB CLANG_RT_BUILTINS

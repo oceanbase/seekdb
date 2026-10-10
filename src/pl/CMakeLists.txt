@@ -22,6 +22,7 @@ endif()
 seekdb_apply_unity_inventory(ob_pl SEEKDB_PL_UNITY)
 seekdb_apply_standalone_inventory(ob_pl SEEKDB_PL_STANDALONE)
 ob_server_add_target(ob_pl)
+target_link_libraries(ob_pl PUBLIC config)
 
 set(SYS_PACK_SQL_SOURCE_DIR ${PROJECT_SOURCE_DIR}/src/share/inner_table/sys_package)
 set(SYS_PACK_CODEGEN_DIR ${CMAKE_CURRENT_BINARY_DIR}/syspack_codegen)

@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_PC
+#include "config_bridge.h"
 #include "ob_ps_cache.h"
 #include "sql/plan_cache/ob_ps_sql_utils.h"
 #include "sql/plan_cache/ob_ps_cache_callback.h"
@@ -122,7 +123,7 @@ int ObPsCache::init(const int64_t hash_bucket)
         param))) {
     } else if (FALSE_IT(evict_task_.ps_cache_ = this)) {
     } else if (OB_FAIL(evict_timer_.init("PsCacheEvict", ObMemAttr("PsCacheEvict")))) {
-    } else if (OB_FAIL(evict_timer_.schedule(evict_task_, GCONF.plan_cache_evict_interval, true))) {
+    } else if (OB_FAIL(evict_timer_.schedule(evict_task_, config::plan_cache_evict_interval(), true))) {
     } else if (OB_ISNULL(mem_context_)) {
       ret = OB_ERR_UNEXPECTED;
     } else {

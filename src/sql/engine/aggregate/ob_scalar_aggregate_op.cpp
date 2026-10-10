@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "config_bridge.h"
 #include "sql/engine/aggregate/ob_scalar_aggregate_op.h"
 #include "sql/engine/px/ob_px_util.h"
 
@@ -204,7 +205,7 @@ int ObScalarAggregateOp::init_hp_infras_group_mgr()
                     MY_SPEC.id_,
                     &ctx_))) {
     } else if (OB_FAIL(hp_infras_mgr_.init(
-      GCONF.is_sql_operator_dump_enabled(), est_rows, MY_SPEC.width_, true/*unique*/, 1/*ways*/,
+      config::enable_sql_operator_dump(), est_rows, MY_SPEC.width_, true/*unique*/, 1/*ways*/,
       &eval_ctx_, &sql_mem_processor_, &io_event_observer_))) {
     } else if (FALSE_IT(distinct_cnt = aggr_processor_.get_distinct_count())) {
     } else if (aggr_processor_.has_distinct() && distinct_cnt > 0

@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_dependency_info.h"
+#include "common/mysqlclient/ob_mysql_result.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "lib/utility/ob_smart_call.h"  // SMART_CALL, previously hidden behind the exec_context include chain, make the dependency explicit
 
 namespace oceanbase

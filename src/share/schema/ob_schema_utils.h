@@ -27,7 +27,6 @@
 #include "share/schema/ob_schema_struct.h"
 #include "share/system_variable/ob_sys_var_class_type.h"
 #include "common/sql_mode/ob_sql_mode.h"
-#include "share/config/ob_config.h"
 #include "share/config/ob_parallel_ddl_control_mode.h"
 
 namespace oceanbase

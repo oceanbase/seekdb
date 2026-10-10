@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "config_bridge.h"
 #include "ob_storage_object_handle.h"
 #include "storage/blocksstable/ob_block_manager.h"
 #include "share/ob_io_device_helper.h"
@@ -99,7 +100,7 @@ int ObStorageObjectHandle::report_bad_block() const
     } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.report_bad_block(macro_id_,
                                                             ret,
                                                             error_msg,
-                                                            GCONF.data_dir))) {
+                                                            config::data_dir().c_str()))) {
     }
   }
   return ret;
@@ -148,7 +149,7 @@ int ObStorageObjectHandle::sn_async_read(const ObStorageObjectReadInfo &read_inf
     io_info.fd_.third_id_ = read_info.macro_block_id_.third_id();
     io_info.fd_.device_handle_ = &LOCAL_DEVICE_INSTANCE;
     io_info.flag_.set_sys_module_id(read_info.io_desc_.get_sys_module_id());
-    const int64_t real_timeout_ms = min(read_info.io_timeout_ms_, GCONF._data_storage_io_timeout / 1000L);
+    const int64_t real_timeout_ms = min(read_info.io_timeout_ms_, config::_data_storage_io_timeout() / 1000L);
     io_info.timeout_us_ = real_timeout_ms * 1000L;
     io_info.user_data_buf_ = read_info.buf_;
     io_info.buf_ = read_info.buf_; // for sync io
@@ -180,7 +181,7 @@ int ObStorageObjectHandle::sn_async_write(const ObStorageObjectWriteInfo &write_
     io_info.fd_.third_id_ = macro_id_.third_id();
     io_info.fd_.device_handle_ = (nullptr == write_info.device_handle_) ? &LOCAL_DEVICE_INSTANCE : write_info.device_handle_;
     io_info.flag_.set_sys_module_id(write_info.io_desc_.get_sys_module_id());
-    const int64_t real_timeout_ms = min(write_info.io_timeout_ms_, GCONF._data_storage_io_timeout / 1000L);
+    const int64_t real_timeout_ms = min(write_info.io_timeout_ms_, config::_data_storage_io_timeout() / 1000L);
     io_info.timeout_us_ = real_timeout_ms * 1000L;
 
     io_info.flag_.set_write();

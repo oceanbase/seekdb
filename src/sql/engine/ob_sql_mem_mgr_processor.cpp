@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "config_bridge.h"
 #include "ob_sql_mem_mgr_processor.h"
 
 namespace oceanbase {
@@ -327,9 +328,9 @@ int ObSqlWorkareaUtil::get_workarea_size(const ObSqlWorkAreaType wa_type,
     }
   } else {
     if (HASH_WORK_AREA == wa_type) {
-      value = GCONF._hash_area_size;
+      value = config::_hash_area_size();
     } else if (SORT_WORK_AREA == wa_type) {
-      value = GCONF._sort_area_size;
+      value = config::_sort_area_size();
     } else {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected status: workarea type", K(wa_type));

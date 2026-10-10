@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "config_bridge.h"
 #include "sql/engine/aggregate/ob_hash_distinct_op.h"
 #include "sql/engine/px/ob_px_util.h"
 
@@ -52,7 +53,7 @@ ObHashDistinctOp::ObHashDistinctOp(ObExecContext &exec_ctx, const ObOpSpec &spec
     bypass_ctrl_(),
     mem_context_(NULL)
 {
-  enable_sql_dumped_ = GCONF.is_sql_operator_dump_enabled();
+  enable_sql_dumped_ = config::enable_sql_operator_dump();
 }
 
 int ObHashDistinctOp::inner_open()

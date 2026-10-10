@@ -223,10 +223,9 @@ ObVirtualTableIteratorFactory::ObVirtualTableIteratorFactory(ObVTIterCreator &vt
 }
 
 ObVirtualTableIteratorFactory::ObVirtualTableIteratorFactory(ObLocalManagementService &local_management_service,
-                                                             common::ObAddr &addr,
-                                                             common::ObServerConfig *config) :
+                                                             common::ObAddr &addr) :
     ObIVirtualTableIteratorFactory(),
-    vt_iter_creator_(local_management_service, addr, config)
+    vt_iter_creator_(local_management_service, addr)
 {
 }
 
@@ -1335,7 +1334,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           case OB_ALL_VIRTUAL_SERVER_STAT_TID: {
             ObAllVirtualServer *server = NULL;
             if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualServer, server))) {
-            } else if (OB_FAIL(server->init(addr_, config_))) {
+            } else if (OB_FAIL(server->init(addr_))) {
             } else {
               vt_iter = static_cast<ObVirtualTableIterator *>(server);
             }

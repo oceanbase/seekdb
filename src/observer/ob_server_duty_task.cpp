@@ -15,6 +15,8 @@
  */
 
 #define USING_LOG_PREFIX SERVER
+#include "config_bridge.h"
+#include "share/config/ob_config_helper.h"
 #include "ob_server_duty_task.h"
 #include "share/rc/ob_server_runtime.h"
 #include "sql/engine/ob_sql_memory_manager.h"
@@ -59,10 +61,11 @@ int ObServerDutyTask::update_ctx_memory_throttle()
     uint64_t ctx_id = 0;
     int64_t limit = 0;
     ObMallocAllocator *alloc = ObMallocAllocator::get_instance();
-    if (!checker.check(GCONF._ctx_memory_limit, ctx_id, limit)) {
+    rust::String limits = config::_ctx_memory_limit();
+    if (!checker.check(limits.c_str(), ctx_id, limit)) {
       // do nothing
     } else {
-      if ('\0' == GCONF._ctx_memory_limit[0]) {
+      if (limits.empty()) {
         ctx_id = ObCtxIds::MAX_CTX_ID;
         limit = INT64_MAX; // empty str means no limit, and not care ctx_id.
       }

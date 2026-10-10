@@ -19,94 +19,76 @@
 
 #include "ob_config_manager.h"
 #include "share/ob_sql_client_decorator.h"
-#include "share/config/ob_system_config.h"
 #include "share/config/ob_config_rpc_types.h"
+#include "config_bridge.h"
+#include "config_checkers.h"
+#include "config.h"
 
 namespace oceanbase
 {
 namespace obcall
 {
 
-OB_SERIALIZE_MEMBER(ObAdminSetConfigItem, name_, value_, comment_);
+OB_SERIALIZE_MEMBER(ObAdminSetConfigItem, name_, value_, comment_, is_reset_);
 
 } // namespace obcall
 
 namespace common
 {
+namespace
+{
+constexpr char CONFIG_PATH[] = "./etc/seekdb.conf";
+
+int report_error(const char *operation, const ConfigError &error)
+{
+  int ret = OB_INVALID_CONFIG;
+  LOG_ERROR("config operation failed", K(operation), "detail", error.message,
+            "line", error.line, "after_replace", error.after_replace);
+  if (error.after_replace != 0) {
+    LOG_USER_ERROR(OB_INVALID_CONFIG,
+                   "config file was replaced, but durability could not be confirmed");
+  } else {
+    LOG_USER_ERROR(OB_INVALID_CONFIG, error.message);
+  }
+  return ret;
+}
+
+}
+
 ObConfigManager::~ObConfigManager()
 {
 }
 
-int ObConfigManager::init(share::ObSQLiteConnectionPool *pool)
+int ObConfigManager::init()
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(pool)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(storage_.init(pool))) {
+  ConfigError error = {};
+  if (0 != config_supported(CONFIG_PATH, &error)) {
+    ret = report_error("initialize", error);
   } else {
     inited_ = true;
   }
   return ret;
 }
 
-void ObConfigManager::stop()
-{
-}
-
-void ObConfigManager::wait()
-{
-}
-
-void ObConfigManager::destroy()
-{
-}
-
 int ObConfigManager::reload_config()
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(server_config_.check_all())) {
-  } else if (OB_FAIL(reload_config_func_())) {
-  }
-  return ret;
-}
-
-int ObConfigManager::check_header_change(const char* path, const char* buf) const
-{
-  UNUSED(path);
-  UNUSED(buf);
-  return OB_SUCCESS;
-}
-
-int ObConfigManager::dump2file_unsafe(const char* path) const
-{
-  UNUSED(path);
-  return OB_SUCCESS;
-}
-
-int ObConfigManager::dump2file(const char* path) const
-{
-  DRWLock::RDLockGuard guard(server_config_.rwlock_);
-  return dump2file_unsafe(path);
+  return reload_config_func_();
 }
 
 int ObConfigManager::update_local()
 {
   int ret = OB_SUCCESS;
-  ObSystemConfig system_config;
-
-  if (OB_FAIL(system_config.init())) {
-  } else if (OB_FAIL(storage_.load_all_configs(system_config))) {
+  if (!inited_) {
+    ret = OB_NOT_INIT;
   } else {
-    DRWLock::WRLockGuard guard(server_config_.rwlock_);
-    if (OB_FAIL(server_config_.read_config(system_config, enable_static_effect_))) {
+    ConfigError error = {};
+    if (0 != config_load_active(CONFIG_PATH,
+                                    enable_static_effect_ ? 0 : 1, &error)) {
+      ret = report_error("load active", error);
     } else {
       LOG_INFO("read config success");
     }
-  }
-
-  if (OB_SUCC(ret)) {
-    server_config_.print();
-  } else {
   }
   return ret;
 }
@@ -125,47 +107,59 @@ int ObConfigManager::got_version()
   return ret;
 }
 
-int ObConfigManager::save_config(
-    const char *config_name,
-    const char *value)
+int ObConfigManager::save_internal_state(const char *name, const char *value)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(config_name) || OB_ISNULL(value)) {
+  if (OB_ISNULL(name) || OB_ISNULL(value)) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (!inited_) {
+    ret = OB_NOT_INIT;
   } else {
-    // Get config item from server_config_ container
-    ObConfigItem *const *ci_ptr = server_config_.get_container().get(
-                                     ObConfigStringKey(config_name));
-    if (OB_ISNULL(ci_ptr)) {
-      ret = OB_ERR_SYS_CONFIG_UNKNOWN;
-    } else if (OB_ISNULL(*ci_ptr)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      const ObConfigItem *config_item = *ci_ptr;
-      if (OB_FAIL(storage_.upsert_config(
-          config_name,
-          config_item->data_type(), value, config_item->info(), config_item->section(), config_item->scope(),
-          config_item->source(), config_item->edit_level()))) {
-      }
+    ConfigError error = {};
+    if (0 != config_update_internal_state(CONFIG_PATH, name, value, &error)) {
+      ret = report_error("save internal state", error);
     }
   }
   return ret;
 }
 
-int ObConfigManager::save_configs(int64_t base_version)
+int ObConfigManager::update_checked(const char *name, const char *value, bool reset,
+                                    ConfigCheckCallback callback, void *context,
+                                    bool *after_replace)
 {
   int ret = OB_SUCCESS;
-  ObConfigContainer::const_iterator it = server_config_.get_container().begin();
-  for (; OB_SUCC(ret) && it != server_config_.get_container().end(); ++it) {
-    if (OB_ISNULL(it->second)) {
-      // ignore ret
-      LOG_WARN("config item is null", "name", it->first.str());
-      continue;
-    }
-      if (it->second->version() > base_version) {
-      if (OB_FAIL(save_config(it->first.str(), it->second->str()))) {
+  if (nullptr != after_replace) {
+    *after_replace = false;
+  }
+  if (nullptr == name) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!config::parameter_exists(rust::Str(name))) {
+    ret = OB_ERR_SYS_CONFIG_UNKNOWN;
+  } else if (!inited_) {
+    ret = OB_NOT_INIT;
+  } else if ((!reset && nullptr == value) || nullptr == callback) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    ConfigError error = {};
+    if (0 != config_update_checked(CONFIG_PATH, name, value,
+                                        reset ? 1 : 0, callback, context, &error)) {
+      if (nullptr != after_replace) {
+        *after_replace = 0 != error.after_replace;
       }
+      ret = report_error(reset ? "checked reset" : "checked save", error);
     }
+  }
+  return ret;
+}
+
+int ObConfigManager::save_configs()
+{
+  int ret = OB_SUCCESS;
+  ConfigError error = {};
+  if (0 != config_save_bootstrap(CONFIG_PATH, &error)) {
+    ret = OB_INVALID_CONFIG;
+    LOG_ERROR("failed to save startup parameters", K(ret), "detail", error.message,
+              "after_replace", error.after_replace);
   }
   return ret;
 }

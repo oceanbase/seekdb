@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX PL
+#include "config_bridge.h"
 #include "ob_pl_type.h"
 #include "src/sql/resolver/ob_resolver_utils.h"
 #include "pl/ob_pl_package.h"
@@ -1630,7 +1631,7 @@ int ObPLCursorInfo::prepare_spi_cursor(ObSPICursor *&spi_cursor,
   OX (last_stream_cursor_ = false);
   if (OB_SUCC(ret)) {
     if (OB_INVALID_SIZE == mem_limit) {
-      mem_limit = GCONF._chunk_row_store_mem_limit;
+      mem_limit = config::_chunk_row_store_mem_limit();
     }
     OZ (spi_cursor->row_store_.init(mem_limit,
                                 common::ObCtxIds::DEFAULT_CTX_ID,

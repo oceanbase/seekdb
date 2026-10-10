@@ -33,6 +33,7 @@ struct iocb {
 struct io_event { void *data; struct iocb *obj; long res; long res2; };
 #endif
 #include "ob_local_device.h"
+#include "config_bridge.h"
 #include "lib/profile/ob_trace_id.h"
 #include "share/config/ob_server_config.h"
 #include "share/ob_io_device_helper.h"  // ObIODeviceLocalFileOp/BlockFileAttr, previously hidden behind the storage include chain(free within share)
@@ -758,7 +759,7 @@ int ObLocalDevice::try_punch_hole(const int64_t block_index)
   // FALLOC_FL_PUNCH_HOLE is only supported after glibc-2.17
   // https://bugzilla.redhat.com/show_bug.cgi?id=1476120
 # if __linux && (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 17))
-  if (is_fs_support_punch_hole_ && GCONF._enable_block_file_punch_hole) {
+  if (is_fs_support_punch_hole_ && config::_enable_block_file_punch_hole()) {
     const int64_t len = block_size_;
     const int64_t offset = block_size_ * block_index;
     const int sys_ret = ::fallocate(block_fd_, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, offset, len);
@@ -1287,7 +1288,7 @@ int64_t ObLocalDevice::get_max_block_size(int64_t reserved_size) const
   int64_t ret_size = 0;
   struct statvfs svfs;
 
-  const int64_t config_max_file_size = GCONF.datafile_maxsize;
+  const int64_t config_max_file_size = config::datafile_maxsize();
   int64_t block_file_max_size = block_file_size_;
 
   if (config_max_file_size < block_file_max_size) {
@@ -1357,8 +1358,8 @@ int ObLocalDevice::check_space_full(
   } else if (OB_FAIL(get_data_disk_used_percentage_(required_size,
                                                     used_percent))) {
   } else {
-    if (GCONF.data_disk_usage_limit_percentage != NO_LIMIT_PERCENT
-        && used_percent >= GCONF.data_disk_usage_limit_percentage) {
+    if (config::data_disk_usage_limit_percentage() != NO_LIMIT_PERCENT
+        && used_percent >= config::data_disk_usage_limit_percentage()) {
       ret = OB_SERVER_OUTOF_DISK_SPACE;
       if (alarm_if_space_full && REACH_TIME_INTERVAL(24 * 3600LL * 1000 * 1000 /* 24h */)) {
         LOG_DBA_ERROR_V2(OB_SHARE_OUTOF_DISK_SPACE, OB_SERVER_OUTOF_DISK_SPACE,
@@ -1376,7 +1377,7 @@ int ObLocalDevice::check_write_limited() const
   int ret = OB_SUCCESS;
   int64_t used_percent = 0;
   const int64_t required_size = 0;
-  const int64_t limit_percent = GCONF.data_disk_write_limit_percentage;
+  const int64_t limit_percent = config::data_disk_write_limit_percentage();
 
   if (OB_UNLIKELY(!is_marked_)) {
     ret = OB_NOT_INIT;

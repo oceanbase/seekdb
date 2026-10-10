@@ -40,6 +40,7 @@ public:
 public:
   int     port_        = 0;
   int8_t  log_level_   = 0;
+  bool    log_level_specified_ = false;
   bool    nodaemon_    = false;
   bool    use_ipv6_    = false;
   bool    embedded_    = false;

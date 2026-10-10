@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "config_bridge.h"
 #include "observer/report/ob_tablet_meta_checker.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/tablet/ob_tablet_iterator.h" // ObLSTabletIterator
@@ -154,7 +155,7 @@ int ObTabletMetaChecker::check_tablet_table()
 int ObTabletMetaChecker::schedule_tablet_meta_check_task()
 {
   int ret = OB_SUCCESS;
-  const int64_t CHECK_INTERVAL = GCONF.tablet_meta_table_check_interval;
+  const int64_t CHECK_INTERVAL = config::tablet_meta_table_check_interval();
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(stopped_)) {

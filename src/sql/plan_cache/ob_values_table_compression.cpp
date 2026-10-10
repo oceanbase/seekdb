@@ -15,6 +15,7 @@
  */
  
 #define USING_LOG_PREFIX SQL_PC
+#include "config_bridge.h"
 #include "sql/plan_cache/ob_values_table_compression.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "sql/engine/expr/ob_expr_version.h"
@@ -267,7 +268,7 @@ int ObValuesTableCompression::try_batch_exec_params(ObIAllocator &allocator,
       session_info.is_inner() ||
       session_info.get_is_in_retry() ||
       fp_result.values_tokens_.empty() ||
-      !GCONF._enable_values_table_folding) {
+      !config::_enable_values_table_folding()) {
     /* do nothing */
   } else if (!is_support_compress_values_table(pc_ctx.raw_sql_)) {
     /* do nothing */

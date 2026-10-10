@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "config_bridge.h"
 #include "data_plane/vector/ob_vector_refresh_transaction.h"
 
 #include "observer/ob_inner_sql_connection.h"
@@ -226,7 +227,7 @@ int ObVectorRefreshTransaction::lock_domain_table(
     } else {
       ObTimeoutCtx timeout_ctx;
       if (OB_FAIL(share::ObShareUtil::set_default_timeout_ctx(
-              timeout_ctx, GCONF.internal_sql_execute_timeout))) {
+              timeout_ctx, config::internal_sql_execute_timeout()))) {
       } else {
         lock_arg.timeout_us_ = timeout_ctx.get_timeout();
       }

@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_DTL
+#include "config_bridge.h"
 #include "ob_dtl_interm_result_manager.h"
 #include "data_plane/tmp_file/ob_tmp_file.h"
 #include "share/ob_shared_timer.h"
@@ -127,7 +128,7 @@ int ObDTLIntermResultManager::init()
   int64_t bucket_num = common::calculate_scaled_value_by_memory(BUCKET_NUM_LOWER_LIMIT, DEFAULT_BUCKET_NUM);
   ObMemAttr interm_res_hash_buck_attr("HashBuckDTLINT");
   ObMemAttr mem_profile_hash_buck_attr("IRMMemHashBuck");
-  int64_t cpu_quota_concurrency = GCONF.cpu_quota_concurrency;
+  int64_t cpu_quota_concurrency = config::cpu_quota_concurrency();
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
   } else if (OB_FAIL(interm_res_map_.create(bucket_num,
@@ -649,7 +650,7 @@ int ObDTLIntermResultManager::process_dump(ObDTLIntermResultInfo &result_info,
                   &mem_profile_info->allocator_,
                   check_update_mem,
                   updated))) {
-      } else if (need_dump(mem_profile_info) && GCONF.is_sql_operator_dump_enabled()
+      } else if (need_dump(mem_profile_info) && config::enable_sql_operator_dump()
                 && OB_FAIL(mem_profile_info->sql_mem_processor_.extend_max_memory_size(
                 &mem_profile_info->allocator_,
                 check_dump,

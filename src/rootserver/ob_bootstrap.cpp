@@ -45,10 +45,8 @@ using namespace storage;
 namespace rootserver
 {
 
-ObBaseBootstrap::ObBaseBootstrap(
-                                 common::ObServerConfig &config)
-    : step_id_(0),
-      config_(config)
+ObBaseBootstrap::ObBaseBootstrap()
+    : step_id_(0)
 {
 }
 
@@ -58,8 +56,8 @@ int ObBaseBootstrap::check_inner_stat() const
   return ret;
 }
 
-ObPreBootstrap::ObPreBootstrap(common::ObServerConfig &config)
-  : ObBaseBootstrap(config),
+ObPreBootstrap::ObPreBootstrap()
+  : ObBaseBootstrap(),
     stop_(false),
     begin_ts_(0)
 {
@@ -159,9 +157,8 @@ bool ObBootstrap::TableIdCompare::operator() (const ObSimpleTableSchemaV2* left,
 
 ObBootstrap::ObBootstrap(
     ObDDLService &ddl_service,
-    ObRuntimeDDLService &runtime_ddl_service,
-    ObServerConfig &config)
-  : ObBaseBootstrap(config),
+    ObRuntimeDDLService &runtime_ddl_service)
+  : ObBaseBootstrap(),
     ddl_service_(ddl_service),
     runtime_ddl_service_(runtime_ddl_service),
     begin_ts_(0)

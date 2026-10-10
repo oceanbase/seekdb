@@ -18,6 +18,7 @@
 #include "common/datum/ob_datum.h"
 #include "share/schema/ob_col_desc.h"  // ObColDesc complete type(previously hidden behind the ddl_common include chain)
 #include "ob_table_schema.h"
+#include "lib/compress/ob_compressor_pool.h"
 #include "share/schema/ob_partition_array_utils.h"
 #include "share/schema/ob_part_mgr_util.h"
 namespace oceanbase

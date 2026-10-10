@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_JO
+#include "config_bridge.h"
 #include "ob_join_order.h"
 #include "sql/optimizer/ob_skyline_prunning.h"
 #include "sql/optimizer/ob_log_table_scan.h"
@@ -2594,7 +2595,7 @@ int ObJoinOrder::get_candi_index_merge_trees(const uint64_t table_id,
     is_match_hint = true;
     OPT_TRACE("generate", candi_index_trees.count(), "candi index merge trees using hint");
   } else if (get_plan()->get_log_plan_hint().is_outline_data_
-             || (!GCONF._enable_index_merge && OB_LIKELY(!EN_FORCE_INDEX_MERGE_PLAN))) {
+             || (!config::_enable_index_merge() && OB_LIKELY(!EN_FORCE_INDEX_MERGE_PLAN))) {
     OPT_TRACE("cannot create index merge paths due to outline or runtime config");
   } else if (OB_FAIL(get_valid_index_merge_indexes(table_id,
                                                    ref_table_id,
@@ -7523,7 +7524,7 @@ int JoinPath::pre_check_nlj_can_px_batch_rescan(bool &can_px_batch_rescan) const
              || !parent_->get_plan()->get_optimizer_context().enable_px_batch_rescan()
              || NESTED_LOOP_JOIN != join_algo_ || !is_nlj_with_param_down()
              || IS_SEMI_ANTI_JOIN(join_type_)
-             || GCONF._enable_px_ordered_coord) {
+             || config::_enable_px_ordered_coord()) {
     /* when _enable_px_ordered_coord is enabled, px batch rescan is disabled due to is_task_order(）exchange op */
   } else if (is_right_need_exchange()) {
     can_px_batch_rescan = true;
@@ -11511,7 +11512,7 @@ int ObJoinOrder::check_normal_join_filter_valid(const Path& left_path,
     } else {
       double rate = 1 - join_filter_sel;
       double threshold = 0.6;
-      double misjudgment_rate = (static_cast<double>(GCONF._bloom_filter_ratio) / 100.0);
+      double misjudgment_rate = (static_cast<double>(config::_bloom_filter_ratio()) / 100.0);
       if (info.in_current_dfo_) {
         threshold = 0.9;
       }

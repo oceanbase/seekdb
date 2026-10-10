@@ -618,21 +618,12 @@ public:
   }
 
   //@brief Check whether the level to print.
-#if defined(_WIN32)
-  bool need_to_print(const int32_t level) { return (level <= get_log_level()); }
-#else
-  bool __attribute__((weak, noinline, cold)) need_to_print(const int32_t level) { return (level <= get_log_level()); }
-#endif
-  bool __attribute__((weak, noinline, cold)) need_to_print_dba(const int32_t level, bool force = false);
+  bool __attribute__((noinline, cold)) need_to_print(const int32_t level);
+  bool __attribute__((noinline, cold)) need_to_print_dba(const int32_t level, bool force = false);
   //@brief Check whether the level of the par-module to print.
-#if defined(_WIN32)
-  bool need_to_print(const uint64_t par_mod_id, const int32_t level);
-  bool need_to_print(const uint64_t par_mod_id, const uint64_t sub_mod_id, const int32_t level);
-#else
-  bool __attribute__((weak, noinline, cold)) need_to_print(const uint64_t par_mod_id, const int32_t level);
-  bool __attribute__((weak, noinline, cold)) need_to_print(const uint64_t par_mod_id, const uint64_t sub_mod_id,
+  bool __attribute__((noinline, cold)) need_to_print(const uint64_t par_mod_id, const int32_t level);
+  bool __attribute__((noinline, cold)) need_to_print(const uint64_t par_mod_id, const uint64_t sub_mod_id,
                             const int32_t level);
-#endif
 
   //@brief Set the log-file's name.
   //@param[in] filename The log-file's name.
@@ -1093,25 +1084,6 @@ inline void ObLogger::log_message_va(const char *mod_name,
     };
     log_it(mod_name, nullptr, level, file, line, function, errcode, log_data_func);
   }
-}
-
-#if defined(_WIN32)
-inline bool ObLogger::need_to_print(const uint64_t par_mod_id, const int32_t level)
-#else
-bool __attribute__((weak, noinline, cold)) ObLogger::need_to_print(const uint64_t par_mod_id, const int32_t level)
-#endif
-{
-  return (level <= get_log_level(par_mod_id));
-}
-
-#if defined(_WIN32)
-inline bool ObLogger::need_to_print(const uint64_t par_mod_id, const uint64_t sub_mod_id, const int32_t level)
-#else
-bool __attribute__((weak, noinline, cold)) ObLogger::need_to_print(const uint64_t par_mod_id, const uint64_t sub_mod_id,
-                                    const int32_t level)
-#endif
-{
-  return (level <= get_log_level(par_mod_id, sub_mod_id));
 }
 
 inline int32_t ObLogger::get_log_level() const

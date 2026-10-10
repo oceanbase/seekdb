@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "config_bridge.h"
 #include "ob_table_update_op.h"
 #include "sql/engine/dml/ob_dml_service.h"
 
@@ -432,7 +433,7 @@ int ObTableUpdateOp::write_rows_post_proc(int last_errno)
       plan_ctx->add_affected_rows(session->get_capability().cap_flags_.OB_CLIENT_FOUND_ROWS ?
                                   found_rows : changed_rows);
     }
-    if (OB_SUCC(ret) && GCONF.enable_defensive_check()) {
+    if (OB_SUCC(ret) && (config::_enable_defensive_check() > 0)) {
       if (OB_FAIL(check_update_affected_row())) {
       }
     }

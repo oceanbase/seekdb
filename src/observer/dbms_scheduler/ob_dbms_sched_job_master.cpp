@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "share/ob_server_struct.h"
 #include "ob_dbms_sched_job_master.h"
 #include "ob_dbms_sched_job_executor.h"
 #include "share/ob_ex_rpc.h"
@@ -181,7 +182,7 @@ int ObDBMSSchedJobMaster::schedule_due_jobs()
       break; // not yet due
     }
     common::ObCurTraceId::TraceId job_trace_id;
-    job_trace_id.init(GCONF.self_addr_);
+    job_trace_id.init(GCTX.self_addr());
     ObTraceIdGuard trace_id_guard(job_trace_id);
     if (OB_SUCCESS != (tmp_ret = wait_vector_.remove(wait_vector_.begin()))) {
     } else if (OB_SUCCESS != (tmp_ret = scheduler_job(job_key))) {

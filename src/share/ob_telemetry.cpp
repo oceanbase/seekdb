@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "config_bridge.h"
 #include "lib/utility/utility.h"
 #include "lib/time/ob_time_utility.h"
 #include "lib/string/ob_sql_string.h"
@@ -1085,7 +1086,7 @@ int get_host_hash(char *buf, const int64_t buf_len)
   int64_t out_len = 0;
   char ip_buf[MAX_IP_ADDR_LENGTH] = {'\0'};
   char hash_buf[SHA256_DIGEST_LENGTH + 1] = {'\0'};
-  ObAddr addr = GCONF.self_addr_;
+  ObAddr addr = GCTX.self_addr();
   if (!addr.ip_to_string(ip_buf, sizeof(ip_buf))) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObHashUtil::hash(OB_HASH_SH256, ip_buf, strlen(ip_buf), hash_buf, sizeof(hash_buf), out_len))) {
@@ -1154,7 +1155,7 @@ static int generate_telemetry_json(const char* reporter, const char* event_name,
   const int64_t ts = created_at_us;
   int64_t cpu_count = common::get_cpu_count();
   int64_t host_cpu_count = common::get_cpu_num();
-  int64_t port = GCONF.mysql_port;
+  int64_t port = config::mysql_port();
   char version[OB_SERVER_VERSION_LENGTH] = {'\0'};
   char memory_budget[SIZE_STR_LEN] = {'\0'};
   char host_memory_size[SIZE_STR_LEN] = {'\0'};
@@ -1164,8 +1165,8 @@ static int generate_telemetry_json(const char* reporter, const char* event_name,
   // construct report content
   double memory_budget_gb = static_cast<double>(lib::get_memory_budget()) / 1024 / 1024 / 1024;
   double host_memory_size_gb = static_cast<double>(common::get_phy_mem_size()) / 1024 / 1024 / 1024;
-  double log_disk_size_gb = static_cast<double>(GCONF.log_disk_size) / 1024 / 1024 / 1024;
-  double datafile_size_gb = static_cast<double>(GCONF.datafile_size) / 1024 / 1024 / 1024;
+  double log_disk_size_gb = static_cast<double>(config::log_disk_size()) / 1024 / 1024 / 1024;
+  double datafile_size_gb = static_cast<double>(config::datafile_size()) / 1024 / 1024 / 1024;
   snprintf(memory_budget, sizeof(memory_budget), "%.9gG", memory_budget_gb);
   snprintf(host_memory_size, sizeof(host_memory_size), "%.9gG", host_memory_size_gb);
   snprintf(log_disk_size, sizeof(log_disk_size), "%.9gG", log_disk_size_gb);

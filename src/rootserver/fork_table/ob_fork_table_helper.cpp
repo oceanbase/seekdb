@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 
+#include "config_bridge.h"
 #include "rootserver/fork_table/ob_fork_table_helper.h"
 #include "common/mysqlclient/ob_isql_connection.h"
 #include "share/rc/ob_server_runtime.h"
@@ -303,7 +304,7 @@ int ObForkTableHelper::copy_tablet_truncate_info_()
     int64_t empty_cnt = 0;
     int64_t registered_cnt = 0;
 
-    if (OB_FAIL(OB_TS_MGR.get_gts_sync(GCONF.rpc_timeout,
+    if (OB_FAIL(OB_TS_MGR.get_gts_sync(config::rpc_timeout(),
                                       max_readable_scn))) {
     }
 

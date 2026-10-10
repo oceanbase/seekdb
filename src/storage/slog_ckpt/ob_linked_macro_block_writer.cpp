@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "config_bridge.h"
 #include "share/ob_server_struct.h"
 
 #include "storage/slog_ckpt/ob_linked_macro_block_writer.h"
@@ -63,7 +64,7 @@ int ObLinkedMacroBlockWriter::write_block(
     write_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
     write_info.io_desc_.set_sys_module_id(ObIOModule::LINKED_MACRO_BLOCK_IO);
     write_info.io_desc_.set_sealed();
-    write_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
+    write_info.io_timeout_ms_ = config::_data_storage_io_timeout() / 1000L;
     
     write_info.offset_ = 0;
 

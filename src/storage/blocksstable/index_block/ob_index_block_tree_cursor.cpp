@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "config_bridge.h"
 #include "ob_index_block_tree_cursor.h"
 
 namespace oceanbase
@@ -1200,7 +1201,7 @@ int ObIndexBlockTreeCursor::load_micro_block_data(const MacroBlockId &macro_bloc
   read_info.io_desc_.set_mode(ObIOMode::READ);
   read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
   read_info.io_desc_.set_sys_module_id(ObIOModule::INDEX_BLOCK_TREE_CURSOR_IO);
-  read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
+  read_info.io_timeout_ms_ = config::_data_storage_io_timeout() / 1000L;
   
 
   idx_row_header.fill_deserialize_meta(block_des_meta);

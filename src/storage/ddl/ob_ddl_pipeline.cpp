@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
+#include "config_bridge.h"
 #include "ob_ddl_pipeline.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/api/storage/vector/ob_i_vector_index_runtime.h"
@@ -1023,7 +1024,7 @@ int ObHNSWIndexBuildOperator::serialize_vector_index(
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(adp->renew_single_snap_index((type == VIAT_HNSW_BQ || type == VIAT_IPIVF)
-            || (GCONF.vector_index_memory_saving_mode && (type == VIAT_HNSW || type == VIAT_HNSW_SQ || type == VIAT_HGRAPH))))) {
+            || (config::vector_index_memory_saving_mode() && (type == VIAT_HNSW || type == VIAT_HNSW_SQ || type == VIAT_HGRAPH))))) {
         }
       }
     }

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "config_bridge.h"
 #include "ob_index_block_builder.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/blocksstable/ob_shared_macro_block_manager.h"
@@ -1529,7 +1530,7 @@ int ObSSTableIndexBuilder::rewrite_small_sstable(ObSSTableMergeRes &res)
   read_info.io_desc_.set_mode(ObIOMode::READ);
   read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
   read_info.io_timeout_ms_ =
-      std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
+      std::max(config::_data_storage_io_timeout() / 1000, DEFAULT_IO_WAIT_TIME_MS);
   read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_INDEX_BUILDER_IO);
 
   if (OB_ISNULL(read_info.buf_ =
@@ -1636,7 +1637,7 @@ int ObSSTableIndexBuilder::load_single_macro_block(
   read_info.io_desc_.set_mode(ObIOMode::READ);
   read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
   read_info.io_timeout_ms_ =
-      std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
+      std::max(config::_data_storage_io_timeout() / 1000, DEFAULT_IO_WAIT_TIME_MS);
   
   read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_INDEX_BUILDER_IO);
 
@@ -2443,7 +2444,7 @@ int ObDataIndexBlockBuilder::init(const ObDataStoreDesc &data_store_desc,
     } else if (OB_FAIL(ObMacroBlockWriter::build_micro_writer(local_leaf_store_desc_,
                                                               task_allocator_,
                                                               meta_block_writer_,
-                                                              GCONF.micro_block_merge_verify_level))) {
+                                                              config::micro_block_merge_verify_level()))) {
     } else if (FALSE_IT(local_leaf_store_desc_->micro_block_size_
                         = local_leaf_store_desc_->get_micro_block_size_limit())) {
     } else if (OB_FAIL(ObBaseIndexBlockBuilder::init(data_store_desc,
@@ -2483,7 +2484,7 @@ int ObDataIndexBlockBuilder::init(const ObDataStoreDesc &data_store_desc,
     if (OB_FAIL(ObMacroBlockWriter::build_micro_writer(index_store_desc,
                                                        task_allocator_,
                                                        meta_block_writer_,
-                                                       GCONF.micro_block_merge_verify_level))) {
+                                                       config::micro_block_merge_verify_level()))) {
     } else if (OB_FAIL(
                    ObBaseIndexBlockBuilder::init(data_store_desc, *leaf_store_desc_, task_allocator_, nullptr, 0))) {
     } else if (OB_FAIL(macro_meta_dumper_.init(*index_store_desc,

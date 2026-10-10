@@ -378,9 +378,8 @@ int StandbyModule::Impl::bootstrap_standby_()
 
   param.is_standby_cluster_ = true;
   common::ObArenaAllocator source_allocator("StandbySource");
-  int64_t source_version = 0;
   if (OB_FAIL(host_->load_log_restore_source(
-      source_allocator, param.source_, source_version))) {
+      source_allocator, param.source_))) {
     LOG_WARN("failed to load standby bootstrap source", KR(ret));
   }
   param.bandwidth_throttle_ = config_.bandwidth_throttle_;

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 
+#include "config_bridge.h"
 #include "ob_dbms_job_utils.h"
 #include "share/ob_dml_sql_splicer.h"
 #include "share/ob_share_util.h"
@@ -157,7 +158,7 @@ int ObDBMSJobUtils::check_job_can_running(bool &can_running)
   ObSqlString sql;
   OX (can_running = false);
   CK (true);
-  OX (job_queue_processor = GCONF.job_queue_processes);
+  OX (job_queue_processor = config::job_queue_processes());
   // found current running job count
   OZ (sql.append("select count(*) from __all_job where this_date is not null"));
 

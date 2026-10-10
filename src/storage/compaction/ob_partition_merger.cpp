@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
+#include "config_bridge.h"
 #include "ob_partition_merger.h"
 #include "share/rc/ob_server_runtime.h"
 #include "ob_tablet_scheduler.h"
@@ -311,7 +312,7 @@ int ObPartitionMerger::process(
   int ret = OB_SUCCESS;
 
 #ifdef ERRSIM
-  int64_t macro_block_builder_errsim_flag = GCONF.macro_block_builder_errsim_flag;
+  int64_t macro_block_builder_errsim_flag = ::oceanbase::common::errsim_config().macro_block_builder_errsim_flag.load();
   if (2 == macro_block_builder_errsim_flag) {
     if (macro_writer_->get_macro_block_write_ctx().get_macro_block_count() -
         macro_writer_->get_merge_block_info().multiplexed_macro_block_count_ >= 1) {
@@ -354,7 +355,7 @@ int ObPartitionMerger::process(
   int ret = OB_SUCCESS;
   ObICompactionFilter::ObFilterRet filter_ret = ObICompactionFilter::FILTER_RET_MAX;
 #ifdef ERRSIM
-  int64_t macro_block_builder_errsim_flag = GCONF.macro_block_builder_errsim_flag;
+  int64_t macro_block_builder_errsim_flag = ::oceanbase::common::errsim_config().macro_block_builder_errsim_flag.load();
   if (1 == macro_block_builder_errsim_flag) {
     if (macro_writer_->get_macro_block_write_ctx().get_macro_block_count() > 1) {
       ret = OB_ERR_SYS;
@@ -595,7 +596,7 @@ int ObPartitionMajorMerger::merge_partition(
     }
     if (OB_ITER_END != ret || OB_FAIL(merge_helper_->check_iter_end())) { //verify merge end
       STORAGE_LOG(WARN, "Partition merge did not end normally", K(ret));
-      if (OB_ALLOCATE_MEMORY_FAILED != ret && GCONF._enable_compaction_diagnose) {
+      if (OB_ALLOCATE_MEMORY_FAILED != ret && config::_enable_compaction_diagnose()) {
         ObPartitionMergeDumper::print_error_info(ret, merge_helper_->get_merge_iters(), *merge_ctx_);
         macro_writer_->dump_block_and_writer_buffer();
       }
@@ -758,7 +759,7 @@ int ObPartitionMajorMerger::reuse_base_sstable(ObPartitionMergeHelper &merge_hel
             STORAGE_LOG(WARN, "curr row is unexpected null", K(ret), KPC(base_iter));
           } else if (OB_FAIL(process(*base_iter->get_curr_row()))) {
             STORAGE_LOG(WARN, "Failed to process row", K(ret), K(partition_fuser_->get_result_row()));
-            if (GCONF._enable_compaction_diagnose) {
+            if (config::_enable_compaction_diagnose()) {
               ObPartitionMergeDumper::print_error_info(ret, minimum_iters, *merge_ctx_);
             }
           } else if (OB_FAIL(base_iter->next())) {
@@ -914,7 +915,7 @@ int ObPartitionMinorMerger::merge_partition(
 
     if (OB_ITER_END != ret || OB_FAIL(merge_helper_->check_iter_end())) {
       STORAGE_LOG(WARN, "Partition merge did not end normally", K(ret));
-      if (OB_ALLOCATE_MEMORY_FAILED != ret && GCONF._enable_compaction_diagnose) {
+      if (OB_ALLOCATE_MEMORY_FAILED != ret && config::_enable_compaction_diagnose()) {
         ObPartitionMergeDumper::print_error_info(ret, merge_helper_->get_merge_iters(), *merge_ctx_);
         macro_writer_->dump_block_and_writer_buffer();
       }

@@ -37,7 +37,6 @@
 #include "share/ob_ddl_common.h"
 #include "rootserver/fork_table/ob_fork_table_util.h"
 #include "lib/utility/ob_common_utility.h"
-#include "share/config/ob_config.h" // ObConfigPairs
 #include "pl_ddl/ob_pl_ddl_service.h"
 
 namespace oceanbase

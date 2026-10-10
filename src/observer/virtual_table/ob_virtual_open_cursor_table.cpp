@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "config_bridge.h"
 #include "ob_virtual_open_cursor_table.h"
 #include "observer/ob_server.h"
 #include "observer/ob_server_runtime_access.h"
@@ -131,7 +132,7 @@ bool ObVirtualOpenCursorTable::FillScanner::operator()(sql::ObSQLSessionMgr::Key
                 K(output_column_ids_.count()));
   } else {
     uint64_t cell_idx = 0;
-    bool display_non_session_cursor = GCONF._display_non_session_cursor;
+    bool display_non_session_cursor = config::_display_non_session_cursor();
     if (sess_info->is_shadow()) {
       //this session info is logical free, shouldn't be added to scanner
     } else {

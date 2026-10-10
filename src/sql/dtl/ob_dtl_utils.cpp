@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_DTL
 
+#include "config_bridge.h"
 #include <algorithm>
 #include "ob_dtl_utils.h"
 #include "ob_dtl_flow_control.h"
@@ -34,7 +35,7 @@ int ObDtlAsynSender::calc_batch_buffer_cnt(int64_t &max_batch_size, int64_t &max
     ret = OB_ERR_UNEXPECTED;
   } else {
     const int64_t queue_size =
-        common::ObServerConfig::get_instance().server_task_queue_size;
+        ::oceanbase::config::server_task_queue_size();
     const int64_t max_buffer_cnt = std::max<int64_t>(1, (queue_size + 1) / 4);
     max_loop_cnt = channels_.count();
     max_batch_size = std::min(max_loop_cnt, max_buffer_cnt);

@@ -16,7 +16,9 @@
 
 #define USING_LOG_PREFIX SQL
 
+#include "config_bridge.h"
 #include "sql/engine/cmd/ob_vector_index_refresh.h"
+#include "sql/ob_sql_utils.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "data_plane/ddl/ob_ddl_coordinator.h"
 #include "data_plane/transaction/ob_i_transaction_service.h"
@@ -76,7 +78,7 @@ int ObVectorIndexRefresher::refresh() {
 
 int ObVectorIndexRefresher::get_current_scn(share::SCN &current_scn) {
   int ret = OB_SUCCESS;
-  const int64_t DEFAULT_TIMEOUT = GCONF.internal_sql_execute_timeout;
+  const int64_t DEFAULT_TIMEOUT = config::internal_sql_execute_timeout();
   data_plane::ObITransactionService *txs =
       data_plane::query_transaction_service();
   if (OB_ISNULL(txs)) {
@@ -103,10 +105,17 @@ int ObVectorIndexRefresher::get_table_row_count(const ObString &db_name,
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       common::sqlclient::ObMySQLResult *result = nullptr;
       ObSqlString sql;
-      if (OB_FAIL(sql.assign_fmt(
+      ObArenaAllocator allocator(common::ObMemAttr("VecIndexSQL"));
+      ObString escaped_db_name;
+      ObString escaped_table_name;
+      if (OB_FAIL(ObSQLUtils::generate_new_name_with_escape_character(
+              allocator, db_name, escaped_db_name))) {
+      } else if (OB_FAIL(ObSQLUtils::generate_new_name_with_escape_character(
+                     allocator, table_name, escaped_table_name))) {
+      } else if (OB_FAIL(sql.assign_fmt(
               "SELECT COUNT(*) AS CNT FROM `%.*s`.`%.*s` AS OF SNAPSHOT %ld",
-              static_cast<int>(db_name.length()), db_name.ptr(),
-              static_cast<int>(table_name.length()), table_name.ptr(),
+              static_cast<int>(escaped_db_name.length()), escaped_db_name.ptr(),
+              static_cast<int>(escaped_table_name.length()), escaped_table_name.ptr(),
               scn.get_val_for_tx()))) {
       } else if (OB_ISNULL(refresh_ctx_->trans_)) {
         ret = OB_ERR_UNEXPECTED;
@@ -177,11 +186,16 @@ int ObVectorIndexRefresher::get_vector_index_col_names(
       ret = OB_ERR_UNEXPECTED;
     }
   }
+  ObArenaAllocator allocator(common::ObMemAttr("VecIndexSQL"));
   for (int64_t i = 0; i < col_name_array.count() && OB_SUCC(ret); i++) {
     bool last_col = (i == (col_name_array.count() - 1));
     ObString &cur_col_name = col_name_array.at(i);
-    if (last_col && OB_FAIL(col_names.append_fmt("%.*s", static_cast<int>(cur_col_name.length()), cur_col_name.ptr()))) {
-    } else if (!last_col && OB_FAIL(col_names.append_fmt("%.*s, ", static_cast<int>(cur_col_name.length()), cur_col_name.ptr()))) {
+    ObString escaped_col_name;
+    if (OB_FAIL(ObSQLUtils::generate_new_name_with_escape_character(
+            allocator, cur_col_name, escaped_col_name))) {
+    } else if (OB_FAIL(col_names.append_fmt("`%.*s`%s",
+                   static_cast<int>(escaped_col_name.length()), escaped_col_name.ptr(),
+                   last_col ? "" : ", "))) {
     }
   }
   return ret;
@@ -293,6 +307,19 @@ int ObVectorIndexRefresher::do_refresh() {
                timeout_ctx.set_trx_timeout_us(DDL_INNER_SQL_EXECUTE_TIMEOUT))) {
   } else if (OB_FAIL(timeout_ctx.set_timeout(DDL_INNER_SQL_EXECUTE_TIMEOUT))) {
   } else if (domain_table_schema->is_vec_delta_buffer_type()) {
+    ObArenaAllocator allocator(common::ObMemAttr("VecIndexSQL"));
+    ObString escaped_db_name;
+    ObString escaped_domain_table_name;
+    ObString escaped_index_id_table_name;
+    if (OB_FAIL(ObSQLUtils::generate_new_name_with_escape_character(
+            allocator, db_schema->get_database_name_str(), escaped_db_name))) {
+    } else if (OB_FAIL(ObSQLUtils::generate_new_name_with_escape_character(
+                   allocator, domain_table_schema->get_table_name_str(),
+                   escaped_domain_table_name))) {
+    } else if (OB_FAIL(ObSQLUtils::generate_new_name_with_escape_character(
+                   allocator, index_id_tb_schema->get_table_name_str(),
+                   escaped_index_id_table_name))) {
+    }
     // do refresh
     if (OB_SUCC(ret)) {
       int64_t affected_rows = 0;
@@ -311,20 +338,18 @@ int ObVectorIndexRefresher::do_refresh() {
         } else if (OB_FAIL(insert_sel_sql.append_fmt(
                 "INSERT INTO `%.*s`.`%.*s` (%.*s) SELECT ora_rowscn, %.*s FROM "
                 "`%.*s`.`%.*s` WHERE ora_rowscn <= %lu",
-                static_cast<int>(db_schema->get_database_name_str().length()),
-                db_schema->get_database_name_str().ptr(),
-                static_cast<int>(
-                    index_id_tb_schema->get_table_name_str().length()),
-                index_id_tb_schema->get_table_name_str().ptr(),
+                static_cast<int>(escaped_db_name.length()),
+                escaped_db_name.ptr(),
+                static_cast<int>(escaped_index_id_table_name.length()),
+                escaped_index_id_table_name.ptr(),
                 static_cast<int>(index_id_tb_col_names.length()),
                 index_id_tb_col_names.ptr(),
                 static_cast<int>(domain_tb_col_names.length()),
                 domain_tb_col_names.ptr(),
-                static_cast<int>(db_schema->get_database_name_str().length()),
-                db_schema->get_database_name_str().ptr(),
-                static_cast<int>(
-                    domain_table_schema->get_table_name_str().length()),
-                domain_table_schema->get_table_name_str().ptr(),
+                static_cast<int>(escaped_db_name.length()),
+                escaped_db_name.ptr(),
+                static_cast<int>(escaped_domain_table_name.length()),
+                escaped_domain_table_name.ptr(),
                 refresh_ctx_->scn_.get_val_for_sql())))
         {
         } else if (OB_FAIL(refresh_ctx_->trans_->write(insert_sel_sql.ptr(), affected_rows))) {
@@ -339,11 +364,10 @@ int ObVectorIndexRefresher::do_refresh() {
         ObSqlString delete_sql;
         if (OB_FAIL(delete_sql.append_fmt(
                 "DELETE FROM `%.*s`.`%.*s` WHERE ora_rowscn <= %lu",
-                static_cast<int>(db_schema->get_database_name_str().length()),
-                db_schema->get_database_name_str().ptr(),
-                static_cast<int>(
-                    domain_table_schema->get_table_name_str().length()),
-                domain_table_schema->get_table_name_str().ptr(),
+                static_cast<int>(escaped_db_name.length()),
+                escaped_db_name.ptr(),
+                static_cast<int>(escaped_domain_table_name.length()),
+                escaped_domain_table_name.ptr(),
                 refresh_ctx_->scn_.get_val_for_sql()))) {
         } else if (OB_FAIL(refresh_ctx_->trans_->write(delete_sql.ptr(), affected_rows))) {
         }
@@ -540,7 +564,7 @@ int ObVectorIndexRefresher::do_rebuild() {
   if (OB_FAIL(ret)) {
   } else if (triggered && (!is_hybrid_vector || need_embedding_when_rebuild)) {
     LOG_INFO("start to rebuild vec index");
-    const int64_t ddl_rpc_timeout = GCONF._ob_ddl_timeout;
+    const int64_t ddl_rpc_timeout = config::_ob_ddl_timeout();
     ObTimeoutCtx timeout_ctx;
     ObAddr rs_addr = GCTX.self_addr();
     SMART_VAR(obcall::ObRebuildIndexArg, rebuild_index_arg) {

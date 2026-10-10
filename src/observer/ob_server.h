@@ -347,10 +347,10 @@ private:
   ~ObServer();
 
   int init_config(const ObServerOptions &opts);
-  int init_opts_config(const ObServerOptions &opts, const char *optstr); // init configs from command line
+  int init_opts_config(const ObServerOptions &opts); // init configs from command line
   int init_data_dir_and_redo_dir(const ObServerOptions &opts);
   int init_self_addr();
-  int init_config_module(const char *optstr);
+  int init_config_module();
   int init_tz_info_mgr();
   int init_pre_setting();
   int init_network();
@@ -428,7 +428,6 @@ private:
   common::ObMySQLProxy ddl_sql_proxy_;
 
   // The OceanBase configuration relating to.
-  common::ObServerConfig &config_;
   ObServerReloadConfig reload_config_;
   common::ObConfigManager config_mgr_;
   omt::ObTimezoneMgr &timezone_mgr_;

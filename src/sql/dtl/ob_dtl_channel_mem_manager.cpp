@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_DTL
 
+#include "config_bridge.h"
 #include "ob_dtl_channel_mem_manager.h"
 
 using namespace oceanbase::common;
@@ -25,7 +26,7 @@ using namespace oceanbase::sql;
 using namespace oceanbase::sql::dtl;
 
 ObDtlChannelMemManager::ObDtlChannelMemManager(ObDtlMemManager &mem_mgr) :
-  size_per_buffer_(GCONF.dtl_buffer_size), seqno_(-1), allocator_{}, pre_alloc_cnt_(0),
+  size_per_buffer_(config::dtl_buffer_size()), seqno_(-1), allocator_{}, pre_alloc_cnt_(0),
   max_mem_percent_(0), alloc_cnt_(0), free_cnt_(0), real_alloc_cnt_(0), real_free_cnt_(0), mem_mgr_(mem_mgr),
   mem_used_(0), last_update_memory_time_(-1)
 {}
@@ -51,7 +52,7 @@ int ObDtlChannelMemManager::init()
 int ObDtlChannelMemManager::get_max_mem_percent()
 {
   int ret = OB_SUCCESS;
-  max_mem_percent_ = GCONF._px_max_message_pool_pct;
+  max_mem_percent_ = config::_px_max_message_pool_pct();
   return ret;
 }
 

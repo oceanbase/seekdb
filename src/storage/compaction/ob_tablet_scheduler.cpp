@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
+#include "config_bridge.h"
 #include "ob_tablet_scheduler.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/ob_bloom_filter_task.h"
@@ -267,14 +268,10 @@ int ObTabletScheduler::init()
   int64_t schedule_interval = ObTabletSchedulerTaskMgr::DEFAULT_COMPACTION_SCHEDULE_INTERVAL;
   int64_t schedule_batch_size = ObScheduleBatchSizeMgr::DEFAULT_TABLET_BATCH_CNT;
 
-  {
-
-    schedule_interval = GCONF.ob_compaction_schedule_interval;
-    enable_adaptive_compaction = GCONF._enable_adaptive_compaction;
-    fast_freeze_checker_.reload_config(GCONF._ob_enable_fast_freeze);
-    schedule_batch_size = GCONF.compaction_schedule_tablet_batch_cnt;
-
-  } // end of ObRuntimeConfigGuard
+  schedule_interval = config::ob_compaction_schedule_interval();
+  enable_adaptive_compaction = config::_enable_adaptive_compaction();
+  fast_freeze_checker_.reload_config(config::_ob_enable_fast_freeze());
+  schedule_batch_size = config::compaction_schedule_tablet_batch_cnt();
 #ifdef ERRSIM
   schedule_interval = 1000L * 1000L; // 1s
 #endif
@@ -322,14 +319,10 @@ int ObTabletScheduler::reload_runtime_config()
     bool enable_adaptive_compaction = false;
     int64_t merge_schedule_interval = ObTabletSchedulerTaskMgr::DEFAULT_COMPACTION_SCHEDULE_INTERVAL;
     int64_t schedule_batch_size = ObScheduleBatchSizeMgr::DEFAULT_TABLET_BATCH_CNT;
-    {
-
-      merge_schedule_interval = GCONF.ob_compaction_schedule_interval;
-      enable_adaptive_compaction = GCONF._enable_adaptive_compaction;
-      fast_freeze_checker_.reload_config(GCONF._ob_enable_fast_freeze);
-      schedule_batch_size = GCONF.compaction_schedule_tablet_batch_cnt;
-
-    } // end of ObRuntimeConfigGuard
+    merge_schedule_interval = config::ob_compaction_schedule_interval();
+    enable_adaptive_compaction = config::_enable_adaptive_compaction();
+    fast_freeze_checker_.reload_config(config::_ob_enable_fast_freeze());
+    schedule_batch_size = config::compaction_schedule_tablet_batch_cnt();
     (void) runtime_status_.refresh_runtime_config(enable_adaptive_compaction);
 
     if (OB_FAIL(timer_task_mgr_.restart_scheduler_timer_task(merge_schedule_interval))) {
@@ -758,7 +751,7 @@ int ObTabletScheduler::schedule_tablet_minor_merge(
     int64_t minor_compact_trigger = ObPartitionMergePolicy::DEFAULT_MINOR_COMPACT_TRIGGER;
     {
 
-      minor_compact_trigger = GCONF.minor_compact_trigger;
+      minor_compact_trigger = config::minor_compact_trigger();
 
     }
 

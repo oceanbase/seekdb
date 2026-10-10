@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SERVER
+#include "config_bridge.h"
 #include "query/protocol/ob_mysql_packet_sender.h"
 #include "nio.h"
 #include "observer/mysql/ob_mysql_result_set.h"
@@ -591,7 +592,7 @@ int ObMPPacketSender::send_error_packet(int err,
       }
     }
 
-    if (ObServerConfig::get_instance().enable_rich_error_msg) {
+    if (::oceanbase::config::enable_rich_error_msg()) {
       // During the test process, if accessing the OceanBase cluster through a proxy,
       // Often it is unknown which observer the sql was sent to,
       // Need to query the proxy logs first, carefully compare the SQL text and error codes to confirm, which is very inefficient.
@@ -764,7 +765,7 @@ int ObMPPacketSender::send_ok_packet(ObSQLSessionInfo &session, ObOKPParam &ok_p
     if (OB_SUCC(ret)) {
       if (!ok_param.take_trace_id_to_client_) {
         const int64_t elapsed_time = ObClockGenerator::getClock() - query_receive_ts_;
-        bool is_slow = (elapsed_time > GCONF.trace_log_slow_query_watermark);
+        bool is_slow = (elapsed_time > config::trace_log_slow_query_watermark());
         ok_param.take_trace_id_to_client_ = is_slow;
       }
       if (ok_param.take_trace_id_to_client_) {

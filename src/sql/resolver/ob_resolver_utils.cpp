@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 
+#include "config_bridge.h"
+#include "share/config/ob_config_helper.h"
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
 
 #include "sql/engine/cmd/ob_load_data_parser.h"
@@ -5292,7 +5294,7 @@ int ObResolverUtils::set_parallel_info(sql::ObSQLSessionInfo &session_info,
 int ObResolverUtils::wait_for_sys_package_ready(ObSQLSessionInfo &session_info)
 {
   int ret = OB_SUCCESS;
-  if (GCONF._enable_async_load_sys_package && !GCTX.sys_package_ready_
+  if (config::_enable_async_load_sys_package() && !GCTX.sys_package_ready_
       && session_info.is_user_session() && share::server_is_write_enabled()) {
     const int64_t retry_interval_us = 100L * 1000L; // 100ms
     bool waited = false;
@@ -7067,7 +7069,7 @@ int64_t ObResolverUtils::get_mysql_max_partition_num()
 {
   int64_t max_partition_num = OB_MAX_PARTITION_NUM_MYSQL;
 
-  max_partition_num = GCONF.max_partition_num;
+  max_partition_num = config::max_partition_num();
 
   return max_partition_num;
 }

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX  SQL_ENG
 
+#include "config_bridge.h"
 #include "sql/engine/cmd/ob_variable_set_executor.h"
 #include "sql/engine/ob_physical_plan.h"
 #include "query/command/ob_root_service_serialization.h"
@@ -519,7 +520,7 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
       int64_t max_read_stale_time = 0;
       if (OB_FAIL(val.get_int(max_read_stale_time))) {
       } else if (max_read_stale_time != share::ObSysVarMeta::INVALID_MAX_READ_STALE_TIME &&
-                 max_read_stale_time < GCONF.weak_read_version_refresh_interval) {
+                 max_read_stale_time < config::weak_read_version_refresh_interval()) {
         ret = OB_INVALID_ARGUMENT;
         LOG_USER_ERROR(OB_INVALID_ARGUMENT,
                        "max_read_stale_time is smaller than weak_read_version_refresh_interval");

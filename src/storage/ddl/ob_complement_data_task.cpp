@@ -40,7 +40,6 @@ using namespace compaction;
 using namespace share;
 using namespace share::schema;
 using namespace sql;
-using namespace omt;
 using namespace name;
 using namespace transaction;
 using namespace blocksstable;

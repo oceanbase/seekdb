@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "config_bridge.h"
 #include "sql/engine/cmd/ob_lock_table_executor.h"
 #include "sql/resolver/ddl/ob_lock_table_stmt.h"
 #include "sql/engine/ob_exec_context.h"
@@ -43,7 +44,7 @@ int ObLockTableExecutor::execute_mysql_(ObExecContext &ctx,
   int ret = OB_SUCCESS;
   // only execute normally after enable lock_priority configuration, otherwise
   // it will directly throw OB_SUCCESS, which is an empty implementation
-  if (GCONF.enable_lock_priority) {
+  if (config::enable_lock_priority()) {
     switch(stmt.get_lock_stmt_type()) {
     case ObLockTableStmt::MYSQL_LOCK_TABLE_STMT: {
       ObMySQLLockTableExecutor executor;

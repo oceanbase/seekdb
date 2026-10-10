@@ -1,3 +1,4 @@
+#include "config_bridge.h"
 #include "share/ob_ex_rpc.h"
 /*
  * Copyright (c) 2025 OceanBase.
@@ -297,8 +298,8 @@ int ObRuntimeDDLService::init_system_variables(
         const int64_t default_px_servers_target =
             common::ObCpuShareCalculator::resolve_parallel_servers_target(
                 0,
-                static_cast<int64_t>(GCONF.get_server_default_min_cpu()),
-                GCONF.px_workers_per_cpu_quota);
+                static_cast<int64_t>(::oceanbase::common::get_server_default_min_cpu()),
+                config::px_workers_per_cpu_quota());
         VAR_INT_TO_STRING(val_buf, default_px_servers_target);
         SET_RUNTIME_VARIABLE(SYS_VAR_PARALLEL_SERVERS_TARGET, val_buf);
       }

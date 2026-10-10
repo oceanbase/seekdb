@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 
+#include "config_bridge.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h"
 #include "rootserver/fork_table/ob_fork_table_helper.h"
 #include "rootserver/ob_ddl_service.h"
@@ -335,7 +336,7 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
                                                  has_async_vec_index))) {
         } else if (has_async_vec_index) {
           common::sqlclient::ObISQLConnection *iconn = trans.get_connection();
-          const int64_t lock_timeout_us = GCONF.internal_sql_execute_timeout;
+          const int64_t lock_timeout_us = config::internal_sql_execute_timeout();
           if (OB_ISNULL(iconn)) {
             ret = OB_ERR_UNEXPECTED;
           } else if (OB_FAIL(transaction::tablelock::ObInnerConnectionLockUtil::lock_table(

@@ -85,10 +85,6 @@ public:
   { return tx_data_quota_used() + tx_data_metadata_tracker_.used(); }
 
 private:
-  void update_share_throttle_config_(const int64_t total_memory, common::ObServerConfig *config);
-  void update_memstore_throttle_config_(const int64_t total_memory, common::ObServerConfig *config);
-  void update_tx_data_throttle_config_(const int64_t total_memory, common::ObServerConfig *config);
-  void update_mds_throttle_config_(const int64_t total_memory, common::ObServerConfig *config);
 
 private:
   

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 
+#include "config_bridge.h"
 #include "ob_storage_meta_cache.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/blocksstable/ob_storage_cache_suite.h"
@@ -601,7 +602,7 @@ int ObStorageMetaCache::read_io(
     read_info.io_callback_ = &callback;
     read_info.io_desc_.set_mode(ObIOMode::READ);
     read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
-    read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
+    read_info.io_timeout_ms_ = config::_data_storage_io_timeout() / 1000L;
     handle.phy_addr_ = meta_addr;
     if (OB_FAIL(ObObjectReaderWriter::async_read(read_info, handle.io_handle_))) {
     }

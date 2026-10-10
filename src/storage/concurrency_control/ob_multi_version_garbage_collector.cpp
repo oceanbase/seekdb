@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "config_bridge.h"
 #include "storage/concurrency_control/ob_multi_version_garbage_collector.h"
 #include "query/ob_i_active_snapshot_service.h"
 #include "share/ob_share_util.h"
@@ -132,7 +133,7 @@ void ObMultiVersionGarbageCollector::destroy()
 
 void ObMultiVersionGarbageCollector::run_timer_task()
 {
-   if (!GCONF._mvcc_gc_using_min_txn_snapshot) {
+   if (!config::_mvcc_gc_using_min_txn_snapshot()) {
      cure();
    } else {
      (void)repeat_study();
@@ -428,7 +429,7 @@ void ObMultiVersionGarbageCollector::update_disk_pressure_status_(
 share::SCN ObMultiVersionGarbageCollector::get_reserved_snapshot_for_active_txn() const
 {
   return get_reserved_snapshot_for_active_txn_(
-      GCONF._mvcc_gc_using_min_txn_snapshot);
+      config::_mvcc_gc_using_min_txn_snapshot());
 }
 
 share::SCN ObMultiVersionGarbageCollector::get_reserved_snapshot_for_active_txn_(

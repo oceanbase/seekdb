@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "config_bridge.h"
 #include "ob_common_id_utils.h"
 #include "common/ob_timeout_ctx.h"
 #include "share/ob_share_util.h"
@@ -32,7 +33,7 @@ int ObCommonIDUtils::gen_unique_id(ObCommonID &id)
 {
   int ret = OB_SUCCESS;
   ObTimeoutCtx ctx;
-  const int64_t DEFAULT_TIMEOUT = GCONF.rpc_timeout;
+  const int64_t DEFAULT_TIMEOUT = config::rpc_timeout();
   int64_t unique_id = ObCommonID::INVALID_ID;
 
   id.reset();

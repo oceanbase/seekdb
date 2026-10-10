@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "config_bridge.h"
 #include "sql/engine/dml/ob_dml_service.h"
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "share/rc/ob_server_runtime.h"
@@ -1941,7 +1942,7 @@ int ObDMLService::check_local_index_affected_rows(int64_t table_affected_rows,
                                                   ObDASDMLBaseRtDef &related_rtdef)
 {
   int ret = OB_SUCCESS;
-  if (GCONF.enable_defensive_check()) {
+  if ((config::_enable_defensive_check() > 0)) {
     if (table_affected_rows != index_affected_rows
         && !related_ctdef.table_param_.get_data_table().is_domain_index()) {
       ret = OB_ERR_DEFENSIVE_CHECK;
@@ -2001,7 +2002,7 @@ int ObDMLService::check_dml_tablet_validity(ObDMLRtCtx &dml_rtctx,
                                             ObDMLBaseRtDef &dml_rtdef)
 {
   int ret = OB_SUCCESS;
-  if (GCONF.enable_strict_defensive_check()) {
+  if ((config::_enable_defensive_check() == 2)) {
     //only strict defensive check need to check tablet validity, otherwise ignore it
     ObTableLocation *tmp_location = nullptr;
     ObSEArray<ObTabletID, 1> tablet_ids;

@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_DTL
+#include "config_bridge.h"
 #include "ob_dtl_channel_loop.h"
 
 using namespace oceanbase::common;
@@ -209,7 +210,7 @@ int ObDtlChannelLoop::process_base(ObIDltChannelLoopPred *pred, int64_t &hinted_
       if (timeout > 0) {
         cond_.wait(wait_key, timeout);
       } else if (OB_UNLIKELY(INT64_MAX == timeout_)) {
-        timeout_ = GCONF._parallel_server_sleep_time * 1000;
+        timeout_ = config::_parallel_server_sleep_time() * 1000;
         cond_.wait(wait_key, timeout_);
       } else {
         cond_.wait(wait_key, timeout_);

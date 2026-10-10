@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "config_bridge.h"
 #include "storage/tx/ob_tx_ctx.h"
 
 #include "lib/allocator/ob_malloc.h"
@@ -83,7 +84,7 @@ int ObTxCtx::get_log_cb_(ObTxLogCb *&log_cb)
   int ret = OB_SUCCESS;
   ObTxLogCb *new_log_cb = nullptr;
   int64_t allocated_log_cb_count = 0;
-  const int64_t trx_max_log_cb_limit = GCONF._trx_max_log_cb_limit;
+  const int64_t trx_max_log_cb_limit = config::_trx_max_log_cb_limit();
 
   if (OB_NOT_NULL(log_cb)) {
     ret = OB_INVALID_ARGUMENT;

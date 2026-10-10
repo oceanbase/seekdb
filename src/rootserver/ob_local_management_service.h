@@ -18,6 +18,7 @@
 #define OCEANBASE_ROOTSERVER_OB_LOCAL_MANAGEMENT_SERVICE_H_
 
 #include "lib/net/ob_addr.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "lib/task/ob_timer.h"
 #include "lib/thread/ob_async_task_queue.h"
 
@@ -46,7 +47,6 @@ class ObILocalCommandService;
 namespace common
 {
 class ObPacket;
-class ObServerConfig;
 class ObConfigManager;
 class ObMySQLProxy;
 class ObRequestTZInfoResult;
@@ -109,7 +109,7 @@ public:
   ObLocalManagementService();
   virtual ~ObLocalManagementService();
 
-  int init(common::ObServerConfig &config, common::ObConfigManager &config_mgr,
+  int init(common::ObConfigManager &config_mgr,
            common::ObAddr &self, common::ObMySQLProxy &sql_proxy,
            share::schema::ObMultiVersionSchemaService *schema_mgr_,
            const bool need_bootstrap);
@@ -126,11 +126,10 @@ public:
   bool in_debug() const { return debug_; }
   void set_debug() { debug_ = true; }
   int reload_config();
-  virtual bool check_config(const ObConfigItem &item, const char *&err_info);
+  virtual bool check_config(const char *name, const char *value, const char *&err_info);
   // misc get functions
   share::schema::ObMultiVersionSchemaService &get_schema_service() { return *schema_service_; }
   common::ObMySQLProxy &get_sql_proxy() { return sql_proxy_; }
-  common::ObServerConfig *get_server_config() { return config_; }
   int64_t get_core_meta_table_version() { return core_meta_table_version_; }
   ObRootMinorFreeze &get_root_minor_freeze() { return root_minor_freeze_; }
   void set_local_command_service(query::ObILocalCommandService &service)
@@ -339,7 +338,6 @@ private:
   bool debug_;
 
   common::ObAddr self_addr_;
-  common::ObServerConfig *config_;
   common::ObConfigManager *config_mgr_;
 
   common::ObMySQLProxy sql_proxy_;

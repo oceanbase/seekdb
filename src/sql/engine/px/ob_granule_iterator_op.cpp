@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "config_bridge.h"
 #include "ob_granule_iterator_op.h"
 #include "src/sql/engine/dml/ob_table_modify_op.h"
 #include "sql/engine/px/p2p_datahub/ob_runtime_filter_msg.h"
@@ -110,7 +111,7 @@ int ObGITaskReBalancer::trigger_rebalance(ObGranuleIteratorOp *gi_op, bool &need
   int64_t cur_timestamp =  ObTimeUtil::current_time();
   int64_t trigger_time = 10 * 1000UL;
 
-  trigger_time = (GCONF._px_task_rebalance_trigger_time);
+  trigger_time = (config::_px_task_rebalance_trigger_time());
 
   //+1 in case of cur_timestamp == wait_until_time;
   int64_t wait_until_time = cur_timestamp + 1 + max(trigger_time, split_gi_task_cost_);

@@ -1,0 +1,22 @@
+[package]
+name = "config"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Durable instance parameter configuration for seekdb"
+
+[lib]
+name = "config"
+crate-type = ["staticlib", "rlib"]
+
+[build-dependencies]
+cbindgen = "=0.29.4"
+cxx-build = "1"
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+
+[dependencies]
+cxx = "1"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_Threading"] }

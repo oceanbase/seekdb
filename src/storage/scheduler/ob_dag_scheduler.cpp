@@ -15,6 +15,8 @@
  */
 
 #define USING_LOG_PREFIX COMMON
+#include "share/ob_server_struct.h"
+#include "config_bridge.h"
 #include "data_plane/scheduler/ob_dag_scheduler.h"
 #include "data_plane/scheduler/ob_sys_task_stat.h"
 #include "share/rc/ob_server_runtime.h"
@@ -31,7 +33,6 @@ namespace oceanbase
 {
 using namespace lib;
 using namespace common;
-using namespace omt;
 using namespace compaction;
 
 namespace lib
@@ -1452,7 +1453,7 @@ int64_t ObIDagNet::to_string(char* buf, const int64_t buf_len) const
 void ObIDagNet::init_dag_id()
 {
   if (dag_net_id_.is_invalid()) {
-    dag_net_id_.init(GCONF.self_addr_);
+    dag_net_id_.init(GCTX.self_addr());
   }
 }
 
@@ -3681,12 +3682,12 @@ void ObDagScheduler::wait()
 void ObDagScheduler::reload_config()
 {
 
-  set_thread_score(ObDagPrio::DAG_PRIO_COMPACTION_HIGH, GCONF.compaction_high_thread_score);
-  set_thread_score(ObDagPrio::DAG_PRIO_COMPACTION_MID, GCONF.compaction_mid_thread_score);
-  set_thread_score(ObDagPrio::DAG_PRIO_COMPACTION_LOW, GCONF.compaction_low_thread_score);
-  set_thread_score(ObDagPrio::DAG_PRIO_STORAGE_HIGH, GCONF.storage_high_thread_score);
-  set_thread_score(ObDagPrio::DAG_PRIO_DDL, GCONF.ddl_thread_score);
-  set_compaction_dag_limit(GCONF.compaction_dag_cnt_limit);
+  set_thread_score(ObDagPrio::DAG_PRIO_COMPACTION_HIGH, config::compaction_high_thread_score());
+  set_thread_score(ObDagPrio::DAG_PRIO_COMPACTION_MID, config::compaction_mid_thread_score());
+  set_thread_score(ObDagPrio::DAG_PRIO_COMPACTION_LOW, config::compaction_low_thread_score());
+  set_thread_score(ObDagPrio::DAG_PRIO_STORAGE_HIGH, config::storage_high_thread_score());
+  set_thread_score(ObDagPrio::DAG_PRIO_DDL, config::ddl_thread_score());
+  set_compaction_dag_limit(config::compaction_dag_cnt_limit());
 
 }
 

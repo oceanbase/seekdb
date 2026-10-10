@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "share/ob_server_struct.h"
+#include "config_bridge.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/alloc/alloc_func.h"
 #include "ob_memstore_freezer.h"
@@ -98,12 +100,12 @@ int ObMemstoreFreezer::init()
 	int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-  } else if (OB_UNLIKELY(!GCONF.self_addr_.is_valid())) {
+  } else if (OB_UNLIKELY(!GCTX.self_addr().is_valid())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(freeze_trigger_timer_.init("MemstoreFreezer", ObMemAttr("MemstoreFreezer")))) {
   } else {
     is_freezing_tx_data_ = false;
-    self_ = GCONF.self_addr_;
+    self_ = GCTX.self_addr();
 
     freezer_stat_.reset();
     freezer_history_.reset();
@@ -1150,7 +1152,7 @@ int64_t ObMemstoreFreezer::get_freeze_trigger_percentage_()
   static const int64_t DEFAULT_FREEZE_TRIGGER_PERCENTAGE = 20;
   int64_t percent = DEFAULT_FREEZE_TRIGGER_PERCENTAGE;
 
-  percent = GCONF.freeze_trigger_percentage;
+  percent = config::freeze_trigger_percentage();
 
   return percent;
 }
@@ -1325,7 +1327,7 @@ bool ObMemstoreFreezer::is_major_freeze_turn_()
   const int64_t freeze_cnt = memstore_info_.freeze_cnt_;
   int64_t major_compact_trigger = INT64_MAX;
 
-  major_compact_trigger = GCONF.major_compact_trigger;
+  major_compact_trigger = config::major_compact_trigger();
 
   return (major_compact_trigger != 0 && freeze_cnt >= major_compact_trigger);
 }
@@ -1724,8 +1726,8 @@ void ObMemstoreAllocator::init_throttle_config(int64_t &resource_limit,
   const int64_t MEMSTORE_THROTTLE_TRIGGER_PERCENTAGE = 60;
   const int64_t MEMSTORE_THROTTLE_MAX_DURATION = 2LL * 60LL * 60LL * 1000LL * 1000LL;  // 2 hours
 
-  trigger_percentage = GCONF.writing_throttling_trigger_percentage;
-  max_duration = GCONF.writing_throttling_maximum_duration;
+  trigger_percentage = config::writing_throttling_trigger_percentage();
+  max_duration = config::writing_throttling_maximum_duration();
   if (trigger_percentage <= 0 || max_duration <= 0) {
     COMMON_LOG_RET(WARN, OB_INVALID_CONFIG, "init throttle config with default value");
     trigger_percentage = MEMSTORE_THROTTLE_TRIGGER_PERCENTAGE;
@@ -1749,10 +1751,9 @@ void ObSharedMemAllocMgr::update_throttle_config()
 
 
   const int64_t memory_budget = lib::get_memory_budget();
-  common::ObServerConfig *runtime_config = &GCONF;
   {
-    int64_t trigger_percentage = runtime_config->writing_throttling_trigger_percentage;
-    int64_t max_duration = runtime_config->writing_throttling_maximum_duration;
+    int64_t trigger_percentage = config::writing_throttling_trigger_percentage();
+    int64_t max_duration = config::writing_throttling_maximum_duration();
     const int64_t memstore_limit = GMEMCONF.get_memstore_memory_limit();
     const int64_t share_mem_limit = get_tx_share_memory_limit();
     const int64_t tx_data_limit = ObTxDataAllocator::get_memory_limit();

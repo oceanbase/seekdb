@@ -17,6 +17,7 @@
 #ifndef OCEANBAE_LIB_OB_TRUNCATED_STRING_H_
 #define OCEANBAE_LIB_OB_TRUNCATED_STRING_H_
 
+#include "config_bridge.h"
 #include "lib/string/ob_string.h"
 #include "share/config/ob_server_config.h"
 
@@ -36,8 +37,8 @@ public:
 
   explicit ObTruncatedString(const ObString &str)
   {
-    const int32_t len = (GCONF.max_string_print_length < str.length()) ?
-                    static_cast<int32_t>(GCONF.max_string_print_length) : str.length();
+    const int32_t len = (config::max_string_print_length() < str.length()) ?
+                    static_cast<int32_t>(config::max_string_print_length()) : str.length();
     str_ = ObString(len, str.ptr());
   }
   inline int32_t length() const { return str_.length(); }

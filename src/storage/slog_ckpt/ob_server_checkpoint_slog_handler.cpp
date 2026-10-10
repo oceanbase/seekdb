@@ -16,8 +16,10 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "share/ob_server_struct.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_server_checkpoint_slog_handler.h"
+#include "lib/utility/ob_smart_var.h"
 #include "storage/api/storage/runtime/ob_i_server_runtime.h"
 #include "storage/blocksstable/ob_block_manager.h"
 #include "storage/slog/ob_storage_log.h"
@@ -37,7 +39,7 @@ using namespace oceanbase::blocksstable;
 void ObServerCheckpointSlogHandler::ObWriteCheckpointTask::runTimerTask()
 {
   int ret = OB_SUCCESS;
-  ObCurTraceId::init(GCONF.self_addr_);
+  ObCurTraceId::init(GCTX.self_addr());
   if (SERVER_STORAGE_META_SERVICE.is_started()) {
     if (OB_FAIL(handler_->write_checkpoint(false/*is_force*/))) {
     }

@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_RESV
+#include "config_bridge.h"
 #include "sql/resolver/ddl/ob_create_index_resolver.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/resolver/ddl/ob_vec_index_builder_util.h"
@@ -199,7 +200,7 @@ int ObCreateIndexResolver::resolve_index_column_node(
       if (OB_FAIL(ret)) {
         // do nothing
       } else if (index_keyname_ == MULTI_KEY || index_keyname_ == MULTI_UNIQUE_KEY) {
-        if (!GCONF._enable_add_fulltext_index_to_existing_table) {
+        if (!config::_enable_add_fulltext_index_to_existing_table()) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "build multivalue index afterward");
         }

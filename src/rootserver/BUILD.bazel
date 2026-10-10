@@ -1438,6 +1438,7 @@ seekdb_semantic_unity_cc_library(
     implementation_deps = [
         ":rootserver_interface",
         ":rootserver_internal_headers",
+        "//rust:config_bridge_headers",
     ] + _ROOTSERVER_RUNTIME_COMMON_DEPS,
     features = ["layering_check"],
     tags = ["manual"],

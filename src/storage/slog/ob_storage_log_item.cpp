@@ -247,7 +247,7 @@ int ObStorageLogItem::fill_log(
 }
 
 int ObStorageLogItem::fill_batch_header(
-    const int32 data_len,
+    const int32_t data_len,
     const int16_t cnt,
     int64_t pos)
 {

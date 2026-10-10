@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "share/ob_server_struct.h"
 #include "observer/vector_index/ob_vector_index_async_task_scheduler.h"
 #include "observer/vector_index/ob_vector_index_async_task_util.h"
 #include "share/ob_max_id_fetcher.h"
@@ -33,13 +34,13 @@ namespace share
 
 void ObVectorIndexHistoryTask::runTimerTask()
 {
-  ObCurTraceId::init(GCONF.self_addr_);
+  ObCurTraceId::init(GCTX.self_addr());
   do_work(); // ignore error
 }
 
 void ObVectorIndexHistoryTask::do_work()
 {
-  ObCurTraceId::init(GCONF.self_addr_);
+  ObCurTraceId::init(GCTX.self_addr());
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;

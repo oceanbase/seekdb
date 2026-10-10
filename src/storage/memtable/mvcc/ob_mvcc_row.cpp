@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "config_bridge.h"
 #include "ob_mvcc_row.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/memtable/ob_row_compactor.h"
@@ -505,12 +506,12 @@ bool ObMvccRow::need_compact(const bool for_read, const bool for_replay)
   bool bool_ret = false;
   const int32_t updates = ATOMIC_LOAD(&update_since_compact_);
   const int32_t compact_trigger = (for_read || for_replay)
-      ? ObServerConfig::get_instance().row_compaction_update_limit * 3
-      : ObServerConfig::get_instance().row_compaction_update_limit;
+      ? ::oceanbase::config::row_compaction_update_limit() * 3
+      : ::oceanbase::config::row_compaction_update_limit();
   // Standby hotspot row compact frequency needs to be reduced
   if (NULL != index_ && for_replay) {
     // Hotline scenario
-    if (updates >= max(2048, ObServerConfig::get_instance().row_compaction_update_limit * 10)) {
+    if (updates >= max(2048, ::oceanbase::config::row_compaction_update_limit() * 10)) {
       bool_ret = ATOMIC_BCAS(&update_since_compact_, updates, 0);
     }
   } else if (updates >= compact_trigger) {

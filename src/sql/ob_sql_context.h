@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_SQL_CONTEXT_
 #define OCEANBASE_SQL_CONTEXT_
 
+#include "share/rc/ob_server_runtime.h"
 #include "ob_sql_utils.h"
 #include "lib/net/ob_addr.h"
 #include "lib/hash/ob_placement_hashset.h"
@@ -26,7 +27,6 @@
 #include "lib/hash_func/murmur_hash.h"
 #include "sql/ob_sql_temp_table.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
-#include "share/config/ob_runtime_config.h"
 #include "sql/monitor/ob_sql_stat_record.h"
 #include "query/optimizer/ob_optimizer_location_defs.h"
 #include "query/optimizer/stat/ob_opt_ds_stat.h"
