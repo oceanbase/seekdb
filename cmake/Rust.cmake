@@ -52,11 +52,15 @@ else()
   set(_cargo_out_subdir "release")
 endif()
 
-# Cargo otherwise builds for the macOS host during an Android CMake cross-build.
+# Cargo otherwise builds for the host during a mobile CMake cross-build.
 # Keep the Rust static library on the same target and API level as the C++ code.
 set(_cargo_target_args)
 set(_cargo_target_subdir)
-if(ANDROID)
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+  set(_rust_target_triple "${SEEKDB_IOS_RUST_TARGET}")
+  list(APPEND _cargo_target_args "--target" "${_rust_target_triple}")
+  set(_cargo_target_subdir "${_rust_target_triple}/")
+elseif(ANDROID)
   if(NOT CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a")
     message(FATAL_ERROR "[rust] unsupported Android ABI: ${CMAKE_ANDROID_ARCH_ABI}")
   endif()
@@ -66,7 +70,8 @@ if(ANDROID)
 endif()
 
 # Keep all cargo output inside the CMake build tree (isolated per build dir).
-set(RUST_TARGET_DIR "${CMAKE_BINARY_DIR}/rust-target")
+set(RUST_TARGET_DIR "${CMAKE_BINARY_DIR}/rust-target" CACHE PATH
+    "Cargo output directory; may reuse a previously built target directory")
 # Cargo's staticlib artifact name is platform-specific: libsql_nio.a on
 # Unix/MSYS, sql_nio.lib with the MSVC toolchain.
 if(WIN32)
@@ -149,7 +154,11 @@ if(APPLE)
   # gets no such implicit flag, so the vendored devtools clang cannot find the
   # macOS SDK headers (TargetConditionals.h). SDKROOT is the env var the clang
   # driver itself honors.
-  if(CMAKE_OSX_SYSROOT)
+  if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    list(APPEND _rust_build_env
+      "SDKROOT=${SEEKDB_IOS_SDK_PATH}"
+      "IPHONEOS_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}")
+  elseif(CMAKE_OSX_SYSROOT)
     list(APPEND _rust_build_env "SDKROOT=${CMAKE_OSX_SYSROOT}")
   else()
     execute_process(COMMAND xcrun --show-sdk-path
@@ -172,7 +181,6 @@ endif()
 add_custom_command(
   OUTPUT "${SQL_NIO_STATICLIB}"
   BYPRODUCTS "${CONFIG_STATICLIB}"
-             "${SQL_NIO_INCLUDE_DIR}/nio.h" "${CONFIG_INCLUDE_DIR}/config.h"
              "${RUST_TARGET_DIR}/include/config_bridge.h"
              "${RUST_TARGET_DIR}/include/config_checkers.h"
   COMMAND "${CMAKE_COMMAND}" -E env ${_rust_build_env}

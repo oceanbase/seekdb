@@ -18,8 +18,12 @@ function(seekdb_external_cargo_toolchain cargo_variable toolchain_variable)
   get_property(_cargo GLOBAL PROPERTY SEEKDB_EXTERNAL_CARGO_EXECUTABLE)
   get_property(_toolchain GLOBAL PROPERTY SEEKDB_EXTERNAL_RUST_TOOLCHAIN)
   if(NOT _cargo OR NOT _toolchain)
-    find_program(_cargo cargo
-      HINTS "$ENV{CARGO_HOME}/bin" "$ENV{HOME}/.cargo/bin" REQUIRED)
+    if(CARGO)
+      set(_cargo "${CARGO}")
+    else()
+      find_program(_cargo cargo
+        HINTS "$ENV{CARGO_HOME}/bin" "$ENV{HOME}/.cargo/bin" REQUIRED)
+    endif()
     set(_toolchain_manifest "${CMAKE_SOURCE_DIR}/rust/rust-toolchain.toml")
     file(STRINGS "${_toolchain_manifest}" _toolchain_line
       REGEX "^[ \t]*channel[ \t]*=[ \t]*\"[0-9]+\\.[0-9]+\\.[0-9]+\"")
@@ -64,17 +68,30 @@ function(seekdb_external_add_cargo_artifacts)
   set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${ARG_MANIFEST}" "${_lockfile}")
 
+  set(_target_args)
+  if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    list(APPEND _target_args "--target" "${SEEKDB_IOS_RUST_TARGET}")
+  endif()
+
+  # Run through a CMake script so newline-delimited configure arguments remain
+  # one environment value instead of becoming extra lines in generated Makefiles.
+  set(_runner "${CMAKE_CURRENT_BINARY_DIR}/${ARG_NAME}-cargo.cmake")
+  set(_runner_content "execute_process(COMMAND [==[${CMAKE_COMMAND}]==] -E env\n")
+  foreach(_argument IN ITEMS "RUSTUP_TOOLCHAIN=${_rust_toolchain}"
+      "CARGO_TARGET_DIR=${_cargo_target}" "MAKEFLAGS=" ${ARG_ENV}
+      "${_cargo}" build --locked --release --jobs 4 ${_target_args}
+      --manifest-path "${ARG_MANIFEST}")
+    string(APPEND _runner_content "  [==[${_argument}]==]\n")
+  endforeach()
+  string(APPEND _runner_content "  COMMAND_ERROR_IS_FATAL ANY)\n")
+  file(GENERATE OUTPUT "${_runner}" CONTENT "${_runner_content}")
+
   add_custom_command(
     OUTPUT ${ARG_OUTPUTS}
     COMMAND "${CMAKE_COMMAND}" -E rm -rf "${_cargo_target}"
-    COMMAND "${CMAKE_COMMAND}" -E env
-      "RUSTUP_TOOLCHAIN=${_rust_toolchain}"
-      "CARGO_TARGET_DIR=${_cargo_target}"
-      "MAKEFLAGS="
-      ${ARG_ENV}
-      "${_cargo}" build --locked --release --jobs 4
-        --manifest-path "${ARG_MANIFEST}"
+    COMMAND "${CMAKE_COMMAND}" -P "${_runner}"
     DEPENDS
+      "${_runner}"
       "${ARG_MANIFEST}"
       "${_lockfile}"
       "${_toolchain_manifest}"

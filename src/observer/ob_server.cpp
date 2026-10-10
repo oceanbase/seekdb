@@ -29,6 +29,8 @@
 #endif
 #include <thread>
 #include "observer/ob_server.h"
+#include "observer/ob_system_package_load_service.h"
+#include "rootserver/ob_ddl_service_launcher.h"
 #include "share/ob_autoincrement_service.h"
 #include "observer/ob_req_time_service.h"
 #include "observer/omt/ob_ai_service.h"
@@ -636,6 +638,7 @@ ObServer::~ObServer()
 
 int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
 {
+  in_process_ = opts.in_process_;
   gctx_.set_embedded_mode(opts.embedded_);
   FLOG_INFO("[OBSERVER_NOTICE] start to init observer");
   DBA_STEP_RESET(server_start);
@@ -876,7 +879,9 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
     Sleep(3000);
 #endif
     set_stop();
-    destroy();
+    if (!in_process_) {
+      destroy();
+    }
   } else {
     FLOG_INFO("[OBSERVER_NOTICE] success to init observer",
         "lib::g_runtime_enabled", lib::g_runtime_enabled);
@@ -1127,10 +1132,12 @@ int ObServer::start()
                     DBA_STEP_INC_INFO(server_start),
                     "observer instance start begin.");
 
-    if (FAILEDx(signal_handle_.start())) {
-      LOG_ERROR("fail to start signal handler", KR(ret));
-    } else {
-      FLOG_INFO("success to start signal handler");
+    if (!in_process_) {
+      if (FAILEDx(signal_handle_.start())) {
+        LOG_ERROR("fail to start signal handler", KR(ret));
+      } else {
+        FLOG_INFO("success to start signal handler");
+      }
     }
     if (FAILEDx(startup_accel_handler_.start())) {
       LOG_ERROR("fail to start server startup task handler", KR(ret));
@@ -1516,12 +1523,32 @@ void ObServer::set_stop()
   FLOG_INFO("[OBSERVER_NOTICE] observer is setted to stop");
 }
 
+/** Cancel package DDL before joining its loader; null modules support partial initialization. */
+static void stop_in_process_package_ddl(
+    rootserver::ObDDLServiceLauncher *launcher,
+    rootserver::ObSystemPackageLoadService *loader)
+{
+  if (launcher != nullptr) {
+    launcher->deactivate();
+  }
+  if (loader != nullptr) {
+    loader->stop();
+    loader->wait();
+  }
+}
+
 int ObServer::stop()
 {
   int ret = OB_SUCCESS;
   int fail_ret = OB_SUCCESS;
   FLOG_INFO("[OBSERVER_NOTICE] stop observer begin");
   LOG_DBA_INFO_V2(OB_SERVER_STOP_BEGIN, "observer stop begin.");
+
+  if (in_process_) {
+    // DDL retries must observe cancellation while schema and SQL services are still available.
+    // Otherwise session cleanup waits for a loader query that cannot publish its schema.
+    stop_in_process_package_ddl(mods_ddl_service_launcher_, mods_system_package_load_service_);
+  }
 
   FLOG_INFO("begin to stop OB_LOGGER");
   OB_LOGGER.stop();
@@ -1611,6 +1638,10 @@ int ObServer::stop()
     // It will wait for all requests done.
     FLOG_INFO("begin to stop server runtime");
     server_runtime_controller_.stop();
+    if (in_process_) {
+      // Join workers and stop/wait storage modules before destroying their owners.
+      server_runtime_controller_.wait();
+    }
     FLOG_INFO("server runtime stopped");
     FLOG_INFO("begin to stop ob_service");
     if (OB_NOT_NULL(standby_module_)) {
@@ -1686,13 +1717,16 @@ int ObServer::wait()
   LOG_DBA_INFO_V2(OB_SERVER_WAIT_BEGIN, "observer process wait begin.");
   // wait for stop flag
 
-  if (gctx_.is_embedded_mode()) {
+  if (!in_process_ && gctx_.is_embedded_mode()) {
     std::thread([this]() { wait_no_client(); }).detach();
   }
 
   FLOG_INFO("begin to wait observer setted to stop");
   while (OB_SUCC(ret) && !stop_) {
     SLEEP(3);
+  }
+  if (in_process_) {
+    return stop();
   }
   _Exit(0);
   return ret;

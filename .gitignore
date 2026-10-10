@@ -389,6 +389,7 @@ src/oblib/grpc/*.pb.cpp
 !src/oblib/grpc/standbyservice.grpc.pb.h
 !src/oblib/grpc/standbyservice.grpc.pb.cc
 deps/3rd
+deps/ios/
 deps/3rd_party
 deps/usr
 win_deps_archives/
@@ -406,3 +407,6 @@ test/var
 CLAUDE.md
 .omo/
 seekdb_data/
+
+# Local Python bytecode for the iOS build helpers.
+deps/ios-build/__pycache__/

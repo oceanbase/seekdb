@@ -43,6 +43,7 @@
 #else
 #include <unistd.h>
 #ifdef __APPLE__
+#include <TargetConditionals.h>
 #include <time.h>
 #include <uuid/uuid.h>
 #endif
@@ -951,7 +952,8 @@ static int get_telemetry_stable_machine_id(char *machine_id,
   MEMSET(raw_id, 0, sizeof(raw_id));
   return ret;
 }
-#elif defined(__APPLE__)
+#elif defined(__APPLE__) && !TARGET_OS_IPHONE
+// Host UUID is a macOS API; iOS falls back to the explicit scope ID when supplied.
 static int get_telemetry_stable_machine_id(char *machine_id,
                                            const int64_t machine_id_len,
                                            int64_t &value_len)

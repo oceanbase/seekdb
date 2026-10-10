@@ -28,10 +28,10 @@ function usage
   cat <<'EOF'
 Usage:
   ./build.sh -h
-  ./build.sh init [--android]
+  ./build.sh init [--android | --ios [--simulator]]
   ./build.sh clean
-  ./build.sh release [--init] [--android] [-DName=Value ...]
-  ./build.sh release [--init] [--android] [-DName=Value ...] --make [MakeOptions]
+  ./build.sh release [--init] [--android | --ios [--simulator]] [-DName=Value ...]
+  ./build.sh release [--init] [--android | --ios [--simulator]] [-DName=Value ...] --make [MakeOptions]
   ./build.sh sanity [--init] [-DName=Value ...]
   ./build.sh sanity [--init] [-DName=Value ...] --make [MakeOptions]
   ./build.sh {rpm|deb|tgz} [--init] [-DName=Value ...]
@@ -44,6 +44,10 @@ Supported compatibility build:
   Sanity is a Linux-only CMake RelWithDebInfo Unity build with memory
   instrumentation enabled.
   Host platforms: Linux and macOS. Android cross-compilation: arm64-v8a.
+  iOS cross-compilation on macOS with Xcode: arm64 iPhone, or the Apple Silicon
+  iOS simulator with --simulator; --make builds SeekDB.framework. For iOS,
+  --init also builds deps/ios-build into deps/ios/<sdk>/devel.
+  iOS also accepts -DCMAKE_BUILD_TYPE=Debug.
   Windows x64 uses build.ps1.
 
 Examples:
@@ -59,6 +63,7 @@ Examples:
   ./build.sh deb --init --make -j80 deb
   ./build.sh tgz --init --make -j16 tgz
   ./build.sh release --android --init --make -j16
+  ./build.sh release --ios --simulator --init --make -j8
 
 On Linux, CMake also provides module unit-test targets and the pretest aggregate.
 See docs/developer-guide/en/unittest.md for build and test commands.
@@ -109,9 +114,17 @@ function find_cmake
 
 function do_init
 {
-  local android_build=$1
+  local platform=$1
+  local android_build=false
   local start_time end_time elapsed
   local status=0
+  local -a ios_args=(--jobs "$(cpu_count)" --reuse)
+
+  if [[ "${platform}" == android ]]; then
+    android_build=true
+  elif [[ "${platform}" == ios-simulator ]]; then
+    ios_args+=(--simulator)
+  fi
 
   if [[ ! -f "${DEP_INIT_DIR}/dep_create.sh" ]]; then
     echo_err "dependency initializer not found: ${DEP_INIT_DIR}/dep_create.sh"
@@ -127,6 +140,9 @@ function do_init
     echo_err "dependency initialization failed with status ${status}"
     return "${status}"
   fi
+  if [[ "${platform}" == ios* ]]; then
+    python3 "${TOPDIR}/deps/ios-build/build.py" "${ios_args[@]}" || return $?
+  fi
   (
     cd "${TOPDIR}/rust" &&
       rustup toolchain install --no-self-update
@@ -139,12 +155,21 @@ function do_init
 
 function release_build_dir
 {
-  local android_build=$1
-  if [[ "${android_build}" == true ]]; then
-    printf '%s\n' "${TOPDIR}/build_android_release"
-  else
-    printf '%s\n' "${TOPDIR}/build_release"
-  fi
+  local platform=$1
+  case "${platform}" in
+    android)
+      printf '%s\n' "${TOPDIR}/build_android_release"
+      ;;
+    ios)
+      printf '%s\n' "${TOPDIR}/build_ios_release"
+      ;;
+    ios-simulator)
+      printf '%s\n' "${TOPDIR}/build_ios_simulator_release"
+      ;;
+    *)
+      printf '%s\n' "${TOPDIR}/build_release"
+      ;;
+  esac
 }
 
 function remove_managed_build_dir
@@ -152,7 +177,7 @@ function remove_managed_build_dir
   local build_dir=$1
 
   case "${build_dir}" in
-    "${TOPDIR}/build_debug"|"${TOPDIR}/build_release"|"${TOPDIR}/build_sanity"|"${TOPDIR}/build_android_release"|"${TOPDIR}/build_rpm"|"${TOPDIR}/build_deb"|"${TOPDIR}/build_tgz")
+    "${TOPDIR}/build_debug"|"${TOPDIR}/build_release"|"${TOPDIR}/build_sanity"|"${TOPDIR}/build_android_release"|"${TOPDIR}/build_ios_release"|"${TOPDIR}/build_ios_simulator_release"|"${TOPDIR}/build_rpm"|"${TOPDIR}/build_deb"|"${TOPDIR}/build_tgz")
       ;;
     *)
       fail "refusing to clean unexpected path: ${build_dir}"
@@ -166,7 +191,7 @@ function remove_managed_build_dir
 function configure_cmake
 {
   local build_label=$1
-  local android_build=$2
+  local platform=$2
   local build_dir=$3
   shift 3
   local cmake_command
@@ -182,6 +207,10 @@ function configure_cmake
 
   cmake_command="$(find_cmake)" || fail "cmake not found; initialize dependencies or install CMake 3.20+"
 
+  if [[ "${platform}" == ios* ]]; then
+    lld_option=OFF
+  fi
+
   # The bundled lld is unavailable on historical EL6 environments.
   if [[ "$(uname -s)" == "Linux" ]] && grep -qE 'release 6([^0-9]|$)' /etc/issue 2>/dev/null; then
     lld_option=OFF
@@ -189,7 +218,7 @@ function configure_cmake
   fi
   cmake_args+=("-DOB_USE_LLD=${lld_option}")
 
-  if [[ "${android_build}" == true ]]; then
+  if [[ "${platform}" == android ]]; then
     local ndk_home="${ANDROID_NDK_HOME:-${HOME}/Library/Android/sdk/ndk/27.3.13750724}"
     if [[ ! -f "${ndk_home}/build/cmake/android.toolchain.cmake" ]]; then
       fail "Android NDK not found: ${ndk_home}; set ANDROID_NDK_HOME"
@@ -199,6 +228,24 @@ function configure_cmake
       -DANDROID_ABI=arm64-v8a
       -DANDROID_PLATFORM=android-28
       -DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON
+    )
+  elif [[ "${platform}" == ios* ]]; then
+    local ios_sdk=iphoneos
+    if [[ "${platform}" == ios-simulator ]]; then
+      ios_sdk=iphonesimulator
+    fi
+    if [[ -z "${DEVELOPER_DIR:-}" && -d /Applications/Xcode.app/Contents/Developer ]]; then
+      export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+    fi
+    if ! xcrun --sdk "${ios_sdk}" --show-sdk-path >/dev/null 2>&1; then
+      fail "iOS SDK not found: ${ios_sdk}; install Xcode or set DEVELOPER_DIR"
+    fi
+    cmake_args+=(
+      -DCMAKE_SYSTEM_NAME=iOS
+      "-DCMAKE_OSX_SYSROOT=${ios_sdk}"
+      -DOB_DISABLE_PIE=OFF
+      -DSEEKDB_IOS_FRAMEWORK=ON
+      -DOB_ENABLE_STANDBY=OFF
     )
   fi
 
@@ -213,13 +260,40 @@ function configure_cmake
   "${cmake_command}" "${cmake_args[@]}" "$@"
 }
 
+function select_platform
+{
+  local android_build=$1
+  local ios_build=$2
+  local simulator=$3
+
+  if [[ "${android_build}" == true && "${ios_build}" == true ]]; then
+    fail "--android and --ios cannot be combined"
+  elif [[ "${ios_build}" == false && "${simulator}" == true ]]; then
+    fail "--simulator requires --ios"
+  elif [[ "${ios_build}" == true && "$(uname -s)" != "Darwin" ]]; then
+    fail "--ios requires macOS with Xcode"
+  elif [[ "${android_build}" == true ]]; then
+    printf 'android\n'
+  elif [[ "${simulator}" == true ]]; then
+    printf 'ios-simulator\n'
+  elif [[ "${ios_build}" == true ]]; then
+    printf 'ios\n'
+  else
+    printf 'host\n'
+  fi
+}
+
 function do_release
 {
   local need_init=false
   local need_make=false
   local collecting_make_args=false
   local android_build=false
+  local ios_build=false
+  local simulator=false
+  local platform
   local build_dir
+  local make_target=seekdb
   local -a cmake_args=()
   local -a make_args=()
 
@@ -230,6 +304,13 @@ function do_release
         ;;
       --android)
         android_build=true
+        ;;
+      --ios)
+        ios_build=true
+        make_target=seekdb_ios_framework
+        ;;
+      --simulator)
+        simulator=true
         ;;
       --make)
         if [[ "${need_make}" == true ]]; then
@@ -263,23 +344,24 @@ function do_release
     shift
   done
 
+  platform="$(select_platform "${android_build}" "${ios_build}" "${simulator}")" || exit $?
   require_host
   if [[ "${need_init}" == true ]]; then
-    do_init "${android_build}" || exit $?
+    do_init "${platform}" || exit $?
   fi
 
-  build_dir="$(release_build_dir "${android_build}")"
+  build_dir="$(release_build_dir "${platform}")"
   if (( ${#cmake_args[@]} > 0 )); then
-    configure_cmake release "${android_build}" "${build_dir}" "${cmake_args[@]}" || exit $?
+    configure_cmake release "${platform}" "${build_dir}" "${cmake_args[@]}" || exit $?
   else
-    configure_cmake release "${android_build}" "${build_dir}" || exit $?
+    configure_cmake release "${platform}" "${build_dir}" || exit $?
   fi
 
   if [[ "${need_make}" == true ]]; then
     if (( ${#make_args[@]} == 0 )); then
       make_args=(-j"$(cpu_count)")
     fi
-    make -C "${build_dir}" "${make_args[@]}" seekdb
+    make -C "${build_dir}" "${make_args[@]}" "${make_target}"
   fi
 }
 
@@ -304,7 +386,7 @@ function do_sanity
         need_make=true
         collecting_make_args=true
         ;;
-      --android|--coverage|--ob-make)
+      --android|--ios|--simulator|--coverage|--ob-make)
         fail "$1 is outside the CMake Sanity build boundary"
         ;;
       -D*)
@@ -327,10 +409,10 @@ function do_sanity
   require_host
   [[ "$(uname -s)" == "Linux" ]] || fail "Sanity builds are supported only on Linux"
   if [[ "${need_init}" == true ]]; then
-    do_init false || exit $?
+    do_init host || exit $?
   fi
 
-  configure_cmake sanity false "${build_dir}" \
+  configure_cmake sanity host "${build_dir}" \
     "${cmake_args[@]}" -DENABLE_SANITY=ON || exit $?
 
   if [[ "${need_make}" == true ]]; then
@@ -385,7 +467,7 @@ function do_package
         need_make=true
         collecting_make_args=true
         ;;
-      --android|--coverage|--ob-make)
+      --android|--ios|--simulator|--coverage|--ob-make)
         fail "$1 is outside the CMake ${package_label} compatibility boundary"
         ;;
       -D*)
@@ -415,7 +497,7 @@ function do_package
       fail "dpkg-deb is required to build a DEB package"
   fi
   if [[ "${need_init}" == true ]]; then
-    do_init false || exit $?
+    do_init host || exit $?
   fi
 
   package_cmake_args=(
@@ -441,7 +523,7 @@ function do_package
   if (( ${#cmake_args[@]} > 0 )); then
     package_cmake_args=("${cmake_args[@]}" "${package_cmake_args[@]}")
   fi
-  configure_cmake "${package_type}" false "${build_dir}" "${package_cmake_args[@]}" || exit $?
+  configure_cmake "${package_type}" host "${build_dir}" "${package_cmake_args[@]}" || exit $?
 
   if [[ "${need_make}" == true ]]; then
     if (( ${#make_args[@]} > 0 )); then
@@ -462,6 +544,8 @@ function do_clean
       "${TOPDIR}/build_release" \
       "${TOPDIR}/build_sanity" \
       "${TOPDIR}/build_android_release" \
+      "${TOPDIR}/build_ios_release" \
+      "${TOPDIR}/build_ios_simulator_release" \
       "${TOPDIR}/build_rpm" \
       "${TOPDIR}/build_deb" \
       "${TOPDIR}/build_tgz"; do
@@ -479,15 +563,30 @@ function do_clean
 function do_init_command
 {
   local android_build=false
-  if (( $# > 1 )); then
-    fail "init accepts only --android"
-  fi
-  if (( $# == 1 )); then
-    [[ "$1" == "--android" ]] || fail "unexpected init argument: $1"
-    android_build=true
-  fi
+  local ios_build=false
+  local simulator=false
+  local platform
+
+  while (( $# > 0 )); do
+    case "$1" in
+      --android)
+        android_build=true
+        ;;
+      --ios)
+        ios_build=true
+        ;;
+      --simulator)
+        simulator=true
+        ;;
+      *)
+        fail "unexpected init argument: $1"
+        ;;
+    esac
+    shift
+  done
+  platform="$(select_platform "${android_build}" "${ios_build}" "${simulator}")" || exit $?
   require_host
-  do_init "${android_build}"
+  do_init "${platform}"
 }
 
 function main

@@ -1620,12 +1620,14 @@ void ObServer::obs_wait_modules()
   server_module_wait_default(mods_tablet_stat_mgr_);
   server_module_wait_default(mods_tmp_file_manager_);
   server_module_wait_default(mods_local_storage_meta_service_);
+  // Deferred memtable GC reads the LS log handler until all metadata is released.
+  // Drain it before ObLSService::wait() frees the LS and its log handler.
+  server_module_wait_default(mods_storage_meta_mem_mgr_);
   server_module_wait_default(mods_ls_service_);
   server_module_wait_default(mods_log_service_);
   server_module_wait_default(mods_trans_service_);
   server_module_wait_default(mods_shared_mem_alloc_mgr_);
   storage::mds::ObMdsService::server_module_wait(mods_mds_service_);
-  server_module_wait_default(mods_storage_meta_mem_mgr_);
   if (OB_NOT_NULL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>())) {
     ::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->wait_sessions_drained();
   }
@@ -1644,7 +1646,6 @@ void ObServer::obs_destroy_modules()
   server_module_destroy_default(mods_rb_mem_mgr_);
   ObGlobalIteratorPool::server_module_destroy(mods_global_iterator_pool_);
   server_module_destroy_default(mods_resource_limit_calculator_);
-  server_module_destroy_default(mods_tablet_memtable_mgr_pool_);
   server_module_destroy_default(mods_srs_service_);
   server_module_destroy_default(mods_opt_stat_monitor_manager_);
   server_module_destroy_default(mods_dbms_sched_service_);
@@ -1701,6 +1702,9 @@ void ObServer::obs_destroy_modules()
   server_module_destroy_default(mods_mds_service_);
   ObIOService::server_module_destroy(mods_io_service_);
   server_module_destroy_default(mods_storage_meta_mem_mgr_);
+  // LS and cached tablets own memtable manager handles; release them before
+  // destroying the pool that those handles return their managers to.
+  server_module_destroy_default(mods_tablet_memtable_mgr_pool_);
   server_module_destroy_default(mods_shared_timer_);
 
   // Keep the slots alive while module destructors run, then invalidate every

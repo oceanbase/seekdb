@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleExecutable</key><string>SeekDB</string>
+<key>CFBundleIdentifier</key><string>org.oceanbase.seekdb</string>
+<key>CFBundleName</key><string>SeekDB</string>
+<key>CFBundlePackageType</key><string>FMWK</string>
+<key>CFBundleVersion</key><string>1</string>
+<key>CFBundleShortVersionString</key><string>1.0</string>
+<key>MinimumOSVersion</key><string>@CMAKE_OSX_DEPLOYMENT_TARGET@</string>
+<key>SeekDBSourceRevision</key><string>@SEEKDB_IOS_BUILD_ID@</string>
+<key>SeekDBTestHooks</key><string>disabled</string>
+</dict></plist>

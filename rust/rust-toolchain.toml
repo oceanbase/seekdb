@@ -5,13 +5,14 @@
 [toolchain]
 channel = "1.98.1"
 profile = "minimal"
-# The cross-compilation targets keep Android builds and Windows `cargo check`
+# The cross-compilation targets keep Android and iOS builds and Windows `cargo check`
 # on the same pinned toolchain as native builds. The windows-gnu target keeps
 # the cfg(windows) transport code compiling without a Windows runner in CI.
 # gnu, not msvc: ring (rustls) compiles C in its build script, and mingw
 # is the only Windows C toolchain a Linux/mac host can provide. The
 # production Windows target stays msvc and is exercised by a real runner.
-targets = ["x86_64-unknown-linux-gnu", "x86_64-pc-windows-gnu", "aarch64-linux-android"]
+targets = ["x86_64-unknown-linux-gnu", "x86_64-pc-windows-gnu", "aarch64-linux-android",
+           "aarch64-apple-ios", "aarch64-apple-ios-sim"]
 # clippy gates CI (`cargo clippy -- -D warnings`); ship it with the toolchain
 # so the minimal-profile CI install has it too.
 components = ["clippy"]

@@ -416,6 +416,7 @@ private:
   bool need_bootstrap_;
   volatile bool has_stopped_;
   bool has_destroy_;
+  bool in_process_ = false;
   int clients_fd_ = -1;
 #ifdef _WIN32
   HANDLE clients_h_ = INVALID_HANDLE_VALUE;

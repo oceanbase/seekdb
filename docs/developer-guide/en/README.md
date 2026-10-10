@@ -16,7 +16,8 @@ This section helps you set up the development environment and get OceanBase seek
 1. [Install toolchain](toolchain.md) - Install the required development tools and dependencies
 2. [Get the code, build and run](build-and-run.md) - Clone the repository, build the project, and connect to the seekdb server
 3. [Build for Android](android.md) - Cross-compile and run seekdb on an Android arm64-v8a device
-4. [Homebrew optimization](homebrew.md) - Configure mirrors when Homebrew downloads are slow
+4. [Build for iOS](ios.md) - Cross-compile seekdb into SeekDB.framework for iOS devices and simulators
+5. [Homebrew optimization](homebrew.md) - Configure mirrors when Homebrew downloads are slow
 
 ### 2. Development Basics
 

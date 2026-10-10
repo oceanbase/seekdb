@@ -71,14 +71,15 @@ if(ANDROID)
 else()
   target_link_directories(oblib_lib PUBLIC
     ${DEP_DIR}/lib ${DEP_DIR}/lib/vsag_lib)
-  if(UNIX)
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
-      # AppleClang's driver does not expose -fopenmp, but its frontend does.
-      # Keep using the libomp runtime packaged with the arm64 VSAG libraries.
-      target_compile_options(oblib_lib PUBLIC "SHELL:-Xclang -fopenmp")
-    else()
-      target_compile_options(oblib_lib PUBLIC -fopenmp)
-    endif()
+  if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    # Apple Clang accepts OpenMP in its frontend; the iOS runtime is linked separately.
+    target_compile_options(oblib_lib PUBLIC "SHELL:-Xpreprocessor -fopenmp")
+  elseif(UNIX AND CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+    # AppleClang's driver does not expose -fopenmp, but its frontend does.
+    # Keep using the libomp runtime packaged with the arm64 VSAG libraries.
+    target_compile_options(oblib_lib PUBLIC "SHELL:-Xclang -fopenmp")
+  elseif(UNIX)
+    target_compile_options(oblib_lib PUBLIC -fopenmp)
   endif()
 
   if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
@@ -115,15 +116,18 @@ else()
       libvsag_static.a
       libdiskann.a
       libio.a
-      libgfortran_static.a
-      libquadmath_static.a
-      libgcc.a
-      libomp_static.a
-      libopenblas.a
       libroaring.a
       libantlr4-runtime.a
       libantlr4-autogen.a
       libfmt.a)
+    if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+      target_link_libraries(oblib_lib PUBLIC
+        libomp.a liblapacke.a "-framework Accelerate")
+    else()
+      target_link_libraries(oblib_lib PUBLIC
+        libgfortran_static.a libquadmath_static.a libgcc.a
+        libomp_static.a libopenblas.a)
+    endif()
   elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64")
     target_link_directories(oblib_lib PUBLIC ${OB_VSAG_DIR}/lib)
     target_include_directories(oblib_lib PUBLIC ${OB_VSAG_DIR}/include)
