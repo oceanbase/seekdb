@@ -1,0 +1,81 @@
+# CASE_OWNER:
+#    @wangyunlai.wyl
+# CASE_DESC:
+#    Verify that a submit handler holding the real ReplayStatus read lock keeps
+#    promotion fail-closed until the iterator can be released under the write
+#    lock.  This case requires a Sanity/ERRSIM observer.
+
+--disable_all_result_log
+db_p=OBI(cluster=1,proxy_num=0,role=primary);
+db_p.reboot;
+
+db_s=OBI(cluster=1,proxy_num=0,primary=db_p);
+db_s.reboot;
+
+sleep 5;
+--enable_all_result_log
+
+--disable_query_log
+--disable_result_log
+
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 30;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 30;
+
+ob_connect(conn_p, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+ob_connect(conn_s, db_s.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+
+connection conn_p;
+create table replay_submit_iterator_release_deadline(
+  id bigint primary key,
+  marker varchar(128)
+);
+insert into replay_submit_iterator_release_deadline values (1, 'warmup');
+db_s.check_until_timeout select count(*) from replay_submit_iterator_release_deadline where id = 1 and marker = 'warmup', 1, 120;
+
+connection conn_p;
+insert into replay_submit_iterator_release_deadline values (2, 'cutover');
+db_s.check_until_timeout select count(*) from replay_submit_iterator_release_deadline where id = 2 and marker = 'cutover', 1, 120;
+
+# Starting with the next submit-task iteration, hold the real ReplayStatus read
+# lock for one second per iteration.  Append a tail record after enabling the
+# tracepoint so that the submit task must enter the controlled read section.
+# Waiting for the first bounded sleep to finish is a deterministic barrier;
+# the following iteration covers terminal iterator release.
+db_s.mysql alter system set_tp tp_name = EN_REPLAY_SERVICE_SUBMIT_TASK_SLEEP, error_code = 4016, occur = 1;
+connection conn_p;
+insert into replay_submit_iterator_release_deadline values (3, 'controlled_tail');
+ALTER SYSTEM SWITCHOVER TO STANDBY;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
+db_s.z1.obs0.check_log_until_success -c "sleep 1s before read log";
+
+connection conn_s;
+set ob_query_timeout = 600000;
+--error 4012
+ALTER SYSTEM SWITCHOVER TO PRIMARY;
+
+# The SQL request deadline is enforced by the request worker and can expire
+# before start_local_log_ emits its trailing timeout diagnostic.  This
+# one-shot stage log proves that the request reached iterator release while the
+# real submit handler still held ReplayStatus::rwlock_ for reading.
+db_s.z1.obs0.check_log_until_success -c "replay submit iterator release blocked.*state.*RWLOCK_BUSY";
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30;
+--error 4688
+insert into replay_submit_iterator_release_deadline values (4, 'write_gate_must_stay_closed');
+
+db_s.mysql alter system set_tp tp_name = EN_REPLAY_SERVICE_SUBMIT_TASK_SLEEP, error_code = 4016, frequency = 0;
+set ob_query_timeout = 120000000;
+ALTER SYSTEM SWITCHOVER TO PRIMARY;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 120;
+insert into replay_submit_iterator_release_deadline values (4, 'write_gate_open_after_release');
+db_s.z1.obs0.check_log_until_success -c "released replay submit iterator.*state.*RELEASED";
+
+ALTER SYSTEM MINOR FREEZE;
+sleep 5;
+--enable_result_log
+select id, marker from replay_submit_iterator_release_deadline order by id;
+--disable_result_log
+drop table replay_submit_iterator_release_deadline;
+
+--enable_query_log
+--enable_result_log
+--echo replay submit iterator release deadline test passed
