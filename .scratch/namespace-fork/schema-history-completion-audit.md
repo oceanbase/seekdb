@@ -2,7 +2,7 @@
 
 日期：2026-10-10。范围依据 [设计](design-storage-schema-boundaries.md) 第1、9、10、11节及 [实施清单](implementation-storage-schema-history.md)；生产代码基线 `d11e76dae`。本次收尾未改变该生产基线的行为。
 
-状态：实现和本轮约定的针对性验收已完成，正在提交推送备份。下列结论来自代码追踪及实际断言。历史失败与修复后的运行均保留在 [验证清单](schema-history-validation.json)。
+状态：实现、本轮约定的针对性验收及备份推送已完成。下列结论来自代码追踪及实际断言。历史失败与修复后的运行均保留在 [验证清单](schema-history-validation.json)。
 
 ## 一、实现要求与证据
 
@@ -31,7 +31,7 @@
 | 1 | F后fork/晚物化，旧轮排除、后轮使用子G | `freeze-preparation-locked-4` 确认F发布后fork成功且仍未物化；`physical-merge-layout-test-final` 实际C>F对象未读旧布局/无旧F文件，父子各用自己的G；真实standby-history两轮证明子G新DDL/major。所有创建使用共同C规则，未增加fork例外。 |
 | 2 | C<F、C=F、C>F，未提交 | `creation_identity_native_probe.ipp` 对真实恢复对象逐项断言 participates(C-1)=false、participates(C)=true、participates(C+1)=true；原生提交前断言UNCOMMITTED不参与。日志 `/tmp/seekdb-physical-merge-identity-test-2.log`。 |
 | 3 | 水位覆盖F后重新枚举 | `/tmp/seekdb-merge-candidates-test-2.log` 通过：暂停实际717对象旧名单并限制为未完成的一批；新DDL后下一轮第一批前重新枚举718对象并含新tablet。后续F低水位分支反复执行时未枚举/无major/未完成；解除后重新枚举含新对象，C<=F及实际文件/全局完成均断言。源码同时核对loop线程换轮reset与init_for_major先于get_next_tablet。 |
-| 4 | C<=F但接管未完成 | `freeze-preparation-wait-2` 未完成时请求等待/超时且F不发布，后台完成后显式重试；`physical-report-native-test-5` 不完整物理状态不放行；实际备库沿F等自己的物理进度。 |
+| 4 | C<=F但接管未完成 | `freeze-preparation-wait-2` 未完成时请求等待/超时且F不发布，后台完成后显式重试；源码 `ObTabletStatusCache::inner_init_execute_state/round_satisfied` 对C<=F保留participates且DATA_NOT_COMPLETE不满足轮次，`PhysicalMergeProgress` 对!is_data_complete显式finished=false；实际备库沿F等自己的物理进度。报告缺失/错身份另由physical-report-native-test-5直接注入验证。 |
 | 5 | 父子DDL/后物化/接管 | `/tmp/seekdb-table-layout-test-1.log` 的late_partition_no_overwrite；`/tmp/seekdb-local-schema-fork-test-4.log` 与 `...fork-wide-test-1.log` 覆盖父/子描述宽度方向；`/tmp/seekdb-meta-layout-cold-child-test-1.log` 冷父来源读取。 |
 | 6 | 8000分区 | `/tmp/seekdb-layout-production-8000-test-1.log` 三次fork的physical_delta=0且目录根共享；`/tmp/seekdb-layout-history-service-8000-test-1.log` 首次服务；`/tmp/seekdb-layout-history-major-8000-test-2.log` 8000实际major、数据8000/31996000、锁内复核53259微秒。普通加列按表发布由共同发布入口及分区复用测试核对；未宣称同规模索引/接管压力已经测过。 |
 | 7 | 不同Namespace相同table_id/局部V | 原生绑定同一seed先后prepare parent/child得到不同G；同table_id的父子独立DDL/布局及checksum分别读取自己目录。`/tmp/seekdb-table-layout-test-1.log`、`/tmp/seekdb-namespace-checksum-native-test-3.log`。 |
@@ -66,6 +66,6 @@
 - 最终无注入构建 `/tmp/seekdb-layout-history-production-final-build.log` 通过，SHA256 `3c1ee2c2c29cb96a48febbc55f82fa70bf50ccddd77d05c78df678450fdc1d1c`，与此前同生产源码二进制一致；`git diff --exit-code -- src` 无差异，临时hook已全部移除。
 - `/tmp/seekdb-layout-history-production-final-major.log` 通过，F1791599177587389006的真实物理major及frozen/broadcast/last一致。
 - 本次驱动Python编译检查、`git diff --check`通过；新增候选用例及增强后的原生历史/冷空间major/主备GC用例均有四件套入口。
-- 提交推送备份正在进行；完成后以分支 `codex/namespace-worker-proxy-v20` 的本地HEAD与远端HEAD核对为准，不创建PR。
+- 生产实现已推送至 `d11e76dae`；本次测试、失败记录及审计备份提交 `316c7e3d26bffbac13afc774d528898da828c278` 已通过 gh 凭据推送到 `codex/namespace-worker-proxy-v20`，本地HEAD与远端跟踪HEAD一致。本节状态收尾作为后续文档提交保留，不创建PR。
 
 本轮未运行完整mysqltest/sysbench，未测8000分区同时带同规模索引和继承接管压力。没有引入SQL历史行清理机制；已有显式历史行继续保留。共享各tablet常驻schema、独立DDL调度、实例私有存储均保持原先划定的后续范围。

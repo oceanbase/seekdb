@@ -13,7 +13,7 @@
 - `/tmp/seekdb-layout-history-cold-major-final-1.log` 验证无人登录的子空间main/index/LOB后台物化与接管不激活完整SQL服务，随后第一次major由上层checksum正常完整激活，数据、索引读及重启通过。
 - `/tmp/seekdb-layout-history-commit-order-test-1.log` 补齐不同G版本号分配与提交顺序相反的原生事务断言：V21先提交时F只看到另一对象旧V11；V20后来提交不改变旧读者，当前读和恢复各得到V20/V21。仍使用原有历史测试入口。
 - 最终生产构建 `/tmp/seekdb-layout-history-production-final-build.log` 通过，无测试注入；SHA256 `3c1ee2c2c29cb96a48febbc55f82fa70bf50ccddd77d05c78df678450fdc1d1c`。`/tmp/seekdb-layout-history-production-final-major.log` 实际major和全局完成通过。
-- 候选枚举 `/tmp/seekdb-merge-candidates-test-2.log` 通过：部分旧名单跨轮重新枚举包含新对象，低水位不枚举、不提前完成，水位恢复后实际major和全局完成。首轮驱动读错trace文件的失败亦已保留。20项验收对应见完成审计，当前仅剩本次备份提交推送。新/失败用例已加入四件套，未跑完整mysqltest/sysbench。
+- 候选枚举 `/tmp/seekdb-merge-candidates-test-2.log` 通过：部分旧名单跨轮重新枚举包含新对象，低水位不枚举、不提前完成，水位恢复后实际major和全局完成。首轮驱动读错trace文件的失败亦已保留。20项验收对应见完成审计，测试与审计备份 `316c7e3d2` 已推送至 `codex/namespace-worker-proxy-v20`，本地/远端HEAD核对一致，本轮目标完成。新/失败用例已加入四件套，未跑完整mysqltest/sysbench。
 
 ### 持续发布缺陷：已复现，修复验证中
 
@@ -218,7 +218,7 @@
 - [x] MVCC 与 SQL 历史保留、重启顺序、备库本机接管及提升主库。
 - [x] 删除 freeze.schema_version 和根/子两套旧路径，不保留隐式回退。见物理/逻辑共同检查与移除字段的生产、原生验证记录。
 - [x] 编译、针对性动态验证、8000 分区成本验证；已执行及失败用例加入四件套。
-- [ ] 提交并推送本次收尾备份；此前生产代码已推送，当前不提 PR。
+- [x] 提交并推送本次收尾备份；生产代码 `d11e76dae`、验收备份 `316c7e3d2` 已推送，不提 PR。
 
 ## 当前证据
 
