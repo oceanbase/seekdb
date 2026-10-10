@@ -41,14 +41,7 @@ static_assert(0 == (TX_CTX_ALIGNMENT & (TX_CTX_ALIGNMENT - 1)),
 }
 
 TxCtxCache::TxCtxCache(const int64_t max_free_count)
-    : lock_(),
-      ref_count_(1),
-      free_list_(nullptr),
-      free_count_(0),
-      max_free_count_(max_free_count),
-      hit_count_(0),
-      miss_count_(0),
-      closed_(false)
+    : max_free_count_(max_free_count)
 {
 }
 

@@ -62,14 +62,14 @@ private:
   static Node *ctx_to_node(ObTxCtx *ctx);
 
 private:
-  common::ObByteLock lock_;
-  int64_t ref_count_;
-  Node *free_list_;
-  int64_t free_count_;
+  common::ObByteLock lock_{};
+  int64_t ref_count_ = 1;
+  Node *free_list_ = nullptr;
+  int64_t free_count_ = 0;
   const int64_t max_free_count_;
-  int64_t hit_count_;
-  int64_t miss_count_;
-  bool closed_;
+  int64_t hit_count_ = 0;
+  int64_t miss_count_ = 0;
+  bool closed_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(TxCtxCache);
 };
