@@ -813,6 +813,13 @@ int64_t ObLogReplayService::get_pending_task_size() const
   return ATOMIC_LOAD(&pending_replay_log_size_);
 }
 
+void ObLogReplayService::notify_replay_idle()
+{
+  if (nullptr != log_storage_) {
+    log_storage_->replay_idle();
+  }
+}
+
 void *ObLogReplayService::alloc_replay_task(const int64_t size)
 {
   return allocator_->alloc_replay_task(size);
@@ -1212,6 +1219,11 @@ int ObLogReplayService::handle_submit_task_(ObReplayServiceSubmitTask *submit_ta
     };
     if (OB_SUCCESS !=(tmp_ret = replay_status->batch_push_all_task_queue())) {
     }
+    if (OB_SUCC(ret)) {
+      // The last replay task can finish before the submitter advances its
+      // cursor. Check this side too, so a drained stream always closes caches.
+      replay_status->notify_replay_idle();
+    }
     replay_status->unlock();
   } else {
     //return OB_EAGAIN to avoid taking up worker threads
@@ -1285,6 +1297,10 @@ int ObLogReplayService::handle_replay_task_(ObReplayServiceReplayTask *task_queu
             if (!replay_task->is_pre_barrier_) {
               //The forward barrier log replay thread will release memory in advance
               replay_status->dec_pending_task(replay_task->get_replay_payload_size());
+            } else {
+              // A pre-barrier's buffer was released before execution. Its
+              // queue entry has only just been popped, so notify idle here.
+              replay_status->notify_replay_idle();
             }
             free_replay_task(replay_task_to_destroy);
             //To avoid a single task occupies too long thread time, the upper limit of

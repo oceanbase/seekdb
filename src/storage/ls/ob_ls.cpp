@@ -455,6 +455,12 @@ int ObLS::start_local_log_(const int64_t deadline_us, const bool activate_handle
     }
   }
   if (OB_SUCC(ret)) {
+    // Local recovery has drained its replay tasks. Close the replay cache now;
+    // incomplete transaction contexts keep the tiny owner alive until they
+    // are eventually released, but no free ObTxCtx is retained.
+    ls_tx_svr_.close_replay_tx_ctx_cache();
+  }
+  if (OB_SUCC(ret)) {
     log_handler_.set_local_append_enabled(true);
     if (!activate_handlers) {
       is_local_append_mode_ = true;

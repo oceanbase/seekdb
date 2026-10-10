@@ -345,7 +345,6 @@ OBLIB_UNITY_GROUPS = {
                 "src/oblib/lib/lds/ob_lds_define.cpp",
                 "src/oblib/lib/net/ob_addr.cpp",
                 "src/oblib/lib/net/ob_net_util.cpp",
-                "src/oblib/lib/objectpool/ob_server_object_pool.cpp",
                 "src/oblib/lib/profile/ob_trace_id.cpp",
                 "src/oblib/lib/profile/ob_trace_id_adaptor.cpp",
                 "src/oblib/lib/thread/ob_dedup_queue.cpp",

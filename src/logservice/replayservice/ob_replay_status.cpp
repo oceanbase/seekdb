@@ -547,6 +547,8 @@ ObReplayStatus::ObReplayStatus():
     post_barrier_lsn_(),
     err_info_(),
     pending_task_count_(0),
+    replay_batch_epoch_(0),
+    notified_idle_epoch_(0),
     last_check_memstore_lsn_(),
     rwlock_(common::ObLatchIds::REPLAY_STATUS_LOCK),
     local_replay_lock_(common::ObLatchIds::REPLAY_STATUS_LOCK),
@@ -624,6 +626,8 @@ void ObReplayStatus::destroy()
     err_info_.reset();
     last_check_memstore_lsn_.reset();
     pending_task_count_ = 0;
+    replay_batch_epoch_ = 0;
+    notified_idle_epoch_ = 0;
     fs_cb_.destroy();
     get_log_info_debug_time_ = OB_INVALID_TIMESTAMP;
     try_wrlock_debug_time_ = OB_INVALID_TIMESTAMP;
@@ -1099,7 +1103,9 @@ void ObReplayStatus::inc_pending_task(const int64_t log_size)
   } else if (OB_ISNULL(rp_sv_)) {
     CLOG_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "rp sv is NULL", K(log_size), KPC(this));
   } else {
-    ATOMIC_INC(&pending_task_count_);
+    if (0 == ATOMIC_FAA(&pending_task_count_, 1)) {
+      ATOMIC_INC(&replay_batch_epoch_);
+    }
     rp_sv_->inc_pending_task_size(log_size);
   }
 }
@@ -1111,8 +1117,41 @@ void ObReplayStatus::dec_pending_task(const int64_t log_size)
   } else if (OB_ISNULL(rp_sv_)) {
     CLOG_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "rp sv is NULL", K(log_size), KPC(this));
   } else {
-    ATOMIC_DEC(&pending_task_count_);
+    const int64_t pending_count = ATOMIC_SAF(&pending_task_count_, 1);
     rp_sv_->dec_pending_task_size(log_size);
+    if (0 == pending_count) {
+      notify_replay_idle();
+    }
+  }
+}
+
+void ObReplayStatus::notify_replay_idle()
+{
+  const int64_t epoch = ATOMIC_LOAD(&replay_batch_epoch_);
+  int64_t notified_epoch = ATOMIC_LOAD(&notified_idle_epoch_);
+  LSN submitted_end;
+  SCN submitted_scn;
+  LSN committed_end;
+  LSN replayed_end;
+  if (!is_enabled_ || nullptr == rp_sv_
+      || notified_epoch >= epoch
+      || 0 != ATOMIC_LOAD(&pending_task_count_)
+      || OB_SUCCESS != submit_log_task_.get_next_to_submit_log_info(submitted_end, submitted_scn)
+      || OB_SUCCESS != palf_handle_.get_end_lsn(committed_end)
+      || !submitted_end.is_valid() || submitted_end < committed_end
+      || OB_SUCCESS != get_min_unreplayed_lsn(replayed_end)
+      || !replayed_end.is_valid() || replayed_end < committed_end) {
+    return;
+  }
+  // Submission and the last replay worker can both observe idle. Generations
+  // prevent duplicate callbacks and ensure a new batch still gets its own
+  // close even if an older idle callback races its first allocation.
+  while (notified_epoch < epoch) {
+    if (ATOMIC_BCAS(&notified_idle_epoch_, notified_epoch, epoch)) {
+      rp_sv_->notify_replay_idle();
+      break;
+    }
+    notified_epoch = ATOMIC_LOAD(&notified_idle_epoch_);
   }
 }
 

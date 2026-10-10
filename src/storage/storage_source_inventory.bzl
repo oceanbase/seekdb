@@ -902,6 +902,7 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/tx/ob_trans_define_v4.cpp",
             "src/storage/tx/ob_trans_end_trans_callback.cpp",
             "src/storage/tx/ob_trans_factory.cpp",
+            "src/storage/tx/tx_ctx_cache.cpp",
             "src/storage/tx/ob_trans_id_service.cpp",
             "src/storage/tx/ob_trans_memory_stat.cpp",
             "src/storage/tx/ob_defensive_check_mgr.cpp",

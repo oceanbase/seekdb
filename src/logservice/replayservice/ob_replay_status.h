@@ -486,6 +486,8 @@ public:
   int batch_push_all_task_queue();
   void inc_pending_task(const int64_t log_size);
   void dec_pending_task(const int64_t log_size);
+  // Called while holding the replay status read or write lock.
+  void notify_replay_idle();
   //Generic replay task memory release interface, forward barrier tasks will not release log buf memory separately
   //Forward barrier complete release of allocated memory requires simultaneous invocation
   //free_replay_task_log_buf() and free_replay_task()
@@ -595,6 +597,8 @@ private:
   // record error info, reported when handle submit or replay type task
   LSErrInfo err_info_;
   int64_t pending_task_count_;
+  int64_t replay_batch_epoch_;
+  int64_t notified_idle_epoch_;
   palf::LSN last_check_memstore_lsn_;
   // protect is_enabled_ and submit_log_task_
   // Hold the read lock until the log replay is complete when replaying a log entry

@@ -117,28 +117,6 @@ ObServerRuntimeController::ObServerRuntimeController()
   }
 }
 
-template<typename T>
-static int server_obj_pool_create(common::ObServerObjectPool<T> *&pool)
-{
-  int ret = common::OB_SUCCESS;
-  pool = SERVER_NEW(common::ObServerObjectPool<T>, "TntSrvObjPool",
-                    share::server_is_mini_mode(), share::server_cpu_count());
-  if (OB_ISNULL(pool)) {
-    ret = common::OB_ALLOCATE_MEMORY_FAILED;
-  } else {
-    ret = pool->init();
-  }
-  return ret;
-}
-
-template<typename T>
-static void server_obj_pool_destroy(common::ObServerObjectPool<T> *&pool)
-{
-  using Pool = common::ObServerObjectPool<T>;
-  SERVER_DELETE(Pool, "TntSrvObjPool", pool);
-  pool = nullptr;
-}
-
 static ObLogRuntimeConfig current_log_runtime_config()
 {
   return {

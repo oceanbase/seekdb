@@ -34,6 +34,9 @@ public:
   virtual ~ObILogStorage() = default;
 
   virtual int replay(ObLogReplayTask *replay_task) = 0;
+  // The committed log tail has been submitted and all replay tasks drained.
+  // Storage may release reusable state; transaction contexts can outlive it.
+  virtual void replay_idle() {}
   virtual int wait_append_sync() = 0;
   virtual bool is_replay_pending_log_too_large(int64_t pending_size) = 0;
   virtual int get_log_handler(ObLogHandler *&log_handler) = 0;
