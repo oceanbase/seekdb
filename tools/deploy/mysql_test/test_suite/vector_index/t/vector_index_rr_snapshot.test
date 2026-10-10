@@ -1,0 +1,43 @@
+# Regression for the query-local bitmap view in an older RR transaction.
+connect (rr_writer,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
+connection rr_writer;
+--disable_warnings
+DROP DATABASE IF EXISTS vector_index_rr_snapshot;
+--enable_warnings
+CREATE DATABASE vector_index_rr_snapshot;
+USE vector_index_rr_snapshot;
+SET autocommit = 1;
+SET ob_query_timeout = 20000000;
+SET ob_trx_timeout = 120000000;
+CREATE TABLE rv_plain (id INT PRIMARY KEY, tag INT, v VECTOR(3), VECTOR INDEX idx(v) WITH (distance=l2,type=hnsw,lib=vsag));
+INSERT INTO rv_plain VALUES (1,10,'[1,0,0]');
+
+connect (rr_reader,$OBMYSQL_MS0,root@sys,,vector_index_rr_snapshot,$OBMYSQL_PORT);
+connection rr_reader;
+SET ob_query_timeout = 20000000;
+SET ob_trx_timeout = 120000000;
+SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+BEGIN;
+--echo # A pins the old snapshot and warms its ANN path
+SELECT id,tag,v FROM rv_plain ORDER BY l2_distance(v,'[1,0,0]') LIMIT 10;
+SELECT /*+ INDEX(rv_plain idx) */ id,tag,v FROM rv_plain ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 10;
+
+connection rr_writer;
+--echo # B commits a new vector, refreshes the index and warms the newer view
+UPDATE rv_plain SET v='[2,0,0]' WHERE id=1;
+SELECT /*+ INDEX(rv_plain idx) */ id,tag,v FROM rv_plain ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 10;
+CALL dbms_vector.refresh_index('idx','rv_plain','v',1,'FAST');
+SELECT /*+ INDEX(rv_plain idx) */ id,tag,v FROM rv_plain ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 10;
+
+connection rr_reader;
+--echo # A still sees the old row and vector through both exact and ANN reads
+SELECT id,tag,v FROM rv_plain ORDER BY l2_distance(v,'[1,0,0]') LIMIT 10;
+SELECT /*+ INDEX(rv_plain idx) */ id,tag,v FROM rv_plain ORDER BY l2_distance(v,'[1,0,0]') APPROXIMATE LIMIT 10;
+COMMIT;
+disconnect rr_reader;
+
+connection rr_writer;
+USE test;
+DROP DATABASE vector_index_rr_snapshot;
+disconnect rr_writer;
+connection default;
