@@ -12,6 +12,8 @@
 #include "sql/engine/basic/ob_ra_datum_store.h"
 #include "sql/engine/basic/ob_workarea_memory_limit.h"
 #include "sql/engine/ob_sql_memory_manager.h"
+#include "share/rc/ob_server_runtime.h"
+#include "storage/tmp_file/ob_tmp_file_manager.h"
 
 #include <vector>
 
@@ -22,6 +24,44 @@ namespace
 {
 
 MemoryQuota *test_workarea_quota = nullptr;
+
+class TestTmpFileManagerGuard final
+{
+public:
+  TestTmpFileManagerGuard() : started_(false), bound_(false) {}
+
+  int init()
+  {
+    int ret = manager_.init();
+    if (OB_SUCCESS == ret) {
+      ret = manager_.start();
+      started_ = OB_SUCCESS == ret;
+    }
+    if (OB_SUCCESS == ret) {
+      oceanbase::share::bind_server_service<oceanbase::tmp_file::ObTmpFileManager>(
+          &manager_);
+      bound_ = true;
+    }
+    return ret;
+  }
+
+  ~TestTmpFileManagerGuard()
+  {
+    if (bound_) {
+      oceanbase::share::unbind_server_service<oceanbase::tmp_file::ObTmpFileManager>();
+    }
+    if (started_) {
+      manager_.stop();
+      manager_.wait();
+    }
+    manager_.destroy();
+  }
+
+private:
+  oceanbase::tmp_file::ObTmpFileManager manager_;
+  bool started_;
+  bool bound_;
+};
 
 MemoryQuota *resolve_test_workarea_quota(const int64_t ctx_id)
 {
@@ -154,8 +194,8 @@ private:
 class TestRADatumStore final : public ObRADatumStore
 {
 public:
-  TestRADatumStore(ObIAllocator &allocator, ObSqlMemoryCallback &callback)
-      : ObRADatumStore(&allocator), callback_(callback), spilled_bytes_(0)
+  TestRADatumStore(ObIAllocator &allocator, ObSqlMemoryCallback &)
+      : ObRADatumStore(&allocator), spilled_bytes_(0)
   {}
 
   int64_t spilled_bytes() const { return spilled_bytes_; }
@@ -163,27 +203,21 @@ public:
 private:
   int write_file(BlockIndex &bi, void *buf, int64_t size) override
   {
-    int ret = OB_SUCCESS;
-    if (size < 0 || (size > 0 && nullptr == buf)) {
-      ret = OB_INVALID_ARGUMENT;
-    } else {
-      bi.offset_ = spilled_bytes_;
-      bi.on_disk_ = true;
+    const int ret = ObRADatumStore::write_file(bi, buf, size);
+    if (OB_SUCCESS == ret) {
       spilled_bytes_ += size;
-      callback_.dumped(size);
     }
     return ret;
   }
 
-  ObSqlMemoryCallback &callback_;
   int64_t spilled_bytes_;
 };
 
 class TestChunkRowStore final : public ObChunkRowStore
 {
 public:
-  TestChunkRowStore(ObIAllocator &allocator, ObSqlMemoryCallback &callback)
-      : ObChunkRowStore(&allocator), callback_(callback), spilled_bytes_(0)
+  TestChunkRowStore(ObIAllocator &allocator, ObSqlMemoryCallback &)
+      : ObChunkRowStore(&allocator), spilled_bytes_(0)
   {}
 
   int64_t spilled_bytes() const { return spilled_bytes_; }
@@ -191,17 +225,13 @@ public:
 private:
   int write_file(void *buf, int64_t size) override
   {
-    int ret = OB_SUCCESS;
-    if (size < 0 || (size > 0 && nullptr == buf)) {
-      ret = OB_INVALID_ARGUMENT;
-    } else {
+    const int ret = ObChunkRowStore::write_file(buf, size);
+    if (OB_SUCCESS == ret) {
       spilled_bytes_ += size;
-      callback_.dumped(size);
     }
     return ret;
   }
 
-  ObSqlMemoryCallback &callback_;
   int64_t spilled_bytes_;
 };
 
@@ -303,6 +333,8 @@ TEST(TestWorkareaMemoryQuota,
 TEST(TestWorkareaMemoryQuota,
      ra_datum_store_reclaims_after_shared_quota_admission_race)
 {
+  TestTmpFileManagerGuard tmp_file_manager;
+  ASSERT_EQ(OB_SUCCESS, tmp_file_manager.init());
   MemoryQuota quota;
   TestWorkareaQuotaResolverGuard quota_resolver_guard(quota);
   ObSqlMemoryTracker tracker;
@@ -313,9 +345,10 @@ TEST(TestWorkareaMemoryQuota,
       backing_allocator, nullptr, &quota,
       ObMemAttr("WARADatumAlloc", ObCtxIds::WORK_AREA));
   ShrinkQuotaOnNextAllocation race_allocator(quota_allocator, quota);
-  std::vector<char> payload(40L << 10, 'x');
+  std::vector<char> first_payload(40L << 10, 'a');
+  std::vector<char> second_payload(40L << 10, 'b');
   ObDatum datum;
-  datum.set_string(payload.data(), payload.size());
+  datum.set_string(first_payload.data(), first_payload.size());
   ObSEArray<ObDatum, 1> row;
   ASSERT_EQ(OB_SUCCESS, row.push_back(datum));
 
@@ -345,6 +378,7 @@ TEST(TestWorkareaMemoryQuota,
     const int64_t reject_count = quota.reject_count();
     const int64_t reclaim_count = quota.reclaim_count();
 
+    row.at(0).set_string(second_payload.data(), second_payload.size());
     ASSERT_EQ(OB_SUCCESS, first_store.add_row(row));
     EXPECT_TRUE(race_allocator.triggered());
     EXPECT_EQ(2, first_store.get_row_cnt());
@@ -354,6 +388,19 @@ TEST(TestWorkareaMemoryQuota,
     EXPECT_GT(first_store.spilled_bytes(), 0);
     EXPECT_LE(quota.committed(), quota.limit());
     ASSERT_EQ(OB_SUCCESS, first_store.finish_add_row());
+
+    quota.set_limit(quota.committed() + 2 * ObRADatumStore::BIG_BLOCK_SIZE);
+    ObRADatumStore::Reader reader(first_store);
+    const ObRADatumStore::StoredRow *stored_row = nullptr;
+    ASSERT_EQ(OB_SUCCESS, reader.get_row(0, stored_row));
+    ASSERT_NE(nullptr, stored_row);
+    EXPECT_EQ(ObString(first_payload.size(), first_payload.data()),
+              stored_row->cells()[0].get_string());
+    ASSERT_EQ(OB_SUCCESS, reader.get_row(1, stored_row));
+    ASSERT_NE(nullptr, stored_row);
+    EXPECT_EQ(ObString(second_payload.size(), second_payload.data()),
+              stored_row->cells()[0].get_string());
+    EXPECT_EQ(OB_INDEX_OUT_OF_RANGE, reader.get_row(2, stored_row));
   }
 
   EXPECT_EQ(0, quota.committed());
@@ -363,6 +410,8 @@ TEST(TestWorkareaMemoryQuota,
 TEST(TestWorkareaMemoryQuota,
      chunk_row_store_reuses_spilled_block_after_quota_admission_race)
 {
+  TestTmpFileManagerGuard tmp_file_manager;
+  ASSERT_EQ(OB_SUCCESS, tmp_file_manager.init());
   MemoryQuota quota;
   TestWorkareaQuotaResolverGuard quota_resolver_guard(quota);
   ObSqlMemoryTracker tracker;
@@ -373,9 +422,10 @@ TEST(TestWorkareaMemoryQuota,
       backing_allocator, nullptr, &quota,
       ObMemAttr("WAChunkRowAlloc", ObCtxIds::WORK_AREA));
   ShrinkQuotaOnNextAllocation race_allocator(quota_allocator, quota);
-  std::vector<char> payload(40L << 10, 'x');
+  std::vector<char> first_payload(40L << 10, 'a');
+  std::vector<char> second_payload(40L << 10, 'b');
   ObObj cell;
-  cell.set_varchar(ObString(payload.size(), payload.data()));
+  cell.set_varchar(ObString(first_payload.size(), first_payload.data()));
   ObNewRow row;
   row.cells_ = &cell;
   row.count_ = 1;
@@ -389,6 +439,7 @@ TEST(TestWorkareaMemoryQuota,
     ASSERT_EQ(OB_SUCCESS,
               second_store.init(0, ObCtxIds::WORK_AREA,
                                 "WAChunkRowSecond", true));
+    ASSERT_EQ(OB_SUCCESS, first_store.alloc_dir_id());
     first_store.set_callback(&tracker);
     second_store.set_callback(&tracker);
 
@@ -403,6 +454,7 @@ TEST(TestWorkareaMemoryQuota,
     const int64_t reject_count = quota.reject_count();
     const int64_t reclaim_count = quota.reclaim_count();
 
+    cell.set_varchar(ObString(second_payload.size(), second_payload.data()));
     ASSERT_EQ(OB_SUCCESS, first_store.add_row(row));
     EXPECT_TRUE(race_allocator.triggered());
     EXPECT_EQ(2, first_store.get_row_cnt());
@@ -412,6 +464,21 @@ TEST(TestWorkareaMemoryQuota,
     EXPECT_GT(first_store.spilled_bytes(), 0);
     EXPECT_LE(quota.committed(), quota.limit());
     ASSERT_EQ(OB_SUCCESS, first_store.finish_add_row(false));
+
+    quota.set_limit(quota.committed() + 2 * ObChunkRowStore::BLOCK_SIZE);
+    ObChunkRowStore::Iterator iterator;
+    ASSERT_EQ(OB_SUCCESS, first_store.begin(iterator));
+    ObNewRow read_row;
+    ObObj read_cell;
+    read_row.cells_ = &read_cell;
+    read_row.count_ = 1;
+    ASSERT_EQ(OB_SUCCESS, iterator.get_next_row(read_row));
+    EXPECT_EQ(ObString(first_payload.size(), first_payload.data()),
+              read_row.cells_[0].get_string());
+    ASSERT_EQ(OB_SUCCESS, iterator.get_next_row(read_row));
+    EXPECT_EQ(ObString(second_payload.size(), second_payload.data()),
+              read_row.cells_[0].get_string());
+    EXPECT_EQ(OB_ITER_END, iterator.get_next_row(read_row));
   }
 
   EXPECT_EQ(0, quota.committed());
