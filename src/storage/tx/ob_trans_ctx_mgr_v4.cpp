@@ -300,7 +300,8 @@ int ObLSTxCtxMgr::create_tx_ctx_(const ObTxCreateArg &arg,
   } else if (is_stopped_()) {
     TRANS_LOG(WARN, "ObLSTxCtxMgr is stopped", K(arg));
     ret = OB_PARTITION_IS_STOPPED;
-  } else if (OB_ISNULL(tmp_ctx = ObTxCtxFactory::alloc())) {
+  } else if (OB_ISNULL(tmp_ctx = ObTxCtxFactory::alloc(
+                          arg.tx_ctx_cache_, !arg.for_replay_))) {
     TRANS_LOG(WARN, "alloc transaction context error", K(arg));
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {

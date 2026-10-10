@@ -509,6 +509,9 @@ int ObTxTable::restore_tx_ctx_table_(ObITable &trans_sstable)
     row_iter = nullptr;
   }
 
+  // Recovery state and its free contexts are needed only during this scan.
+  // Restored contexts that outlive the scan retain their cache owner safely.
+  tx_ctx_table_.finish_recover();
   return ret;
 }
 

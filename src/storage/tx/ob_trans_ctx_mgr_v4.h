@@ -52,6 +52,8 @@ class ObIMemtableCtx;
 
 namespace transaction
 {
+
+class TxCtxCache;
 class ObLSTxCtxMgrStat;
 class ObTransCtx;
 class ObTxCtx;
@@ -87,13 +89,15 @@ struct ObTxCreateArg
                 const ObTransID &trans_id,
                 const uint32_t session_id,
                 const int64_t trans_expired_time,
-                ObTransService *trans_service)
+                ObTransService *trans_service,
+                TxCtxCache *tx_ctx_cache = nullptr)
       : for_replay_(for_replay),
         ctx_source_(ctx_source),
         tx_id_(trans_id),
         session_id_(session_id),
         trans_expired_time_(trans_expired_time),
-        trans_service_(trans_service) {}
+        trans_service_(trans_service),
+        tx_ctx_cache_(tx_ctx_cache) {}
   bool is_valid() const
   {
     return tx_id_.is_valid()
@@ -102,13 +106,14 @@ struct ObTxCreateArg
   }
   TO_STRING_KV(K_(for_replay), "ctx_source", to_str_ctx_source(ctx_source_), K_(tx_id),
                  K_(session_id),
-                 K_(trans_expired_time), KP_(trans_service));
+                 K_(trans_expired_time), KP_(trans_service), KP_(tx_ctx_cache));
   bool for_replay_;
   TxCtxSource ctx_source_;
   ObTransID tx_id_;
   uint32_t session_id_;
   int64_t trans_expired_time_;
   ObTransService *trans_service_;
+  TxCtxCache *tx_ctx_cache_;
 };
 
 // Is used to store and traverse ObTxID

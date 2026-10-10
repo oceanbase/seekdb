@@ -18,6 +18,7 @@
 #include "share/rc/ob_server_runtime.h"
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx/ob_tx_ctx.h"
+#include "storage/tx/tx_ctx_cache.h"
 
 namespace oceanbase
 {
@@ -28,6 +29,12 @@ namespace storage
 
 void ObTxCtxTableRecoverHelper::reset()
 {
+  if (nullptr != tx_ctx_cache_) {
+    STORAGE_LOG(INFO, "close recover tx ctx cache",
+                "hit_count", tx_ctx_cache_->get_hit_count(),
+                "miss_count", tx_ctx_cache_->get_miss_count());
+  }
+  TxCtxCache::close(tx_ctx_cache_);
   in_multi_row_state_ = false;
   prev_meta_.reset();
   buf_.reset();
@@ -105,12 +112,16 @@ int ObTxCtxTableRecoverHelper::recover_one_tx_ctx_(transaction::ObLSTxCtxMgr* ls
   int ret = OB_SUCCESS;
   transaction::ObTxCtx *tx_ctx = NULL;
   bool tx_ctx_existed = true;
+  if (nullptr == tx_ctx_cache_) {
+    tx_ctx_cache_ = TxCtxCache::create(TxCtxCache::REPLAY_MAX_FREE_COUNT);
+  }
   transaction::ObTxCreateArg arg(true,  /* for_replay */
                                  TxCtxSource::RECOVER,
                                  ctx_info.tx_id_,
                                  0, /*session_id*/
                                  INT64_MAX,
-                                 ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>());
+                                 ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>(),
+                                 tx_ctx_cache_);
   if (OB_FAIL(ls_tx_ctx_mgr->create_tx_ctx(arg,
                                            tx_ctx_existed, /*tx_ctx_existed*/
                                            tx_ctx))) {

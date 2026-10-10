@@ -27,10 +27,6 @@
 
 namespace oceanbase
 {
-namespace common
-{
-template <typename T> class ObServerObjectPool;
-}
 namespace storage
 {
 class ObTableScanIterator;
@@ -145,24 +141,6 @@ template <typename Service>
 inline void unbind_server_service()
 {
   ObServerServiceSlot<Service>::service_ = nullptr;
-}
-
-template <typename T>
-inline common::ObServerObjectPool<T> *server_obj_pool()
-{
-  return server_service<common::ObServerObjectPool<T>>();
-}
-
-template <typename T>
-inline T *borrow_server_object()
-{
-  return server_obj_pool<T>()->borrow_object();
-}
-
-template <typename T>
-inline void return_server_object(T *object)
-{
-  server_obj_pool<T>()->return_object(object);
 }
 
 inline lib::IRunWrapper *server_run_wrapper()

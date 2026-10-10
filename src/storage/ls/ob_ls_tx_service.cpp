@@ -23,6 +23,7 @@
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx/ob_tx_replay_executor.h"
 #include "storage/tx/ob_tx_ctx.h"
+#include "storage/tx/tx_ctx_cache.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"
 
@@ -60,7 +61,17 @@ int ObLSTxService::create_tx_ctx(ObTxCreateArg arg,
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", K(ret));
   } else {
-    ret = mgr_->create_tx_ctx(arg, existed, ctx);
+    if (arg.for_replay_) {
+      // Keep the lifecycle owner's reference valid through allocation. The
+      // context retains its own reference after it has been checked out.
+      RLockGuard guard(rwlock_);
+      if (nullptr == arg.tx_ctx_cache_) {
+        arg.tx_ctx_cache_ = get_or_create_replay_tx_ctx_cache_();
+      }
+      ret = mgr_->create_tx_ctx(arg, existed, ctx);
+    } else {
+      ret = mgr_->create_tx_ctx(arg, existed, ctx);
+    }
   }
   return ret;
 }
@@ -617,6 +628,7 @@ int ObLSTxService::traversal_flush()
 
 
 void ObLSTxService::reset_() {
+  close_replay_tx_ctx_cache();
   WLockGuard guard(rwlock_);
   for (int i = 0; i < ObCommonCheckpointType::MAX_BASE_TYPE; i++) {
     common_checkpoints_[i] = NULL;
@@ -668,8 +680,42 @@ int ObLSTxService::offline()
     if (REACH_TIME_INTERVAL(PRINT_LOG_INTERVAL)) {
       TRANS_LOG(WARN, "transaction not empty, try again", K(ret), KP(mgr_), K(mgr_->get_tx_ctx_count()));
     }
+  } else {
+    close_replay_tx_ctx_cache();
   }
   return ret;
+}
+
+TxCtxCache *ObLSTxService::get_or_create_replay_tx_ctx_cache_() const
+{
+  TxCtxCache *cache = ATOMIC_LOAD(&replay_tx_ctx_cache_);
+  if (nullptr == cache) {
+    TxCtxCache *new_cache = TxCtxCache::create(TxCtxCache::REPLAY_MAX_FREE_COUNT);
+    if (nullptr != new_cache) {
+      if (ATOMIC_BCAS(&replay_tx_ctx_cache_, nullptr, new_cache)) {
+        cache = new_cache;
+      } else {
+        TxCtxCache::close(new_cache);
+        cache = ATOMIC_LOAD(&replay_tx_ctx_cache_);
+      }
+    }
+  }
+  return cache;
+}
+
+void ObLSTxService::close_replay_tx_ctx_cache()
+{
+  if (nullptr == ATOMIC_LOAD(&replay_tx_ctx_cache_)) {
+    return;
+  }
+  WLockGuard guard(rwlock_);
+  TxCtxCache *cache = ATOMIC_TAS(&replay_tx_ctx_cache_, nullptr);
+  if (nullptr != cache) {
+    TRANS_LOG(INFO, "close replay tx ctx cache",
+              "hit_count", cache->get_hit_count(),
+              "miss_count", cache->get_miss_count());
+  }
+  TxCtxCache::close(cache);
 }
 
 int ObLSTxService::online()

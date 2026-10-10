@@ -72,6 +72,7 @@ public:
   static uint32_t get_server_session_id(
       const sql::ObSQLSessionInfo *session);
   static void *get_iter_cache(sql::ObSQLSessionInfo *session);
+  static void *get_tx_ctx_cache(sql::ObSQLSessionInfo *session, bool create);
   static void get_current_sql_id(
       const sql::ObSQLSessionInfo *session,
       char *buffer,

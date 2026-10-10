@@ -426,6 +426,7 @@ public:
   ObPrivSet get_user_priv_set() const { return user_priv_set_; }
   ObPrivSet get_db_priv_set() const { return db_priv_set_; }
   void *get_iter_cache() { return iter_cache_; }
+  void *get_tx_ctx_cache(bool create);
   void set_user_priv_set(const ObPrivSet priv_set) { user_priv_set_ = priv_set; }
   void set_db_priv_set(const ObPrivSet priv_set) { db_priv_set_ = priv_set; }
   void set_show_warnings_buf(int error_code);
@@ -1026,6 +1027,7 @@ private:
   share::schema::ObUserLoginInfo login_info_;
   dbms_scheduler::ObDBMSSchedJobInfo *job_info_; // dbms_scheduler related.
   void *iter_cache_;
+  void *tx_ctx_cache_;
   common::ObString audit_filter_name_;
   ObExecutingSqlStatRecord executing_sql_stat_record_;
 };

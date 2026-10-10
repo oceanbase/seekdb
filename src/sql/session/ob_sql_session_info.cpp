@@ -19,6 +19,7 @@
 #include "config_bridge.h"
 #include <new>
 #include "data_plane/ob_iter_cache_api.h"
+#include "data_plane/ob_tx_ctx_cache_api.h"
 #include "data_plane/transaction/ob_i_read_timestamp_service.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "query/command/ob_root_command_service.h"
@@ -160,6 +161,7 @@ ObSQLSessionInfo::ObSQLSessionInfo() :
       out_bytes_(0),
       job_info_(nullptr),
       iter_cache_(nullptr),
+      tx_ctx_cache_(nullptr),
       executing_sql_stat_record_()
 {
 }
@@ -201,6 +203,30 @@ int ObSQLSessionInfo::init(uint32_t sessid,
     package_state_map_.clear();
   }
   return ret;
+}
+
+void *ObSQLSessionInfo::get_tx_ctx_cache(const bool create)
+{
+  // Internal connection pools can outlive every user connection. They must
+  // not retain a transaction context while the server has no foreground work.
+  if (!is_inited_ || !is_user_session()) {
+    return nullptr;
+  }
+  void *cache = ATOMIC_LOAD(&tx_ctx_cache_);
+  if (create && nullptr == cache) {
+    // Retain one returned context. Delayed cleanup and parallel execution can
+    // check out additional contexts without increasing the cache's idle size.
+    void *new_cache = data_plane::create_tx_ctx_cache(1);
+    if (nullptr != new_cache) {
+      if (ATOMIC_BCAS(&tx_ctx_cache_, nullptr, new_cache)) {
+        cache = new_cache;
+      } else {
+        data_plane::close_tx_ctx_cache(new_cache);
+        cache = ATOMIC_LOAD(&tx_ctx_cache_);
+      }
+    }
+  }
+  return cache;
 }
 
 //for test
@@ -533,6 +559,9 @@ void ObSQLSessionInfo::destroy(bool skip_sys_var)
     reset_all_package_state();
     if (OB_NOT_NULL(iter_cache_)) {
       data_plane::destroy_iter_cache(get_session_allocator(), iter_cache_);
+    }
+    if (OB_NOT_NULL(tx_ctx_cache_)) {
+      data_plane::close_tx_ctx_cache(tx_ctx_cache_);
     }
     reset(skip_sys_var);
     is_inited_ = false;
@@ -1866,6 +1895,11 @@ uint32_t ObSessionAccess::get_server_session_id(
 void *ObSessionAccess::get_iter_cache(sql::ObSQLSessionInfo *session)
 {
   return nullptr == session ? nullptr : session->get_iter_cache();
+}
+
+void *ObSessionAccess::get_tx_ctx_cache(sql::ObSQLSessionInfo *session, const bool create)
+{
+  return nullptr == session ? nullptr : session->get_tx_ctx_cache(create);
 }
 
 void ObSessionAccess::get_current_sql_id(

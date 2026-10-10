@@ -47,6 +47,7 @@ class ObTransService;
 class ObITxLogAdapter;
 class ObTxCreateArg;
 class ObLSTxCtxIterator;
+class TxCtxCache;
 }
 
 namespace storage
@@ -61,16 +62,18 @@ public:
       : parent_(parent),
         mgr_(NULL),
         trans_service_(NULL),
+        replay_tx_ctx_cache_(NULL),
         rwlock_(common::ObLatchIds::CLOG_CKPT_RWLOCK) {
     reset_();
   }
-  ~ObLSTxService() {}
+  ~ObLSTxService() { close_replay_tx_ctx_cache(); }
   void destroy() {
     reset_();
   }
   int prepare_offline(const int64_t start_ts);
   int offline();
   int online();
+  void close_replay_tx_ctx_cache();
 
   // NB: block_normal and unblcok should pair used !!!
   // when you finish block_noraml, you should unblock_normal then push to other state
@@ -181,11 +184,13 @@ public:
   int check_tx_blocked(bool &tx_blocked) const;
 private:
   void reset_();
+  transaction::TxCtxCache *get_or_create_replay_tx_ctx_cache_() const;
 
   storage::ObLS *parent_;
 
   transaction::ObLSTxCtxMgr *mgr_;
   transaction::ObTransService *trans_service_;
+  mutable transaction::TxCtxCache *replay_tx_ctx_cache_;
 
   // responsible for maintenance checkpoint unit that write TRANS_SERVICE_LOG_BASE_TYPE clog
   checkpoint::ObCommonCheckpoint *common_checkpoints_[checkpoint::ObCommonCheckpointType::MAX_BASE_TYPE];

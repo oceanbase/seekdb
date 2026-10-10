@@ -114,6 +114,7 @@ STORAGE_PUBLIC_HEADER_ROOTS = [
     "tx/ob_trans_service.h",
     "tx/ob_ts_mgr.h",
     "tx/ob_tx_ctx.h",
+    "tx/tx_ctx_cache.h",
     "tx/ob_tx_log.h",
     "tx/ob_tx_loop_worker.h",
     "tx/ob_tx_result_struct.h",
