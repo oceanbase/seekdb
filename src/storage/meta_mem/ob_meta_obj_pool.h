@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_META_OBJ_POOL_H_
 #define OCEANBASE_STORAGE_OB_META_OBJ_POOL_H_
 
+#include "config_bridge.h"
 #include "lib/objectpool/ob_resource_pool.h"
 #include "storage/meta_mem/ob_meta_memory_limit.h"
 
@@ -297,7 +298,7 @@ ObMetaObjPool<T>::ObMetaObjPool(
 {
   int ret = OB_SUCCESS;
   const int64_t mem_limit = true
-      ? GCONF._storage_meta_memory_limit_percentage : OB_DEFAULT_META_OBJ_PERCENTAGE_LIMIT;
+      ? config::_storage_meta_memory_limit_percentage() : OB_DEFAULT_META_OBJ_PERCENTAGE_LIMIT;
   if (ObCtxIds::META_OBJ_CTX_ID == ctx_id && OB_FAIL(set_meta_obj_memory_limit(mem_limit))) {
     STORAGE_LOG(WARN, "fail to set meta object memory limit", K(ret), K(mem_limit));
   } else if (OB_FAIL(allocator_.init(lib::ObMallocAllocator::get_instance(), common::OB_MALLOC_MIDDLE_BLOCK_SIZE,

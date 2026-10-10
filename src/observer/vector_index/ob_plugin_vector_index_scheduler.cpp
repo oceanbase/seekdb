@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #define USING_LOG_PREFIX SERVER
+#include "share/ob_server_struct.h"
 #include "ob_plugin_vector_index_scheduler.h"
 #include "share/rc/ob_server_runtime.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
@@ -62,7 +63,7 @@ int ObPluginVectorIndexLoadScheduler::init(ObLS *ls, common::ObTimer &scheduler_
 
 void ObPluginVectorIndexLoadScheduler::runTimerTask()
 {
-  ObCurTraceId::init(GCONF.self_addr_);
+  ObCurTraceId::init(GCTX.self_addr());
   ObTimeGuard guard("ObPluginVectorIndexLoadScheduler::runTimerTask", 
     VEC_INDEX_LOAD_TIME_NORMAL_THRESHOLD);
   run_task();
@@ -1001,7 +1002,7 @@ int ObPluginVectorIndexLoadScheduler::resume_task_executors()
 
 void ObPluginVectorIndexLoadScheduler::run_task()
 {
-  ObCurTraceId::init(GCONF.self_addr_);
+  ObCurTraceId::init(GCTX.self_addr());
   ObTimeGuard guard("ObPluginVectorIndexLoadScheduler::run_task", 
                      VEC_INDEX_LOAD_TIME_NORMAL_THRESHOLD);
   int ret = OB_SUCCESS;

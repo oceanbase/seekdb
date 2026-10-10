@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 
+#include "config_bridge.h"
 #include "rootserver/fork_table/ob_fork_table_task.h"
 #include "share/rc/ob_server_runtime.h"
 #include "rootserver/ob_ddl_service.h"
@@ -525,7 +526,7 @@ int ObForkTableTask::cleanup_impl()
       } else if (OB_ISNULL(dst_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
       } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
-      } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, GCONF.rpc_timeout))) {
+      } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, config::rpc_timeout()))) {
       } else if (OB_ISNULL(conn = trans.get_connection())) {
         ret = OB_ERR_UNEXPECTED;
       } else {

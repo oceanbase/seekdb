@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "config_bridge.h"
 #include "ob_macro_block_writer.h"
 #include "ob_imacro_block_flush_callback.h"
 #include "share/rc/ob_server_runtime.h"
@@ -63,7 +64,7 @@ int ObMicroBlockBufferHelper::open(
       &data_store_desc.get_col_desc_array(), data_store_desc.contain_full_col_descs()))) {
   } else {
     data_store_desc_ = &data_store_desc;
-    micro_block_merge_verify_level_ = GCONF.micro_block_merge_verify_level;
+    micro_block_merge_verify_level_ = config::micro_block_merge_verify_level();
   }
   return ret;
 }
@@ -380,7 +381,7 @@ int ObMacroBlockWriter::ObDefaultMacroBlockFlusher::write_disk(ObMacroBlock& mac
       object_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
       object_info.io_desc_.set_sealed();
       object_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_MACRO_BLOCK_WRITE_IO);
-      object_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
+      object_info.io_timeout_ms_ = std::max(config::_data_storage_io_timeout() / 1000, DEFAULT_IO_WAIT_TIME_MS);
       object_info.device_handle_ = device_handle_;
       object_info.has_backup_device_handle_ = OB_NOT_NULL(device_handle_);
     }
@@ -635,7 +636,7 @@ int ObMacroBlockWriter::inner_init(
     } else if (OB_FAIL(build_micro_writer(data_store_desc_,
                                           allocator_,
                                           micro_writer_,
-                                          GCONF.micro_block_merge_verify_level))) {
+                                          config::micro_block_merge_verify_level()))) {
     } else if (OB_FAIL(datum_row_.init(allocator_, data_store_desc.get_row_column_count()))) {
     } else if (OB_FAIL(micro_helper_.open(data_store_desc, allocator_))) {
     } else if (OB_FAIL(reader_helper_.init(allocator_))) {
@@ -1888,7 +1889,7 @@ int ObMacroBlockWriter::check_write_complete(const MacroBlockId &macro_block_id)
   read_info.io_desc_.set_mode(ObIOMode::READ);
   read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
   read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_MACRO_BLOCK_WRITE_IO);
-  read_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
+  read_info.io_timeout_ms_ = std::max(config::_data_storage_io_timeout() / 1000, DEFAULT_IO_WAIT_TIME_MS);
   read_info.macro_block_id_ = macro_block_id;
   
 

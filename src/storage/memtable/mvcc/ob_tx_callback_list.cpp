@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#include "config_bridge.h"
 #include "ob_tx_callback_list.h"
 #include "storage/tx/ob_tx_ctx.h"
 
@@ -381,7 +382,7 @@ int64_t ObTxCallbackList::calc_need_remove_count_for_fast_commit_()
 {
   // TODO: when support multiple callback-list, the remove count for single
   // list should be re-developed
-  const int64_t fast_commit_callback_count = GCONF._fast_commit_callback_count;
+  const int64_t fast_commit_callback_count = config::_fast_commit_callback_count();
   const int64_t recommand_reserve_count = (fast_commit_callback_count + 1) / 2;
   const int64_t need_remove_count = length_ - recommand_reserve_count;
 

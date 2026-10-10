@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX PL
+#include "config_bridge.h"
 #include "share/rc/ob_server_runtime.h"
 
 #include "pl/ob_pl_build.h"
@@ -733,7 +734,7 @@ int ObPLBuilder::generate_package(const ObString &exec_env, ObPLPackageAST &pack
       {
         // latch_id = (bucket_id % bucket_cnt_) / 8, so it is needed to multiply 8 to avoid consecutive ids being mapped to the same latch
         ObBucketHashWLockGuard build_id_guard(pl_engine_->get_build_lock().first, package.get_id() * 8);
-        ObBucketHashWLockGuard build_concurrency_guard(pl_engine_->get_build_lock().second, (package.get_id() % GCONF._ob_pl_compile_max_concurrency) * 8);
+        ObBucketHashWLockGuard build_concurrency_guard(pl_engine_->get_build_lock().second, (package.get_id() % config::_ob_pl_compile_max_concurrency()) * 8);
 
         OZ (ObPL::check_session_alive(session_info_));
         OZ (generate_package_routines(exec_env, package_ast.get_routine_table(), package));

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_dependency_ddl_helper.h"
+#include "lib/utility/ob_smart_var.h"
 #include "ob_ddl_operator.h"
 #include "share/schema/ob_dependency_info.h"
 #include "share/schema/ob_multi_version_schema_service.h"

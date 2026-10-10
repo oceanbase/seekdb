@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX TABLELOCK
+#include "config_bridge.h"
 #include "data_plane/tablelock/ob_table_lock.h"
 #include "storage/tablelock/ob_table_lock_service.h"
 #include "share/rc/ob_server_runtime.h"
@@ -64,7 +65,7 @@ ObTableLockService::ObTableLockCtx::ObTableLockCtx() :
   is_for_replace_(false)
 {
   is_enable_lock_priority_ = false;
-  is_enable_lock_priority_ = GCONF.enable_lock_priority;
+  is_enable_lock_priority_ = config::enable_lock_priority();
 }
 
 void ObTableLockService::ObRetryCtx::reuse()

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_macro_block_reader.h"
+#include "lib/compress/ob_compressor_pool.h"
 #include "ob_macro_block_bare_iterator.h"
 #include "index_block/ob_index_block_row_struct.h"
 

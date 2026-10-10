@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS_COMPACTION
 
+#include "config_bridge.h"
 #include "rootserver/freeze/ob_daily_major_freeze_launcher.h"
 
 #include "rootserver/freeze/ob_major_freeze_helper.h"
@@ -36,7 +37,6 @@ ObDailyMajorFreezeLauncher::ObDailyMajorFreezeLauncher()
     is_paused_(false),
     already_launch_(false),
     sql_proxy_(nullptr),
-    config_(nullptr),
     gc_freeze_info_last_timestamp_(0),
     merge_info_mgr_(nullptr),
     last_check_tablet_ckm_us_(0),
@@ -52,7 +52,6 @@ ObDailyMajorFreezeLauncher::~ObDailyMajorFreezeLauncher()
 }
 
 int ObDailyMajorFreezeLauncher::init(
-    ObServerConfig &config,
     ObMySQLProxy &proxy,
     ObMajorMergeInfoManager &merge_info_manager)
 {
@@ -60,7 +59,6 @@ int ObDailyMajorFreezeLauncher::init(
   if (is_inited_) {
     ret = OB_INIT_TWICE;
   } else {
-    config_ = &config;
     gc_freeze_info_last_timestamp_ = ObTimeUtility::current_time();
     merge_info_mgr_ = &merge_info_manager;
     last_check_tablet_ckm_us_ = ObTimeUtility::current_time();
@@ -137,7 +135,6 @@ int ObDailyMajorFreezeLauncher::destroy()
   is_paused_ = false;
   is_inited_ = false;
   sql_proxy_ = nullptr;
-  config_ = nullptr;
   merge_info_mgr_ = nullptr;
   tablet_ckm_gc_compaction_scn_.set_invalid();
   return ret;
@@ -146,14 +143,15 @@ int ObDailyMajorFreezeLauncher::destroy()
 int ObDailyMajorFreezeLauncher::try_launch_major_freeze()
 {
   int ret = OB_SUCCESS;
+  const config::MomentTime duty = config::major_freeze_duty_time_parts();
 
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-  } else if (GCONF.major_freeze_duty_time.disable()) {
+  } else if (duty.disabled) {
     LOG_INFO("major_freeze_duty_time is disabled, can not launch major freeze by duty");
   } else {
-    const int hour = GCONF.major_freeze_duty_time.hour();
-    const int minute = GCONF.major_freeze_duty_time.minute();
+    const int hour = duty.hour;
+    const int minute = duty.minute;
     time_t cur_time = -1;
     time(&cur_time);
     struct tm human_time;
@@ -180,8 +178,8 @@ int ObDailyMajorFreezeLauncher::try_launch_major_freeze()
             }
           } else {
             already_launch_ = true;
-            LOG_INFO("launch major freeze by duty time",
-                     "duty_time", GCONF.major_freeze_duty_time);
+            rust::String duty_text = config::major_freeze_duty_time();
+            LOG_INFO("launch major freeze by duty time", "duty_time", duty_text.c_str());
           }
 
           // launcher will retry when error code is OB_EAGAIN

@@ -42,7 +42,6 @@
 #include "share/transaction/ob_tx_id.h"
 #include "share/ob_tablet_autoincrement_param.h"
 #include "share/log/palf/log_define.h"
-#include "share/config/ob_config.h" // ObConfigArray
 #include "share/config/ob_config_rpc_types.h"
 #include "share/scn.h"//SCN
 #include "share/resource_limit_calculator/ob_resource_limit_calculator.h"//ObUserResourceCalculateArg

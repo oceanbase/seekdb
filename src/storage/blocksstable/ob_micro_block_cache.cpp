@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
+#include "config_bridge.h"
 #include "ob_micro_block_cache.h"
 #include "src/storage/meta_mem/ob_tablet_pointer.h"
 #include "src/storage/meta_mem/ob_tablet_pointer.h"
@@ -1087,7 +1088,7 @@ int ObDataMicroBlockCache::load_block(
       macro_read_info.io_callback_ = callback;
       macro_read_info.offset_ = micro_block_id.offset_;
       macro_read_info.size_ = micro_block_id.size_;
-      macro_read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
+      macro_read_info.io_timeout_ms_ = config::_data_storage_io_timeout() / 1000L;
 
 
       if (OB_FAIL(ObObjectManager::async_read_object(macro_read_info, macro_handle))) {
@@ -1344,7 +1345,7 @@ int ObIndexMicroBlockCache::load_block(
       macro_read_info.io_callback_ = callback;
       macro_read_info.offset_ = micro_block_id.offset_;
       macro_read_info.size_ = micro_block_id.size_;
-      macro_read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
+      macro_read_info.io_timeout_ms_ = config::_data_storage_io_timeout() / 1000L;
 
 
       ObIndexBlockDataTransformer idx_transformer;

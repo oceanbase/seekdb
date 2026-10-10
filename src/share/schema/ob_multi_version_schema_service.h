@@ -141,7 +141,6 @@ public:
   static ObMultiVersionSchemaService &get_instance();
 
   int init(common::ObMySQLProxy *proxy,
-      const common::ObCommonConfig *config,
       ObSchemaStatusProxy &schema_status_proxy,
       const ObServiceStatus &service_status,
       bool &in_bootstrap,

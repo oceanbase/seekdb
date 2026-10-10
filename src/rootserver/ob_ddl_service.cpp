@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX RS
 
+#include "share/rc/ob_server_runtime.h"
+#include "config_bridge.h"
 #include <algorithm>
 #include "rootserver/ob_dependency_ddl_helper.h"
 #include "share/ob_sys_time_zone_util.h"
@@ -24,7 +26,6 @@
 #include "rootserver/ob_runtime_ddl_service.h"
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "share/ob_ddl_common.h"
-#include "share/rc/ob_server_runtime.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "sql/printer/ob_schema_printer.h"
 #include "share/autoincrement/ob_i_tablet_autoincrement_admin.h"
@@ -319,7 +320,7 @@ int ObDDLService::check_create_with_db_id(ObDatabaseSchema &schema)
   int ret = OB_SUCCESS;
   const uint64_t db_id = schema.get_database_id();
   if (OB_INVALID_ID != db_id) {
-    const bool enable_sys_table_ddl = common::ObServerConfig::get_instance().enable_sys_table_ddl;
+    const bool enable_sys_table_ddl = ::oceanbase::config::enable_sys_table_ddl();
     char err_msg[number::ObNumber::MAX_PRINTABLE_SIZE];
     if (!enable_sys_table_ddl) { //Only when the configuration item switch is turned on can the internal table be created
       ret = OB_OP_NOT_ALLOW;
@@ -348,7 +349,7 @@ int ObDDLService::replace_table_schema_type(ObTableSchema &schema)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("should not reach here");
     } else {
-      const bool enable_sys_table_ddl = common::ObServerConfig::get_instance().enable_sys_table_ddl;
+      const bool enable_sys_table_ddl = ::oceanbase::config::enable_sys_table_ddl();
       char err_msg[number::ObNumber::MAX_PRINTABLE_SIZE];
       if (!enable_sys_table_ddl) { // Only when the configuration item switch is turned on can the internal table is created
         ret = OB_OP_NOT_ALLOW;
@@ -444,7 +445,7 @@ int ObDDLService::get_lock_argument_for_rename_(
   owner_id.set_default();  // if lock_priority is disabled, just use default owner_id
   if (lock_priority != ObTableLockPriority::NORMAL) {
     timeout_us = (THIS_WORKER.is_timeout_ts_valid() ?
-                  THIS_WORKER.get_timeout_remain() : GCONF.rpc_timeout);
+                  THIS_WORKER.get_timeout_remain() : config::rpc_timeout());
     // allow rename if the lock is hold by the same session.
     if (OB_FAIL(owner_id.convert_from_session_id(session_id,
           session_create_ts))) {
@@ -9807,7 +9808,7 @@ int ObDDLService::check_could_write_truncate_info_(
   if (!arg.is_update_global_indexes_) {
   } else {
     {
-      if (!GCONF._ob_enable_truncate_partition_preserve_global_index) {
+      if (!config::_ob_enable_truncate_partition_preserve_global_index()) {
         enable_preserve_index = false;
         LOG_INFO("_ob_enable_truncate_partition_preserve_global_index is false, need rebuild global index when truncate partition", KR(ret));
       } else {
@@ -10133,7 +10134,7 @@ int ObDDLService::check_enable_sys_table_ddl(const ObTableSchema &table_schema,
 {
   int ret = OB_SUCCESS;
   if (is_inner_table(table_schema.get_table_id())) {
-    const bool enable_sys_table_ddl = common::ObServerConfig::get_instance().enable_sys_table_ddl;
+    const bool enable_sys_table_ddl = ::oceanbase::config::enable_sys_table_ddl();
     char err_msg[number::ObNumber::MAX_PRINTABLE_SIZE];
     if (!enable_sys_table_ddl) {
       ret = OB_OP_NOT_ALLOW;
@@ -11125,7 +11126,7 @@ int ObDDLService::check_is_offline_ddl(ObAlterTableArg &alter_table_arg,
       }
     }
     if (OB_SUCC(ret) && DDL_NORMAL_TYPE == ddl_type && has_drop_and_add_index) {
-      if (!GCONF._enable_drop_and_add_index) {
+      if (!config::_enable_drop_and_add_index()) {
         ret = OB_OP_NOT_ALLOW;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "Dropping and adding indexes at the same time is a high-risk operation, which is");
       }
@@ -12887,7 +12888,7 @@ int ObDDLService::build_single_table_rw_defensive_(const ObArray<ObTabletID> &ta
     ret = OB_INVALID_ARGUMENT;
   } else {
     const int64_t abs_timeout_us = THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_ts()
-                                                                     : ObTimeUtility::current_time() + GCONF.rpc_timeout;
+                                                                     : ObTimeUtility::current_time() + config::rpc_timeout();
     if (OB_FAIL(ObTabletBindingMdsHelper::modify_tablet_binding_for_rw_defensive(tablet_ids, schema_version, abs_timeout_us, trans))) {
     }
   }
@@ -15235,7 +15236,7 @@ int ObDDLService::unbind_hidden_tablets(
   } else if (OB_FAIL(hidden_table_schema.get_tablet_ids(hidden_tablet_ids))) {
   } else {
     const int64_t abs_timeout_us = THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_ts()
-                                                                     : ObTimeUtility::current_time() + GCONF.rpc_timeout;
+                                                                     : ObTimeUtility::current_time() + config::rpc_timeout();
     if (OB_FAIL(ObTabletBindingMdsHelper::modify_tablet_binding_for_unbind(orig_tablet_ids, hidden_tablet_ids, schema_version, abs_timeout_us, trans))) {
     }
   }
@@ -22139,7 +22140,7 @@ int ObDDLSQLTransaction::lock_all_ddl_operation(
   int ret = OB_SUCCESS;
 
   ObTimeoutCtx ctx;
-  if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, GCONF.rpc_timeout))) {
+  if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, config::rpc_timeout()))) {
   } else {
     // ddl service init after RS master start service
     // we don't want ddl service grab lock block RS master start
@@ -22249,7 +22250,7 @@ bool ObDDLService::need_check_constraint_validity(const obcall::ObAlterTableArg 
 int ObDDLService::ddl_wlock()
 {
   const int64_t timeout_us = THIS_WORKER.is_timeout_ts_valid() ?
-      THIS_WORKER.get_timeout_remain() : GCONF.rpc_timeout;
+      THIS_WORKER.get_timeout_remain() : config::rpc_timeout();
 
   return ddl_lock_.wrlock(ObLatchIds::DDL_EXECUTE_LOCK, ObTimeUtility::current_time() + timeout_us);
 }
@@ -22257,7 +22258,7 @@ int ObDDLService::ddl_wlock()
 int ObDDLService::ddl_rlock()
 {
   const int64_t timeout_us = THIS_WORKER.is_timeout_ts_valid() ?
-      THIS_WORKER.get_timeout_remain() : GCONF.rpc_timeout;
+      THIS_WORKER.get_timeout_remain() : config::rpc_timeout();
 
   return ddl_lock_.rdlock(ObLatchIds::DDL_EXECUTE_LOCK, ObTimeUtility::current_time() + timeout_us);
 }
@@ -23526,7 +23527,6 @@ int ObDDLService::submit_drop_lob_task_(ObMySQLTransaction &trans,
 } // end namespace rootserver
 } // end namespace oceanbase
 
-#include "share/config/ob_runtime_config.h"  // RUNTIME_CONF(this repository keeps it in share, so it is legal)
 namespace oceanbase
 {
 namespace rootserver

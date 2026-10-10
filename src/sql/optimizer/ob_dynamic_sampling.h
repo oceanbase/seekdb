@@ -31,7 +31,6 @@ class ObExecContext;
 class OptTableMeta;
 }  // end of namespace sql
 namespace common {
-class ObServerConfig;
 class ObMySQLProxy;
 
 struct ObDSFailTabInfo

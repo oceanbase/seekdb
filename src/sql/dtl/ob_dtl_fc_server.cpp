@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_DTL
 
+#include "config_bridge.h"
 #include "ob_dtl_fc_server.h"
 #include "share/rc/ob_server_runtime.h"
 
@@ -126,7 +127,7 @@ void ObDfc::calc_max_buffer(int64_t max_parallel_cnt)
   //    max_parallel_cnt_=600, then 600 * (4 + 2) * 64 * 1024 * 2 / 2, then maximum 3600 buffer pages
   //      Assume a 1:1 ratio, then for 300 concurrent SQLs, the maximum number of channels is 600, each dfc has about 6 buffers
   //      Assume 2 queries, each with 150*2, then the number of channels is approximately 150*150*2, each dfc has about 12 buffers
-  max_blocked_buffer_size_ = max_parallel_cnt_ * (MAX_BUFFER_CNT + 2) * GCONF.dtl_buffer_size * MAX_BUFFER_FACTOR / 2;
+  max_blocked_buffer_size_ = max_parallel_cnt_ * (MAX_BUFFER_CNT + 2) * config::dtl_buffer_size() * MAX_BUFFER_FACTOR / 2;
   max_buffer_size_ = max_blocked_buffer_size_ * MAX_BUFFER_FACTOR;
   int64_t factor = 1;
   int ret = OB_SUCCESS;

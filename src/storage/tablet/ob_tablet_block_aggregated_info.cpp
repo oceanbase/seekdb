@@ -107,7 +107,7 @@ int ObTabletMacroInfo::init(
                             + data_block_info_set.size()
                             + shared_data_block_info_map.size();
 #ifdef ERRSIM
-  const int64_t block_cnt_config_value = GCONF.errsim_storage_meta_macro_ids_threshold;
+  const int64_t block_cnt_config_value = ::oceanbase::common::errsim_config().errsim_storage_meta_macro_ids_threshold.load();
   const int64_t block_cnt_threshold = 0 == block_cnt_config_value ? ID_COUNT_THRESHOLD
                                              : min(ID_COUNT_THRESHOLD, block_cnt_config_value);
 #else

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "config_bridge.h"
 #include "ob_sql_memory_manager.h"
 #include "sql/engine/px/ob_px_util.h"
 #include "share/rc/ob_server_runtime.h"
@@ -966,10 +967,11 @@ bool ObSqlMemoryManager::enable_auto_sql_memory_manager()
 {
   bool auto_memory_mgr = false;
   {
-    const ObString tmp_str(GCONF.workarea_size_policy.str());
+    const rust::String config_value = config::workarea_size_policy();
+    const ObString tmp_str(static_cast<int32_t>(config_value.size()), config_value.data());
     auto_memory_mgr = !tmp_str.case_compare("AUTO");
     LOG_TRACE("get work area policy config", K(auto_memory_mgr), K(tmp_str),
-      K(GCONF.workarea_size_policy.str()));
+      K(tmp_str));
   }
   return auto_memory_mgr;
 }

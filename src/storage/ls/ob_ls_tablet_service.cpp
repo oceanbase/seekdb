@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "config_bridge.h"
 #include "ob_ls_tablet_service.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "share/rc/ob_server_runtime.h"
@@ -2585,9 +2586,9 @@ int ObLSTabletService::lock_rows(
         if (ObTimeUtility::current_time() > dml_param.timeout_) {
           ret = OB_TIMEOUT;
           int64_t cur_time = ObClockGenerator::getClock();
-        } else if (GCONF.enable_defensive_check()
+        } else if ((config::_enable_defensive_check() > 0)
             && OB_FAIL(check_old_row_legitimacy_wrap(datum_utils.get_cmp_funcs(), tmp_handle, run_ctx, 1, row, error_row_idx))) {
-        } else if (GCONF.enable_defensive_check()
+        } else if ((config::_enable_defensive_check() > 0)
             && OB_FAIL(check_datum_row_nullable_value(col_desc, relative_table, *row))) {
         } else if (FALSE_IT(timeguard.click("Check"))) {
         } else if (OB_FAIL(lock_row_wrap(tmp_handle, run_ctx.relative_table_, ctx, col_desc, *row))) {
@@ -2994,7 +2995,7 @@ int ObLSTabletService::insert_tablet_rows(
       run_ctx.store_ctx_.mvcc_acc_ctx_.write_flag_.is_update_pk_dop();
 
   // 1. Defensive checking of new rows.
-  if (GCONF.enable_defensive_check()) {
+  if ((config::_enable_defensive_check() > 0)) {
     if (OB_FAIL(check_new_row_legitimacy(run_ctx, row_count, rows_info.rows_))) {
     }
   }
@@ -3076,7 +3077,7 @@ int ObLSTabletService::put_tablet_rows(
   ObRelativeTable &table = run_ctx.relative_table_;
   const int64_t row_count = rows_info.get_rowkey_cnt();
   // 1. Defensive checking of new rows.
-  if (GCONF.enable_defensive_check()) {
+  if ((config::_enable_defensive_check() > 0)) {
     if (OB_FAIL(check_new_row_legitimacy(run_ctx, row_count, rows_info.rows_))) {
     }
   }
@@ -3937,7 +3938,7 @@ int ObLSTabletService::process_new_rows(
 
   if (OB_UNLIKELY(update_idx.count() < 0)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (GCONF.enable_defensive_check()
+  } else if ((config::_enable_defensive_check() > 0)
       && OB_FAIL(check_new_row_legitimacy(run_ctx, row_count, new_rows_info.rows_))) {
   } else {
     const ObColDescIArray &col_descs = *run_ctx.col_descs_;

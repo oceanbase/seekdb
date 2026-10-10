@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "config_bridge.h"
 #include "ob_sstable_meta_info.h"
 #include "storage/blocksstable/ob_macro_block_reader.h"
 #include "storage/blocksstable/index_block/ob_index_block_row_scanner.h"
@@ -249,7 +250,7 @@ int ObRootBlockInfo::read_block_data(
 
     read_info.io_desc_.set_mode(ObIOMode::READ);
     read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
-    read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
+    read_info.io_timeout_ms_ = config::_data_storage_io_timeout() / 1000L;
     read_info.buf_ = buf;
     
     read_info.io_desc_.set_sys_module_id(ObIOModule::ROOT_BLOCK_IO);

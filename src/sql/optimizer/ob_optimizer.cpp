@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_OPT
+#include "config_bridge.h"
 #include "ob_optimizer.h"
 #include "share/rc/ob_server_runtime.h"
 #include "sql/optimizer/ob_explain_note.h"
@@ -721,17 +722,17 @@ int ObOptimizer::extract_opt_ctx_basic_flags(const ObDMLStmt &stmt, ObSQLSession
   bool partition_wise_plan_enabled = true;
   bool exists_partition_wise_plan_enabled_hint = false;
   ctx_.set_is_online_ddl(session.get_ddl_info().is_ddl());  // set is online ddl first, is used by other extract operations
-  bool das_keep_order_enabled = true && GCONF._enable_das_keep_order;
-  bool hash_join_enabled = true && GCONF._hash_join_enabled;
-  bool optimizer_sortmerge_join_enabled = true && GCONF._optimizer_sortmerge_join_enabled;
-  bool nested_loop_join_enabled = true && GCONF._nested_loop_join_enabled;
+  bool das_keep_order_enabled = true && config::_enable_das_keep_order();
+  bool hash_join_enabled = true && config::_hash_join_enabled();
+  bool optimizer_sortmerge_join_enabled = true && config::_optimizer_sortmerge_join_enabled();
+  bool nested_loop_join_enabled = true && config::_nested_loop_join_enabled();
   bool enable_adj_index_cost = false;
   int64_t optimizer_index_cost_adj = 0;
   bool enable_use_batch_nlj = false;
   bool better_inlist_costing = false;
   bool enable_spf_batch_rescan = session.is_spf_mlj_group_rescan_enabled();
-  bool enable_px_ordered_coord = GCONF._enable_px_ordered_coord;
-  int64_t das_batch_rescan_flag = true ? GCONF._enable_das_batch_rescan_flag : 0;
+  bool enable_px_ordered_coord = config::_enable_px_ordered_coord();
+  int64_t das_batch_rescan_flag = true ? config::_enable_das_batch_rescan_flag() : 0;
   const ObOptParamHint &opt_params = ctx_.get_global_hint().opt_params_;
   if (OB_ISNULL(query_ctx)) {
     ret = OB_ERR_UNEXPECTED;
@@ -791,7 +792,7 @@ int ObOptimizer::extract_opt_ctx_basic_flags(const ObDMLStmt &stmt, ObSQLSession
       ctx_.set_nested_join_enabled(nested_loop_join_enabled);
     }
 
-    ctx_.set_partition_wise_plan_enabled(GCONF._partition_wise_plan_enabled);
+    ctx_.set_partition_wise_plan_enabled(config::_partition_wise_plan_enabled());
 
     if (exists_partition_wise_plan_enabled_hint) {
       ctx_.set_partition_wise_plan_enabled(partition_wise_plan_enabled);
@@ -1235,7 +1236,7 @@ int ObOptimizer::check_enable_topn_runtime_filter()
     
     bool hint_exist = false;
 
-    config_enable = GCONF._enable_topn_runtime_filter;
+    config_enable = config::_enable_topn_runtime_filter();
 
     if (OB_FAIL(ctx_.get_global_hint().opt_params_.get_bool_opt_param(
             ObOptParamHint::ENABLE_TOPN_RUNTIME_FILTER, hint_enable, hint_exist))) {

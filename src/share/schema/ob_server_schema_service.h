@@ -43,7 +43,6 @@ namespace common
 class ObInnerTableBackupGuard;
 class ObMySQLTransactionaction;
 class ObMySQLProxy;
-class ObCommonConfig;
 class ObKVCacheHandle;
 class ObTimeoutCtx;
 }
@@ -666,7 +665,6 @@ public:
 
 public:
   int init(common::ObMySQLProxy *sql_proxy,
-           const common::ObCommonConfig *config,
            ObSchemaStatusProxy &schema_status_proxy,
            const ObServiceStatus &service_status,
            bool &in_bootstrap,
@@ -958,7 +956,6 @@ protected:
   common::SpinRWLock schema_manager_rwlock_;
   ObSchemaService *schema_service_;
   common::ObMySQLProxy *sql_proxy_;
-  const common::ObCommonConfig *config_;
   ObSchemaStatusProxy *schema_status_proxy_;
   const ObServiceStatus *service_status_;
   bool *in_bootstrap_;

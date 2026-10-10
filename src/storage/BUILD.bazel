@@ -428,16 +428,18 @@ cc_library(
     deps = [
         ":_textual_ob_keybtree",
         ":tablet_autoincrement_state",
+        "//rust:config_bridge_headers",
         "//src/logservice:append_callback_interface",
         "//src/oblib:oblib_db_log_advanced",
         "//src/oblib:oblib_db_meta_runtime",
         "//src/share:server_snapshot_id",
+        "//src/share:time_wheel",
     ] + _STORAGE_INTERFACE_NON_SHARE_DEPS,
     implementation_deps = (
         [
             dep
             for dep in _STORAGE_INTERFACE_SHARE_DEPS
-            if dep != "//src/share:server_snapshot_id"
+            if dep not in ["//src/share:server_snapshot_id", "//src/share:time_wheel"]
         ] +
         _STORAGE_INTERFACE_OBLIB_DEPS
     ),
@@ -451,6 +453,7 @@ cc_library(
     hdrs = STORAGE_PRIVATE_HEADERS,
     deps = [
         ":storage_runtime_interface",
+        "//rust:config_bridge_headers",
     ] + _STORAGE_EXACT_HEADER_DEPS + _STORAGE_HEADER_NON_SHARE_DEPS,
     implementation_deps = (
         _STORAGE_HEADER_SHARE_DEPS +
@@ -2441,6 +2444,7 @@ seekdb_semantic_unity_cc_library(
     implementation_deps = [
         ":storage_runtime_interface",
         ":storage_runtime_internal_headers",
+        "//rust:config_bridge_headers",
     ] + _STORAGE_EXACT_HEADER_DEPS + _STORAGE_RUNTIME_NON_SHARE_DEPS,
     features = ["layering_check"],
     tags = ["manual"],

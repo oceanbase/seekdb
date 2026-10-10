@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_RESV
+#include "config_bridge.h"
 #include "sql/resolver/ddl/ob_create_table_resolver_base.h"
 
 namespace oceanbase
@@ -81,7 +82,7 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
     int64_t progressive_merge_round = 0;
     int64_t tablet_size = tablet_size_;
     if (-1 == tablet_size) {
-      tablet_size = common::ObServerConfig::get_instance().tablet_size;
+      tablet_size = ::oceanbase::config::tablet_size();
     }
     table_schema.set_tablet_size(tablet_size);
     table_schema.set_pctfree(pctfree_);
@@ -93,18 +94,14 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
     table_schema.set_table_mode_struct(table_mode_);
     table_schema.set_dop(table_dop_);
     if (0 == progressive_merge_num_) {
-      table_schema.set_progressive_merge_num(GCONF.default_progressive_merge_num);
+      table_schema.set_progressive_merge_num(config::default_progressive_merge_num());
     } else {
       table_schema.set_progressive_merge_num(progressive_merge_num_);
     }
     // set store format
     if (store_format_ == OB_STORE_FORMAT_INVALID) {
-      ObString default_format;
-      if (NULL == GCONF.default_row_format.get_value()) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        default_format = ObString::make_string(GCONF.default_row_format.str());
-      }
+      const rust::String configured_format = config::default_row_format();
+      const ObString default_format(static_cast<int32_t>(configured_format.size()), configured_format.data());
       if (OB_SUCC(ret)) {
         if (OB_FAIL((ObStoreFormat::find_store_format_type(default_format, store_format_)))) {
           ret = OB_ERR_UNEXPECTED;
@@ -126,10 +123,12 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
     if (OB_SUCC(ret)) {
       if (compress_method_.empty()) {
         char compress_func_str[OB_MAX_HEADER_COMPRESSOR_NAME_LENGTH] = "";
-        if (NULL == GCONF.default_compress_func.get_value()) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(GCONF.default_compress_func.copy(compress_func_str, sizeof(compress_func_str)))) {
+        const rust::String configured_compressor = config::default_compress_func();
+        if (configured_compressor.size() >= sizeof(compress_func_str)) {
+          ret = OB_BUF_NOT_ENOUGH;
         } else {
+          MEMCPY(compress_func_str, configured_compressor.data(), configured_compressor.size());
+          compress_func_str[configured_compressor.size()] = '\0';
           bool found = false;
           for (int i = 0; i < ARRAYSIZEOF(common::compress_funcs) && !found; ++i) {
             //find again in case of case sensitive in server init parameters
@@ -231,19 +230,15 @@ int ObCreateTableResolverBase::add_primary_key_part(const ObString &column_name,
 }
 
 
-int ObCreateTableResolverBase::resolve_table_organization(common::ObServerConfig *runtime_config, ParseNode *node)
+int ObCreateTableResolverBase::resolve_table_organization(ParseNode *node)
 {
   int ret = OB_SUCCESS;
   // Get the table organization from the server runtime configuration.
   {
-    const char *ptr = NULL;
-    if (OB_ISNULL(ptr = runtime_config->default_table_organization.get_value())) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      table_organization_ =
-        (0 == ObString::make_string("HEAP").case_compare(ptr)) ?
-          ObTableOrganizationType::OB_HEAP_ORGANIZATION : ObTableOrganizationType::OB_INDEX_ORGANIZATION;
-    }
+    rust::String organization = config::default_table_organization();
+    table_organization_ =
+      (0 == ObString::make_string("HEAP").case_compare(organization.c_str())) ?
+        ObTableOrganizationType::OB_HEAP_ORGANIZATION : ObTableOrganizationType::OB_INDEX_ORGANIZATION;
   }
 
   // get the table organization from the table options

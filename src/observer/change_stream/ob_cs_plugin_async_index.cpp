@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SHARE
+#include "config_bridge.h"
 #include "lib/oblog/ob_log_module.h"
 #include "share/rc/ob_server_runtime.h"
 #include "share/rc/ob_server_runtime.h"
@@ -703,7 +704,7 @@ int ObCSAsyncIndexProcessor::build_das_ins_rtdef_(common::ObArenaAllocator &allo
     // tolerate large batches; internal_sql_execute_timeout default is 30s
     // which is too small here.
     static const int64_t CS_ASYNC_INDEX_DAS_TIMEOUT_US = 5L * 60L * 1000L * 1000L;
-    const int64_t default_timeout_us = GCONF.internal_sql_execute_timeout;
+    const int64_t default_timeout_us = config::internal_sql_execute_timeout();
     const int64_t timeout_us = MAX(default_timeout_us, CS_ASYNC_INDEX_DAS_TIMEOUT_US);
     ins_rtdef->timeout_ts_ = current_time + timeout_us;
     ins_rtdef->runtime_schema_version_ = ctx_.schema_version_;
@@ -886,7 +887,7 @@ int ObCSAsyncIndexProcessor::set_das_insert_context_(const common::ObIArray<ObAS
         if (OB_ISNULL(txs)) {
           ret = common::OB_ERR_UNEXPECTED;
         } else {
-          const int64_t timeout_ts = common::ObTimeUtility::current_time() + GCONF.internal_sql_execute_timeout;
+          const int64_t timeout_ts = common::ObTimeUtility::current_time() + config::internal_sql_execute_timeout();
           if (OB_FAIL(txs->get_read_snapshot(*tx_desc,
                                              transaction::ObTxIsolationLevel::RC,
                                              timeout_ts,

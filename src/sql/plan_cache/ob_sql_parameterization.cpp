@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_PC
+#include "config_bridge.h"
 #include "ob_sql_parameterization.h"
 #include "lib/json/ob_json_print_utils.h"
 #include "sql/resolver/ob_resolver_utils.h"
@@ -1546,7 +1547,7 @@ int ObSqlParameterization::formalize_fast_parameter_sql(ObIAllocator &allocator,
   } else if (!is_contain_select && (!need_fast_parser(src_sql)
       || (ObParser::is_pl_stmt(src_sql, nullptr, &is_call_procedure) && !is_call_procedure))) {
     // do nothing
-  } else if (GCONF._ob_enable_fast_parser) {
+  } else if (config::_ob_enable_fast_parser()) {
     if (OB_FAIL(ObFastParser::parse(src_sql, fp_ctx_format, allocator, format_sql_ptr, format_sql_len,
                                     p_list, param_num, fp_result, fp_result.values_token_pos_))) {
     } else if (OB_ISNULL(p_list)) {
@@ -1599,7 +1600,7 @@ int ObSqlParameterization::formalize_sql_filter_hint(ObIAllocator &allocator,
   if (!is_contain_select && (!need_fast_parser(src_sql)
       || (ObParser::is_pl_stmt(src_sql, nullptr, &is_call_procedure) && !is_call_procedure))) {
     // do nothing
-  } else if (GCONF._ob_enable_fast_parser) {
+  } else if (config::_ob_enable_fast_parser()) {
     if (OB_FAIL(ObFastParser::parse(src_sql, fp_ctx, allocator, format_sql_ptr, format_sql_len,
                                     p_list, param_num, fp_result, fp_result.values_token_pos_))) {
     } else if (param_num != raw_params.count()) {
@@ -1647,7 +1648,7 @@ int ObSqlParameterization::fast_parser(ObIAllocator &allocator,
   if (!is_contain_select && (!need_fast_parser(sql)
     || (ObParser::is_pl_stmt(sql, nullptr, &is_call_procedure) && !is_call_procedure))) {
     (void)fp_result.pc_key_.name_.assign_ptr(sql.ptr(), sql.length());
-  } else if (GCONF._ob_enable_fast_parser) {
+  } else if (config::_ob_enable_fast_parser()) {
     if (OB_FAIL(ObFastParser::parse(sql, fp_ctx, allocator, no_param_sql_ptr, no_param_sql_len,
                                     p_list, param_num, fp_result, fp_result.values_token_pos_))) {
     }

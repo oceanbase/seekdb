@@ -154,37 +154,32 @@ public:
   bool is_same_as(const StandbyPromotionBoundary &other) const;
   int add_source_hop(
       const common::ObAddr &relay,
-      const common::ObAddr &source,
-      int64_t source_version);
+      const common::ObAddr &source);
 
   struct SourceHop final
   {
     OB_UNIS_VERSION(1);
   public:
-    SourceHop() : relay_(), source_(), source_version_(0) {}
+    SourceHop() : relay_(), source_() {}
     SourceHop(
         const common::ObAddr &relay,
-        const common::ObAddr &source,
-        const int64_t source_version)
-      : relay_(relay), source_(source), source_version_(source_version) {}
+        const common::ObAddr &source)
+      : relay_(relay), source_(source) {}
     bool is_valid() const
     {
       return relay_.is_valid()
           && source_.is_valid()
-          && relay_ != source_
-          && source_version_ >= 0;
+          && relay_ != source_;
     }
     bool is_same_as(const SourceHop &other) const
     {
       return relay_ == other.relay_
-          && source_ == other.source_
-          && source_version_ == other.source_version_;
+          && source_ == other.source_;
     }
 
-    TO_STRING_KV(K_(relay), K_(source), K_(source_version));
+    TO_STRING_KV(K_(relay), K_(source));
     common::ObAddr relay_;
     common::ObAddr source_;
-    int64_t source_version_;
   };
 
   TO_STRING_KV(K_(origin), K_(cutover_scn), K_(source_chain));

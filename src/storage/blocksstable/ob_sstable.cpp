@@ -1455,7 +1455,7 @@ int ObSSTable::persist_linked_block_if_need(
 {
   int ret = OB_SUCCESS;
 #ifdef ERRSIM
-  const int64_t block_cnt_config_value = GCONF.errsim_storage_meta_macro_ids_threshold;
+  const int64_t block_cnt_config_value = ::oceanbase::common::errsim_config().errsim_storage_meta_macro_ids_threshold.load();
   const int64_t block_cnt_threshold = 0 == block_cnt_config_value ? ObSSTableMacroInfo::BLOCK_CNT_THRESHOLD
                                              : min(ObSSTableMacroInfo::BLOCK_CNT_THRESHOLD, block_cnt_config_value);
 #else

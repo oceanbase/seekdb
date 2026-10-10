@@ -747,8 +747,8 @@ int ObServerResource::generate_default(const int64_t log_disk_size)
 
   reset();
   memory_size_ = GMEMCONF.get_server_memory_budget();
-  max_cpu_ = GCONF.get_server_default_max_cpu();
-  min_cpu_ = GCONF.get_server_default_min_cpu();
+  max_cpu_ = ::oceanbase::common::get_server_default_max_cpu();
+  min_cpu_ = ::oceanbase::common::get_server_default_min_cpu();
   log_disk_size_ = log_disk_size;
   max_iops_ = get_default_iops();
   min_iops_ = max_iops_;

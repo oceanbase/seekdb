@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_BLKMGR
 
+#include "config_bridge.h"
 #include "storage/blocksstable/ob_shared_macro_block_manager.h"
 #include "share/rc/ob_server_runtime.h"
 
@@ -176,7 +177,7 @@ int ObSharedMacroBlockMgr::write_block(
     write_info.buffer_ = buf;
     write_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
     write_info.size_ = size;
-    write_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000;
+    write_info.io_timeout_ms_ = config::_data_storage_io_timeout() / 1000;
     lib::ObMutexGuard guard(mutex_);
 
     if (size >= SMALL_SSTABLE_STHRESHOLD_SIZE) {
@@ -188,7 +189,7 @@ int ObSharedMacroBlockMgr::write_block(
 
     if (OB_SUCC(ret)) {
       write_info.offset_ = offset_;
-      write_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
+      write_info.io_timeout_ms_ = std::max(config::_data_storage_io_timeout() / 1000, DEFAULT_IO_WAIT_TIME_MS);
       if (OB_FAIL(do_write_block(macro_handle_.get_macro_id(), write_info, block_info))) {
       }
 
@@ -225,7 +226,7 @@ int ObSharedMacroBlockMgr::write_block(
 
   if (OB_SUCC(ret)
       && !write_macro_handle.is_empty()
-      && MICRO_BLOCK_MERGE_VERIFY_LEVEL::ENCODING_AND_COMPRESSION_AND_WRITE_COMPLETE == GCONF.micro_block_merge_verify_level
+      && MICRO_BLOCK_MERGE_VERIFY_LEVEL::ENCODING_AND_COMPRESSION_AND_WRITE_COMPLETE == config::micro_block_merge_verify_level()
       && 0 != offset) {
     if (OB_FAIL(check_write_complete(write_macro_handle.get_macro_id(), offset, size))) {
     }
@@ -250,7 +251,7 @@ int ObSharedMacroBlockMgr::write_block(
   read_info.size_ = size;
   read_info.offset_ = offset;
   read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
-  read_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
+  read_info.io_timeout_ms_ = std::max(config::_data_storage_io_timeout() / 1000, DEFAULT_IO_WAIT_TIME_MS);
   read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_WHOLE_SCANNER_IO);
   ObMacroBlockHandle read_handle;
   ObSSTableMacroBlockChecker macro_block_checker;
@@ -290,7 +291,7 @@ int ObSharedMacroBlockMgr::try_switch_macro_block()
     write_info.size_ = header_size_;
     write_info.offset_ = 0;
     write_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
-    write_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
+    write_info.io_timeout_ms_ = std::max(config::_data_storage_io_timeout() / 1000, DEFAULT_IO_WAIT_TIME_MS);
     if (OB_FAIL(do_write_block(new_macro_handle.get_macro_id(), write_info, block_info))) {
     }
   }
@@ -769,7 +770,7 @@ int ObSharedMacroBlockMgr::read_sstable_block(
     read_info.offset_ = sstable.get_macro_offset();
     read_info.size_ = upper_align(sstable.get_macro_read_size(), DIO_READ_ALIGN_SIZE);
     read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
-    read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
+    read_info.io_timeout_ms_ = config::_data_storage_io_timeout() / 1000L;
     read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_WHOLE_SCANNER_IO);
 
     if (OB_ISNULL(read_info.buf_ = reinterpret_cast<char*>(allocator.alloc(read_info.size_)))) {

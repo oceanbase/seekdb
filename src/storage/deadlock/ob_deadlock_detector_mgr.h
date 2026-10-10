@@ -16,6 +16,7 @@
 
 #ifndef OCEANBASE_SHARE_DEADLOCK_OB_DEADLOCK_DETECTOR_MGR_
 #define OCEANBASE_SHARE_DEADLOCK_OB_DEADLOCK_DETECTOR_MGR_
+#include "config_bridge.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "ob_deadlock_detector_common_define.h"
 #include "ob_deadlock_parameters.h"
@@ -113,7 +114,7 @@ class ObDeadLockDetectorMgr
   friend class ObLCLNode;
   friend class ObDeadLockLocalTaskQueue;
 public:
-  static bool is_deadlock_enabled() { return ObServerConfig::get_instance()._lcl_op_interval != 0; }
+  static bool is_deadlock_enabled() { return ::oceanbase::config::_lcl_op_interval() != 0; }
 public:
   ObDeadLockDetectorMgr();
   // all inner object centralized initialization interface,

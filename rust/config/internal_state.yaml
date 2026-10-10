@@ -1,0 +1,15 @@
+# Instance parameter declarations, in display order.
+- name: server_create_time
+  type: INT
+  default: "0"
+  range: "[1,)"
+  section: OBSERVER
+  edit_level: READONLY
+  description: "the first time this server created, default: 0 (invalid timestamp), Range: [1,)"
+
+- name: server_role_info
+  type: STR
+  default: ""
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "server role state, format: active_role:pending_role:transition_status:cutover_scn"

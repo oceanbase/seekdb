@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "config_bridge.h"
 #include "sql/engine/set/ob_hash_set_op.h"
 #include "sql/engine/px/ob_px_util.h"
 
@@ -260,7 +261,7 @@ int ObHashSetOp::init_hash_partition_infras()
                   get_spec().id_,
                   &ctx_))) {
   } else if (OB_FAIL(hp_infras_.init(
-                                     GCONF.is_sql_operator_dump_enabled(),
+                                     config::enable_sql_operator_dump(),
                                      true, true, 2, &sql_mem_processor_))) {
   } else {
     const ObHashSetSpec &spec = static_cast<const ObHashSetSpec&>(get_spec());

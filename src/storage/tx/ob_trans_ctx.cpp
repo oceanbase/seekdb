@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX TRANS
+#include "config_bridge.h"
 #include "ob_trans_ctx.h"
 #include "ob_trans_service.h"
 
@@ -156,7 +157,7 @@ void ObTransCtx::set_exiting_()
 bool ObTransCtx::is_slow_query_() const
 {
   return ObClockGenerator::getClock() >=
-      (ctx_create_time_ + ObServerConfig::get_instance().trace_log_slow_query_watermark);
+      (ctx_create_time_ + ::oceanbase::config::trace_log_slow_query_watermark());
 }
 
 void ObTransCtx::set_stc_(const MonotonicTs stc)
@@ -298,7 +299,7 @@ void ObTransCtx::update_commit_retry_timeout_()
 
 int64_t ObTransCtx::get_commit_retry_interval_us_()
 {
-  return ObServerConfig::get_instance().trx_commit_retry_interval;
+  return ::oceanbase::config::trx_commit_retry_interval();
 }
 
 int ObTransCtx::set_app_trace_id_(const ObString &app_trace_id)

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "config_bridge.h"
 #include "ob_lcl_node.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/deadlock/ob_deadlock_detector_mgr.h"
@@ -182,7 +183,7 @@ int ObLCLNode::register_timer_with_necessary_retry_with_lock_()
   while (OB_SUCC(ret)) {
     int64_t cur_ts = ObClockGenerator::getRealClock();
     int64_t baseline_ts = cur_ts > allow_detect_time_ ? cur_ts : allow_detect_time_;
-    int64_t lcl_op_interval = ObServerConfig::get_instance()._lcl_op_interval;
+    int64_t lcl_op_interval = ::oceanbase::config::_lcl_op_interval();
     if (lcl_op_interval == 0) {
       ret = OB_NOT_RUNNING;
       break;

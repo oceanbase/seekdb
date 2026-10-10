@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX  SQL_ENG
 
 #include "sql/engine/cmd/ob_load_data_impl.h"
+#include "share/config/ob_config_helper.h"
 #include "share/rc/ob_server_runtime.h"
 
 #include "sql/resolver/ob_resolver.h"

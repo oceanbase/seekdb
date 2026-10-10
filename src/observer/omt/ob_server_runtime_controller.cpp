@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX SERVER_OMT
 
 
+#include "share/ob_server_struct.h"
+#include "config_bridge.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_server_runtime_controller.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"
@@ -140,12 +142,12 @@ static void server_obj_pool_destroy(common::ObServerObjectPool<T> *&pool)
 static ObLogRuntimeConfig current_log_runtime_config()
 {
   return {
-      GCONF.log_disk_utilization_threshold,
-      GCONF.log_disk_utilization_limit_threshold,
-      GCONF.log_disk_throttling_percentage,
-      GCONF.log_disk_throttling_maximum_duration,
-      GCONF.log_storage_warning_tolerance_time,
-      GCONF._enable_log_cache,
+      config::log_disk_utilization_threshold(),
+      config::log_disk_utilization_limit_threshold(),
+      config::log_disk_throttling_percentage(),
+      config::log_disk_throttling_maximum_duration(),
+      config::log_storage_warning_tolerance_time(),
+      config::_enable_log_cache(),
   };
 }
 
@@ -172,7 +174,7 @@ static int init_log_service(
       &LOCAL_DEVICE_INSTANCE,
       &OB_IO_MANAGER,
       false,
-      GCONF.cpu_quota_concurrency,
+      config::cpu_quota_concurrency(),
       current_log_runtime_config()))) {
   } else {
     ::oceanbase::share::server_service<::oceanbase::logservice::ObServerLogBlockMgr>()->bind_log_service(*log_service);
@@ -461,8 +463,8 @@ int ObServerRuntimeController::update_server_resources_no_lock(const ObServerRun
   lib::ObMutexGuard guard(resource_conf_lock_);
 
   ObServerRuntime *runtime = nullptr;
-  const double min_cpu = GCONF.get_server_default_min_cpu();
-  const double max_cpu = GCONF.get_server_default_max_cpu();
+  const double min_cpu = ::oceanbase::common::get_server_default_min_cpu();
+  const double max_cpu = ::oceanbase::common::get_server_default_max_cpu();
   int64_t log_disk_size = 0;
 
   ObServerRuntimeConfig allowed_runtime_config;
@@ -740,7 +742,7 @@ int ObServerRuntimeController::modify_server_io(const ObServerResourceConfig &re
     ObIOServiceConfig::ResourceConfig io_resource_config(resource_config);
     ObIOServiceConfig::ParamConfig io_param_config;
     io_param_config.memory_limit_ = resource_config.memory_size();
-    io_param_config.callback_thread_count_ = GCONF._io_callback_thread_count;
+    io_param_config.callback_thread_count_ = config::_io_callback_thread_count();
     if (OB_FAIL(OB_IO_MANAGER.refresh_io_resource_config(io_resource_config))) {
     } else if (OB_FAIL(OB_IO_MANAGER.refresh_io_param_config(io_param_config))) {
     }
@@ -843,7 +845,7 @@ int ObServerRuntimeController::get_server_cpu(double &min_cpu, double &max_cpu) 
   return ret;
 }
 
-// Materialize the single runtime resource config from GCONF.
+// Materialize the single runtime resource config from Rust instance parameters.
 int ObServerRuntimeController::build_server_resource_config_(ObServerRuntimeConfig &runtime_config)
 {
   int ret = OB_SUCCESS;
@@ -853,8 +855,8 @@ int ObServerRuntimeController::build_server_resource_config_(ObServerRuntimeConf
     ret = OB_NOT_INIT;
   // Keep the default automatic limit chosen during bootstrap stable. An
   // explicit size or percentage remains dynamically effective.
-  } else if (0 == GCONF.log_disk_size
-             && 0 == GCONF.log_disk_percentage
+  } else if (0 == config::log_disk_size()
+             && 0 == config::log_disk_percentage()
              && has_runtime()) {
     if (OB_FAIL(get_server_log_disk_size(log_disk_size))) {
       LOG_WARN("fail to get persisted runtime log disk size", KR(ret));
@@ -918,12 +920,12 @@ int ObServerRuntimeController::bring_up_runtime()
   return bring_up_runtime_();
 }
 
-// Refresh the live resource config from GCONF.
+// Refresh the live resource config from Rust instance parameters.
 int ObServerRuntimeController::refresh_server_config_()
 {
   int ret = OB_SUCCESS;
   ObServerRuntimeConfig runtime_config;
-  ObCurTraceId::init(GCONF.self_addr_);
+  ObCurTraceId::init(GCTX.self_addr());
   if (!SERVER_STORAGE_META_SERVICE.is_started()) {
     // do nothing if not finish replaying slog
     LOG_INFO("server slog not finish replaying, need wait");
@@ -1013,7 +1015,7 @@ void ObServerRuntimeController::runTimerTask()
 void ObServerRuntimeController::reload_request_queue_size()
 {
   if (OB_NOT_NULL(runtime_)) {
-    runtime_->set_queue_limit(GCONF.server_task_queue_size);
+    runtime_->set_queue_limit(config::server_task_queue_size());
   }
 }
 
@@ -1153,10 +1155,7 @@ namespace schema
 int64_t get_max_schema_slot_num_for_add_schema(const int64_t default_val)
 {
   int64_t max_schema_slot_num = default_val;
-  omt::ObRuntimeConfigGuard runtime_config(RUNTIME_CONF());
-  if (runtime_config.is_valid()) {
-    max_schema_slot_num = runtime_config->_max_schema_slot_num;
-  }
+  max_schema_slot_num = config::_max_schema_slot_num();
   return max_schema_slot_num;
 }
 }  // namespace schema

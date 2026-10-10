@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "config_bridge.h"
 #include "ob_temp_table_insert_op.h"
 #include "share/rc/ob_server_runtime.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
@@ -360,7 +361,7 @@ int ObTempTableInsertOp::process_dump(dtl::ObDTLIntermResultInfo &chunk_row_stor
       &mem_context_->get_malloc_allocator(),
       [&](int64_t cur_cnt){ return chunk_row_store.datum_store_->get_row_cnt_in_memory() > cur_cnt; },
       updated))) {
-  } else if (need_dump() && GCONF.is_sql_operator_dump_enabled()
+  } else if (need_dump() && config::enable_sql_operator_dump()
           && OB_FAIL(sql_mem_processor_.extend_max_memory_size(
             &mem_context_->get_malloc_allocator(),
             [&](int64_t max_memory_size) {

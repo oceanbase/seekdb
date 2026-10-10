@@ -133,6 +133,7 @@ cc_library(
     hdrs = PL_PRIVATE_HEADERS,
     deps = [
         ":pl_interface",
+        "//rust:config_bridge_headers",
         "//src/oblib:oblib_foundation",
         "//src/sql:sql_runtime_interface",
     ],
@@ -262,7 +263,7 @@ seekdb_semantic_unity_cc_library(
         "pl_recompile",
         "pl_sys_package",
     ],
-    implementation_deps = _PL_RUNTIME_NON_OBLIB_DEPS,
+    implementation_deps = _PL_RUNTIME_NON_OBLIB_DEPS + ["//rust:config_bridge_headers"],
     group_implementation_deps = pl_runtime_group_oblib_deps(
         _PL_RUNTIME_UNITY_GROUPS,
     ),

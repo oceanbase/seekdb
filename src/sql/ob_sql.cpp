@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL
+#include "config_bridge.h"
 #include "sql/ob_sql.h"
 #include "lib/json/ob_json_print_utils.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
@@ -1380,7 +1381,7 @@ int ObSql::handle_ps_prepare(const ObString &stmt,
       bool is_expired = false;
       int64_t open_cursors_limit = 0;
       int64_t cur_ps_handle_size = session.get_ps_session_info_size();
-      if (FALSE_IT(open_cursors_limit = GCONF.open_cursors)) {
+      if (FALSE_IT(open_cursors_limit = config::open_cursors())) {
       } else if (!is_inner_sql
                 && NEED_CHECK_SESS_MAX_PS_HANDLE_LIMIT(open_cursors_limit)
                 && cur_ps_handle_size >= open_cursors_limit) {
@@ -3007,7 +3008,7 @@ int ObSql::pc_get_plan(ObPlanCacheCtx &pc_ctx,
       //FIXME qianfu NG_TRACE_EXT(set_need_disconnect, OB_ID(need_disconnect), false);
       pc_ctx.sql_ctx_.plan_cache_hit_ = true;
       // In extreme performance scenarios (perf_event=true), permission information is no longer validated
-      if (OB_SUCC(ret) && GCONF.enable_perf_event) {
+      if (OB_SUCC(ret) && config::enable_perf_event()) {
         if (OB_FAIL(ObPrivilegeCheck::check_read_only(pc_ctx.sql_ctx_, plan->get_stmt_type(), false,
                                                       plan->get_stmt_need_privs()))) {
         } else if (OB_FAIL(ObPrivilegeCheck::check_privilege(
@@ -3250,7 +3251,7 @@ int ObSql::parser_and_check(const ObString &outlined_stmt,
             is_show_variables = true;
           }
           if (ObStmt::is_ddl_stmt(stmt_type, true)) {
-            THIS_WORKER.set_timeout_ts(session->get_query_start_time() + GCONF._ob_ddl_timeout);
+            THIS_WORKER.set_timeout_ts(session->get_query_start_time() + config::_ob_ddl_timeout());
           }
           if (IS_DML_STMT(type) || is_show_variables) {
             if (OB_UNLIKELY(NULL == (plan_cache = plan_cache_))) {

@@ -15,6 +15,7 @@
  */
 
 #include "ob_all_virtual_sys_parameter_stat.h"
+#include "config_bridge.h"
 #include "observer/ob_server_utils.h"
 #include "src/sql/session/ob_sql_session_info.h"
 
@@ -24,8 +25,24 @@ using namespace common;
 
 namespace observer
 {
+namespace
+{
+int set_string_cell(ObObj &cell, const rust::String &text, ObIAllocator &allocator)
+{
+  ObString copied;
+  int ret = ob_write_string(allocator,
+      ObString(static_cast<int32_t>(text.size()), text.data()), copied);
+  if (OB_SUCC(ret)) {
+    cell.set_varchar(copied);
+    cell.set_collation_type(
+        ObCharset::get_default_collation(ObCharset::get_default_charset()));
+  }
+  return ret;
+}
+} // namespace
+
 ObAllVirtualSysParameterStat::ObAllVirtualSysParameterStat()
-    : ObVirtualTableIterator(), sys_iter_()
+    : ObVirtualTableIterator(), index_(0)
 {
 }
 
@@ -37,13 +54,13 @@ ObAllVirtualSysParameterStat::~ObAllVirtualSysParameterStat()
 int ObAllVirtualSysParameterStat::inner_open()
 {
   int ret = OB_SUCCESS;
-  sys_iter_ = GCONF.get_container().begin();
+  index_ = 0;
   return ret;
 }
 
 void ObAllVirtualSysParameterStat::reset()
 {
-  sys_iter_ = GCONF.get_container().begin();
+  index_ = 0;
 }
 
 int ObAllVirtualSysParameterStat::inner_get_next_row(ObNewRow *&row)
@@ -57,8 +74,7 @@ int ObAllVirtualSysParameterStat::inner_get_next_row(ObNewRow *&row)
 int ObAllVirtualSysParameterStat::inner_sys_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  const ObConfigContainer &container = GCONF.get_container();
-  if (sys_iter_ == container.end()) {
+  if (index_ >= config::parameter_count()) {
     ret = OB_ITER_END;
   } else {
     ObObj *cells = cur_row_.cells_;
@@ -66,6 +82,7 @@ int ObAllVirtualSysParameterStat::inner_sys_get_next_row(ObNewRow *&row)
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
     } else {
+      const config::ParameterRow parameter = config::parameter_row(index_);
       for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
         const uint64_t col_id = output_column_ids_.at(i);
         switch (col_id) {
@@ -76,61 +93,45 @@ int ObAllVirtualSysParameterStat::inner_sys_get_next_row(ObNewRow *&row)
             break;
           }
         case NAME: {
-            cells[i].set_varchar(sys_iter_->first.str());
-            cells[i].set_collation_type(
-                ObCharset::get_default_collation(ObCharset::get_default_charset()));
+            ret = set_string_cell(cells[i], parameter.name, *allocator_);
             break;
           }
         case DATA_TYPE: {
-            cells[i].set_varchar(sys_iter_->second->data_type());
-            cells[i].set_collation_type(
-                ObCharset::get_default_collation(ObCharset::get_default_charset()));
+            ret = set_string_cell(cells[i], parameter.data_type, *allocator_);
             break;
           }
         case VALUE: {
-            cells[i].set_varchar(sys_iter_->second->str());
-            cells[i].set_collation_type(
-                ObCharset::get_default_collation(ObCharset::get_default_charset()));
+            ret = set_string_cell(cells[i], parameter.value, *allocator_);
             break;
           }
         case INFO: {
-            cells[i].set_varchar(sys_iter_->second->info());
-            cells[i].set_collation_type(
-                ObCharset::get_default_collation(ObCharset::get_default_charset()));
+            ret = set_string_cell(cells[i], parameter.info, *allocator_);
             break;
           }
         case SECTION: {
-            cells[i].set_varchar(sys_iter_->second->section());
-            cells[i].set_collation_type(
-                ObCharset::get_default_collation(ObCharset::get_default_charset()));
+            ret = set_string_cell(cells[i], parameter.section, *allocator_);
             break;
           }
         case SCOPE: {
-            cells[i].set_varchar(sys_iter_->second->scope());
-            cells[i].set_collation_type(
-                ObCharset::get_default_collation(ObCharset::get_default_charset()));
+            ret = set_string_cell(cells[i], parameter.scope, *allocator_);
             break;
           }
         case SOURCE: {
-           cells[i].set_varchar(sys_iter_->second->source());
-           cells[i].set_collation_type(
-              ObCharset::get_default_collation(ObCharset::get_default_charset()));
+           ret = set_string_cell(cells[i], parameter.source, *allocator_);
            break;
           }
         case EDIT_LEVEL: {
-           cells[i].set_varchar(sys_iter_->second->edit_level());
-           cells[i].set_collation_type(
-               ObCharset::get_default_collation(ObCharset::get_default_charset()));
+           ret = set_string_cell(cells[i], parameter.edit_level, *allocator_);
            break;
           }
         case DEFAULT_VALUE: {
-            cells[i].set_varchar(sys_iter_->second->default_str());
-            cells[i].set_collation_type(
-              ObCharset::get_default_collation(ObCharset::get_default_charset()));
+            ret = set_string_cell(cells[i], parameter.default_value, *allocator_);
             break;
           }
         case ISDEFAULT: {
-            int isdefault = sys_iter_->second->is_default(sys_iter_->second->str(),sys_iter_->second->default_str(),sizeof(sys_iter_->second->default_str())) ? 1 : 0;
+            const ObString value(static_cast<int32_t>(parameter.value.size()), parameter.value.data());
+            const ObString default_value(static_cast<int32_t>(parameter.default_value.size()), parameter.default_value.data());
+            int isdefault = value.case_compare(default_value) == 0 ? 1 : 0;
             cells[i].set_int(isdefault);
             break;
           }
@@ -145,7 +146,7 @@ int ObAllVirtualSysParameterStat::inner_sys_get_next_row(ObNewRow *&row)
       } // end for
       if (OB_SUCC(ret)) {
         row = &cur_row_;
-        ++sys_iter_;
+        ++index_;
       }
     }
   }

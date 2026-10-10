@@ -16,6 +16,8 @@
 
 #ifndef _OB_OPTIMIZER_CONTEXT_H
 #define _OB_OPTIMIZER_CONTEXT_H 1
+#include "share/rc/ob_server_runtime.h"
+#include "config_bridge.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
@@ -23,7 +25,6 @@
 #include "sql/optimizer/ob_table_location.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/optimizer/ob_fd_item.h"
-#include "share/config/ob_runtime_config.h"
 #include "sql/optimizer/ob_sharding_info.h"
 #include "sql/optimizer/ob_opt_est_cost.h"
 #include "sql/engine/expr/ob_expr_join_filter.h"
@@ -436,7 +437,7 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
   double enable_px_batch_rescan()
   {
     if (-1 == enable_px_batch_rescan_) {
-      if (GCONF._enable_px_batch_rescan) {
+      if (config::_enable_px_batch_rescan()) {
         enable_px_batch_rescan_ = 1;
       } else {
         enable_px_batch_rescan_ = 0;
@@ -497,7 +498,7 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
   int get_px_object_sample_rate()
   {
     if (-1 == px_object_sample_rate_) {
-      px_object_sample_rate_ = GCONF._px_object_sampling;
+      px_object_sample_rate_ = config::_px_object_sampling();
     }
     return px_object_sample_rate_;
   }

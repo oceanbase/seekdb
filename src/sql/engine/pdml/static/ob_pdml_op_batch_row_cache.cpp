@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "config_bridge.h"
 #include "ob_pdml_op_batch_row_cache.h"
 #include "sql/engine/px/ob_px_util.h"
 
@@ -161,7 +162,7 @@ int ObPDMLOpBatchRowCache::add_row(const ObExprPtrIArray &row, ObTabletID tablet
   // the 2MB config is tested optimal under PDML concurrency=4 and concurrency=8 cases
   // TODO: maybe we can introduce a dynamic control policy
   //       considering the server runtime's overall storage access pattern
-  const int64_t max_pdml_cache_size_per_thread = GCONF._pdml_thread_cache_size;
+  const int64_t max_pdml_cache_size_per_thread = config::_pdml_thread_cache_size();
   if (!with_barrier_ && cached_rows_size_ > max_pdml_cache_size_per_thread) {
     ret = OB_EXCEED_MEM_LIMIT;
   } else if (OB_FAIL(process_dump())) {

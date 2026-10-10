@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX RS_COMPACTION
 
+#include "share/ob_server_struct.h"
+#include "config_bridge.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "rootserver/freeze/ob_major_merge_progress_checker.h"
 #include "share/tablet/ob_tablet_table_iterator.h"
@@ -585,7 +587,7 @@ int ObMajorMergeProgressChecker::prepare_check_progress(
     progress_.clear_before_each_loop();
     reset_uncompacted_tablets();
     if (is_extra_check_round()) {
-      batch_size_mgr_.set_tablet_batch_size(GCONF.compaction_schedule_tablet_batch_cnt);
+      batch_size_mgr_.set_tablet_batch_size(config::compaction_schedule_tablet_batch_cnt());
     }
   }
   return ret;
@@ -667,7 +669,7 @@ int ObMajorMergeProgressChecker::check_progress()
             MANAGEMENT_EVENT_ADD("daily_merge", "verification",
                                   "check verification fail", ret,
                                   "global_broadcast_scn", get_compaction_scn().get_val_for_inner_table_field(),
-                                  "service_addr", GCONF.self_addr_);
+                                  "service_addr", GCTX.self_addr());
           }
         }
         if (OB_FAIL(ret) && last_errno_ == ret) {

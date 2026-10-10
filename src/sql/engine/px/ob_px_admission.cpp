@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL
+#include "config_bridge.h"
 #include "ob_px_admission.h"
 #include "query/runtime/ob_query_runtime_environment.h"
 #include "ob_px_target_monitor.h"
@@ -35,7 +36,7 @@ int ObPxAdmission::get_parallel_session_target(ObSQLSessionInfo &session,
     ret = OB_ERR_PARALLEL_SERVERS_TARGET_NOT_ENOUGH;
   } else if (OB_LIKELY(true)) {
     session_target = parallel_servers_target;
-    int64_t pmas = GCONF._parallel_max_active_sessions;
+    int64_t pmas = config::_parallel_max_active_sessions();
     int64_t parallel_session_count = OB_PX_TARGET_MONITOR.get_parallel_session_count();
     if (pmas > 0 && parallel_servers_target != INT64_MAX && parallel_session_count > 0) {
       // when pmas is TOO large, session target could be less than one,

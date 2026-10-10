@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS_COMPACTION
 
+#include "config_bridge.h"
 #include "rootserver/freeze/ob_global_merge_manager.h"
 
 #include "lib/stat/ob_diagnostic_info_guard.h"
@@ -195,7 +196,7 @@ int ObGlobalMergeManagerBase::check_need_broadcast(
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(check_inner_stat())) {
   } else if (global_merge_info_.frozen_scn() < frozen_scn
-             && GCONF.enable_major_freeze) {
+             && config::enable_major_freeze()) {
     need_broadcast = true;
   }
   return ret;

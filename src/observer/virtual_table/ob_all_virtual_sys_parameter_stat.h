@@ -18,8 +18,7 @@
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_SYS_PARAMETER_STAT_H_
 
 #include "observer/virtual_table/ob_virtual_table_iterator.h"
-#include "share/config/ob_server_config.h"
-#include "share/config/ob_config_helper.h"
+#include <cstddef>
 
 namespace oceanbase
 {
@@ -52,7 +51,7 @@ private:
     DEFAULT_VALUE,
     ISDEFAULT
 };
-  common::ObConfigContainer::const_iterator sys_iter_;
+  std::size_t index_;
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualSysParameterStat);
 };
 } // namespace observer

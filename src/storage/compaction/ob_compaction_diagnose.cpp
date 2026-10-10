@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
+#include "config_bridge.h"
 #include "ob_compaction_diagnose.h"
 #include "share/rc/ob_server_runtime.h"
 #include "ob_compaction_progress.h"
@@ -1092,7 +1093,7 @@ int ObCompactionDiagnoseMgr::diagnose_tablet_minor_merge(ObTablet &tablet)
   int64_t minor_compact_trigger = ObPartitionMergePolicy::DEFAULT_MINOR_COMPACT_TRIGGER;
   {
 
-    minor_compact_trigger = GCONF.minor_compact_trigger;
+    minor_compact_trigger = config::minor_compact_trigger();
 
   }
   if (tablet.get_minor_table_count() >= minor_compact_trigger) {

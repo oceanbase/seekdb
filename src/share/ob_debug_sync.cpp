@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 
+#include "config_bridge.h"
 #include "ob_debug_sync.h"
 #include "share/config/ob_server_config.h"
 #include "share/ob_i_debug_sync_broadcaster.h"
@@ -679,7 +680,7 @@ int ObDebugSync::parse_action(const ObString &str_origin,
   bool finish = false; // finish parsing
 
   action.reset();
-  action.timeout_ = GCONF.debug_sync_timeout;
+  action.timeout_ = config::debug_sync_timeout();
   action.execute_ = 1;
   clear = false;
   reset = false;
@@ -872,7 +873,7 @@ int ObDebugSync::execute(const ObDebugSyncPoint sync_point)
   if (OB_UNLIKELY(sync_point <= INVALID_DEBUG_SYNC_POINT)
       || OB_UNLIKELY(sync_point >= MAX_DEBUG_SYNC_POINT)) {
     ret = OB_INVALID_ARGUMENT;;
-  } else if (!GCONF.is_debug_sync_enabled()
+  } else if (!(config::debug_sync_timeout() > 0)
       || ((OB_ISNULL(local_actions) || local_actions->is_empty())
           && global_actions_.is_empty())) {
     // quick path
@@ -958,7 +959,7 @@ ObDSActionArray &ObDebugSync::rpc_spread_actions() const
   static const bool const_array = true;
   static ObDSActionArray empty_actions(const_array);
   ObDSActionArray *actions = thread_local_actions();
-  if (OB_ISNULL(actions) || !GCONF.is_debug_sync_enabled()) {
+  if (OB_ISNULL(actions) || !(config::debug_sync_timeout() > 0)) {
     actions = &empty_actions;
   }
   return *actions;
@@ -974,7 +975,7 @@ int ObDebugSync::set_global_action(const bool reset, const bool clear,
     const ObDebugSyncAction &action)
 {
   int ret = OB_SUCCESS;
-  const bool is_debug_sync_enabled = GCONF.is_debug_sync_enabled();
+  const bool is_debug_sync_enabled = (config::debug_sync_timeout() > 0);
   if (!reset && !clear && !action.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
   } else {

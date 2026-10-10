@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_BLKMGR
 
+#include "config_bridge.h"
 #include "ob_block_manager.h"
 #include "ob_io_bench_controller.h"
 #include "share/rc/ob_server_runtime.h"
@@ -43,8 +44,8 @@ int calc_auto_extend_size(int64_t &cur_datafile_size,
                           int64_t &actual_extend_size)
 {
   int ret = OB_SUCCESS;
-  const int64_t datafile_maxsize = GCONF.datafile_maxsize;
-  const int64_t datafile_next = GCONF.datafile_next;
+  const int64_t datafile_maxsize = config::datafile_maxsize();
+  const int64_t datafile_next = config::datafile_next();
   const int64_t datafile_size =
       OB_STORAGE_OBJECT_MGR.get_total_macro_block_count()
       * OB_STORAGE_OBJECT_MGR.get_macro_block_size();
@@ -1311,7 +1312,7 @@ int ObBlockManager::InspectBadBlockTask::check_block(
     const MacroBlockId &macro_id = macro_block_handle.get_macro_id();
     ObMacroBlockReadInfo read_info;
     common::ObArenaAllocator allocator(ObModIds::OB_SSTABLE_BLOCK_FILE);
-    read_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000,
+    read_info.io_timeout_ms_ = std::max(config::_data_storage_io_timeout() / 1000,
                                         DEFAULT_IO_WAIT_TIME_MS);
     read_info.macro_block_id_ = macro_id;
     read_info.offset_ = 0;
@@ -1345,7 +1346,7 @@ int ObBlockManager::InspectBadBlockTask::check_block(
                              "Bad data block: macro id=%s", macro_id_str))) {
       } else if (OB_SUCCESS !=
                  (tmp_ret = blk_mgr_.report_bad_block(macro_id, ret, error_msg,
-                                                      GCONF.data_dir))) {
+                                                      config::data_dir().c_str()))) {
       } else {
         ret = OB_SUCCESS; // after report bad block, overwrite ret code and
                           // continue to check.
@@ -1370,7 +1371,7 @@ int ObBlockManager::extend_file_size_if_need() {
         OB_STORAGE_OBJECT_MGR.get_total_macro_block_count();
     const int64_t free_block_cnt = get_free_macro_block_count();
     const int64_t usage_upper_bound_percentage =
-        GCONF._datafile_usage_upper_bound_percentage;
+        config::_datafile_usage_upper_bound_percentage();
     const int64_t free_block_cnt_to_extend =
         total_block_cnt - total_block_cnt * usage_upper_bound_percentage / 100;
     // here we can see auto extend disk premise:
@@ -1401,7 +1402,7 @@ int ObBlockManager::extend_file_size_if_need() {
 bool ObBlockManager::check_can_be_extend(const int64_t reserved_size) {
   bool can_be_extended = false;
 
-  const int64_t datafile_maxsize = GCONF.datafile_maxsize;
+  const int64_t datafile_maxsize = config::datafile_maxsize();
   const int64_t current_block_file_size = io_device_->get_total_block_size();
   if (OB_UNLIKELY(datafile_maxsize <= 0) ||
       OB_UNLIKELY(current_block_file_size <= 0)) {
@@ -1428,7 +1429,7 @@ static inline int64_t get_disk_allowed_iops(const int64_t macro_block_size) {
 void ObBlockManager::InspectBadBlockTask::inspect_bad_block() {
   int ret = OB_SUCCESS;
   const int64_t macro_block_size = OB_STORAGE_OBJECT_MGR.get_macro_block_size();
-  const int64_t verify_cycle = GCONF.builtin_db_data_verify_cycle;
+  const int64_t verify_cycle = config::builtin_db_data_verify_cycle();
   const int64_t sec_per_day = 24 * 3600;
   const int64_t check_times_per_day =
       sec_per_day * 1000 * 1000 / ObBlockManager::INSPECT_DELAY_US;
@@ -1456,7 +1457,7 @@ void ObBlockManager::InspectBadBlockTask::inspect_bad_block() {
         std::min(search_num_per_round,
                  std::max(MIN_OPEN_BLOCKS_PER_ROUND, disk_allowed_iops));
     const int64_t inspect_timeout_us =
-        std::max(GCONF._data_storage_io_timeout * 1,
+        std::max(config::_data_storage_io_timeout() * 1,
                  max_check_count_per_round * DEFAULT_IO_WAIT_TIME_MS * 1000);
     const int64_t begin_time = ObTimeUtility::current_time();
     int64_t check_count = 0;

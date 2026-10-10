@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 
+#include "config_bridge.h"
 #include "rootserver/ddl_task/ob_fts_index_build_task.h"
 #include "share/rc/ob_server_runtime.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
@@ -741,7 +742,7 @@ int ObFtsIndexBuildTask::load_dictionary()
   const ObString &parser_name = create_index_arg_.index_option_.parser_name_;
   ObTimeoutCtx timeout_ctx;
   const int64_t default_timeout = ObDicLoader::DEFAULT_TIMEOUT_US;
-  const int64_t timeout = MIN(GCONF._ob_ddl_timeout, MAX(default_timeout, GCONF.internal_sql_execute_timeout));
+  const int64_t timeout = MIN(config::_ob_ddl_timeout(), MAX(default_timeout, config::internal_sql_execute_timeout()));
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
   } else if (ObDDLTaskStatus::LOAD_DICTIONARY != task_status_) {

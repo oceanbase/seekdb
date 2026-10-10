@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_RESV
+#include "config_bridge.h"
 #include "ob_dml_resolver.h"
 #include "sql/resolver/dml/ob_view_table_resolver.h"
 #include "sql/optimizer/ob_optimizer_util.h"
@@ -6954,7 +6955,7 @@ int ObDMLResolver::resolve_json_table_column_type(const ParseNode &parse_tree,
     if (OB_UNLIKELY(!ob_is_valid_obj_type(obj_type))) {
       ret = OB_INVALID_ARGUMENT;
     } else {
-      bool convert_real_to_decimal = (true && GCONF._enable_convert_real_to_decimal);
+      bool convert_real_to_decimal = (true && config::_enable_convert_real_to_decimal());
       bool enable_mysql_compatible_dates = false;
       if (OB_FAIL(ObSQLUtils::check_enable_mysql_compatible_dates(session_info_, false,
                                 enable_mysql_compatible_dates))) {
@@ -8037,7 +8038,7 @@ int ObDMLResolver::generate_ddl_sample_info_if_needed(TableItem &table_item)
       sample_info->scope_ = SampleInfo::SAMPLE_ALL_DATA;
       int64_t px_object_sample_rate = 0;
 
-      px_object_sample_rate = GCONF._px_object_sampling;
+      px_object_sample_rate = config::_px_object_sampling();
 
       sample_info->percent_ = (double)px_object_sample_rate / 1000;
       sample_info->table_id_ = table_item.table_id_;

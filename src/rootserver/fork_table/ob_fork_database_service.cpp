@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 
+#include "config_bridge.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h"
 #include "rootserver/fork_table/ob_fork_table_helper.h"
 #include "rootserver/ob_ddl_operator.h"
@@ -234,7 +235,7 @@ int ObDDLService::fork_database(
     if (OB_SUCC(ret) && user_table_schemas.count() > 0) {
       bool need_wait = false;
       common::sqlclient::ObISQLConnection *iconn = trans.get_connection();
-      const int64_t lock_timeout_us = GCONF.internal_sql_execute_timeout;
+      const int64_t lock_timeout_us = config::internal_sql_execute_timeout();
       if (OB_ISNULL(iconn)) {
         ret = OB_ERR_UNEXPECTED;
       }

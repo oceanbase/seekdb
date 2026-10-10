@@ -24,7 +24,6 @@
 #include "storage/ddl/ob_ddl_vector_utils.h"
 #include "share/ob_ddl_error_message_table_operator.h"
 #include "share/schema/ob_multi_version_schema_service.h"
-#include "sql/engine/ob_batch_rows.h"
 #include "storage/ob_tablet_autoincrement_service.h"
 
 #define USING_LOG_PREFIX STORAGE

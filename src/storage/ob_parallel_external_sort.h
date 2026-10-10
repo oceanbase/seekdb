@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_PARALLEL_EXTERNAL_SORT_H_
 #define OCEANBASE_STORAGE_OB_PARALLEL_EXTERNAL_SORT_H_
 
+#include "config_bridge.h"
 #include "blocksstable/ob_block_manager.h"
 #include "share/ob_define.h"
 #include "share/rc/ob_server_runtime.h"
@@ -62,7 +63,7 @@ int ObExternalSortConstant::get_io_timeout_ms(
 {
   int ret = common::OB_SUCCESS;
 
-  wait_time_ms = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
+  wait_time_ms = std::max(config::_data_storage_io_timeout() / 1000, DEFAULT_IO_WAIT_TIME_MS);
   if (expire_timestamp < 0) {
     ret = common::OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid args", K(ret), K(expire_timestamp));

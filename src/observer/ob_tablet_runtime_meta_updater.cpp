@@ -19,6 +19,7 @@
 // Asynchronous persistence for local tablet runtime metadata.
 
 
+#include "share/ob_server_struct.h"
 #include "ob_tablet_runtime_meta_updater.h"
 #include "data_plane/report/ob_tablet_report.h"
 #include "observer/omt/ob_server_runtime_controller.h"
@@ -539,7 +540,7 @@ int ObTabletRuntimeMetaUpdater::batch_process_tasks(
   ObArray<ObTabletLocalChecksumItem> update_tablet_checksums;
   UpdateTaskList update_tablet_tasks;
   RemoveTaskList remove_tablet_tasks;
-  ObCurTraceId::init(GCONF.self_addr_);
+  ObCurTraceId::init(GCTX.self_addr());
   int64_t succ_cnt = 0;
   int64_t update_task_cnt = 0;
   int64_t remove_task_cnt = 0;

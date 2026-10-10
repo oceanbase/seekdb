@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_DAS
+#include "config_bridge.h"
 #include "sql/das/iter/ob_das_global_lookup_iter.h"
 #include "sql/das/iter/ob_das_merge_iter.h"
 #include "sql/das/ob_das_attach_define.h"
@@ -182,7 +183,7 @@ int ObDASGlobalLookupIter::check_index_lookup()
   int ret = OB_SUCCESS;
   OB_ASSERT(data_table_iter_->get_type() == DAS_ITER_MERGE);
   ObDASMergeIter *merge_iter = static_cast<ObDASMergeIter*>(data_table_iter_);
-  if (GCONF.enable_defensive_check() &&
+  if ((config::_enable_defensive_check() > 0) &&
       lookup_ctdef_->pd_expr_spec_.pushdown_filters_.empty()) {
     if (OB_UNLIKELY(lookup_rowkey_cnt_ != lookup_row_cnt_)) {
       ret = OB_ERR_DEFENSIVE_CHECK;

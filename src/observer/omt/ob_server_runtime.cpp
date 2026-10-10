@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SERVER_OMT
+#include "config_bridge.h"
 #include "ob_server_runtime.h"
 #include "observer/ob_server.h"   // T3d
 #include "share/rc/ob_server_runtime.h"
@@ -179,7 +180,7 @@ int ObPxPool::submit(const RunFuncT &func)
 {
   int ret = OB_SUCCESS;
   if (!is_inited_) {
-    queue_.set_limit(common::ObServerConfig::get_instance().server_task_queue_size);
+    queue_.set_limit(::oceanbase::config::server_task_queue_size());
     is_inited_ = true;
   }
   disable_recycle();
@@ -243,7 +244,7 @@ void ObPxPool::run1()
   LOG_INFO("run px pool", K(group_id_), K_(active_threads));
 
 	if (!is_inited_) {
-    queue_.set_limit(common::ObServerConfig::get_instance().server_task_queue_size);
+    queue_.set_limit(::oceanbase::config::server_task_queue_size());
     is_inited_ = true;
   }
 
@@ -329,7 +330,7 @@ int ObServerRuntime::init(const ObServerRuntimeMeta &meta)
 
   if (OB_FAIL(ObServerRuntimeState::init())) {
   } else {
-    req_queue_.set_limit(GCONF.server_task_queue_size);
+    req_queue_.set_limit(config::server_task_queue_size());
     if (OB_FAIL(construct_module_init_ctx(meta, module_init_ctx_))) {
     } else {
       runtime_meta_ = meta;
@@ -373,7 +374,7 @@ int ObServerRuntime::construct_module_init_ctx(const ObServerRuntimeMeta &meta, 
     ctx->palf_options_.disk_options_.log_disk_utilization_limit_threshold_ = 95;
     ctx->palf_options_.disk_options_.log_disk_throttling_percentage_ = 100;
     ctx->palf_options_.disk_options_.log_disk_throttling_maximum_duration_ = 2LL * 60 * 60 * 1000 * 1000;//2h
-    ctx->palf_options_.enable_log_cache_ = GCONF._enable_log_cache;
+    ctx->palf_options_.enable_log_cache_ = config::_enable_log_cache();
     LOG_INFO("construct_module_init_ctx success", "palf_options", ctx->palf_options_.disk_options_
              );
   }
@@ -563,7 +564,7 @@ void ObServerRuntime::set_min_cpu(double cpu)
 
 int64_t ObServerRuntime::cpu_quota_concurrency() const
 {
-  return static_cast<int64_t>(GCONF.cpu_quota_concurrency);
+  return static_cast<int64_t>(config::cpu_quota_concurrency());
 }
 
 int64_t ObServerRuntime::min_worker_cnt() const
@@ -574,7 +575,7 @@ int64_t ObServerRuntime::min_worker_cnt() const
 
 int64_t ObServerRuntime::max_worker_cnt() const
 {
-  int64_t cnt = std::max(runtime_meta_.runtime_config_.resource_config_.memory_size() / 20 / (GCONF.stack_size + (3 << 20) + (512 << 10)),
+  int64_t cnt = std::max(runtime_meta_.runtime_config_.resource_config_.memory_size() / 20 / (config::stack_size() + (3 << 20) + (512 << 10)),
                   static_cast<int64_t>(150L));
   return cnt;
 }
@@ -798,8 +799,8 @@ void ObServerRuntime::check_parallel_servers_target()
   } else {
     val = ObCpuShareCalculator::resolve_parallel_servers_target(
         val,
-        static_cast<int64_t>(GCONF.get_server_default_min_cpu()),
-        GCONF.px_workers_per_cpu_quota);
+        static_cast<int64_t>(::oceanbase::common::get_server_default_min_cpu()),
+        config::px_workers_per_cpu_quota());
     OB_PX_TARGET_MONITOR.set_parallel_servers_target(val);
   }
 }

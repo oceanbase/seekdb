@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
+#include "config_bridge.h"
 #include "ob_schema_service_sql_impl.h"
 #include "share/ob_global_stat_proxy.h"
 #include "share/ob_share_util.h"
@@ -191,7 +192,6 @@ ObSchemaServiceSQLImpl::ObSchemaServiceSQLImpl(
       trigger_service_(*this),
       refreshed_schema_version_(OB_INVALID_VERSION),
       gen_schema_version_(OB_INVALID_VERSION),
-      config_(NULL),
       is_inited_(false),
       rw_lock_(common::ObLatchIds::SCHEMA_REFRESH_INFO_LOCK),
       schema_info_(),
@@ -5425,7 +5425,7 @@ int ObSchemaServiceSQLImpl::calc_refresh_full_schema_timeout_ctx_(
     ObMySQLResult *result = NULL;
     ObSqlString sql;
     // consider that sql scan 10w records per scecond, and normally history table has 1000w records at most.
-    int64_t default_timeout = 4 * GCONF.internal_sql_execute_timeout;
+    int64_t default_timeout = 4 * config::internal_sql_execute_timeout();
     if (OB_UNLIKELY(
         false
         || OB_ISNULL(tname))) {
@@ -5441,7 +5441,7 @@ int ObSchemaServiceSQLImpl::calc_refresh_full_schema_timeout_ctx_(
       if (OB_SUCC(ret)) {
         // each 100w history may cost almost 400s (almost each 7w history may cost `internal_sql_execute_timeout`)
         // for more details: ob/qa/gqk9w2
-        timeout = ((row_cnt / (70 * 1000L)) + 1) * GCONF.internal_sql_execute_timeout;
+        timeout = ((row_cnt / (70 * 1000L)) + 1) * config::internal_sql_execute_timeout();
         FLOG_INFO("[REFRESH_SCHEMA] calc refresh schema timeout",
                    KR(ret),
                    "tname", tname,

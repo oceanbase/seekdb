@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "config_bridge.h"
 #include "storage/tablet/ob_tablet_obj_load_helper.h"
 #include "storage/blockstore/ob_object_reader_writer.h"
 
@@ -42,7 +43,7 @@ int ObTabletObjLoadHelper::read_from_addr(
     read_info.addr_ = meta_addr;
     read_info.io_desc_.set_mode(ObIOMode::READ);
     read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
-    read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000;
+    read_info.io_timeout_ms_ = config::_data_storage_io_timeout() / 1000;
     ObObjectReadHandle io_handle(allocator);
     if (OB_FAIL(ObObjectReaderWriter::async_read(read_info, io_handle))) {
     } else if (OB_FAIL(io_handle.wait())) {

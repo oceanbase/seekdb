@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX RS
+#include "config_bridge.h"
 #include "rootserver/ob_create_index_on_empty_table_helper.h"
 #include "rootserver/ddl_task/ob_ddl_task_util.h"
 #include "rootserver/ob_ddl_service.h"
@@ -67,7 +68,7 @@ int ObCreateIndexOnEmptyTableHelper::get_major_frozen_scn(share::SCN &major_froz
 {
   int ret = OB_SUCCESS;
   ObTimeoutCtx ctx;
-  if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, GCONF.rpc_timeout))) {
+  if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, config::rpc_timeout()))) {
   } else if (OB_FAIL(OB_TS_MGR.get_gts_sync(ctx.get_timeout(), major_frozen_scn))) {
   }
   return ret;

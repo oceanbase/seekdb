@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_OPT
+#include "config_bridge.h"
 #include "sql/optimizer/ob_log_granule_iterator.h"
 #include "sql/optimizer/ob_log_table_scan.h"
 #include "sql/optimizer/ob_log_join.h"
@@ -204,7 +205,7 @@ int ObLogGranuleIterator::check_adaptive_task_splitting(ObLogTableScan *tsc)
   
   bool exist_deadlock_condition = false;
   if (!ENABLE_PX_TASK_REBALANCE) {
-  } else if (!true || !GCONF._enable_px_task_rebalance) {
+  } else if (!true || !config::_enable_px_task_rebalance()) {
   } else if (!ObGranuleUtil::can_resplit_gi_task(gi_attri_flag_)) {
   } else if (is_rescanable()) {
     // for rescanable gi, we can not handle the rescan process among all workers since gi task

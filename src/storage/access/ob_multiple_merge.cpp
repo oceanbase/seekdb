@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "config_bridge.h"
 #include "ob_multiple_merge.h"
 #include "share/rc/ob_server_runtime.h"
 #include "ob_aggregated_store.h"
@@ -1437,7 +1438,7 @@ int ObMultipleMerge::prepare_tables_from_iterator(
     read_memtable_only_ = true;
   }
   #ifdef ENABLE_DEBUG_LOG
-  if (GCONF.enable_defensive_check() && read_released_memtable) {
+  if ((config::_enable_defensive_check() > 0) && read_released_memtable) {
     for (int64_t i = 0; i < tables_.count(); ++i) {
       LOG_INFO("dump read tables", KPC(tables_.at(i)));
     }

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "config_bridge.h"
 #include "lib/container/ob_se_array.h"
 #include "common/json_type/ob_json_bin.h"
 #include "share/ob_errno.h"
@@ -1095,7 +1096,7 @@ int ObFTDMLIterator::scan_ft_word_rows(const ObChunkDatumStore::StoredRow *store
       }
     }
   }
-  if (OB_SUCC(ret) && GCONF.enable_strict_defensive_check()) {
+  if (OB_SUCC(ret) && (config::_enable_defensive_check() == 2)) {
     common::ObArenaAllocator allocator(lib::ObMemAttr("FTIterDEF"));
     const common::ObString &parser_str = das_ctdef_->table_param_.get_data_table().get_fts_parser_name();
     const common::ObString &parser_property_str = das_ctdef_->table_param_.get_data_table().get_fts_parser_property();
