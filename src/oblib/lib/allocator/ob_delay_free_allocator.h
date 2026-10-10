@@ -101,7 +101,7 @@ private:
   int64_t total_size_;
   int64_t expire_duration_us_;
   lib::ObLabel label_;
-  ObTCMalloc allocator_;
+  ObMalloc allocator_;
   lib::ObMutex mutex_;
   bool inited_;
 private:

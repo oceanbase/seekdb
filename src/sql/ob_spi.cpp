@@ -100,8 +100,7 @@ int ObSPIService::PLPrepareResult::init(
   param.set_mem_attr(ObModIds::OB_PL_TEMP,
                     ObCtxIds::DEFAULT_CTX_ID)
     .set_properties(lib::USE_TL_PAGE_OPTIONAL)
-    .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE)
-    .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
+    .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE);
   if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
   } else {
     result_set_ = new (buf_) ObResultSet(
@@ -120,8 +119,7 @@ int ObSPIResultSet::init(
   param.set_mem_attr(ObModIds::OB_RESULT_SET,
                     ObCtxIds::DEFAULT_CTX_ID)
     .set_properties(lib::USE_TL_PAGE_OPTIONAL)
-    .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE)
-    .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
+    .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE);
   if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
   } else {
     plan_cache_access_service_ = &plan_cache_access_service;

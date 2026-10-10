@@ -47,11 +47,11 @@ int64_t sanity_max_addr = 0;
 namespace oceanbase {
 namespace common {
 
-bool memory_sanity_enabled() noexcept { return is_jemalloc_backend(); }
+bool memory_sanity_enabled() noexcept { return true; }
 
 namespace {
 
-// The former OBMalloc Sanity integration searched the same upper bounds. Its
+// The legacy allocator Sanity integration searched the same upper bounds. Its
 // maximum candidate was [0x0c0000000000, 0x600000000000): about 84 TiB of
 // application address space plus 10.5 TiB of shadow; occupied mappings made it
 // retreat in 128 GiB steps. Preserve that policy instead of the 64 GiB limit
@@ -395,6 +395,11 @@ int allocation_flags(size_t alignment) {
          MALLOCX_TCACHE_NONE;
 }
 
+size_t user_usable_size(void *ptr) {
+  const size_t backing_size = je_sallocx(ptr, 0);
+  return backing_size >= REDZONE_SIZE ? backing_size - REDZONE_SIZE : 0;
+}
+
 void *allocate_aligned(size_t alignment, size_t size) {
   // arenas.create may allocate through the process-wide malloc symbol.  Those
   // bootstrap allocations must use jemalloc's default arena or initialization
@@ -424,10 +429,20 @@ void *allocate_aligned(size_t alignment, size_t size) {
   if (nullptr == ptr) {
     return nullptr;
   }
-  // jemalloc returns the aligned allocation base directly.  Keep everything
-  // after the requested user range poisoned as the redzone and size-class
-  // slack; no prefix header or manually aligned interior pointer is needed.
-  unpoison_user_memory(ptr, size);
+  size_t usable = 0;
+  {
+    SanityDisableCheckRangeGuard guard;
+    usable = user_usable_size(ptr);
+  }
+  if (usable < size) {
+    SanityDisableCheckRangeGuard guard;
+    je_dallocx(ptr, MALLOCX_TCACHE_NONE);
+    return nullptr;
+  }
+  // malloc_usable_size() promises that every reported byte may be accessed.
+  // Expose and unpoison the size-class capacity excluding a fixed trailing
+  // redzone.  SQLite lookaside legitimately consumes this usable slack.
+  unpoison_user_memory(ptr, usable);
   return ptr;
 }
 
@@ -472,13 +487,10 @@ void *jemalloc_sanity_realloc(void *ptr, size_t size) noexcept {
   size_t old_usable = 0;
   {
     SanityDisableCheckRangeGuard guard;
-    old_usable = je_sallocx(ptr, 0);
+    old_usable = user_usable_size(ptr);
   }
   void *new_ptr = jemalloc_sanity_malloc(size);
   if (nullptr != new_ptr) {
-    // The source range may include the poisoned redzone and size-class slack.
-    // This is allocator-internal copying; shadow state is not copied and the
-    // newly allocated user range already has the correct accessibility.
     {
       SanityDisableCheckRangeGuard guard;
       std::memcpy(new_ptr, ptr, std::min(old_usable, size));
@@ -495,7 +507,7 @@ void *jemalloc_sanity_memalign(size_t alignment, size_t size) noexcept {
 size_t jemalloc_sanity_usable_size(void *ptr) noexcept {
   if (sanity_addr_in_range(ptr, 0)) {
     SanityDisableCheckRangeGuard guard;
-    return je_sallocx(ptr, 0);
+    return user_usable_size(ptr);
   }
   SanityDisableCheckRangeGuard guard;
   return je_malloc_usable_size(ptr);

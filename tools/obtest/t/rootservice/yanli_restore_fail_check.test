@@ -5,8 +5,8 @@
 ob1=OBI(cluster=1, proxy_num=0);
 ob2=OBI(cluster=1, proxy_num=0);
 
-ob1.z1.obs0.set extra_config = "cache_wash_threshold='1G',_ob_minor_merge_schedule_interval='3s'";
-ob2.z1.obs0.set extra_config = "cpu_count=16,memory_budget='15G',cache_wash_threshold='1G',_ob_minor_merge_schedule_interval='3s'";
+ob1.z1.obs0.set extra_config = "_ob_minor_merge_schedule_interval='3s'";
+ob2.z1.obs0.set extra_config = "cpu_count=16,memory_budget='15G',_ob_minor_merge_schedule_interval='3s'";
 
 let $backup_cluster_name = deploy_get_value(ob1.get_cluster_name);
 let $backup_cluster_id = deploy_get_value(ob1.get_cluster_id);

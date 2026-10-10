@@ -36,11 +36,13 @@ def _seekdb_jemalloc_build_impl(ctx):
                 ctx.file.external_src,
                 ctx.file.lockfile,
                 ctx.file.manifest,
+                ctx.file.toolchain_manifest,
             ],
             transitive = [cc_toolchain.all_files],
         ),
         outputs = [archive, public_header, cargo_target],
         arguments = [
+            ctx.file.toolchain_manifest.path,
             "build",
             "--locked",
             "--release",
@@ -58,13 +60,14 @@ def _seekdb_jemalloc_build_impl(ctx):
             "JEMALLOC_SYS_OUTPUT_DIR": archive.dirname + "/..",
             "MAKEFLAGS": "",
         },
-        executable = ctx.attr.cargo,
+        executable = ctx.executable.cargo_wrapper,
         execution_requirements = {
             "no-remote": "1",
             "no-sandbox": "1",
         },
         mnemonic = "SeekdbJemallocBuild",
         progress_message = "Building seekdb-jemalloc-sys",
+        tools = [ctx.executable.cargo_wrapper],
         use_default_shell_env = True,
     )
 
@@ -82,7 +85,15 @@ _seekdb_jemalloc_build = rule(
         "external_src": attr.label(allow_single_file = True, mandatory = True),
         "lockfile": attr.label(allow_single_file = True, mandatory = True),
         "manifest": attr.label(allow_single_file = True, mandatory = True),
-        "cargo": attr.string(default = "cargo"),
+        "cargo_wrapper": attr.label(
+            default = Label("//deps/external/bazel:run_pinned_cargo"),
+            executable = True,
+            cfg = "exec",
+        ),
+        "toolchain_manifest": attr.label(
+            allow_single_file = True,
+            default = Label("//rust:rust-toolchain.toml"),
+        ),
     } | CC_TOOLCHAIN_ATTRS,
     fragments = ["cpp"],
     toolchains = use_cc_toolchain(),

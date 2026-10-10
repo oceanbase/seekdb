@@ -1121,7 +1121,7 @@ private:
     }
   inline int dump_one_block(BlockBuffer *item);
 
-  int write_file(void *buf, int64_t size);
+  virtual int write_file(void *buf, int64_t size);
   int aio_read_file(void *buf,
                     const int64_t size,
                     const int64_t offset,

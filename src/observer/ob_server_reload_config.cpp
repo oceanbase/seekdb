@@ -20,12 +20,13 @@
 #include "ob_server_reload_config.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"  // previously hidden behind the allocator_mgr.h include chain, make the dependency explicit
 #include "share/rc/ob_server_runtime.h"
-#include "lib/alloc/ob_malloc_sample_struct.h"
 #include "observer/ob_server.h"
 #include "observer/ob_server_utils.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "storage/compaction/ob_tablet_scheduler.h"
+#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
+#include <atomic>
 
 #include <string>
 
@@ -34,6 +35,28 @@ using namespace oceanbase::common;
 using namespace oceanbase::observer;
 using namespace oceanbase::storage;
 using namespace oceanbase::share;
+
+namespace
+{
+void warn_deprecated_allocator_parameters_once()
+{
+  static std::atomic<bool> warned(false);
+  if (!warned.exchange(true, std::memory_order_acq_rel)) {
+    LOG_WARN_RET(OB_SUCCESS, "cache_wash_threshold is deprecated and has no effect",
+        "value", oceanbase::config::cache_wash_threshold());
+    LOG_WARN_RET(OB_SUCCESS, "memory_chunk_cache_size is deprecated and has no effect",
+        "value", oceanbase::config::memory_chunk_cache_size());
+    LOG_WARN_RET(OB_SUCCESS, "_min_malloc_sample_interval is deprecated and has no effect",
+        "value", oceanbase::config::_min_malloc_sample_interval());
+    LOG_WARN_RET(OB_SUCCESS, "_max_malloc_sample_interval is deprecated and has no effect",
+        "value", oceanbase::config::_max_malloc_sample_interval());
+    LOG_WARN_RET(OB_SUCCESS, "_ctx_memory_limit is deprecated and has no effect",
+        "value", oceanbase::config::_ctx_memory_limit().c_str());
+    LOG_WARN_RET(OB_SUCCESS, "_enable_memleak_light_backtrace is deprecated and has no effect",
+        "value", oceanbase::config::_enable_memleak_light_backtrace());
+  }
+}
+} // namespace
 
 ObServerReloadConfig::ObServerReloadConfig(ObGlobalContext &gctx)
   : gctx_(gctx)
@@ -49,6 +72,7 @@ int ObServerReloadConfig::operator()()
 {
   int tmp_ret = OB_SUCCESS;
   int ret = tmp_ret;
+  warn_deprecated_allocator_parameters_once();
 
   if (!gctx_.is_inited()) {
     ret = tmp_ret = OB_INNER_STAT_ERROR;
@@ -67,12 +91,6 @@ int ObServerReloadConfig::operator()()
     // Reload log configuration after applying the latest configuration values.
     if (OB_TMP_FAIL(ObReloadConfig::operator()())) {
     }
-    const int64_t reserved_memory = config::cache_wash_threshold();
-    LOG_INFO("set reserved memory", K(reserved_memory));
-    ob_set_reserved_memory(reserved_memory);
-    ObMallocSampleLimiter::set_interval(config::_max_malloc_sample_interval(),
-                                     config::_min_malloc_sample_interval());
-    enable_memleak_light_backtrace(config::_enable_memleak_light_backtrace());
       ObIOConfig io_config;
       int64_t cpu_cnt = config::cpu_count();
       if (cpu_cnt <= 0) {
@@ -93,17 +111,15 @@ int ObServerReloadConfig::operator()()
 
       reload_memstore_freezer_config_();
       reload_scheduler_config_();
+      storage::ObStorageMetaMemMgr *meta_memory_mgr =
+          share::server_service<storage::ObStorageMetaMemMgr>();
+      if (OB_NOT_NULL(meta_memory_mgr)) {
+        meta_memory_mgr->refresh_memory_quota_limit();
+      }
       if (OB_NOT_NULL(::oceanbase::share::server_service<::oceanbase::omt::ObServerRuntimeController>())) {
         ::oceanbase::share::server_service<::oceanbase::omt::ObServerRuntimeController>()->reload_request_queue_size();
       }
   }
-
-  int64_t cache_size = config::memory_chunk_cache_size();
-  bool use_large_chunk_cache = false;
-  if (0 == cache_size || 1 == cache_size) {
-    cache_size = lib::AChunkMgr::get_default_max_chunk_cache_size();
-  }
-  lib::AChunkMgr::instance().set_max_chunk_cache_size(cache_size, use_large_chunk_cache);
 
   // syslog bandwidth limitation
   share::ObTaskController::get().set_log_rate_limit(
@@ -157,5 +173,10 @@ void ObServerReloadConfig::reload_memstore_freezer_config_()
 {
   // The memstore freezer must be updated before ObSharedMemAllocMgr.
   ::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>()->reload_config();
-  ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->update_throttle_config();
+  share::ObSharedMemAllocMgr *shared_memory_mgr =
+      share::server_service<share::ObSharedMemAllocMgr>();
+  if (OB_NOT_NULL(shared_memory_mgr)) {
+    shared_memory_mgr->update_throttle_config();
+    shared_memory_mgr->vector_allocator().refresh_memory_quota_limit();
+  }
 }

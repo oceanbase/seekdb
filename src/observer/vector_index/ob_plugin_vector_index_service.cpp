@@ -822,7 +822,10 @@ int ObPluginVectorIndexService::init(schema::ObMultiVersionSchemaService *schema
                                      common::ObILobReadService *lob_read_service)
 {
   int ret = OB_SUCCESS;
-  lib::ObMemAttr mem_attr("VecIdxSrv");
+  // The service allocator owns vector-index metadata pages.  Attribute those
+  // pages to the vector context so the shared quota covers metadata as well as
+  // the VSAG memory contexts and roaring bitmaps.
+  lib::ObMemAttr mem_attr("VecIdxSrv", ObCtxIds::VECTOR_CTX_ID);
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
   } else if (OB_ISNULL(schema_service)

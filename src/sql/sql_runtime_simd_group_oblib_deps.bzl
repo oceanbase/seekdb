@@ -31,7 +31,6 @@ _SQL_RUNTIME_SIMD_GROUP_OBLIB_DEPS = {
         "//src/oblib:oblib_memory_advanced",
         "//src/oblib:oblib_memory_base",
         "//src/oblib:oblib_memory_model",
-        "//src/oblib:oblib_memory_runtime_base",
         "//src/oblib:oblib_memory_utilities",
         "//src/oblib:oblib_mysql_client_domain",
         "//src/oblib:oblib_mysql_client_runtime",
@@ -56,11 +55,3 @@ def sql_runtime_simd_group_oblib_deps(groups, base = {}):
         name: base.get(name, []) + _SQL_RUNTIME_SIMD_GROUP_OBLIB_DEPS[name]
         for name in actual
     }
-
-def sql_runtime_simd_test_oblib_deps():
-    """Returns the OBLib closure reached by SQL's SIMD groups."""
-    deps = {}
-    for group_deps in _SQL_RUNTIME_SIMD_GROUP_OBLIB_DEPS.values():
-        for dep in group_deps:
-            deps[dep] = True
-    return sorted(deps.keys())

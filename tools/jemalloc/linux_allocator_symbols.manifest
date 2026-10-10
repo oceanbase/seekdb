@@ -1,0 +1,31 @@
+# Copyright (c) 2026 OceanBase.
+# Licensed under the Apache License, Version 2.0.
+
+# One symbol per line. Blank lines and comments are ignored.
+malloc
+free
+realloc
+reallocarray
+memalign
+malloc_usable_size
+calloc
+cfree
+strdup
+strndup
+free_sized
+free_aligned_sized
+aligned_alloc
+posix_memalign
+valloc
+pvalloc
+__libc_malloc
+__libc_free
+__libc_realloc
+__libc_reallocarray
+__libc_memalign
+__libc_calloc
+__libc_free_sized
+__libc_free_aligned_sized
+__libc_valloc
+__libc_pvalloc
+__posix_memalign

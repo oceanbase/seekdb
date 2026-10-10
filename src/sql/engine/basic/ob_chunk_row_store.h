@@ -444,7 +444,10 @@ private:
     }
   inline int dump_one_block(BlockBuffer *item);
 
-  int write_file(void *buf, int64_t size);
+protected:
+  virtual int write_file(void *buf, int64_t size);
+
+private:
   int read_file(void *buf, const int64_t size, const int64_t offset,
                 const int64_t file_size, const int64_t cur_pos,
                 int64_t &tmp_file_size);

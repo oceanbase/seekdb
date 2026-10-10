@@ -1,0 +1,14 @@
+# owner: wangyunlai.wyl
+# owner group: storage
+# tags: allocator
+
+--disable_query_log
+--disable_result_log
+--error 1064
+DUMP ENTITY ALL;
+--error 1064
+DUMP CHUNK ALL;
+--error 1064
+ALTER SYSTEM REFRESH MEMORY STAT;
+--enable_result_log
+--enable_query_log

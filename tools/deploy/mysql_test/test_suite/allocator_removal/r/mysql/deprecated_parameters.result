@@ -1,0 +1,7 @@
+SELECT COUNT(DISTINCT name) = 6 AS retired_parameters_loadable
+FROM oceanbase.__all_virtual_sys_parameter_stat
+WHERE name IN ('cache_wash_threshold', 'memory_chunk_cache_size',
+'_min_malloc_sample_interval', '_max_malloc_sample_interval',
+'_ctx_memory_limit', '_enable_memleak_light_backtrace');
+retired_parameters_loadable
+1

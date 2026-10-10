@@ -20,7 +20,6 @@
 #include "ob_pl.h"
 #include "ob_pl_stmt.h"
 #include "lib/hash/ob_hashmap.h"
-#include "lib/alloc/ob_malloc_callback.h"
 #include "lib/lock/ob_mutex.h"
 
 namespace oceanbase

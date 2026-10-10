@@ -21,7 +21,6 @@
 #include "lib/hash/ob_hashmap.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/allocator/ob_lf_fifo_allocator.h"
-#include "lib/resource/ob_resource_mgr.h"
 #include "lib/container/ob_array.h"
 #include "lib/hash/ob_hashmap.h"
 #include "lib/hash/ob_hashset.h"
@@ -46,7 +45,6 @@ struct ObKVMemBlockList
     head_.reset();
     head_.prev_ = &head_;
     head_.next_ = &head_;
-    resource_mgr_.reset();
     ref_cnt_ = 0;
     inited_ = false;
   }
@@ -56,7 +54,6 @@ struct ObKVMemBlockList
   int64_t get_ref() const { return ATOMIC_LOAD(&ref_cnt_); }
 
   ObKVMemBlockHandle head_;
-  lib::ObResourceMgrHandle resource_mgr_;
   int64_t ref_cnt_;
   bool inited_;
 };

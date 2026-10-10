@@ -247,18 +247,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(KVCacheMemoryLimitConfigChecker);
 };
 
-class ObCtxMemoryLimitChecker
-  : public ObConfigChecker
-{
-public:
-  ObCtxMemoryLimitChecker() {}
-  virtual ~ObCtxMemoryLimitChecker() {};
-  bool check(const char *text) const;
-  bool check(const char* str, uint64_t& ctx_id, int64_t& limit) const;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObCtxMemoryLimitChecker);
-};
-
 class ObConfigEnableDefensiveChecker
   : public ObConfigChecker
 {

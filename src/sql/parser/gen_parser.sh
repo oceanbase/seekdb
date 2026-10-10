@@ -26,14 +26,6 @@ else
     }
 fi
 
-BISON_VERSION=`bison -V| grep 'bison (GNU Bison)'|awk '{ print  $4;}'`
-NEED_VERSION='2.4.1'
-
-if [ "$BISON_VERSION" != "$NEED_VERSION" ]; then
-  echo "bison version not match, please use bison-$NEED_VERSION"
-  exit 1
-fi
-
 cat ../../../src/sql/parser/sql_parser_mysql_mode.y >> $TEMP_FILE
 cat ../../../src/sql/parser/sql_parser_mysql_mode.l >> $TEMP_FILE
 cat "$ITEM_TYPE_HEADER" >> $TEMP_FILE
@@ -76,6 +68,12 @@ fi
 }
 
 function generate_parser {
+local BISON_VERSION=`bison -V| grep 'bison (GNU Bison)'|awk '{ print  $4;}'`
+local NEED_VERSION='2.4.1'
+if [ "$BISON_VERSION" != "$NEED_VERSION" ]; then
+  echo "bison version not match, please use bison-$NEED_VERSION"
+  exit 1
+fi
 
 # fts boolean mode parser for mysql
 bison_parser ../../../src/sql/parser/ftsparser.y ../../../src/sql/parser/ftsparser_tab.c

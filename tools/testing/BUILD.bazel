@@ -1,0 +1,4 @@
+exports_files(
+    ["memory_quota_benchmark.cpp"],
+    visibility = ["//unittest/oblib:__pkg__"],
+)

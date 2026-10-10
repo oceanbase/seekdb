@@ -19,6 +19,7 @@
 #include "config_bridge.h"
 #include "sql/executor/ob_memory_tracker.h"
 #include "share/ob_errno.h"
+#include "lib/alloc/alloc_func.h"
 #include "lib/rc/context.h"
 
 using namespace oceanbase::lib;

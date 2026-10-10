@@ -193,7 +193,6 @@ int ObVectorIndexSerializer::serialize(void *index, ObOStreamBuf::CbParam &cb_pa
     ObOStreamBuf streambuf(data, capacity, cb_param, cb);
     std::ostream out(&streambuf);
     lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("VIndexVsagADP"));
-    lib::ObLightBacktraceGuard light_backtrace_guard(false);
     if (OB_FAIL(obvectorutil::fserialize(index, out))) {
       if (streambuf.get_error_code() != OB_SUCCESS && streambuf.get_error_code() != OB_ITER_END) {
         ret = streambuf.get_error_code();
@@ -221,7 +220,6 @@ int ObVectorIndexSerializer::deserialize(void *&index, ObIStreamBuf::CbParam &cb
     }
   } else {
     lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("VIndexVsagADP"));
-    lib::ObLightBacktraceGuard light_backtrace_guard(false);
     if (OB_FAIL(obvectorutil::fdeserialize(index, in))) {
       if (streambuf.get_error_code() != OB_SUCCESS && streambuf.get_error_code() != OB_ITER_END) {
         ret = streambuf.get_error_code();

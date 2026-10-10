@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+exec "@CMAKE_CTEST_COMMAND@" --test-dir "@CMAKE_BINARY_DIR@" "$@"

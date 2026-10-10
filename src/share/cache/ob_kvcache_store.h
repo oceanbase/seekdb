@@ -19,8 +19,9 @@
 
 
 #include "lib/allocator/ob_retire_station.h"
+#include "lib/allocator/ob_malloc.h"
 #include "lib/resource/ob_cache_washer.h"
-#include "lib/resource/ob_resource_mgr.h"
+#include "lib/resource/ob_memory_quota.h"
 #include "share/cache/ob_cache_utils.h"
 #include "share/cache/ob_kvcache_hazard_pointer.h"
 #include "share/cache/ob_kvcache_inst_map.h"
@@ -67,6 +68,9 @@ class ObKVCacheStore final : public ObIKVCacheStore,
 {
 public:
   static constexpr int64_t MAX_CACHE_SIZE = MAX_KVCACHE_MEMORY_SIZE;
+  // Preserve the KV cache allocation and wash granularity independently from
+  // the removed allocator chunk layout.
+  static constexpr int64_t DEFAULT_MEMBLOCK_SIZE = 2032L << 10;
   ObKVCacheStore();
   virtual ~ObKVCacheStore();
   int init(const int64_t max_cache_size,
@@ -91,6 +95,10 @@ public:
 
   virtual int64_t get_block_size() const { return block_size_; }
   int64_t get_store_size() const { return ATOMIC_LOAD(&global_status_.store_size_); }
+  MemoryQuotaSample get_memory_quota_sample() const
+  {
+    return memory_quota_.sample();
+  }
   // implement functions of ObIObKVMemBlockHandleMgr
   virtual int alloc(const enum ObKVCachePolicy policy,
       const int64_t block_size, ObKVMemBlockHandle *&mb_handle);
@@ -129,7 +137,7 @@ private:
             const int64_t size_need_washed = INT64_MAX, const bool force_flush = false);
   int inner_flush_washable_mb(const int64_t size_to_wash, int64_t& size_washed,
     lib::ObICacheWasher::ObCacheMemBlock*& wash_blocks, bool force_flush);
-  void free_mbs(lib::ObResourceMgrHandle& resource_handle, lib::ObICacheWasher::ObCacheMemBlock* wash_blocks);
+  void free_mbs(lib::ObICacheWasher::ObCacheMemBlock* wash_blocks);
   int inner_push_memblock_info(const ObKVMemBlockHandle &handle, ObIArray<ObKVCacheStoreMemblockInfo> &memblock_infos);
   void purge_mb_handle_retire_station();
   int alloc_kvpair_without_retry(
@@ -144,12 +152,6 @@ private:
   static const int64_t WASH_THREAD_RETIRE_LIMIT = 64;
   static const int64_t SUPPLY_MB_NUM_ONCE = 128;
   constexpr static const double  WASH_OUT_SCORE_THRESHOLD = 1e-6;
-
-public:
-  static const int64_t MAX_MB_HANDLE_NUM = 
-        MAX_CACHE_SIZE / lib::ACHUNK_SIZE
-        + 2 * (ObKVCacheStore::WASH_THREAD_RETIRE_LIMIT
-               + ObKVCacheStore::RETIRE_LIMIT * OB_MAX_THREAD_NUM);
 
 private:
 struct WashCallBack {
@@ -208,9 +210,8 @@ private:
   int prepare_wash_structs();
   void destroy_wash_structs();
 
-  void *alloc_mb(lib::ObResourceMgrHandle &resource_handle,
-        const int64_t block_size);
-  void free_mb(lib::ObResourceMgrHandle &resource_handle, void *ptr);
+  void *alloc_mb(const int64_t block_size);
+  void free_mb(void *ptr);
 
   static QClock &get_qclock()
   {
@@ -242,6 +243,7 @@ private:
   ObFixedQueue<ObKVMemBlockHandle> mb_handles_pool_;
   ObKVMemBlockHandle *active_mb_handles_[MAX_POLICY];
   ObKVCacheStatus global_status_; // TODO rename me to status_
+  MemoryQuota memory_quota_;
   ObKVMemBlockList mb_list_;
 
   static constexpr int64_t WASH_HEAP_SIZE = 64;

@@ -36,17 +36,14 @@ load(
 load(
     ":sql_runtime_group_oblib_deps.bzl",
     "sql_runtime_group_oblib_deps",
-    "sql_runtime_test_oblib_deps",
 )
 load(
     ":sql_runtime_simd_group_oblib_deps.bzl",
     "sql_runtime_simd_group_oblib_deps",
-    "sql_runtime_simd_test_oblib_deps",
 )
 load(
     ":sql_runtime_without_pass_group_oblib_deps.bzl",
     "sql_runtime_without_pass_group_oblib_deps",
-    "sql_runtime_without_pass_test_oblib_deps",
 )
 
 package(default_visibility = ["//visibility:private"])
@@ -262,25 +259,6 @@ seekdb_test_interface(
     visibility = ["//unittest/sql:__subpackages__"],
 )
 
-# SQL-owned unit tests may compile against the Module's private implementation
-# headers, but receive all implementation symbols from liboceanbase.so.
-seekdb_test_interface(
-    name = "sql_unit_test_interface",
-    deps = [
-        ":_textual_sql_map_inputs",
-        ":sql_runtime_internal_headers",
-    ] + sorted({
-        dep: True
-        for dep in (
-            SQL_RUNTIME_NATIVE_DEPS +
-            sql_runtime_test_oblib_deps() +
-            sql_runtime_simd_test_oblib_deps() +
-            sql_runtime_without_pass_test_oblib_deps()
-        )
-    }.keys()),
-    visibility = ["//unittest/sql:__pkg__"],
-)
-
 _SQL_STANDALONE_SANITY_PARTITION = sql_partition_sources(
     SQL_STANDALONE_SOURCES,
     SQL_SANITY_WITHOUT_PASS_STANDALONE_PATHS,
@@ -301,6 +279,31 @@ _SQL_RUNTIME_WITHOUT_PASS_UNITY_GROUPS = sql_singleton_unity_groups(
 ) + sql_singleton_unity_groups(
     SQL_EXTRA_SOURCES,
     "sql_runtime_extra",
+)
+
+_SQL_UNIT_TEST_OBLIB_DEPS = sorted(depset(transitive = [
+    depset(group_deps)
+    for group_deps in (
+        sql_runtime_group_oblib_deps(_SQL_RUNTIME_UNITY_GROUPS).values() +
+        sql_runtime_simd_group_oblib_deps(SQL_SIMD_UNITY_GROUPS).values() +
+        sql_runtime_without_pass_group_oblib_deps(
+            _SQL_RUNTIME_WITHOUT_PASS_UNITY_GROUPS,
+        ).values()
+    )
+]).to_list())
+
+# SQL-owned unit tests may compile against the Module's private implementation
+# headers, but receive all implementation symbols from liboceanbase.so.
+seekdb_test_interface(
+    name = "sql_unit_test_interface",
+    deps = [
+        ":_textual_sql_map_inputs",
+        ":sql_runtime_internal_headers",
+    ] + sorted({
+        dep: True
+        for dep in SQL_RUNTIME_NATIVE_DEPS + _SQL_UNIT_TEST_OBLIB_DEPS
+    }.keys()),
+    visibility = ["//unittest/sql:__pkg__"],
 )
 
 _SQL_RUNTIME_IMPLEMENTATION_DEPS = [

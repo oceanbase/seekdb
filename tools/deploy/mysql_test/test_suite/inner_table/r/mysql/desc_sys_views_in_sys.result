@@ -265,16 +265,6 @@ POSITION	bigint(21) unsigned	NO
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from information_schema.INNODB_FT_INDEX_CACHE limit 1);
 cnt
 1
-desc oceanbase.V$OB_MEMORY;
-Field	Type	Null	Key	Default	Extra
-CTX_NAME	varchar(256)	NO		NULL	
-MOD_NAME	varchar(256)	NO		NULL	
-COUNT	decimal(42,0)	NO		NULL	
-HOLD	decimal(42,0)	NO		NULL	
-USED	decimal(42,0)	NO		NULL	
-select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.V$OB_MEMORY limit 1);
-cnt
-1
 desc oceanbase.V$OB_PLAN_CACHE_PLAN_STAT;
 Field	Type	Null	Key	Default	Extra
 PLAN_ID	bigint(20)	NO		NULL	

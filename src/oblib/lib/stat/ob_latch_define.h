@@ -130,7 +130,6 @@ LATCH_DEF(GLOBAL_MERGE_MANAGER_READ_LOCK, 201, "global merge manager read lock",
 LATCH_DEF(GLOBAL_MERGE_MANAGER_WRITE_LOCK, 202, "global merge manager write lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(AUTO_INCREMENT_INIT_LOCK, 203, "auto increment init lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(AUTO_INCREMENT_ALLOC_LOCK, 204, "auto increment alloc lock", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(ALLOC_MEM_DUMP_TASK_LOCK, 210, "alloc memory dump task lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(ALLOC_ESS_LOCK, 211, "alloc expand, shrink and segment lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(OB_AREAN_ALLOCATOR_LOCK, 214, "arena allocator lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(OB_CACHED_ALLOCATOR_LOCK, 215, "cached allocator lock", LATCH_FIFO, 2000, 0, true)

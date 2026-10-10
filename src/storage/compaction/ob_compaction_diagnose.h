@@ -280,9 +280,9 @@ protected:
   int64_t page_size_;
   uint64_t version_; // locked by rwlock_
   uint64_t seq_num_; // locked by lock_
-  char pool_label_[lib::AOBJECT_LABEL_SIZE + 1];
-  char bucket_label_[lib::AOBJECT_LABEL_SIZE + 1];
-  char node_label_[lib::AOBJECT_LABEL_SIZE + 1];
+  char pool_label_[lib::ObLabel::MAX_LENGTH + 1];
+  char bucket_label_[lib::ObLabel::MAX_LENGTH + 1];
+  char node_label_[lib::ObLabel::MAX_LENGTH + 1];
   common::SpinRWLock lock_;
   common::SpinRWLock rwlock_;
   ObFIFOAllocator allocator_;

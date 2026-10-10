@@ -411,23 +411,49 @@ int ObVectorAllocator::init()
 {
   int ret = OB_SUCCESS;
 
+  refresh_memory_quota_limit();
   lib::ContextParam param;
   param.set_mem_attr("VectorIndex", ObCtxIds::VECTOR_CTX_ID)
     .set_properties(lib::ADD_CHILD_THREAD_SAFE | lib::ALLOC_THREAD_SAFE | lib::RETURN_MALLOC_DEFAULT)
     .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE)
-    .set_label("VectorIndex")
-    .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
+    .set_label("VectorIndex");
   MDS_TG(10_ms);
   if (IS_INIT){
     ret = OB_INIT_TWICE;
     SHARE_LOG(WARN, "init vector allocator twice", KR(ret), KPC(this));
-  } else if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(memory_context_, param))) {
-  } else if (OB_FAIL(ObVectorMemContext::init(memory_context_, this))) {
   } else {
-    is_inited_ = true;
+    common::set_memory_quota_resolver(
+        ObCtxIds::VECTOR_CTX_ID, ObVectorAllocator::resolve_memory_quota);
+    if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(memory_context_, param))) {
+    } else if (OB_FAIL(ObVectorMemContext::init(memory_context_, this))) {
+    } else {
+      is_inited_ = true;
+    }
+  }
+
+  if (OB_FAIL(ret) && !is_inited_) {
+    common::set_memory_quota_resolver(ObCtxIds::VECTOR_CTX_ID, nullptr);
+    if (memory_context_ != nullptr) {
+      DESTROY_CONTEXT(memory_context_);
+      memory_context_ = nullptr;
+    }
+    ObVectorMemContext::reset();
+    quota_.reset(0);
   }
 
   return ret;
+}
+
+void ObVectorAllocator::destroy()
+{
+  common::set_memory_quota_resolver(ObCtxIds::VECTOR_CTX_ID, nullptr);
+  if (memory_context_ != nullptr) {
+    DESTROY_CONTEXT(memory_context_);
+    memory_context_ = nullptr;
+  }
+  ObVectorMemContext::reset();
+  quota_.reset(0);
+  is_inited_ = false;
 }
 
 

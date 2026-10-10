@@ -17,10 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_STORAGE_META_OBJ_POOL_H_
 #define OCEANBASE_STORAGE_OB_STORAGE_META_OBJ_POOL_H_
 
-#include "share/rc/ob_server_runtime.h"
-#include "config_bridge.h"
 #include "lib/objectpool/ob_resource_pool.h"
-#include "storage/meta_mem/ob_meta_memory_limit.h"
 
 #include "share/config/ob_server_config.h"
 namespace oceanbase
@@ -178,9 +175,11 @@ public:
       const int64_t max_free_list_num,
       const lib::ObLabel &label,
       const uint64_t ctx_id,
+      common::MemoryQuota &memory_quota,
       TryWashTabletFunc *wash_func = nullptr,
       const bool allow_over_max_free_num = true);
   virtual ~ObStorageMetaObjPool();
+  void destroy();
 
   int64_t used() const { return allocator_.used(); }
   int64_t total() const { return allocator_.total(); }
@@ -200,6 +199,7 @@ public:
 private:
   TryWashTabletFunc *wash_func_;
   common::ObFIFOAllocator allocator_;
+  common::TrackedAllocator direct_allocator_;
   int64_t used_obj_cnt_;
   bool allow_over_max_free_num_;
 };
@@ -273,9 +273,8 @@ void ObStorageMetaObjPool<T>::free_node_(typename BasePool::Node *ptr)
         _COMMON_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "free node to list fail, size=%ld ptr=%p", BasePool::free_list_.get_total(), ptr);
       }
       (void)ATOMIC_AAF(&(BasePool::inner_used_num_), -1);
-    } else if (BasePool::ALLOC_BY_OBMALLOC == ptr->flag) {
-      ptr->~Node();
-      common::ob_free(ptr);
+    } else if (BasePool::ALLOC_BY_BACKING_ALLOCATOR == ptr->flag) {
+      BasePool::free_backing_node_(ptr);
     } else {
       _COMMON_LOG_RET(ERROR, OB_INVALID_ARGUMENT, "invalid flag=%lu ptr=%p", ptr->flag, ptr);
     }
@@ -287,21 +286,25 @@ ObStorageMetaObjPool<T>::ObStorageMetaObjPool(
     const int64_t max_free_list_num,
     const lib::ObLabel &label,
     const uint64_t ctx_id,
+    common::MemoryQuota &memory_quota,
     TryWashTabletFunc *wash_func,
     const bool allow_over_max_free_num)
   : ObBaseResourcePool<T, RPMetaObjLabel>(max_free_list_num, &allocator_,
-      lib::ObMemAttr(label, ctx_id)),
+      lib::ObMemAttr(label, ctx_id), &memory_quota),
       wash_func_(wash_func),
+      allocator_(),
+      direct_allocator_(),
       used_obj_cnt_(0),
       allow_over_max_free_num_(allow_over_max_free_num)
 {
   int ret = OB_SUCCESS;
-  const int64_t mem_limit = 2 * (true
-      ? config::_storage_meta_memory_limit_percentage() : OB_DEFAULT_META_OBJ_PERCENTAGE_LIMIT);
-  if (ObCtxIds::META_OBJ_CTX_ID == ctx_id && OB_FAIL(set_meta_obj_memory_limit(mem_limit))) {
-    STORAGE_LOG(WARN, "fail to set meta object memory limit", K(ret), K(mem_limit));
-  } else if (OB_FAIL(allocator_.init(lib::ObMallocAllocator::get_instance(), common::OB_MALLOC_MIDDLE_BLOCK_SIZE,
-      lib::ObMemAttr(label, ctx_id)))) {
+  lib::ObMallocAllocator *malloc_allocator = lib::ObMallocAllocator::get_instance();
+  abort_unless(nullptr != malloc_allocator);
+  direct_allocator_.configure(*malloc_allocator, nullptr, &memory_quota,
+      lib::ObMemAttr(label, ctx_id), true);
+  BasePool::set_backing_allocator(&direct_allocator_);
+  if (OB_FAIL(allocator_.init(lib::ObMallocAllocator::get_instance(), common::OB_MALLOC_MIDDLE_BLOCK_SIZE,
+      lib::ObMemAttr(label, ctx_id), memory_quota))) {
   }
   abort_unless(OB_SUCCESS == ret);
 }
@@ -309,7 +312,19 @@ ObStorageMetaObjPool<T>::ObStorageMetaObjPool(
 template <class T>
 ObStorageMetaObjPool<T>::~ObStorageMetaObjPool()
 {
+  destroy();
+}
+
+template <class T>
+void ObStorageMetaObjPool<T>::destroy()
+{
+  // Drain free nodes before releasing the FIFO pages that own them.  The
+  // manager invokes this while its quota is still alive; the destructor may
+  // call it again after both allocators have already been reset.
   ObBaseResourcePool<T, RPMetaObjLabel>::destroy();
+  BasePool::free_list_.destroy();
+  BasePool::free_list_allocator_.reset();
+  allocator_.reset();
 }
 
 } // end namespace storage

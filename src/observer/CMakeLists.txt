@@ -19,6 +19,24 @@ target_link_libraries(oceanbase_static PUBLIC
 # not part of the Windows/Android runtime contract.
 if(NOT OB_USE_ASAN AND NOT APPLE AND NOT WIN32 AND NOT ANDROID)
   set(link_malloc_hook malloc_hook)
+  set(malloc_hook_export_symbols
+    malloc free realloc reallocarray memalign malloc_usable_size
+    calloc cfree strdup strndup free_sized free_aligned_sized
+    aligned_alloc posix_memalign valloc pvalloc
+    __libc_malloc __libc_free __libc_realloc __libc_reallocarray
+    __libc_memalign __libc_calloc __libc_free_sized
+    __libc_free_aligned_sized __libc_valloc __libc_pvalloc
+    __posix_memalign
+    _Znwm _Znam _ZnwmRKSt9nothrow_t _ZnamRKSt9nothrow_t
+    _ZdlPv _ZdaPv _ZdlPvRKSt9nothrow_t _ZdaPvRKSt9nothrow_t
+    _ZdlPvm _ZdaPvm
+    _ZnwmSt11align_val_t _ZnamSt11align_val_t
+    _ZnwmSt11align_val_tRKSt9nothrow_t
+    _ZnamSt11align_val_tRKSt9nothrow_t
+    _ZdlPvSt11align_val_t _ZdaPvSt11align_val_t
+    _ZdlPvSt11align_val_tRKSt9nothrow_t
+    _ZdaPvSt11align_val_tRKSt9nothrow_t
+    _ZdlPvmSt11align_val_t _ZdaPvmSt11align_val_t)
 else()
   set(link_malloc_hook "")
 endif()
@@ -101,6 +119,10 @@ target_link_libraries(seekdb PRIVATE
   $<$<PLATFORM_ID:Linux>:-static-libgcc>
   $<$<PLATFORM_ID:Linux>:-static-libstdc++>
   ${link_malloc_hook})
+
+foreach(symbol IN LISTS malloc_hook_export_symbols)
+  target_link_options(seekdb PRIVATE "-Wl,--export-dynamic-symbol=${symbol}")
+endforeach()
 
 if(ENABLE_SANITY)
   target_link_options(seekdb PRIVATE ${SEEKDB_SANITY_WRAP_LINK_OPTIONS})

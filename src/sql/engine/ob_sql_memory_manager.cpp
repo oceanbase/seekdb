@@ -18,6 +18,7 @@
 
 #include "config_bridge.h"
 #include "ob_sql_memory_manager.h"
+#include "lib/alloc/alloc_func.h"
 #include "sql/engine/px/ob_px_util.h"
 #include "share/rc/ob_server_runtime.h"
 
@@ -34,6 +35,84 @@ namespace sql {
 
 namespace
 {
+common::MemoryQuota *get_workarea_memory_quota()
+{
+  common::MemoryQuota *quota =
+      common::resolve_memory_quota(common::ObCtxIds::WORK_AREA);
+  if (OB_ISNULL(quota)) {
+    ObSqlMemoryManager *manager = share::server_service<ObSqlMemoryManager>();
+    if (OB_NOT_NULL(manager)) {
+      quota = &manager->get_workarea_quota();
+    }
+  }
+  return quota;
+}
+}
+
+int64_t calculate_workarea_memory_limit(
+    const int64_t configured_limit,
+    const int64_t manager_limit)
+{
+  return 0 == configured_limit && manager_limit > 0
+      ? manager_limit / 10 * 8 + manager_limit % 10 * 8 / 10
+      : configured_limit;
+}
+
+int64_t effective_workarea_memory_limit(const int64_t configured_limit)
+{
+  int64_t manager_limit = 0;
+  if (0 == configured_limit) {
+    common::MemoryQuota *quota = get_workarea_memory_quota();
+    if (OB_NOT_NULL(quota)) {
+      manager_limit = quota->limit();
+    }
+  }
+  return calculate_workarea_memory_limit(configured_limit, manager_limit);
+}
+
+bool should_spill_workarea(const int64_t configured_limit,
+                           const int64_t local_bytes,
+                           const int64_t incoming_bytes)
+{
+  bool should_spill = false;
+  const int64_t nonnegative_local = std::max<int64_t>(0, local_bytes);
+  const int64_t nonnegative_incoming = std::max<int64_t>(0, incoming_bytes);
+  if (0 != configured_limit) {
+    should_spill = configured_limit > 0
+        && (nonnegative_incoming > configured_limit
+            || nonnegative_local > configured_limit - nonnegative_incoming);
+  } else {
+    common::MemoryQuota *quota = get_workarea_memory_quota();
+    if (OB_NOT_NULL(quota)) {
+      const common::MemoryQuotaSample sample = quota->sample();
+      const int64_t spill_watermark =
+          calculate_workarea_memory_limit(0, sample.limit_bytes_);
+      const int64_t committed = std::max<int64_t>(0, sample.committed_bytes_);
+      const int64_t reserved = std::max<int64_t>(0, sample.reserved_bytes_);
+      const int64_t accounted = committed > INT64_MAX - reserved
+          ? INT64_MAX : committed + reserved;
+      should_spill = spill_watermark > 0
+          && (accounted >= spill_watermark
+              || nonnegative_incoming >= spill_watermark - accounted);
+    }
+  }
+  return should_spill;
+}
+
+bool should_retry_workarea_allocation(const int alloc_ret,
+                                      const int64_t configured_limit,
+                                      const int64_t ctx_id,
+                                      const bool enable_dump)
+{
+  return OB_ALLOCATE_MEMORY_FAILED == alloc_ret
+      && 0 == configured_limit
+      && common::ObCtxIds::WORK_AREA == ctx_id
+      && enable_dump
+      && config::enable_sql_operator_dump();
+}
+
+namespace
+{
 common::MemoryUsageTracker *resolve_sql_memory_usage_tracker(const int64_t ctx_id)
 {
   common::MemoryUsageTracker *tracker = nullptr;
@@ -45,6 +124,18 @@ common::MemoryUsageTracker *resolve_sql_memory_usage_tracker(const int64_t ctx_i
     }
   }
   return tracker;
+}
+
+common::MemoryQuota *resolve_sql_memory_quota(const int64_t ctx_id)
+{
+  common::MemoryQuota *quota = nullptr;
+  if (common::ObCtxIds::WORK_AREA == ctx_id) {
+    ObSqlMemoryManager *manager = share::server_service<ObSqlMemoryManager>();
+    if (nullptr != manager) {
+      quota = &manager->get_workarea_quota();
+    }
+  }
+  return quota;
 }
 }
 
@@ -430,12 +521,16 @@ int ObSqlMemoryManager::server_module_init(ObSqlMemoryManager *&sql_mem_mgr)
   } else {
     common::set_memory_usage_tracker_resolver(
         common::ObCtxIds::WORK_AREA, resolve_sql_memory_usage_tracker);
+    common::set_memory_quota_resolver(
+        common::ObCtxIds::WORK_AREA, resolve_sql_memory_quota);
   }
   return ret;
 }
 
 void ObSqlMemoryManager::server_module_destroy(ObSqlMemoryManager *&sql_mem_mgr)
 {
+  common::set_memory_usage_tracker_resolver(common::ObCtxIds::WORK_AREA, nullptr);
+  common::set_memory_quota_resolver(common::ObCtxIds::WORK_AREA, nullptr);
   if (nullptr != sql_mem_mgr) {
     if (nullptr != sql_mem_mgr->wa_intervals_) {
       sql_mem_mgr->allocator_.free(sql_mem_mgr->wa_intervals_);
@@ -785,16 +880,14 @@ int ObSqlMemoryManager::unregister_work_area_profile(ObSqlWorkAreaProfile &profi
   return ret;
 }
 
-int ObSqlMemoryManager::get_max_work_area_size(
-  int64_t &max_wa_memory_size, const bool auto_calc)
+int ObSqlMemoryManager::get_work_area_hard_limit(int64_t &work_area_max_size)
 {
   int ret = OB_SUCCESS;
-  const int64_t MIN_AVAILABLE_MEMORY = 1;
   ObSchemaGetterGuard schema_guard;
   const ObSysVarSchema *var_schema = NULL;
   ObObj value;
   int64_t pctg = 0;
-  max_wa_memory_size = 0;
+  work_area_max_size = 0;
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
@@ -806,19 +899,31 @@ int ObSqlMemoryManager::get_max_work_area_size(
   } else if (OB_FAIL(value.get_int(pctg))) {
   } else {
     const int64_t memory_budget = lib::get_memory_budget();
-    const int64_t work_area_max_size = memory_budget / 100 * pctg;
+    work_area_max_size = memory_budget / 100 * pctg;
+  }
+  return ret;
+}
+
+int ObSqlMemoryManager::get_max_work_area_size(
+  const int64_t work_area_max_size,
+  int64_t &max_wa_memory_size,
+  const bool auto_calc)
+{
+  int ret = OB_SUCCESS;
+  const int64_t MIN_AVAILABLE_MEMORY = 1;
+  if (work_area_max_size < 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
     const int64_t workarea_managed_used = get_workarea_managed_used();
     const int64_t active_profile_used = MAX(get_active_profile_used(), 0);
     const int64_t non_active_workarea_used =
         MAX(workarea_managed_used - active_profile_used, 0);
     max_wa_memory_size = MAX(
         work_area_max_size - non_active_workarea_used, MIN_AVAILABLE_MEMORY);
-    max_workarea_size_ = work_area_max_size;
     workarea_hold_size_ = workarea_managed_used;
     max_auto_workarea_size_ = max_wa_memory_size;
     if (auto_calc || MIN_AVAILABLE_MEMORY == max_wa_memory_size) {
-      LOG_INFO("trace max work area", K(auto_calc), K(memory_budget), K(pctg),
-          K(work_area_max_size), K(workarea_managed_used),
+      LOG_INFO("trace max work area", K(auto_calc), K(work_area_max_size), K(workarea_managed_used),
           K(active_profile_used), K(non_active_workarea_used), K(max_wa_memory_size));
     }
   }
@@ -1068,10 +1173,32 @@ int ObSqlMemoryManager::calculate_global_bound_size_by_interval_info(
 int ObSqlMemoryManager::calculate_global_bound_size(ObIAllocator *allocator, bool auto_calc)
 {
   int ret = OB_SUCCESS;
+  int64_t work_area_max_size = 0;
+  const bool auto_memory_mgr = enable_auto_sql_memory_manager();
+  if (OB_FAIL(get_work_area_hard_limit(work_area_max_size))) {
+  } else if (OB_FAIL(calculate_global_bound_size(
+      auto_memory_mgr, work_area_max_size, allocator, auto_calc))) {
+  }
+  return ret;
+}
+
+int ObSqlMemoryManager::calculate_global_bound_size(
+  const bool auto_memory_mgr,
+  const int64_t work_area_max_size,
+  ObIAllocator *allocator,
+  const bool auto_calc)
+{
+  int ret = OB_SUCCESS;
   int64_t wa_max_memory_size = 0;
-  // set enable_auto_sql_memory_mgr after calculate global bound size
-  bool auto_memory_mgr = enable_auto_sql_memory_manager();
-  if (!auto_memory_mgr) {
+  if (work_area_max_size < 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    max_workarea_size_ = work_area_max_size;
+    workarea_quota_.set_limit(work_area_max_size);
+  }
+  // Set enable_auto_memory_mgr_ after calculating the policy-specific bound.
+  if (OB_FAIL(ret)) {
+  } else if (!auto_memory_mgr) {
     // manually memory manager
     lib::ObMutexGuard guard(mutex_);
     enable_auto_memory_mgr_ = false;
@@ -1091,7 +1218,8 @@ int ObSqlMemoryManager::calculate_global_bound_size(ObIAllocator *allocator, boo
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(get_max_work_area_size(wa_max_memory_size, auto_calc))) {
+    } else if (OB_FAIL(get_max_work_area_size(
+        work_area_max_size, wa_max_memory_size, auto_calc))) {
     } else if (0 == wa_max_memory_size) {
       lib::ObMutexGuard guard(mutex_);
       global_bound_size_ = min_bound_size_;

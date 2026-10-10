@@ -3,17 +3,14 @@ title: Memory Management
 ---
 
 # Introduction
-Memory management is one of the most important modules in any large C++ project. Since OceanBase seekdb also needs to deal with the issue of multi-tenant memory resource isolation, seekdb's memory management is more complicated than ordinary C++ projects. Generally, a good memory management module needs to consider the following issues:
+Memory management is one of the most important modules in any large C++ project. Generally, a good memory management module needs to consider the following issues:
 
 - Easy to use. The designed interface must be understood and used by the container, otherwise the code will be difficult to read and maintain, and memory errors will be more likely to occur;
 - Efficient. An efficient memory allocator has a crucial impact on performance, especially in high-concurrency scenarios;
 - Diagnosis. As the amount of code increases, bugs are inevitable. Common memory errors, such as memory leaks, memory out-of-bounds, wild pointers and other problems cause headaches for development and operation and maintenance. How to write a function that can help us avoid or troubleshoot these problems is also an important indicator to measure the quality of the memory management module.
 
-For the multi-tenant model, the impact of memory management design mainly includes the following aspects:
-- Transparent interface design. How to make developers have no awareness or little need to care about the memory management of different tenants;
-- Efficient and accurate. Sufficient memory must be applied successfully, and tenant memory exhaustion must be detected in time, which is the most basic condition for multi-tenant memory management.
-
-This article will introduce the commonly used memory allocation interfaces and memory management related idioms in seekdb. For technical details of memory management, please refer to [Memory Management](https://open.oceanbase.com/blog/8501613072)( In Chinese).
+This article introduces the current memory allocation interfaces, component
+budgets, diagnostics, and memory-management idioms in seekdb.
 
 ## Runtime memory budget
 
@@ -36,12 +33,21 @@ seekdb provides different memory allocators for different scenarios. In addition
 
 ## ob_malloc
 
-seekdb has developed a set of libc-style interface functions ob_malloc/ob_free/ob_realloc. This set of interfaces will dynamically apply for memory blocks of size based on tenant_id, ctx_id, label and other attributes, and mark the memory blocks to determine ownership. This not only facilitates multi-tenant resource management, but is also very helpful in diagnosing memory problems.
-ob_malloc will index to the corresponding ObTenantCtxAllocator based on tenant_id and ctx_id, and ObTenantCtxAllocator will allocate memory according to the current tenant context.
+seekdb provides the libc-style `ob_malloc`, `ob_free`, and `ob_realloc`
+facade. The concrete process allocator is selected at build time: supported
+Linux and macOS production builds use the Cargo-locked bundled jemalloc;
+ASAN, Windows, and Android use their platform allocator. There is no runtime
+allocator switch.
 
-ob_free uses offset operation to find the object allocator corresponding to the memory to be released, and then returns the memory to the memory pool.
+`ObMemAttr` remains part of the source-level allocation contract. A component
+that needs a hard budget registers its own tracker and quota for the relevant
+context ID; labels and unregistered context IDs are descriptive and do not
+recreate the former process-wide label accounting platform.
 
-ob_realloc is different from libc's realloc. It does not expand the original address, but first copies the data to another memory through ob_malloc+memcpy, and then calls ob_free to release the original memory.
+`ob_realloc` has the normal realloc failure contract: a failed non-zero resize
+does not invalidate the original pointer. MemoryContext freeable allocations
+also retain their real owner, so a matching free or realloc can be dispatched
+from another context handle.
 
 ```cpp
 inline void *ob_malloc(const int64_t nbyte, const ObMemAttr &attr = default_memattr);
@@ -82,7 +88,7 @@ struct ObMemAttr
 {
   uint64_t    tenant_id_;  // tenant
   ObLabel     label_;      // label or module
-  uint64_t    ctx_id_;     // refer to ob_mod_define.h, each ctx id is corresponding to a ObTenantCtxAllocator
+  uint64_t    ctx_id_;     // refer to ob_mod_define.h; selected components register a tracker/quota
   uint64_t    sub_ctx_id_; // please ignore it
   ObAllocPrio prio_;       // priority
 };
@@ -92,7 +98,10 @@ struct ObMemAttr
 
 **tenant_id**
 
-Memory allocation management perform resource statistics and restrictions based on tenant maintenance.
+The tenant ID remains source-level attribution carried by `ObMemAttr`. The
+allocator facade does not provide a process-wide per-tenant accounting or
+quota hierarchy; hard limits are owned by the component quotas described
+below.
 
 **label**
 
@@ -100,19 +109,45 @@ At the beginning, seekdb uses a predefined method to create memory labels for ea
 
 **ctx_id**
 
-ctx id is predefined, please refer to `alloc_struct.h`. Each ctx_id of each tenant will create an `ObTenantCtxAllocator` object, which can separately count the related memory allocation usage. Normally use `DEFAULT_CTX_ID` as ctx id. For some special modules, for example, if we want to more conveniently observe memory usage or troubleshoot problems, we define special ctx ids for them, such as libeasy communication library (LIBEASY) and Plan Cache cache usage (PLAN_CACHE_CTX_ID). We can see periodic memory statistics in log files, such as:
+Context IDs are predefined in `alloc_struct.h`. Use `DEFAULT_CTX_ID` unless a
+component explicitly owns a tracker or quota. KV cache, SQL WorkArea, Vector,
+and Meta Object own their admission and reclaim policy; the shared quota
+primitive only provides atomic reserve/reconcile/rollback accounting.
 
-```txt
-[2024-01-02 20:05:50.375549] INFO  [LIB] operator() (ob_malloc_allocator.cpp:537) [47814][MemDumpTimer][T0][Y0-0000000000000000-0-0] [lt=10] [MEMORY] tenant: 500, limit: 9,223,372,036,854,775,807 hold: 800,768,000 rpc_hold: 0 cache_hold: 0 cache_used: 0 cache_item_count: 0
-[MEMORY] ctx_id=           DEFAULT_CTX_ID hold_bytes=    270,385,152 limit=             2,147,483,648
-[MEMORY] ctx_id=                    GLIBC hold_bytes=      8,388,608 limit= 9,223,372,036,854,775,807
-[MEMORY] ctx_id=                 CO_STACK hold_bytes=    106,954,752 limit= 9,223,372,036,854,775,807
-[MEMORY] ctx_id=                  LIBEASY hold_bytes=      4,194,304 limit= 9,223,372,036,854,775,807
-[MEMORY] ctx_id=            LOGGER_CTX_ID hold_bytes=     12,582,912 limit= 9,223,372,036,854,775,807
-[MEMORY] ctx_id=                  PKT_NIO hold_bytes=     17,969,152 limit= 9,223,372,036,854,775,807
-[MEMORY] ctx_id=           SCHEMA_SERVICE hold_bytes=    135,024,640 limit= 9,223,372,036,854,775,807
-[MEMORY] ctx_id=        UNEXPECTED_IN_500 hold_bytes=    245,268,480 limit= 9,223,372,036,854,775,807
-```
+## Component memory diagnostics
+
+`V$OB_COMPONENT_MEMORY` (backed by
+`__all_virtual_component_memory_stat`) exposes one row per server for
+`KV_CACHE`, `SQL_WORKAREA`, `VECTOR`, and `META_OBJECT`. Its eight columns are
+`SVR_IP`, `SVR_PORT`, `COMPONENT_NAME`, `LIMIT_BYTES`, `COMMITTED_BYTES`,
+`RESERVED_BYTES`, `REJECT_COUNT`, and `RECLAIM_COUNT`.
+
+The numeric fields are independent atomic samples. A row has no joint
+linearization point and must not be treated as a transactionally consistent
+snapshot. Use it for capacity trends and component attribution. Tests or tools
+that require a strict invariant must first stop and join component workers,
+wait for reclaim work, and then verify that no reservation is in flight.
+
+`REJECT_COUNT` counts each failed quota admission or reconcile attempt,
+including an attempt later recovered by a component retry. `RECLAIM_COUNT`
+counts successful wash, spill, cleanup, or GC batches that physically reclaim
+at least one byte/object; failed attempts are logged but not counted. For SQL
+WorkArea specifically, one event is one successful positive physical-spill
+write callback. A later negative accounting adjustment does not add an event.
+
+The obmalloc-specific `V$OB_MEMORY`, `__all_virtual_memory_info`,
+`__all_virtual_ctx_memory_info`, and `__all_virtual_malloc_sample_info` tables,
+and the `DUMP ENTITY`, `DUMP CHUNK`, and `ALTER SYSTEM REFRESH MEMORY STAT`
+commands, are removed. The Vector `RAW_MALLOC_SIZE` compatibility column is
+deprecated and returns `NULL`; Vector totals use the component tracker.
+
+`MALLOC_BACKEND=jemalloc` is accepted only as a deprecated no-op on bundled
+jemalloc builds. `MALLOC_BACKEND=obmalloc`, unknown values, and every non-empty
+value on platform-allocator builds fail during early startup. The following
+configuration parameters remain loadable and persistent compatibility no-ops:
+`cache_wash_threshold`, `memory_chunk_cache_size`,
+`_min_malloc_sample_interval`, `_max_malloc_sample_interval`,
+`_ctx_memory_limit`, and `_enable_memleak_light_backtrace`.
 
 **prio**
 

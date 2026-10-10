@@ -1,5 +1,5 @@
-ob1=OBI(cluster=1,proxy_num=0);
-ob1.z1.obs0.set extra_config=$extra_conf;
+ob1=OBI(cluster=1,proxy_num=0,init_unit_cpu=0);
+ob1.z1.obs0.set extra_config=cpu_count=16,memory_budget='20G',system_memory='5G',__min_full_resource_pool_memory='1073741824',enable_async_syslog=false,_private_buffer_size='16K',_fast_commit_callback_count='1',log_disk_size='20G';
 ===============================================================
 ====================     bootstrap   ==========================
 ===============================================================
@@ -234,7 +234,6 @@ ob1.nstart;
 ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_server where start_service_time <= $stop_tstamp_usec, 0 ,180;
 ob1.check_until_timeout select count(*) from oceanbase.__all_server a left join oceanbase.__all_virtual_server_schema_info b on a.svr_ip = b.svr_ip and a.svr_port = b.svr_port where b.svr_ip is null, 0, 120;
 ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version or a.refreshed_schema_version % 8 != 0, 0, 180;
-ob1.check_until_timeout select count(*) from __all_virtual_memory_info where mod_name like '%OB_MOD_DO_NOT_USE_ME%' and hold != 0, 0, 10;
 test restart cluster finish
 ===============================================================
 =================     tablet report    ========================
