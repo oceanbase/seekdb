@@ -5363,7 +5363,12 @@ int ObTablet::check_schema_version_with_cache(const int64_t schema_version)
         if (OB_FAIL(ret)) {
         } else if (mds::TwoPhaseCommitState::ON_COMMIT == trans_stat) {
           // already get valid tmp_ddl_data
-        } else if (OB_FAIL(get_ddl_data(tmp_ddl_data))) {
+        } else {
+          // A concurrent tablet-binding change has not reached a committed state yet.
+          // Do not validate a write against the previous binding: once the DDL lock is
+          // released, that binding may refer to a different logical table.  Let SQL
+          // retry with the schema published by the binding transaction instead.
+          ret = OB_SCHEMA_EAGAIN;
         }
 
         if (OB_SUCC(ret)) {
