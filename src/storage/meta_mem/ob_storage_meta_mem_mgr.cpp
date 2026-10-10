@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include <algorithm>
 #include "ob_storage_meta_mem_mgr.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/rc/ob_server_runtime.h"
@@ -165,8 +166,9 @@ ObStorageMetaMemMgr::ObStorageMetaMemMgr()
     tablet_map_(),
     flying_tablet_map_(FLYING_TABLET_THRESHOLD),
     external_tablet_cnt_map_(),
-    tablet_reference_changes_started_(0),
-    tablet_reference_changes_finished_(0),
+    tablet_reference_lock_(common::ObLatchIds::STORAGE_META_MEM_MGR_LOCK),
+    tablet_reference_captures_(nullptr),
+    tablet_reference_writers_(0),
     gc_timer_(),
     table_gc_task_(this),
     refresh_config_task_(),
@@ -944,15 +946,24 @@ int ObStorageMetaMemMgr::scan_all_version_tablets(const ObTabletMapKey &key, con
   return ret;
 }
 
-ObStorageMetaMemMgr::TabletReferenceChange::TabletReferenceChange(ObStorageMetaMemMgr &owner)
-  : owner_(owner)
+ObStorageMetaMemMgr::TabletReferenceChange::TabletReferenceChange(
+    ObStorageMetaMemMgr &owner, const ObTabletMapKey &key)
+  : owner_(owner), key_(key)
 {
-  ATOMIC_INC(&owner_.tablet_reference_changes_started_);
+  lib::ObLockGuard<common::ObSpinLock> guard(owner_.tablet_reference_lock_);
+  ++owner_.tablet_reference_writers_;
 }
 
 ObStorageMetaMemMgr::TabletReferenceChange::~TabletReferenceChange()
 {
-  ATOMIC_INC(&owner_.tablet_reference_changes_finished_);
+  lib::ObLockGuard<common::ObSpinLock> guard(owner_.tablet_reference_lock_);
+  for (auto *capture = owner_.tablet_reference_captures_; capture != nullptr; capture = capture->next_) {
+    if (capture->error_ == OB_SUCCESS && key_.is_valid()) {
+      // A failed allocation invalidates this capture, not the publication.
+      capture->error_ = capture->changed_keys_.push_back(key_);
+    }
+  }
+  --owner_.tablet_reference_writers_;
 }
 
 int ObStorageMetaMemMgr::scan_retired_tablets(const ObFunction<int(ObTablet &)> &visit)
@@ -995,31 +1006,78 @@ int ObStorageMetaMemMgr::scan_retired_tablets(const ObFunction<int(ObTablet &)> 
 }
 
 int ObStorageMetaMemMgr::scan_tablet_references(
-    const std::function<int(const ObTablet &)> &visit)
+    const std::function<int(const ObTablet &)> &visit, int64_t deadline)
 {
   int ret = OB_SUCCESS;
-  const int64_t before = ATOMIC_LOAD(&tablet_reference_changes_started_);
   if (!is_inited_) { return OB_NOT_INIT; }
   if (!visit) { return OB_INVALID_ARGUMENT; }
-  if (before != ATOMIC_LOAD(&tablet_reference_changes_finished_)) { return OB_EAGAIN; }
   ObT3mTabletMapIterator keys(*this);
-  ObFunction<int(ObTablet &)> apply([&](ObTablet &tablet) { return visit(tablet); });
+  int visitor_error = OB_SUCCESS;
+  auto checked_visit = [&](const ObTablet &tablet) {
+    const int rc = ObTimeUtility::current_time() >= deadline ? OB_TIMEOUT : visit(tablet);
+    if (rc != OB_SUCCESS) { visitor_error = rc; }
+    return rc;
+  };
+  ObFunction<int(ObTablet &)> apply([&](ObTablet &tablet) { return checked_visit(tablet); });
   if (!apply.is_valid()) { return OB_ALLOCATE_MEMORY_FAILED; }
+  TabletReferenceCapture capture;
+  {
+    lib::ObLockGuard<common::ObSpinLock> guard(tablet_reference_lock_);
+    capture.next_ = tablet_reference_captures_;
+    tablet_reference_captures_ = &capture;
+  }
+  // Registration precedes the key snapshot. Any cross-key handoff during the
+  // traversal records its destination, including publications already in flight.
+  ObArray<ObTabletMapKey> pending;
   if (OB_FAIL(keys.fetch_tablet_item())) {
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < keys.tablet_items_.count(); ++i) {
-      ret = scan_all_version_tablets(keys.tablet_items_.at(i), apply);
-      if (ObT3mTabletMapIterator::ignore_err_code(ret)) { ret = OB_EAGAIN; }
+  } else if (OB_FAIL(pending.assign(keys.tablet_items_))) {
+  }
+  bool finished = false;
+  while (OB_SUCC(ret) && !finished) {
+    std::sort(pending.begin(), pending.end());
+    for (int64_t i = 0; OB_SUCC(ret) && i < pending.count(); ++i) {
+      if (i > 0 && pending.at(i) == pending.at(i - 1)) { continue; }
+      if (ObTimeUtility::current_time() >= deadline) { ret = OB_TIMEOUT; }
+      else { ret = scan_all_version_tablets(pending.at(i), apply); }
+      // Removal/replacement is covered by the completed writer's key below.
+      // Retained versions of a removed key remain in the flying/external roots.
+      if (visitor_error == OB_SUCCESS && ObT3mTabletMapIterator::ignore_err_code(ret)) {
+        bool exists = false;
+        ret = has_tablet(pending.at(i), exists);
+        if (OB_SUCC(ret) && exists) {
+          // The key still exists but its current object changed or is not yet
+          // readable. Revisit it; do not confuse metadata read failures with
+          // a completed removal, or silently omit a partly published object.
+          lib::ObLockGuard<common::ObSpinLock> guard(tablet_reference_lock_);
+          ret = capture.changed_keys_.push_back(pending.at(i));
+        }
+      }
+    }
+    if (OB_SUCC(ret)) { ret = scan_retired_tablets(apply); }
+    if (OB_SUCC(ret)) { ret = external_tablet_cnt_map_.scan(checked_visit); }
+    pending.reuse();
+    while (OB_SUCC(ret) && pending.empty() && !finished) {
+      if (ObTimeUtility::current_time() >= deadline) { ret = OB_TIMEOUT; break; }
+      {
+        lib::ObLockGuard<common::ObSpinLock> guard(tablet_reference_lock_);
+        ret = capture.error_;
+        if (OB_SUCC(ret) && !capture.changed_keys_.empty()) {
+          ret = pending.assign(capture.changed_keys_);
+          capture.changed_keys_.reuse();
+        } else if (OB_SUCC(ret) && tablet_reference_writers_ == 0) {
+          // No publication remains partly visible and no destination was missed.
+          // Later handoffs originate in this conservatively collected root set.
+          finished = true;
+        }
+      }
+      if (OB_SUCC(ret) && pending.empty() && !finished) { usleep(1000); }
     }
   }
-  if (OB_SUCC(ret)) { ret = scan_retired_tablets(apply); }
-  if (OB_SUCC(ret)) { ret = external_tablet_cnt_map_.scan(visit); }
-  // A tablet may transfer old file references to another tablet while being
-  // scanned. Per-key locks alone cannot detect that cross-key handoff. Reject
-  // a traversal overlapping any create/swap/delete, including an active writer.
-  if (OB_SUCC(ret) && (before != ATOMIC_LOAD(&tablet_reference_changes_started_)
-      || before != ATOMIC_LOAD(&tablet_reference_changes_finished_))) {
-    ret = OB_EAGAIN;
+  {
+    lib::ObLockGuard<common::ObSpinLock> guard(tablet_reference_lock_);
+    auto **link = &tablet_reference_captures_;
+    while (*link != &capture) { link = &(*link)->next_; }
+    *link = capture.next_;
   }
   return ret;
 }
@@ -1510,7 +1568,7 @@ int ObStorageMetaMemMgr::create_tablet(
     ObLS *tenant_ls,
     ObTabletHandle &tablet_handle)
 {
-  TabletReferenceChange reference_change(*this);
+  TabletReferenceChange reference_change(*this, key);
   int ret = OB_SUCCESS;
   ObMemtableMgrHandle memtable_mgr_hdl;
   if (OB_UNLIKELY(!is_inited_)) {
@@ -1908,7 +1966,7 @@ int ObStorageMetaMemMgr::push_tablet_pointer_to_fly_map_if_need_(
 
 int ObStorageMetaMemMgr::del_tablet(const ObTabletMapKey &key)
 {
-  TabletReferenceChange reference_change(*this);
+  TabletReferenceChange reference_change(*this, key);
   int ret = OB_SUCCESS;
   // use tmp_handle to ensure the tablet is finally released by handle,
   // since ObMetaObjGuard && ObMetaObj is not adapted to gc_tablet()
@@ -1942,7 +2000,7 @@ int ObStorageMetaMemMgr::compare_and_swap_tablet(
     const ObTabletHandle &new_handle,
     const ObUpdateTabletPointerParam &update_pointer_param)
 {
-  TabletReferenceChange reference_change(*this);
+  TabletReferenceChange reference_change(*this, key);
   TIMEGUARD_INIT(STORAGE, 10_ms);
   int ret = OB_SUCCESS;
   const ObMetaDiskAddr &new_addr = new_handle.get_obj()->get_tablet_addr();
@@ -2007,7 +2065,7 @@ int ObStorageMetaMemMgr::compare_and_swap_tablet(
     const ObTabletPoolType &pool_type,
     const bool set_pool /* whether to set tablet pool */)
 {
-  TabletReferenceChange reference_change(*this);
+  TabletReferenceChange reference_change(*this, key);
   int ret = OB_SUCCESS;
   bool is_exist = false;
   if (OB_UNLIKELY(!is_inited_)) {

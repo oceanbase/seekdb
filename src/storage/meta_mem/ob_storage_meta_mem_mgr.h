@@ -203,9 +203,10 @@ public:
   int scan_all_version_tablets(const ObTabletMapKey &key, const ObFunction<int(ObTablet &)> &op);
   // Visits current, retained old and external tablet descriptions. The visitor
   // may load their immutable schema/SSTable metadata, but must not acquire or
-  // mutate tablets. Duplicate visits are possible. A concurrent publication
-  // returns EAGAIN; the caller must discard all partial results on any error.
-  int scan_tablet_references(const std::function<int(const ObTablet &)> &visit);
+  // mutate tablets. Concurrent publications are revisited; duplicate visits
+  // are possible. The caller must discard all partial results on any error.
+  int scan_tablet_references(const std::function<int(const ObTablet &)> &visit,
+      int64_t deadline);
 
   // garbage collector for sstable and memtable.
   int push_table_into_gc_queue(ObITable *table, const ObITable::TableType table_type);
@@ -448,13 +449,20 @@ private:
   typedef common::hash::ObHashSet<ObTabletMapKey, hash::NoPthreadDefendMode> PinnedTabletSet;
 
 private:
+  struct TabletReferenceCapture
+  {
+    common::ObArray<ObTabletMapKey> changed_keys_;
+    TabletReferenceCapture *next_ = nullptr;
+    int error_ = OB_SUCCESS;
+  };
   class TabletReferenceChange final
   {
   public:
-    explicit TabletReferenceChange(ObStorageMetaMemMgr &owner);
+    TabletReferenceChange(ObStorageMetaMemMgr &owner, const ObTabletMapKey &key);
     ~TabletReferenceChange();
   private:
     ObStorageMetaMemMgr &owner_;
+    const ObTabletMapKey key_;
     DISALLOW_COPY_AND_ASSIGN(TabletReferenceChange);
   };
   int scan_retired_tablets(const ObFunction<int(ObTablet &)> &visit);
@@ -506,10 +514,11 @@ private:
   ObTabletPointerMap tablet_map_;
   ObFlyingTabletPointerMap flying_tablet_map_;
   ObExternalTabletCntMap external_tablet_cnt_map_;
-  // Count overlapping publications without serializing unrelated tablet work.
-  // These are process-local observation counters, not persistent GC progress.
-  int64_t tablet_reference_changes_started_;
-  int64_t tablet_reference_changes_finished_;
+  // Captures exist only on a scan's stack. This lock counts publishers and
+  // records changed keys, never loading/visiting tablet metadata while held.
+  common::ObSpinLock tablet_reference_lock_;
+  TabletReferenceCapture *tablet_reference_captures_;
+  int64_t tablet_reference_writers_;
   common::ObTimer gc_timer_;
   TableGCTask table_gc_task_;
   RefreshConfigTask refresh_config_task_;

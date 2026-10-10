@@ -98,7 +98,7 @@ int StorageSchemaHistory::collect_physical_references(ObIArray<PhysicalReference
       }
     }
     return rc;
-  });
+  }, deadline);
   if (ret == OB_SUCCESS && found.count() != 0) {
     std::sort(found.begin(), found.end(), [](const PhysicalReference &left, const PhysicalReference &right) {
       return left.layout_id < right.layout_id

@@ -37,6 +37,7 @@ def run(binary):
         assert 'TABLE_LAYOUT_EXTERNAL_ROOTS_PASS copies=2 duplicate_rejected=1 exact_unregister=1 destruction_waits=1' in initial
         assert 'TABLE_LAYOUT_ALL_ROOTS_PASS ' in initial
         assert 'TABLE_LAYOUT_CAPTURE_RACE_PASS ' in initial
+        assert 'TABLE_LAYOUT_VISITOR_ERROR_PASS missing_metadata_not_hidden=1' in initial
         assert 'TABLE_LAYOUT_PHYSICAL_REFS_PASS ' in initial
         assert 'TABLE_LAYOUT_CAPTURE_TIMEOUT_PASS ' in initial
         initial_physical = re.findall(r'TABLET_LAYOUT_AUDIT tablet=(\d+) table=(\d+) layout=(\d+)', initial)
@@ -71,6 +72,7 @@ def run(binary):
         recovered = log_tail(exp, cursors)
         assert 'TABLE_LAYOUT_EXTERNAL_ROOTS_PASS ' in recovered, recovered[-5000:]
         assert 'TABLE_LAYOUT_CAPTURE_RACE_PASS ' in recovered, recovered[-5000:]
+        assert 'TABLE_LAYOUT_VISITOR_ERROR_PASS missing_metadata_not_hidden=1' in recovered, recovered[-5000:]
         assert 'TABLE_LAYOUT_PHYSICAL_REFS_PASS ' in recovered, recovered[-5000:]
         assert 'TABLE_LAYOUT_AUDIT_END ' in recovered and 'ret=0' in recovered, recovered[-5000:]
         bindings = {(int(ns), int(table)): (int(layout), int(version))

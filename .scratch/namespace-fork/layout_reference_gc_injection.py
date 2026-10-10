@@ -15,7 +15,8 @@ changes = {
          '#include "storage/instance_meta/storage_schema_history.h"\n'
          '#include "storage/blocksstable/ob_sstable_meta.h"\n'
          '#include "storage/tablet/ob_tablet_table_store.h"\n'
-         '#include "storage/tx/ob_trans_service.h"\n', False),
+         '#include "storage/tx/ob_trans_service.h"\n'
+         '#include <set>\n', False),
         ('int NamespaceForkKernelPrototype::ensure_control_schema(bool initial_install) {\n',
          '#include "' + str(local / 'layout_reference_gc_native_probe.ipp') + '"\n', True),
     ],
@@ -23,7 +24,7 @@ changes = {
         ('namespace oceanbase {\n',
          'namespace oceanbase { namespace storage { void run_layout_reference_gc_command(); } }\n', True),
         ('  if (!ATOMIC_LOAD(&GCTX.sys_package_ready_) || !share::server_is_write_enabled()) { return; }\n',
-         '  if (ATOMIC_LOAD(&GCTX.sys_package_ready_)) { storage::run_layout_reference_gc_command(); }\n', True),
+         '  storage::run_layout_reference_gc_command();\n', True),
     ],
 }
 for name, hooks in changes.items():

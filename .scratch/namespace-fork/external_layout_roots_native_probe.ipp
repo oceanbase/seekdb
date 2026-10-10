@@ -75,7 +75,7 @@ static int run_external_layout_roots_native_probe()
       seen_old += &tablet == old;
       seen_current += &tablet == replacement.get_obj();
       return OB_SUCCESS;
-    });
+    }, collect_until);
     elapsed = ObTimeUtility::current_time() - started;
     if (ret == OB_SUCCESS && (seen_a == 0 || seen_b == 0 || seen_old == 0
         || seen_current == 0 || all_visits < 4)) {
@@ -88,11 +88,12 @@ static int run_external_layout_roots_native_probe()
       all_visits, elapsed);
 
   // Re-publish the same current object during the external phase. Even this
-  // ABA case must invalidate capture; per-object addresses cannot detect it.
+  // ABA case must revisit that key; unchanged addresses cannot detect it.
   ObUpdateTabletPointerParam publish_param;
   publish_param.tablet_addr_ = replacement.get_obj()->get_tablet_addr();
   std::atomic<bool> publish{false}, published{false}, cancel{false};
   int publish_ret = OB_ERR_UNEXPECTED;
+  int64_t replacement_visits = 0;
   std::thread publisher([&] {
     while (!publish && !cancel) { usleep(1000); }
     if (publish) {
@@ -101,16 +102,24 @@ static int run_external_layout_roots_native_probe()
     }
   });
   ret = manager->scan_tablet_references([&](const ObTablet &tablet) {
+    replacement_visits += &tablet == replacement.get_obj();
     if (&tablet == b) {
       publish = true;
       while (!published) { usleep(1000); }
     }
     return OB_SUCCESS;
-  });
+  }, ObTimeUtility::current_time() + 5000000);
   cancel = true;
   publisher.join();
-  if (ret != OB_EAGAIN || !published || publish_ret != OB_SUCCESS) { return OB_ERR_UNEXPECTED; }
-  fprintf(stderr, "TABLE_LAYOUT_CAPTURE_RACE_PASS concurrent_publication_rejected=1\n");
+  if (ret != OB_SUCCESS || !published || publish_ret != OB_SUCCESS || replacement_visits < 2) {
+    return OB_ERR_UNEXPECTED;
+  }
+  fprintf(stderr, "TABLE_LAYOUT_CAPTURE_RACE_PASS concurrent_publication_revisited=1 visits=%ld\n",
+      replacement_visits);
+  ret = manager->scan_tablet_references([](const ObTablet &) { return OB_ENTRY_NOT_EXIST; },
+      ObTimeUtility::current_time() + 5000000);
+  if (ret != OB_ENTRY_NOT_EXIST) { return OB_ERR_UNEXPECTED; }
+  fprintf(stderr, "TABLE_LAYOUT_VISITOR_ERROR_PASS missing_metadata_not_hidden=1\n");
 
   ObArray<StorageSchemaHistory::PhysicalReference> references;
   const int64_t collect_started = ObTimeUtility::current_time();

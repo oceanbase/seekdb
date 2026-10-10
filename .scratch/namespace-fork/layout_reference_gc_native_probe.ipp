@@ -3,17 +3,22 @@
 void run_layout_reference_gc_command()
 {
   const char *control = getenv("SEEKDB_LAYOUT_REFERENCE_GC_CONTROL");
+  std::string process_control;
+  if (const char *directory = getenv("SEEKDB_LAYOUT_REFERENCE_GC_CONTROL_DIR")) {
+    process_control = std::string(directory) + "/" + std::to_string(getpid());
+    control = process_control.c_str();
+  }
   if (control == nullptr) { return; }
   FILE *request = fopen(control, "r");
   if (request == nullptr) { return; }
   int64_t sequence = 0, wanted_version = 0;
-  uint64_t physical_id = 0, wanted_layout = 0;
+  uint64_t physical_id = 0, wanted_layout = 0, wanted_orphan = 0;
   char action[32] = {};
-  const int fields = fscanf(request, "%ld %31s %lu %lu %ld", &sequence, action,
-      &physical_id, &wanted_layout, &wanted_version);
+  const int fields = fscanf(request, "%ld %31s %lu %lu %ld %lu", &sequence, action,
+      &physical_id, &wanted_layout, &wanted_version, &wanted_orphan);
   fclose(request);
   static int64_t completed_sequence = 0;
-  if (fields != 5 || sequence <= completed_sequence) { return; }
+  if (fields < 5 || sequence <= completed_sequence) { return; }
   completed_sequence = sequence;
   struct Held {
     ObArenaAllocator a{ObMemAttr("LayoutGcTest")}, b{ObMemAttr("LayoutGcTest")};
@@ -24,6 +29,7 @@ void run_layout_reference_gc_command()
   static Held *held = nullptr;
   if (held == nullptr) { held = new Held(); }
   auto &state = *held;
+  if (wanted_orphan != 0) { state.orphan = wanted_orphan; }
   auto &manager = *share::server_service<ObStorageMetaMemMgr>();
   auto &store = share::server_service<ObAccessService>()->storage_schema_store();
   auto deadline = [] { return ObTimeUtility::current_time() + 120000000; };
@@ -33,6 +39,7 @@ void run_layout_reference_gc_command()
   int64_t seen_old = 0, seen_current = 0, seen_a = 0, seen_b = 0, matching = 0;
   int64_t capture_us = 0, capture_attempts = 0, capture_total_us = 0;
   int64_t foreign_files = 0;
+  int64_t checkpoint = 0, minor_files = 0, retention = 0;
   bool retained = false;
   int body_rc = OB_ERR_UNEXPECTED, head_rc = OB_ERR_UNEXPECTED, orphan_rc = OB_ERR_UNEXPECTED;
   bool mapped = false;
@@ -43,7 +50,7 @@ void run_layout_reference_gc_command()
 #define REF_GC_CHECK(expr) do { if (!(expr)) { \
   fprintf(stderr, "LAYOUT_REFERENCE_GC_FAIL seq=%ld line=%d check=%s\n", sequence, __LINE__, #expr); return OB_ERR_UNEXPECTED; } } while (0)
     REF_GC_CALL(share::server_service<ObLSService>()->get_ls(ls));
-    if (strcmp(action, "hold") == 0) {
+    if (strcmp(action, "hold") == 0 || strcmp(action, "hold_external") == 0) {
       REF_GC_CHECK(!state.old.is_valid() && !state.first.is_valid() && !state.second.is_valid());
       state.id = physical_id;
       const ObTabletMapKey key{ObTabletID(state.id)};
@@ -51,12 +58,21 @@ void run_layout_reference_gc_command()
       REF_GC_CHECK(!state.old.get_obj()->is_external_tablet());
       state.layout = state.old.get_obj()->get_tablet_meta().storage_layout_id_;
       REF_GC_CALL(state.old.get_obj()->get_schema_version_from_storage_schema(state.version));
-      REF_GC_CALL(ls->get_tablet_svr()->update_tablet_snapshot_version(ObTabletID(state.id),
-          state.old.get_obj()->get_snapshot_version()));
-      REF_GC_CALL(manager.get_tablet(WashTabletPriority::WTP_LOW, key, state.current));
-      REF_GC_CHECK(state.old.get_obj() != state.current.get_obj());
+      if (strcmp(action, "hold") == 0) {
+        REF_GC_CALL(ls->get_tablet_svr()->update_tablet_snapshot_version(ObTabletID(state.id),
+            state.old.get_obj()->get_snapshot_version()));
+        REF_GC_CALL(manager.get_tablet(WashTabletPriority::WTP_LOW, key, state.current));
+        REF_GC_CHECK(state.old.get_obj() != state.current.get_obj());
+      }
       REF_GC_CALL(manager.get_tablet_with_allocator(WashTabletPriority::WTP_LOW, key, state.a, state.first, true));
       REF_GC_CALL(manager.get_tablet_with_allocator(WashTabletPriority::WTP_LOW, key, state.b, state.second, true));
+      if (strcmp(action, "hold_external") == 0) { state.old.reset(); }
+    } else if (strcmp(action, "describe") == 0) {
+      ObTabletHandle subject;
+      state.id = physical_id;
+      REF_GC_CALL(manager.get_tablet(WashTabletPriority::WTP_LOW, ObTabletMapKey(ObTabletID(state.id)), subject));
+      state.layout = subject.get_obj()->get_tablet_meta().storage_layout_id_;
+      REF_GC_CALL(subject.get_obj()->get_schema_version_from_storage_schema(state.version));
     } else if (strcmp(action, "release_pool") == 0) {
       state.old.reset(); state.current.reset();
     } else if (strcmp(action, "release_a") == 0) {
@@ -81,7 +97,7 @@ void run_layout_reference_gc_command()
       REF_GC_CALL(store.begin(tx, deadline()));
       REF_GC_CALL(StorageSchemaHistory(store, tx).create(state.orphan, layout));
       REF_GC_CALL(store.commit(tx));
-    } else if (strcmp(action, "cycle") == 0) {
+    } else if (strcmp(action, "cycle") == 0 || strcmp(action, "advance") == 0) {
       // Advance the existing durable fence; do not bypass the merge policy,
       // coherent reference capture, local restore gate, or actual minor DAG.
       ObMySQLTransaction sql;
@@ -105,7 +121,7 @@ void run_layout_reference_gc_command()
       } while (active < now && ObTimeUtility::current_time() < until);
       REF_GC_CHECK(active >= now);
       const ObTabletID schema_id(ObTabletID::LS_STORAGE_SCHEMA_TABLET_ID);
-      for (int i = 0; i < 3; ++i) {
+      for (int i = 0; strcmp(action, "cycle") == 0 && i < 3; ++i) {
         InstanceMetaStore::Transaction tx;
         REF_GC_CALL(store.begin(tx, deadline()));
         const int64_t marker = ObTimeUtility::current_time();
@@ -127,23 +143,39 @@ void run_layout_reference_gc_command()
         REF_GC_CHECK(dumped);
       }
       bool compacted = false;
-      while (!compacted && ObTimeUtility::current_time() < until) {
+      while (strcmp(action, "cycle") == 0 && !compacted && ObTimeUtility::current_time() < until) {
         ObTabletHandle handle;
         REF_GC_CALL(ls->get_tablet(schema_id, handle));
         compacted = handle.get_obj()->get_minor_table_count() < 3;
         if (!compacted) { usleep(100000); }
       }
-      REF_GC_CHECK(compacted);
+      REF_GC_CHECK(strcmp(action, "advance") == 0 || compacted);
+    } else if (strcmp(action, "flush") == 0) {
+      // Read-only replica action: no SQL/KV writes or forced completion state.
+      // Primary publications supply replayed rows. The driver observes actual
+      // local minor deletion, including retries when publication overlaps capture.
+      const int64_t until = deadline();
+      do {
+        rc = share::server_service<ObFreezeInfoMgr>()->reload_for_test();
+        if (rc == OB_EAGAIN) { usleep(100000); }
+      } while (rc == OB_EAGAIN && ObTimeUtility::current_time() < until);
+      REF_GC_CALL(rc);
+      REF_GC_CALL(ls->tablet_freeze(ObTabletID(ObTabletID::LS_STORAGE_SCHEMA_TABLET_ID),
+          true, deadline(), false, ObFreezeSourceFlag::TEST_MODE));
     } else if (strcmp(action, "inspect") != 0 && strcmp(action, "inspect_files") != 0) {
       return OB_INVALID_ARGUMENT;
     }
     REF_GC_CHECK(state.id != 0 && state.layout != 0);
     REF_GC_CALL(manager.has_tablet(ObTabletMapKey(ObTabletID(state.id)), mapped));
-    const int64_t capture_until = deadline();
+    const char *capture_budget = getenv("SEEKDB_LAYOUT_REFERENCE_GC_CAPTURE_US");
+    const int64_t capture_until = capture_budget == nullptr ? deadline()
+        : ObTimeUtility::current_time() + strtoll(capture_budget, nullptr, 10);
     do {
+      std::set<const ObTablet *> visited;
       seen_old = seen_current = seen_a = seen_b = matching = 0;
       foreign_files = 0;
       rc = manager.scan_tablet_references([&](const ObTablet &tablet) {
+        if (!visited.insert(&tablet).second) { return OB_SUCCESS; }
         seen_old += &tablet == state.old.get_obj();
         seen_current += &tablet == state.current.get_obj();
         seen_a += &tablet == state.first.get_obj();
@@ -172,7 +204,7 @@ void run_layout_reference_gc_command()
           return visit_rc;
         }
         return OB_SUCCESS;
-      });
+      }, capture_until);
       if (rc == OB_EAGAIN) { usleep(10000); }
     } while (rc == OB_EAGAIN && ObTimeUtility::current_time() < capture_until);
     REF_GC_CALL(rc);
@@ -201,6 +233,13 @@ void run_layout_reference_gc_command()
     head_rc = history.read_version(state.layout, version);
     if (state.orphan != 0) { orphan_rc = history.read_version(state.orphan, version); }
     REF_GC_CALL(store.commit(tx));
+    ObTabletHandle schema_tablet;
+    REF_GC_CALL(ls->get_tablet(ObTabletID(ObTabletID::LS_STORAGE_SCHEMA_TABLET_ID), schema_tablet));
+    checkpoint = schema_tablet.get_obj()->get_tablet_meta().clog_checkpoint_scn_.get_val_for_tx();
+    minor_files = schema_tablet.get_obj()->get_minor_table_count();
+    SCN bound;
+    REF_GC_CALL(share::server_service<ObFreezeInfoMgr>()->get_schema_history_retention(bound));
+    retention = bound.get_val_for_tx();
     return OB_SUCCESS;
 #undef REF_GC_CALL
 #undef REF_GC_CHECK
@@ -209,10 +248,11 @@ void run_layout_reference_gc_command()
   const std::string response = std::string(control) + ".result";
   FILE *result = fopen(response.c_str(), "w");
   if (result != nullptr) {
-    fprintf(result, "seq=%ld ret=%d G=%lu V=%ld mapped=%d old=%ld current=%ld a=%ld b=%ld matching=%ld body=%d head=%d orphan=%d capture_us=%ld attempts=%ld retained=%d foreign=%ld capture_total_us=%ld\n",
+    fprintf(result, "seq=%ld ret=%d G=%lu V=%ld mapped=%d old=%ld current=%ld a=%ld b=%ld matching=%ld body=%d head=%d orphan=%d capture_us=%ld attempts=%ld retained=%d foreign=%ld capture_total_us=%ld orphan_id=%lu checkpoint=%ld minor_files=%ld retention=%ld\n",
         sequence, ret, held == nullptr ? 0 : state.layout, held == nullptr ? 0 : state.version,
         mapped, seen_old, seen_current, seen_a, seen_b, matching, body_rc, head_rc, orphan_rc, capture_us, capture_attempts,
-        retained, foreign_files, capture_total_us);
+        retained, foreign_files, capture_total_us, held == nullptr ? 0 : state.orphan,
+        checkpoint, minor_files, retention);
     fclose(result);
   }
 }
