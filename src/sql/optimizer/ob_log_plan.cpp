@@ -2045,8 +2045,8 @@ int ObLogPlan::generate_subplan_for_query_ref(ObQueryRefRawExpr *query_ref,
                                                         get_selectivity_ctx()))) {
   }
   if (OB_SUCC(ret)) {
-    // Correlated subqueries must retain their own parallel planning policy.
-    // The partial-result protection is only needed for init-plan children.
+    // Correlated subqueries retain their own parallel policy. SPF callers may
+    // retain PX for init-plans when the filter collects the complete result.
     if (force_serial && is_initplan) {
       saved_parallel_rule = opt_ctx.get_parallel_rule();
       saved_parallel = opt_ctx.get_parallel();
@@ -7306,6 +7306,7 @@ int ObLogPlan::generate_subplan_filter_info(const ObIArray<ObRawExpr *> &subquer
   ObSEArray<ObQueryRefRawExpr *, 4> onetime_query_refs;
   ObSEArray<ObQueryRefRawExpr *, 4> tmp;
   int64_t idx = 0;
+  bool has_rescan_subplan = false;
   for (int64_t i = 0; OB_SUCC(ret) && i < subquery_exprs.count(); ++i) {
     tmp.reuse();
     if (OB_FAIL(ObTransformUtils::extract_query_ref_expr(subquery_exprs.at(i),
@@ -7322,10 +7323,32 @@ int ObLogPlan::generate_subplan_filter_info(const ObIArray<ObRawExpr *> &subquer
   if (!candi_query_refs.empty()) {
     OPT_TRACE_TITLE("start generate subplan filter");
   }
+  for (int64_t i = 0; OB_SUCC(ret) && !has_rescan_subplan && i < candi_query_refs.count(); ++i) {
+    const ObQueryRefRawExpr *query_ref = candi_query_refs.at(i);
+    const ObSelectStmt *subquery = NULL;
+    SubPlanInfo *info = NULL;
+    bool has_ref_assign_user_var = false;
+    if (OB_ISNULL(query_ref)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(get_subplan(candi_query_refs.at(i), info))) {
+    } else if (NULL != info && !for_on_condition && info->allocated_) {
+      // Already owned by an earlier SPF, so it is not a child of this SPF.
+    } else if (NULL != info) {
+      has_rescan_subplan = !info->init_plan_;
+    } else if (OB_ISNULL(subquery = query_ref->get_ref_stmt())) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(subquery->has_ref_assign_user_var(has_ref_assign_user_var))) {
+    } else {
+      has_rescan_subplan = query_ref->has_exec_param() || has_ref_assign_user_var;
+    }
+  }
   for (int64_t i = 0; OB_SUCC(ret) && i < candi_query_refs.count(); ++i) {
     SubPlanInfo *info = NULL;
-    // Forced PX DOP is unsafe for SPF init-plan subqueries: the parent may observe partial results.
-    bool force_serial_subplan = get_optimizer_context().get_global_hint().has_parallel_hint();
+    // A mixed SPF keeps the original serial init-plan policy and its distributed
+    // alternatives. An SPF with only ordinary init-plans can collect PX locally.
+    // A pre-generated onetime subplan may already have its own PX policy.
+    bool force_serial_subplan = get_optimizer_context().get_global_hint().has_parallel_hint() &&
+        (has_rescan_subplan || ObOptimizerUtil::find_item(onetime_query_refs, candi_query_refs.at(i)));
     if (OB_FAIL(get_subplan(candi_query_refs.at(i), info))) {
     } else if (NULL != info && !for_on_condition && info->allocated_) {
       // do nothing
@@ -7496,7 +7519,27 @@ int ObLogPlan::create_subplan_filter_plan(ObLogicalOperator *&top,
   ObExchangeInfo exch_info;
   int64_t cur_dist_methods = dist_methods;
   DistAlgo dist_algo = DIST_INVALID_METHOD;
-  if (OB_ISNULL(top)) {
+  bool has_rescan_subplan = false;
+  for (int64_t i = 0; !has_rescan_subplan && i < subquery_ops.count(); ++i) {
+    has_rescan_subplan = !initplan_idxs.has_member(i + 1) && !onetime_idxs.has_member(i + 1);
+  }
+  const bool has_hinted_initplan = !has_rescan_subplan && !initplan_idxs.is_empty() &&
+      get_optimizer_context().get_global_hint().has_parallel_hint();
+  bool is_child_ops_match_all = false;
+  bool requires_local_initplan = false;
+  if (has_hinted_initplan) {
+    if (OB_FAIL(check_if_all_match_all(subquery_ops, is_child_ops_match_all))) {
+    } else if (!is_child_ops_match_all) {
+      // A worker-local SPF must see the complete init-plan result. Match-all
+      // children already provide it at every worker; only other PX children
+      // require a single-instance SPF and collected child results.
+      requires_local_initplan = true;
+      cur_dist_methods &= (DIST_BASIC_METHOD | DIST_PULL_TO_LOCAL);
+      OPT_TRACE("SPF will use basic or pull to local method due to hinted PX init-plan");
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_ISNULL(top)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(get_subplan_filter_distributed_method(top,
                                                            subquery_ops,
@@ -7505,6 +7548,11 @@ int ObLogPlan::create_subplan_filter_plan(ObLogicalOperator *&top,
                                                            cur_dist_methods))) {
   } else if (DIST_INVALID_METHOD == (dist_algo = get_dist_algo(cur_dist_methods))) {
     top = NULL;
+  } else if (requires_local_initplan &&
+             DistAlgo::DIST_BASIC_METHOD != dist_algo &&
+             DistAlgo::DIST_PULL_TO_LOCAL != dist_algo) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("hinted init-plan requires a single-instance subplan filter", K(ret), K(dist_algo));
   } else if (DistAlgo::DIST_BASIC_METHOD == dist_algo ||
              DistAlgo::DIST_PARTITION_WISE == dist_algo ||
              DistAlgo::DIST_NONE_ALL == dist_algo) {
@@ -7565,6 +7613,12 @@ int ObLogPlan::create_subplan_filter_plan(ObLogicalOperator *&top,
                                                     dist_algo,
                                                     is_update_set))) {
   } else { /*do nothing*/
+  }
+  if (OB_SUCC(ret) && requires_local_initplan && NULL != top &&
+      (OB_ISNULL(top->get_sharding()) || !top->get_sharding()->is_single() ||
+       ObGlobalHint::DEFAULT_PARALLEL != top->get_parallel())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("hinted init-plan subplan filter is not single-instance", K(ret), K(dist_algo));
   }
   OPT_TRACE("succeed to generate subplan filter plan:", top);
   return ret;
