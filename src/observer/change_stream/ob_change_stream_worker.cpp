@@ -149,15 +149,33 @@ int ObCSExecutor::process_sub_task(ObCSExecSubTask *sub_task)
     LOG_INFO("CSWorker: epoch mismatch, marking fail",
              K(executor_id_), K(ctx->batch_sn_), K(ctx->epoch_), K(dispatcher.get_epoch()));
   } else if (ATOMIC_LOAD(&ctx->task_fail_) == 0) {
-    // Normal processing: invoke each plugin on this subtask's rows.
-    common::ObSEArray<ObCSRow, 4> &rows = sub_task->get_rows();
-    for (int64_t i = 0; OB_SUCC(ret) && i < ctx->plugin_cnt_; ++i) {
-      ObCSPlugin *plugin = ctx->plugins_[i];
-      if (OB_NOT_NULL(plugin) && OB_FAIL(plugin->process(rows, *ctx))) {
-      }
-    }
-    if (OB_FAIL(ret)) {
+    // All workers in this batch share ctx->trans_ (and its inner SQL
+    // connection) plus the per-batch plugin objects.  Serialize that shared
+    // state: concurrent use can corrupt the connection/session state and make
+    // a healthy batch fail/recover forever.  Recheck failure/epoch after
+    // acquiring the lock because another worker may have failed while this
+    // worker was waiting.
+    lib::ObMutexGuard process_guard(ctx->process_lock_);
+    if (ctx->epoch_ != dispatcher.get_epoch()) {
       ATOMIC_AAF(&ctx->task_fail_, 1);
+      LOG_INFO("CSWorker: epoch changed while waiting for process lock",
+               K(executor_id_), K(ctx->batch_sn_), K(ctx->epoch_), K(dispatcher.get_epoch()));
+    } else if (ATOMIC_LOAD(&ctx->task_fail_) == 0) {
+      // Normal processing: invoke each plugin on this subtask's rows.
+      common::ObSEArray<ObCSRow, 4> &rows = sub_task->get_rows();
+      for (int64_t i = 0; OB_SUCC(ret) && i < ctx->plugin_cnt_; ++i) {
+        ObCSPlugin *plugin = ctx->plugins_[i];
+        if (OB_NOT_NULL(plugin) && OB_FAIL(plugin->process(rows, *ctx))) {
+          // Keep the first product failure visible even when a failed batch is
+          // retried fast enough to rotate/rate-limit the normal diagnostic log.
+          FLOG_WARN("change stream plugin process failed",
+                    KR(ret), K(i), K(executor_id_), K(ctx->batch_sn_),
+                    K(ctx->schema_version_), K(row_count));
+        }
+      }
+      if (OB_FAIL(ret)) {
+        ATOMIC_AAF(&ctx->task_fail_, 1);
+      }
     }
   }
   // ── Last-worker gate ──

@@ -70,7 +70,21 @@ ObCSAsyncIndexProcessor::ObCSAsyncIndexProcessor(ObCSExecCtx &ctx)
 {
 }
 
-int ObCSAsyncIndexProcessor::init_schema_guard_()
+int ObCSAsyncIndexProcessor::init_latest_schema_guard_()
+{
+  int ret = common::OB_SUCCESS;
+  ObMultiVersionSchemaService *schema_service =
+      nullptr != ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()
+          ? ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service()
+          : nullptr;
+  if (OB_ISNULL(schema_service)) {
+    ret = common::OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(latest_schema_guard_))) {
+  }
+  return ret;
+}
+
+int ObCSAsyncIndexProcessor::init_historical_schema_guard_()
 {
   int ret = common::OB_SUCCESS;
   ObMultiVersionSchemaService *schema_service =
@@ -82,6 +96,105 @@ int ObCSAsyncIndexProcessor::init_schema_guard_()
   } else if (OB_FAIL(schema_service->get_runtime_schema_guard(
       schema_guard_, ctx_.schema_version_,
       ObMultiVersionSchemaService::RefreshSchemaMode::FORCE_FALLBACK))) {
+  }
+  return ret;
+}
+
+int ObCSAsyncIndexProcessor::check_live_async_index_target_(
+    const schema::ObTableSchema &data_table_schema,
+    const schema::ObTableSchema &index_schema,
+    bool &is_live_target)
+{
+  int ret = common::OB_SUCCESS;
+  is_live_target = false;
+
+  if (!data_table_schema.is_user_table()
+      || !data_table_schema.is_heap_organized_table()
+      || index_schema.get_data_table_id() != data_table_schema.get_table_id()
+      || !schema::is_vec_index_id_type(index_schema.get_index_type())) {
+  } else {
+    const ObString index_params_str = index_schema.get_index_params();
+    const bool is_async_mode = is_vector_index_sync_mode_async(
+        index_params_str, true /*is_hnsw_heap_table*/);
+    common::ObSEArray<uint64_t, 1> vec_col_ids;
+    bool is_semantic_index = false;
+    if (!is_async_mode) {
+    } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_id(
+                   data_table_schema, index_schema, vec_col_ids))) {
+    } else if (vec_col_ids.count() <= 0) {
+      ret = common::OB_ERR_UNEXPECTED;
+    } else if (!index_params_str.empty()) {
+      const ObColumnSchemaV2 *data_col_schema =
+          data_table_schema.get_column_schema(vec_col_ids.at(0));
+      if (OB_ISNULL(data_col_schema)) {
+        ret = common::OB_ERR_UNEXPECTED;
+      } else if (ob_is_varchar_type(data_col_schema->get_data_type(),
+                                    data_col_schema->get_collation_type())) {
+        ObVectorIndexParam param;
+        const int tmp_ret = ObVectorIndexUtil::parser_params_from_string(
+            index_params_str, ObVectorIndexType::VIT_HNSW_INDEX,
+            param, false /*set_default*/);
+        if (OB_SUCCESS == tmp_ret) {
+          is_semantic_index = (param.endpoint_[0] != '\0' && param.dim_ > 0);
+        }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      is_live_target = is_async_mode && !is_semantic_index;
+    }
+  }
+  return ret;
+}
+
+int ObCSAsyncIndexProcessor::has_live_async_index_target_(
+    const common::ObIArray<ObCSRow> &rows,
+    bool &has_live_target)
+{
+  int ret = common::OB_SUCCESS;
+  has_live_target = false;
+  common::ObSEArray<uint64_t, 16> checked_table_ids;
+
+  for (int64_t i = 0; OB_SUCC(ret) && !has_live_target && i < rows.count(); ++i) {
+    uint64_t table_id = common::OB_INVALID_ID;
+    if (OB_FAIL(resolve_table_id_from_tablet_id_(rows.at(i).tablet_id_, table_id))) {
+      if (common::OB_TABLET_NOT_EXIST == ret) {
+        ret = common::OB_SUCCESS;
+      }
+    } else if (common::OB_INVALID_ID == table_id) {
+    } else {
+      bool checked = false;
+      for (int64_t j = 0; !checked && j < checked_table_ids.count(); ++j) {
+        checked = checked_table_ids.at(j) == table_id;
+      }
+      if (!checked && OB_FAIL(checked_table_ids.push_back(table_id))) {
+      } else if (!checked) {
+        const schema::ObTableSchema *data_table_schema = nullptr;
+        if (OB_FAIL(latest_schema_guard_.get_table_schema(table_id, data_table_schema))) {
+        } else if (OB_ISNULL(data_table_schema)
+                   || !data_table_schema->is_user_table()
+                   || !data_table_schema->is_heap_organized_table()) {
+        } else {
+          common::ObSEArray<schema::ObAuxTableMetaInfo, 16> simple_index_infos;
+          if (OB_FAIL(data_table_schema->get_simple_index_infos(simple_index_infos))) {
+          } else {
+            for (int64_t j = 0;
+                 OB_SUCC(ret) && !has_live_target && j < simple_index_infos.count(); ++j) {
+              const schema::ObTableSchema *index_schema = nullptr;
+              if (OB_FAIL(latest_schema_guard_.get_table_schema(
+                      simple_index_infos.at(j).table_id_, index_schema))) {
+              } else if (OB_NOT_NULL(index_schema)) {
+                bool is_live_target = false;
+                if (OB_FAIL(check_live_async_index_target_(
+                        *data_table_schema, *index_schema, is_live_target))) {
+                } else if (is_live_target) {
+                  has_live_target = true;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
   }
   return ret;
 }
@@ -118,11 +231,18 @@ int ObCSAsyncIndexProcessor::get_or_cache_vec_index_info_(
 int ObCSAsyncIndexProcessor::process(common::ObIArray<ObCSRow> &rows)
 {
   int ret = common::OB_SUCCESS;
+  bool has_live_target = false;
   if (rows.count() == 0) {
     // nothing to process
   } else if (!vec_index_cache_.created() && OB_FAIL(vec_index_cache_.create(64, "CSAsyncIdxCa"))) {
   } else if (!tablet_to_table_.created() && OB_FAIL(tablet_to_table_.create(64, "CSTabletToTb"))) {
-  } else if (OB_FAIL(init_schema_guard_())) {
+  } else if (OB_FAIL(init_latest_schema_guard_())) {
+  } else if (OB_FAIL(has_live_async_index_target_(rows, has_live_target))) {
+  } else if (!has_live_target) {
+    // Every row belongs to a dropped table/index (or to a table that never had
+    // a live async vector target).  Retire the stale redo without requiring an
+    // old schema version that may already have been recycled.
+  } else if (OB_FAIL(init_historical_schema_guard_())) {
   } else {
     common::ObSEArray<TabletEventGroup, 16> groups;
     common::hash::ObHashMap<GroupKey, int64_t, common::hash::NoPthreadDefendMode> key_to_group;
@@ -256,10 +376,25 @@ int ObCSAsyncIndexProcessor::resolve_vector_index_info_(
   vec_infos.reset();
   
   const schema::ObTableSchema *data_table_schema = nullptr;
+  const schema::ObTableSchema *latest_data_table_schema = nullptr;
   bool need_resolve = true;
 
-  if (OB_FAIL(schema_guard.get_table_schema( table_id, data_table_schema))) {
+  // Check current ownership before resolving the historical schema.  A slow
+  // consumer can legitimately reach redo for a table that a previous client
+  // already dropped; that table may also have fallen out of the historical
+  // schema cache.  In that case there is no live async-index destination and
+  // the redo must be retired rather than turning a harmless teardown into an
+  // endlessly retried batch.
+  if (OB_FAIL(latest_schema_guard_.get_table_schema(
+          table_id, latest_data_table_schema))) {
+  } else if (OB_ISNULL(latest_data_table_schema)) {
+    // The source table was dropped after this transaction committed.  Its
+    // historical async-index work has no live destination and is safe to skip.
+    need_resolve = false;
+  } else if (OB_FAIL(schema_guard.get_table_schema(table_id, data_table_schema))) {
   } else if (OB_ISNULL(data_table_schema)) {
+    // The table still exists, so losing the historical schema is not a stale
+    // teardown case and must remain visible as a real error.
     ret = common::OB_ERR_UNEXPECTED;
   } else if (!data_table_schema->is_user_table() || !data_table_schema->is_heap_organized_table()) {
     // Skip: not user table or not heap table (async index only supports heap + ASYNC)
@@ -275,7 +410,16 @@ int ObCSAsyncIndexProcessor::resolve_vector_index_info_(
       for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
         const uint64_t index_table_id = simple_index_infos.at(i).table_id_;
         const schema::ObTableSchema *index_schema = nullptr;
-        if (OB_FAIL(schema_guard.get_table_schema( index_table_id, index_schema))) {
+        const schema::ObTableSchema *latest_index_schema = nullptr;
+        if (OB_FAIL(latest_schema_guard_.get_table_schema(
+                index_table_id, latest_index_schema))) {
+        } else if (OB_ISNULL(latest_index_schema)
+                   || latest_index_schema->get_data_table_id() != table_id
+                   || !schema::is_vec_index_id_type(latest_index_schema->get_index_type())) {
+          // The historical index was dropped (or replaced) before this redo
+          // was consumed.  Do not require its historical schema to remain in
+          // cache just to discover that there is no live destination.
+        } else if (OB_FAIL(schema_guard.get_table_schema(index_table_id, index_schema))) {
         } else if (OB_ISNULL(index_schema)) {
           ret = common::OB_ERR_UNEXPECTED;
         } else if (!schema::is_vec_index_id_type(index_schema->get_index_type())) {
@@ -341,15 +485,25 @@ int ObCSAsyncIndexProcessor::resolve_vector_index_info_(
                   if (OB_FAIL(ObPluginVectorIndexUtils::get_vector_index_prefix(*index_schema, index_id_prefix))) {
                   } else {
                     for (int64_t k = 0; OB_SUCC(ret) && k < simple_index_infos.count(); ++k) {
+                      const uint64_t candidate_table_id = simple_index_infos.at(k).table_id_;
                       const schema::ObTableSchema *candidate_schema = nullptr;
-                      if (OB_FAIL(schema_guard.get_table_schema( simple_index_infos.at(k).table_id_, candidate_schema))) {
+                      const schema::ObTableSchema *latest_candidate_schema = nullptr;
+                      if (OB_FAIL(latest_schema_guard_.get_table_schema(
+                              candidate_table_id, latest_candidate_schema))) {
+                      } else if (OB_ISNULL(latest_candidate_schema)
+                                 || latest_candidate_schema->get_data_table_id() != table_id
+                                 || !schema::is_vec_delta_buffer_type(
+                                        latest_candidate_schema->get_index_type())) {
+                        // Dropped or unrelated historical auxiliary table.
+                      } else if (OB_FAIL(schema_guard.get_table_schema(
+                                     candidate_table_id, candidate_schema))) {
                       } else if (OB_ISNULL(candidate_schema)) {
                         ret = common::OB_ERR_UNEXPECTED;
                       } else if (schema::is_vec_delta_buffer_type(candidate_schema->get_index_type())) {
                         ObString candidate_prefix;
                         if (OB_FAIL(ObPluginVectorIndexUtils::get_vector_index_prefix(*candidate_schema, candidate_prefix))) {
                         } else if (candidate_prefix == index_id_prefix) {
-                          delta_buffer_table_id = simple_index_infos.at(k).table_id_;
+                          delta_buffer_table_id = candidate_table_id;
                           break;
                         }
                       }
@@ -361,51 +515,66 @@ int ObCSAsyncIndexProcessor::resolve_vector_index_info_(
                 }
 
                 if (OB_SUCC(ret)) {
-                  ObCSVecIndexInfo vec_info;
-                  vec_info.data_table_id_ = table_id;
-                  vec_info.index_id_table_id_ = index_id_table_id;
-                  vec_info.delta_buffer_table_id_ = delta_buffer_table_id;
-                  vec_info.vec_column_id_ = vec_column_id;
-                  vec_info.vec_col_idx_ = vec_col_idx;
-                  vec_info.index_type_ = index_schema->get_index_type();
-                  vec_info.dim_ = dim;
+                  const schema::ObTableSchema *latest_delta_schema = nullptr;
+                  if (OB_FAIL(latest_schema_guard_.get_table_schema(
+                                 delta_buffer_table_id, latest_delta_schema))) {
+                  } else if (OB_ISNULL(latest_index_schema)
+                             || OB_ISNULL(latest_delta_schema)
+                             || latest_index_schema->get_data_table_id() != table_id
+                             || latest_delta_schema->get_data_table_id() != table_id
+                             || !schema::is_vec_index_id_type(latest_index_schema->get_index_type())
+                             || !schema::is_vec_delta_buffer_type(latest_delta_schema->get_index_type())) {
+                    // The historical schema still contains this async index,
+                    // but the current schema no longer does (drop/recreate or
+                    // teardown between embedded tests).  Do not replay into a
+                    // deleted auxiliary table.
+                  } else {
+                    ObCSVecIndexInfo vec_info;
+                    vec_info.data_table_id_ = table_id;
+                    vec_info.index_id_table_id_ = index_id_table_id;
+                    vec_info.delta_buffer_table_id_ = delta_buffer_table_id;
+                    vec_info.vec_column_id_ = vec_column_id;
+                    vec_info.vec_col_idx_ = vec_col_idx;
+                    vec_info.index_type_ = index_schema->get_index_type();
+                    vec_info.dim_ = dim;
 
-                  // Identify extra columns in index_id_table (partition key columns from
-                  // data table) that are neither rowkey nor vector columns.
-                  // These must be extracted from redo row and populated during insert.
-                  const schema::ObTableSchema *idx_id_schema = nullptr;
-                  if (OB_FAIL(schema_guard.get_table_schema( index_id_table_id, idx_id_schema))) {
-                  } else if (OB_NOT_NULL(idx_id_schema)) {
-                    for (schema::ObTableSchema::const_column_iterator cit = idx_id_schema->column_begin();
-                         OB_SUCC(ret) && cit != idx_id_schema->column_end(); ++cit) {
-                      const schema::ObColumnSchemaV2 *c = *cit;
-                      if (OB_ISNULL(c)) {
-                        // skip
-                      } else if (c->get_rowkey_position() > 0) {
-                        // rowkey column (scn/vid/type), already handled
-                      } else if (schema::ObSchemaUtils::is_vec_hnsw_vector_column(c->get_column_flags())) {
-                        // vector column, already handled
-                      } else {
-                        // Extra column (partition key): find its index in data table's col_descs
-                        const uint64_t col_id = c->get_column_id();
-                        int64_t data_col_idx = -1;
-                        for (int64_t ci = 0; ci < col_descs.count(); ++ci) {
-                          if (col_descs.at(ci).col_id_ == static_cast<uint32_t>(col_id)) {
-                            data_col_idx = ci;
-                            break;
-                          }
-                        }
-                        if (data_col_idx >= 0) {
-                          if (OB_FAIL(vec_info.part_key_col_ids_.push_back(col_id))) {
-                          } else if (OB_FAIL(vec_info.part_key_col_idxs_.push_back(data_col_idx))) {
-                          }
+                    // Identify extra columns in index_id_table (partition key columns from
+                    // data table) that are neither rowkey nor vector columns.
+                    // These must be extracted from redo row and populated during insert.
+                    const schema::ObTableSchema *idx_id_schema = nullptr;
+                    if (OB_FAIL(schema_guard.get_table_schema(index_id_table_id, idx_id_schema))) {
+                    } else if (OB_NOT_NULL(idx_id_schema)) {
+                      for (schema::ObTableSchema::const_column_iterator cit = idx_id_schema->column_begin();
+                           OB_SUCC(ret) && cit != idx_id_schema->column_end(); ++cit) {
+                        const schema::ObColumnSchemaV2 *c = *cit;
+                        if (OB_ISNULL(c)) {
+                          // skip
+                        } else if (c->get_rowkey_position() > 0) {
+                          // rowkey column (scn/vid/type), already handled
+                        } else if (schema::ObSchemaUtils::is_vec_hnsw_vector_column(c->get_column_flags())) {
+                          // vector column, already handled
                         } else {
+                          // Extra column (partition key): find its index in data table's col_descs
+                          const uint64_t col_id = c->get_column_id();
+                          int64_t data_col_idx = -1;
+                          for (int64_t ci = 0; ci < col_descs.count(); ++ci) {
+                            if (col_descs.at(ci).col_id_ == static_cast<uint32_t>(col_id)) {
+                              data_col_idx = ci;
+                              break;
+                            }
+                          }
+                          if (data_col_idx >= 0) {
+                            if (OB_FAIL(vec_info.part_key_col_ids_.push_back(col_id))) {
+                            } else if (OB_FAIL(vec_info.part_key_col_idxs_.push_back(data_col_idx))) {
+                            }
+                          } else {
+                          }
                         }
                       }
                     }
-                  }
 
-                  if (OB_SUCC(ret) && OB_FAIL(vec_infos.push_back(vec_info))) {
+                    if (OB_SUCC(ret) && OB_FAIL(vec_infos.push_back(vec_info))) {
+                    }
                   }
                 }
               }

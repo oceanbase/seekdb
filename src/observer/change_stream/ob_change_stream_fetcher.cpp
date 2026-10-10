@@ -56,6 +56,9 @@ ObCSFetcher::ObCSFetcher()
     current_lsn_(),
     current_scn_(),
     current_schema_version_(0),
+    tx_info_(),
+    refresh_scn_exempt_tx_lock_(),
+    refresh_scn_exempt_tx_ids_(),
     total_tx_committed_(0),
     running_mode_(IDLE),
     has_async_index_tables_(false),
@@ -209,6 +212,10 @@ void ObCSFetcher::destroy()
       }
     }
     tx_info_.destroy();
+    {
+      common::ObSpinLockGuard guard(refresh_scn_exempt_tx_lock_);
+      refresh_scn_exempt_tx_ids_.reset();
+    }
     dispatcher_ = nullptr;
     log_storage_ = nullptr;
     schema_publish_signal_ = nullptr;
@@ -281,9 +288,14 @@ int ObCSFetcher::get_min_dep_lsn(palf::LSN &min_lsn)
 
 // ---------------------------------------------------------------------------
 // get_refresh_scn: get GTS, then decide refresh_scn based on async-index state:
-//   1. !has_async: return GTS — no async vector index tables.
-//   2. has_async && tx_info_ not empty: return OB_SUCCESS with invalid refresh_scn — worker handles.
-//   3. has_async && current_lsn_.is_valid() && current_lsn_ >= max_lsn:
+//   1. !has_async: return the GTS sampled before the schema check.  Advancing
+//      to that horizon is safe because a DML for a newly-created async index
+//      cannot commit before the index schema is published, while the later
+//      schema check still observed that no async index existed.  It also lets
+//      Dispatcher retire work for an index that has since been dropped.
+//   2. has_async && a non-exempt tx is still in flight, or a committed tx is
+//      still in dispatcher: return OB_SUCCESS with invalid refresh_scn.
+//   3. has_async && current_lsn_.is_valid() && current_lsn_ >= end_lsn:
 //      return GTS — no pending logs to consume.
 //   4. otherwise (including invalid current_lsn_): return current_scn_ —
 //      still consuming logs / cannot prove caught-up.
@@ -304,39 +316,106 @@ int ObCSFetcher::get_refresh_scn(SCN &refresh_scn)
   }
 
   if (!has_async) {
-    // Case 1: no async vector index tables — advance to GTS.
+    // Case 1: no async vector index tables.  The GTS was sampled before this
+    // schema check, so it cannot cover DML for an async index created after
+    // the check.  Publishing it is required to retire already-dispatched work
+    // for an index that has been dropped; retaining the old watermark would
+    // replay those stale transactions against a later schema indefinitely.
     refresh_scn = gts_scn;
     return ret;
   }
 
-  // Case 2: in-flight tx — worker will advance refresh_scn after draining; skip here.
-  if (!tx_info_.empty()) {
+  // Case 2: remain conservative for every in-flight transaction.  A
+  // transaction may already have chosen a commit version before its commit
+  // log becomes readable, so commit_version_ == 0 in Fetcher does not prove
+  // that publishing the sampled GTS is safe.  The only exception is the exact
+  // FORK transaction registered by wait_refresh_scn(): that caller is still
+  // inside the wait, so it cannot enter commit before the exemption is
+  // removed, and its commit version must therefore be newer than gts_scn.
+  bool has_blocking_tx = false;
+  for (common::hash::ObHashMap<int64_t, ObCSTxInfo *>::const_iterator it = tx_info_.begin();
+       !has_blocking_tx && it != tx_info_.end(); ++it) {
+    const ObCSTxInfo *tx = it->second;
+    if (OB_NOT_NULL(tx) && !is_refresh_scn_exempt_tx_(tx->tx_id_)) {
+      has_blocking_tx = true;
+    }
+  }
+  if (has_blocking_tx) {
     return OB_SUCCESS;
   }
 
-  // Fetch max_lsn to distinguish case 3 and case 4.
-  palf::LSN max_lsn;
+  // Fetch the committed and flushed end LSN used by the log iterator.  Do not
+  // use max_lsn here: it is the allocator tail and may include an uncommitted
+  // log from the DDL transaction that is waiting for this refresh watermark.
+  // Comparing the iterator position with that tail would make the DDL wait on
+  // its own commit.
+  palf::LSN end_lsn;
   {
     storage::ObLS *ls = nullptr;
     if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))
-        || OB_FAIL(ls->get_log_handler()->get_max_lsn(max_lsn))) {
+        || OB_FAIL(ls->get_log_handler()->get_end_lsn(end_lsn))) {
       return ret;
     }
   }
 
-  if (current_lsn_.is_valid() && current_lsn_ >= max_lsn) {
-    // Case 3: caught up — no pending logs, advance to GTS.
-    SCN gts_scn;
-    if (OB_FAIL(OB_TS_MGR.get_gts(gts_scn))) {
-    } else {
-      refresh_scn = gts_scn;
-    }
+  if (current_lsn_.is_valid() && current_lsn_ >= end_lsn) {
+    // Case 3: caught up — no pending logs.  Publish the GTS sampled before
+    // end_lsn.  Sampling a newer GTS here would open a window in which a
+    // transaction can commit after end_lsn was read but still be covered by
+    // the published watermark before Fetcher consumes its commit log.
+    refresh_scn = gts_scn;
   } else {
     // Case 4: still consuming logs, or current_lsn_ is invalid (e.g. restart init phase).
     // In both cases, be conservative and only advance to current_scn_.
     refresh_scn = current_scn_;
   }
   return ret;
+}
+
+int ObCSFetcher::add_refresh_scn_exempt_tx(const int64_t tx_id)
+{
+  int ret = OB_SUCCESS;
+  common::ObSpinLockGuard guard(refresh_scn_exempt_tx_lock_);
+  bool found = false;
+  if (tx_id <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    for (int64_t i = 0; !found && i < refresh_scn_exempt_tx_ids_.count(); ++i) {
+      found = refresh_scn_exempt_tx_ids_.at(i) == tx_id;
+    }
+    if (!found && OB_FAIL(refresh_scn_exempt_tx_ids_.push_back(tx_id))) {
+      LOG_WARN("CSFetcher: failed to register refresh scn exempt transaction",
+               KR(ret), K(tx_id));
+    }
+  }
+  return ret;
+}
+
+int ObCSFetcher::remove_refresh_scn_exempt_tx(const int64_t tx_id)
+{
+  int ret = OB_SUCCESS;
+  common::ObSpinLockGuard guard(refresh_scn_exempt_tx_lock_);
+  bool found = false;
+  for (int64_t i = 0; !found && i < refresh_scn_exempt_tx_ids_.count(); ++i) {
+    if (refresh_scn_exempt_tx_ids_.at(i) == tx_id) {
+      found = true;
+      ret = refresh_scn_exempt_tx_ids_.remove(i);
+    }
+  }
+  if (!found) {
+    ret = OB_ENTRY_NOT_EXIST;
+  }
+  return ret;
+}
+
+bool ObCSFetcher::is_refresh_scn_exempt_tx_(const int64_t tx_id)
+{
+  common::ObSpinLockGuard guard(refresh_scn_exempt_tx_lock_);
+  bool found = false;
+  for (int64_t i = 0; !found && i < refresh_scn_exempt_tx_ids_.count(); ++i) {
+    found = refresh_scn_exempt_tx_ids_.at(i) == tx_id;
+  }
+  return found;
 }
 
 // get_has_async_cached_: use last_checked_schema_version_ / has_async_index_tables_; refresh cache when schema version changed.
@@ -454,25 +533,30 @@ void ObCSFetcher::try_advance_min_dep_lsn_()
   }
 }
 
-void ObCSFetcher::try_advance_refresh_scn_()
+void ObCSFetcher::try_advance_refresh_scn_(const bool force)
 {
-  if (!REACH_TIME_INTERVAL(CS_FETCHER_REFRESH_SCN_ADVANCE_INTERVAL_US)) {
+  if (!force && !REACH_TIME_INTERVAL(CS_FETCHER_REFRESH_SCN_ADVANCE_INTERVAL_US)) {
     return;
   }
   int ret = OB_SUCCESS;
   SCN refresh_scn;
+  int64_t affected_rows = 0;
   if (OB_FAIL(get_refresh_scn(refresh_scn))) {
     return;
   }
   if (refresh_scn.is_valid()) {
-    if (OB_ISNULL(dispatcher_)) {
+    if (OB_ISNULL(dispatcher_) || OB_ISNULL(GCTX.sql_proxy_)) {
       ret = OB_ERR_UNEXPECTED;
+    } else if (IDLE == running_mode_
+               && OB_FAIL(ObGlobalStatProxy::advance_change_stream_refresh_scn(
+                      *GCTX.sql_proxy_, refresh_scn, affected_rows))) {
     } else if (OB_FAIL(dispatcher_->update_refresh_scn(
                    static_cast<int64_t>(refresh_scn.get_val_for_gts())))) {
     } else if (REACH_TIME_INTERVAL(10 * 1000 * 1000)) {
       LOG_INFO("CSFetcher: refresh_scn advanced",
                "mode", running_mode_ == ACTIVE ? "ACTIVE" : "IDLE",
-               K(refresh_scn), "inflight_tx_count", tx_info_.size());
+               K(refresh_scn), K(affected_rows),
+               "inflight_tx_count", tx_info_.size());
     }
   }
 }
@@ -790,6 +874,14 @@ void ObCSFetcher::run1()
             }
           }
           running_mode_ = new_mode;
+          if (IDLE == running_mode_) {
+            // The IDLE window can be shorter than the periodic refresh interval
+            // (for example, consecutive embedded tests can drop one async index
+            // and create the next almost immediately).  Persist the safe horizon
+            // at the transition so a later process never replays work for the
+            // dropped index against a newer schema.
+            try_advance_refresh_scn_(true /* force */);
+          }
           if (ACTIVE == running_mode_) {
             iter_ready = false;
           }

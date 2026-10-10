@@ -168,9 +168,11 @@ ObService::~ObService()
 
 int ObService::wait_until_change_stream_refreshed(
     common::ObMySQLProxy &mysql_proxy,
-    const int64_t timeout_us)
+    const int64_t timeout_us,
+    const int64_t exempt_tx_id)
 {
-  return change_stream_service_.wait_until_refreshed(mysql_proxy, timeout_us);
+  return change_stream_service_.wait_until_refreshed(
+      mysql_proxy, timeout_us, exempt_tx_id);
 }
 
 int ObService::init(common::ObMySQLProxy &sql_proxy)

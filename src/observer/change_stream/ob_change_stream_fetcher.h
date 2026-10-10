@@ -24,6 +24,7 @@
 #include "lib/ob_define.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/hash/ob_hashmap.h"
+#include "lib/lock/ob_spin_lock.h"
 #include "common/ob_tablet_id.h"
 #include "share/scn.h"
 #include "share/ob_thread_pool.h"
@@ -116,7 +117,8 @@ struct ObCSTxInfo
   /// Free redo buffers and reset; caller then frees the ObCSTxInfo itself.
   void destroy();
 
-  TO_STRING_KV(K_(tx_id), K_(commit_version), K_(start_lsn), K_(schema_version), K_(is_ddl), K_(in_dispatch_time));
+  TO_STRING_KV(K_(tx_id), K_(commit_version), K_(start_lsn), K_(schema_version),
+               K_(is_ddl), K_(in_dispatch_time));
 };
 
 // ---------------------------------------------------------------------------
@@ -143,11 +145,18 @@ public:
   int get_min_dep_lsn(palf::LSN &min_lsn);
 
   /// For change_stream_refresh_scn:
-  /// - no async table: returns GTS
-  /// - async table with in-flight tx: returns invalid SCN (skip advancing this round)
-  /// - async table without in-flight tx: returns GTS only when current_lsn catches up;
-  ///   otherwise returns current_scn to avoid over-advancing.
+  /// - no async table: returns the GTS sampled before checking the schema, so
+  ///   stale work for a dropped index can be retired without covering DML for
+  ///   an index created after that check
+  /// - async table with an in-flight tx or committed dispatched tx: returns
+  ///   invalid SCN (skip this round)
+  /// - a FORK caller may temporarily exempt only its own non-DML transaction
+  ///   while waiting for the watermark, avoiding a wait-on-self cycle
+  /// - otherwise returns GTS only when current_lsn catches up; returns
+  ///   current_scn while logs are still being consumed.
   int get_refresh_scn(SCN &refresh_scn);
+  int add_refresh_scn_exempt_tx(int64_t tx_id);
+  int remove_refresh_scn_exempt_tx(int64_t tx_id);
   /// For log reclaim: returns the minimum LSN still depended on by in-flight tx.
   palf::LSN get_min_dep_lsn() const;
 
@@ -170,7 +179,7 @@ private:
 
   int init_consumption_position_();
   void try_advance_min_dep_lsn_();
-  void try_advance_refresh_scn_();
+  void try_advance_refresh_scn_(const bool force = false);
   /// Check if any async vector index tables exist; returns OB_SUCCESS and sets has_async on success.
   int check_has_async_index_tables_(bool &has_async);
   /// Get has_async using cache (last_checked_schema_version_ / has_async_index_tables_).
@@ -189,6 +198,7 @@ private:
   int extract_ddl_schema_version_(ObCSTxInfo *tx, int64_t &schema_version);
   /// Get or create tx in tx_info_; used by handle_redo_log_ and MDS DDL branch.
   int get_or_create_tx_info_(int64_t tid, const palf::LSN &lsn, ObCSTxInfo *&tx);
+  bool is_refresh_scn_exempt_tx_(int64_t tx_id);
 
   bool is_inited_;
   ObCSDispatcher *dispatcher_;
@@ -198,6 +208,8 @@ private:
   SCN current_scn_;
   int64_t current_schema_version_;
   common::hash::ObHashMap<int64_t, ObCSTxInfo *> tx_info_; // tx_id -> ObCSTxInfo
+  common::ObSpinLock refresh_scn_exempt_tx_lock_;
+  common::ObSEArray<int64_t, 4> refresh_scn_exempt_tx_ids_;
   int64_t total_tx_committed_;
   RunningMode running_mode_;           // IDLE: no async-index tables; ACTIVE: consuming logs.
   bool has_async_index_tables_;        // Cached result of check_has_async_index_tables_().
