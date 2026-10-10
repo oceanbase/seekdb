@@ -18,7 +18,6 @@
 #define OCEANBASE_STORAGE_OB_STORAGE_META_OBJ_POOL_H_
 
 #include "lib/objectpool/ob_resource_pool.h"
-#include "share/config/ob_runtime_config.h"
 
 #include "share/config/ob_server_config.h"
 namespace oceanbase

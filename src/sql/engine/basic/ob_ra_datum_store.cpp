@@ -574,6 +574,7 @@ int ObRADatumStore::switch_block(const int64_t min_size)
     LOG_WARN("fail to dump block if need", K(ret), K(min_size));
   } else {
     BlockBuffer new_blkbuf;
+    bool reclaimed_after_rejection = false;
     BlockIndex bi;
     bi.is_idx_block_ = false;
     bi.on_disk_ = false;
@@ -583,10 +584,30 @@ int ObRADatumStore::switch_block(const int64_t min_size)
     bi.capacity_ = static_cast<int32_t>(blkbuf_.buf_.capacity()); // used to calc mem_hold for dump
     if (OB_SUCC(ret) && !finish_add) { // need alloc new block
       if (OB_FAIL(alloc_block(new_blkbuf, min_size))) {
+        // The shared WORK_AREA quota may be consumed or shrunk after the
+        // preceding spill sample.  Index and spill the current block through
+        // the regular dump path, then retry allocation once.
+        if (should_retry_workarea_allocation(ret, mem_limit_, ctx_id_, true)) {
+          ret = OB_SUCCESS;
+          if (OB_FAIL(dump(true, BIG_BLOCK_SIZE))) {
+            LOG_WARN("failed to reclaim RA datum block after quota rejection",
+                     K(ret), K(min_size), K_(mem_hold));
+          } else if (OB_FAIL(alloc_block(new_blkbuf, min_size))) {
+            LOG_WARN("failed to allocate RA datum block after reclaim",
+                     K(ret), K(min_size), K_(mem_hold));
+          } else {
+            reclaimed_after_rejection = true;
+          }
+        }
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(add_block_idx(bi))) {
+      if (reclaimed_after_rejection) {
+        blkbuf_ = new_blkbuf;
+        new_blkbuf.reset();
+        if (OB_FAIL(setup_block(blkbuf_))) {
+        }
+      } else if (OB_FAIL(add_block_idx(bi))) {
       } else {
         save_row_cnt_ = row_cnt_;
         blkbuf_.reset();

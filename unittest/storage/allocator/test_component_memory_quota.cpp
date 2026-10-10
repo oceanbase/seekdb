@@ -101,8 +101,53 @@ TEST(TestVectorMemoryQuota, fifo_metadata_pages_use_vector_context_quota)
 TEST(TestMetaMemoryQuota, preserves_double_percentage_rule)
 {
   EXPECT_EQ(400, ObStorageMetaMemMgr::calculate_memory_quota_limit(1000, 20));
-  EXPECT_EQ(0, ObStorageMetaMemMgr::calculate_memory_quota_limit(1000, 0));
+  EXPECT_EQ(1000, ObStorageMetaMemMgr::calculate_memory_quota_limit(1000, 0));
   EXPECT_EQ(0, ObStorageMetaMemMgr::calculate_memory_quota_limit(0, 20));
+}
+
+TEST(TestMetaMemoryQuota, zero_percentage_initialization_allows_allocation)
+{
+  static constexpr int64_t MEMORY_BUDGET = 16L << 20;
+  MemoryQuota quota(ObStorageMetaMemMgr::calculate_memory_quota_limit(
+      MEMORY_BUDGET, 0));
+  ObStorageMetaObjPool<TestMetaPoolObject> pool(
+      1, "MetaZeroInit", ObCtxIds::META_OBJ_CTX_ID, quota);
+
+  TestMetaPoolObject *object = nullptr;
+  ASSERT_EQ(OB_SUCCESS, pool.acquire(object));
+  ASSERT_NE(nullptr, object);
+  EXPECT_GT(quota.committed(), 0);
+
+  pool.release(object);
+  pool.destroy();
+  EXPECT_EQ(0, quota.committed());
+  EXPECT_EQ(0, quota.reserved());
+}
+
+TEST(TestMetaMemoryQuota, zero_percentage_reload_restores_allocation)
+{
+  static constexpr int64_t MEMORY_BUDGET = 16L << 20;
+  MemoryQuota quota(MEMORY_BUDGET);
+  ObStorageMetaObjPool<TestMetaPoolObject> pool(
+      1, "MetaZeroReload", ObCtxIds::META_OBJ_CTX_ID, quota);
+
+  const int64_t construction_charge = quota.committed();
+  ASSERT_GT(construction_charge, 0);
+  quota.set_limit(construction_charge);
+  TestMetaPoolObject *object = nullptr;
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, pool.acquire(object));
+  EXPECT_EQ(nullptr, object);
+
+  quota.set_limit(ObStorageMetaMemMgr::calculate_memory_quota_limit(
+      MEMORY_BUDGET, 0));
+  ASSERT_EQ(OB_SUCCESS, pool.acquire(object));
+  ASSERT_NE(nullptr, object);
+  EXPECT_GT(quota.committed(), construction_charge);
+
+  pool.release(object);
+  pool.destroy();
+  EXPECT_EQ(0, quota.committed());
+  EXPECT_EQ(0, quota.reserved());
 }
 
 TEST(TestMetaMemoryQuota, production_order_charges_inner_and_overflow_allocations)

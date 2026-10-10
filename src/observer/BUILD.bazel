@@ -636,6 +636,9 @@ _SEEKDB_SYSTEM_LIBS = select({
 _SEEKDB_EXECUTABLE_LINKOPTS = select({
     "@platforms//os:macos": [
         "-Wl,-dead_strip",
+        # jemalloc's Darwin zone registration lives in a standalone archive
+        # member.  Keep it reachable even when dead_strip is enabled.
+        "-Wl,-u,_je_zone_register",
         "-Wl,-framework,Security",
         "-Wl,-framework,CoreFoundation",
         "-Wl,-framework,SystemConfiguration",

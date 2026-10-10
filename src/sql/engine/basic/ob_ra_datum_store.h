@@ -428,7 +428,11 @@ private:
   int find_block_idx(Reader &reader, const int64_t row_id, BlockIndex *&bi);
   int get_store_row(Reader &reader, const int64_t row_id, const StoredRow *&sr);
   int ensure_reader_buffer(Reader &reader, ShrinkBuffer &buf, const int64_t size);
-  int write_file(BlockIndex &bi, void *buf, int64_t size);
+
+protected:
+  virtual int write_file(BlockIndex &bi, void *buf, int64_t size);
+
+private:
   int read_file(void *buf, const int64_t size, const int64_t offset);
   inline bool has_index_block() const { return nullptr != idx_blk_; }
 private:

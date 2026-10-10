@@ -43,6 +43,14 @@ bool should_spill_workarea(int64_t configured_limit,
                            int64_t local_bytes,
                            int64_t incoming_bytes);
 
+// A zero-limit WORK_AREA store may lose the shared-quota admission race after
+// should_spill_workarea() sampled below the watermark.  Such stores get one
+// component-owned spill/reclaim and allocation retry before returning OOM.
+bool should_retry_workarea_allocation(int alloc_ret,
+                                      int64_t configured_limit,
+                                      int64_t ctx_id,
+                                      bool enable_dump);
+
 } // namespace sql
 } // namespace oceanbase
 

@@ -15,12 +15,12 @@
  */
 
 #define USING_LOG_PREFIX LIB
+#include "share/rc/ob_server_runtime.h"
+#include "config_bridge.h"
 #include "sql/executor/ob_memory_tracker.h"
 #include "share/ob_errno.h"
 #include "lib/alloc/alloc_func.h"
 #include "lib/rc/context.h"
-#include "share/config/ob_runtime_config.h"
-#include "share/rc/ob_server_runtime.h"
 
 using namespace oceanbase::lib;
 
@@ -30,7 +30,7 @@ thread_local ObMemTracker ObMemTrackerGuard::mem_tracker_;
 
 void ObMemTrackerGuard::update_mem_limit()
 {
-  const int64_t mem_quota_pct = GCONF.query_memory_limit_percentage;
+  const int64_t mem_quota_pct = config::query_memory_limit_percentage();
   mem_tracker_.cache_mem_limit_ = mem_quota_pct > 0
       ? lib::get_memory_budget() / 100 * mem_quota_pct
       : 0;

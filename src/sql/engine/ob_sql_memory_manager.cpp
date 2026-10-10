@@ -99,6 +99,18 @@ bool should_spill_workarea(const int64_t configured_limit,
   return should_spill;
 }
 
+bool should_retry_workarea_allocation(const int alloc_ret,
+                                      const int64_t configured_limit,
+                                      const int64_t ctx_id,
+                                      const bool enable_dump)
+{
+  return OB_ALLOCATE_MEMORY_FAILED == alloc_ret
+      && 0 == configured_limit
+      && common::ObCtxIds::WORK_AREA == ctx_id
+      && enable_dump
+      && config::enable_sql_operator_dump();
+}
+
 namespace
 {
 common::MemoryUsageTracker *resolve_sql_memory_usage_tracker(const int64_t ctx_id)

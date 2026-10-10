@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "config_bridge.h"
 #include "ob_tablet_meta_mem_mgr.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/tablelock/ob_lock_memtable.h"
@@ -2162,10 +2163,10 @@ int ObTabletMetaMemMgr::ObT3MResourceLimitCalculatorHandler::
   int ret = OB_SUCCESS;
   // Read the server-wide storage metadata configuration.
   const int64_t config_tablet_per_gb = true ?
-                                          GCONF._max_tablet_cnt_per_gb :
+                                          config::_max_tablet_cnt_per_gb() :
                                           DEFAULT_TABLET_CNT_PER_GB;
   const int64_t config_mem_percentage = true ?
-                                          GCONF._storage_meta_memory_limit_percentage :
+                                          config::_storage_meta_memory_limit_percentage() :
                                           OB_DEFAULT_META_OBJ_PERCENTAGE_LIMIT;
   const int64_t hard_memory_limit = lib::get_hard_memory_limit();
   // Calculate config constraint: (server memory / 1GB) * config_tablet_per_gb.
@@ -2192,10 +2193,10 @@ int ObTabletMetaMemMgr::ObT3MResourceLimitCalculatorHandler::
   int64_t cal_num = num >= 0 ? num : 0;  // We treat unexpected negative input numbers as zero.
   // Calculate the server memory needed for the requested tablet count.
   const int64_t config_tablet_per_gb = true ?
-                                          GCONF._max_tablet_cnt_per_gb :
+                                          config::_max_tablet_cnt_per_gb() :
                                           DEFAULT_TABLET_CNT_PER_GB;
   const int64_t config_mem_percentage = true ?
-                                          GCONF._storage_meta_memory_limit_percentage :
+                                          config::_storage_meta_memory_limit_percentage() :
                                           OB_DEFAULT_META_OBJ_PERCENTAGE_LIMIT;
   // Inverse calculate through config formula and memory formula
   const int64_t memory_constraint_formula_inverse =

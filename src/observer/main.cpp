@@ -815,7 +815,6 @@ int inner_main(int argc, char *argv[])
       OB_DELETE(ObServerOptions, mem_attr, opts);
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(observer.start())) {
-        LOG_ERROR("seekdb start fail", K(ret));
       } else {
         safe_sd_notify(0, "READY=1\n"
                        "STATUS=seekdb is ready and running\n");
@@ -826,7 +825,6 @@ int inner_main(int argc, char *argv[])
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(observer.wait())) {
-        LOG_ERROR("seekdb wait fail", K(ret));
       }
 
       if (OB_FAIL(ret)) {

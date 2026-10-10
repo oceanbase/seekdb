@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "config_bridge.h"
 #include "ob_storage_meta_mem_mgr.h"
 #include "lib/alloc/alloc_func.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
@@ -255,18 +256,26 @@ int64_t ObStorageMetaMemMgr::calculate_memory_quota_limit(
     const int64_t memory_budget,
     const int64_t configured_percentage)
 {
-  const int64_t percentage = configured_percentage > 0
-      ? 2 * configured_percentage : 0;
-  return memory_budget > 0 && percentage > 0
-      ? memory_budget / 100 * percentage
-          + memory_budget % 100 * percentage / 100
-      : 0;
+  int64_t limit = 0;
+  if (memory_budget > 0) {
+    if (0 == configured_percentage) {
+      // Zero disables the component-specific cap but META_OBJECT allocations
+      // remain bounded by the process memory budget, matching the documented
+      // parameter semantics and the removed context-limit implementation.
+      limit = memory_budget;
+    } else if (configured_percentage > 0) {
+      const int64_t percentage = 2 * configured_percentage;
+      limit = memory_budget / 100 * percentage
+          + memory_budget % 100 * percentage / 100;
+    }
+  }
+  return limit;
 }
 
 void ObStorageMetaMemMgr::refresh_memory_quota_limit()
 {
   const int64_t limit = calculate_memory_quota_limit(
-      lib::get_memory_budget(), GCONF._storage_meta_memory_limit_percentage);
+      lib::get_memory_budget(), config::_storage_meta_memory_limit_percentage());
   memory_quota_.set_limit(limit);
 }
 
@@ -2117,10 +2126,10 @@ int ObStorageMetaMemMgr::ObT3MResourceLimitCalculatorHandler::
   int ret = OB_SUCCESS;
   // Read the local runtime configuration.
   const int64_t config_tablet_per_gb = true ?
-                                          GCONF._max_tablet_cnt_per_gb :
+                                          config::_max_tablet_cnt_per_gb() :
                                           DEFAULT_TABLET_CNT_PER_GB;
   const int64_t config_mem_percentage =
-      2 * GCONF._storage_meta_memory_limit_percentage;
+      2 * config::_storage_meta_memory_limit_percentage();
   const int64_t memory_budget = lib::get_memory_budget();
   // Preserve the effective-memory tablet scale after increasing the automatic
   // memory budget from 50% to 80%.
@@ -2143,10 +2152,10 @@ int ObStorageMetaMemMgr::ObT3MResourceLimitCalculatorHandler::
   int64_t cal_num = num >= 0 ? num : 0;  // We treat unexpected negative input numbers as zero.
   // Get server runtime memory.
   const int64_t config_tablet_per_gb = true ?
-                                          GCONF._max_tablet_cnt_per_gb :
+                                          config::_max_tablet_cnt_per_gb() :
                                           DEFAULT_TABLET_CNT_PER_GB;
   const int64_t config_mem_percentage = 2 * (true ?
-                                          GCONF._storage_meta_memory_limit_percentage :
+                                          config::_storage_meta_memory_limit_percentage() :
                                           OB_DEFAULT_META_OBJ_PERCENTAGE_LIMIT);
   // Inverse calculate through config formula and memory formula
   const int64_t memory_constraint_formula_inverse =

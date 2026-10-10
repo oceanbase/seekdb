@@ -363,7 +363,7 @@ int ObRARowStore::switch_block(const int64_t min_size)
     const bool finish_add = (0 == min_size);
     BlockBuf new_blkbuf;
     const bool force_new_block = (min_size > blkbuf_.buf_.capacity())
-        || !GCONF.is_sql_operator_dump_enabled();
+        || !config::enable_sql_operator_dump();
     BlockIndex bi;
     bi.is_idx_block_ = false;
     bi.on_disk_ = false;
@@ -514,7 +514,7 @@ int ObRARowStore::switch_idx_block(bool finish_add /* = false */)
     if (!finish_add && !dump) {
       if (OB_FAIL(alloc_idx_block(ib))) {
         LOG_WARN("alloc index block failed", K(ret));
-        if (GCONF.is_sql_operator_dump_enabled()) {
+        if (config::enable_sql_operator_dump()) {
           ret = OB_SUCCESS;
           dump = true;
         }

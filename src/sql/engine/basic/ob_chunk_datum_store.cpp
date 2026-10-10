@@ -497,10 +497,10 @@ int ObChunkDatumStore::init(int64_t mem_limit,
   
   ctx_id_ = mem_ctx_id;
   UNUSED(label_);
-  if (0 == GCONF._chunk_row_store_mem_limit) {
+  if (0 == config::_chunk_row_store_mem_limit()) {
     mem_limit_ = mem_limit;
   } else {
-    mem_limit_ = GCONF._chunk_row_store_mem_limit;
+    mem_limit_ = config::_chunk_row_store_mem_limit();
   }
   inited_ = true;
   default_block_size_ = std::max(static_cast<int64_t>(MIN_BLOCK_SIZE), default_block_size);
@@ -864,11 +864,7 @@ int ObChunkDatumStore::switch_block(const int64_t min_size)
         // A concurrent zero-limit store can consume the shared quota after
         // need_dump() samples it.  Spill one local block and retry once before
         // allowing the shared-quota rejection to escape to the SQL operator.
-        if (OB_ALLOCATE_MEMORY_FAILED == ret
-            && 0 == mem_limit_
-            && common::ObCtxIds::WORK_AREA == ctx_id_
-            && enable_dump_
-            && GCONF.is_sql_operator_dump_enabled()
+        if (should_retry_workarea_allocation(ret, mem_limit_, ctx_id_, enable_dump_)
             && !blocks_.is_empty()) {
           ret = OB_SUCCESS;
           const bool dump_last_block = 1 == blocks_.get_size();
