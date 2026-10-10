@@ -819,7 +819,6 @@ bool ObChunkDatumStore::find_block_can_hold(const int64_t size, bool &need_shrin
 {
   bool found = false;
   need_shrink = false;
-  const int64_t effective_limit = effective_workarea_memory_limit(mem_limit_);
   if (NULL != cur_blk_ && size <= cur_blk_->get_buffer()->remain()) {
     found = true;
   } else if (free_list_.get_size() > 0 && default_block_size_ >= size) {
@@ -829,8 +828,8 @@ bool ObChunkDatumStore::find_block_can_hold(const int64_t size, bool &need_shrin
     use_block(next);
     blocks_.add_last(next);
     n_blocks_++;
-  } else if (effective_limit > 0 && mem_hold_ > mem_used_
-      && mem_hold_ + size > effective_limit) {
+  } else if (mem_hold_ > mem_used_
+      && should_spill_workarea(mem_limit_, mem_hold_, size)) {
     need_shrink = true;
   }
   return found;
@@ -845,7 +844,10 @@ int ObChunkDatumStore::switch_block(const int64_t min_size)
   } else if (min_size <= 0 || OB_ISNULL(cur_blk_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(min_size));
-  } else if (need_dump(min_size) && OB_FAIL(dump(true, false, default_block_size_))) {
+  } else if (need_dump(min_size)
+      && OB_FAIL(dump(true,
+                      0 == mem_limit_ && 1 == blocks_.get_size(),
+                      default_block_size_))) {
     if (OB_EXCEED_MEM_LIMIT != ret) {
       LOG_WARN("got error when dump blocks", K(ret));
     }
@@ -859,6 +861,33 @@ int ObChunkDatumStore::switch_block(const int64_t min_size)
     }
     if (!can_find) { // need alloc new block
       if (OB_FAIL(alloc_block_buffer(new_block, min_size, false))) {
+        // A concurrent zero-limit store can consume the shared quota after
+        // need_dump() samples it.  Spill one local block and retry once before
+        // allowing the shared-quota rejection to escape to the SQL operator.
+        if (OB_ALLOCATE_MEMORY_FAILED == ret
+            && 0 == mem_limit_
+            && common::ObCtxIds::WORK_AREA == ctx_id_
+            && enable_dump_
+            && GCONF.is_sql_operator_dump_enabled()
+            && !blocks_.is_empty()) {
+          ret = OB_SUCCESS;
+          const bool dump_last_block = 1 == blocks_.get_size();
+          if (OB_FAIL(dump(true, dump_last_block, default_block_size_))) {
+            LOG_WARN("failed to reclaim workarea block after quota rejection",
+                     K(ret), K(min_size), K_(mem_hold), K_(mem_used));
+          } else {
+            need_shrink = false;
+            can_find = find_block_can_hold(min_size, need_shrink);
+            if (need_shrink) {
+              static_cast<void>(shrink_block(min_size));
+            }
+            if (!can_find
+                && OB_FAIL(alloc_block_buffer(new_block, min_size, false))) {
+              LOG_WARN("failed to allocate workarea block after reclaim",
+                       K(ret), K(min_size), K_(mem_hold), K_(mem_used));
+            }
+          }
+        }
       }
       if (!can_find && OB_SUCC(ret)){
         blocks_.add_last(new_block);
@@ -1902,13 +1931,10 @@ int ObChunkDatumStore::aio_read_file(
 bool ObChunkDatumStore::need_dump(int64_t extra_size)
 {
   bool dump = false;
-  const int64_t effective_limit = effective_workarea_memory_limit(mem_limit_);
   if (!config::enable_sql_operator_dump()) {
     // no dump
-  } else if (effective_limit > 0) {
-    if (mem_used_ + extra_size > effective_limit) {
-      dump = true;
-    }
+  } else {
+    dump = should_spill_workarea(mem_limit_, mem_used_, extra_size);
   }
   return dump;
 }

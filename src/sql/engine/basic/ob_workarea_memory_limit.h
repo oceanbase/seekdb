@@ -28,12 +28,20 @@ namespace sql
 static constexpr int64_t UNLIMITED_WORKAREA_MEMORY =
     std::numeric_limits<int64_t>::max();
 
-// A zero per-store limit inherits 80% of the process SQL work-area quota so
-// that spill can make progress before the strict admission limit is reached.
-// A positive value, including UNLIMITED_WORKAREA_MEMORY, is explicit.
+// A zero per-store limit uses 80% of the process SQL work-area quota as the
+// aggregate spill watermark.  A positive value, including
+// UNLIMITED_WORKAREA_MEMORY, remains an explicit per-store limit.
 int64_t calculate_workarea_memory_limit(int64_t configured_limit,
                                         int64_t manager_limit);
 int64_t effective_workarea_memory_limit(int64_t configured_limit);
+
+// Explicit limits compare the local store bytes.  A zero limit compares the
+// incoming allocation with all committed and reserved WORK_AREA bytes so two
+// individually-small stores still spill before the shared hard quota rejects
+// the next allocation.
+bool should_spill_workarea(int64_t configured_limit,
+                           int64_t local_bytes,
+                           int64_t incoming_bytes);
 
 } // namespace sql
 } // namespace oceanbase

@@ -546,7 +546,6 @@ bool ObChunkRowStore::find_block_can_hold(const int64_t size, bool &need_shrink)
 {
   bool found = false;
   need_shrink = false;
-  const int64_t effective_limit = effective_workarea_memory_limit(mem_limit_);
   if (NULL != cur_blk_ && size <= cur_blk_->get_buffer()->remain()) {
     found = true;
   } else if (free_list_.get_size() > 0 && default_block_size_ >= size) {
@@ -556,8 +555,8 @@ bool ObChunkRowStore::find_block_can_hold(const int64_t size, bool &need_shrink)
     use_block(next);
     blocks_.add_last(next);
     n_blocks_++;
-  } else if (effective_limit > 0 && mem_hold_ > mem_used_
-      && mem_hold_ + size > effective_limit) {
+  } else if (mem_hold_ > mem_used_
+      && should_spill_workarea(mem_limit_, mem_hold_, size)) {
     need_shrink = true;
   }
   return found;
@@ -1498,13 +1497,10 @@ int ObChunkRowStore::read_file(void *buf, const int64_t size, const int64_t offs
 bool ObChunkRowStore::need_dump(int64_t extra_size)
 {
   bool dump = false;
-  const int64_t effective_limit = effective_workarea_memory_limit(mem_limit_);
   if (!config::enable_sql_operator_dump()) {
     // no dump
-  } else if (effective_limit > 0) {
-    if (mem_used_ + extra_size > effective_limit) {
-      dump = true;
-    }
+  } else {
+    dump = should_spill_workarea(mem_limit_, mem_used_, extra_size);
   }
   return dump;
 }

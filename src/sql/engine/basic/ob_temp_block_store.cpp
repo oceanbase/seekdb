@@ -1130,12 +1130,9 @@ int ObTempBlockStore::dump_block_if_need(const int64_t extra_size)
 bool ObTempBlockStore::need_dump(const int64_t extra_size)
 {
   bool need_to_dump = false;
-  const int64_t effective_limit = effective_workarea_memory_limit(mem_limit_);
   if (!config::enable_sql_operator_dump() || !enable_dump_) { // no dump
-  } else if (effective_limit > 0) {
-    if (mem_hold_ + extra_size > effective_limit) {
-      need_to_dump = true;
-    }
+  } else {
+    need_to_dump = should_spill_workarea(mem_limit_, mem_hold_, extra_size);
   }
   return need_to_dump;
 }

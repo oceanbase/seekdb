@@ -33,6 +33,22 @@ using namespace oceanbase::observer;
 
 namespace sql {
 
+namespace
+{
+common::MemoryQuota *get_workarea_memory_quota()
+{
+  common::MemoryQuota *quota =
+      common::resolve_memory_quota(common::ObCtxIds::WORK_AREA);
+  if (OB_ISNULL(quota)) {
+    ObSqlMemoryManager *manager = share::server_service<ObSqlMemoryManager>();
+    if (OB_NOT_NULL(manager)) {
+      quota = &manager->get_workarea_quota();
+    }
+  }
+  return quota;
+}
+}
+
 int64_t calculate_workarea_memory_limit(
     const int64_t configured_limit,
     const int64_t manager_limit)
@@ -46,12 +62,41 @@ int64_t effective_workarea_memory_limit(const int64_t configured_limit)
 {
   int64_t manager_limit = 0;
   if (0 == configured_limit) {
-    ObSqlMemoryManager *manager = share::server_service<ObSqlMemoryManager>();
-    if (OB_NOT_NULL(manager)) {
-      manager_limit = manager->get_workarea_quota().limit();
+    common::MemoryQuota *quota = get_workarea_memory_quota();
+    if (OB_NOT_NULL(quota)) {
+      manager_limit = quota->limit();
     }
   }
   return calculate_workarea_memory_limit(configured_limit, manager_limit);
+}
+
+bool should_spill_workarea(const int64_t configured_limit,
+                           const int64_t local_bytes,
+                           const int64_t incoming_bytes)
+{
+  bool should_spill = false;
+  const int64_t nonnegative_local = std::max<int64_t>(0, local_bytes);
+  const int64_t nonnegative_incoming = std::max<int64_t>(0, incoming_bytes);
+  if (0 != configured_limit) {
+    should_spill = configured_limit > 0
+        && (nonnegative_incoming > configured_limit
+            || nonnegative_local > configured_limit - nonnegative_incoming);
+  } else {
+    common::MemoryQuota *quota = get_workarea_memory_quota();
+    if (OB_NOT_NULL(quota)) {
+      const common::MemoryQuotaSample sample = quota->sample();
+      const int64_t spill_watermark =
+          calculate_workarea_memory_limit(0, sample.limit_bytes_);
+      const int64_t committed = std::max<int64_t>(0, sample.committed_bytes_);
+      const int64_t reserved = std::max<int64_t>(0, sample.reserved_bytes_);
+      const int64_t accounted = committed > INT64_MAX - reserved
+          ? INT64_MAX : committed + reserved;
+      should_spill = spill_watermark > 0
+          && (accounted >= spill_watermark
+              || nonnegative_incoming >= spill_watermark - accounted);
+    }
+  }
+  return should_spill;
 }
 
 namespace
