@@ -1,0 +1,361 @@
+CREATE TABLE graph_step_v (id INT PRIMARY KEY,name VARCHAR(32));
+CREATE TABLE graph_step_e (
+tenant INT,code VARCHAR(32) COLLATE utf8mb4_bin,edge_no BIGINT UNSIGNED,
+src INT,dst INT,weight DECIMAL(12,3),
+PRIMARY KEY(tenant,code,edge_no)
+);
+INSERT INTO graph_step_v VALUES (1,'source'),(2,'middle'),(3,'terminal');
+INSERT INTO graph_step_e VALUES
+(1,'first',18446744073709551610,1,2,1.250),
+(1,'parallel',18446744073709551611,1,2,2.500),
+(2,'next',18446744073709551612,2,3,3.750),
+(2,'cycle',18446744073709551613,3,1,4.000),
+(2,'orphan',18446744073709551614,1,99,9.000);
+CREATE PROPERTY GRAPH graph_steps
+VERTEX TABLES(graph_step_v KEY(id) LABEL node PROPERTIES(id,name))
+EDGE TABLES(graph_step_e KEY(tenant,code,edge_no)
+SOURCE KEY(src) REFERENCES graph_step_v(id)
+DESTINATION KEY(dst) REFERENCES graph_step_v(id)
+LABEL link PROPERTIES(tenant,code,edge_no,weight));
+drop table if exists plan_table;
+create table plan_table (
+statement_id varchar(30),
+plan_id int,
+gmt_create timestamp,
+remarks varchar(4000),
+operator varchar(255),
+options varchar(255),
+object_node varchar(40),
+object_owner varchar(128),
+object_name varchar(128),
+object_alias varchar(261),
+object_instance int,
+object_type varchar(30),
+optimizer varchar(4000),
+search_columns int,
+id int,
+parent_id int,
+depth int,
+position int,
+is_last_child int,
+cost int,
+cardinality int,
+bytes int,
+rowset int,
+other_tag varchar(4000),
+partition_start varchar(4000),
+partition_stop varchar(4000),
+partition_id int,
+other varchar(4000),
+distribution varchar(64),
+cpu_cost int,
+io_cost int,
+temp_space int,
+access_predicates varchar(4000),
+filter_predicates varchar(4000),
+startup_predicates varchar(4000),
+projection varchar(4000),
+special_predicates longtext,
+time int,
+qblock_name varchar(128),
+other_xml varchar(4000)
+);
+ALTER TABLE plan_table MODIFY other_xml LONGTEXT;
+DELETE FROM plan_table;
+EXPLAIN INTO plan_table SET statement_id='step_output'
+  SELECT * FROM GRAPH_TABLE(graph_steps MATCH
+(a IS node WHERE a.id=1)-[e IS link]->{0,3}(b IS node)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS s,
+v1.id AS src,se.code AS edge_code,v2.id AS dst)) g;
+SELECT COUNT(*)=1 AS one_native_traversal FROM plan_table
+WHERE statement_id='step_output' AND operator='GRAPH FEEDBACK LOOP'
+    AND special_predicates LIKE '%runtime=native%';
+one_native_traversal
+1
+SELECT * FROM GRAPH_TABLE(graph_steps MATCH
+(a IS node WHERE a.id=1)-[e IS link]->{0,4}(b IS node)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(v1) AS vn1,
+ELEMENT_NUMBER(se) AS sn,ELEMENT_NUMBER(v2) AS vn2,
+v1.name AS src,se.code AS edge_code,se.edge_no AS edge_no,
+se.weight AS weight,v2.name AS dst,COUNT(e.code) AS hops,
+JSON_ARRAYAGG(e.code) AS path_edges)) g
+ORDER BY m,sn;
+m	vn1	sn	vn2	src	edge_code	edge_no	weight	dst	hops	path_edges
+1	1	NULL	NULL	source	NULL	NULL	NULL	NULL	0	NULL
+2	1	2	3	source	first	18446744073709551610	1.250	middle	1	["first"]
+3	1	2	3	source	first	18446744073709551610	1.250	middle	2	["first", "next"]
+3	3	4	5	middle	next	18446744073709551612	3.750	terminal	2	["first", "next"]
+4	1	2	3	source	first	18446744073709551610	1.250	middle	3	["first", "next", "cycle"]
+4	3	4	5	middle	next	18446744073709551612	3.750	terminal	3	["first", "next", "cycle"]
+4	5	6	7	terminal	cycle	18446744073709551613	4.000	source	3	["first", "next", "cycle"]
+5	1	2	3	source	first	18446744073709551610	1.250	middle	4	["first", "next", "cycle", "first"]
+5	3	4	5	middle	next	18446744073709551612	3.750	terminal	4	["first", "next", "cycle", "first"]
+5	5	6	7	terminal	cycle	18446744073709551613	4.000	source	4	["first", "next", "cycle", "first"]
+5	7	8	9	source	first	18446744073709551610	1.250	middle	4	["first", "next", "cycle", "first"]
+7	1	2	3	source	parallel	18446744073709551611	2.500	middle	1	["parallel"]
+8	1	2	3	source	parallel	18446744073709551611	2.500	middle	2	["parallel", "next"]
+8	3	4	5	middle	next	18446744073709551612	3.750	terminal	2	["parallel", "next"]
+9	1	2	3	source	parallel	18446744073709551611	2.500	middle	3	["parallel", "next", "cycle"]
+9	3	4	5	middle	next	18446744073709551612	3.750	terminal	3	["parallel", "next", "cycle"]
+9	5	6	7	terminal	cycle	18446744073709551613	4.000	source	3	["parallel", "next", "cycle"]
+10	1	2	3	source	first	18446744073709551610	1.250	middle	4	["first", "next", "cycle", "parallel"]
+10	3	4	5	middle	next	18446744073709551612	3.750	terminal	4	["first", "next", "cycle", "parallel"]
+10	5	6	7	terminal	cycle	18446744073709551613	4.000	source	4	["first", "next", "cycle", "parallel"]
+10	7	8	9	source	parallel	18446744073709551611	2.500	middle	4	["first", "next", "cycle", "parallel"]
+15	1	2	3	source	parallel	18446744073709551611	2.500	middle	4	["parallel", "next", "cycle", "first"]
+15	3	4	5	middle	next	18446744073709551612	3.750	terminal	4	["parallel", "next", "cycle", "first"]
+15	5	6	7	terminal	cycle	18446744073709551613	4.000	source	4	["parallel", "next", "cycle", "first"]
+15	7	8	9	source	first	18446744073709551610	1.250	middle	4	["parallel", "next", "cycle", "first"]
+20	1	2	3	source	parallel	18446744073709551611	2.500	middle	4	["parallel", "next", "cycle", "parallel"]
+20	3	4	5	middle	next	18446744073709551612	3.750	terminal	4	["parallel", "next", "cycle", "parallel"]
+20	5	6	7	terminal	cycle	18446744073709551613	4.000	source	4	["parallel", "next", "cycle", "parallel"]
+20	7	8	9	source	parallel	18446744073709551611	2.500	middle	4	["parallel", "next", "cycle", "parallel"]
+SELECT m,s,JSON_VALUE(vi,'$.KEY_VALUE.id') AS src,
+JSON_VALUE(ei,'$.KEY_VALUE.tenant') AS tenant,
+JSON_VALUE(ei,'$.KEY_VALUE.code') AS edge_code,
+JSON_VALUE(ei,'$.KEY_VALUE.edge_no') AS edge_no,
+JSON_VALUE(vj,'$.KEY_VALUE.id') AS dst
+FROM GRAPH_TABLE(graph_steps MATCH
+(a IS node WHERE a.id=3)<-[e IS link]-{0,3}(b IS node WHERE b.id!=2)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS s,
+VERTEX_ID(v1) AS vi,EDGE_ID(se) AS ei,VERTEX_ID(v2) AS vj)) g
+ORDER BY m,s;
+m	s	src	tenant	edge_code	edge_no	dst
+1	NULL	3	NULL	NULL	NULL	NULL
+3	2	3	2	next	18446744073709551612	2
+3	4	2	1	first	18446744073709551610	1
+4	2	3	2	next	18446744073709551612	2
+4	4	2	1	first	18446744073709551610	1
+4	6	1	2	cycle	18446744073709551613	3
+7	2	3	2	next	18446744073709551612	2
+7	4	2	1	parallel	18446744073709551611	1
+8	2	3	2	next	18446744073709551612	2
+8	4	2	1	parallel	18446744073709551611	1
+8	6	1	2	cycle	18446744073709551613	3
+PREPARE graph_steps_cached FROM
+'SELECT * FROM GRAPH_TABLE(graph_steps MATCH (a IS node WHERE a.id=?)-[e IS link WHERE e.weight>=?]->{0,2}(b IS node) ONE ROW PER STEP(v1,se,v2) COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS s,v1.id AS src,se.code AS edge_code,v2.id AS dst)) g ORDER BY m,s';
+SET @seed=1,@weight=0;
+EXECUTE graph_steps_cached USING @seed,@weight;
+m	s	src	edge_code	dst
+1	NULL	1	NULL	NULL
+2	2	1	first	2
+3	2	1	first	2
+3	4	2	next	3
+5	2	1	parallel	2
+6	2	1	parallel	2
+6	4	2	next	3
+SET @seed=3,@weight=3;
+EXECUTE graph_steps_cached USING @seed,@weight;
+m	s	src	edge_code	dst
+1	NULL	3	NULL	NULL
+2	2	3	cycle	1
+DEALLOCATE PREPARE graph_steps_cached;
+SELECT s.seed,s.score,g.m,g.sn,g.edge_code
+FROM (SELECT 1 AS seed,10 AS score UNION ALL SELECT 1,20 UNION ALL SELECT 3,30) s,
+LATERAL (
+SELECT * FROM GRAPH_TABLE(graph_steps MATCH
+(a IS node WHERE a.id=s.seed)-[e IS link]->{0,2}(b IS node)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS sn,se.code AS edge_code)) g
+) g
+ORDER BY s.score,g.m,g.sn;
+seed	score	m	sn	edge_code
+1	10	1	NULL	NULL
+1	10	2	2	first
+1	10	3	2	first
+1	10	3	4	next
+1	10	5	2	parallel
+1	10	6	2	parallel
+1	10	6	4	next
+1	20	1	NULL	NULL
+1	20	2	2	first
+1	20	3	2	first
+1	20	3	4	next
+1	20	5	2	parallel
+1	20	6	2	parallel
+1	20	6	4	next
+3	30	1	NULL	NULL
+3	30	2	2	cycle
+3	30	3	2	cycle
+3	30	3	4	first
+3	30	6	2	cycle
+3	30	6	4	parallel
+CREATE INDEX graph_step_out ON graph_step_e(src,tenant,code,edge_no);
+CREATE INDEX graph_step_in ON graph_step_e(dst,tenant,code,edge_no);
+DELETE FROM plan_table;
+EXPLAIN INTO plan_table SET statement_id='step_output'
+  SELECT * FROM GRAPH_TABLE(graph_steps MATCH
+(a IS node WHERE a.id=1)-[e IS link]->{0,3}(b IS node)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS s,
+v1.id AS src,se.code AS edge_code,v2.id AS dst)) g;
+SELECT COUNT(*)=1 AS one_native_traversal FROM plan_table
+WHERE statement_id='step_output' AND operator='GRAPH FEEDBACK LOOP'
+    AND special_predicates LIKE '%runtime=native%';
+one_native_traversal
+1
+SELECT * FROM GRAPH_TABLE(graph_steps MATCH
+(a IS node WHERE a.id=1)-[e IS link]->{0,4}(b IS node)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(v1) AS vn1,
+ELEMENT_NUMBER(se) AS sn,ELEMENT_NUMBER(v2) AS vn2,
+v1.name AS src,se.code AS edge_code,se.edge_no AS edge_no,
+se.weight AS weight,v2.name AS dst,COUNT(e.code) AS hops,
+JSON_ARRAYAGG(e.code) AS path_edges)) g
+ORDER BY m,sn;
+m	vn1	sn	vn2	src	edge_code	edge_no	weight	dst	hops	path_edges
+1	1	NULL	NULL	source	NULL	NULL	NULL	NULL	0	NULL
+2	1	2	3	source	first	18446744073709551610	1.250	middle	1	["first"]
+3	1	2	3	source	first	18446744073709551610	1.250	middle	2	["first", "next"]
+3	3	4	5	middle	next	18446744073709551612	3.750	terminal	2	["first", "next"]
+4	1	2	3	source	first	18446744073709551610	1.250	middle	3	["first", "next", "cycle"]
+4	3	4	5	middle	next	18446744073709551612	3.750	terminal	3	["first", "next", "cycle"]
+4	5	6	7	terminal	cycle	18446744073709551613	4.000	source	3	["first", "next", "cycle"]
+5	1	2	3	source	first	18446744073709551610	1.250	middle	4	["first", "next", "cycle", "first"]
+5	3	4	5	middle	next	18446744073709551612	3.750	terminal	4	["first", "next", "cycle", "first"]
+5	5	6	7	terminal	cycle	18446744073709551613	4.000	source	4	["first", "next", "cycle", "first"]
+5	7	8	9	source	first	18446744073709551610	1.250	middle	4	["first", "next", "cycle", "first"]
+7	1	2	3	source	parallel	18446744073709551611	2.500	middle	1	["parallel"]
+8	1	2	3	source	parallel	18446744073709551611	2.500	middle	2	["parallel", "next"]
+8	3	4	5	middle	next	18446744073709551612	3.750	terminal	2	["parallel", "next"]
+9	1	2	3	source	parallel	18446744073709551611	2.500	middle	3	["parallel", "next", "cycle"]
+9	3	4	5	middle	next	18446744073709551612	3.750	terminal	3	["parallel", "next", "cycle"]
+9	5	6	7	terminal	cycle	18446744073709551613	4.000	source	3	["parallel", "next", "cycle"]
+10	1	2	3	source	first	18446744073709551610	1.250	middle	4	["first", "next", "cycle", "parallel"]
+10	3	4	5	middle	next	18446744073709551612	3.750	terminal	4	["first", "next", "cycle", "parallel"]
+10	5	6	7	terminal	cycle	18446744073709551613	4.000	source	4	["first", "next", "cycle", "parallel"]
+10	7	8	9	source	parallel	18446744073709551611	2.500	middle	4	["first", "next", "cycle", "parallel"]
+15	1	2	3	source	parallel	18446744073709551611	2.500	middle	4	["parallel", "next", "cycle", "first"]
+15	3	4	5	middle	next	18446744073709551612	3.750	terminal	4	["parallel", "next", "cycle", "first"]
+15	5	6	7	terminal	cycle	18446744073709551613	4.000	source	4	["parallel", "next", "cycle", "first"]
+15	7	8	9	source	first	18446744073709551610	1.250	middle	4	["parallel", "next", "cycle", "first"]
+20	1	2	3	source	parallel	18446744073709551611	2.500	middle	4	["parallel", "next", "cycle", "parallel"]
+20	3	4	5	middle	next	18446744073709551612	3.750	terminal	4	["parallel", "next", "cycle", "parallel"]
+20	5	6	7	terminal	cycle	18446744073709551613	4.000	source	4	["parallel", "next", "cycle", "parallel"]
+20	7	8	9	source	parallel	18446744073709551611	2.500	middle	4	["parallel", "next", "cycle", "parallel"]
+SELECT m,s,JSON_VALUE(vi,'$.KEY_VALUE.id') AS src,
+JSON_VALUE(ei,'$.KEY_VALUE.tenant') AS tenant,
+JSON_VALUE(ei,'$.KEY_VALUE.code') AS edge_code,
+JSON_VALUE(ei,'$.KEY_VALUE.edge_no') AS edge_no,
+JSON_VALUE(vj,'$.KEY_VALUE.id') AS dst
+FROM GRAPH_TABLE(graph_steps MATCH
+(a IS node WHERE a.id=3)<-[e IS link]-{0,3}(b IS node WHERE b.id!=2)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS s,
+VERTEX_ID(v1) AS vi,EDGE_ID(se) AS ei,VERTEX_ID(v2) AS vj)) g
+ORDER BY m,s;
+m	s	src	tenant	edge_code	edge_no	dst
+1	NULL	3	NULL	NULL	NULL	NULL
+3	2	3	2	next	18446744073709551612	2
+3	4	2	1	first	18446744073709551610	1
+4	2	3	2	next	18446744073709551612	2
+4	4	2	1	first	18446744073709551610	1
+4	6	1	2	cycle	18446744073709551613	3
+7	2	3	2	next	18446744073709551612	2
+7	4	2	1	parallel	18446744073709551611	1
+8	2	3	2	next	18446744073709551612	2
+8	4	2	1	parallel	18446744073709551611	1
+8	6	1	2	cycle	18446744073709551613	3
+PREPARE graph_steps_cached FROM
+'SELECT * FROM GRAPH_TABLE(graph_steps MATCH (a IS node WHERE a.id=?)-[e IS link WHERE e.weight>=?]->{0,2}(b IS node) ONE ROW PER STEP(v1,se,v2) COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS s,v1.id AS src,se.code AS edge_code,v2.id AS dst)) g ORDER BY m,s';
+SET @seed=1,@weight=0;
+EXECUTE graph_steps_cached USING @seed,@weight;
+m	s	src	edge_code	dst
+1	NULL	1	NULL	NULL
+2	2	1	first	2
+3	2	1	first	2
+3	4	2	next	3
+5	2	1	parallel	2
+6	2	1	parallel	2
+6	4	2	next	3
+SET @seed=3,@weight=3;
+EXECUTE graph_steps_cached USING @seed,@weight;
+m	s	src	edge_code	dst
+1	NULL	3	NULL	NULL
+2	2	3	cycle	1
+DEALLOCATE PREPARE graph_steps_cached;
+SELECT s.seed,s.score,g.m,g.sn,g.edge_code
+FROM (SELECT 1 AS seed,10 AS score UNION ALL SELECT 1,20 UNION ALL SELECT 3,30) s,
+LATERAL (
+SELECT * FROM GRAPH_TABLE(graph_steps MATCH
+(a IS node WHERE a.id=s.seed)-[e IS link]->{0,2}(b IS node)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS sn,se.code AS edge_code)) g
+) g
+ORDER BY s.score,g.m,g.sn;
+seed	score	m	sn	edge_code
+1	10	1	NULL	NULL
+1	10	2	2	first
+1	10	3	2	first
+1	10	3	4	next
+1	10	5	2	parallel
+1	10	6	2	parallel
+1	10	6	4	next
+1	20	1	NULL	NULL
+1	20	2	2	first
+1	20	3	2	first
+1	20	3	4	next
+1	20	5	2	parallel
+1	20	6	2	parallel
+1	20	6	4	next
+3	30	1	NULL	NULL
+3	30	2	2	cycle
+3	30	3	2	cycle
+3	30	3	4	first
+3	30	6	2	cycle
+3	30	6	4	parallel
+SELECT COUNT(*) AS step_rows,MAX(sn) AS last_element_number
+FROM GRAPH_TABLE(graph_steps MATCH
+(a IS node WHERE a.id=3)-[e IS link WHERE e.code='cycle']->{0,16}(b IS node)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(ELEMENT_NUMBER(se) AS sn)) g;
+step_rows	last_element_number
+2	2
+SELECT * FROM GRAPH_TABLE(graph_steps MATCH
+(a IS node WHERE a.id=1)-[e IS link]->{0}(b IS node WHERE b.id=1)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(v1) AS vn1,
+ELEMENT_NUMBER(se) AS sn,ELEMENT_NUMBER(v2) AS vn2,
+v1.id AS src,se.code AS edge_code,v2.id AS dst)) g;
+m	vn1	sn	vn2	src	edge_code	dst
+1	1	NULL	NULL	1	NULL	NULL
+DROP TABLE plan_table;
+DROP PROPERTY GRAPH graph_steps;
+DROP TABLE graph_step_e,graph_step_v;
+typed_vertex_keys_and_binary_edge_history
+CREATE TABLE graph_step_v (
+tenant INT,code VARBINARY(8),revision DECIMAL(10,2),name VARCHAR(32),
+PRIMARY KEY(tenant,code,revision)
+);
+CREATE TABLE graph_step_e (
+edge_code VARBINARY(8) PRIMARY KEY,
+st INT,sc VARBINARY(8),sr DECIMAL(10,2),
+dt INT,dc VARBINARY(8),dr DECIMAL(10,2)
+);
+INSERT INTO graph_step_v VALUES (1,X'6100',1.25,'A'),(1,X'6200',2.50,'B'),(2,X'6300',3.75,'C');
+INSERT INTO graph_step_e VALUES
+(X'FF00',1,X'6100',1.25,1,X'6200',2.50),
+(X'FF01',1,X'6200',2.50,2,X'6300',3.75);
+CREATE PROPERTY GRAPH graph_steps
+VERTEX TABLES(graph_step_v KEY(tenant,code,revision) LABEL node PROPERTIES(tenant,code,revision,name))
+EDGE TABLES(graph_step_e KEY(edge_code)
+SOURCE KEY(st,sc,sr) REFERENCES graph_step_v(tenant,code,revision)
+DESTINATION KEY(dt,dc,dr) REFERENCES graph_step_v(tenant,code,revision)
+LABEL link PROPERTIES(edge_code));
+SELECT * FROM GRAPH_TABLE(graph_steps MATCH
+(a IS node WHERE a.name='A')-[e IS link]->{0,2}(b IS node)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS sn,
+v1.tenant AS tenant,HEX(v1.code) AS from_code,v1.revision AS revision,
+HEX(se.edge_code) AS edge_code,HEX(v2.code) AS to_code)) g
+ORDER BY m,sn;
+m	sn	tenant	from_code	revision	edge_code	to_code
+1	NULL	1	6100	1.25	NULL	NULL
+2	2	1	6100	1.25	FF00	6200
+3	2	1	6100	1.25	FF00	6200
+3	4	1	6200	2.50	FF01	6300
+DROP PROPERTY GRAPH graph_steps;
+DROP TABLE graph_step_e,graph_step_v;

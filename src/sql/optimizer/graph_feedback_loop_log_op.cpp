@@ -386,9 +386,10 @@ int GraphFeedbackLoopLogOp::initialize_path_payloads(ObLogTableScan &edge_scan)
   const ObSelectStmt *stmt = static_cast<const ObSelectStmt *>(get_stmt());
   const ObSelectStmt *step = stmt == nullptr ? nullptr : stmt->get_set_query(1);
   const int64_t payload_begin = GRAPH_FEEDBACK_DEPTH_COLUMN_COUNT
-      + expand_access_desc_.source_key_count_ + expand_access_desc_.target_key_count_;
-  if (!native_step_supported_ || path_desc_.path_mode_ != GraphPathMode::WALK
-      || path_desc_.row_shape_ != GraphPathRowShape::PER_MATCH) {
+      + expand_access_desc_.source_key_count_ + expand_access_desc_.target_key_count_
+      + (path_desc_.needs_edge_key_history()
+         ? path_desc_.upper_bound_ * expand_access_desc_.edge_key_count_ : 0);
+  if (!native_step_supported_ || path_desc_.path_mode_ != GraphPathMode::WALK) {
   } else if (OB_ISNULL(step)) {
     ret = OB_ERR_UNEXPECTED;
   } else {

@@ -61,6 +61,13 @@ enum class GraphPathRowShape : int8_t
 // Element IDs are mapping identities, not labels or table IDs.
 struct GraphPathDesc
 {
+  // Typed edge history is also needed to bind each PER_STEP iterator without
+  // repeating the traversal or recovering relational keys from JSON text.
+  bool needs_edge_key_history() const
+  {
+    return path_mode_ == GraphPathMode::TRAIL || row_shape_ == GraphPathRowShape::PER_STEP;
+  }
+
   bool is_valid() const
   {
     return graph_id_ != common::OB_INVALID_ID

@@ -126,18 +126,18 @@ WHERE statement_id='graph_das_access'
   AND object_alias='__g_step_vertex(graph_das_vertex_cover)';
 has_covering_target_index
 1
-EXPLAIN INTO plan_table SET statement_id='graph_das_unrolled'
+EXPLAIN INTO plan_table SET statement_id='graph_das_steps'
 SELECT * FROM GRAPH_TABLE(graph_das_access MATCH
 (a IS item WHERE a.kind='seed')-[e IS link WHERE e.enabled=1]->{1,2}
 (b IS item WHERE b.kind='node')
 ONE ROW PER STEP (v1,step_e,v2)
 COLUMNS(step_e.id AS edge_id)) g;
-SELECT COUNT(*)=3 AS unrolled_plan_keeps_selective_edge_index
+SELECT COUNT(*)=1 AS step_output_uses_one_native_traversal
 FROM plan_table
-WHERE statement_id='graph_das_unrolled'
-  AND operator='TABLE RANGE SCAN'
-  AND object_alias LIKE '__g_walk_out_e_%(graph_das_edge_filter)';
-unrolled_plan_keeps_selective_edge_index
+WHERE statement_id='graph_das_steps'
+  AND operator='GRAPH FEEDBACK LOOP'
+  AND special_predicates LIKE '%runtime=native%';
+step_output_uses_one_native_traversal
 1
 DROP TABLE plan_table;
 prepared_graph_plan_parameter_rebinding

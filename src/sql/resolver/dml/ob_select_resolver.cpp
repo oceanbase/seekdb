@@ -506,7 +506,6 @@ int ObSelectResolver::set_stmt_set_type(ObSelectStmt *select_stmt,
       const GraphPathDesc *path_desc = params_.internal_graph_path_desc_;
       if (OB_ISNULL(path_desc)
           || OB_UNLIKELY(!path_desc->is_valid()
-                         || path_desc->row_shape_ != GraphPathRowShape::PER_MATCH
                          || path_desc->lower_bound_ != set_node->int16_values_[0]
                          || path_desc->upper_bound_ != set_node->int16_values_[1]
                          || (path_desc->direction_ == GraphPathDirection::IN)

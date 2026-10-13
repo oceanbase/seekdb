@@ -46,7 +46,7 @@ int GraphFeedbackRowDesc::init(const GraphPathDesc &path_desc,
     LOG_WARN("invalid graph feedback row description", K(ret), K(path_desc),
              K(access_desc), K(output_count));
   } else {
-    const int64_t trail_key_count = path_desc.path_mode_ == GraphPathMode::TRAIL
+    const int64_t trail_key_count = path_desc.needs_edge_key_history()
         ? path_desc.upper_bound_ * access_desc.edge_key_count_ : 0;
     const int64_t fixed_count = 1 + access_desc.source_key_count_
         + access_desc.target_key_count_ + trail_key_count;
@@ -78,7 +78,7 @@ bool GraphFeedbackRowDesc::is_valid(
 {
   bool valid = path_desc.is_valid() && access_desc.is_valid();
   if (valid) {
-    const int64_t trail_key_count = path_desc.path_mode_ == GraphPathMode::TRAIL
+    const int64_t trail_key_count = path_desc.needs_edge_key_history()
         ? path_desc.upper_bound_ * access_desc.edge_key_count_ : 0;
     const int64_t fixed_count = 1 + access_desc.source_key_count_
         + access_desc.target_key_count_ + trail_key_count;
@@ -104,7 +104,6 @@ bool GraphFeedbackRowDesc::supports_basic_native_output(
     int64_t payload_count) const
 {
   return is_valid(path_desc, access_desc)
-      && trail_key_expr_count_ == 0
       && payload_expr_count_ == payload_count
       && supports_basic_native_graph_feedback(
              path_desc, access_desc, output_expr_count_, payload_count);
@@ -282,7 +281,8 @@ public:
   }
 
   // Produces a recursive WALK row with hop count, endpoint keys and optional
-  // ordered edge arrays. TRAIL and per-step rows retain the SQL fallback.
+  // ordered edge arrays / typed history for per-step projection. TRAIL keeps
+  // the recursive SQL fallback until its native eligibility is enabled.
   int get_next_basic_output_row(
       ObOperator &anchor,
       const GraphFeedbackLoopSpec &spec)
@@ -427,7 +427,25 @@ private:
       } else if (OB_FAIL(write_output_key(
                      output_exprs, desc.current_key_expr_begin_,
                      desc.current_key_expr_count_, leaf.current_identity_))) {
-      } else if (OB_FAIL(materialize_path_payloads(spec, path))) {
+      } else {
+        const int64_t key_count = spec.get_expand_access_desc().edge_key_count_;
+        for (int64_t slot = 0; OB_SUCC(ret)
+             && slot * key_count < desc.trail_key_expr_count_; ++slot) {
+          const int64_t begin = desc.trail_key_expr_begin_ + slot * key_count;
+          if (slot + 1 < path.count()) {
+            ret = write_output_key(output_exprs, begin, key_count,
+                                   path.at(slot + 1).incoming_edge_identity_);
+          } else {
+            ObObj unused;
+            unused.set_null();
+            for (int64_t key = 0; OB_SUCC(ret) && key < key_count; ++key) {
+              ret = write_output_value(output_exprs.at(begin + key), unused);
+            }
+          }
+        }
+        if (OB_SUCC(ret)) {
+          ret = materialize_path_payloads(spec, path);
+        }
       }
     }
     return ret;
