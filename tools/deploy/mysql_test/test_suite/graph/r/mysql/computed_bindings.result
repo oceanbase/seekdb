@@ -1,0 +1,183 @@
+SELECT COUNT(*) AS computed_reuse_eligible FROM plan_table
+WHERE statement_id='cb_reuse' AND special_predicates LIKE '%runtime=native%adjacency_reuse=eligible%';
+computed_reuse_eligible
+1
+SELECT COUNT(*) AS derived_reuse_eligible FROM plan_table
+WHERE statement_id='cb_derived' AND special_predicates LIKE '%runtime=native%adjacency_reuse=eligible%';
+derived_reuse_eligible
+1
+SELECT COUNT(*) AS unproven_or_volatile_reuse FROM plan_table
+WHERE statement_id IN ('cb_unproven','cb_volatile') AND special_predicates LIKE '%adjacency_reuse=eligible%';
+unproven_or_volatile_reuse
+0
+DROP TABLE plan_table;
+computed_path_bag_mismatches
+0
+id	endpoint	hops	edges
+1	1	0	NULL
+1	2	1	[10]
+1	2	1	[11]
+1	3	2	[10, 12]
+1	3	2	[11, 12]
+2	1	0	NULL
+2	2	1	[11]
+2	3	2	[11, 12]
+3	1	0	NULL
+3	2	1	[10]
+3	2	1	[11]
+3	3	2	[10, 12]
+3	3	2	[11, 12]
+4	1	0	NULL
+4	2	1	[11]
+4	3	2	[11, 12]
+5	1	0	NULL
+5	2	1	[11]
+5	3	2	[11, 12]
+6	1	0	NULL
+6	3	1	[14]
+7	1	0	NULL
+7	2	1	[10]
+7	2	1	[11]
+7	3	2	[10, 12]
+7	3	2	[11, 12]
+8	1	0	NULL
+10	1	0	NULL
+10	2	1	[11]
+10	3	2	[11, 12]
+11	1	0	NULL
+derived_path_bag_mismatches
+0
+PREPARE cb_cached FROM 'SELECT s.id,COUNT(*) AS paths FROM cb_seed s,LATERAL (SELECT * FROM GRAPH_TABLE(cb_graph MATCH (a IS person WHERE a.id=s.seed)-[e IS link WHERE e.since>=COALESCE(ABS(s.cutoff)+s.delta,?) AND LOWER(e.kind)=LOWER(COALESCE(s.kind,''knows''))]->{0,2}(b IS person) COLUMNS(b.id AS endpoint)) p) g GROUP BY s.id ORDER BY s.id';
+SET @cb_default=2020;
+EXECUTE cb_cached USING @cb_default;
+id	paths
+1	5
+2	3
+3	5
+4	5
+5	3
+6	2
+7	5
+8	1
+10	3
+11	1
+SET @cb_default=2024;
+EXECUTE cb_cached USING @cb_default;
+id	paths
+1	5
+2	3
+3	5
+4	1
+5	3
+6	2
+7	5
+8	1
+10	3
+11	1
+SET @cb_default=2020;
+EXECUTE cb_cached USING @cb_default;
+id	paths
+1	5
+2	3
+3	5
+4	5
+5	3
+6	2
+7	5
+8	1
+10	3
+11	1
+DEALLOCATE PREPARE cb_cached;
+CREATE INDEX cb_adjacency ON cb_edge(src,since,dst);
+SELECT COUNT(*) AS computed_reuse_eligible FROM plan_table
+WHERE statement_id='cb_reuse' AND special_predicates LIKE '%runtime=native%adjacency_reuse=eligible%';
+computed_reuse_eligible
+1
+SELECT COUNT(*) AS derived_reuse_eligible FROM plan_table
+WHERE statement_id='cb_derived' AND special_predicates LIKE '%runtime=native%adjacency_reuse=eligible%';
+derived_reuse_eligible
+1
+SELECT COUNT(*) AS unproven_or_volatile_reuse FROM plan_table
+WHERE statement_id IN ('cb_unproven','cb_volatile') AND special_predicates LIKE '%adjacency_reuse=eligible%';
+unproven_or_volatile_reuse
+0
+DROP TABLE plan_table;
+computed_path_bag_mismatches
+0
+id	endpoint	hops	edges
+1	1	0	NULL
+1	2	1	[10]
+1	2	1	[11]
+1	3	2	[10, 12]
+1	3	2	[11, 12]
+2	1	0	NULL
+2	2	1	[11]
+2	3	2	[11, 12]
+3	1	0	NULL
+3	2	1	[10]
+3	2	1	[11]
+3	3	2	[10, 12]
+3	3	2	[11, 12]
+4	1	0	NULL
+4	2	1	[11]
+4	3	2	[11, 12]
+5	1	0	NULL
+5	2	1	[11]
+5	3	2	[11, 12]
+6	1	0	NULL
+6	3	1	[14]
+7	1	0	NULL
+7	2	1	[10]
+7	2	1	[11]
+7	3	2	[10, 12]
+7	3	2	[11, 12]
+8	1	0	NULL
+10	1	0	NULL
+10	2	1	[11]
+10	3	2	[11, 12]
+11	1	0	NULL
+derived_path_bag_mismatches
+0
+PREPARE cb_cached FROM 'SELECT s.id,COUNT(*) AS paths FROM cb_seed s,LATERAL (SELECT * FROM GRAPH_TABLE(cb_graph MATCH (a IS person WHERE a.id=s.seed)-[e IS link WHERE e.since>=COALESCE(ABS(s.cutoff)+s.delta,?) AND LOWER(e.kind)=LOWER(COALESCE(s.kind,''knows''))]->{0,2}(b IS person) COLUMNS(b.id AS endpoint)) p) g GROUP BY s.id ORDER BY s.id';
+SET @cb_default=2020;
+EXECUTE cb_cached USING @cb_default;
+id	paths
+1	5
+2	3
+3	5
+4	5
+5	3
+6	2
+7	5
+8	1
+10	3
+11	1
+SET @cb_default=2024;
+EXECUTE cb_cached USING @cb_default;
+id	paths
+1	5
+2	3
+3	5
+4	1
+5	3
+6	2
+7	5
+8	1
+10	3
+11	1
+SET @cb_default=2020;
+EXECUTE cb_cached USING @cb_default;
+id	paths
+1	5
+2	3
+3	5
+4	5
+5	3
+6	2
+7	5
+8	1
+10	3
+11	1
+DEALLOCATE PREPARE cb_cached;
+DROP PROPERTY GRAPH cb_graph;
+DROP TABLE cb_expected,cb_reference,cb_seed,cb_edge,cb_vertex;

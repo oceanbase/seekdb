@@ -39,6 +39,18 @@ const char *GRAPH_SEED_VERTEX_ALIAS = "__g_seed_vertex";
 const char *GRAPH_STEP_EDGE_ALIAS = "__g_step_edge";
 const char *GRAPH_STEP_VERTEX_ALIAS = "__g_step_vertex";
 
+bool is_reusable_graph_scalar(const ObRawExpr &expr)
+{
+  // Determinism alone does not prove that a builtin has no external state or
+  // side effects. Keep the explicit list shared by parameter and edge proofs.
+  return expr.is_op_expr() || expr.get_expr_type() == T_FUN_SYS_CAST
+      || expr.get_expr_type() == T_OP_ABS
+      || expr.get_expr_type() == T_FUN_SYS_COALESCE
+      || expr.get_expr_type() == T_FUN_SYS_LOWER
+      || expr.get_expr_type() == T_FUN_SYS_UPPER
+      || expr.get_expr_type() == T_FUN_SYS_LENGTH;
+}
+
 // Native expansion bypasses the recursive child's joins. Only parameters
 // bound outside that statement survive the bypass and stay constant per rescan.
 bool is_outer_graph_parameter(const ObRawExpr &expr, const ObLogTableScan &edge)
@@ -47,12 +59,32 @@ bool is_outer_graph_parameter(const ObRawExpr &expr, const ObLogTableScan &edge)
   if (safe) {
     const ObExecParamRawExpr &param = static_cast<const ObExecParamRawExpr &>(expr);
     const ObRawExpr *ref = param.get_ref_expr();
-    safe = !param.is_onetime() && ref != nullptr && ref->is_column_ref_expr();
-    if (safe) {
-      const ObColumnRefRawExpr &column = *static_cast<const ObColumnRefRawExpr *>(ref);
-      safe = !column.is_cte_generated_column()
-          && edge.get_stmt()->get_table_item_by_id(column.get_table_id()) == nullptr;
+    ObArray<const ObRawExpr *> pending;
+    bool has_outer_column = false;
+    safe = !param.is_onetime() && ref != nullptr
+        && OB_SUCCESS == pending.push_back(ref);
+    while (safe && !pending.empty()) {
+      const ObRawExpr *node = pending.at(pending.count() - 1);
+      pending.pop_back();
+      // Exec parameters inherit the constant expression class. A nested one
+      // still needs an independent ownership proof; do not treat it as a literal.
+      safe = node != nullptr && node->is_deterministic() && !node->is_exec_param_expr();
+      if (safe && node->is_column_ref_expr()) {
+        const ObColumnRefRawExpr &column = *static_cast<const ObColumnRefRawExpr *>(node);
+        safe = !column.is_cte_generated_column()
+            && edge.get_stmt()->get_table_item_by_id(column.get_table_id()) == nullptr;
+        has_outer_column |= safe;
+      } else if (safe && !node->is_const_raw_expr()) {
+        safe = is_reusable_graph_scalar(*node) && node->get_param_count() > 0;
+        for (int64_t i = 0; safe && i < node->get_param_count(); ++i) {
+          safe = OB_SUCCESS == pending.push_back(node->get_param_expr(i));
+        }
+      }
     }
+    // The enclosing join evaluates this expression before rescan. Its complete
+    // typed result, not its textual expression or just one leaf, enters the
+    // adjacency parameter key. Never accept references to the bypassed child.
+    safe = safe && has_outer_column;
     // These scalar values serialize by value, not as LOB/JSON/UDT locators.
     if (safe) {
       switch (expr.get_data_type()) {
@@ -503,8 +535,10 @@ bool GraphFeedbackLoopLogOp::can_reuse_adjacency(ObIArray<ObRawExpr *> *paramete
       }
     } else if (safe && expr->is_column_ref_expr()) {
       safe = static_cast<const ObColumnRefRawExpr *>(expr)->get_table_id() == edge->get_table_id();
-    } else if (safe && !expr->is_const_expr()) {
-      safe = (expr->is_op_expr() || expr->get_expr_type() == T_FUN_SYS_CAST)
+    } else if (safe && !expr->is_const_raw_expr()) {
+      // A dynamic constant such as (:cutoff + 1) is constant only within one
+      // rescan. Visit its parameters instead of sharing it across all bindings.
+      safe = is_reusable_graph_scalar(*expr)
           && expr->get_param_count() > 0;
       for (int64_t i = 0; safe && i < expr->get_param_count(); ++i) {
         safe = OB_SUCCESS == pending.push_back(expr->get_param_expr(i));
