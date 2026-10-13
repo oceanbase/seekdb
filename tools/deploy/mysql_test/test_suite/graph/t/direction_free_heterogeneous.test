@@ -1,0 +1,73 @@
+--disable_query_log
+--source mysql_test/test_suite/graph/mapping_fixture.sql
+--enable_query_log
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=1)-[e IS works]-{0,4}(b IS person)
+ COLUMNS(a.id AS seed,b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g ORDER BY hops;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=1)-[e IS works]-{0,4}(b IS company)
+ COLUMNS(a.id AS seed,b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g ORDER BY hops;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS company WHERE a.id=1)-[e IS works]-{0,3}(b IS person)
+ ONE ROW PER STEP(v1,se,v2)
+ COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS n,v1.name AS src,se.id AS eid,v2.name AS dst,
+ COUNT(e.id) AS hops)) g ORDER BY m,n;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=1)-[e IS works]-{0,2}(b IS person)
+ ONE ROW PER STEP(v1,se,v2)
+ COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS n,v1.name AS src,se.id AS eid,v2.name AS dst,
+ v1.age AS from_age,v2.age AS to_age,COUNT(e.id) AS hops)) g ORDER BY m,n;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+ (a IS person WHERE a.id=1)-[e IS works]-{0,4}(b IS person)
+ COLUMNS(COUNT(e.id) AS hops)) g;
+SELECT s.binding,g.endpoint,g.hops FROM (SELECT 1 AS binding,1 AS id UNION ALL SELECT 2,2 UNION ALL SELECT 3,1) s,
+LATERAL (SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=s.id AND RAND(1)<1)-[e IS works]-{0,3}(b IS company)
+ COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) p) g ORDER BY s.binding,g.hops;
+--echo unrelated_mapping_zero_hop_keeps_fixed_step
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=1)-[f IS works]->(b IS company)-[e IS knows]-{0,2}(c IS company)
+ ONE ROW PER STEP(v1,se,v2)
+ COLUMNS(ELEMENT_NUMBER(se) AS n,v1.name AS src,se.id AS eid,v2.name AS dst,COUNT(e.id) AS hops)) g;
+SELECT COUNT(*) AS impossible_paths FROM GRAPH_TABLE(graph_social MATCH
+ (a IS company)-[e IS knows]-{1,2}(b IS company) COLUMNS(b.id AS endpoint)) g;
+SELECT COUNT(*) AS impossible_target FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person)-[e IS knows]-{0,2}(b IS company) COLUMNS(b.id AS endpoint)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS company)-[e IS knows WHERE e.missing=1]-{0}(b IS company) COLUMNS(b.id AS endpoint)) g;
+--echo generated_alias_does_not_capture_outer_filter
+SELECT s.id,g.hops FROM (SELECT 20 AS id) s,
+LATERAL (SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=1)-[e IS works WHERE e.id=s.id]-{1,3}(b IS company)
+ COLUMNS(COUNT(e.id) AS hops)) p) g ORDER BY g.hops;
+SELECT __g_other_vertex_0_0.id,g.hops FROM (SELECT 20 AS id) __g_other_vertex_0_0,
+LATERAL (SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=1)-[e IS works WHERE e.id=__g_other_vertex_0_0.id]-{1,3}(b IS company)
+ COLUMNS(COUNT(e.id) AS hops)) p) g ORDER BY g.hops;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;
+CREATE TABLE df_a(id BIGINT PRIMARY KEY,name VARCHAR(20));
+CREATE TABLE df_b(tenant VARBINARY(8),code DECIMAL(8,2),name VARCHAR(20),PRIMARY KEY(tenant,code));
+CREATE TABLE df_e(id BIGINT PRIMARY KEY,src BIGINT,dt VARBINARY(8),dc DECIMAL(8,2));
+INSERT INTO df_a VALUES(1,'A1'),(2,'A2');
+INSERT INTO df_b VALUES(X'4100',1.25,'B1');
+INSERT INTO df_e VALUES(10,1,X'4100',1.25),(11,2,X'4100',1.25);
+CREATE PROPERTY GRAPH df_graph VERTEX TABLES
+ (df_a KEY(id) LABEL a PROPERTIES(name),df_b KEY(tenant,code) LABEL b PROPERTIES(name))
+ EDGE TABLES(df_e KEY(id) SOURCE KEY(src) REFERENCES df_a(id)
+ DESTINATION KEY(dt,dc) REFERENCES df_b(tenant,code) LABEL e PROPERTIES(id));
+SELECT * FROM GRAPH_TABLE(df_graph MATCH (a IS a WHERE a.name='A1')-[e IS e]-{0,2}(b IS a)
+ ONE ROW PER STEP(v1,se,v2)
+ COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS n,v1.name AS src,se.id AS eid,v2.name AS dst,
+ COUNT(e.id) AS hops)) g ORDER BY m,n;
+INSERT INTO df_e VALUES(12,1,X'4100',1.25);
+SELECT * FROM GRAPH_TABLE(df_graph MATCH TRAIL (a IS b)-[e IS e]-{0,3}(b IS a)
+ COLUMNS(b.name AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g ORDER BY hops,endpoint,CAST(edges AS CHAR);
+SELECT m,n,JSON_UNQUOTE(JSON_EXTRACT(src,'$.ELEM_TABLE')) AS src_table,
+ JSON_UNQUOTE(JSON_EXTRACT(dst,'$.ELEM_TABLE')) AS dst_table FROM GRAPH_TABLE(df_graph MATCH
+ (a IS a WHERE a.name='A1')-[e IS e WHERE e.id=10]-{2}(b IS a)
+ ONE ROW PER STEP(v1,se,v2)
+ COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS n,VERTEX_ID(v1) AS src,VERTEX_ID(v2) AS dst)) g ORDER BY m,n;
+DROP PROPERTY GRAPH df_graph;
+DROP TABLE df_e,df_b,df_a;

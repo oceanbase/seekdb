@@ -43,7 +43,9 @@ enum class GraphPathMode : int8_t
 enum class GraphPathDirection : int8_t
 {
   OUT = 0,
-  IN = 1
+  IN = 1,
+  // Each hop may follow either endpoint orientation of the stored edge.
+  BOTH = 2
 };
 
 // Controls how one matched path is exposed as relational rows and how path
@@ -77,7 +79,8 @@ struct GraphPathDesc
         && lower_bound_ >= 0
         && lower_bound_ <= upper_bound_
         && upper_bound_ <= GRAPH_PATH_MAX_HOPS
-        && (direction_ == GraphPathDirection::OUT || direction_ == GraphPathDirection::IN)
+        && (direction_ == GraphPathDirection::OUT || direction_ == GraphPathDirection::IN
+            || direction_ == GraphPathDirection::BOTH)
         && (path_mode_ == GraphPathMode::WALK || path_mode_ == GraphPathMode::TRAIL)
         && (row_shape_ == GraphPathRowShape::PER_MATCH
             || row_shape_ == GraphPathRowShape::PER_STEP);

@@ -136,7 +136,8 @@ bool supports_basic_native_graph_feedback(
         + access_desc.target_key_count_
         + (path_desc.needs_edge_key_history()
            ? path_desc.upper_bound_ * access_desc.edge_key_count_ : 0);
-    supported = path_desc.source_element_id_ == path_desc.target_element_id_
+    supported = path_desc.direction_ != GraphPathDirection::BOTH
+        && path_desc.source_element_id_ == path_desc.target_element_id_
         && path_desc.path_mode_ == GraphPathMode::WALK
         && (!path_desc.need_path_ || payload_expr_count > 0
             || path_desc.row_shape_ == GraphPathRowShape::PER_STEP)

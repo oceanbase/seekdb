@@ -525,8 +525,10 @@ int GraphFeedbackLoopLogOp::initialize_expand_access()
     step_access_method_ = expand_access_desc_.uses_adjacency_index()
         ? GraphFeedbackAccessMethod::INDEX_SCAN
         : GraphFeedbackAccessMethod::FULL_SCAN;
-    native_step_supported_ = is_native_graph_step_supported(
-        step, edge_scan, target_scan);
+    // The current DAS descriptor describes one endpoint orientation. Keep the
+    // bidirectional relational step intact rather than dropping its OR branch.
+    native_step_supported_ = path_desc_.direction_ != GraphPathDirection::BOTH
+        && is_native_graph_step_supported(step, edge_scan, target_scan);
     if (OB_FAIL(retain_native_edge_range_filters(
             *edge_scan, *target_scan, expand_access_desc_, native_step_supported_))) {
       LOG_WARN("failed to retain graph edge range filters", K(ret));
@@ -739,7 +741,7 @@ int GraphFeedbackLoopLogOp::get_plan_item_info(PlanText &plan_text,
     BEGIN_BUF_PRINT;
     if (OB_FAIL(BUF_PRINTF("direction=%s, hops={%ld,%ld}, access=%s, mode=%s, runtime=%s, states=%s",
                            path_desc_.direction_ == GraphPathDirection::IN
-                               ? "IN" : "OUT",
+                               ? "IN" : path_desc_.direction_ == GraphPathDirection::BOTH ? "BOTH" : "OUT",
                            path_desc_.lower_bound_,
                            path_desc_.upper_bound_,
                            access_method_name(step_access_method_),

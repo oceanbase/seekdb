@@ -1376,7 +1376,8 @@ int build_recursive_step_rows(GraphRelationBuilder &builder,
                               ParseNode *&select,
                               const ObIArray<GraphBinding> *composed_actual = nullptr,
                               const ObIArray<GraphExprBinding> *composed_expressions = nullptr,
-                              int64_t quantified_index = 1)
+                              int64_t quantified_index = 1,
+                              const GraphBinding *opposite_pattern = nullptr)
 {
   if (builder.error() != OB_SUCCESS) {
     return builder.error();
@@ -1432,7 +1433,8 @@ int build_recursive_step_rows(GraphRelationBuilder &builder,
       builder.identifier(ObString::make_string("__g_iter_edge"))};
   GraphBinding iter_from = {source_pattern.element_, source_pattern.table_,
       builder.identifier(ObString::make_string("__g_iter_from"))};
-  GraphBinding iter_to = {target_pattern.element_, target_pattern.table_,
+  const GraphBinding &other_pattern = opposite_pattern == nullptr ? target_pattern : *opposite_pattern;
+  GraphBinding iter_to = {other_pattern.element_, other_pattern.table_,
       builder.identifier(ObString::make_string("__g_iter_to"))};
   ParseNode *edge_condition = nullptr;
   for (int64_t key = 0; key < edge_pattern.element_->key_count_; ++key) {
@@ -1448,7 +1450,15 @@ int build_recursive_step_rows(GraphRelationBuilder &builder,
         edge_condition);
   }
   relation = builder.join(relation, builder.relation(iter_edge), edge_condition, true);
-  const bool reverse = path_desc.direction_ == GraphPathDirection::IN;
+  const bool reverse = opposite_pattern == nullptr ? path_desc.direction_ == GraphPathDirection::IN
+      : source_pattern.element_->id_ == edge_pattern.element_->destination_id_;
+  ParseNode *step_reverse = nullptr;
+  if (path_desc.direction_ == GraphPathDirection::BOTH && opposite_pattern == nullptr) {
+    step_reverse = builder.binary(T_OP_BIT_AND,
+        builder.binary(T_OP_BIT_RIGHT_SHIFT,
+            builder.column(path_alias, ObString::make_string("__g_reverse_steps")),
+            builder.binary(T_OP_MINUS, quantified_step, builder.integer(1))), builder.integer(1));
+  }
   const uint64_t *from_keys = reverse ? edge_pattern.element_->destination_columns_
                                      : edge_pattern.element_->source_columns_;
   const uint64_t *to_keys = reverse ? edge_pattern.element_->source_columns_
@@ -1460,12 +1470,18 @@ int build_recursive_step_rows(GraphRelationBuilder &builder,
         builder.column(iter_from, source_pattern.element_->key_columns_[key]),
         builder.choose(zero,
             builder.column(result_source, source_pattern.element_->key_columns_[key]),
-            builder.column(iter_edge, from_keys[key]))), from_condition);
+            step_reverse == nullptr ? builder.column(iter_edge, from_keys[key])
+                : builder.choose(step_reverse,
+                    builder.column(iter_edge, edge_pattern.element_->destination_columns_[key]),
+                    builder.column(iter_edge, edge_pattern.element_->source_columns_[key])))), from_condition);
   }
-  for (int64_t key = 0; key < target_pattern.element_->key_count_; ++key) {
+  for (int64_t key = 0; key < other_pattern.element_->key_count_; ++key) {
     builder.append_condition(builder.binary(T_OP_EQ,
-        builder.column(iter_to, target_pattern.element_->key_columns_[key]),
-        builder.column(iter_edge, to_keys[key])), to_condition);
+        builder.column(iter_to, other_pattern.element_->key_columns_[key]),
+        step_reverse == nullptr ? builder.column(iter_edge, to_keys[key])
+            : builder.choose(step_reverse,
+                builder.column(iter_edge, edge_pattern.element_->source_columns_[key]),
+                builder.column(iter_edge, edge_pattern.element_->destination_columns_[key]))), to_condition);
   }
   relation = builder.join(relation, builder.relation(iter_from), from_condition,
                           composed_actual != nullptr);
@@ -1475,7 +1491,8 @@ int build_recursive_step_rows(GraphRelationBuilder &builder,
   ObArray<GraphParseNode> ordering;
   if (need_match_number) {
     for (int64_t key = 0; OB_SUCC(ret) && key < source_pattern.element_->key_count_; ++key) {
-      ret = ordering.push_back(GraphParseNode{builder.choose(
+      ret = ordering.push_back(GraphParseNode{path_desc.direction_ == GraphPathDirection::BOTH
+          ? make_internal_column(builder, path_alias, "__g_source_key_", key) : builder.choose(
           builder.binary(T_OP_EQ, builder.column(path_alias, depth_name), builder.integer(0)),
           make_internal_column(builder, path_alias, "__g_source_key_", key), builder.null_value())});
     }
@@ -1523,13 +1540,36 @@ int build_recursive_step_rows(GraphRelationBuilder &builder,
   ObArray<GraphConditionalBinding> from_alternatives;
   ObArray<GraphConditionalBinding> edge_alternatives;
   ObArray<GraphConditionalBinding> to_alternatives;
+  if (OB_SUCC(ret) && opposite_pattern != nullptr) {
+    ParseNode *odd = builder.binary(T_OP_EQ,
+        builder.binary(T_OP_MOD, quantified_step, builder.integer(2)), builder.integer(1));
+    ParseNode *even = builder.binary(T_OP_EQ,
+        builder.binary(T_OP_MOD, quantified_step, builder.integer(2)), builder.integer(0));
+    ParseNode *active = builder.binary(T_OP_AND,
+        builder.binary(T_OP_GT, quantified_step, builder.integer(0)),
+        builder.binary(T_OP_LE, quantified_step, depth));
+    ParseNode *odd_step = builder.binary(T_OP_AND, active, odd);
+    ParseNode *even_step = builder.binary(T_OP_AND, active, even);
+    if (OB_FAIL(from_alternatives.push_back(GraphConditionalBinding{iter_from,
+            composed_actual == nullptr ? builder.binary(T_OP_OR, zero, odd_step) : odd_step}))) {
+    } else if (OB_FAIL(from_alternatives.push_back(GraphConditionalBinding{iter_to, even_step}))) {
+    } else if (OB_FAIL(to_alternatives.push_back(GraphConditionalBinding{iter_to, odd_step}))) {
+    } else if (OB_FAIL(to_alternatives.push_back(GraphConditionalBinding{iter_from, even_step}))) {
+    } else {
+      bindings.at(0).conditional_ = &from_alternatives;
+      bindings.at(2).conditional_ = &to_alternatives;
+    }
+  }
   if (OB_SUCC(ret) && composed_actual != nullptr) {
     ParseNode *in_quantified = builder.binary(T_OP_AND,
         builder.binary(T_OP_GT, quantified_step, builder.integer(0)),
         builder.binary(T_OP_LE, quantified_step, depth));
-    if (OB_FAIL(from_alternatives.push_back(GraphConditionalBinding{iter_from, in_quantified}))) {
-    } else if (OB_FAIL(edge_alternatives.push_back(GraphConditionalBinding{iter_edge, in_quantified}))) {
-    } else if (OB_FAIL(to_alternatives.push_back(GraphConditionalBinding{iter_to, in_quantified}))) {
+    if (opposite_pattern == nullptr) {
+      if (OB_FAIL(from_alternatives.push_back(GraphConditionalBinding{iter_from, in_quantified}))) {
+      } else if (OB_FAIL(to_alternatives.push_back(GraphConditionalBinding{iter_to, in_quantified}))) {
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(edge_alternatives.push_back(GraphConditionalBinding{iter_edge, in_quantified}))) {
     }
     for (int64_t i = 1; OB_SUCC(ret) && i < composed_actual->count(); i += 2) {
       if (i == quantified_index) { continue; }
@@ -1872,16 +1912,23 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
                                 ParseNode *&select,
                                 const ParseNode *composed_chain = nullptr,
                                 const ObIArray<GraphBinding> *composed_bindings = nullptr,
-                                int64_t quantified_index = 1)
+                                int64_t quantified_index = 1,
+                                const GraphBinding *opposite_pattern = nullptr)
 {
   int ret = OB_SUCCESS;
   static const ObString CTE_NAME = ObString::make_string("__g_walk_frontier");
   static const ObString DEPTH_NAME = ObString::make_string("__g_depth");
   static const char *SOURCE_KEY_PREFIX = "__g_source_key_";
   static const char *CURRENT_KEY_PREFIX = "__g_current_key_";
+  static const char *OTHER_KEY_PREFIX = "__g_other_key_";
   static const char *TRAIL_EDGE_KEY_PREFIX = "__g_trail_edge_key_";
   static const char *EDGE_PROPERTY_PREFIX = "__g_edge_property_";
   static const ObString EDGE_IDENTITY_NAME = ObString::make_string("__g_edge_identity");
+  static const ObString REVERSE_STEPS_NAME = ObString::make_string("__g_reverse_steps");
+  const bool keep_orientation = path_desc.direction_ == GraphPathDirection::BOTH
+      && path_desc.row_shape_ == GraphPathRowShape::PER_STEP && opposite_pattern == nullptr;
+  const bool alternating = opposite_pattern != nullptr;
+  const GraphBinding &current_pattern = alternating ? source_pattern : target_pattern;
 
   ParseNode *seed_alias = builder.identifier(ObString::make_string("__g_seed_vertex"));
   ParseNode *frontier_alias = builder.identifier(ObString::make_string("__g_frontier"));
@@ -1892,7 +1939,23 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
   ParseNode *result_target_alias = builder.identifier(ObString::make_string("__g_result_target"));
   GraphBinding seed = {source_pattern.element_, source_pattern.table_, seed_alias};
   GraphBinding edge = {edge_pattern.element_, edge_pattern.table_, edge_alias};
-  GraphBinding step_vertex = {target_pattern.element_, target_pattern.table_, step_vertex_alias};
+  GraphBinding step_vertex = {current_pattern.element_, current_pattern.table_, step_vertex_alias};
+  GraphBinding other_vertex = alternating ? *opposite_pattern : current_pattern;
+  GraphBinding other_types = other_vertex;
+  if (alternating) {
+    ParseNode *filters = builder.make(T_EXPR_LIST, 3);
+    if (filters == nullptr) {
+      ret = builder.error();
+    } else {
+      filters->children_[0] = source_filter == nullptr ? nullptr : builder.clone(*source_filter);
+      filters->children_[1] = edge_filter == nullptr ? nullptr : builder.clone(*edge_filter);
+      filters->children_[2] = target_filter == nullptr ? nullptr : builder.clone(*target_filter);
+      const ParseNode &scope = composed_chain == nullptr ? *filters : *composed_chain;
+      if (OB_FAIL(make_composed_alias(builder, scope, "__g_other_vertex_", 0, other_vertex.variable_))) {
+      } else if (OB_FAIL(make_composed_alias(builder, scope, "__g_other_key_types_", 0, other_types.variable_))) {
+      }
+    }
+  }
   GraphBinding result_source = {source_pattern.element_, source_pattern.table_, result_source_alias};
   GraphBinding result_target = {target_pattern.element_, target_pattern.table_, result_target_alias};
   GraphBinding history_types = {edge_pattern.element_, edge_pattern.table_,
@@ -1903,7 +1966,7 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
   const bool need_trail_history = path_desc.path_mode_ == GraphPathMode::TRAIL;
   const bool need_edge_history = path_desc.needs_edge_key_history();
   ObSEArray<const GraphProperty *, 4> edge_properties;
-  if (OB_FAIL(collect_path_projection_requirements(
+  if (OB_SUCC(ret) && OB_FAIL(collect_path_projection_requirements(
           projects, graph, edge_pattern, need_match_number,
           need_edge_identity, edge_properties))) {
   }
@@ -1925,10 +1988,12 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
     } else if (OB_FAIL(cte_column_names.push_back(GraphParseNode{name}))) {
     }
   }
-  for (int64_t i = 0; OB_SUCC(ret) && i < target_pattern.element_->key_count_; ++i) {
+  for (int64_t i = 0; OB_SUCC(ret) && i < current_pattern.element_->key_count_; ++i) {
     ParseNode *name = builder.internal_identifier(CURRENT_KEY_PREFIX, 0, i);
+    ParseNode *key = builder.column(seed, source_pattern.element_->key_columns_[i]);
+    if (alternating) { key = builder.choose(builder.integer(1), key, builder.null_value()); }
     if (OB_FAIL(anchor_exprs.push_back(GraphParseNode{
-            builder.column(seed, source_pattern.element_->key_columns_[i])}))) {
+            key}))) {
     } else if (OB_FAIL(cte_column_names.push_back(GraphParseNode{name}))) {
     }
   }
@@ -1963,6 +2028,21 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
     }
   }
 
+  if (OB_SUCC(ret) && keep_orientation) {
+    if (OB_FAIL(anchor_exprs.push_back(GraphParseNode{builder.integer(0)}))) {
+    } else if (OB_FAIL(cte_column_names.push_back(GraphParseNode{
+        builder.identifier(REVERSE_STEPS_NAME)}))) {
+    }
+  }
+  // Alternating mappings retain separate typed key slots. Never UNION or CAST
+  // unrelated primary keys into one common SQL type merely to carry a frontier.
+  for (int64_t i = 0; OB_SUCC(ret) && alternating && i < other_vertex.element_->key_count_; ++i) {
+    if (OB_FAIL(anchor_exprs.push_back(GraphParseNode{
+        builder.column(other_types, other_vertex.element_->key_columns_[i])}))) {
+    } else if (OB_FAIL(cte_column_names.push_back(GraphParseNode{
+        builder.internal_identifier(OTHER_KEY_PREFIX, 0, i)}))) {
+    }
+  }
   ParseNode *anchor = nullptr;
   if (OB_SUCC(ret)) {
     ParseNode *anchor_from = builder.make(T_FROM_LIST, 1);
@@ -1973,6 +2053,10 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
       ret = builder.error();
     } else {
       anchor_from->children_[0] = builder.relation(seed);
+      if (alternating) {
+        anchor_from->children_[0] = builder.join(anchor_from->children_[0],
+            builder.relation(other_types), builder.false_value(), true);
+      }
       if (need_edge_history && path_desc.upper_bound_ > 0) {
         // A constant-false outer join supplies typed NULLs without inventing a
         // CAST mapping for every SQL key type/collation. No edge row is read.
@@ -2022,7 +2106,7 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
 
   ParseNode *recursive = nullptr;
   if (OB_SUCC(ret)) {
-    ParseNode *recursive_from = builder.make(T_FROM_LIST, 3);
+    ParseNode *recursive_from = builder.make(T_FROM_LIST, alternating ? 4 : 3);
     ParseNode *recursive_projects = nullptr;
     ParseNode *recursive_where = nullptr;
     if (recursive_from == nullptr) {
@@ -2031,6 +2115,7 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
       recursive_from->children_[0] = builder.relation(CTE_NAME, frontier_alias);
       recursive_from->children_[1] = builder.relation(edge, adjacency_index);
       recursive_from->children_[2] = builder.relation(step_vertex);
+      if (alternating) { recursive_from->children_[3] = builder.relation(other_vertex); }
     }
     if (OB_SUCC(ret)) {
       ParseNode *depth = builder.column(frontier_alias, DEPTH_NAME);
@@ -2043,9 +2128,14 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
               make_internal_column(builder, frontier_alias, SOURCE_KEY_PREFIX, i)}))) {
       }
     }
-    for (int64_t i = 0; OB_SUCC(ret) && i < target_pattern.element_->key_count_; ++i) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < current_pattern.element_->key_count_; ++i) {
+      ParseNode *key = builder.column(step_vertex, current_pattern.element_->key_columns_[i]);
+      if (alternating) {
+        key = builder.choose(builder.binary(T_OP_MOD, builder.column(frontier_alias, DEPTH_NAME),
+                                           builder.integer(2)), key, builder.null_value());
+      }
       if (OB_FAIL(recursive_exprs.push_back(GraphParseNode{
-              builder.column(step_vertex, target_pattern.element_->key_columns_[i])}))) {
+              key}))) {
       }
     }
     for (int64_t slot = 0; OB_SUCC(ret) && need_edge_history
@@ -2130,7 +2220,68 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
       builder.append_condition(builder.binary(T_OP_OR, slot_unused, edge_differs),
                                recursive_where);
     }
-    if (OB_SUCC(ret)) {
+    if (OB_SUCC(ret) && alternating) {
+      const bool source_is_stored_source = source_pattern.element_->id_ == edge.element_->source_id_;
+      const uint64_t *primary_keys = source_is_stored_source
+          ? edge.element_->source_columns_ : edge.element_->destination_columns_;
+      const uint64_t *other_keys = source_is_stored_source
+          ? edge.element_->destination_columns_ : edge.element_->source_columns_;
+      ParseNode *odd = builder.binary(T_OP_MOD, builder.column(frontier_alias, DEPTH_NAME),
+                                      builder.integer(2));
+      ParseNode *at_primary = builder.binary(T_OP_EQ, odd, builder.integer(0));
+      ParseNode *at_other = builder.binary(T_OP_EQ, odd, builder.integer(1));
+      for (int64_t i = 0; i < current_pattern.element_->key_count_; ++i) {
+        builder.append_condition(builder.binary(T_OP_EQ, builder.column(edge, primary_keys[i]),
+            builder.column(step_vertex, current_pattern.element_->key_columns_[i])), recursive_where);
+        builder.append_condition(builder.binary(T_OP_EQ, builder.column(edge, primary_keys[i]),
+            make_internal_column(builder, frontier_alias, CURRENT_KEY_PREFIX, i)), at_primary);
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && i < other_vertex.element_->key_count_; ++i) {
+        builder.append_condition(builder.binary(T_OP_EQ, builder.column(edge, other_keys[i]),
+            builder.column(other_vertex, other_vertex.element_->key_columns_[i])), recursive_where);
+        builder.append_condition(builder.binary(T_OP_EQ, builder.column(edge, other_keys[i]),
+            make_internal_column(builder, frontier_alias, OTHER_KEY_PREFIX, i)), at_other);
+        ret = recursive_exprs.push_back(GraphParseNode{builder.choose(odd, builder.null_value(),
+            builder.column(other_vertex, other_vertex.element_->key_columns_[i]))});
+      }
+      builder.append_condition(builder.binary(T_OP_OR, at_primary, at_other), recursive_where);
+    } else if (OB_SUCC(ret) && path_desc.direction_ == GraphPathDirection::BOTH) {
+      ParseNode *directions[2] = {nullptr, nullptr};
+      ParseNode *forward_source = nullptr;
+      for (int64_t orientation = 0; orientation < 2; ++orientation) {
+        const uint64_t *current_columns = orientation == 0
+            ? edge.element_->source_columns_ : edge.element_->destination_columns_;
+        const uint64_t *next_columns = orientation == 0
+            ? edge.element_->destination_columns_ : edge.element_->source_columns_;
+        if (edge.element_->source_id_ != source_pattern.element_->id_
+            || edge.element_->destination_id_ != target_pattern.element_->id_) {
+          directions[orientation] = builder.false_value();
+        } else {
+          for (int64_t i = 0; i < source_pattern.element_->key_count_; ++i) {
+            builder.append_condition(builder.binary(T_OP_EQ,
+                builder.column(edge, current_columns[i]),
+                make_internal_column(builder, frontier_alias, CURRENT_KEY_PREFIX, i)),
+                directions[orientation]);
+          }
+          if (orientation == 0) { forward_source = directions[0]; }
+          for (int64_t i = 0; i < target_pattern.element_->key_count_; ++i) {
+            builder.append_condition(builder.binary(T_OP_EQ,
+                builder.column(edge, next_columns[i]),
+                builder.column(step_vertex, target_pattern.element_->key_columns_[i])),
+                directions[orientation]);
+          }
+        }
+      }
+      // OR matches a physical self-loop once, not twice as UNION ALL would.
+      builder.append_condition(builder.binary(T_OP_OR, directions[0], directions[1]), recursive_where);
+      if (keep_orientation) {
+        ParseNode *bit = builder.choose(forward_source == nullptr ? builder.false_value() : forward_source,
+                                       builder.integer(0), builder.integer(1));
+        ret = recursive_exprs.push_back(GraphParseNode{builder.binary(T_OP_BIT_OR,
+            builder.column(frontier_alias, REVERSE_STEPS_NAME),
+            builder.binary(T_OP_BIT_LEFT_SHIFT, bit, builder.column(frontier_alias, DEPTH_NAME)))});
+      }
+    } else if (OB_SUCC(ret)) {
       const bool reverse = path_desc.direction_ == GraphPathDirection::IN;
       const uint64_t expected_current = reverse ? edge.element_->destination_id_
                                                 : edge.element_->source_id_;
@@ -2185,7 +2336,9 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
   ParseNode *with_list = nullptr;
   if (OB_SUCC(ret)) {
     ParseNode *cte_query = builder.make(T_SELECT, PARSE_SELECT_MAX_IDX);
-    ParseNode *set = builder.make(T_GRAPH_FEEDBACK_LOOP, 2);
+    // The specialized native descriptor has one current-key mapping. The
+    // alternating typed frontier uses the ordinary recursive SQL executor.
+    ParseNode *set = builder.make(alternating ? T_SET_UNION_ALL : T_GRAPH_FEEDBACK_LOOP, 2);
     ParseNode *column_list = builder.make(T_COLUMN_LIST, cte_column_names.count());
     ParseNode *with_as = builder.make(T_WITH_CLAUSE_AS, 3);
     with_list = builder.make(T_WITH_CLAUSE_LIST, 1);
@@ -2195,9 +2348,9 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
     } else {
       set->int16_values_[0] = static_cast<int16_t>(path_desc.lower_bound_);
       set->int16_values_[1] = static_cast<int16_t>(path_desc.upper_bound_);
-      set->int16_values_[2] = static_cast<int16_t>(
-          path_desc.direction_ == GraphPathDirection::IN ? 1 : 0);
+      set->int16_values_[2] = static_cast<int16_t>(path_desc.direction_);
       set->int16_values_[3] = static_cast<int16_t>(path_desc.path_mode_);
+      if (alternating) { set->value_ = 2; }
       set->children_[0] = anchor;
       set->children_[1] = recursive;
       builder.force_serial(cte_query);
@@ -2231,10 +2384,18 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
             builder.column(result_source, source_pattern.element_->key_columns_[i]),
             make_internal_column(builder, path_alias, SOURCE_KEY_PREFIX, i)), where);
       }
-      for (int64_t i = 0; i < target_pattern.element_->key_count_; ++i) {
+      const bool target_is_primary = target_pattern.element_->id_ == current_pattern.element_->id_;
+      const bool target_is_other = alternating
+          && target_pattern.element_->id_ == other_vertex.element_->id_;
+      if (alternating && !target_is_primary && !target_is_other) {
+        builder.append_condition(builder.false_value(), where);
+      }
+      for (int64_t i = 0; (!alternating || target_is_primary || target_is_other)
+           && i < target_pattern.element_->key_count_; ++i) {
         builder.append_condition(builder.binary(T_OP_EQ,
             builder.column(result_target, target_pattern.element_->key_columns_[i]),
-            make_internal_column(builder, path_alias, CURRENT_KEY_PREFIX, i)), where);
+            make_internal_column(builder, path_alias,
+                                 target_is_other ? OTHER_KEY_PREFIX : CURRENT_KEY_PREFIX, i)), where);
       }
       ParseNode *condition = nullptr;
       if (target_filter != nullptr
@@ -2326,7 +2487,7 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
             source_pattern, edge_pattern, target_pattern, result_source, result_target,
             path_alias, *from, where, *shape, projects, runtime_group, need_match_number,
             with_list, select, composed_chain == nullptr ? nullptr : &composed_actual,
-            composed_chain == nullptr ? nullptr : &expr_bindings, quantified_index);
+            composed_chain == nullptr ? nullptr : &expr_bindings, quantified_index, opposite_pattern);
       }
       return ret;
     }
@@ -2605,7 +2766,11 @@ int build_graph_path_branch(GraphRelationBuilder &builder,
     }
     if (builder.error() == OB_SUCCESS) {
       step_set->value_ = step_count;
-      step_query->children_[PARSE_SELECT_SET] = step_set;
+      if (step_count == 1) {
+        step_query = step_set->children_[0];
+      } else {
+        step_query->children_[PARSE_SELECT_SET] = step_set;
+      }
       step_relation->children_[0] = step_query;
       step_relation->children_[1] = step_alias;
       from = builder.make(T_FROM_LIST, 1);
@@ -2679,6 +2844,35 @@ int build_graph_path_branch(GraphRelationBuilder &builder,
   }
   if (OB_SUCC(ret) && builder.error() != OB_SUCCESS) {
     ret = builder.error();
+  }
+  return ret;
+}
+// The generated frontier has exactly one consumer, including PER_STEP (steps
+// share that consumer). Inline that internal relation once before generic CTE
+// rewrites: unlike duplicating a user CTE, this cannot multiply volatile seed
+// evaluations, and it keeps correlated seed parameters in their rescan scope.
+int inline_graph_frontier(ObSelectStmt &query, ObSQLSessionInfo &session,
+                          ObRawExprFactory &expr_factory)
+{
+  int ret = OB_SUCCESS;
+  ObArray<ObDMLStmt::TempTableInfo> tables;
+  if (OB_FAIL(query.collect_temp_table_infos(tables))) {
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < tables.count(); ++i) {
+    ObDMLStmt::TempTableInfo &info = tables.at(i);
+    if (info.temp_table_query_ == nullptr || !info.temp_table_query_->is_recursive_union()) {
+      continue;
+    } else if (OB_UNLIKELY(info.table_items_.count() != 1 || info.upper_stmts_.count() != 1)
+               || OB_ISNULL(info.table_items_.at(0)) || OB_ISNULL(info.upper_stmts_.at(0))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("generated graph frontier must have one consumer", K(ret));
+    } else {
+      info.table_items_.at(0)->type_ = TableItem::GENERATED_TABLE;
+      if (OB_FAIL(info.temp_table_query_->formalize_stmt(&session, false))) {
+      } else if (OB_FAIL(info.temp_table_query_->formalize_stmt_expr_reference(&expr_factory, &session))) {
+      } else if (OB_FAIL(info.upper_stmts_.at(0)->formalize_stmt_expr_reference(&expr_factory, &session))) {
+      }
+    }
   }
   return ret;
 }
@@ -2767,7 +2961,7 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
     for (int64_t i = 0; OB_SUCC(ret) && i < chain.num_child_; ++i) {
       const ParseNode &pattern = *chain.children_[i];
       GraphBinding binding = {nullptr, nullptr, pattern.children_[0]};
-      if ((i % 2) == 1 && pattern.value_ != 0 && pattern.value_ != 1) {
+      if ((i % 2) == 1 && pattern.value_ != 0 && pattern.value_ != 1 && pattern.value_ != 2) {
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "undirected graph path segments");
       } else {
@@ -2885,8 +3079,7 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
             ? 0 : quantifier->children_[0]->value_;
         path_desc.upper_bound_ = quantifier->value_ == 0
             ? path_desc.lower_bound_ : quantifier->children_[1]->value_;
-        path_desc.direction_ = chain.children_[quantified_index]->value_ == 1
-            ? GraphPathDirection::IN : GraphPathDirection::OUT;
+        path_desc.direction_ = static_cast<GraphPathDirection>(chain.children_[quantified_index]->value_);
         path_desc.path_mode_ = path_mode;
         path_desc.row_shape_ = shape != nullptr && shape->value_ == 1
             ? GraphPathRowShape::PER_STEP : GraphPathRowShape::PER_MATCH;
@@ -2936,7 +3129,7 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
       // Validate against the complete graph-variable namespace before lowering
       // the quantified segment. Otherwise a prefix variable could accidentally
       // be interpreted as a same-named outer LATERAL alias inside its filter.
-      if (chain.num_child_ != 3) {
+      if (chain.num_child_ != 3 || path_desc.direction_ == GraphPathDirection::BOTH) {
         for (int64_t i = 0; OB_SUCC(ret) && i < bindings.count(); ++i) {
           const ParseNode *filter = chain.children_[i]->children_[2];
           if (filter == nullptr) { continue; }
@@ -2948,20 +3141,44 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
           }
           ParseNode *validated = nullptr;
           GraphExprRewriter rewriter(builder, *graph, database_name,
-                                    filter_bindings, nullptr, true, false);
+                                    filter_bindings, nullptr, true,
+                                    chain.num_child_ == 3 && i == quantified_index - 1);
           if (OB_SUCC(ret)) { ret = rewriter.rewrite(*filter, validated); }
         }
       }
       ObString adjacency_index;
-      if (OB_SUCC(ret) && OB_FAIL(find_adjacency_index(
+      if (OB_SUCC(ret) && path_desc.direction_ != GraphPathDirection::BOTH && OB_FAIL(find_adjacency_index(
               bindings.at(quantified_index), path_desc.direction_,
               *schema_checker_->get_schema_guard(), adjacency_index))) {
         LOG_WARN("failed to select graph adjacency index", K(ret), K(path_desc));
       }
-      const bool use_feedback_loop =
+      bool use_feedback_loop =
           bindings.at(quantified_index - 1).element_->id_
               == bindings.at(quantified_index + 1).element_->id_;
       const bool composed = chain.num_child_ != 3;
+      GraphBinding opposite;
+      if (OB_SUCC(ret) && path_desc.direction_ == GraphPathDirection::BOTH) {
+        const GraphElement &edge = *bindings.at(quantified_index).element_;
+        const uint64_t source_id = bindings.at(quantified_index - 1).element_->id_;
+        if (source_id == edge.source_id_ || source_id == edge.destination_id_) {
+          if (edge.source_id_ != edge.destination_id_) {
+            use_feedback_loop = true;
+            opposite.element_ = graph->get_element(source_id == edge.source_id_
+                                                   ? edge.destination_id_ : edge.source_id_);
+            if (OB_ISNULL(opposite.element_)) {
+              ret = OB_ERR_UNEXPECTED;
+            } else if (OB_FAIL(schema_checker_->get_schema_guard()->get_table_schema(
+                                  opposite.element_->table_id_, opposite.table_))) {
+            } else if (OB_ISNULL(opposite.table_)) {
+              ret = OB_TABLE_NOT_EXIST;
+            }
+          }
+        } else {
+          // No positive-length path can leave this mapping. The zero-hop
+          // branch still has normal source/terminal and fixed-segment semantics.
+          use_feedback_loop = false;
+        }
+      }
       if (OB_SUCC(ret) && use_feedback_loop && adjacency_index.empty()) {
         // The native fallback requires a base-table scan. Graph element keys
         // are the complete base-table primary key, so PRIMARY is always valid.
@@ -2982,7 +3199,8 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
                                            chain.children_[quantified_index + 1]->children_[2],
                                            shape, projects, select,
                                            composed ? &chain : nullptr,
-                                           composed ? &bindings : nullptr, quantified_index);
+                                           composed ? &bindings : nullptr, quantified_index,
+                                           opposite.element_ == nullptr ? nullptr : &opposite);
       } else if (OB_SUCC(ret)) {
         ObSEArray<GraphParseNode, 32> branches;
         // With different source/target element mappings the same quantified
@@ -2990,8 +3208,9 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
         // A typed one-hop branch also describes an empty result when bounds
         // exclude one. Keep the legacy single-segment lowering unchanged.
         const bool composed_steps = composed && path_desc.row_shape_ == GraphPathRowShape::PER_STEP;
-        for (int64_t hop = composed_steps ? 1 : path_desc.lower_bound_;
-             OB_SUCC(ret) && hop <= (composed_steps ? 1 : path_desc.upper_bound_);
+        const bool zero_only = path_desc.direction_ == GraphPathDirection::BOTH;
+        for (int64_t hop = zero_only ? 0 : composed_steps ? 1 : path_desc.lower_bound_;
+             OB_SUCC(ret) && hop <= (zero_only ? 0 : composed_steps ? 1 : path_desc.upper_bound_);
              ++hop) {
           const int64_t first_step = path_desc.row_shape_ == GraphPathRowShape::PER_STEP
               ? (composed ? 1 : (hop == 0 ? 0 : 1)) : -1;
@@ -3048,6 +3267,14 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
         ret = resolve_generate_table(*select, node.children_[GRAPH_TABLE_ALIAS], table_item);
         params_.internal_graph_path_desc_ = saved_path_desc;
         guard.set_session_id(saved_session_id);
+        if (OB_SUCC(ret) && use_feedback_loop) {
+          if (OB_ISNULL(table_item) || OB_ISNULL(table_item->ref_query_)
+              || OB_ISNULL(params_.expr_factory_)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else {
+            ret = inline_graph_frontier(*table_item->ref_query_, *session_info_, *params_.expr_factory_);
+          }
+        }
         if (OB_SUCC(ret)) {
           ObSchemaObjVersion dependency(graph->get_graph_id(), graph->get_schema_version(),
                                         DEPENDENCY_PROPERTY_GRAPH);

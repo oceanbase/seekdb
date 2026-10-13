@@ -473,9 +473,10 @@ ERROR 0A000: graph path upper bounds greater than 16 not supported
 SELECT * FROM GRAPH_TABLE(graph_social MATCH
 (a IS person)-[e IS knows]->{2,1}(b IS person) COLUMNS(COUNT(e.id) AS hops)) g;
 ERROR 0A000: graph path bounds with lower greater than upper not supported
-SELECT * FROM GRAPH_TABLE(graph_social MATCH
+SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH
 (a IS person)-[e IS knows]-{1}(b IS person) COLUMNS(COUNT(e.id) AS hops)) g;
-ERROR 0A000: undirected graph path segments not supported
+paths
+9
 SELECT * FROM GRAPH_TABLE(graph_social MATCH SIMPLE
 (a IS person)-[e IS knows]->{1}(b IS person) COLUMNS(COUNT(e.id) AS hops)) g;
 ERROR 0A000: SIMPLE and ACYCLIC graph path modes not supported

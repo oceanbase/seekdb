@@ -508,8 +508,8 @@ int ObSelectResolver::set_stmt_set_type(ObSelectStmt *select_stmt,
           || OB_UNLIKELY(!path_desc->is_valid()
                          || path_desc->lower_bound_ != set_node->int16_values_[0]
                          || path_desc->upper_bound_ != set_node->int16_values_[1]
-                         || (path_desc->direction_ == GraphPathDirection::IN)
-                                != (set_node->int16_values_[2] != 0)
+                         || static_cast<int64_t>(path_desc->direction_)
+                                != set_node->int16_values_[2]
                          || static_cast<int64_t>(path_desc->path_mode_)
                                 != set_node->int16_values_[3])) {
         ret = OB_ERR_UNEXPECTED;
