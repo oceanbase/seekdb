@@ -1,0 +1,81 @@
+--disable_query_log
+--source mysql_test/test_suite/graph/mapping_fixture.sql
+--enable_query_log
+--echo suffix_steps
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=1)-[e IS knows]->{0,2}(b IS person)<-[f IS knows]-(c IS person)
+ ONE ROW PER STEP (v1,se,v2)
+ COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS n,v1.id AS src,se.id AS edge_id,v2.id AS dst,
+ COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges,f.id AS suffix)) g ORDER BY m,n;
+--echo prefix_steps
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=1)-[f IS knows]->(b IS person)-[e IS knows]->{0,1}(c IS person)
+ ONE ROW PER STEP (v1,se,v2)
+ COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS n,v1.id AS src,se.id AS edge_id,v2.id AS dst,
+ COUNT(e.id) AS hops,f.id AS prefix)) g ORDER BY m,n;
+--echo both_sides_trail_steps
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+ (a IS person WHERE a.id=1)-[f IS knows]->(b IS person)-[e IS knows]->{0,1}(c IS person)
+ <-[h IS knows]-(d IS person)
+ ONE ROW PER STEP (v1,se,v2)
+ COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS n,v1.id AS src,se.id AS edge_id,v2.id AS dst,
+ COUNT(e.id) AS hops,f.id AS prefix,h.id AS suffix)) g ORDER BY m,n;
+--echo heterogeneous_fixed_suffix_steps
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=3)-[e IS knows]->{0,2}(b IS person)-[f IS works]->(c IS company)
+ ONE ROW PER STEP (v1,se,v2)
+ COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS n,v1.id AS src,se.id AS edge_id,v2.id AS dst,
+ se.since AS since_value,EDGE_ID(se) AS edge_identity,VERTEX_ID(v2) AS target_identity)) g ORDER BY m,n;
+--echo heterogeneous_quantified_steps
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=2)<-[f IS knows]-(b IS person)-[e IS works]->{0,2}(c IS company)
+ ONE ROW PER STEP (v1,se,v2)
+ COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS n,v1.id AS src,se.id AS edge_id,v2.id AS dst,
+ se.since AS since_value,COUNT(e.id) AS hops,f.id AS prefix)) g ORDER BY m,n;
+SELECT COUNT(*) AS impossible_zero FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=2)<-[f IS knows]-(b IS person)-[e IS works]->{0}(c IS company)
+ ONE ROW PER STEP (v1,se,v2)
+ COLUMNS(se.since AS since_value,EDGE_ID(se) AS edge_identity)) g;
+SELECT COUNT(*) AS impossible_two FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=2)<-[f IS knows]-(b IS person)-[e IS works]->{2}(c IS company)
+ ONE ROW PER STEP (v1,se,v2)
+ COLUMNS(se.since AS since_value,EDGE_ID(se) AS edge_identity)) g;
+--echo maximum_total_length_with_filtered_prefix
+INSERT INTO graph_person VALUES (6,'Seed',20);
+INSERT INTO graph_knows VALUES (18,6,5,2030),(20,4,4,2030),(21,4,4,2030),(22,4,4,2030),(23,4,4,2030);
+SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=6)-[f IS knows]->(b IS person)-[e IS knows]->{0,15}(c IS person)
+ COLUMNS(c.id AS endpoint,COUNT(e.id) AS hops)) g;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=6)-[f IS knows]->(b IS person)-[e IS knows]->{0,15}(c IS person)
+ ONE ROW PER STEP (v1,se,v2)
+ COLUMNS(ELEMENT_NUMBER(se) AS n,v1.id AS src,se.id AS edge_id,v2.id AS dst)) g;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;
+--echo composite_typed_keys_across_prefix_and_quantified_history
+CREATE TABLE gc_vertex(tenant VARBINARY(8),region DECIMAL(9,2),k VARCHAR(16) COLLATE utf8mb4_bin,
+ PRIMARY KEY(tenant,region,k));
+CREATE TABLE gc_edge(tenant VARBINARY(8),eid VARBINARY(8),version DECIMAL(9,2),
+ st VARBINARY(8),sr DECIMAL(9,2),sk VARCHAR(16) COLLATE utf8mb4_bin,
+ dt VARBINARY(8),dr DECIMAL(9,2),dk VARCHAR(16) COLLATE utf8mb4_bin,
+ PRIMARY KEY(tenant,eid,version));
+INSERT INTO gc_vertex VALUES (X'4100',1.25,'root'),(X'4100',1.25,'middle');
+INSERT INTO gc_edge VALUES
+ (X'4100',X'6600',1.25,X'4100',1.25,'root',X'4100',1.25,'middle'),
+ (X'4100',X'6600',2.50,X'4100',1.25,'root',X'4100',1.25,'middle');
+CREATE PROPERTY GRAPH graph_composite VERTEX TABLES
+ (gc_vertex KEY(tenant,region,k) LABEL vertex PROPERTIES(k))
+ EDGE TABLES(gc_edge KEY(tenant,eid,version)
+ SOURCE KEY(st,sr,sk) REFERENCES gc_vertex(tenant,region,k)
+ DESTINATION KEY(dt,dr,dk) REFERENCES gc_vertex(tenant,region,k)
+ LABEL edge PROPERTIES(eid,version));
+SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_composite MATCH TRAIL
+ (a IS vertex WHERE a.k='root')-[f IS edge]->(b IS vertex)<-[e IS edge]-{0,1}(c IS vertex)
+ COLUMNS(c.k AS endpoint,COUNT(e.eid) AS hops)) g;
+SELECT m,n,src,HEX(eid) AS edge_hex,version,dst,hops FROM GRAPH_TABLE(graph_composite MATCH TRAIL
+ (a IS vertex WHERE a.k='root')-[f IS edge]->(b IS vertex)<-[e IS edge]-{0,1}(c IS vertex)
+ ONE ROW PER STEP(v1,se,v2)
+ COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS n,v1.k AS src,se.eid AS eid,
+ se.version AS version,v2.k AS dst,COUNT(e.eid) AS hops)) g ORDER BY m,n;
+DROP PROPERTY GRAPH graph_composite;
+DROP TABLE gc_edge,gc_vertex;
