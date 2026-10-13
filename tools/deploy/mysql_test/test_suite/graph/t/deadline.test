@@ -1,0 +1,116 @@
+--disable_query_log
+DROP PROPERTY GRAPH IF EXISTS graph_social;
+--disable_warnings
+DROP TABLE IF EXISTS graph_works,graph_knows,graph_company,graph_person;
+--enable_warnings
+--source mysql_test/test_suite/graph/mapping_fixture.sql
+--source mysql_test/include/create_plan_table.inc
+SET @saved_optimizer_dynamic_sampling=@@optimizer_dynamic_sampling;
+SET @saved_ob_query_timeout=@@ob_query_timeout;
+SET optimizer_dynamic_sampling=0;
+let $saved_debug_sync_timeout=query_get_value(show parameters like 'debug_sync_timeout', value, 1);
+ALTER SYSTEM SET debug_sync_timeout='60s';
+sleep 3;
+connect (deadline_admin,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection deadline_admin;
+SET ob_query_timeout=60000000;
+connection default;
+let $access_pass=2;
+while ($access_pass)
+{
+  if ($access_pass == 1)
+  {
+    CREATE INDEX graph_deadline_src ON graph_knows(src,id,dst);
+  }
+  DELETE FROM plan_table;
+  --disable_result_log
+  EXPLAIN INTO plan_table SET statement_id='deadline'
+  SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH
+    (a IS person WHERE a.id=1)-[e IS knows]->{1,2}(b IS person)
+    COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+  --enable_result_log
+  --enable_query_log
+  SELECT COUNT(*)=1 AS native_deadline_target FROM plan_table
+    WHERE statement_id='deadline' AND operator='GRAPH FEEDBACK LOOP'
+      AND special_predicates LIKE '%runtime=native%';
+  --disable_query_log
+  if ($access_pass == 2)
+  {
+    --enable_query_log
+    SELECT COUNT(*)=1 AS fullscan_deadline_target FROM plan_table
+      WHERE statement_id='deadline' AND operator='GRAPH FEEDBACK LOOP'
+        AND special_predicates LIKE '%access=full-scan%';
+    --disable_query_log
+  }
+  if ($access_pass == 1)
+  {
+    --enable_query_log
+    SELECT COUNT(*)=1 AS indexed_deadline_target FROM plan_table
+      WHERE statement_id='deadline' AND operator='GRAPH FEEDBACK LOOP'
+        AND special_predicates LIKE '%access=index%';
+    --disable_query_log
+  }
+  --enable_query_log
+  PREPARE graph_deadline FROM
+    'SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH (a IS person WHERE a.id=?)-[e IS knows]->{1,2}(b IS person) COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g';
+  SET @seed=1;
+  EXECUTE graph_deadline USING @seed;
+  --disable_query_log
+  connection deadline_admin;
+  SET ob_global_debug_sync='reset';
+  SET ob_global_debug_sync='DAS_GRAPH_EXPAND_AFTER_EDGE_ROW signal graph_deadline_reached wait_for graph_deadline_resume timeout 30000000 execute 1';
+  SET ob_global_debug_sync='DAS_GRAPH_EXPAND_AFTER_ERROR_CLEANUP signal graph_deadline_cleaned execute 1';
+  connection default;
+  --enable_query_log
+  # No SET_TP error injection and no KILL: expire the real statement deadline
+  # while a checked live DAS cursor is paused, then resume it. This proves the
+  # runtime status/cleanup path, not merely planning-time timeout propagation.
+  SET ob_query_timeout=5000000;
+  send EXECUTE graph_deadline USING @seed;
+  --disable_query_log
+  connection deadline_admin;
+  let $wait_start=query_get_value(select current_timestamp(6) as ts, ts, 1);
+  SET ob_global_debug_sync='NOW wait_for graph_deadline_reached timeout 30000000';
+  let $wait_timed_out=`select timestampdiff(microsecond,'$wait_start',current_timestamp(6)) >= 29000000`;
+  if ($wait_timed_out)
+  {
+    die graph deadline did not reach a live DAS cursor;
+  }
+  # Six seconds after the cursor signal is later than its five-second deadline,
+  # independent of optimizer speed or graph throughput.
+  sleep 6;
+  SET ob_global_debug_sync='NOW signal graph_deadline_resume';
+  let $wait_start=query_get_value(select current_timestamp(6) as ts, ts, 1);
+  SET ob_global_debug_sync='NOW wait_for graph_deadline_cleaned timeout 30000000';
+  let $wait_timed_out=`select timestampdiff(microsecond,'$wait_start',current_timestamp(6)) >= 29000000`;
+  if ($wait_timed_out)
+  {
+    die graph deadline did not pass the DAS cleanup invariant;
+  }
+  SET ob_global_debug_sync='reset';
+  connection default;
+  --enable_query_log
+  --error 4012
+  reap;
+  # Same connection and prepared plan recover, including a different binding.
+  SET ob_query_timeout=30000000;
+  EXECUTE graph_deadline USING @seed;
+  SET @seed=5;
+  EXECUTE graph_deadline USING @seed;
+  SET @seed=1;
+  EXECUTE graph_deadline USING @seed;
+  DEALLOCATE PREPARE graph_deadline;
+  --disable_query_log
+  dec $access_pass;
+}
+connection deadline_admin;
+SET ob_global_debug_sync='reset';
+disconnect deadline_admin;
+connection default;
+SET optimizer_dynamic_sampling=@saved_optimizer_dynamic_sampling;
+SET ob_query_timeout=@saved_ob_query_timeout;
+eval ALTER SYSTEM SET debug_sync_timeout='$saved_debug_sync_timeout';
+--enable_query_log
+DROP TABLE plan_table;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;
