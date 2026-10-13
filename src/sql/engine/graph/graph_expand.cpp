@@ -31,6 +31,27 @@ using namespace share::schema;
 namespace sql
 {
 
+int GraphEdgePayload::deep_copy(const GraphEdgePayload &source,
+                                ObIAllocator &allocator)
+{
+  int ret = OB_SUCCESS;
+  values_.reset();
+  if (source.values_.count_ == 0) {
+  } else if (OB_UNLIKELY(!source.values_.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    const int64_t size = source.values_.get_deep_copy_size();
+    char *buffer = static_cast<char *>(allocator.alloc(size));
+    int64_t pos = 0;
+    if (OB_ISNULL(buffer)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_FAIL(values_.deep_copy(source.values_, buffer, size, pos))) {
+      LOG_WARN("failed to retain graph edge payload", K(ret), K(size));
+    }
+  }
+  return ret;
+}
+
 // Conservative fixed-memory reserves for container bookkeeping and identity
 // buffers; variable-length ObObj payloads are accounted by identity_allocator_.
 static constexpr int64_t GRAPH_EXPAND_INPUT_MEMORY_RESERVE_BYTES = 128;
@@ -106,7 +127,8 @@ bool GraphExpandAccessDesc::is_valid() const
 bool supports_basic_native_graph_feedback(
     const GraphPathDesc &path_desc,
     const GraphExpandAccessDesc &access_desc,
-    int64_t output_expr_count)
+    int64_t output_expr_count,
+    int64_t payload_expr_count)
 {
   bool supported = path_desc.is_valid() && access_desc.is_valid();
   if (supported) {
@@ -115,9 +137,10 @@ bool supports_basic_native_graph_feedback(
     supported = path_desc.source_element_id_ == path_desc.target_element_id_
         && path_desc.row_shape_ == GraphPathRowShape::PER_MATCH
         && path_desc.path_mode_ == GraphPathMode::WALK
-        && !path_desc.need_path_
+        && (!path_desc.need_path_ || payload_expr_count > 0)
         && access_desc.source_table_id_ == access_desc.target_table_id_
-        && output_expr_count == fixed_output_count;
+        && payload_expr_count >= 0
+        && output_expr_count == fixed_output_count + payload_expr_count;
   }
   return supported;
 }
@@ -872,6 +895,8 @@ int GraphExpand::stabilize_edge_page()
                                           stable.edge_identity_))) {
     } else if (OB_FAIL(deep_copy_identity(edge_page_.at(i).target_identity_,
                                           stable.target_identity_))) {
+    } else if (OB_FAIL(stable.payload_.deep_copy(edge_page_.at(i).payload_,
+                                                identity_allocator_))) {
     } else {
       edge_page_.at(i) = stable;
     }
@@ -1215,6 +1240,7 @@ int GraphExpand::get_next_row(GraphExpandOutput &output)
                 output.path_state_id_ = input.path_state_id_;
                 output.edge_identity_ = edge.edge_identity_;
                 output.target_identity_ = edge.target_identity_;
+                output.edge_payload_ = edge.payload_;
                 ++stats_.output_states_;
                 return OB_SUCCESS;
               }
@@ -1230,6 +1256,7 @@ int GraphExpand::get_next_row(GraphExpandOutput &output)
                 output.path_state_id_ = input.path_state_id_;
                 output.edge_identity_ = edge.edge_identity_;
                 output.target_identity_ = edge.target_identity_;
+                output.edge_payload_ = edge.payload_;
                 ++stats_.output_states_;
                 return OB_SUCCESS;
               }

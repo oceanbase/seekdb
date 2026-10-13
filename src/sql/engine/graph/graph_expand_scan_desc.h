@@ -55,6 +55,9 @@ public:
   bool need_check_output_datum_{false};
   ExprFixedArray startup_filters_;
   ExprFixedArray filters_;
+  // Generated JSON_ARRAY_APPEND expressions; native access evaluates only
+  // argument 2 (the edge value), never the recursive accumulator argument.
+  ExprFixedArray payload_exprs_;
   ObTableScanCtDef owned_ctdef_;
   // Codegen-owned backing used before plan serialization. This pointer is
   // deliberately not serialized; deserialized plans use owned_ctdef_.

@@ -1218,6 +1218,23 @@ int ObStaticEngineCG::generate_spec(GraphFeedbackLoopLogOp &op,
                K(target_scan_op_id));
     }
   }
+  // These expressions are also owned by the recursive child. Do not register
+  // them as feedback-loop calc expressions: native DAS evaluates just their
+  // edge-value argument and invalidates that subtree for every scanned edge.
+  // get_native_runtime_exprs() separately retains them in the DFO frame.
+  ObArray<ObRawExpr *> payload_raw_exprs;
+  if (OB_SUCC(ret) && OB_FAIL(spec.get_path_payload_exprs().reserve(
+                                 op.get_path_payload_exprs().count()))) {
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < op.get_path_payload_exprs().count(); ++i) {
+    ObExpr *expr = nullptr;
+    if (OB_FAIL(ObStaticEngineExprCG::generate_rt_expr(
+            *op.get_path_payload_exprs().at(i), payload_raw_exprs, expr))) {
+    } else if (OB_ISNULL(expr)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(spec.get_path_payload_exprs().push_back(expr))) {
+    }
+  }
   return ret;
 }
 

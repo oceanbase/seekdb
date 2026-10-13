@@ -376,7 +376,68 @@ bool GraphFeedbackLoopLogOp::can_use_basic_native_runtime() const
   return anchor != nullptr && native_step_supported_
       && supports_basic_native_graph_feedback(
              path_desc_, expand_access_desc_,
-             anchor->get_output_exprs().count());
+             anchor->get_output_exprs().count(), path_payload_exprs_.count());
+}
+
+int GraphFeedbackLoopLogOp::initialize_path_payloads(ObLogTableScan &edge_scan)
+{
+  int ret = OB_SUCCESS;
+  path_payload_exprs_.reuse();
+  const ObSelectStmt *stmt = static_cast<const ObSelectStmt *>(get_stmt());
+  const ObSelectStmt *step = stmt == nullptr ? nullptr : stmt->get_set_query(1);
+  const int64_t payload_begin = GRAPH_FEEDBACK_DEPTH_COLUMN_COUNT
+      + expand_access_desc_.source_key_count_ + expand_access_desc_.target_key_count_;
+  if (!native_step_supported_ || path_desc_.path_mode_ != GraphPathMode::WALK
+      || path_desc_.row_shape_ != GraphPathRowShape::PER_MATCH) {
+  } else if (OB_ISNULL(step)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    for (int64_t i = payload_begin; OB_SUCC(ret) && native_step_supported_
+         && i < step->get_select_item_size(); ++i) {
+      ObRawExpr *expr = nullptr;
+      ObArray<ObRawExpr *> columns;
+      if (OB_FAIL(ObRawExprUtils::erase_inner_added_exprs(
+              step->get_select_item(i).expr_, expr))) {
+      }
+      // Recursive CTE select items carry a column conversion to the declared
+      // accumulator type. Only bypass the identity JSON-to-JSON conversion;
+      // other conversions must retain the relational execution semantics.
+      if (OB_SUCC(ret) && expr != nullptr && expr->get_expr_type() == T_FUN_COLUMN_CONV
+          && expr->get_param_count() > 4 && expr->get_param_expr(4) != nullptr
+          && expr->get_result_type().get_type() == ObJsonType
+          && expr->get_param_expr(4)->get_result_type().get_type() == ObJsonType) {
+        expr = expr->get_param_expr(4);
+      }
+      if (OB_FAIL(ret)) {
+      } else if (expr == nullptr || expr->get_expr_type() != T_FUN_SYS_JSON_ARRAY_APPEND
+                 || expr->get_param_count() != 3) {
+        native_step_supported_ = false;
+      } else {
+        ObRawExpr *value = expr->get_param_expr(2);
+        if (value == nullptr || !value->is_deterministic()
+            || value->has_flag(CNT_DYNAMIC_PARAM)) {
+          native_step_supported_ = false;
+        } else if (OB_FAIL(ObRawExprUtils::extract_column_exprs(value, columns))) {
+        }
+        for (int64_t j = 0; OB_SUCC(ret) && native_step_supported_
+             && j < columns.count(); ++j) {
+          native_step_supported_ = columns.at(j)->is_column_ref_expr()
+              && static_cast<ObColumnRefRawExpr *>(columns.at(j))->get_table_id()
+                  == edge_scan.get_table_id();
+          if (native_step_supported_
+              && OB_FAIL(edge_scan.add_runtime_access_expr(columns.at(j)))) {
+          }
+        }
+        if (OB_SUCC(ret) && native_step_supported_
+            && OB_FAIL(path_payload_exprs_.push_back(expr))) {
+        }
+      }
+    }
+  }
+  if (!native_step_supported_) {
+    path_payload_exprs_.reuse();
+  }
+  return ret;
 }
 
 int GraphFeedbackLoopLogOp::initialize_expand_access()
@@ -427,6 +488,8 @@ int GraphFeedbackLoopLogOp::initialize_expand_access()
     if (OB_FAIL(retain_native_edge_range_filters(
             *edge_scan, *target_scan, expand_access_desc_, native_step_supported_))) {
       LOG_WARN("failed to retain graph edge range filters", K(ret));
+    } else if (OB_FAIL(initialize_path_payloads(*edge_scan))) {
+      LOG_WARN("failed to bind native graph path payloads", K(ret));
     }
   }
   return ret;
@@ -494,6 +557,9 @@ int GraphFeedbackLoopLogOp::get_native_runtime_exprs(
     ObIArray<ObRawExpr *> &exprs)
 {
   int ret = OB_SUCCESS;
+  if (OB_FAIL(append_array_no_dup(exprs, path_payload_exprs_))) {
+    LOG_WARN("failed to register graph path payload expressions", K(ret));
+  }
   ObLogTableScan *scans[] = {
       find_internal_scan(get_child(first_child), GRAPH_SEED_VERTEX_ALIAS),
       find_internal_scan(get_child(second_child), GRAPH_STEP_EDGE_ALIAS),

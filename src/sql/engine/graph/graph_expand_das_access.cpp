@@ -28,6 +28,9 @@
 #include "sql/engine/table/ob_table_scan_op.h"
 #include "sql/optimizer/ob_table_location.h"
 #include "sql/session/ob_sql_session_info.h"
+#include "sql/engine/expr/ob_expr_json_func_helper.h"
+#include "share/ob_json_access_utils.h"
+#include "lib/utility/ob_smart_call.h"
 
 namespace oceanbase
 {
@@ -37,6 +40,23 @@ namespace sql
 
 namespace
 {
+
+int clear_payload_eval_flags(ObExpr &expr, ObEvalCtx &ctx)
+{
+  int ret = OB_SUCCESS;
+  // DAS owns column datums. Only invalidate calculated values above those
+  // leaves; nested JSON_OBJECT/CAST expressions must not reuse the last edge.
+  if (expr.arg_cnt_ > 0) {
+    expr.clear_evaluated_flag(ctx);
+    for (uint32_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
+      if (OB_ISNULL(expr.args_[i])) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(SMART_CALL(clear_payload_eval_flags(*expr.args_[i], ctx)))) {
+      }
+    }
+  }
+  return ret;
+}
 
 int close_das_tasks(ObDASRef &das_ref, int ret)
 {
@@ -150,6 +170,7 @@ int bind_column_exprs(const ObDASScanCtDef &ctdef,
 GraphExpandScanDesc::GraphExpandScanDesc(ObIAllocator &allocator)
     : startup_filters_(&allocator),
       filters_(&allocator),
+      payload_exprs_(&allocator),
       owned_ctdef_(allocator)
 {
 }
@@ -204,6 +225,7 @@ OB_DEF_SERIALIZE(GraphExpandScanDesc)
               need_check_output_datum_,
               startup_filters_,
               filters_,
+              payload_exprs_,
               tsc_ctdef);
   return ret;
 }
@@ -222,6 +244,7 @@ OB_DEF_DESERIALIZE(GraphExpandScanDesc)
               need_check_output_datum_,
               startup_filters_,
               filters_,
+              payload_exprs_,
               owned_ctdef_);
   return ret;
 }
@@ -240,6 +263,7 @@ OB_DEF_SERIALIZE_SIZE(GraphExpandScanDesc)
               need_check_output_datum_,
               startup_filters_,
               filters_,
+              payload_exprs_,
               tsc_ctdef);
   return len;
 }
@@ -1212,6 +1236,44 @@ int GraphExpandDasAccess::materialize_edge(GraphExpandEdge &edge,
   return ret;
 }
 
+int GraphExpandDasAccess::materialize_edge_payload(GraphEdgePayload &payload)
+{
+  int ret = OB_SUCCESS;
+  const GraphExpandScanDesc *desc = edge_binding_.scan_desc_;
+  if (OB_ISNULL(desc)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (!desc->payload_exprs_.empty()) {
+    MultimodeAlloctor json_allocator(identity_page_allocator_);
+    const int64_t count = desc->payload_exprs_.count();
+    ObObj *cells = static_cast<ObObj *>(identity_page_allocator_.alloc(sizeof(ObObj) * count));
+    if (OB_ISNULL(cells)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      new(cells) ObObj[count];
+      payload.values_.assign(cells, count);
+      for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+        ObExpr *append_expr = desc->payload_exprs_.at(i);
+        ObIJsonBase *value = nullptr;
+        ObString binary;
+        if (OB_ISNULL(append_expr) || append_expr->arg_cnt_ != 3
+            || OB_ISNULL(append_expr->args_[2])) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(clear_payload_eval_flags(*append_expr->args_[2], eval_ctx_))) {
+        } else if (OB_FAIL(ObJsonExprHelper::get_json_val(
+                       *append_expr, eval_ctx_, &json_allocator, 2, value))) {
+        } else if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(
+                       value, binary, &identity_page_allocator_))) {
+        } else {
+          // This is one encoded JSON value, including SQL NULL as JSON null.
+          // It is not a serialized identity used for graph equality.
+          cells[i].set_varbinary(binary);
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 int GraphExpandDasAccess::validate_edge_scan_request(
     const ObIArray<GraphElementIdentity> &sources,
     GraphPathDirection direction,
@@ -1661,7 +1723,8 @@ int GraphExpandDasAccess::get_edge_page(
           // iterator, not a global seek key. Tablet task order need not match
           // edge rowkey order, and no output ordering is exposed without an
           // outer ORDER BY.
-          if (OB_FAIL(edges.push_back(edge))) {
+          if (OB_FAIL(materialize_edge_payload(edge.payload_))) {
+          } else if (OB_FAIL(edges.push_back(edge))) {
           } else if (OB_FAIL(save_edge_cursor(edge.edge_identity_))) {
           }
         }

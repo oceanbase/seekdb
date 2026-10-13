@@ -155,6 +155,7 @@ private:
   int save_edge_cursor(const GraphElementIdentity &identity);
   int edge_row_has_null_endpoint(bool &has_null) const;
   int materialize_edge(GraphExpandEdge &edge, bool &matches);
+  int materialize_edge_payload(GraphEdgePayload &payload);
   int validate_edge_scan_request(
       const common::ObIArray<GraphElementIdentity> &sources,
       GraphPathDirection direction,

@@ -132,14 +132,15 @@ public:
                "edge_next", common::ObArrayWrap<uint64_t>(edge_next_columns_, target_key_count_));
 };
 
-// The first native feedback runtime materializes only the generated recursive
-// row's fixed fields: hop count, source key and current key. Keep this predicate
+// Native feedback materializes hop count, source/current keys and supported
+// ordered edge-value arrays in the generated recursive row. Keep this predicate
 // shared by EXPLAIN and execution so a plan never advertises a runtime that the
 // physical operator will reject.
 bool supports_basic_native_graph_feedback(
     const GraphPathDesc &path_desc,
     const GraphExpandAccessDesc &access_desc,
-    int64_t output_expr_count);
+    int64_t output_expr_count,
+    int64_t payload_expr_count = 0);
 
 // Distinguishes the anchor-existence lookup from the target-existence lookup
 // performed after an edge page. Access implementations may share machinery,

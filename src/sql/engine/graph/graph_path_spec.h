@@ -17,6 +17,7 @@
 #pragma once
 
 #include "common/rowkey/ob_rowkey.h"
+#include "common/row/ob_row.h"
 #include "lib/ob_define.h"
 #include "lib/utility/utility.h"
 
@@ -147,6 +148,17 @@ struct GraphElementIdentity
   TO_STRING_KV(K_(graph_id), K_(element_id), K_(rowkey));
 };
 
+// Non-owning row of projected edge values, encoded individually as binary JSON
+// (not element identities used for equality). The producing DAS page owns its
+// initial backing; each consumer copies it into its query work-area arena
+// before that page or frontier can be reused. Empty payloads allocate nothing.
+struct GraphEdgePayload
+{
+  int deep_copy(const GraphEdgePayload &source, common::ObIAllocator &allocator);
+  common::ObNewRow values_{};
+  TO_STRING_KV(K_(values));
+};
+
 // Represents one node in a query-local, parent-linked path-state store.
 // path_state_id_ is a store key, not an encoded path: following
 // parent_path_state_id_ back to the root and reversing the nodes reconstructs
@@ -173,6 +185,7 @@ struct GraphPathState
   int64_t hop_ = 0;
   GraphElementIdentity current_identity_{};
   GraphElementIdentity incoming_edge_identity_{};
+  GraphEdgePayload incoming_edge_payload_{};
   TO_STRING_KV(K_(binding_id), K_(path_state_id), K_(parent_path_state_id),
                K_(hop), K_(current_identity), K_(incoming_edge_identity));
 };
@@ -201,6 +214,7 @@ struct GraphExpandOutput
   int64_t path_state_id_ = GRAPH_INVALID_PATH_STATE_ID;
   GraphElementIdentity edge_identity_{};
   GraphElementIdentity target_identity_{};
+  GraphEdgePayload edge_payload_{};
   TO_STRING_KV(K_(binding_id), K_(path_state_id), K_(edge_identity),
                K_(target_identity));
 };
@@ -212,6 +226,7 @@ struct GraphExpandEdge
   GraphElementIdentity source_identity_{};
   GraphElementIdentity edge_identity_{};
   GraphElementIdentity target_identity_{};
+  GraphEdgePayload payload_{};
   TO_STRING_KV(K_(source_identity), K_(edge_identity), K_(target_identity));
 };
 

@@ -42,7 +42,8 @@ public:
                 const GraphExpandAccessDesc &access_desc) const;
   bool supports_basic_native_output(
       const GraphPathDesc &path_desc,
-      const GraphExpandAccessDesc &access_desc) const;
+      const GraphExpandAccessDesc &access_desc,
+      int64_t payload_count) const;
 
   int64_t depth_expr_index_{0};
   int64_t source_key_expr_begin_{0};
@@ -188,6 +189,7 @@ public:
   const GraphExpandScanDesc &get_target_scan_desc() const
   { return target_scan_desc_; }
   ExprFixedArray &get_seed_key_exprs() { return seed_key_exprs_; }
+  ExprFixedArray &get_path_payload_exprs() { return edge_scan_desc_.payload_exprs_; }
   const ExprFixedArray &get_seed_key_exprs() const { return seed_key_exprs_; }
   bool has_valid_seed_key_exprs() const
   {
@@ -202,7 +204,7 @@ public:
   {
     return native_step_supported_
         && output_row_desc_.supports_basic_native_output(
-        path_desc_, expand_access_desc_);
+        path_desc_, expand_access_desc_, edge_scan_desc_.payload_exprs_.count());
   }
 
 private:

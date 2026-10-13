@@ -165,6 +165,8 @@ int GraphPathStateStore::add_child(const GraphExpandOutput &extension,
                                    child.current_identity_))) {
     } else if (OB_FAIL(deep_copy_identity(extension.edge_identity_,
                                           child.incoming_edge_identity_))) {
+    } else if (OB_FAIL(child.incoming_edge_payload_.deep_copy(
+                   extension.edge_payload_, identity_allocator_))) {
     } else if (OB_FAIL(append_state(child, path_state_id))) {
     }
   }

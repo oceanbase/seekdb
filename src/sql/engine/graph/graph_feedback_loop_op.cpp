@@ -22,6 +22,8 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "share/ob_errno.h"
 #include "sql/engine/table/ob_table_scan_op.h"
+#include "sql/engine/expr/ob_expr_json_func_helper.h"
+#include "share/ob_json_access_utils.h"
 
 #include <algorithm>
 #include <utility>
@@ -98,13 +100,14 @@ bool GraphFeedbackRowDesc::is_valid(
 
 bool GraphFeedbackRowDesc::supports_basic_native_output(
     const GraphPathDesc &path_desc,
-    const GraphExpandAccessDesc &access_desc) const
+    const GraphExpandAccessDesc &access_desc,
+    int64_t payload_count) const
 {
   return is_valid(path_desc, access_desc)
       && trail_key_expr_count_ == 0
-      && payload_expr_count_ == 0
+      && payload_expr_count_ == payload_count
       && supports_basic_native_graph_feedback(
-             path_desc, access_desc, output_expr_count_);
+             path_desc, access_desc, output_expr_count_, payload_count);
 }
 
 namespace
@@ -135,6 +138,7 @@ public:
                 memory_limit),
         frontier_(binding_store_.get_work_area_allocator(), expand_,
                   GRAPH_EXPAND_MAX_INPUT_STATE_COUNT, memory_limit),
+        payload_allocator_(binding_store_.get_work_area_allocator()),
         memory_limit_(memory_limit)
   {}
   ~GraphFeedbackRuntime() = default;
@@ -277,9 +281,8 @@ public:
     return ret;
   }
 
-  // Produces a complete recursive row for WALK queries that need only the hop
-  // count and endpoint keys. The general path cursor above remains available
-  // to TRAIL and payload writers added by later increments.
+  // Produces a recursive WALK row with hop count, endpoint keys and optional
+  // ordered edge arrays. TRAIL and per-step rows retain the SQL fallback.
   int get_next_basic_output_row(
       ObOperator &anchor,
       const GraphFeedbackLoopSpec &spec)
@@ -336,6 +339,7 @@ public:
 
   void reset()
   {
+    payload_allocator_.reset();
     frontier_.reset();
     binding_store_.reset();
     next_output_index_ = 0;
@@ -390,9 +394,8 @@ private:
     return ret;
   }
 
-  // Materializes the complete recursive row for the initial native subset:
-  // hop count plus source/current vertex keys. TRAIL history and JSON payload
-  // are rejected until their dedicated writers are installed.
+  // Materializes fixed fields and ordered payload arrays from path-local state.
+  // Shared adjacency reads never merge the histories of different paths.
   int materialize_basic_output_row(
       const GraphFeedbackLoopSpec &spec,
       const ObIArray<GraphPathState> &path)
@@ -424,9 +427,51 @@ private:
       } else if (OB_FAIL(write_output_key(
                      output_exprs, desc.current_key_expr_begin_,
                      desc.current_key_expr_count_, leaf.current_identity_))) {
+      } else if (OB_FAIL(materialize_path_payloads(spec, path))) {
       }
     }
     return ret;
+  }
+
+  int materialize_path_payloads(const GraphFeedbackLoopSpec &spec,
+                                const ObIArray<GraphPathState> &path)
+  {
+    int ret = OB_SUCCESS;
+    payload_allocator_.reuse();
+    const GraphFeedbackRowDesc &desc = spec.get_output_row_desc();
+    for (int64_t column = 0; OB_SUCC(ret) && column < desc.payload_expr_count_; ++column) {
+      ObJsonArray array(&payload_allocator_);
+      // The root has no incoming edge. Walking root-to-leaf preserves order
+      // and repeated edges; SQL's existing zero-hop wrapper handles [] output.
+      for (int64_t hop = 1; OB_SUCC(ret) && hop < path.count(); ++hop) {
+        const ObNewRow &row = path.at(hop).incoming_edge_payload_.values_;
+        ObIJsonBase *value = nullptr;
+        if (OB_UNLIKELY(row.count_ != desc.payload_expr_count_ || row.cells_ == nullptr)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(
+                       &payload_allocator_, row.cells_[column].get_string(),
+                       ObJsonInType::JSON_BIN, ObJsonInType::JSON_TREE, value))) {
+        } else if (OB_FAIL(array.array_append(value))) {
+        }
+      }
+      ObString binary;
+      ObExpr *output = spec.output_union_exprs_.at(desc.payload_expr_begin_ + column);
+      if (OB_SUCC(ret)) {
+        if (OB_ISNULL(output)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (ObJsonExprHelper::is_json_depth_exceed_limit(array.depth())) {
+          ret = OB_ERR_JSON_OUT_OF_DEPTH;
+        } else if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(&array, binary, &payload_allocator_))) {
+        } else if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(
+                       *output, eval_ctx_, output->locate_datum_for_write(eval_ctx_), binary))) {
+        } else {
+          output->set_evaluated_projected(eval_ctx_);
+        }
+      }
+    }
+    cumulative_stats_.peak_path_memory_ = std::max(
+        cumulative_stats_.peak_path_memory_, binding_store_.used_memory());
+    return normalize_work_area_error(ret);
   }
 
   int restore_output_binding(
@@ -536,6 +581,7 @@ private:
   GraphExpandDasAccess access_;
   GraphExpand expand_;
   GraphFeedbackFrontier frontier_;
+  common::ObArenaAllocator payload_allocator_;
   int64_t memory_limit_{0};
   int64_t next_output_index_{0};
   GraphExpandStats cumulative_stats_{};

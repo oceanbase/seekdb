@@ -23,6 +23,7 @@ namespace oceanbase
 {
 namespace sql
 {
+class ObLogTableScan;
 
 // Describes how one feedback iteration reaches the edge table. This is kept on
 // the graph operator instead of being inferred by EXPLAIN from a generic SET
@@ -60,6 +61,8 @@ public:
                              uint64_t &target_scan_op_id) const;
   int get_seed_key_exprs(common::ObIArray<ObRawExpr *> &exprs) const;
   int get_native_runtime_exprs(common::ObIArray<ObRawExpr *> &exprs);
+  const common::ObIArray<ObRawExpr *> &get_path_payload_exprs() const
+  { return path_payload_exprs_; }
   const GraphPathDesc &get_path_desc() const { return path_desc_; }
   const GraphExpandAccessDesc &get_expand_access_desc() const
   { return expand_access_desc_; }
@@ -107,6 +110,8 @@ public:
                        "step access", static_cast<int64_t>(step_access_method_));
 
 private:
+  int initialize_path_payloads(ObLogTableScan &edge_scan);
+  common::ObArray<ObRawExpr *> path_payload_exprs_;
   int get_feedback_exprs(ObIArray<ObRawExpr *> &exprs) const;
   bool can_use_basic_native_runtime() const;
 
