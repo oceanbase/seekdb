@@ -188,6 +188,10 @@ private:
   ObExecContext &exec_ctx_;
   ObEvalCtx &eval_ctx_;
   common::ObIAllocator &work_area_allocator_;
+  // Table-location initialization uses resolver factories which destroy their
+  // temporary objects but leave their storage to an arena. Keep that storage
+  // budgeted and reclaim it after both vertex routers have been destroyed.
+  common::ObArenaAllocator vertex_router_allocator_{work_area_allocator_};
   ObDASRef edge_das_ref_;
   // Materialized edge identities are page-local views. The caller stabilizes
   // them before the next scan_edges() call, when this arena can be reused.

@@ -425,6 +425,7 @@ void GraphExpandDasAccess::destroy_vertex_routers()
     work_area_allocator_.free(target_vertex_router_);
     target_vertex_router_ = nullptr;
   }
+  vertex_router_allocator_.reset();
 }
 
 int GraphExpandDasAccess::get_vertex_router(
@@ -457,7 +458,7 @@ int GraphExpandDasAccess::get_vertex_router(
       LOG_WARN("graph vertex router context is incomplete", K(ret),
                K(sql_ctx), K(session));
     } else {
-      candidate = new(buf) ObTableLocation(work_area_allocator_);
+      candidate = new(buf) ObTableLocation(vertex_router_allocator_);
       for (int64_t i = 0; OB_SUCC(ret) && i < binding.key_count_; ++i) {
         if (OB_FAIL(key_columns.push_back(binding.key_columns_[i]))) {
           LOG_WARN("failed to append graph vertex routing column", K(ret),
