@@ -1194,6 +1194,7 @@ int ObStaticEngineCG::generate_spec(GraphFeedbackLoopLogOp &op,
   uint64_t source_scan_op_id = OB_INVALID_ID;
   uint64_t edge_scan_op_id = OB_INVALID_ID;
   uint64_t target_scan_op_id = OB_INVALID_ID;
+  bool prune_duplicate_states = false;
   UNUSED(in_root_job);
   if (OB_FAIL(generate_recursive_pump_spec(op, spec))) {
   } else if (OB_FAIL(op.get_seed_key_exprs(seed_key_exprs))) {
@@ -1204,10 +1205,13 @@ int ObStaticEngineCG::generate_spec(GraphFeedbackLoopLogOp &op,
   } else if (OB_FAIL(op.get_expand_scan_op_ids(
                  source_scan_op_id, edge_scan_op_id, target_scan_op_id))) {
     LOG_WARN("failed to get graph expand scan operator ids", K(ret));
+  } else if (OB_FAIL(op.can_prune_duplicate_states(prune_duplicate_states))) {
+    LOG_WARN("failed to check graph duplicate-insensitive consumer", K(ret));
   } else {
     spec.set_graph_path(op.get_path_desc());
     spec.set_expand_access(op.get_expand_access_desc());
     spec.set_native_step_supported(op.is_native_step_supported());
+    spec.set_prune_duplicate_states(prune_duplicate_states);
     if (OB_FAIL(spec.init_output_row_desc())) {
       LOG_WARN("failed to initialize graph feedback output row", K(ret),
                K(op.get_path_desc()), K(op.get_expand_access_desc()));

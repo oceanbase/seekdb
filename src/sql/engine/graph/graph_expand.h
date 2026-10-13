@@ -43,7 +43,8 @@ static const int64_t GRAPH_EXPAND_MAX_EDGE_PAGE_SIZE = 4096;
 // DECIMAL_INT keys are normalized, while tolerance-compared DOUBLE keys use a
 // type bucket, so bucket selection follows graph endpoint equality. Identities
 // are shallow views: the caller must keep their rowkey backing alive until
-// reset(). Both buckets and entries use the owner's graph work-area allocator.
+// reset(). An optional binding ID separates correlation domains without
+// changing element identity. Both arrays use the owner's graph work area.
 class GraphIdentityIndex final
 {
 public:
@@ -53,10 +54,12 @@ public:
   int init(int64_t expected_count);
   int get_or_insert(const GraphElementIdentity &identity,
                     int64_t &entry_index,
-                    bool &inserted);
+                    bool &inserted,
+                    int64_t binding_id = 0);
   int find(const GraphElementIdentity &identity,
            int64_t &entry_index,
-           bool &found) const;
+           bool &found,
+           int64_t binding_id = 0) const;
   void reset();
   int64_t count() const { return entries_.count(); }
   int64_t used_memory() const
@@ -71,6 +74,8 @@ private:
   struct Entry
   {
     GraphElementIdentity identity_{};
+    // Optional correlation domain; adjacency-only users keep the default zero.
+    int64_t binding_id_{0};
     int64_t next_entry_{-1};
     TO_STRING_KV(K_(identity), K_(next_entry));
   };
@@ -78,7 +83,9 @@ private:
   int calc_compatible_hash(const GraphElementIdentity &identity,
                            uint64_t &hash) const;
   int get_bucket(const GraphElementIdentity &identity,
-                 int64_t &bucket) const;
+                 int64_t &bucket,
+                 int64_t binding_id) const;
+  int grow_buckets();
 
 private:
   common::ObArray<int64_t> bucket_heads_;

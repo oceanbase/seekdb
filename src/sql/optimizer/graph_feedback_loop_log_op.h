@@ -38,8 +38,9 @@ enum class GraphFeedbackAccessMethod : int8_t
 
 // Logical controller for a bounded graph path. The first child produces seed
 // path states and the second child performs one expansion step over the current
-// frontier. Unlike ObLogSet, this operator never applies relational set
-// distinctness: both WALK and TRAIL retain bag multiplicity between paths.
+// frontier. WALK and TRAIL retain path multiplicity by default. An enclosing
+// DISTINCT may authorize native WALK state pruning only after a final-plan
+// proof that no intervening operation can observe path copies or history.
 class GraphFeedbackLoopLogOp final : public ObLogicalOperator
 {
 public:
@@ -56,6 +57,9 @@ public:
   }
 
   int initialize_expand_access();
+  // Final-plan proof: only an enclosing DISTINCT across deterministic,
+  // multiplicity-insensitive relational operators can discard path copies.
+  int can_prune_duplicate_states(bool &can_prune);
   int get_expand_scan_op_ids(uint64_t &source_scan_op_id,
                              uint64_t &edge_scan_op_id,
                              uint64_t &target_scan_op_id) const;

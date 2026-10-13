@@ -1,0 +1,323 @@
+CREATE TABLE gr_v (id INT PRIMARY KEY,name VARCHAR(20));
+CREATE TABLE gr_e (id INT PRIMARY KEY,src INT,dst INT,kind INT);
+INSERT INTO gr_v VALUES (1,'A'),(2,'B'),(3,'C'),(4,'D'),(5,'isolated');
+INSERT INTO gr_e VALUES (10,1,2,1),(11,1,2,1),(12,1,3,1),
+(13,2,4,1),(14,3,4,1),(15,4,1,1),(16,4,4,1),(17,1,99,1),(18,1,5,2);
+CREATE PROPERTY GRAPH graph_reach
+VERTEX TABLES(gr_v KEY(id) LABEL node PROPERTIES(id,name))
+EDGE TABLES(gr_e KEY(id) SOURCE KEY(src) REFERENCES gr_v(id)
+DESTINATION KEY(dst) REFERENCES gr_v(id) LABEL link PROPERTIES(id,kind));
+drop table if exists plan_table;
+create table plan_table (
+statement_id varchar(30),
+plan_id int,
+gmt_create timestamp,
+remarks varchar(4000),
+operator varchar(255),
+options varchar(255),
+object_node varchar(40),
+object_owner varchar(128),
+object_name varchar(128),
+object_alias varchar(261),
+object_instance int,
+object_type varchar(30),
+optimizer varchar(4000),
+search_columns int,
+id int,
+parent_id int,
+depth int,
+position int,
+is_last_child int,
+cost int,
+cardinality int,
+bytes int,
+rowset int,
+other_tag varchar(4000),
+partition_start varchar(4000),
+partition_stop varchar(4000),
+partition_id int,
+other varchar(4000),
+distribution varchar(64),
+cpu_cost int,
+io_cost int,
+temp_space int,
+access_predicates varchar(4000),
+filter_predicates varchar(4000),
+startup_predicates varchar(4000),
+projection varchar(4000),
+special_predicates longtext,
+time int,
+qblock_name varchar(128),
+other_xml varchar(4000)
+);
+ALTER TABLE plan_table MODIFY other_xml LONGTEXT;
+CREATE TABLE gr_expected AS
+WITH RECURSIVE w(source,endpoint,hops) AS (
+SELECT id,id,0 FROM gr_v WHERE id IN (1,2)
+UNION ALL
+SELECT w.source,v.id,w.hops+1 FROM w JOIN gr_e e ON e.src=w.endpoint
+JOIN gr_v v ON v.id=e.dst WHERE e.kind=1 AND w.hops<4
+) SELECT source,endpoint,hops,COUNT(*) AS paths FROM w GROUP BY source,endpoint,hops;
+DELETE FROM plan_table;
+EXPLAIN INTO plan_table SET statement_id='reach'
+  SELECT DISTINCT g.* FROM GRAPH_TABLE(graph_reach MATCH
+(a IS node WHERE a.id IN (1,2))-[e IS link WHERE e.kind=1]->{0,4}(b IS node)
+COLUMNS(a.id AS source,b.id AS endpoint,COUNT(e.id) AS hops)) g;
+SELECT COUNT(*)=1 AS prunes_per_binding_vertex_hop FROM plan_table
+WHERE statement_id='reach' AND operator='GRAPH FEEDBACK LOOP'
+   AND special_predicates LIKE '%states=binding_vertex_hop%';
+prunes_per_binding_vertex_hop
+1
+CREATE TABLE gr_actual AS SELECT DISTINCT g.* FROM GRAPH_TABLE(graph_reach MATCH
+(a IS node WHERE a.id IN (1,2))-[e IS link WHERE e.kind=1]->{0,4}(b IS node)
+COLUMNS(a.id AS source,b.id AS endpoint,COUNT(e.id) AS hops)) g;
+SELECT COUNT(*) AS unexpected_reachable FROM gr_actual a LEFT JOIN gr_expected e
+ON a.source=e.source AND a.endpoint=e.endpoint AND a.hops=e.hops WHERE e.source IS NULL;
+unexpected_reachable
+0
+SELECT COUNT(*) AS missing_reachable FROM gr_expected e LEFT JOIN gr_actual a
+ON a.source=e.source AND a.endpoint=e.endpoint AND a.hops=e.hops WHERE a.source IS NULL;
+missing_reachable
+0
+DROP TABLE gr_actual;
+CREATE TABLE gr_actual AS SELECT source,endpoint,hops,COUNT(*) AS paths
+FROM GRAPH_TABLE(graph_reach MATCH
+(a IS node WHERE a.id IN (1,2))-[e IS link WHERE e.kind=1]->{0,4}(b IS node)
+COLUMNS(a.id AS source,b.id AS endpoint,COUNT(e.id) AS hops)) g
+GROUP BY source,endpoint,hops;
+SELECT COUNT(*) AS changed_bag_counts FROM gr_expected e LEFT JOIN gr_actual a
+ON a.source=e.source AND a.endpoint=e.endpoint AND a.hops=e.hops
+WHERE a.source IS NULL OR a.paths!=e.paths;
+changed_bag_counts
+0
+DROP TABLE gr_actual;
+SELECT DISTINCT g.* FROM GRAPH_TABLE(graph_reach MATCH
+(a IS node WHERE a.id=1)-[e IS link WHERE e.kind=1]->{3,4}(b IS node WHERE b.id=1)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g ORDER BY hops;
+endpoint	hops
+1	3
+1	4
+SELECT DISTINCT g.* FROM GRAPH_TABLE(graph_reach MATCH
+(a IS node WHERE a.id=4)<-[e IS link WHERE e.kind=1]-{0,3}(b IS node WHERE b.id=1)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g ORDER BY hops;
+endpoint	hops
+1	2
+1	3
+PREPARE reachable_cached FROM 'SELECT DISTINCT g.* FROM GRAPH_TABLE(graph_reach MATCH (a IS node WHERE a.id=?)-[e IS link WHERE e.kind=?]->{0,3}(b IS node) COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g ORDER BY hops,endpoint';
+SET @seed=1,@kind=1;
+EXECUTE reachable_cached USING @seed,@kind;
+endpoint	hops
+1	0
+2	1
+3	1
+4	2
+1	3
+4	3
+SET @seed=1,@kind=2;
+EXECUTE reachable_cached USING @seed,@kind;
+endpoint	hops
+1	0
+5	1
+DEALLOCATE PREPARE reachable_cached;
+CREATE INDEX gr_out ON gr_e(src,kind,dst);
+CREATE INDEX gr_in ON gr_e(dst,kind,src);
+DELETE FROM plan_table;
+EXPLAIN INTO plan_table SET statement_id='reach'
+  SELECT DISTINCT g.* FROM GRAPH_TABLE(graph_reach MATCH
+(a IS node WHERE a.id IN (1,2))-[e IS link WHERE e.kind=1]->{0,4}(b IS node)
+COLUMNS(a.id AS source,b.id AS endpoint,COUNT(e.id) AS hops)) g;
+SELECT COUNT(*)=1 AS prunes_per_binding_vertex_hop FROM plan_table
+WHERE statement_id='reach' AND operator='GRAPH FEEDBACK LOOP'
+   AND special_predicates LIKE '%states=binding_vertex_hop%';
+prunes_per_binding_vertex_hop
+1
+CREATE TABLE gr_actual AS SELECT DISTINCT g.* FROM GRAPH_TABLE(graph_reach MATCH
+(a IS node WHERE a.id IN (1,2))-[e IS link WHERE e.kind=1]->{0,4}(b IS node)
+COLUMNS(a.id AS source,b.id AS endpoint,COUNT(e.id) AS hops)) g;
+SELECT COUNT(*) AS unexpected_reachable FROM gr_actual a LEFT JOIN gr_expected e
+ON a.source=e.source AND a.endpoint=e.endpoint AND a.hops=e.hops WHERE e.source IS NULL;
+unexpected_reachable
+0
+SELECT COUNT(*) AS missing_reachable FROM gr_expected e LEFT JOIN gr_actual a
+ON a.source=e.source AND a.endpoint=e.endpoint AND a.hops=e.hops WHERE a.source IS NULL;
+missing_reachable
+0
+DROP TABLE gr_actual;
+CREATE TABLE gr_actual AS SELECT source,endpoint,hops,COUNT(*) AS paths
+FROM GRAPH_TABLE(graph_reach MATCH
+(a IS node WHERE a.id IN (1,2))-[e IS link WHERE e.kind=1]->{0,4}(b IS node)
+COLUMNS(a.id AS source,b.id AS endpoint,COUNT(e.id) AS hops)) g
+GROUP BY source,endpoint,hops;
+SELECT COUNT(*) AS changed_bag_counts FROM gr_expected e LEFT JOIN gr_actual a
+ON a.source=e.source AND a.endpoint=e.endpoint AND a.hops=e.hops
+WHERE a.source IS NULL OR a.paths!=e.paths;
+changed_bag_counts
+0
+DROP TABLE gr_actual;
+SELECT DISTINCT g.* FROM GRAPH_TABLE(graph_reach MATCH
+(a IS node WHERE a.id=1)-[e IS link WHERE e.kind=1]->{3,4}(b IS node WHERE b.id=1)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g ORDER BY hops;
+endpoint	hops
+1	3
+1	4
+SELECT DISTINCT g.* FROM GRAPH_TABLE(graph_reach MATCH
+(a IS node WHERE a.id=4)<-[e IS link WHERE e.kind=1]-{0,3}(b IS node WHERE b.id=1)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g ORDER BY hops;
+endpoint	hops
+1	2
+1	3
+PREPARE reachable_cached FROM 'SELECT DISTINCT g.* FROM GRAPH_TABLE(graph_reach MATCH (a IS node WHERE a.id=?)-[e IS link WHERE e.kind=?]->{0,3}(b IS node) COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g ORDER BY hops,endpoint';
+SET @seed=1,@kind=1;
+EXECUTE reachable_cached USING @seed,@kind;
+endpoint	hops
+1	0
+2	1
+3	1
+4	2
+1	3
+4	3
+SET @seed=1,@kind=2;
+EXECUTE reachable_cached USING @seed,@kind;
+endpoint	hops
+1	0
+5	1
+DEALLOCATE PREPARE reachable_cached;
+duplicate_sensitive_consumers_keep_paths
+DELETE FROM plan_table;
+EXPLAIN INTO plan_table SET statement_id='bag'
+SELECT g.* FROM GRAPH_TABLE(graph_reach MATCH
+(a IS node WHERE a.id=1)-[e IS link WHERE e.kind=1]->{0,3}(b IS node)
+COLUMNS(b.id AS endpoint)) g;
+EXPLAIN INTO plan_table SET statement_id='aggregate'
+SELECT DISTINCT endpoint,COUNT(*) AS paths FROM GRAPH_TABLE(graph_reach MATCH
+(a IS node WHERE a.id=1)-[e IS link WHERE e.kind=1]->{0,3}(b IS node)
+COLUMNS(b.id AS endpoint)) g GROUP BY endpoint;
+EXPLAIN INTO plan_table SET statement_id='path'
+SELECT DISTINCT g.* FROM GRAPH_TABLE(graph_reach MATCH
+(a IS node WHERE a.id=1)-[e IS link WHERE e.kind=1]->{0,3}(b IS node)
+COLUMNS(b.id AS endpoint,JSON_ARRAYAGG(e.id) AS edges)) g;
+EXPLAIN INTO plan_table SET statement_id='matchnum'
+SELECT DISTINCT g.* FROM GRAPH_TABLE(graph_reach MATCH
+(a IS node WHERE a.id=1)-[e IS link WHERE e.kind=1]->{0,3}(b IS node)
+COLUMNS(b.id AS endpoint,MATCHNUM() AS m)) g;
+EXPLAIN INTO plan_table SET statement_id='volatile'
+SELECT DISTINCT endpoint,RAND() FROM GRAPH_TABLE(graph_reach MATCH
+(a IS node WHERE a.id=1)-[e IS link WHERE e.kind=1]->{0,3}(b IS node)
+COLUMNS(b.id AS endpoint)) g;
+EXPLAIN INTO plan_table SET statement_id='volatile_filter'
+SELECT DISTINCT endpoint FROM GRAPH_TABLE(graph_reach MATCH
+(a IS node WHERE a.id=1)-[e IS link WHERE e.kind=1]->{0,3}(b IS node)
+COLUMNS(b.id AS endpoint)) g WHERE RAND()>0.5;
+EXPLAIN INTO plan_table SET statement_id='limit'
+SELECT DISTINCT endpoint FROM (SELECT * FROM GRAPH_TABLE(graph_reach MATCH
+(a IS node WHERE a.id=1)-[e IS link WHERE e.kind=1]->{0,3}(b IS node)
+COLUMNS(b.id AS endpoint)) g ORDER BY endpoint LIMIT 3) x;
+SELECT statement_id,COUNT(*)=1 AS keeps_paths FROM plan_table
+WHERE operator='GRAPH FEEDBACK LOOP' AND special_predicates LIKE '%states=paths%'
+ GROUP BY statement_id ORDER BY statement_id;
+statement_id	keeps_paths
+aggregate	1
+bag	1
+limit	1
+matchnum	1
+path	1
+volatile	1
+volatile_filter	1
+SELECT s.score,g.endpoint FROM (SELECT 10 AS score UNION ALL SELECT 20) s,
+LATERAL (SELECT DISTINCT endpoint FROM GRAPH_TABLE(graph_reach MATCH
+(a IS node WHERE a.id=s.score/10)-[e IS link WHERE e.kind=1]->{2}(b IS node)
+COLUMNS(b.id AS endpoint)) g) g ORDER BY score,endpoint;
+score	endpoint
+10	4
+20	1
+20	4
+exponentially_many_walks_but_one_reachable_state_per_hop
+DELETE FROM gr_e;
+INSERT INTO gr_e VALUES (1,1,1,1),(2,1,1,1),(3,1,1,1),(4,1,1,1),
+(5,1,1,1),(6,1,1,1),(7,1,1,1),(8,1,1,1);
+SELECT DISTINCT endpoint FROM GRAPH_TABLE(graph_reach MATCH
+(a IS node WHERE a.id=1)-[e IS link]->{0,16}(b IS node)
+COLUMNS(b.id AS endpoint)) g;
+endpoint
+1
+SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_reach MATCH
+(a IS node WHERE a.id=1)-[e IS link]->{0,3}(b IS node)
+COLUMNS(b.id AS endpoint)) g;
+paths
+585
+frontier_hash_growth_and_cross_batch_convergence
+CREATE TABLE gr_digit (n INT PRIMARY KEY);
+INSERT INTO gr_digit VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+INSERT INTO gr_v SELECT 1000+d0.n+10*d1.n+100*d2.n+1000*d3.n,'fanout'
+ FROM gr_digit d0,gr_digit d1,gr_digit d2,gr_digit d3
+WHERE d0.n+10*d1.n+100*d2.n+1000*d3.n<4200;
+DELETE FROM gr_e;
+INSERT INTO gr_e SELECT id,1,id,1 FROM gr_v WHERE id>=1000;
+INSERT INTO gr_e SELECT id+10000,1,id,1 FROM gr_v WHERE id>=1000;
+INSERT INTO gr_e SELECT id+20000,id,1,1 FROM gr_v WHERE id>=1000;
+SELECT COUNT(*) AS reachable_vertex_hops FROM (
+SELECT DISTINCT g.* FROM GRAPH_TABLE(graph_reach MATCH
+(a IS node WHERE a.id=1)-[e IS link]->{1,2}(b IS node)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g) r;
+reachable_vertex_hops
+4201
+SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_reach MATCH
+(a IS node WHERE a.id=1)-[e IS link]->{1,2}(b IS node)
+COLUMNS(b.id AS endpoint)) g;
+paths
+16800
+DROP TABLE gr_digit;
+DROP TABLE plan_table,gr_expected;
+DROP PROPERTY GRAPH graph_reach;
+DROP TABLE gr_e,gr_v;
+typed_composite_reachability
+CREATE TABLE gr_v (tenant INT,code VARBINARY(8),revision DECIMAL(10,2),
+PRIMARY KEY(tenant,code,revision));
+CREATE TABLE gr_e (id INT PRIMARY KEY,st INT,sc VARBINARY(8),sr DECIMAL(10,2),
+dt INT,dc VARBINARY(8),dr DECIMAL(10,2));
+INSERT INTO gr_v VALUES (1,X'6100',1.25),(1,X'6200',2.50),(2,X'6300',3.75);
+INSERT INTO gr_e VALUES
+(1,1,X'6100',1.25,1,X'6200',2.50),(2,1,X'6100',1.25,1,X'6200',2.50),
+(3,1,X'6200',2.50,2,X'6300',3.75),(4,2,X'6300',3.75,1,X'6100',1.25);
+CREATE PROPERTY GRAPH graph_reach
+VERTEX TABLES(gr_v KEY(tenant,code,revision) LABEL node PROPERTIES(tenant,code,revision))
+EDGE TABLES(gr_e KEY(id) SOURCE KEY(st,sc,sr) REFERENCES gr_v(tenant,code,revision)
+DESTINATION KEY(dt,dc,dr) REFERENCES gr_v(tenant,code,revision) LABEL link PROPERTIES(id));
+SELECT DISTINCT g.* FROM GRAPH_TABLE(graph_reach MATCH
+(a IS node WHERE a.code=X'6100')-[e IS link]->{0,4}(b IS node)
+COLUMNS(b.tenant AS tenant,HEX(b.code) AS code,b.revision AS revision,COUNT(e.id) AS hops)) g
+ORDER BY hops;
+tenant	code	revision	hops
+1	6100	1.25	0
+1	6200	2.50	1
+2	6300	3.75	2
+1	6100	1.25	3
+1	6200	2.50	4
+DROP PROPERTY GRAPH graph_reach;
+DROP TABLE gr_e,gr_v;
+floating_key_equality_keeps_path_enumeration
+CREATE TABLE gr_v (id DOUBLE PRIMARY KEY);
+CREATE TABLE gr_e (eid INT PRIMARY KEY,src DOUBLE,dst DOUBLE);
+INSERT INTO gr_v VALUES (1),(2);
+INSERT INTO gr_e VALUES (1,1,2),(2,1,2);
+CREATE PROPERTY GRAPH graph_reach
+VERTEX TABLES(gr_v KEY(id) LABEL node PROPERTIES(id))
+EDGE TABLES(gr_e KEY(eid) SOURCE KEY(src) REFERENCES gr_v(id)
+DESTINATION KEY(dst) REFERENCES gr_v(id) LABEL link PROPERTIES(eid));
+EXPLAIN INTO plan_table SET statement_id='float'
+SELECT DISTINCT endpoint FROM GRAPH_TABLE(graph_reach MATCH
+(a IS node WHERE a.id=1)-[e IS link]->{0,2}(b IS node)
+COLUMNS(b.id AS endpoint)) g;
+SELECT COUNT(*)=1 AS float_keeps_paths FROM plan_table
+WHERE operator='GRAPH FEEDBACK LOOP' AND special_predicates LIKE '%states=paths%';
+float_keeps_paths
+1
+SELECT DISTINCT endpoint FROM GRAPH_TABLE(graph_reach MATCH
+(a IS node WHERE a.id=1)-[e IS link]->{0,2}(b IS node)
+COLUMNS(b.id AS endpoint)) g ORDER BY endpoint;
+endpoint
+1
+2
+DROP TABLE plan_table;
+DROP PROPERTY GRAPH graph_reach;
+DROP TABLE gr_e,gr_v;

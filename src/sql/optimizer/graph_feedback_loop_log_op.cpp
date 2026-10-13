@@ -19,6 +19,7 @@
 #include "sql/optimizer/graph_feedback_loop_log_op.h"
 #include "sql/optimizer/ob_join_order.h"
 #include "sql/optimizer/ob_log_join.h"
+#include "sql/optimizer/ob_log_sort.h"
 #include "sql/optimizer/ob_log_table_scan.h"
 #include "sql/optimizer/ob_opt_est_cost.h"
 #include "sql/resolver/dml/ob_select_stmt.h"
@@ -589,14 +590,105 @@ int GraphFeedbackLoopLogOp::get_native_runtime_exprs(
   return ret;
 }
 
+int GraphFeedbackLoopLogOp::can_prune_duplicate_states(bool &can_prune)
+{
+  int ret = OB_SUCCESS;
+  can_prune = false;
+  bool safe = can_use_basic_native_runtime()
+      && path_desc_.path_mode_ == GraphPathMode::WALK
+      && path_desc_.row_shape_ == GraphPathRowShape::PER_MATCH
+      && !path_desc_.need_path_ && path_payload_exprs_.empty();
+  ObArray<ObRawExpr *> keys;
+  if (safe && OB_FAIL(get_seed_key_exprs(keys))) {
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && safe && i < keys.count(); ++i) {
+    // Tolerance equality is not an equivalence relation suitable for pruning
+    // vertices whose subsequent neighborhoods may differ at its boundaries.
+    safe = keys.at(i) != nullptr
+        && keys.at(i)->get_result_type().get_type_class() != ObDoubleTC
+        && keys.at(i)->get_result_type().get_type_class() != ObFloatTC;
+  }
+  ObLogicalOperator *boundary = get_parent();
+  while (safe && boundary != nullptr && boundary->get_type() != LOG_DISTINCT) {
+    const auto type = boundary->get_type();
+    safe = type == LOG_SUBPLAN_SCAN || type == LOG_JOIN
+        || type == LOG_SORT || type == LOG_MATERIAL;
+    if (safe) {
+      boundary = boundary->get_parent();
+    }
+  }
+  // Inspect the whole intervening subtree, not only the spine: a correlated
+  // aggregate/window/LIMIT or volatile sibling can observe path multiplicity.
+  // Keep this allowlist conservative; unsupported plans retain ordinary WALK.
+  ObArray<ObLogicalOperator *> pending;
+  if (OB_SUCC(ret) && safe && boundary != nullptr
+      && OB_FAIL(pending.push_back(boundary))) {
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && safe && i < pending.count(); ++i) {
+    ObLogicalOperator *node = pending.at(i);
+    if (OB_ISNULL(node)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (node == this) {
+      // Native eligibility already checks the generated single-hop filters.
+      // No edge/history payload is observable in this path representation.
+    } else {
+      switch (node->get_type()) {
+        case LOG_DISTINCT:
+        case LOG_SUBPLAN_SCAN:
+        case LOG_MATERIAL:
+          break;
+        case LOG_JOIN:
+          safe = static_cast<ObLogJoin *>(node)->get_join_type() == INNER_JOIN;
+          break;
+        case LOG_SORT: {
+          ObLogSort *sort = static_cast<ObLogSort *>(node);
+          safe = sort->get_topn_expr() == nullptr
+              && sort->get_topk_limit_expr() == nullptr
+              && sort->get_pushdown_topn_filter_expr() == nullptr;
+          break;
+        }
+        case LOG_TABLE_SCAN:
+          safe = static_cast<ObLogTableScan *>(node)->get_limit_expr() == nullptr;
+          break;
+        default:
+          safe = false;
+      }
+    }
+    if (OB_SUCC(ret) && safe) {
+      ObArray<ObRawExpr *> exprs;
+      if (node == this) {
+        // A filter pushed onto the loop itself also runs once per output path.
+        // Native scan eligibility does not cover these post-traversal filters.
+        ret = node->ObLogicalOperator::get_op_exprs(exprs);
+      } else {
+        ret = node->get_op_exprs(exprs);
+      }
+      if (OB_SUCC(ret) && OB_FAIL(append(exprs, node->get_output_exprs()))) {
+      }
+      for (int64_t j = 0; OB_SUCC(ret) && safe && j < exprs.count(); ++j) {
+        safe = exprs.at(j) != nullptr && exprs.at(j)->is_deterministic()
+            && !exprs.at(j)->has_flag(CNT_SUB_QUERY);
+      }
+      for (int64_t j = 0; OB_SUCC(ret) && safe && node != this
+                              && j < node->get_num_of_child(); ++j) {
+        ret = pending.push_back(node->get_child(j));
+      }
+    }
+  }
+  can_prune = OB_SUCC(ret) && safe && boundary != nullptr;
+  return ret;
+}
+
 int GraphFeedbackLoopLogOp::get_plan_item_info(PlanText &plan_text,
                                                ObSqlPlanItem &plan_item)
 {
   int ret = OB_SUCCESS;
+  bool prune = false;
   if (OB_FAIL(ObLogicalOperator::get_plan_item_info(plan_text, plan_item))) {
+  } else if (OB_FAIL(can_prune_duplicate_states(prune))) {
   } else {
     BEGIN_BUF_PRINT;
-    if (OB_FAIL(BUF_PRINTF("direction=%s, hops={%ld,%ld}, access=%s, mode=%s, runtime=%s",
+    if (OB_FAIL(BUF_PRINTF("direction=%s, hops={%ld,%ld}, access=%s, mode=%s, runtime=%s, states=%s",
                            path_desc_.direction_ == GraphPathDirection::IN
                                ? "IN" : "OUT",
                            path_desc_.lower_bound_,
@@ -604,7 +696,8 @@ int GraphFeedbackLoopLogOp::get_plan_item_info(PlanText &plan_text,
                            access_method_name(step_access_method_),
                            path_mode_name(path_desc_.path_mode_),
                            can_use_basic_native_runtime()
-                               ? "native" : "fallback"))) {
+                               ? "native" : "fallback",
+                           prune ? "binding_vertex_hop" : "paths"))) {
     }
     END_BUF_PRINT(plan_item.special_predicates_, plan_item.special_predicates_len_);
   }

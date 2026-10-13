@@ -317,7 +317,8 @@ public:
     } else if (frontier_.empty() || current_hop >= spec.get_upper_bound()) {
       ret = OB_ITER_END;
     } else if (OB_FAIL(frontier_.expand(spec.get_direction(),
-                                        spec.get_path_mode()))) {
+                                        spec.get_path_mode(),
+                                        spec.prune_duplicate_states()))) {
       ret = normalize_work_area_error(ret);
       if (ret != OB_ITER_END) {
         LOG_WARN("failed to advance graph feedback frontier", K(ret),
@@ -646,6 +647,7 @@ GraphFeedbackFrontier::GraphFeedbackFrontier(ObIAllocator &allocator,
     : expand_(expand),
       state_store_(allocator, memory_limit),
       hop_source_index_(allocator),
+      next_state_index_(allocator),
       input_batch_size_(input_batch_size),
       memory_limit_(memory_limit),
       frontier_buffer_a_(OB_MALLOC_NORMAL_BLOCK_SIZE,
@@ -672,7 +674,7 @@ int GraphFeedbackFrontier::check_memory_limit()
   const int64_t hop_source_index_bytes = hop_source_index_.used_memory();
   const int64_t memory_parts[] = {
       buffer_a_bytes, buffer_b_bytes, input_bytes, path_bytes,
-      hop_source_index_bytes, expand_.used_memory()};
+      hop_source_index_bytes, next_state_index_.used_memory(), expand_.used_memory()};
 
   if (OB_UNLIKELY(memory_limit_ <= 0)) {
     ret = OB_INVALID_ARGUMENT;
@@ -868,7 +870,8 @@ int GraphFeedbackFrontier::build_input_batch(int64_t start,
 
 int GraphFeedbackFrontier::consume_input_batch(
     GraphPathDirection direction,
-    GraphPathMode path_mode)
+    GraphPathMode path_mode,
+    bool prune_duplicate_states)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expand_.rescan(input_batch_, direction))) {
@@ -878,6 +881,8 @@ int GraphFeedbackFrontier::consume_input_batch(
   while (OB_SUCC(ret)) {
     GraphExpandOutput extension;
     bool repeated_edge = false;
+    bool repeated_state = false;
+    int64_t entry_index = -1;
     int next_ret = expand_.get_next_row(extension);
     if (next_ret == OB_ITER_END) {
       break;
@@ -890,13 +895,26 @@ int GraphFeedbackFrontier::consume_input_batch(
                    repeated_edge))) {
       LOG_WARN("failed to inspect graph path edge history", K(ret),
                K(extension));
-    } else if (!repeated_edge) {
+    } else if (prune_duplicate_states
+               && OB_FAIL(next_state_index_.find(extension.target_identity_,
+                   entry_index, repeated_state, extension.binding_id_))) {
+      LOG_WARN("failed to probe reachable graph state", K(ret));
+    } else if (!repeated_edge && !repeated_state) {
       int64_t child_state_id = GRAPH_INVALID_PATH_STATE_ID;
+      GraphPathState child;
+      bool inserted = false;
       if (OB_FAIL(state_store_.add_child(extension, child_state_id))) {
         LOG_WARN("failed to add graph frontier child", K(ret), K(extension));
       } else if (OB_FAIL(next_state_ids_->push_back(child_state_id))) {
         LOG_WARN("failed to append next graph frontier state", K(ret),
                  K(child_state_id));
+      } else if (prune_duplicate_states
+                 && OB_FAIL(state_store_.get_state(child_state_id, child))) {
+      } else if (prune_duplicate_states
+                 && OB_FAIL(next_state_index_.get_or_insert(
+                     child.current_identity_, entry_index, inserted, child.binding_id_))) {
+        // Index the stable state-store copy, never the reusable DAS page.
+        LOG_WARN("failed to index reachable graph state", K(ret));
       } else if (OB_FAIL(check_memory_limit())) {
       }
     }
@@ -914,7 +932,8 @@ int GraphFeedbackFrontier::consume_input_batch(
 }
 
 int GraphFeedbackFrontier::expand(GraphPathDirection direction,
-                                  GraphPathMode path_mode)
+                                  GraphPathMode path_mode,
+                                  bool prune_duplicate_states)
 {
   int ret = OB_SUCCESS;
   int64_t start = 0;
@@ -925,19 +944,24 @@ int GraphFeedbackFrontier::expand(GraphPathDirection direction,
                          || (direction != GraphPathDirection::OUT
                              && direction != GraphPathDirection::IN)
                          || (path_mode != GraphPathMode::WALK
-                             && path_mode != GraphPathMode::TRAIL))) {
+                             && path_mode != GraphPathMode::TRAIL)
+                         || (prune_duplicate_states && path_mode != GraphPathMode::WALK))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid graph frontier expansion", K(ret), K_(hop),
              "direction", static_cast<int64_t>(direction),
              "path_mode", static_cast<int64_t>(path_mode));
   } else {
     next_state_ids_->reuse();
+    next_state_index_.reset();
     if (OB_FAIL(start_hop_stats())) {
       LOG_WARN("failed to start graph hop statistics", K(ret), K_(hop));
+    } else if (prune_duplicate_states
+               && OB_FAIL(next_state_index_.init(current_state_ids_->count()))) {
+    } else if (OB_FAIL(check_memory_limit())) {
     }
     while (OB_SUCC(ret) && start < current_state_ids_->count()) {
       if (OB_FAIL(build_input_batch(start, next_start))) {
-      } else if (OB_FAIL(consume_input_batch(direction, path_mode))) {
+      } else if (OB_FAIL(consume_input_batch(direction, path_mode, prune_duplicate_states))) {
       } else {
         start = next_start;
       }
@@ -949,6 +973,7 @@ int GraphFeedbackFrontier::expand(GraphPathDirection direction,
       if (OB_FAIL(check_memory_limit())) {
       } else {
         finish_hop_stats();
+        next_state_index_.reset();
       }
     }
   }
@@ -1015,6 +1040,7 @@ void GraphFeedbackFrontier::reset()
   frontier_buffer_b_.reset();
   input_batch_.reset();
   hop_source_index_.reset();
+  next_state_index_.reset();
   // ModulePageAllocator may wrap the query arena, whose individual free() is
   // a no-op. Keep this reusable result block across rescans so reset does not
   // lose the only pointer to memory that remains charged to the query.
@@ -1332,6 +1358,7 @@ OB_SERIALIZE_MEMBER((GraphFeedbackLoopSpec, RecursivePumpSpec),
                     expand_access_desc_,
                     output_row_desc_,
                     native_step_supported_,
+                    prune_duplicate_states_,
                     seed_key_exprs_,
                     source_scan_desc_,
                     edge_scan_desc_,

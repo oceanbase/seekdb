@@ -458,7 +458,8 @@ int GraphIdentityIndex::calc_compatible_hash(
 
 int GraphIdentityIndex::get_bucket(
     const GraphElementIdentity &identity,
-    int64_t &bucket) const
+    int64_t &bucket,
+    int64_t binding_id) const
 {
   int ret = OB_SUCCESS;
   uint64_t hash = 0;
@@ -468,14 +469,15 @@ int GraphIdentityIndex::get_bucket(
   } else if (OB_FAIL(calc_compatible_hash(identity, hash))) {
     LOG_WARN("failed to hash graph identity", K(ret), K(identity));
   } else {
-    bucket = static_cast<int64_t>(hash % bucket_heads_.count());
+    bucket = static_cast<int64_t>(do_hash(binding_id, hash) % bucket_heads_.count());
   }
   return ret;
 }
 
 int GraphIdentityIndex::find(const GraphElementIdentity &identity,
                              int64_t &entry_index,
-                             bool &found) const
+                             bool &found,
+                             int64_t binding_id) const
 {
   int ret = OB_SUCCESS;
   int64_t visited = 0;
@@ -485,7 +487,7 @@ int GraphIdentityIndex::find(const GraphElementIdentity &identity,
   if (OB_UNLIKELY(!identity.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid graph identity lookup", K(ret), K(identity));
-  } else if (OB_FAIL(get_bucket(identity, bucket))) {
+  } else if (OB_FAIL(get_bucket(identity, bucket, binding_id))) {
     LOG_WARN("failed to locate graph identity bucket", K(ret), K(identity));
   } else {
     if (OB_UNLIKELY(bucket < 0 || bucket >= bucket_heads_.count())) {
@@ -499,7 +501,8 @@ int GraphIdentityIndex::find(const GraphElementIdentity &identity,
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("corrupted graph identity hash chain", K(ret), K(current),
                    K(visited), "entry_count", entries_.count());
-        } else if (entries_.at(current).identity_ == identity) {
+        } else if (entries_.at(current).binding_id_ == binding_id
+                   && entries_.at(current).identity_ == identity) {
           entry_index = current;
           found = true;
         } else {
@@ -514,20 +517,23 @@ int GraphIdentityIndex::find(const GraphElementIdentity &identity,
 int GraphIdentityIndex::get_or_insert(
     const GraphElementIdentity &identity,
     int64_t &entry_index,
-    bool &inserted)
+    bool &inserted,
+    int64_t binding_id)
 {
   int ret = OB_SUCCESS;
   bool found = false;
   inserted = false;
-  if (OB_FAIL(find(identity, entry_index, found))) {
+  if (OB_FAIL(find(identity, entry_index, found, binding_id))) {
   } else if (found) {
+  } else if (OB_FAIL(grow_buckets())) {
   } else {
     int64_t bucket = -1;
-    if (OB_FAIL(get_bucket(identity, bucket))) {
+    if (OB_FAIL(get_bucket(identity, bucket, binding_id))) {
       LOG_WARN("failed to locate graph identity bucket", K(ret), K(identity));
     } else {
       Entry entry;
       entry.identity_ = identity;
+      entry.binding_id_ = binding_id;
       entry.next_entry_ = bucket_heads_.at(bucket);
       if (OB_FAIL(entries_.push_back(entry))) {
         LOG_WARN("failed to append graph identity entry", K(ret), K(identity));
@@ -535,6 +541,34 @@ int GraphIdentityIndex::get_or_insert(
         entry_index = entries_.count() - 1;
         bucket_heads_.at(bucket) = entry_index;
         inserted = true;
+      }
+    }
+  }
+  return ret;
+}
+
+int GraphIdentityIndex::grow_buckets()
+{
+  int ret = OB_SUCCESS;
+  // Reachable frontiers can grow far beyond their input level's size. Keep a
+  // bounded load factor instead of degrading to linear chains at a high-degree
+  // vertex. Entry positions (used by existing adjacency callers) stay stable.
+  if (entries_.count() >= bucket_heads_.count()) {
+    if (bucket_heads_.count() > INT64_MAX / 2) {
+      ret = OB_SIZE_OVERFLOW;
+    } else if (OB_FAIL(bucket_heads_.prepare_allocate(bucket_heads_.count() * 2))) {
+    } else {
+      for (int64_t i = 0; i < bucket_heads_.count(); ++i) {
+        bucket_heads_.at(i) = -1;
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && i < entries_.count(); ++i) {
+        Entry &entry = entries_.at(i);
+        int64_t bucket = -1;
+        if (OB_FAIL(get_bucket(entry.identity_, bucket, entry.binding_id_))) {
+        } else {
+          entry.next_entry_ = bucket_heads_.at(bucket);
+          bucket_heads_.at(bucket) = i;
+        }
       }
     }
   }

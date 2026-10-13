@@ -82,10 +82,12 @@ public:
   int add_seed(int64_t binding_id,
                const GraphElementIdentity &source_identity);
 
-  // Advances exactly one hop. WALK accepts every extension; TRAIL rejects an
-  // edge already present in that extension's own parent chain. An empty current
+  // Advances exactly one hop. WALK normally accepts every extension; a proven
+  // duplicate-insensitive consumer can merge equal binding/vertex states at
+  // this hop. TRAIL rejects edges in the extension's own history. An empty current
   // frontier returns OB_ITER_END without modifying the controller.
-  int expand(GraphPathDirection direction, GraphPathMode path_mode);
+  int expand(GraphPathDirection direction, GraphPathMode path_mode,
+             bool prune_duplicate_states = false);
 
   int get_frontier_state(int64_t index, GraphPathState &state) const;
   // Reconstructs one current frontier entry from its zero-hop root through
@@ -111,7 +113,8 @@ public:
 private:
   int build_input_batch(int64_t start, int64_t &next_start);
   int consume_input_batch(GraphPathDirection direction,
-                          GraphPathMode path_mode);
+                          GraphPathMode path_mode,
+                          bool prune_duplicate_states);
   int start_hop_stats();
   int record_hop_source(const GraphElementIdentity &source_identity);
   void accumulate_expand_stats();
@@ -126,6 +129,9 @@ private:
   // Tolerance-compared DOUBLE keys cannot use an equality-compatible hash and
   // therefore retain GraphExpand's bounded, per-batch source counts instead.
   GraphIdentityIndex hop_source_index_;
+  // One entry per (binding, typed vertex) in the NEXT BFS level only. Never a
+  // global visited set: a vertex reached at different hops is not equivalent.
+  GraphIdentityIndex next_state_index_;
   int64_t input_batch_size_;
   int64_t memory_limit_;
   common::ObArray<int64_t> frontier_buffer_a_;
@@ -168,6 +174,8 @@ public:
   {
     native_step_supported_ = supported;
   }
+  void set_prune_duplicate_states(bool prune) { prune_duplicate_states_ = prune; }
+  bool prune_duplicate_states() const { return prune_duplicate_states_; }
   int init_output_row_desc();
   int bind_expand_scans(uint64_t source_scan_op_id,
                         uint64_t edge_scan_op_id,
@@ -212,6 +220,7 @@ private:
   GraphExpandAccessDesc expand_access_desc_{};
   GraphFeedbackRowDesc output_row_desc_{};
   bool native_step_supported_{false};
+  bool prune_duplicate_states_{false};
   // Evaluated after the anchor child produces a row. The expression order is
   // the source element's declared key order, so it can be copied directly into
   // a typed GraphElementIdentity without inspecting generated column names.
