@@ -55,11 +55,11 @@ WHERE statement_id='fullscan_reuse' AND operator='GRAPH FEEDBACK LOOP'
  AND special_predicates LIKE '%access=full-scan, mode=WALK, runtime=native%adjacency_reuse=eligible%';
 fullscan_reuse_eligible
 1
-SELECT COUNT(*) AS unsafe_correlated_reuse FROM plan_table
+SELECT COUNT(*) AS parameterized_correlated_reuse FROM plan_table
 WHERE statement_id='fullscan_correlated' AND operator='GRAPH FEEDBACK LOOP'
  AND special_predicates LIKE '%adjacency_reuse=eligible%';
-unsafe_correlated_reuse
-0
+parameterized_correlated_reuse
+1
 DROP TABLE plan_table;
 unindexed_cycles_keep_complete_path_multiplicity
 SELECT s.binding_id,g.endpoint,g.hops,g.edges FROM fs_seeds s,LATERAL (

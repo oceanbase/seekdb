@@ -48,8 +48,8 @@ private:
 };
 
 // Statement/operator-local adjacency reuse. Only complete successful reads
-// become entries. The owner must prove edge predicates/payloads independent of
-// rescan parameters, and clear this cache on close or execution failure.
+// become entries. The owner must include all outer filter parameters in the
+// selected context, and clear this cache on close or execution failure.
 // Vertex existence is always checked by the underlying adapter. Bindings and
 // paths never enter the cache, so parallel edges and seed copies retain bags.
 class GraphCachedAccess final : public IGraphExpandAccess
@@ -59,6 +59,9 @@ public:
                     int64_t memory_limit);
   ~GraphCachedAccess() override { clear(); }
   void set_enabled(bool enabled) { enabled_ = enabled; }
+  // Select the complete, typed outer-parameter tuple for this rescan. Contexts
+  // belong to this statement only; a hash match still compares all bytes.
+  int select_context(const common::ObIArray<common::ObObj> &parameters);
   void clear();
   void release() override;
   int64_t used_memory() const override;
@@ -73,6 +76,13 @@ public:
                  int64_t limit, common::ObIArray<GraphExpandEdge> &edges,
                  int64_t &scanned_edges, bool &end) override;
 private:
+  struct Context
+  {
+    common::ObString key_{};
+    uint64_t hash_{0};
+    int64_t next_{-1};
+    TO_STRING_KV(K_(hash), K_(next));
+  };
   struct Entry
   {
     int64_t first_edge_{-1};
@@ -90,6 +100,7 @@ private:
   int begin_recording();
   int record(const common::ObIArray<GraphExpandEdge> &edges, bool end);
   int recover_cache_budget(int ret);
+  int grow_context_buckets();
   void reset_cache();
   int copy_identity(const GraphElementIdentity &source, GraphElementIdentity &dest);
 
@@ -99,6 +110,8 @@ private:
   GraphIdentityIndex index_;
   common::ObArray<Entry> entries_;
   common::ObArray<Edge> cached_edges_;
+  common::ObArray<Context> contexts_;
+  common::ObArray<int64_t> context_buckets_;
   // Request-local arrays are not backed by the optional cache sub-budget.
   common::ObArray<int64_t> hits_;
   common::ObArray<GraphElementIdentity> misses_;
@@ -107,6 +120,10 @@ private:
   int64_t hit_position_{0};
   int64_t hit_edge_{-1};
   int64_t first_new_entry_{-1};
+  // Zero denotes parameter-independent reads; positive IDs are private cache
+  // namespaces, NOT seed binding IDs or graph element IDs. -1 bypasses reuse.
+  int64_t context_id_{0};
+  bool parameterized_{false};
   bool enabled_{false};
   bool bypass_{true};
   bool recording_{false};

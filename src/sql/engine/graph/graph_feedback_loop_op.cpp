@@ -182,6 +182,27 @@ public:
       LOG_WARN("graph feedback seeds are already loaded", K(ret),
                "binding_count", binding_store_.count());
     }
+    // The enclosing nested loop has populated outer execution parameters by
+    // this point. Do not evaluate their referring expressions or recursive
+    // child parameters: only read the already-bound scalar values.
+    ObArray<ObObj> parameters(OB_MALLOC_NORMAL_BLOCK_SIZE,
+        ModulePageAllocator(binding_store_.get_work_area_allocator(), "GraphAdjCache"));
+    for (int64_t i = 0; OB_SUCC(ret) && i < spec.get_adjacency_parameters().count(); ++i) {
+      ObExpr *expr = spec.get_adjacency_parameters().at(i);
+      ObDatum *datum = nullptr;
+      ObObj value;
+      if (OB_ISNULL(expr)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
+      } else if (OB_ISNULL(datum)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(datum->to_obj(value, expr->obj_meta_, expr->obj_datum_map_))) {
+      } else if (OB_FAIL(parameters.push_back(value))) {
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(cached_access_.select_context(parameters))) {
+      LOG_WARN("failed to select graph adjacency context", K(ret));
+    }
     while (OB_SUCC(ret) && !seeds_loaded_) {
       const int next_ret = anchor.get_next_row();
       if (next_ret == OB_ITER_END) {
@@ -194,6 +215,7 @@ public:
       }
     }
     if (OB_SUCCESS != ret) {
+      ret = normalize_work_area_error(ret);
       reset();
     }
     return ret;
@@ -1134,6 +1156,7 @@ GraphFeedbackLoopSpec::GraphFeedbackLoopSpec(common::ObIAllocator &allocator,
                                              const ObPhyOperatorType type)
     : RecursivePumpSpec(allocator, type),
       seed_key_exprs_(allocator),
+      adjacency_parameters_(allocator),
       source_scan_desc_(allocator),
       edge_scan_desc_(allocator),
       target_scan_desc_(allocator)
@@ -1438,6 +1461,7 @@ OB_SERIALIZE_MEMBER((GraphFeedbackLoopSpec, RecursivePumpSpec),
                     prune_duplicate_states_,
                     reuse_adjacency_,
                     seed_key_exprs_,
+                    adjacency_parameters_,
                     source_scan_desc_,
                     edge_scan_desc_,
                     target_scan_desc_);

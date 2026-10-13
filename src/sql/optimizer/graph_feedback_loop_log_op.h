@@ -60,7 +60,7 @@ public:
   // Final-plan proof: only an enclosing DISTINCT across deterministic,
   // multiplicity-insensitive relational operators can discard path copies.
   int can_prune_duplicate_states(bool &can_prune);
-  bool can_reuse_adjacency() const;
+  bool can_reuse_adjacency(common::ObIArray<ObRawExpr *> *parameters = nullptr) const;
   int get_expand_scan_op_ids(uint64_t &source_scan_op_id,
                              uint64_t &edge_scan_op_id,
                              uint64_t &target_scan_op_id) const;

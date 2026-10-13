@@ -62,6 +62,8 @@ GraphCachedAccess::GraphCachedAccess(ObIAllocator &allocator,
       identities_(cache_allocator_), index_(cache_allocator_),
       entries_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(cache_allocator_, "GraphAdjCache")),
       cached_edges_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(cache_allocator_, "GraphAdjCache")),
+      contexts_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(cache_allocator_, "GraphAdjCache")),
+      context_buckets_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(cache_allocator_, "GraphAdjCache")),
       hits_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "GraphAdjCache")),
       misses_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "GraphAdjCache")),
       cursor_allocator_(allocator)
@@ -69,11 +71,101 @@ GraphCachedAccess::GraphCachedAccess(ObIAllocator &allocator,
 
 void GraphCachedAccess::reset_cache()
 {
+  for (int64_t i = 0; i < contexts_.count(); ++i) {
+    cache_allocator_.free(contexts_.at(i).key_.ptr());
+  }
+  contexts_.reset();
+  context_buckets_.reset();
+  context_id_ = parameterized_ ? -1 : 0;
   index_.reset();
   entries_.reset();
   cached_edges_.reset();
   identities_.reset();
   cache_allocator_.clear_budget_error();
+}
+
+int GraphCachedAccess::grow_context_buckets()
+{
+  int ret = OB_SUCCESS;
+  if (contexts_.count() >= context_buckets_.count()) {
+    if (context_buckets_.count() > INT64_MAX / 2) {
+      ret = OB_SIZE_OVERFLOW;
+    } else if (OB_FAIL(context_buckets_.prepare_allocate(
+        std::max<int64_t>(1, context_buckets_.count() * 2)))) {
+    } else {
+      for (int64_t i = 0; i < context_buckets_.count(); ++i) { context_buckets_.at(i) = -1; }
+      for (int64_t i = 0; i < contexts_.count(); ++i) {
+        Context &context = contexts_.at(i);
+        const int64_t bucket = context.hash_ % context_buckets_.count();
+        context.next_ = context_buckets_.at(bucket);
+        context_buckets_.at(bucket) = i;
+      }
+    }
+  }
+  return ret;
+}
+
+int GraphCachedAccess::select_context(const ObIArray<ObObj> &parameters)
+{
+  int ret = OB_SUCCESS;
+  parameterized_ = !parameters.empty();
+  context_id_ = parameterized_ ? -1 : 0;
+  if (enabled_ && parameterized_) {
+    int64_t size = 0;
+    for (int64_t i = 0; i < parameters.count(); ++i) {
+      const int64_t part = parameters.at(i).get_serialize_size();
+      // ObString length is int32. Oversized optional keys bypass reuse rather
+      // than narrowing values, truncating output, or changing SQL semantics.
+      if (part < 0 || part > INT32_MAX - size) { return OB_SUCCESS; }
+      size += part;
+    }
+    char *buffer = nullptr;
+    if (OB_FAIL(check_status())) {
+    } else if (OB_ISNULL(buffer = static_cast<char *>(cache_allocator_.alloc(size)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      int64_t pos = 0;
+      for (int64_t i = 0; OB_SUCC(ret) && i < parameters.count(); ++i) {
+        ret = parameters.at(i).serialize(buffer, size, pos);
+      }
+      // ObObj serialization preserves NULL, type, collation and value lengths.
+      // Conservative byte equality may miss equivalent values, never equate
+      // distinct values just because their hashes or text representations agree.
+      const ObString key(static_cast<int32_t>(size), buffer);
+      const uint64_t hash = key.hash();
+      int64_t index = context_buckets_.empty() ? -1
+          : context_buckets_.at(hash % context_buckets_.count());
+      int64_t visited = 0;
+      while (OB_SUCC(ret) && index >= 0 && context_id_ < 0) {
+        if (index >= contexts_.count() || visited++ >= contexts_.count()) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (contexts_.at(index).key_ == key) {
+          context_id_ = index + 1;
+        } else {
+          index = contexts_.at(index).next_;
+        }
+      }
+      if (OB_SUCC(ret) && context_id_ < 0) {
+        if (OB_FAIL(grow_context_buckets())) {
+        } else {
+          const int64_t bucket = hash % context_buckets_.count();
+          Context context;
+          context.key_ = key;
+          context.hash_ = hash;
+          context.next_ = context_buckets_.at(bucket);
+          if (OB_FAIL(contexts_.push_back(context))) {
+          } else {
+            context_buckets_.at(bucket) = contexts_.count() - 1;
+            context_id_ = contexts_.count();
+            buffer = nullptr; // Owned until reset_cache(), including rescans.
+          }
+        }
+      }
+    }
+    if (buffer != nullptr) { cache_allocator_.free(buffer); }
+    ret = recover_cache_budget(ret);
+  }
+  return ret;
 }
 
 void GraphCachedAccess::release()
@@ -140,7 +232,7 @@ int GraphCachedAccess::begin(const ObIArray<GraphElementIdentity> &sources)
   // after that scan completes can each requested source become a cache entry.
   // Never expose can_partition_sources() as true merely because reuse is on:
   // doing so would turn a whole-frontier scan into one full scan per batch.
-  bypass_ = !enabled_;
+  bypass_ = !enabled_ || context_id_ < 0;
   for (int64_t i = 0; !bypass_ && i < sources.count(); ++i) {
     const ObRowkey &key = sources.at(i).rowkey_;
     for (int64_t k = 0; k < key.get_obj_cnt(); ++k) {
@@ -152,7 +244,7 @@ int GraphCachedAccess::begin(const ObIArray<GraphElementIdentity> &sources)
     int64_t pos = -1;
     bool found = false;
     if (i % GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE == 0 && OB_FAIL(check_status())) {
-    } else if (index_.count() > 0 && OB_FAIL(index_.find(sources.at(i), pos, found))) {
+    } else if (index_.count() > 0 && OB_FAIL(index_.find(sources.at(i), pos, found, context_id_))) {
     } else if (found && (pos < 0 || pos >= entries_.count() || !entries_.at(pos).complete_)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (found) {
@@ -164,7 +256,7 @@ int GraphCachedAccess::begin(const ObIArray<GraphElementIdentity> &sources)
   if (OB_SUCC(ret) && !hits_.empty()) {
     hit_edge_ = entries_.at(hits_.at(0)).first_edge_;
   }
-  LOG_TRACE("graph adjacency reuse request", K(bypass_), "hit_sources", hits_.count(),
+  LOG_TRACE("graph adjacency reuse request", K(bypass_), K_(context_id), "hit_sources", hits_.count(),
             "miss_sources", misses_.count());
   return ret;
 }
@@ -181,7 +273,7 @@ int GraphCachedAccess::begin_recording()
     int64_t pos = -1;
     bool inserted = false;
     if (OB_FAIL(copy_identity(misses_.at(i), stable))) {
-    } else if (OB_FAIL(index_.get_or_insert(stable, pos, inserted))) {
+    } else if (OB_FAIL(index_.get_or_insert(stable, pos, inserted, context_id_))) {
     } else if (!inserted || pos != entries_.count()) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(entries_.push_back(Entry()))) {
@@ -199,7 +291,7 @@ int GraphCachedAccess::record(const ObIArray<GraphExpandEdge> &edges, bool end)
     Edge stable;
     int64_t pos = -1;
     bool found = false;
-    if (OB_FAIL(index_.find(edge.source_identity_, pos, found))) {
+    if (OB_FAIL(index_.find(edge.source_identity_, pos, found, context_id_))) {
     } else if (!found || pos < first_new_entry_ || pos >= entries_.count()) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(copy_identity(edge.source_identity_, stable.value_.source_identity_))) {

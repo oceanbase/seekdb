@@ -1212,8 +1212,25 @@ int ObStaticEngineCG::generate_spec(GraphFeedbackLoopLogOp &op,
     spec.set_expand_access(op.get_expand_access_desc());
     spec.set_native_step_supported(op.is_native_step_supported());
     spec.set_prune_duplicate_states(prune_duplicate_states);
-    spec.set_reuse_adjacency(op.can_reuse_adjacency());
-    if (OB_FAIL(spec.init_output_row_desc())) {
+    ObArray<ObRawExpr *> adjacency_parameters;
+    spec.set_reuse_adjacency(op.can_reuse_adjacency(&adjacency_parameters));
+    ObArray<ObRawExpr *> parameter_raw_exprs;
+    // These values are set by the enclosing join, not calculated by this
+    // operator. Their edge-filter references already retain them in the frame.
+    if (OB_FAIL(spec.get_adjacency_parameters().reserve(adjacency_parameters.count()))) {
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < adjacency_parameters.count(); ++i) {
+      ObExpr *expr = nullptr;
+      if (OB_FAIL(ObStaticEngineExprCG::generate_rt_expr(
+              *adjacency_parameters.at(i), parameter_raw_exprs, expr))) {
+      } else if (OB_ISNULL(expr)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(spec.get_adjacency_parameters().push_back(expr))) {
+      }
+    }
+    if (OB_FAIL(ret)) {
+      LOG_WARN("failed to generate graph adjacency parameters", K(ret));
+    } else if (OB_FAIL(spec.init_output_row_desc())) {
       LOG_WARN("failed to initialize graph feedback output row", K(ret),
                K(op.get_path_desc()), K(op.get_expand_access_desc()));
     } else if (OB_FAIL(spec.bind_expand_scans(

@@ -18,7 +18,7 @@ SELECT s.binding_id,g.endpoint FROM fs_seeds s,LATERAL (
 SELECT COUNT(*)=1 AS fullscan_reuse_eligible FROM plan_table
  WHERE statement_id='fullscan_reuse' AND operator='GRAPH FEEDBACK LOOP'
  AND special_predicates LIKE '%access=full-scan, mode=WALK, runtime=native%adjacency_reuse=eligible%';
-SELECT COUNT(*) AS unsafe_correlated_reuse FROM plan_table
+SELECT COUNT(*) AS parameterized_correlated_reuse FROM plan_table
  WHERE statement_id='fullscan_correlated' AND operator='GRAPH FEEDBACK LOOP'
  AND special_predicates LIKE '%adjacency_reuse=eligible%';
 DROP TABLE plan_table;

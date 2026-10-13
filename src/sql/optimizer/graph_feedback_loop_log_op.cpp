@@ -39,6 +39,62 @@ const char *GRAPH_SEED_VERTEX_ALIAS = "__g_seed_vertex";
 const char *GRAPH_STEP_EDGE_ALIAS = "__g_step_edge";
 const char *GRAPH_STEP_VERTEX_ALIAS = "__g_step_vertex";
 
+// Native expansion bypasses the recursive child's joins. Only parameters
+// bound outside that statement survive the bypass and stay constant per rescan.
+bool is_outer_graph_parameter(const ObRawExpr &expr, const ObLogTableScan &edge)
+{
+  bool safe = expr.is_exec_param_expr() && edge.get_stmt() != nullptr;
+  if (safe) {
+    const ObExecParamRawExpr &param = static_cast<const ObExecParamRawExpr &>(expr);
+    const ObRawExpr *ref = param.get_ref_expr();
+    safe = !param.is_onetime() && ref != nullptr && ref->is_column_ref_expr();
+    if (safe) {
+      const ObColumnRefRawExpr &column = *static_cast<const ObColumnRefRawExpr *>(ref);
+      safe = !column.is_cte_generated_column()
+          && edge.get_stmt()->get_table_item_by_id(column.get_table_id()) == nullptr;
+    }
+    // These scalar values serialize by value, not as LOB/JSON/UDT locators.
+    if (safe) {
+      switch (expr.get_data_type()) {
+        case ObNullType:
+        case ObTinyIntType: case ObSmallIntType: case ObMediumIntType:
+        case ObInt32Type: case ObIntType:
+        case ObUTinyIntType: case ObUSmallIntType: case ObUMediumIntType:
+        case ObUInt32Type: case ObUInt64Type:
+        case ObFloatType: case ObDoubleType:
+        case ObNumberType: case ObUNumberType: case ObDecimalIntType:
+        case ObVarcharType: case ObCharType:
+        case ObDateTimeType: case ObTimestampType: case ObDateType:
+        case ObTimeType: case ObYearType:
+          break;
+        default:
+          safe = false;
+      }
+    }
+  }
+  return safe;
+}
+
+bool has_only_outer_graph_parameters(const ObRawExpr &root, const ObLogTableScan &edge)
+{
+  ObArray<const ObRawExpr *> pending;
+  bool safe = OB_SUCCESS == pending.push_back(&root);
+  while (safe && !pending.empty()) {
+    const ObRawExpr *expr = pending.at(pending.count() - 1);
+    pending.pop_back();
+    safe = expr != nullptr;
+    if (safe && expr->is_exec_param_expr()) {
+      safe = is_outer_graph_parameter(*expr, edge);
+    } else if (safe && expr->has_flag(CNT_DYNAMIC_PARAM)) {
+      safe = expr->get_param_count() > 0;
+      for (int64_t i = 0; safe && i < expr->get_param_count(); ++i) {
+        safe = OB_SUCCESS == pending.push_back(expr->get_param_expr(i));
+      }
+    }
+  }
+  return safe;
+}
+
 bool are_native_scan_filters_supported(
     const ObIArray<ObRawExpr *> &filters)
 {
@@ -105,7 +161,7 @@ int retain_native_edge_range_filters(ObLogTableScan &edge_scan,
       } else if (is_native_identity_range(*expr, scan, edge_scan, access)) {
         // The native frontier/lookup enforces this generated join equality.
       } else if (&scan != &edge_scan || !expr->is_deterministic()
-                 || expr->has_flag(CNT_DYNAMIC_PARAM)) {
+                 || !has_only_outer_graph_parameters(*expr, edge_scan)) {
         // Target lookup is existence-only, and recursive join parameters are
         // not populated when that child is bypassed. Keep these on fallback.
         supported = false;
@@ -384,8 +440,9 @@ bool GraphFeedbackLoopLogOp::can_use_basic_native_runtime() const
              anchor->get_output_exprs().count(), path_payload_exprs_.count());
 }
 
-bool GraphFeedbackLoopLogOp::can_reuse_adjacency() const
+bool GraphFeedbackLoopLogOp::can_reuse_adjacency(ObIArray<ObRawExpr *> *parameters) const
 {
+  if (parameters != nullptr) { parameters->reuse(); }
   const ObLogTableScan *edge = find_internal_scan(get_child(second_child), GRAPH_STEP_EDGE_ALIAS);
   const ObDMLStmt *root = get_plan()->get_optimizer_context().get_root_stmt();
   // EXPLAIN describes the enclosed statement's eligibility. The wrapper is
@@ -411,13 +468,18 @@ bool GraphFeedbackLoopLogOp::can_reuse_adjacency() const
         && OB_SUCCESS == pending.push_back(payload->get_param_expr(2));
   }
   // Only pure scalar operations over this edge and statement constants are
-  // reusable. No recursive/outer execution parameter, variable or UDF may be
-  // omitted from a cache key. Unproven expressions retain uncached execution.
+  // reusable. Every proven outer parameter enters the cache key; parameters
+  // produced by the bypassed recursive child and unproven expressions do not.
   while (safe && !pending.empty()) {
     const ObRawExpr *expr = pending.at(pending.count() - 1);
     pending.pop_back();
-    safe = expr != nullptr && expr->is_deterministic() && !expr->has_flag(CNT_DYNAMIC_PARAM);
-    if (safe && expr->is_column_ref_expr()) {
+    safe = expr != nullptr && expr->is_deterministic();
+    if (safe && expr->is_exec_param_expr()) {
+      safe = is_outer_graph_parameter(*expr, *edge);
+      if (safe && parameters != nullptr) {
+        safe = OB_SUCCESS == add_var_to_array_no_dup(*parameters, const_cast<ObRawExpr *>(expr));
+      }
+    } else if (safe && expr->is_column_ref_expr()) {
       safe = static_cast<const ObColumnRefRawExpr *>(expr)->get_table_id() == edge->get_table_id();
     } else if (safe && !expr->is_const_expr()) {
       safe = (expr->is_op_expr() || expr->get_expr_type() == T_FUN_SYS_CAST)
@@ -427,6 +489,7 @@ bool GraphFeedbackLoopLogOp::can_reuse_adjacency() const
       }
     }
   }
+  if (!safe && parameters != nullptr) { parameters->reuse(); }
   return safe;
 }
 
