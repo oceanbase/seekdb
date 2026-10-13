@@ -126,3 +126,21 @@ SELECT * FROM GRAPH_TABLE(graph_steps MATCH
 ORDER BY m,sn;
 DROP PROPERTY GRAPH graph_steps;
 DROP TABLE graph_step_e,graph_step_v;
+--disable_query_log
+--source mysql_test/test_suite/graph/mapping_fixture.sql
+--enable_query_log
+--echo incompatible_edge_mapping_preserves_zero_hop
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS works]->{0,1}(b IS person)
+  ONE ROW PER STEP(v1,se,v2)
+  COLUMNS(v1.id AS source_id,se.id AS edge_id,v2.id AS target_id)) g;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS company WHERE a.id=1)<-[e IS works]-{0,1}(b IS company)
+  ONE ROW PER STEP(v1,se,v2)
+  COLUMNS(v1.id AS source_id,se.id AS edge_id,v2.id AS target_id)) g;
+SELECT COUNT(*) AS positive_paths FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS works]->{1,2}(b IS person)
+  ONE ROW PER STEP(v1,se,v2)
+  COLUMNS(v1.id AS source_id,se.id AS edge_id,v2.id AS target_id)) g;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;
