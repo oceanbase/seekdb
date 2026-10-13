@@ -81,6 +81,7 @@ while ($access_pass)
       connection gcs_writer;
       SET ob_global_debug_sync='reset';
       SET ob_global_debug_sync='DAS_GRAPH_EXPAND_AFTER_EDGE_ROW signal gcs_reached wait_for gcs_resume timeout 30000000 execute 1';
+      let $pause_start=query_get_value(select current_timestamp(6) as ts, ts, 1);
       connection default;
       # The writer commits only after a checked live edge cursor is paused,
       # before the graph query has completed endpoint existence/property lookups.
@@ -103,6 +104,14 @@ while ($access_pass)
       INSERT INTO gcs_edge VALUES(11,1,@gcs_middle,'keep'),(12,@gcs_middle,3,'keep'),
         (13,1,@gcs_middle,'keep'),(14,1,3,'reject');
       COMMIT;
+      # DEBUG_SYNC may return success on timeout. Bound the entire interval
+      # from before dispatch through COMMIT, not merely the reached wait, so
+      # the cursor cannot have resumed on its own before the writer commits.
+      let $pause_expired=`select timestampdiff(microsecond,'$pause_start',current_timestamp(6)) >= 29000000`;
+      if ($pause_expired)
+      {
+        die graph writer did not commit within the live cursor pause;
+      }
       SET ob_global_debug_sync='NOW signal gcs_resume';
       connection default;
       --echo in_flight_statement_keeps_old_vertices_edges_and_properties
