@@ -20,10 +20,11 @@ import threading
 import uuid
 
 import numpy as np
+import pymysql
 from lightrag import LightRAG, QueryParam
 from lightrag.utils import EmbeddingFunc, Tokenizer, compute_mdhash_id, make_relation_chunk_key
 
-from seekdb_graph import BATCH_SIZE, SeekDBGraphStorage, register
+from seekdb_graph import BATCH_SIZE, TRANSACTION_MAX_ATTEMPTS, SeekDBGraphStorage, register
 
 
 def storage(workspace, namespace="graph"):
@@ -354,8 +355,94 @@ async def product_checks():
             await replacement.finalize_storages()
 
 
+async def retry_checks():
+    graph = storage('retry_' + uuid.uuid4().hex)
+    await graph.initialize()
+    try:
+        lock_attempts = 0
+        class LockConflictCursor(pymysql.cursors.DictCursor):
+            def execute(self, query, args=None):
+                nonlocal lock_attempts
+                if (isinstance(query, str) and query.startswith('SELECT id FROM lr_seekdb_scopes')
+                        and query.endswith('FOR UPDATE')):
+                    lock_attempts += 1
+                    if lock_attempts < TRANSACTION_MAX_ATTEMPTS:
+                        return super().execute("SIGNAL SQLSTATE '25000' SET MYSQL_ERRNO=6235, MESSAGE_TEXT='lock retry fixture'")
+                return super().execute(query, args)
+        original_cursor = graph._options['cursorclass']
+        graph._options['cursorclass'] = LockConflictCursor
+        try:
+            await graph.upsert_node('lock_retry', {'value': 1})
+            assert lock_attempts == TRANSACTION_MAX_ATTEMPTS
+        finally:
+            graph._options['cursorclass'] = original_cursor
+        assert await graph.get_node('lock_retry') == {'value': 1}
+
+        async def injected(prefix, failures, code=6235):
+            attempts = []
+            def write(cursor):
+                cursor.execute('SELECT CONNECTION_ID() AS id')
+                attempts.append(cursor.fetchone()['id'])
+                previous = [f'{prefix}{i}' for i in range(1, len(attempts))]
+                assert graph._nodes(cursor, previous) == {}, 'earlier attempt was not rolled back'
+                graph._upsert_nodes(cursor, [(graph._scope, f'{prefix}{len(attempts)}'.encode(), '{"value":1}')])
+                if len(attempts) <= failures:
+                    cursor.execute(f"SIGNAL SQLSTATE '25000' SET MYSQL_ERRNO={code}, MESSAGE_TEXT='retry fixture'")
+                return len(attempts)
+            try:
+                result = await graph._run(write, write=True)
+                assert result == failures + 1
+            except pymysql.OperationalError as error:
+                assert error.args[0] == code
+                assert failures >= TRANSACTION_MAX_ATTEMPTS or code != 6235
+                result = None
+            expected_attempts = min(failures + 1, TRANSACTION_MAX_ATTEMPTS) if code == 6235 else 1
+            assert len(attempts) == expected_attempts and len(set(attempts)) == len(attempts)
+            keys = [f'{prefix}{i}' for i in range(1, TRANSACTION_MAX_ATTEMPTS + 1)]
+            assert await graph.get_nodes_batch(keys) == (
+                {f'{prefix}{result}': {'value': 1}} if result is not None else {})
+        # These failures occur after a real SQL write. A retry of just the failed
+        # statement, rather than the complete transaction, leaves visible markers.
+        await injected('eventual', TRANSACTION_MAX_ATTEMPTS - 1)
+        await injected('exhausted', TRANSACTION_MAX_ATTEMPTS)
+        await injected('not_retryable', 1, 1205)
+
+        reached, resume = threading.Event(), threading.Event()
+        attempts = 0
+        def cancelled_retry(cursor):
+            nonlocal attempts
+            attempts += 1
+            graph._upsert_nodes(cursor, [(graph._scope, f'cancel{attempts}'.encode(), '{"value":1}')])
+            if attempts == 1:
+                cursor.execute("SIGNAL SQLSTATE '25000' SET MYSQL_ERRNO=6235, MESSAGE_TEXT='retry fixture'")
+            reached.set()
+            if not resume.wait(10):
+                raise RuntimeError('retry cancellation handshake timed out')
+        task = asyncio.create_task(graph._run(cancelled_retry, write=True))
+        try:
+            assert await asyncio.to_thread(reached.wait, 10)
+            task.cancel()
+            await asyncio.sleep(.01)
+            assert not task.done(), 'cancel escaped while retry worker was live'
+            resume.set()
+            try:
+                await task
+                raise AssertionError('retry cancellation was swallowed')
+            except asyncio.CancelledError:
+                pass
+        finally:
+            resume.set()
+            await asyncio.gather(task, return_exceptions=True)
+        assert attempts == 2
+        assert await graph.get_nodes_batch(['cancel1', 'cancel2']) == {'cancel2': {'value': 1}}
+        print('adapter serialization retries: passed', flush=True)
+    finally:
+        await graph.drop()
+
+
 async def main():
     await contract_checks()
+    await retry_checks()
     await concurrent_batch_checks()
     await product_checks()
 

@@ -31,6 +31,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import time
 from dataclasses import dataclass, field
 
 import pymysql
@@ -42,6 +43,8 @@ from lightrag.utils import validate_graph_attributes
 BATCH_SIZE = 256
 MAX_LABEL_BYTES = 2048
 MAX_SCOPE_BYTES = 512
+TRANSACTION_MAX_ATTEMPTS = 3
+TRANSACTION_RETRY_DELAY = 0.01
 
 
 def _key(value, capacity=MAX_LABEL_BYTES):
@@ -95,31 +98,41 @@ class SeekDBGraphStorage(BaseGraphStorage):
         _key(self.namespace, MAX_SCOPE_BYTES)
 
     def _transaction(self, operation, write, scoped):
-        connection = pymysql.connect(**self._options)
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute("SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ")
-                cursor.execute("SET ob_query_timeout=30000000")
-                connection.begin()
-                if scoped:
-                    if self._scope is None:
-                        raise RuntimeError("initialize graph storage before use")
-                    if write:
-                        # All writers of this namespace, including separate processes,
-                        # take this lock before touching nodes/edges. Atomic deletion
-                        # cannot race edge insertion into leaving orphan endpoints.
-                        cursor.execute("SELECT id FROM lr_seekdb_scopes WHERE id=%s FOR UPDATE",
-                                       (self._scope,))
-                        if cursor.fetchone() is None:
-                            raise RuntimeError("graph namespace was removed externally")
-                result = operation(cursor)
-            connection.commit()
-            return result
-        except BaseException:
-            connection.rollback()
-            raise
-        finally:
-            connection.close()
+        for attempt in range(TRANSACTION_MAX_ATTEMPTS):
+            connection = pymysql.connect(**self._options)
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+                    cursor.execute("SET ob_query_timeout=30000000")
+                    connection.begin()
+                    if scoped:
+                        if self._scope is None:
+                            raise RuntimeError("initialize graph storage before use")
+                        if write:
+                            # All writers, including other processes, lock before
+                            # touching nodes/edges so deletion cannot create orphans.
+                            cursor.execute("SELECT id FROM lr_seekdb_scopes WHERE id=%s FOR UPDATE",
+                                           (self._scope,))
+                            if cursor.fetchone() is None:
+                                raise RuntimeError("graph namespace was removed externally")
+                    result = operation(cursor)
+                connection.commit()
+                return result
+            except pymysql.OperationalError as error:
+                connection.rollback()
+                # RR may reject a contended namespace lock or a later write.
+                # Only this explicit serialization conflict permits replay of the
+                # whole mutation with a new snapshot. Transport/commit ambiguity
+                # and cleanup failures must propagate, never trigger replay.
+                if (not write or not error.args or error.args[0] != 6235
+                        or attempt + 1 == TRANSACTION_MAX_ATTEMPTS):
+                    raise
+            except BaseException:
+                connection.rollback()
+                raise
+            finally:
+                connection.close()
+            time.sleep(TRANSACTION_RETRY_DELAY * (2 ** attempt))
 
     async def _run(self, operation, *, write=False, scoped=True):
         worker = asyncio.create_task(asyncio.to_thread(self._transaction, operation, write, scoped))
