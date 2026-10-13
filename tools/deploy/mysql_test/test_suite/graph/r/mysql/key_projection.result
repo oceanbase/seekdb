@@ -2,7 +2,7 @@ SELECT statement_id,COUNT(*) AS result_lookups FROM plan_table
 WHERE object_alias LIKE '__g_result_%' GROUP BY statement_id ORDER BY statement_id;
 statement_id	result_lookups
 filter	2
-property	2
+property	1
 SELECT COUNT(*) AS native_key_only FROM plan_table WHERE statement_id='keys'
 AND special_predicates LIKE '%runtime=native%';
 native_key_only

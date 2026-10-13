@@ -2041,11 +2041,13 @@ int build_graph_prefix_seed(GraphRelationBuilder &builder,
 }
 
 // The recursive anchor/step already verify vertex existence. When results use
-// only integral vertex keys, their values are exactly represented in the path
-// row and the two final vertex lookups add no information. Do not generalize
+// integral vertex keys, their values are exactly represented in the path row.
+// Rewrite those keys even beside property projections, so ORDER BY keys can
+// run before property lookups. If there are no properties, omit both lookups.
+// Do not generalize
 // this to collation/tolerance equality: an edge's stored key can compare equal
 // to a vertex key while having a different representation (e.g. "a" vs "A").
-int replace_graph_key_projections(GraphRelationBuilder &builder,
+int rewrite_graph_key_projections(GraphRelationBuilder &builder,
                                   const GraphBinding &source,
                                   const GraphBinding &target,
                                   ParseNode *path_alias,
@@ -2054,6 +2056,7 @@ int replace_graph_key_projections(GraphRelationBuilder &builder,
 {
   int ret = OB_SUCCESS;
   bool safe = true;
+  bool keys_only = true;
   replaced = false;
   const GraphBinding *bindings[] = {&source, &target};
   const char *prefixes[] = {"__g_source_key_", "__g_current_key_"};
@@ -2086,9 +2089,10 @@ int replace_graph_key_projections(GraphRelationBuilder &builder,
             if (graph_name_equal(graph_node_name(*node->children_[2]),
                                  column->get_column_name_str())) { break; }
           }
-          safe = key < binding.element_->key_count_;
-          if (safe && OB_FAIL(columns.push_back(GraphParseNode{node}))) {
-          } else if (safe && OB_FAIL(replacements.push_back(GraphParseNode{
+          if (key == binding.element_->key_count_) {
+            keys_only = false;
+          } else if (OB_FAIL(columns.push_back(GraphParseNode{node}))) {
+          } else if (OB_FAIL(replacements.push_back(GraphParseNode{
               make_internal_column(builder, path_alias, prefixes[b], key)}))) {
           }
         }
@@ -2104,7 +2108,7 @@ int replace_graph_key_projections(GraphRelationBuilder &builder,
     for (int64_t i = 0; i < columns.count(); ++i) {
       *columns.at(i).node_ = *replacements.at(i).node_;
     }
-    replaced = true;
+    replaced = keys_only;
   }
   return ret;
 }
@@ -2752,13 +2756,33 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
         && !alternating && !path_desc.any_shortest_
         && path_desc.direction_ != GraphPathDirection::BOTH) {
       bool replaced = false;
-      if (OB_FAIL(replace_graph_key_projections(builder, result_source, result_target,
+      if (OB_FAIL(rewrite_graph_key_projections(builder, result_source, result_target,
                                                path_alias, *rewritten_projects, replaced))) {
-      } else if (replaced) {
+      } else {
+        ParseNode *relation = builder.relation(CTE_NAME, path_alias);
+        if (!replaced) {
+          // The anchor and every step already checked these vertices under
+          // the same statement snapshot. With no endpoint predicate, these
+          // joins only fetch properties and cannot reject a path. LEFT JOIN
+          // exposes that invariant to ordinary unique-join LIMIT pushdown:
+          // rank path data first, fetch non-ranking properties for winners.
+          // Keep predicates/composed/step/shortest shapes on the existing path.
+          const GraphBinding *results[] = {&result_source, &result_target};
+          const char *prefixes[] = {SOURCE_KEY_PREFIX, CURRENT_KEY_PREFIX};
+          for (int64_t b = 0; b < ARRAYSIZEOF(results); ++b) {
+            ParseNode *on = nullptr;
+            for (int64_t k = 0; k < results[b]->element_->key_count_; ++k) {
+              builder.append_condition(builder.binary(T_OP_EQ,
+                  builder.column(*results[b], results[b]->element_->key_columns_[k]),
+                  make_internal_column(builder, path_alias, prefixes[b], k)), on);
+            }
+            relation = builder.join(relation, builder.relation(*results[b]), on, true);
+          }
+        }
         // Only the hop lower bound remains. Source filters ran in the anchor;
         // endpoint filters and composed/step/shortest shapes retain lookups.
         from = builder.make(T_FROM_LIST, 1);
-        if (from != nullptr) { from->children_[0] = builder.relation(CTE_NAME, path_alias); }
+        if (from != nullptr) { from->children_[0] = relation; }
         where = builder.binary(T_OP_GE, builder.column(path_alias, DEPTH_NAME),
                                 builder.integer(path_desc.lower_bound_));
       }
