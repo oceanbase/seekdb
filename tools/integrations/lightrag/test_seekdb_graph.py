@@ -23,7 +23,7 @@ import numpy as np
 from lightrag import LightRAG, QueryParam
 from lightrag.utils import EmbeddingFunc, Tokenizer, compute_mdhash_id, make_relation_chunk_key
 
-from seekdb_graph import SeekDBGraphStorage, register
+from seekdb_graph import BATCH_SIZE, SeekDBGraphStorage, register
 
 
 def storage(workspace, namespace="graph"):
@@ -173,6 +173,90 @@ async def contract_checks():
             await item.drop()
 
 
+async def concurrent_batch_checks():
+    workspace = "batch_snapshot_" + uuid.uuid4().hex
+    reader, first, second = [storage(workspace) for _ in range(3)]
+    for item in (reader, first, second):
+        await item.initialize()
+    keys = [f"node{i:04d}" for i in range(BATCH_SIZE + 1)]
+    pairs = [(keys[i], keys[(i + 1) % len(keys)]) for i in range(len(keys))]
+    requested = [{"src": src, "tgt": dst} for src, dst in pairs]
+    initial = {"version": 0, "w0": 0, "w1": 0}
+    tasks = []
+    try:
+        await first.upsert_nodes_batch([(key, initial) for key in keys])
+        await first.upsert_edges_batch([(src, dst, initial) for src, dst in pairs])
+
+        async def read_across_commit(method_name, read, write):
+            original = getattr(reader, method_name)
+            reached, resume = threading.Event(), threading.Event()
+            def paused(cursor, items):
+                # The first packet really establishes the transaction snapshot.
+                # Only scheduling is controlled; both packets use the real DB.
+                result = original(cursor, items[:BATCH_SIZE])
+                reached.set()
+                if not resume.wait(10):
+                    raise RuntimeError("batch snapshot resume timed out")
+                result.update(original(cursor, items[BATCH_SIZE:]))
+                return result
+            setattr(reader, method_name, paused)
+            task = asyncio.create_task(read())
+            try:
+                assert await asyncio.to_thread(reached.wait, 10), "first packet was not read"
+                await write()
+                resume.set()
+                result = await task
+                assert len(result) == len(keys)
+                assert all(row["version"] == 0 for row in result.values()), result
+            finally:
+                resume.set()
+                # Drain the real DB worker before restoring the hook or cleanup.
+                await asyncio.gather(task, return_exceptions=True)
+                setattr(reader, method_name, original)
+
+        await read_across_commit(
+            "_nodes", lambda: reader.get_nodes_batch(keys),
+            lambda: first.upsert_nodes_batch([(key, {"version": 1}) for key in keys]))
+        assert all(row["version"] == 1 for row in (await reader.get_nodes_batch(keys)).values())
+        await read_across_commit(
+            "_edges", lambda: reader.get_edges_batch(requested),
+            lambda: first.upsert_edges_batch([(src, dst, {"version": 1}) for src, dst in pairs]))
+        assert all(row["version"] == 1 for row in (await reader.get_edges_batch(requested)).values())
+
+        rounds = 8
+        async def writer(store, field):
+            for value in range(1, rounds + 1):
+                await store.upsert_nodes_batch([(key, {field: value}) for key in keys])
+                await store.upsert_edges_batch([(src, dst, {field: value}) for src, dst in pairs])
+        tasks = [asyncio.create_task(writer(first, "w0")), asyncio.create_task(writer(second, "w1"))]
+        checks = 0
+        while not all(task.done() for task in tasks):
+            for rows in (await reader.get_nodes_batch(keys), await reader.get_edges_batch(requested)):
+                assert len(rows) == len(keys)
+                # One call is atomic across packets. Different calls need not
+                # observe the same epoch, nor do node/edge writes share a txn.
+                for field in ("w0", "w1"):
+                    assert len({row[field] for row in rows.values()}) == 1, (field, rows)
+            checks += 1
+        await asyncio.gather(*tasks)
+        assert checks > 0, "concurrent readers were not exercised"
+        expected = {"version": 1, "w0": rounds, "w1": rounds}
+        assert await reader.get_nodes_batch(keys) == {key: expected for key in keys}
+        assert await reader.get_edges_batch(requested) == {pair: expected for pair in pairs}
+        incident = await reader.get_nodes_edges_batch(keys)
+        assert incident == {
+            key: sorted([(key, keys[(i - 1) % len(keys)]), (key, keys[(i + 1) % len(keys)])])
+            for i, key in enumerate(keys)
+        }
+        print("adapter concurrent batches: snapshots and disjoint updates passed", flush=True)
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        await reader.drop()
+
+
 class ByteTokenizer:
     def encode(self, text):
         return list(text.encode("utf-8"))
@@ -272,6 +356,7 @@ async def product_checks():
 
 async def main():
     await contract_checks()
+    await concurrent_batch_checks()
     await product_checks()
 
 
