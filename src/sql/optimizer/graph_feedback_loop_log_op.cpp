@@ -65,6 +65,7 @@ bool is_outer_graph_parameter(const ObRawExpr &expr, const ObLogTableScan &edge)
         case ObNumberType: case ObUNumberType: case ObDecimalIntType:
         case ObVarcharType: case ObCharType:
         case ObDateTimeType: case ObTimestampType: case ObDateType:
+        case ObMySQLDateType: case ObMySQLDateTimeType:
         case ObTimeType: case ObYearType:
           break;
         default:

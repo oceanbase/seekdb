@@ -365,6 +365,11 @@ DEALLOCATE PREPARE pr_cached;
 DROP TABLE pr_expected,pr_seeds;
 DROP PROPERTY GRAPH graph_social;
 DROP TABLE graph_works,graph_knows,graph_company,graph_person;
+SELECT COUNT(*)=1 AS typed_parameter_reuse_eligible FROM plan_table
+WHERE statement_id='typed_parameter_reuse' AND operator='GRAPH FEEDBACK LOOP'
+   AND special_predicates LIKE '%runtime=native%adjacency_reuse=eligible%';
+typed_parameter_reuse_eligible
+1
 typed_contexts_preserve_binary_strings_dates_decimals_and_nulls
 SELECT s.id,g.eid FROM pr_bindings s,LATERAL (
 SELECT * FROM GRAPH_TABLE(pr_graph MATCH
@@ -378,6 +383,11 @@ id	eid
 6	[12]
 8	[10]
 CREATE INDEX pr_typed_src ON pr_edge(src,tenant,dst);
+SELECT COUNT(*)=1 AS typed_parameter_reuse_eligible FROM plan_table
+WHERE statement_id='typed_parameter_reuse' AND operator='GRAPH FEEDBACK LOOP'
+   AND special_predicates LIKE '%runtime=native%adjacency_reuse=eligible%';
+typed_parameter_reuse_eligible
+1
 typed_contexts_preserve_binary_strings_dates_decimals_and_nulls
 SELECT s.id,g.eid FROM pr_bindings s,LATERAL (
 SELECT * FROM GRAPH_TABLE(pr_graph MATCH

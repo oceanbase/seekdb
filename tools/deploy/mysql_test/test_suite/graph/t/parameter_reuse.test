@@ -105,6 +105,23 @@ while ($passes)
   {
     CREATE INDEX pr_typed_src ON pr_edge(src,tenant,dst);
   }
+  --disable_query_log
+  --source mysql_test/include/create_plan_table.inc
+  --disable_result_log
+  EXPLAIN INTO plan_table SET statement_id='typed_parameter_reuse'
+  SELECT s.id,g.eid FROM pr_bindings s,LATERAL (
+   SELECT * FROM GRAPH_TABLE(pr_graph MATCH
+    (a IS person WHERE a.id=1)-[e IS knows WHERE e.tenant=s.tenant
+     AND e.valid_at>=s.since AND e.weight>=s.weight]->{1}(b IS person)
+    COLUMNS(JSON_ARRAYAGG(e.id) AS eid)) p) g;
+  --enable_result_log
+  --enable_query_log
+  SELECT COUNT(*)=1 AS typed_parameter_reuse_eligible FROM plan_table
+   WHERE statement_id='typed_parameter_reuse' AND operator='GRAPH FEEDBACK LOOP'
+   AND special_predicates LIKE '%runtime=native%adjacency_reuse=eligible%';
+  --disable_query_log
+  DROP TABLE plan_table;
+  --enable_query_log
   --echo typed_contexts_preserve_binary_strings_dates_decimals_and_nulls
   SELECT s.id,g.eid FROM pr_bindings s,LATERAL (
    SELECT * FROM GRAPH_TABLE(pr_graph MATCH
