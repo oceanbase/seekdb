@@ -117,7 +117,9 @@ public:
 
 private:
   int initialize_path_payloads(ObLogTableScan &edge_scan);
-  common::ObArray<ObRawExpr *> path_payload_exprs_;
+  // Logical plans release their memory context without running every operator
+  // destructor. Bind this buffer to that context, like other logical-op arrays.
+  common::ObArray<ObRawExpr *, common::ModulePageAllocator, true> path_payload_exprs_{};
   int get_feedback_exprs(ObIArray<ObRawExpr *> &exprs) const;
   bool can_use_basic_native_runtime() const;
 
