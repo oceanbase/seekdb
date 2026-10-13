@@ -63,10 +63,10 @@ public:
                K_(payload_expr_count), K_(output_expr_count));
 };
 
-// Query-local owner of one breadth-first path frontier. Each call to expand()
-// converts the current path-state IDs into GraphExpandInput batches, consumes
-// their single-hop extensions, and installs the accepted child states as the
-// next frontier. GraphFeedbackLoopOp uses this controller for its conservative
+// Query-local owner of a breadth-first path frontier. expand() converts the
+// input path-state IDs into GraphExpandInput batches and yields bounded groups
+// of accepted children. Only a complete level becomes the next input frontier.
+// GraphFeedbackLoopOp uses this controller for its conservative
 // native subset and retains the recursive-SQL child as a semantic fallback.
 class GraphFeedbackFrontier final
 {
@@ -82,7 +82,11 @@ public:
   int add_seed(int64_t binding_id,
                const GraphElementIdentity &source_identity);
 
-  // Advances exactly one hop. WALK normally accepts every extension; a proven
+  // Produces a bounded batch from the next hop, or resumes that same hop.
+  // A partially produced hop is visible to the consumer but never becomes
+  // input to the following hop until all its extensions have been consumed.
+  // This is scheduling, not truncation: further calls return every path.
+  // WALK normally accepts every extension; a proven
   // duplicate-insensitive consumer can merge equal binding/vertex states at
   // this hop. TRAIL rejects edges in the extension's own history. An empty current
   // frontier returns OB_ITER_END without modifying the controller.
@@ -96,15 +100,17 @@ public:
   int get_frontier_path(
       int64_t index,
       const common::ObIArray<GraphPathState> *&path);
-  int64_t get_hop() const { return hop_; }
-  int64_t get_frontier_count() const { return current_state_ids_->count(); }
+  int64_t get_hop() const { return hop_ + (expanding_ ? 1 : 0); }
+  int64_t get_frontier_count() const { return output_state_ids().count(); }
+  bool is_expanding() const { return expanding_; }
   int64_t get_path_state_count() const { return state_store_.count(); }
   int64_t get_peak_memory() const { return peak_memory_bytes_; }
   // Statistics for the most recently completed source-hop -> target-hop
   // expansion. They aggregate every physical input batch in that BFS level.
   const GraphExpandStats &get_last_hop_stats() const
   { return last_hop_stats_; }
-  bool empty() const { return current_state_ids_->empty(); }
+  GraphExpandStats get_pending_hop_stats() const;
+  bool empty() const { return output_state_ids().empty(); }
 
   // Clears path history and both frontier buffers for close, rescan, or any
   // terminal error. The referenced GraphExpand object remains reusable.
@@ -122,7 +128,10 @@ private:
   int build_input_batch(int64_t start, int64_t &next_start);
   int consume_input_batch(GraphPathDirection direction,
                           GraphPathMode path_mode,
-                          bool prune_duplicate_states);
+                          bool prune_duplicate_states,
+                          int64_t output_end);
+  const common::ObIArray<int64_t> &output_state_ids() const
+  { return expanding_ ? *next_state_ids_ : *current_state_ids_; }
   int start_hop_stats();
   int record_hop_source(const GraphElementIdentity &source_identity);
   void accumulate_expand_stats();
@@ -158,6 +167,9 @@ private:
   GraphExpandStats last_hop_stats_{};
   bool collecting_hop_stats_{false};
   bool hop_source_index_enabled_{true};
+  bool expanding_{false};
+  bool batch_open_{false};
+  int64_t next_input_start_{0};
 
   DISALLOW_COPY_AND_ASSIGN(GraphFeedbackFrontier);
 };

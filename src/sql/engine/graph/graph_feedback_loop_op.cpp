@@ -238,9 +238,16 @@ public:
     return has_output_frontier(spec) ? frontier_.get_frontier_count() : 0;
   }
 
-  const GraphExpandStats &get_cumulative_stats() const
-  { return cumulative_stats_; }
-  int64_t get_expanded_hop_count() const { return expanded_hop_count_; }
+  GraphExpandStats get_cumulative_stats() const
+  {
+    GraphExpandStats stats = cumulative_stats_;
+    if (frontier_.is_expanding()) {
+      add_hop_stats(frontier_.get_pending_hop_stats(), stats);
+    }
+    return stats;
+  }
+  int64_t get_expanded_hop_count() const
+  { return expanded_hop_count_ + (frontier_.is_expanding() ? 1 : 0); }
 
   int get_output_state(const GraphFeedbackLoopSpec &spec,
                        int64_t index,
@@ -300,8 +307,9 @@ public:
         } else {
           ++next_output_index_;
         }
-      } else if (frontier_.empty()
-                 || frontier_.get_hop() >= spec.get_upper_bound()) {
+      } else if (!frontier_.is_expanding()
+                 && (frontier_.empty()
+                     || frontier_.get_hop() >= spec.get_upper_bound())) {
         ret = OB_ITER_END;
       } else if (OB_FAIL(advance_frontier(spec))) {
         if (ret != OB_ITER_END) {
@@ -341,16 +349,22 @@ public:
     return ret;
   }
 
-  // Advances exactly one level and never crosses the SQL upper bound. WALK
-  // and TRAIL decisions remain path-local inside GraphFeedbackFrontier.
+  // Starts/resumes one level and never crosses the SQL upper bound. A visible
+  // batch can be consumed before the level completes; lower-bound levels are
+  // still fully drained before any qualifying path is returned.
   int advance_frontier(const GraphFeedbackLoopSpec &spec)
   {
     int ret = OB_SUCCESS;
+    // DAS batch iterators can change the shared evaluation batch position.
+    // Restore the caller's scalar output slot even when the cursor stays open
+    // at a yield; otherwise the first output can be written past slot zero.
+    ObEvalCtx::BatchInfoScopeGuard batch_guard(eval_ctx_);
     const int64_t current_hop = frontier_.get_hop();
     if (OB_UNLIKELY(!seeds_loaded_)) {
       ret = OB_NOT_INIT;
       LOG_WARN("graph feedback seeds are not loaded", K(ret));
-    } else if (frontier_.empty() || current_hop >= spec.get_upper_bound()) {
+    } else if (!frontier_.is_expanding()
+               && (frontier_.empty() || current_hop >= spec.get_upper_bound())) {
       ret = OB_ITER_END;
     } else if (OB_FAIL(frontier_.expand(spec.get_direction(),
                                         spec.get_path_mode(),
@@ -361,10 +375,10 @@ public:
                  K(current_hop));
       }
     } else {
-      accumulate_last_hop_stats();
-      if (frontier_.empty()) {
+      if (!frontier_.is_expanding()) { accumulate_last_hop_stats(); }
+      if (frontier_.empty() && !frontier_.is_expanding()) {
         ret = OB_ITER_END;
-      } else {
+      } else if (frontier_.get_hop() != current_hop) {
         next_output_index_ = 0;
       }
     }
@@ -376,6 +390,10 @@ public:
 
   void reset(bool keep_adjacency = false)
   {
+    if (frontier_.is_expanding()) {
+      add_hop_stats(frontier_.get_pending_hop_stats(), cumulative_stats_);
+      expanded_hop_count_ = saturated_stat_add(expanded_hop_count_, 1);
+    }
     payload_allocator_.reset();
     frontier_.reset();
     if (!keep_adjacency) { cached_access_.clear(); }
@@ -607,26 +625,21 @@ private:
 
   void accumulate_last_hop_stats()
   {
-    const GraphExpandStats &hop_stats = frontier_.get_last_hop_stats();
-    cumulative_stats_.input_states_ = saturated_stat_add(
-        cumulative_stats_.input_states_, hop_stats.input_states_);
-    cumulative_stats_.distinct_sources_ = saturated_stat_add(
-        cumulative_stats_.distinct_sources_, hop_stats.distinct_sources_);
-    cumulative_stats_.distinct_sources_exact_ =
-        cumulative_stats_.distinct_sources_exact_
-        && hop_stats.distinct_sources_exact_;
-    cumulative_stats_.scanned_edges_ = saturated_stat_add(
-        cumulative_stats_.scanned_edges_, hop_stats.scanned_edges_);
-    cumulative_stats_.looked_up_vertices_ = saturated_stat_add(
-        cumulative_stats_.looked_up_vertices_,
-        hop_stats.looked_up_vertices_);
-    cumulative_stats_.orphan_edges_ = saturated_stat_add(
-        cumulative_stats_.orphan_edges_, hop_stats.orphan_edges_);
-    cumulative_stats_.output_states_ = saturated_stat_add(
-        cumulative_stats_.output_states_, hop_stats.output_states_);
-    cumulative_stats_.peak_path_memory_ = std::max(
-        cumulative_stats_.peak_path_memory_, hop_stats.peak_path_memory_);
+    add_hop_stats(frontier_.get_last_hop_stats(), cumulative_stats_);
     expanded_hop_count_ = saturated_stat_add(expanded_hop_count_, 1);
+  }
+
+  static void add_hop_stats(const GraphExpandStats &hop_stats, GraphExpandStats &total)
+  {
+    total.input_states_ = saturated_stat_add(total.input_states_, hop_stats.input_states_);
+    total.distinct_sources_ = saturated_stat_add(total.distinct_sources_, hop_stats.distinct_sources_);
+    total.distinct_sources_exact_ = total.distinct_sources_exact_
+        && hop_stats.distinct_sources_exact_;
+    total.scanned_edges_ = saturated_stat_add(total.scanned_edges_, hop_stats.scanned_edges_);
+    total.looked_up_vertices_ = saturated_stat_add(total.looked_up_vertices_, hop_stats.looked_up_vertices_);
+    total.orphan_edges_ = saturated_stat_add(total.orphan_edges_, hop_stats.orphan_edges_);
+    total.output_states_ = saturated_stat_add(total.output_states_, hop_stats.output_states_);
+    total.peak_path_memory_ = std::max(total.peak_path_memory_, hop_stats.peak_path_memory_);
   }
 
 private:
@@ -835,6 +848,23 @@ void GraphFeedbackFrontier::finish_hop_stats()
   hop_source_index_.reset();
 }
 
+GraphExpandStats GraphFeedbackFrontier::get_pending_hop_stats() const
+{
+  GraphExpandStats stats = current_hop_stats_;
+  if (batch_open_) {
+    const GraphExpandStats &batch = expand_.get_stats();
+    if (!hop_source_index_enabled_) {
+      stats.distinct_sources_ = saturated_stat_add(stats.distinct_sources_, batch.distinct_sources_);
+    }
+    stats.scanned_edges_ = saturated_stat_add(stats.scanned_edges_, batch.scanned_edges_);
+    stats.looked_up_vertices_ = saturated_stat_add(stats.looked_up_vertices_, batch.looked_up_vertices_);
+    stats.orphan_edges_ = saturated_stat_add(stats.orphan_edges_, batch.orphan_edges_);
+  }
+  if (hop_source_index_enabled_) { stats.distinct_sources_ = hop_source_index_.count(); }
+  stats.output_states_ = next_state_ids_->count();
+  return stats;
+}
+
 int GraphFeedbackFrontier::add_seed(
     int64_t binding_id,
     const GraphElementIdentity &source_identity)
@@ -960,20 +990,27 @@ int GraphFeedbackFrontier::build_input_batch(int64_t start,
 int GraphFeedbackFrontier::consume_input_batch(
     GraphPathDirection direction,
     GraphPathMode path_mode,
-    bool prune_duplicate_states)
+    bool prune_duplicate_states,
+    int64_t output_end)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(expand_.rescan(input_batch_, direction))) {
-    LOG_WARN("failed to open graph expand for frontier batch", K(ret),
-             "input_count", input_batch_.count());
+  bool batch_end = false;
+  if (!batch_open_) {
+    if (OB_FAIL(expand_.rescan(input_batch_, direction))) {
+      LOG_WARN("failed to open graph expand for frontier batch", K(ret),
+               "input_count", input_batch_.count());
+    } else {
+      batch_open_ = true;
+    }
   }
-  while (OB_SUCC(ret)) {
+  while (OB_SUCC(ret) && next_state_ids_->count() < output_end) {
     GraphExpandOutput extension;
     bool repeated_edge = false;
     bool repeated_state = false;
     int64_t entry_index = -1;
     int next_ret = expand_.get_next_row(extension);
     if (next_ret == OB_ITER_END) {
+      batch_end = true;
       break;
     } else if (OB_SUCCESS != next_ret) {
       ret = next_ret;
@@ -1013,10 +1050,15 @@ int GraphFeedbackFrontier::consume_input_batch(
   // GraphExpand::used_memory() after release().
   if (OB_SUCC(ret) && OB_FAIL(check_memory_limit())) {
   }
-  if (OB_SUCC(ret)) {
+  if (OB_SUCC(ret) && batch_end) {
     accumulate_expand_stats();
   }
-  expand_.release();
+  // Keep the current DAS page/cursor alive while the parent consumes this
+  // output batch. close/rescan/error releases it even if LIMIT stops early.
+  if (OB_SUCCESS != ret || batch_end) {
+    expand_.release();
+    batch_open_ = false;
+  }
   return ret;
 }
 
@@ -1025,8 +1067,9 @@ int GraphFeedbackFrontier::expand(GraphPathDirection direction,
                                   bool prune_duplicate_states)
 {
   int ret = OB_SUCCESS;
-  int64_t start = 0;
-  int64_t next_start = 0;
+  // A scheduling quantum, never a result/fanout limit. In particular a high
+  // degree source can yield before its complete adjacency is materialized.
+  static constexpr int64_t OUTPUT_BATCH_SIZE = 128;
   if (current_state_ids_->empty()) {
     ret = OB_ITER_END;
   } else if (OB_UNLIKELY(hop_ >= GRAPH_PATH_MAX_HOPS
@@ -1040,35 +1083,51 @@ int GraphFeedbackFrontier::expand(GraphPathDirection direction,
              "direction", static_cast<int64_t>(direction),
              "path_mode", static_cast<int64_t>(path_mode));
   } else {
-    next_state_ids_->reuse();
-    next_state_index_.reset();
-    if (OB_FAIL(start_hop_stats())) {
-      LOG_WARN("failed to start graph hop statistics", K(ret), K_(hop));
-    } else if (OB_FAIL(prepare_source_groups())) {
-      LOG_WARN("failed to group graph frontier sources", K(ret), K_(hop));
-    } else if (prune_duplicate_states
-               && OB_FAIL(next_state_index_.init(current_state_ids_->count()))) {
-    } else if (OB_FAIL(check_memory_limit())) {
+    if (!expanding_) {
+      next_state_ids_->reuse();
+      next_state_index_.reset();
+      next_input_start_ = 0;
+      if (OB_FAIL(start_hop_stats())) {
+        LOG_WARN("failed to start graph hop statistics", K(ret), K_(hop));
+      } else if (OB_FAIL(prepare_source_groups())) {
+        LOG_WARN("failed to group graph frontier sources", K(ret), K_(hop));
+      } else if (prune_duplicate_states
+                 && OB_FAIL(next_state_index_.init(current_state_ids_->count()))) {
+      } else if (OB_FAIL(check_memory_limit())) {
+      } else {
+        expanding_ = true;
+      }
     }
     const int64_t input_units = batch_by_source_groups_
         ? source_groups_.count() : current_state_ids_->count();
-    while (OB_SUCC(ret) && start < input_units) {
-      if (OB_FAIL(build_input_batch(start, next_start))) {
-      } else if (OB_FAIL(consume_input_batch(direction, path_mode, prune_duplicate_states))) {
-      } else {
-        start = next_start;
+    const int64_t output_end = saturated_stat_add(next_state_ids_->count(), OUTPUT_BATCH_SIZE);
+    while (OB_SUCC(ret) && (batch_open_ || next_input_start_ < input_units)
+           && next_state_ids_->count() < output_end) {
+      if (!batch_open_) {
+        int64_t next_start = next_input_start_;
+        if (OB_FAIL(build_input_batch(next_input_start_, next_start))) {
+        } else {
+          next_input_start_ = next_start;
+        }
+      }
+      if (OB_SUCC(ret) && OB_FAIL(consume_input_batch(
+              direction, path_mode, prune_duplicate_states, output_end))) {
       }
     }
-    if (OB_SUCC(ret)) {
+    if (OB_SUCC(ret) && !batch_open_ && next_input_start_ == input_units) {
       std::swap(current_state_ids_, next_state_ids_);
       next_state_ids_->reuse();
       ++hop_;
+      expanding_ = false;
       if (OB_FAIL(check_memory_limit())) {
       } else {
         finish_hop_stats();
         LOG_TRACE("completed graph frontier hop", K_(hop), K_(last_hop_stats));
         next_state_index_.reset();
       }
+    } else if (OB_SUCC(ret)) {
+      LOG_TRACE("yielded graph frontier batch", "hop", get_hop(),
+                "stats", get_pending_hop_stats());
     }
   }
   if (OB_SUCCESS != ret && OB_ITER_END != ret) {
@@ -1082,13 +1141,13 @@ int GraphFeedbackFrontier::get_frontier_state(
     GraphPathState &state) const
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(index < 0 || index >= current_state_ids_->count())) {
+  if (OB_UNLIKELY(index < 0 || index >= output_state_ids().count())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid graph frontier index", K(ret), K(index),
-             "frontier_count", current_state_ids_->count());
-  } else if (OB_FAIL(state_store_.get_state(current_state_ids_->at(index),
+             "frontier_count", output_state_ids().count());
+  } else if (OB_FAIL(state_store_.get_state(output_state_ids().at(index),
                                              state))) {
-  } else if (OB_UNLIKELY(state.hop_ != hop_)) {
+  } else if (OB_UNLIKELY(state.hop_ != get_hop())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("graph frontier state hop is inconsistent", K(ret), K_(hop),
              K(state));
@@ -1150,6 +1209,9 @@ void GraphFeedbackFrontier::reset()
   last_hop_stats_ = GraphExpandStats();
   collecting_hop_stats_ = false;
   hop_source_index_enabled_ = true;
+  expanding_ = false;
+  batch_open_ = false;
+  next_input_start_ = 0;
 }
 
 GraphFeedbackLoopSpec::GraphFeedbackLoopSpec(common::ObIAllocator &allocator,
@@ -1433,9 +1495,9 @@ void GraphFeedbackLoopOp::update_native_monitor_info()
   if (use_native_runtime_ && native_runtime_ != nullptr) {
     const GraphExpandStats &stats = native_runtime_->get_cumulative_stats();
     const int64_t expanded_hops = native_runtime_->get_expanded_hop_count();
-    // A level may return many paths, but cumulative access statistics change
-    // only when the feedback loop completes another hop.
-    if (expanded_hops != op_monitor_info_.otherstat_1_value_) {
+    // A consumer may stop during a hop. Include the live cursor's counters,
+    // not only completed levels, without accumulating a batch twice.
+    {
       op_monitor_info_.otherstat_1_value_ = expanded_hops;
       op_monitor_info_.otherstat_2_value_ = stats.input_states_;
       op_monitor_info_.otherstat_3_value_ = stats.distinct_sources_;

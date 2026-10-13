@@ -1,0 +1,108 @@
+--disable_query_log
+CREATE TABLE gd_digit(n INT PRIMARY KEY);
+INSERT INTO gd_digit VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+CREATE TABLE gd_v(id INT PRIMARY KEY);
+INSERT INTO gd_v VALUES (1),(2),(3);
+CREATE TABLE gd_e(id INT PRIMARY KEY,src INT,dst INT);
+INSERT INTO gd_e SELECT 1+a.n+10*b.n+100*c.n+1000*d.n+10000*f.n,1,2
+ FROM gd_digit a,gd_digit b,gd_digit c,gd_digit d,gd_digit f
+ WHERE a.n+10*b.n+100*c.n+1000*d.n+10000*f.n<20000;
+INSERT INTO gd_e VALUES (30000,2,3),(30001,1,99),(30002,1,3);
+CREATE PROPERTY GRAPH gd_graph
+ VERTEX TABLES(gd_v KEY(id) LABEL node PROPERTIES(id))
+ EDGE TABLES(gd_e KEY(id) SOURCE KEY(src) REFERENCES gd_v(id)
+ DESTINATION KEY(dst) REFERENCES gd_v(id) LABEL link PROPERTIES(id));
+CREATE TABLE gd_seed(binding_id INT PRIMARY KEY,seed INT);
+INSERT INTO gd_seed VALUES (1,1),(2,2),(3,1);
+SET @gd_sampling=@@optimizer_dynamic_sampling;
+SET optimizer_dynamic_sampling=0;
+let $gd_hash=query_get_value(select value from oceanbase.__all_virtual_sys_parameter_stat where name='_hash_area_size', value, 1);
+--enable_query_log
+--let $passes=2
+while ($passes)
+{
+ if ($passes == 1)
+ {
+  CREATE INDEX gd_out ON gd_e(src,id,dst);
+ }
+ --disable_query_log
+ --source mysql_test/include/create_plan_table.inc
+ --disable_result_log
+ EXPLAIN INTO plan_table SET statement_id='demand'
+ SELECT /*+ USE_NL(@SEL$3 __g_result_source __g_result_target) LEADING(@SEL$3 __g_path __g_result_source __g_result_target) */ COUNT(*) FROM (
+ SELECT * FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=1)
+ -[e IS link]->{1}(b IS node) COLUMNS(b.id AS endpoint)) g LIMIT 20) q;
+ --enable_result_log
+ --enable_query_log
+ SELECT COUNT(*) AS native_loops FROM plan_table WHERE statement_id='demand'
+ AND special_predicates LIKE '%runtime=native%';
+ SELECT COUNT(*) AS blocking_result_sorts FROM plan_table WHERE statement_id='demand'
+ AND operator LIKE '%SORT%';
+ DROP TABLE plan_table;
+ --disable_query_log
+ ALTER SYSTEM SET _hash_area_size='4M';
+ sleep 6;
+ --enable_query_log
+ --echo explicit_limit_does_not_materialize_the_complete_high_degree_hop
+ # Pin the nonblocking result joins: the default cost-based plan may sort
+ # before a merge join, which correctly prevents LIMIT from stopping early.
+ SELECT /*+ USE_NL(@SEL$3 __g_result_source __g_result_target) LEADING(@SEL$3 __g_path __g_result_source __g_result_target) */ COUNT(*) AS limited_paths FROM (
+ SELECT * FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=1)
+ -[e IS link]->{1}(b IS node) COLUMNS(b.id AS endpoint)) g LIMIT 20) q;
+ --echo an_unlimited_or_sorted_consumer_still_requires_the_complete_result
+ --error 11049
+ SELECT COUNT(*) FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=1)
+ -[e IS link]->{1}(b IS node) COLUMNS(b.id AS endpoint)) g;
+ --error 11049
+ SELECT * FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=1)
+ -[e IS link]->{1}(b IS node) COLUMNS(JSON_ARRAYAGG(e.id) AS edges)) g
+ ORDER BY edges DESC LIMIT 20;
+ --disable_query_log
+ eval ALTER SYSTEM SET _hash_area_size='$gd_hash';
+ sleep 6;
+ --enable_query_log
+ --echo full_drain_crosses_output_batches_and_das_pages_without_truncation
+ SELECT hops,COUNT(*) AS paths FROM GRAPH_TABLE(gd_graph MATCH
+ (a IS node WHERE a.id=1)-[e IS link]->{0,2}(b IS node)
+ COLUMNS(COUNT(e.id) AS hops)) g GROUP BY hops ORDER BY hops;
+ SELECT COUNT(*) AS paths FROM (
+ SELECT * FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=1)
+ -[e IS link]->{1}(b IS node) COLUMNS(b.id AS endpoint)) g LIMIT 4090,30) q;
+ --echo sorted_top_k_is_not_replaced_by_an_arbitrary_prefix
+ SELECT edges FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=1)
+ -[e IS link]->{2}(b IS node)
+ COLUMNS(JSON_ARRAYAGG(e.id) AS edges)) g
+ ORDER BY CAST(JSON_VALUE(edges,'$[0]') AS UNSIGNED) DESC LIMIT 3;
+ --echo early_rescan_preserves_each_binding_and_does_not_cache_partial_adjacency
+ SELECT /*+ USE_NL(@SEL$3 __g_result_source __g_result_target) LEADING(@SEL$3 __g_path __g_result_source __g_result_target) */ s.binding_id,COUNT(*) AS paths FROM gd_seed s,LATERAL (
+ SELECT * FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=s.seed)
+ -[e IS link]->{1,2}(b IS node) COLUMNS(b.id AS endpoint)) g LIMIT 140) p
+ GROUP BY s.binding_id ORDER BY s.binding_id;
+ # Binding 1 stops on the first page. Binding 2 needs the last edge page
+ # of the same adjacency, so treating the first prefix as complete is wrong.
+ SELECT /*+ USE_NL(@SEL$3 __g_result_source __g_result_target) LEADING(@SEL$3 __g_path __g_result_source __g_result_target) */ s.binding_id,COUNT(*) AS paths
+ FROM (SELECT binding_id,1 AS seed,IF(binding_id=2,3,2) AS target FROM gd_seed) s,LATERAL (
+ SELECT * FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=s.seed)
+ -[e IS link]->{1}(b IS node WHERE b.id=s.target)
+ COLUMNS(b.id AS endpoint)) g LIMIT 140) p
+ GROUP BY s.binding_id ORDER BY s.binding_id;
+ # Element numbers include vertices: the two edge positions are 2 and 4.
+ SELECT COUNT(*) AS step_rows,SUM(sn=2) AS first_steps,SUM(sn=4) AS second_steps
+ FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=1)
+ -[e IS link]->{2}(b IS node) ONE ROW PER STEP(v1,se,v2)
+ COLUMNS(ELEMENT_NUMBER(se) AS sn)) g;
+ PREPARE gd_cached FROM 'SELECT /*+ USE_NL(@SEL$3 __g_result_source __g_result_target) LEADING(@SEL$3 __g_path __g_result_source __g_result_target) */ COUNT(*) AS paths FROM (SELECT * FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=?)-[e IS link]->{1,2}(b IS node) COLUMNS(b.id AS endpoint)) g LIMIT ?) p';
+ SET @gd_start=1,@gd_count=129;
+ EXECUTE gd_cached USING @gd_start,@gd_count;
+ SET @gd_start=2,@gd_count=1;
+ EXECUTE gd_cached USING @gd_start,@gd_count;
+ SET @gd_start=1,@gd_count=4097;
+ EXECUTE gd_cached USING @gd_start,@gd_count;
+ DEALLOCATE PREPARE gd_cached;
+ --dec $passes
+}
+--disable_query_log
+SET optimizer_dynamic_sampling=@gd_sampling;
+--enable_query_log
+DROP PROPERTY GRAPH gd_graph;
+DROP TABLE gd_seed,gd_e,gd_v,gd_digit;
