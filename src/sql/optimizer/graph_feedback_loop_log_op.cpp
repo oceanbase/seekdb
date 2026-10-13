@@ -363,6 +363,9 @@ const char *path_mode_name(GraphPathMode path_mode)
     case GraphPathMode::TRAIL:
       name = "TRAIL";
       break;
+    case GraphPathMode::ACYCLIC:
+      name = "ACYCLIC";
+      break;
     default:
       break;
   }

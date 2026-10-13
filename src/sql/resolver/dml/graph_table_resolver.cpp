@@ -1164,14 +1164,14 @@ ParseNode *make_internal_column(GraphRelationBuilder &builder,
   return name == nullptr ? nullptr : builder.column(variable, graph_node_name(*name));
 }
 
-// Graph edge identity is (graph mapping, element mapping, complete typed key).
+// Graph element identity is (graph mapping, element mapping, complete typed key).
 // The graph is fixed for one GRAPH_TABLE invocation, so different element
-// mappings are always different identities. Edges from the same mapping are
+// mappings are always different identities. Elements from the same mapping are
 // different when at least one non-null primary-key component differs.
-int make_edge_identity_not_equal(GraphRelationBuilder &builder,
-                                 const GraphBinding &left,
-                                 const GraphBinding &right,
-                                 ParseNode *&condition)
+int make_element_identity_not_equal(GraphRelationBuilder &builder,
+                                    const GraphBinding &left,
+                                    const GraphBinding &right,
+                                    ParseNode *&condition)
 {
   int ret = OB_SUCCESS;
   condition = nullptr;
@@ -1198,27 +1198,52 @@ int make_edge_identity_not_equal(GraphRelationBuilder &builder,
   return ret;
 }
 
-// TRAIL is a per-path constraint. It does not deduplicate different paths; it
-// only rejects a row when two edge positions in that row bind the same typed
-// graph edge identity.
-int append_trail_edge_conditions(GraphRelationBuilder &builder,
-                                 const ObIArray<GraphBinding> &edges,
-                                 ParseNode *&where)
+// TRAIL and ACYCLIC are per-path constraints over edge and vertex positions,
+// respectively. They never deduplicate distinct paths or parallel edges.
+int append_distinct_element_conditions(GraphRelationBuilder &builder,
+                                       const ObIArray<GraphBinding> &elements,
+                                       ParseNode *&where)
 {
   int ret = OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && i < edges.count(); ++i) {
-    for (int64_t j = i + 1; OB_SUCC(ret) && j < edges.count(); ++j) {
+  for (int64_t i = 0; OB_SUCC(ret) && i < elements.count(); ++i) {
+    for (int64_t j = i + 1; OB_SUCC(ret) && j < elements.count(); ++j) {
       ParseNode *condition = nullptr;
-      if (OB_FAIL(make_edge_identity_not_equal(builder, edges.at(i), edges.at(j),
+      if (OB_FAIL(make_element_identity_not_equal(builder, elements.at(i), elements.at(j),
                                                condition))) {
       } else {
         // A null condition means the two positions use different graph element
-        // mappings and therefore cannot denote the same graph edge.
+        // mappings and therefore cannot denote the same graph element.
         builder.append_condition(condition, where);
       }
     }
   }
   return ret;
+}
+
+// Slot zero is the real seed; slots 1..upper are traversal destinations. The
+// mapping of each slot is known at compile time, including alternating A/B
+// mappings. Unpopulated slots impose no constraint, and key types/collations
+// are preserved rather than comparing JSON identities.
+void append_vertex_history_condition(GraphRelationBuilder &builder,
+                                     const GraphBinding &vertex,
+                                     const GraphBinding &slot_mapping,
+                                     ParseNode *history_alias,
+                                     int64_t slot,
+                                     ParseNode *&where)
+{
+  if (vertex.element_->id_ == slot_mapping.element_->id_) {
+    ParseNode *different = nullptr;
+    for (int64_t k = 0; k < vertex.element_->key_count_; ++k) {
+      ParseNode *part = builder.binary(T_OP_NE,
+          builder.column(vertex, vertex.element_->key_columns_[k]),
+          make_internal_column(builder, history_alias, "__g_vertex_key_", slot, k));
+      different = different == nullptr ? part : builder.binary(T_OP_OR, different, part);
+    }
+    builder.append_condition(builder.binary(T_OP_OR,
+        builder.binary(T_OP_LT,
+            builder.column(history_alias, ObString::make_string("__g_depth")),
+            builder.integer(slot)), different), where);
+  }
 }
 
 int make_project_list(GraphRelationBuilder &builder,
@@ -1772,7 +1797,9 @@ int append_fixed_path_segments(GraphRelationBuilder &builder,
                                ObIArray<GraphExprBinding> &expressions,
                                ParseNode *&from,
                                ParseNode *&where,
-                               const ObIArray<GraphBinding> *unrolled_edges = nullptr)
+                               const ObIArray<GraphBinding> *unrolled_edges = nullptr,
+                               const ObIArray<GraphBinding> *unrolled_vertices = nullptr,
+                               const GraphBinding *opposite_pattern = nullptr)
 {
   int ret = OB_SUCCESS;
   // Reserve before taking pointers into this array for expression bindings.
@@ -1871,7 +1898,28 @@ int append_fixed_path_segments(GraphRelationBuilder &builder,
     }
   }
   if (OB_SUCC(ret) && path_desc.path_mode_ == GraphPathMode::TRAIL) {
-    ret = append_trail_edge_conditions(builder, fixed_edges, where);
+    ret = append_distinct_element_conditions(builder, fixed_edges, where);
+  }
+  if (OB_SUCC(ret) && path_desc.path_mode_ == GraphPathMode::ACYCLIC) {
+    ObArray<GraphBinding> vertices;
+    // Segment boundaries are already history positions. In particular a zero
+    // hop has ONE vertex, not separate source and target positions.
+    for (int64_t i = 0; OB_SUCC(ret) && i < actual.count(); i += 2) {
+      if (i == quantified_index - 1 || i == quantified_index + 1) { continue; }
+      if (OB_FAIL(vertices.push_back(actual.at(i)))) {
+      } else if (path_alias != nullptr) {
+        for (int64_t slot = 0; slot <= path_desc.upper_bound_; ++slot) {
+          const GraphBinding &mapping = opposite_pattern != nullptr && slot % 2 == 1
+              ? *opposite_pattern : source;
+          append_vertex_history_condition(builder, actual.at(i), mapping, path_alias, slot, where);
+        }
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && unrolled_vertices != nullptr
+         && i < unrolled_vertices->count(); ++i) {
+      ret = vertices.push_back(unrolled_vertices->at(i));
+    }
+    if (OB_SUCC(ret)) { ret = append_distinct_element_conditions(builder, vertices, where); }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < patterns.count(); ++i) {
     if (i >= quantified_index - 1 && i <= quantified_index + 1) { continue; }
@@ -2129,6 +2177,21 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
         builder.column(other_types, other_vertex.element_->key_columns_[i])}))) {
     } else if (OB_FAIL(cte_column_names.push_back(GraphParseNode{
         builder.internal_identifier(OTHER_KEY_PREFIX, 0, i)}))) {
+    }
+  }
+  if (path_desc.path_mode_ == GraphPathMode::ACYCLIC) {
+    for (int64_t slot = 0; OB_SUCC(ret) && slot <= path_desc.upper_bound_; ++slot) {
+      const GraphBinding &types = alternating && slot % 2 == 1 ? other_types : seed;
+      for (int64_t k = 0; OB_SUCC(ret) && k < types.element_->key_count_; ++k) {
+        ParseNode *key = builder.column(types, types.element_->key_columns_[k]);
+        // Retain the original nullable key type. Slot zero is the seed;
+        // later slots are populated exactly once, when their hop is reached.
+        if (slot > 0) { key = builder.choose(builder.false_value(), key, builder.null_value()); }
+        if (OB_FAIL(anchor_exprs.push_back(GraphParseNode{key}))) {
+        } else if (OB_FAIL(cte_column_names.push_back(GraphParseNode{
+            builder.internal_identifier("__g_vertex_key_", slot, k)}))) {
+        }
+      }
     }
   }
   ParseNode *anchor = nullptr;
@@ -2397,6 +2460,29 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
         }
       }
     }
+    if (path_desc.path_mode_ == GraphPathMode::ACYCLIC) {
+      for (int64_t slot = 0; OB_SUCC(ret) && slot <= path_desc.upper_bound_; ++slot) {
+        const GraphBinding &next = alternating && slot % 2 == 1 ? other_vertex : step_vertex;
+        for (int64_t k = 0; OB_SUCC(ret) && k < next.element_->key_count_; ++k) {
+          ParseNode *old_key = make_internal_column(builder, frontier_alias, "__g_vertex_key_", slot, k);
+          ParseNode *key = slot == 0 ? old_key : builder.choose(
+              builder.binary(T_OP_EQ, builder.column(frontier_alias, DEPTH_NAME), builder.integer(slot - 1)),
+              builder.column(next, next.element_->key_columns_[k]), old_key);
+          ret = recursive_exprs.push_back(GraphParseNode{key});
+        }
+        ParseNode *not_visited = nullptr;
+        append_vertex_history_condition(builder, next, next, frontier_alias, slot, not_visited);
+        if (alternating) {
+          // At even frontier depth the next mapping is B, at odd depth A.
+          // A slot from the other mapping cannot match the next identity.
+          not_visited = builder.binary(T_OP_OR,
+              builder.binary(T_OP_EQ,
+                  builder.binary(T_OP_MOD, builder.column(frontier_alias, DEPTH_NAME), builder.integer(2)),
+                  builder.integer(slot % 2)), not_visited);
+        }
+        builder.append_condition(not_visited, recursive_where);
+      }
+    }
     for (int64_t i = 0; OB_SUCC(ret) && i < prefix_recursive_keys.count(); ++i) {
       ret = recursive_exprs.push_back(prefix_recursive_keys.at(i));
     }
@@ -2565,7 +2651,7 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
       ret = append_fixed_path_segments(builder, graph, database_name,
           *composed_chain, *composed_bindings, quantified_index,
           result_source, result_target, path_desc, path_alias,
-          composed_actual, expr_bindings, from, where);
+          composed_actual, expr_bindings, from, where, nullptr, nullptr, opposite_pattern);
     }
     if (OB_SUCC(ret) && path_desc.row_shape_ == GraphPathRowShape::PER_STEP) {
       if (OB_ISNULL(shape)) {
@@ -2758,7 +2844,10 @@ int build_graph_path_branch(GraphRelationBuilder &builder,
     }
   }
   if (OB_SUCC(ret) && path_desc.path_mode_ == GraphPathMode::TRAIL
-      && OB_FAIL(append_trail_edge_conditions(builder, edges, where))) {
+      && OB_FAIL(append_distinct_element_conditions(builder, edges, where))) {
+  }
+  if (OB_SUCC(ret) && path_desc.path_mode_ == GraphPathMode::ACYCLIC
+      && OB_FAIL(append_distinct_element_conditions(builder, vertices, where))) {
   }
   if (OB_SUCC(ret) && needs_separate_terminal) {
     builder.append_condition(builder.false_value(), where);
@@ -2824,7 +2913,7 @@ int build_graph_path_branch(GraphRelationBuilder &builder,
     ret = append_fixed_path_segments(builder, graph, database_name,
         *composed_chain, *composed_bindings, quantified_index,
         vertices.at(0), *terminal, path_desc, nullptr,
-        composed_actual, expr_bindings, from, where, &edges);
+        composed_actual, expr_bindings, from, where, &edges, &vertices);
   }
   ObArray<GraphConditionalBinding> from_alternatives;
   ObArray<GraphConditionalBinding> edge_alternatives;
@@ -3015,9 +3104,9 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
     ret = OB_ERR_UNEXPECTED;
   } else if (node.children_[GRAPH_TABLE_PATH_MODE] != nullptr
              && node.children_[GRAPH_TABLE_PATH_MODE]->value_
-                    != static_cast<int64_t>(GraphPathMode::TRAIL)) {
+                    == static_cast<int64_t>(GraphPathMode::SIMPLE)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "SIMPLE and ACYCLIC graph path modes");
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "SIMPLE graph path mode");
   } else if (OB_FAIL(resolve_table_relation_node(node.children_[GRAPH_TABLE_GRAPH], name, database_name))) {
   } else if (OB_FAIL(schema_checker_->get_database_id(database_name, database_id))) {
   } else if (database_id != session_info_->get_database_id()) {
@@ -3144,8 +3233,15 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
             ret = edges.push_back(bindings.at(i));
           }
           if (OB_SUCC(ret)) {
-            ret = append_trail_edge_conditions(builder, edges, where);
+            ret = append_distinct_element_conditions(builder, edges, where);
           }
+        }
+        if (OB_SUCC(ret) && path_mode == GraphPathMode::ACYCLIC) {
+          ObArray<GraphBinding> vertices;
+          for (int64_t i = 0; OB_SUCC(ret) && i < bindings.count(); i += 2) {
+            ret = vertices.push_back(bindings.at(i));
+          }
+          if (OB_SUCC(ret)) { ret = append_distinct_element_conditions(builder, vertices, where); }
         }
         select->children_[PARSE_SELECT_FROM] = from;
         select->children_[PARSE_SELECT_SELECT] = node.children_[GRAPH_TABLE_PROJECTS];
@@ -3196,6 +3292,7 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
         path_desc.row_shape_ = shape != nullptr && shape->value_ == 1
             ? GraphPathRowShape::PER_STEP : GraphPathRowShape::PER_MATCH;
         path_desc.need_path_ = path_desc.path_mode_ == GraphPathMode::TRAIL
+            || path_desc.path_mode_ == GraphPathMode::ACYCLIC
             || path_desc.row_shape_ == GraphPathRowShape::PER_STEP
             || contains_item_type(projects, T_FUN_JSON_ARRAYAGG);
         if (path_desc.lower_bound_ < 0 || path_desc.upper_bound_ < 0

@@ -30,8 +30,8 @@ static const int64_t GRAPH_PATH_MAX_HOPS = 16;
 static const int64_t GRAPH_INVALID_PATH_STATE_ID = -1;
 
 // Controls which repeated graph elements are legal inside one matched path.
-// WALK and TRAIL are implemented in P2; SIMPLE and ACYCLIC reserve the public
-// path-mode vocabulary for later vertex-history support.
+// SIMPLE remains reserved; ACYCLIC rejects every repeated vertex, including
+// a nonempty path whose final vertex equals its start.
 enum class GraphPathMode : int8_t
 {
   WALK = 0,
@@ -81,7 +81,8 @@ struct GraphPathDesc
         && upper_bound_ <= GRAPH_PATH_MAX_HOPS
         && (direction_ == GraphPathDirection::OUT || direction_ == GraphPathDirection::IN
             || direction_ == GraphPathDirection::BOTH)
-        && (path_mode_ == GraphPathMode::WALK || path_mode_ == GraphPathMode::TRAIL)
+        && (path_mode_ == GraphPathMode::WALK || path_mode_ == GraphPathMode::TRAIL
+            || path_mode_ == GraphPathMode::ACYCLIC)
         && (row_shape_ == GraphPathRowShape::PER_MATCH
             || row_shape_ == GraphPathRowShape::PER_STEP);
   }

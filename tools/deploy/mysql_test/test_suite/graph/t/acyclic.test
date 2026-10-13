@@ -1,0 +1,161 @@
+--disable_query_log
+--source mysql_test/test_suite/graph/mapping_fixture.sql
+--enable_query_log
+--echo cycles_parallel_edges_and_zero_hop
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ACYCLIC
+ (a IS person WHERE a.id=1)-[e IS knows]->{0,16}(b IS person)
+ COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g
+ ORDER BY hops,CAST(edges AS CHAR);
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ACYCLIC
+ (a IS person WHERE a.id=4)-[e IS knows]->{0,16}(b IS person)
+ ONE ROW PER STEP(v1,se,v2)
+ COLUMNS(v1.id AS src,se.id AS edge_id,v2.id AS dst,ELEMENT_NUMBER(se) AS step_no)) g;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ACYCLIC
+ (a IS person WHERE a.id=3)<-[e IS knows]-{1,4}(b IS person)
+ COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g
+ ORDER BY hops,CAST(edges AS CHAR);
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ACYCLIC
+ (a IS person WHERE a.id=1)-[e IS knows]-{1,4}(b IS person)
+ COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g
+ ORDER BY hops,CAST(edges AS CHAR);
+--echo fixed_segments_share_boundaries_but_not_other_vertices
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ACYCLIC
+ (a IS person WHERE a.id=1)-[f IS knows]->(b IS person)
+ -[e IS knows]->{0,3}(c IS person)-[z IS knows]->(d IS person)
+ COLUMNS(f.id AS first_edge,COUNT(e.id) AS hops,z.id AS last_edge,d.id AS endpoint)) g
+ ORDER BY first_edge,hops,last_edge;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ACYCLIC
+ (a IS person WHERE a.id=1)-[f IS knows]->(b IS person)
+ -[e IS knows]->{0,3}(c IS person)-[z IS knows]->(d IS person)
+ ONE ROW PER STEP(v1,se,v2)
+ COLUMNS(f.id AS first_edge,COUNT(e.id) AS hops,ELEMENT_NUMBER(se) AS step_no,
+ v1.id AS src,se.id AS edge_id,v2.id AS dst)) g ORDER BY first_edge,step_no;
+SELECT COUNT(*) AS no_fixed_cycle FROM GRAPH_TABLE(graph_social MATCH ACYCLIC
+ (a IS person)-[e IS knows]->(b IS person)-[f IS knows]->(c IS person)
+ -[h IS knows]->(d IS person) COLUMNS(d.id AS endpoint)) g;
+--echo different_mappings_are_different_vertices
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ACYCLIC
+ (a IS person WHERE a.id=1)-[e IS works]-{0,4}(b IS company)
+ COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ACYCLIC
+ (a IS person WHERE a.id=1)-[e IS works]-{0,4}(b IS person)
+ COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ACYCLIC
+ (a IS person WHERE a.id=1)-[f IS knows]->(b IS person)
+ <-[z IS knows]-(c IS person)-[e IS works]->{1}(d IS company)
+ COLUMNS(f.id AS first_edge,z.id AS second_edge,d.id AS endpoint)) g;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ACYCLIC
+ (a IS person WHERE a.id=1)-[f IS works]->(b IS company)
+ -[e IS knows]-{0}(c IS company)
+ COLUMNS(f.id AS edge_id,COUNT(e.id) AS hops,c.id AS endpoint)) g;
+--echo shortest_is_selected_after_acyclic_validation
+--source mysql_test/include/create_plan_table.inc
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='acyclic_fallback'
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST ACYCLIC
+ (a IS person WHERE a.id=1)-[e IS knows]->{1,4}(b IS person)
+ COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g;
+--enable_result_log
+SELECT COUNT(*)=1 AS preserves_path_local_history FROM plan_table
+ WHERE statement_id='acyclic_fallback' AND operator='GRAPH FEEDBACK LOOP'
+ AND special_predicates LIKE '%mode=ACYCLIC, runtime=fallback, states=paths, search=any_shortest%';
+DROP TABLE plan_table;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST ACYCLIC
+ (a IS person WHERE a.id=1)-[e IS knows]->{1,4}(b IS person)
+ COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g ORDER BY endpoint;
+--echo parameter_rebinding_keeps_seed_multiplicity
+PREPARE acyclic_cached FROM 'SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH ACYCLIC (a IS person WHERE a.id=?)-[e IS knows]->{0,4}(b IS person) COLUMNS(b.id AS endpoint)) g';
+SET @seed=1;
+EXECUTE acyclic_cached USING @seed;
+SET @seed=4;
+EXECUTE acyclic_cached USING @seed;
+DEALLOCATE PREPARE acyclic_cached;
+SELECT s.binding,g.endpoint,g.hops FROM (SELECT 1 AS binding,1 AS id UNION ALL SELECT 2,1 UNION ALL SELECT 3,4) s,
+ LATERAL (SELECT * FROM GRAPH_TABLE(graph_social MATCH ACYCLIC
+ (a IS person WHERE a.id=s.id)-[e IS knows]->{0,4}(b IS person WHERE b.id<>2)
+ COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) p) g ORDER BY s.binding,g.hops,g.endpoint;
+--echo independent_full_path_bag_oracle
+INSERT INTO graph_knows VALUES(30,3,4,2024),(31,4,5,2024),(32,5,2,2024),(33,1,1,2024);
+CREATE TABLE ac_expected AS WITH RECURSIVE paths(seed,endpoint,hops,visited,edges) AS (
+ SELECT id,id,0,CAST(CONCAT(',',id,',') AS CHAR(256)),CAST('' AS CHAR(256)) FROM graph_person
+ UNION ALL
+ SELECT p.seed,v.id,p.hops+1,CONCAT(p.visited,v.id,','),
+ CONCAT(p.edges,IF(p.hops=0,'',','),e.id)
+ FROM paths p JOIN graph_knows e ON e.src=p.endpoint JOIN graph_person v ON v.id=e.dst
+ WHERE p.hops<4 AND LOCATE(CONCAT(',',v.id,','),p.visited)=0
+) SELECT seed,endpoint,hops,edges FROM paths;
+CREATE TABLE ac_actual AS SELECT seed,endpoint,hops,
+ COALESCE(REPLACE(REPLACE(REPLACE(CAST(edges AS CHAR),'[',''),']',''),' ',''),'') AS edges
+ FROM GRAPH_TABLE(graph_social MATCH ACYCLIC
+ (a IS person)-[e IS knows]->{0,4}(b IS person)
+ COLUMNS(a.id AS seed,b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g;
+SELECT COUNT(*) AS differing_path_bags FROM (
+ SELECT seed,endpoint,hops,edges,SUM(delta) AS difference FROM (
+ SELECT seed,endpoint,hops,edges,1 AS delta FROM ac_expected
+ UNION ALL SELECT seed,endpoint,hops,edges,-1 FROM ac_actual) u
+ GROUP BY seed,endpoint,hops,edges HAVING SUM(delta)<>0) bad;
+CREATE INDEX ac_adj ON graph_knows(src,since,dst);
+DELETE FROM ac_actual;
+INSERT INTO ac_actual SELECT seed,endpoint,hops,
+ COALESCE(REPLACE(REPLACE(REPLACE(CAST(edges AS CHAR),'[',''),']',''),' ',''),'')
+ FROM GRAPH_TABLE(graph_social MATCH ACYCLIC
+ (a IS person)-[e IS knows]->{0,4}(b IS person)
+ COLUMNS(a.id AS seed,b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g;
+SELECT COUNT(*) AS indexed_differing_path_bags FROM (
+ SELECT seed,endpoint,hops,edges,SUM(delta) AS difference FROM (
+ SELECT seed,endpoint,hops,edges,1 AS delta FROM ac_expected
+ UNION ALL SELECT seed,endpoint,hops,edges,-1 FROM ac_actual) u
+ GROUP BY seed,endpoint,hops,edges HAVING SUM(delta)<>0) bad;
+--echo composed_path_bags_match_complete_oracle
+DELETE FROM ac_actual;
+INSERT INTO ac_actual SELECT seed,endpoint,hops+2,
+ CONCAT(first_edge,IF(hops=0,'',CONCAT(',',REPLACE(REPLACE(REPLACE(CAST(edges AS CHAR),'[',''),']',''),' ',''))),',',last_edge)
+ FROM GRAPH_TABLE(graph_social MATCH ACYCLIC
+ (a IS person)-[f IS knows]->(b IS person)-[e IS knows]->{0,2}(c IS person)
+ -[z IS knows]->(d IS person)
+ COLUMNS(a.id AS seed,d.id AS endpoint,f.id AS first_edge,z.id AS last_edge,
+ COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g;
+SELECT COUNT(*) AS composed_differing_path_bags FROM (
+ SELECT seed,endpoint,hops,edges,SUM(delta) AS difference FROM (
+ SELECT seed,endpoint,hops,edges,1 AS delta FROM ac_expected WHERE hops>=2
+ UNION ALL SELECT seed,endpoint,hops,edges,-1 FROM ac_actual) u
+ GROUP BY seed,endpoint,hops,edges HAVING SUM(delta)<>0) bad;
+--echo filtered_expansion_and_lower_bound
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ACYCLIC
+ (a IS person WHERE a.id=1)-[e IS knows WHERE e.since>=2021]->{2,4}(b IS person WHERE b.id<>2)
+ COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g
+ ORDER BY hops,CAST(edges AS CHAR);
+DROP TABLE ac_expected,ac_actual;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;
+--echo heterogeneous_typed_keys_and_mapping_identity
+CREATE TABLE ac_a(id BIGINT PRIMARY KEY,name VARCHAR(20));
+CREATE TABLE ac_b(tenant VARBINARY(8),code DECIMAL(8,2),name VARCHAR(20),PRIMARY KEY(tenant,code));
+CREATE TABLE ac_e(id BIGINT PRIMARY KEY,src BIGINT,dt VARBINARY(8),dc DECIMAL(8,2));
+INSERT INTO ac_a VALUES(1,'A1'),(2,'A2');
+INSERT INTO ac_b VALUES(X'4100',1.25,'B1'),(X'4100',2.25,'B2');
+INSERT INTO ac_e VALUES(10,1,X'4100',1.25),(11,2,X'4100',1.25),
+ (12,1,X'4100',1.25),(13,2,X'4100',2.25),(14,1,X'4100',2.25);
+CREATE PROPERTY GRAPH ac_graph VERTEX TABLES
+ (ac_a KEY(id) LABEL a PROPERTIES(name),ac_b KEY(tenant,code) LABEL b PROPERTIES(name))
+ EDGE TABLES(ac_e KEY(id) SOURCE KEY(src) REFERENCES ac_a(id)
+ DESTINATION KEY(dt,dc) REFERENCES ac_b(tenant,code) LABEL e PROPERTIES(id));
+SELECT * FROM GRAPH_TABLE(ac_graph MATCH ACYCLIC
+ (a IS a WHERE a.name='A1')-[e IS e]-{0,4}(b IS a)
+ COLUMNS(b.name AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g
+ ORDER BY hops,CAST(edges AS CHAR);
+SELECT * FROM GRAPH_TABLE(ac_graph MATCH ACYCLIC
+ (a IS b WHERE a.name='B1')-[e IS e]-{0,4}(b IS b)
+ COLUMNS(b.name AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g
+ ORDER BY hops,CAST(edges AS CHAR);
+SELECT * FROM GRAPH_TABLE(ac_graph MATCH ACYCLIC
+ (a IS a WHERE a.name='A1')-[e IS e]-{3}(b IS b)
+ ONE ROW PER STEP(v1,se,v2)
+ COLUMNS(JSON_ARRAYAGG(e.id) AS edges,ELEMENT_NUMBER(se) AS step_no,
+ v1.name AS src,se.id AS edge_id,v2.name AS dst)) g ORDER BY CAST(edges AS CHAR),step_no;
+SELECT * FROM GRAPH_TABLE(ac_graph MATCH ACYCLIC
+ (a IS a WHERE a.name='A1')-[f IS e]->(b IS b)-[e IS e]-{0,4}(c IS b)
+ COLUMNS(f.id AS first_edge,c.name AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g
+ ORDER BY first_edge,hops,CAST(edges AS CHAR);
+DROP PROPERTY GRAPH ac_graph;
+DROP TABLE ac_e,ac_b,ac_a;
