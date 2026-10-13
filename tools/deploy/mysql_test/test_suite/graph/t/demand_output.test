@@ -12,8 +12,8 @@ CREATE PROPERTY GRAPH gd_graph
  VERTEX TABLES(gd_v KEY(id) LABEL node PROPERTIES(id))
  EDGE TABLES(gd_e KEY(id) SOURCE KEY(src) REFERENCES gd_v(id)
  DESTINATION KEY(dst) REFERENCES gd_v(id) LABEL link PROPERTIES(id));
-CREATE TABLE gd_seed(binding_id INT PRIMARY KEY,seed INT);
-INSERT INTO gd_seed VALUES (1,1),(2,2),(3,1);
+CREATE TABLE gd_seed(binding_id INT PRIMARY KEY,seed INT,cache_seed INT,target INT);
+INSERT INTO gd_seed VALUES (1,1,1,2),(2,2,1,3),(3,1,1,2);
 SET @gd_sampling=@@optimizer_dynamic_sampling;
 SET optimizer_dynamic_sampling=0;
 let $gd_hash=query_get_value(select value from oceanbase.__all_virtual_sys_parameter_stat where name='_hash_area_size', value, 1);
@@ -32,11 +32,21 @@ while ($passes)
  SELECT /*+ USE_NL(@SEL$3 __g_result_source __g_result_target) LEADING(@SEL$3 __g_path __g_result_source __g_result_target) */ COUNT(*) FROM (
  SELECT * FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=1)
  -[e IS link]->{1}(b IS node) COLUMNS(b.id AS endpoint)) g LIMIT 20) q;
+ EXPLAIN INTO plan_table SET statement_id='partial_rescan'
+ SELECT /*+ USE_NL(@SEL$3 __g_result_source __g_result_target) LEADING(@SEL$3 __g_path __g_result_source __g_result_target) */ s.binding_id,p.endpoint
+ FROM gd_seed s,LATERAL (
+ SELECT * FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=s.cache_seed)
+ -[e IS link]->{1}(b IS node WHERE b.id=s.target)
+ COLUMNS(b.id AS endpoint)) g LIMIT 140) p;
  --enable_result_log
  --enable_query_log
  SELECT COUNT(*) AS native_loops FROM plan_table WHERE statement_id='demand'
  AND special_predicates LIKE '%runtime=native%';
  SELECT COUNT(*) AS blocking_result_sorts FROM plan_table WHERE statement_id='demand'
+ AND operator LIKE '%SORT%';
+ SELECT COUNT(*) AS partial_rescan_reuse FROM plan_table WHERE statement_id='partial_rescan'
+ AND special_predicates LIKE '%runtime=native%adjacency_reuse=eligible%';
+ SELECT COUNT(*) AS partial_rescan_sorts FROM plan_table WHERE statement_id='partial_rescan'
  AND operator LIKE '%SORT%';
  DROP TABLE plan_table;
  --disable_query_log
@@ -81,8 +91,8 @@ while ($passes)
  # Binding 1 stops on the first page. Binding 2 needs the last edge page
  # of the same adjacency, so treating the first prefix as complete is wrong.
  SELECT /*+ USE_NL(@SEL$3 __g_result_source __g_result_target) LEADING(@SEL$3 __g_path __g_result_source __g_result_target) */ s.binding_id,COUNT(*) AS paths
- FROM (SELECT binding_id,1 AS seed,IF(binding_id=2,3,2) AS target FROM gd_seed) s,LATERAL (
- SELECT * FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=s.seed)
+ FROM gd_seed s,LATERAL (
+ SELECT * FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=s.cache_seed)
  -[e IS link]->{1}(b IS node WHERE b.id=s.target)
  COLUMNS(b.id AS endpoint)) g LIMIT 140) p
  GROUP BY s.binding_id ORDER BY s.binding_id;

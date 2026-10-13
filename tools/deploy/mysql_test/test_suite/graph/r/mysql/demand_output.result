@@ -6,90 +6,13 @@ SELECT COUNT(*) AS blocking_result_sorts FROM plan_table WHERE statement_id='dem
  AND operator LIKE '%SORT%';
 blocking_result_sorts
 0
-DROP TABLE plan_table;
-explicit_limit_does_not_materialize_the_complete_high_degree_hop
-SELECT /*+ USE_NL(@SEL$3 __g_result_source __g_result_target) LEADING(@SEL$3 __g_path __g_result_source __g_result_target) */ COUNT(*) AS limited_paths FROM (
-SELECT * FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=1)
--[e IS link]->{1}(b IS node) COLUMNS(b.id AS endpoint)) g LIMIT 20) q;
-limited_paths
-20
-an_unlimited_or_sorted_consumer_still_requires_the_complete_result
-SELECT COUNT(*) FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=1)
--[e IS link]->{1}(b IS node) COLUMNS(b.id AS endpoint)) g;
-ERROR HY000: Exceed query memory limit
-SELECT * FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=1)
--[e IS link]->{1}(b IS node) COLUMNS(JSON_ARRAYAGG(e.id) AS edges)) g
-ORDER BY edges DESC LIMIT 20;
-ERROR HY000: Exceed query memory limit
-full_drain_crosses_output_batches_and_das_pages_without_truncation
-SELECT hops,COUNT(*) AS paths FROM GRAPH_TABLE(gd_graph MATCH
-(a IS node WHERE a.id=1)-[e IS link]->{0,2}(b IS node)
-COLUMNS(COUNT(e.id) AS hops)) g GROUP BY hops ORDER BY hops;
-hops	paths
-0	1
-1	20001
-2	20000
-SELECT COUNT(*) AS paths FROM (
-SELECT * FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=1)
--[e IS link]->{1}(b IS node) COLUMNS(b.id AS endpoint)) g LIMIT 4090,30) q;
-paths
-30
-sorted_top_k_is_not_replaced_by_an_arbitrary_prefix
-SELECT edges FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=1)
--[e IS link]->{2}(b IS node)
-COLUMNS(JSON_ARRAYAGG(e.id) AS edges)) g
-ORDER BY CAST(JSON_VALUE(edges,'$[0]') AS UNSIGNED) DESC LIMIT 3;
-edges
-[20000, 30000]
-[19999, 30000]
-[19998, 30000]
-early_rescan_preserves_each_binding_and_does_not_cache_partial_adjacency
-SELECT /*+ USE_NL(@SEL$3 __g_result_source __g_result_target) LEADING(@SEL$3 __g_path __g_result_source __g_result_target) */ s.binding_id,COUNT(*) AS paths FROM gd_seed s,LATERAL (
-SELECT * FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=s.seed)
--[e IS link]->{1,2}(b IS node) COLUMNS(b.id AS endpoint)) g LIMIT 140) p
-GROUP BY s.binding_id ORDER BY s.binding_id;
-binding_id	paths
-1	140
-2	1
-3	140
-SELECT /*+ USE_NL(@SEL$3 __g_result_source __g_result_target) LEADING(@SEL$3 __g_path __g_result_source __g_result_target) */ s.binding_id,COUNT(*) AS paths
-FROM (SELECT binding_id,1 AS seed,IF(binding_id=2,3,2) AS target FROM gd_seed) s,LATERAL (
-SELECT * FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=s.seed)
--[e IS link]->{1}(b IS node WHERE b.id=s.target)
-COLUMNS(b.id AS endpoint)) g LIMIT 140) p
-GROUP BY s.binding_id ORDER BY s.binding_id;
-binding_id	paths
-1	140
-2	1
-3	140
-SELECT COUNT(*) AS step_rows,SUM(sn=2) AS first_steps,SUM(sn=4) AS second_steps
-FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=1)
--[e IS link]->{2}(b IS node) ONE ROW PER STEP(v1,se,v2)
-COLUMNS(ELEMENT_NUMBER(se) AS sn)) g;
-step_rows	first_steps	second_steps
-40000	20000	20000
-PREPARE gd_cached FROM 'SELECT /*+ USE_NL(@SEL$3 __g_result_source __g_result_target) LEADING(@SEL$3 __g_path __g_result_source __g_result_target) */ COUNT(*) AS paths FROM (SELECT * FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=?)-[e IS link]->{1,2}(b IS node) COLUMNS(b.id AS endpoint)) g LIMIT ?) p';
-SET @gd_start=1,@gd_count=129;
-EXECUTE gd_cached USING @gd_start,@gd_count;
-paths
-129
-SET @gd_start=2,@gd_count=1;
-EXECUTE gd_cached USING @gd_start,@gd_count;
-paths
+SELECT COUNT(*) AS partial_rescan_reuse FROM plan_table WHERE statement_id='partial_rescan'
+ AND special_predicates LIKE '%runtime=native%adjacency_reuse=eligible%';
+partial_rescan_reuse
 1
-SET @gd_start=1,@gd_count=4097;
-EXECUTE gd_cached USING @gd_start,@gd_count;
-paths
-4097
-DEALLOCATE PREPARE gd_cached;
-CREATE INDEX gd_out ON gd_e(src,id,dst);
-SELECT COUNT(*) AS native_loops FROM plan_table WHERE statement_id='demand'
- AND special_predicates LIKE '%runtime=native%';
-native_loops
-1
-SELECT COUNT(*) AS blocking_result_sorts FROM plan_table WHERE statement_id='demand'
+SELECT COUNT(*) AS partial_rescan_sorts FROM plan_table WHERE statement_id='partial_rescan'
  AND operator LIKE '%SORT%';
-blocking_result_sorts
+partial_rescan_sorts
 0
 DROP TABLE plan_table;
 explicit_limit_does_not_materialize_the_complete_high_degree_hop
@@ -138,8 +61,101 @@ binding_id	paths
 2	1
 3	140
 SELECT /*+ USE_NL(@SEL$3 __g_result_source __g_result_target) LEADING(@SEL$3 __g_path __g_result_source __g_result_target) */ s.binding_id,COUNT(*) AS paths
-FROM (SELECT binding_id,1 AS seed,IF(binding_id=2,3,2) AS target FROM gd_seed) s,LATERAL (
+FROM gd_seed s,LATERAL (
+SELECT * FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=s.cache_seed)
+-[e IS link]->{1}(b IS node WHERE b.id=s.target)
+COLUMNS(b.id AS endpoint)) g LIMIT 140) p
+GROUP BY s.binding_id ORDER BY s.binding_id;
+binding_id	paths
+1	140
+2	1
+3	140
+SELECT COUNT(*) AS step_rows,SUM(sn=2) AS first_steps,SUM(sn=4) AS second_steps
+FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=1)
+-[e IS link]->{2}(b IS node) ONE ROW PER STEP(v1,se,v2)
+COLUMNS(ELEMENT_NUMBER(se) AS sn)) g;
+step_rows	first_steps	second_steps
+40000	20000	20000
+PREPARE gd_cached FROM 'SELECT /*+ USE_NL(@SEL$3 __g_result_source __g_result_target) LEADING(@SEL$3 __g_path __g_result_source __g_result_target) */ COUNT(*) AS paths FROM (SELECT * FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=?)-[e IS link]->{1,2}(b IS node) COLUMNS(b.id AS endpoint)) g LIMIT ?) p';
+SET @gd_start=1,@gd_count=129;
+EXECUTE gd_cached USING @gd_start,@gd_count;
+paths
+129
+SET @gd_start=2,@gd_count=1;
+EXECUTE gd_cached USING @gd_start,@gd_count;
+paths
+1
+SET @gd_start=1,@gd_count=4097;
+EXECUTE gd_cached USING @gd_start,@gd_count;
+paths
+4097
+DEALLOCATE PREPARE gd_cached;
+CREATE INDEX gd_out ON gd_e(src,id,dst);
+SELECT COUNT(*) AS native_loops FROM plan_table WHERE statement_id='demand'
+ AND special_predicates LIKE '%runtime=native%';
+native_loops
+1
+SELECT COUNT(*) AS blocking_result_sorts FROM plan_table WHERE statement_id='demand'
+ AND operator LIKE '%SORT%';
+blocking_result_sorts
+0
+SELECT COUNT(*) AS partial_rescan_reuse FROM plan_table WHERE statement_id='partial_rescan'
+ AND special_predicates LIKE '%runtime=native%adjacency_reuse=eligible%';
+partial_rescan_reuse
+1
+SELECT COUNT(*) AS partial_rescan_sorts FROM plan_table WHERE statement_id='partial_rescan'
+ AND operator LIKE '%SORT%';
+partial_rescan_sorts
+0
+DROP TABLE plan_table;
+explicit_limit_does_not_materialize_the_complete_high_degree_hop
+SELECT /*+ USE_NL(@SEL$3 __g_result_source __g_result_target) LEADING(@SEL$3 __g_path __g_result_source __g_result_target) */ COUNT(*) AS limited_paths FROM (
+SELECT * FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=1)
+-[e IS link]->{1}(b IS node) COLUMNS(b.id AS endpoint)) g LIMIT 20) q;
+limited_paths
+20
+an_unlimited_or_sorted_consumer_still_requires_the_complete_result
+SELECT COUNT(*) FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=1)
+-[e IS link]->{1}(b IS node) COLUMNS(b.id AS endpoint)) g;
+ERROR HY000: Exceed query memory limit
+SELECT * FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=1)
+-[e IS link]->{1}(b IS node) COLUMNS(JSON_ARRAYAGG(e.id) AS edges)) g
+ORDER BY edges DESC LIMIT 20;
+ERROR HY000: Exceed query memory limit
+full_drain_crosses_output_batches_and_das_pages_without_truncation
+SELECT hops,COUNT(*) AS paths FROM GRAPH_TABLE(gd_graph MATCH
+(a IS node WHERE a.id=1)-[e IS link]->{0,2}(b IS node)
+COLUMNS(COUNT(e.id) AS hops)) g GROUP BY hops ORDER BY hops;
+hops	paths
+0	1
+1	20001
+2	20000
+SELECT COUNT(*) AS paths FROM (
+SELECT * FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=1)
+-[e IS link]->{1}(b IS node) COLUMNS(b.id AS endpoint)) g LIMIT 4090,30) q;
+paths
+30
+sorted_top_k_is_not_replaced_by_an_arbitrary_prefix
+SELECT edges FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=1)
+-[e IS link]->{2}(b IS node)
+COLUMNS(JSON_ARRAYAGG(e.id) AS edges)) g
+ORDER BY CAST(JSON_VALUE(edges,'$[0]') AS UNSIGNED) DESC LIMIT 3;
+edges
+[20000, 30000]
+[19999, 30000]
+[19998, 30000]
+early_rescan_preserves_each_binding_and_does_not_cache_partial_adjacency
+SELECT /*+ USE_NL(@SEL$3 __g_result_source __g_result_target) LEADING(@SEL$3 __g_path __g_result_source __g_result_target) */ s.binding_id,COUNT(*) AS paths FROM gd_seed s,LATERAL (
 SELECT * FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=s.seed)
+-[e IS link]->{1,2}(b IS node) COLUMNS(b.id AS endpoint)) g LIMIT 140) p
+GROUP BY s.binding_id ORDER BY s.binding_id;
+binding_id	paths
+1	140
+2	1
+3	140
+SELECT /*+ USE_NL(@SEL$3 __g_result_source __g_result_target) LEADING(@SEL$3 __g_path __g_result_source __g_result_target) */ s.binding_id,COUNT(*) AS paths
+FROM gd_seed s,LATERAL (
+SELECT * FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=s.cache_seed)
 -[e IS link]->{1}(b IS node WHERE b.id=s.target)
 COLUMNS(b.id AS endpoint)) g LIMIT 140) p
 GROUP BY s.binding_id ORDER BY s.binding_id;
