@@ -23,7 +23,7 @@ FROM GRAPH_TABLE(graph_social MATCH
   (a IS person WHERE a.id=1)
   -[e IS knows WHERE SLEEP(0.2 + MOD(e.id,1))=0]->{1,2}(b IS person)
   COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
-EXPLAIN INTO plan_table SET statement_id='graph_path_output_fallback'
+EXPLAIN INTO plan_table SET statement_id='graph_path_output_native'
 SELECT COUNT(*) AS paths
 FROM GRAPH_TABLE(graph_social MATCH
   (a IS person WHERE a.id=1)-[e IS knows]->{1,2}(b IS person)
@@ -45,11 +45,11 @@ FROM plan_table
 WHERE statement_id='graph_volatile_filter_fallback'
   AND operator='GRAPH FEEDBACK LOOP'
   AND special_predicates LIKE '%runtime=fallback%';
-SELECT COUNT(*)=1 AS path_output_uses_fallback
+SELECT COUNT(*)=1 AS path_output_uses_native
 FROM plan_table
-WHERE statement_id='graph_path_output_fallback'
+WHERE statement_id='graph_path_output_native'
   AND operator='GRAPH FEEDBACK LOOP'
-  AND special_predicates LIKE '%runtime=fallback%';
+  AND special_predicates LIKE '%runtime=native%';
 SELECT COUNT(*)=1 AS terminal_filter_preserves_native_feedback
 FROM plan_table
 WHERE statement_id='graph_terminal_filter_native'

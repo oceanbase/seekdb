@@ -641,7 +641,8 @@ int GraphExpand::deep_copy_inputs(const ObIArray<GraphExpandInput> &inputs)
     GraphExpandInput stable;
     stable.binding_id_ = inputs.at(i).binding_id_;
     stable.path_state_id_ = inputs.at(i).path_state_id_;
-    if (OB_FAIL(deep_copy_identity(inputs.at(i).source_identity_,
+    if (i % GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE == 0 && OB_FAIL(access_.check_status())) {
+    } else if (OB_FAIL(deep_copy_identity(inputs.at(i).source_identity_,
                                    stable.source_identity_))) {
     } else if (OB_FAIL(inputs_.push_back(stable))) {
     }
@@ -669,9 +670,15 @@ int GraphExpand::validate_input_keys(
                  K(slot_count));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < slot_count; ++i) {
-        input_key_slots_.at(i) = -1;
+        if (i % GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE == 0 && OB_FAIL(access_.check_status())) {
+        } else {
+          input_key_slots_.at(i) = -1;
+        }
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < inputs.count(); ++i) {
+        if (i % GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE == 0 && OB_FAIL(access_.check_status())) {
+          break;
+        }
         const GraphExpandInput &input = inputs.at(i);
         uint64_t hash = do_hash(input.binding_id_, 0);
         hash = do_hash(input.path_state_id_, hash);
@@ -710,7 +717,10 @@ int GraphExpand::build_source_input_groups()
   int ret = OB_SUCCESS;
   source_input_groups_enabled_ = true;
   for (int64_t i = 0;
-       source_input_groups_enabled_ && i < inputs_.count(); ++i) {
+       OB_SUCC(ret) && source_input_groups_enabled_ && i < inputs_.count(); ++i) {
+    if (i % GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE == 0 && OB_FAIL(access_.check_status())) {
+      break;
+    }
     const ObRowkey &rowkey = inputs_.at(i).source_identity_.rowkey_;
     for (int64_t key = 0;
          source_input_groups_enabled_ && key < rowkey.get_obj_cnt(); ++key) {
@@ -718,13 +728,15 @@ int GraphExpand::build_source_input_groups()
           rowkey.get_obj_ptr()[key].get_type_class() != ObDoubleTC;
     }
   }
-  if (!source_input_groups_enabled_) {
+  if (OB_FAIL(ret)) {
+  } else if (!source_input_groups_enabled_) {
     // Fixed-scale DOUBLE rowkey equality is tolerance based and therefore not
     // transitive. One input can match more than one apparent source group, so
     // a single-result hash lookup is unsafe; retain the linear bag-semantic
     // matching path for the whole batch.
     for (int64_t i = 0; OB_SUCC(ret) && i < inputs_.count(); ++i) {
-      if (OB_FAIL(push_unique(source_identities_,
+      if (i % GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE == 0 && OB_FAIL(access_.check_status())) {
+      } else if (OB_FAIL(push_unique(source_identities_,
                               inputs_.at(i).source_identity_))) {
         LOG_WARN("failed to append graph source identity", K(ret), K(i));
       }
@@ -737,7 +749,8 @@ int GraphExpand::build_source_input_groups()
     for (int64_t i = 0; OB_SUCC(ret) && i < inputs_.count(); ++i) {
       int64_t group_index = -1;
       bool inserted = false;
-      if (OB_FAIL(source_input_index_.get_or_insert(
+      if (i % GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE == 0 && OB_FAIL(access_.check_status())) {
+      } else if (OB_FAIL(source_input_index_.get_or_insert(
               inputs_.at(i).source_identity_, group_index, inserted))) {
         LOG_WARN("failed to index graph source input", K(ret), K(i));
       } else if (inserted
@@ -1044,7 +1057,8 @@ int GraphExpand::validate_and_account(const ObIArray<GraphExpandInput> &inputs)
     ret = OB_INVALID_ARGUMENT;
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < inputs.count(); ++i) {
-    if (inputs.at(i).binding_id_ < 0 || inputs.at(i).path_state_id_ < 0
+    if (i % GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE == 0 && OB_FAIL(access_.check_status())) {
+    } else if (inputs.at(i).binding_id_ < 0 || inputs.at(i).path_state_id_ < 0
         || !inputs.at(i).source_identity_.is_valid()) {
       ret = OB_INVALID_ARGUMENT;
     }
