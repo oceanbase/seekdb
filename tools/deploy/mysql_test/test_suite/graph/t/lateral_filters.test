@@ -71,8 +71,37 @@ while ($passes)
   SET @since=2023;
   EXECUTE gl_cached USING @since;
   DEALLOCATE PREPARE gl_cached;
+  # Only the recursive edge predicate is correlated; its column name collides
+  # with a physical edge column, so qualification must preserve the outer scope.
+  SELECT s.binding_id,COUNT(*) AS paths FROM
+   (SELECT binding_id,min_since AS since FROM gl_seeds) s,LATERAL (
+    SELECT * FROM GRAPH_TABLE(graph_social MATCH
+     (a IS person WHERE a.id=1)-[e IS knows WHERE e.since>=s.since]->{1,2}
+     (b IS person) COLUMNS(b.id AS destination)) g
+   ) g GROUP BY s.binding_id ORDER BY s.binding_id;
+  SELECT s.binding_id,COUNT(*) AS paths FROM gl_seeds s,LATERAL (
+   SELECT * FROM GRAPH_TABLE(graph_social MATCH
+    (a IS person WHERE a.id=1)-[e IS knows]->{0,2}(b IS person WHERE b.age>=s.score)
+    COLUMNS(b.id AS destination)) g
+  ) g GROUP BY s.binding_id ORDER BY s.binding_id;
+  SELECT s.binding_id,COUNT(*) AS paths FROM gl_seeds s,LATERAL (
+   SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+    (a IS person WHERE a.id=4)-[e IS knows WHERE e.since>=s.min_since]->{0,2}
+    (b IS person) COLUMNS(b.id AS destination)) g
+  ) g GROUP BY s.binding_id ORDER BY s.binding_id;
   --dec $passes
 }
+# Unqualified names must not be captured by hidden relational table columns.
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM (SELECT min_since AS since FROM gl_seeds) s,LATERAL (
+ SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS knows WHERE e.since>=since]->{1,2}(b IS person)
+  COLUMNS(b.id AS destination)) g) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM (SELECT min_age AS age FROM gl_seeds) s,LATERAL (
+ SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS knows]->{1,2}(b IS person WHERE b.age>=age)
+  COLUMNS(b.id AS destination)) g) g;
 # No implicit correlation without LATERAL, no capture of another graph variable.
 --error ER_BAD_FIELD_ERROR
 SELECT * FROM gl_seeds s,GRAPH_TABLE(graph_social MATCH

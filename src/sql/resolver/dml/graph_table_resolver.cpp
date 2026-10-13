@@ -571,13 +571,15 @@ public:
                     const ObString &database_name,
                     const ObIArray<GraphExprBinding> &bindings,
                     const ParseNode *match_number,
-                    bool allow_outer_reference)
+                    bool allow_outer_reference,
+                    bool allow_unqualified_outer_reference = false)
     : builder_(builder),
       graph_(graph),
       database_name_(database_name),
       bindings_(bindings),
       match_number_(match_number),
-      allow_outer_reference_(allow_outer_reference)
+      allow_outer_reference_(allow_outer_reference),
+      allow_unqualified_outer_reference_(allow_unqualified_outer_reference)
   {}
 
   int rewrite(const ParseNode &source, ParseNode *&result)
@@ -658,7 +660,7 @@ private:
         || source.children_[2] == nullptr || source.children_[2]->type_ != T_IDENT) {
       ret = unsupported("qualified graph variable.property references");
     } else if (source.children_[1] == nullptr) {
-      if (allow_outer_reference_) {
+      if (allow_outer_reference_ && allow_unqualified_outer_reference_) {
         result = builder_.clone(source);
       } else {
         ret = unsupported("unqualified columns inside GRAPH_TABLE path expressions");
@@ -882,6 +884,7 @@ private:
   const ObIArray<GraphExprBinding> &bindings_;
   const ParseNode *match_number_;
   bool allow_outer_reference_;
+  bool allow_unqualified_outer_reference_;
 };
 
 int add_expr_binding(ObIArray<GraphExprBinding> &bindings,
@@ -1020,6 +1023,7 @@ int rewrite_graph_filter(GraphRelationBuilder &builder,
                          const GraphBinding *binding,
                          const GraphBinding *forbidden_one,
                          const GraphBinding *forbidden_two,
+                         bool allow_unqualified_outer,
                          ParseNode *&condition)
 {
   int ret = OB_SUCCESS;
@@ -1043,8 +1047,11 @@ int rewrite_graph_filter(GraphRelationBuilder &builder,
       // LATERAL resolution. Each outer row may supply its own seed, edge
       // predicate or endpoint constraint. Other declared graph variables stay
       // forbidden here; they are not mistaken for outer correlation.
+      // Edge/endpoint outer references must be qualified: an unqualified
+      // name could otherwise bind to a hidden base-table column after lowering.
+      // Keep the pre-existing unqualified seed-filter behavior unchanged.
       GraphExprRewriter rewriter(builder, graph, database_name, expr_bindings,
-                                 nullptr, true);
+                                 nullptr, true, allow_unqualified_outer);
       ret = rewriter.rewrite(*filter, condition);
     }
   }
@@ -1523,7 +1530,7 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
     if (OB_SUCC(ret) && source_filter != nullptr
         && OB_FAIL(rewrite_graph_filter(builder, graph, database_name, source_filter,
                                         *source_pattern.variable_, &seed,
-                                        &edge_pattern, &target_pattern,
+                                        &edge_pattern, &target_pattern, true,
                                         condition))) {
     } else if (OB_SUCC(ret)) {
       builder.append_condition(condition, anchor_where);
@@ -1627,7 +1634,7 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
       if (edge_filter != nullptr
           && OB_FAIL(rewrite_graph_filter(builder, graph, database_name, edge_filter,
                                           *edge_pattern.variable_, &edge,
-                                          &source_pattern, &target_pattern,
+                                          &source_pattern, &target_pattern, false,
                                           condition))) {
       } else {
         builder.append_condition(condition, recursive_where);
@@ -1764,7 +1771,7 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
       if (target_filter != nullptr
           && OB_FAIL(rewrite_graph_filter(builder, graph, database_name, target_filter,
                                           *target_pattern.variable_, &result_target,
-                                          &source_pattern, &edge_pattern,
+                                          &source_pattern, &edge_pattern, false,
                                           condition))) {
       } else {
         builder.append_condition(condition, where);
@@ -1963,7 +1970,7 @@ int build_graph_path_branch(GraphRelationBuilder &builder,
     if (source_filter != nullptr
         && OB_FAIL(rewrite_graph_filter(builder, graph, database_name, source_filter,
                                         *source_pattern.variable_, &vertices.at(0),
-                                        &edge_pattern, &target_pattern,
+                                        &edge_pattern, &target_pattern, true,
                                         condition))) {
     } else {
       builder.append_condition(condition, where);
@@ -1973,7 +1980,7 @@ int build_graph_path_branch(GraphRelationBuilder &builder,
       if (edge_filter != nullptr
           && OB_FAIL(rewrite_graph_filter(builder, graph, database_name, edge_filter,
                                           *edge_pattern.variable_, &edges.at(i),
-                                          &source_pattern, &target_pattern,
+                                          &source_pattern, &target_pattern, false,
                                           condition))) {
       } else {
         builder.append_condition(condition, where);
@@ -1983,7 +1990,7 @@ int build_graph_path_branch(GraphRelationBuilder &builder,
       if (OB_SUCC(ret) && target_filter != nullptr
         && OB_FAIL(rewrite_graph_filter(builder, graph, database_name, target_filter,
                                         *target_pattern.variable_, terminal,
-                                        &source_pattern, &edge_pattern,
+                                        &source_pattern, &edge_pattern, false,
                                         condition))) {
     } else if (OB_SUCC(ret)) {
       builder.append_condition(condition, where);
