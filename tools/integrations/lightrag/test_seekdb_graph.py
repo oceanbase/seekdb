@@ -1,0 +1,254 @@
+# Copyright (c) 2025 OceanBase.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software distributed
+# under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+# CONDITIONS OF ANY KIND, either express or implied. See the License for the
+# specific language governing permissions and limitations under the License.
+
+"""Live integration checks; provision schema.sql in an isolated test database.
+
+Run with the adapter's SEEKDB_* environment and pinned LightRAG available:
+python tools/integrations/lightrag/test_seekdb_graph.py
+Only unique test namespaces are modified; no database/table/graph is dropped.
+"""
+
+import asyncio
+import tempfile
+import threading
+import uuid
+
+import numpy as np
+from lightrag import LightRAG, QueryParam
+from lightrag.utils import EmbeddingFunc, Tokenizer
+
+from seekdb_graph import SeekDBGraphStorage, register
+
+
+def storage(workspace, namespace="graph"):
+    return SeekDBGraphStorage(namespace=namespace, workspace=workspace,
+                              global_config={}, embedding_func=None)
+
+
+async def contract_checks():
+    name = "adapter_" + uuid.uuid4().hex
+    graph = storage(name)
+    peer = storage(name)
+    sibling = storage(name, "other")
+    other = storage(name + "_other")
+    empty_scope = storage("", name)
+    stores = [graph, peer, sibling, other, empty_scope]
+    for item in stores:
+        await item.initialize()
+    try:
+        keys = ["", "A", "A ", "a", "中文", "quote'\\%_", "é", "e\u0301"]
+        await graph.upsert_nodes_batch([(key, {"description": key, "version": 1}) for key in keys])
+        await graph.upsert_nodes_batch([(key, {"version": 2}) for key in keys])
+        assert await graph.get_all_labels() == sorted(keys)
+        for key in keys:
+            actual = await graph.get_node(key)
+            assert actual == {"description": key, "version": 2}, (key, actual)
+        assert await sibling.get_all_labels() == []
+        assert await other.get_all_labels() == []
+        await empty_scope.upsert_node("", {"value": 1})
+        assert await empty_scope.get_node("") == {"value": 1}
+        assert await graph.get_node_edges("missing") is None
+        assert await graph.get_node_edges("A") == []
+        assert await graph.node_degrees_batch(["missing", "A"]) == {"missing": 0, "A": 0}
+
+        await graph.upsert_edges_batch([("B", "A", {"weight": 1}), ("A", "B", {"source_id": "chunk1"})])
+        await graph.upsert_edge("B", "A", {"weight": 1})
+        assert await graph.get_node("B") == {}
+        assert await graph.get_edge("B", "A") == {"weight": 1, "source_id": "chunk1"}
+        assert await graph.get_node_edges("B") == [("A", "B")]
+        await sibling.upsert_edge("A", "namespace_only", {"value": 1})
+        await other.upsert_edge("A", "workspace_only", {"value": 1})
+        assert await graph.get_node_edges("A") == [("A", "B")]
+        assert await graph.get_nodes_edges_batch(["A", "B", "missing"]) == {
+            "A": [("A", "B")], "B": [("A", "B")], "missing": []}
+        assert await graph.edge_degrees_batch([("A", "B"), ("missing", "A")]) == {
+            ("A", "B"): 2, ("missing", "A"): 1}
+        assert await graph.search_labels("quote'\\%_") == ["quote'\\%_"]
+        assert await graph.get_popular_labels(2) == ["A", "B"]
+        assert len(await graph.get_popular_labels(100)) == len(keys) + 1
+        graph_view = await graph.get_knowledge_graph("A", max_depth=1)
+        assert {node.id for node in graph_view.nodes} == {"A", "B"}
+        assert len(graph_view.edges) == 1 and not graph_view.is_truncated
+        capped = await graph.get_knowledge_graph("*", max_nodes=1)
+        assert [node.id for node in capped.nodes] == ["A"] and capped.is_truncated
+
+        # A legacy self-loop must remain visible exactly once for repair, even
+        # though LightRAG's ingestion rejects creation of such relationships.
+        await graph.upsert_edge("A", "A", {"legacy": True})
+        assert (await graph.get_node_edges("A")).count(("A", "A")) == 1
+        await graph.remove_edges([("A", "A")])
+
+        batch = [(f"batch{i:04d}", {"value": i}) for i in range(513)]
+        await graph.upsert_nodes_batch(batch)
+        await graph.upsert_edges_batch([(batch[i][0], batch[i+1][0], {"value": i}) for i in range(512)])
+        assert len(await graph.get_nodes_batch([key for key, _ in batch])) == 513
+        degrees = await graph.node_degrees_batch([key for key, _ in batch])
+        assert degrees == {f"batch{i:04d}": 1 if i in (0, 512) else 2 for i in range(513)}
+        labels = [key async for page in graph.iter_labels(37) for key in page]
+        assert labels == await graph.get_all_labels()
+        edges = [edge async for page in graph.iter_edges(37) for edge in page]
+        assert edges == await graph.get_all_edges() and len(edges) == 513
+
+        # The first packet really reaches the database; failure before the next
+        # packet must roll it back. Do not replace the DB with a mock.
+        original = graph._upsert_nodes
+        def fail_after_packet(cursor, rows):
+            original(cursor, rows[:256])
+            raise RuntimeError("intentional batch failure")
+        graph._upsert_nodes = fail_after_packet
+        try:
+            try:
+                await graph.upsert_nodes_batch([(f"rollback{i}", {"value": i}) for i in range(300)])
+                raise AssertionError("batch failure was swallowed")
+            except RuntimeError as error:
+                assert str(error) == "intentional batch failure"
+        finally:
+            graph._upsert_nodes = original
+        assert await peer.get_nodes_batch([f"rollback{i}" for i in range(300)]) == {}
+        try:
+            await graph.upsert_nodes_batch([("valid_before_bad", {"value": 1}), ("bad", {"value": None})])
+            raise AssertionError("invalid attributes accepted")
+        except ValueError:
+            pass
+        assert await graph.get_node("valid_before_bad") is None
+        largest = "\U0001f680" * 512
+        await graph.upsert_node(largest, {"value": 1})
+        assert await graph.get_node(largest) == {"value": 1}
+        try:
+            await graph.upsert_node(largest + "x", {"value": 1})
+            raise AssertionError("oversized identifier was silently truncated")
+        except ValueError:
+            pass
+
+        # Independent instances/connections update one property map without
+        # losing disjoint attributes. Per-namespace row lock includes deletions.
+        semaphore = asyncio.Semaphore(4)
+        async def writer(i):
+            async with semaphore:
+                target = graph if i % 2 else peer
+                await target.upsert_node("concurrent", {f"k{i}": i})
+                if i % 2:
+                    await target.delete_node("race")
+                else:
+                    await target.upsert_edge("race", "concurrent", {"value": i})
+        await asyncio.gather(*(writer(i) for i in range(20)))
+        assert await graph.get_node("concurrent") == {f"k{i}": i for i in range(20)}
+        def orphans(cursor):
+            cursor.execute("SELECT COUNT(*) AS n FROM lr_seekdb_edges e "
+                           "LEFT JOIN lr_seekdb_nodes a ON a.id=e.src "
+                           "LEFT JOIN lr_seekdb_nodes b ON b.id=e.dst "
+                           "WHERE e.scope_id=%s AND (a.id IS NULL OR b.id IS NULL)", (graph._scope,))
+            return cursor.fetchone()["n"]
+        assert await graph._run(orphans) == 0
+
+        reached, resume = threading.Event(), threading.Event()
+        def paused_write(cursor):
+            graph._upsert_nodes(cursor, [(graph._scope, b"cancelled", '{"value":1}')])
+            reached.set()
+            if not resume.wait(5):
+                raise RuntimeError("cancel test handshake timed out")
+        task = asyncio.create_task(graph._run(paused_write, write=True))
+        assert await asyncio.to_thread(reached.wait, 5)
+        task.cancel()
+        await asyncio.sleep(0.01)
+        assert not task.done(), "cancelled write escaped while worker was still live"
+        resume.set()
+        try:
+            await task
+            raise AssertionError("cancellation lost")
+        except asyncio.CancelledError:
+            pass
+        assert await peer.get_node("cancelled") == {"value": 1}
+        await graph.delete_node("A")
+        assert await graph.get_node("A") is None and await graph.get_node_edges("B") == []
+        print("adapter contracts: passed", flush=True)
+    finally:
+        for item in (graph, sibling, other, empty_scope):
+            await item.drop()
+
+
+class ByteTokenizer:
+    def encode(self, text):
+        return list(text.encode("utf-8"))
+
+    def decode(self, tokens):
+        return bytes(tokens).decode("utf-8", errors="replace")
+
+    def __deepcopy__(self, memo):
+        return self
+
+
+async def embeddings(texts):
+    # Fixed vectors exercise real product/storage APIs, not embedding quality.
+    return np.asarray([[1.0, 0.0, 0.0, 0.0] for _ in texts], dtype=np.float32)
+
+
+async def no_llm(*args, **kwargs):
+    raise AssertionError("retrieval parity test must not invoke an LLM")
+
+
+def canonical(result):
+    data = result.get("data", {})
+    return {
+        "status": result.get("status"),
+        "entities": sorted((row["entity_name"], row.get("description"), row.get("source_id"))
+                           for row in data.get("entities", [])),
+        "relationships": sorted((tuple(sorted((row["src_id"], row["tgt_id"]))), row.get("description"),
+                                 row.get("source_id")) for row in data.get("relationships", [])),
+        "chunks": sorted((row.get("content"), row.get("file_path")) for row in data.get("chunks", [])),
+    }
+
+
+async def product_checks():
+    register()
+    kg = {
+        "chunks": [{"source_id": "c1", "content": "Alice works at Acme.", "file_path": "source-v1.txt"}],
+        "entities": [{"entity_name": name, "entity_type": "ENTITY", "description": desc,
+                      "source_id": "c1", "file_path": "source-v1.txt"}
+                     for name, desc in [("Alice", "engineer"), ("Acme", "employer")]],
+        "relationships": [{"src_id": "Alice", "tgt_id": "Acme", "description": "Alice works at Acme",
+                           "keywords": "employment", "weight": 1.0, "source_id": "c1",
+                           "file_path": "source-v1.txt"}],
+    }
+    with tempfile.TemporaryDirectory(prefix="seekdb-lightrag-") as root:
+        options = dict(llm_model_func=no_llm, embedding_func=EmbeddingFunc(
+            embedding_dim=4, max_token_size=8192, func=embeddings, model_name="storage_contract_fixture"),
+            tokenizer=Tokenizer("offline-byte", ByteTokenizer()), enable_llm_cache=False)
+        name = "product_" + uuid.uuid4().hex
+        baseline = LightRAG(working_dir=root + "/original", workspace=name + "_original", **options)
+        replacement = LightRAG(working_dir=root + "/seekdb", workspace=name,
+                               graph_storage="SeekDBGraphStorage", **options)
+        await baseline.initialize_storages()
+        await replacement.initialize_storages()
+        assert isinstance(replacement.chunk_entity_relation_graph, SeekDBGraphStorage)
+        try:
+            for product in (baseline, replacement):
+                await product.ainsert_custom_kg(kg)
+                await product.ainsert_custom_kg(kg)  # product-level idempotent retry
+            for mode in ("local", "global", "hybrid", "mix"):
+                param = QueryParam(mode=mode, ll_keywords=["Alice"], hl_keywords=["employment"],
+                                   top_k=20, chunk_top_k=20, max_total_tokens=12000, enable_rerank=False)
+                expected = canonical(await baseline.aquery_data("Where does Alice work?", param))
+                actual = canonical(await replacement.aquery_data("Where does Alice work?", param))
+                assert actual == expected, (mode, actual, expected)
+                assert actual["status"] == "success" and actual["chunks"], (mode, actual)
+            print("actual LightRAG ingestion/retrieval: four modes passed", flush=True)
+        finally:
+            await replacement.chunk_entity_relation_graph.drop()
+            await baseline.finalize_storages()
+            await replacement.finalize_storages()
+
+
+async def main():
+    await contract_checks()
+    await product_checks()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
