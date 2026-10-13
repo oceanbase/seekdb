@@ -37,6 +37,7 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"step", STEP},
   {"trail", TRAIL},
   {"acyclic", ACYCLIC},
+  {"shortest", SHORTEST},
 
   {"access", ACCESS},
   {"accessible", ACCESSIBLE},

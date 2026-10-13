@@ -456,12 +456,12 @@ END_P SET_VAR DELIMITER
 %type <node> set_type
 %type <node> drop_index_stmt hint_options opt_expr_as_list expr_as_list expr_with_opt_alias substr_params opt_comma substr_or_substring
 %type <node> /*frozen_type*/ opt_binary
-%token <non_reserved_keyword> PROPERTY GRAPH VERTEX EDGE LABEL DESTINATION GRAPH_TABLE STEP TRAIL ACYCLIC
+%token <non_reserved_keyword> PROPERTY GRAPH VERTEX EDGE LABEL DESTINATION GRAPH_TABLE STEP TRAIL ACYCLIC SHORTEST
 %type <node> create_property_graph_stmt drop_property_graph_stmt
 %type <node> graph_vertex_list graph_vertex graph_edge_list graph_edge opt_graph_edges
 %type <node> graph_columns graph_table_expr graph_chain graph_node_pattern graph_edge_pattern graph_filter
 %type <node> graph_projection_list graph_projection
-%type <node> graph_quantifier opt_graph_quantifier graph_table_shape opt_graph_table_shape graph_path_mode
+%type <node> graph_quantifier opt_graph_quantifier graph_table_shape opt_graph_table_shape graph_path_mode opt_graph_search
 %type <node> create_view_stmt view_name opt_column_list opt_tablet_id view_select_stmt opt_check_option opt_algorithm view_algorithm opt_definer opt_sql_security
 %type <node> name_list
 %type <node> opt_subpartitions runtime_selector opt_runtime_selector runtime_selector_target opt_flush_scope suspend_or_resume cache_name opt_cache_name file_id opt_file_id
@@ -7464,14 +7464,24 @@ LABEL relation_name PROPERTIES '(' graph_columns ')'
 ;
 
 graph_table_expr:
-GRAPH_TABLE '(' relation_factor MATCH graph_path_mode graph_chain opt_graph_table_shape COLUMNS '(' graph_projection_list ')' ')' opt_as relation_name
+GRAPH_TABLE '(' relation_factor MATCH opt_graph_search graph_path_mode graph_chain opt_graph_table_shape COLUMNS '(' graph_projection_list ')' ')' opt_as relation_name
 {
-  UNUSED($13);
+  UNUSED($14);
   ParseNode *chain = NULL, *columns = NULL;
-  merge_nodes(chain, result, T_GRAPH_PATTERN, $6);
-  merge_nodes(columns, result, T_PROJECT_LIST, $10);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_GRAPH_TABLE, 6,
-                           $3, $5, chain, $7, columns, $14);
+  merge_nodes(chain, result, T_GRAPH_PATTERN, $7);
+  merge_nodes(columns, result, T_PROJECT_LIST, $11);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_GRAPH_TABLE, 7,
+                           $3, $6, chain, $8, columns, $15, $5);
+}
+;
+
+opt_graph_search:
+/* EMPTY */
+{ $$ = NULL; }
+| ANY SHORTEST
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_INT);
+  $$->value_ = 1;
 }
 ;
 
@@ -17750,6 +17760,7 @@ unreserved_keyword:
 |       STEP
 |       TRAIL
 |       ACYCLIC
+|       SHORTEST
 |unreserved_keyword_for_role_name { $$=$1;}
 | unreserved_keyword_ambiguous_roles { $$=$1;}
 ;

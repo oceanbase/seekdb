@@ -102,10 +102,16 @@ struct GraphPathDesc
   // COLUMNS still defines the output column count, names, and SQL data types.
   GraphPathRowShape row_shape_ = GraphPathRowShape::PER_MATCH;
   bool need_path_ = false;
+  // Select one minimum-hop witness per complete pattern endpoint pair.
+  // This is a search goal, independent of WALK/TRAIL path validity.
+  bool any_shortest_ = false;
+  // Only a single segment permits binding/vertex/hop witness pruning; fixed
+  // segments can observe prefix identity or constrain the selected suffix.
+  bool shortest_single_segment_ = false;
   TO_STRING_KV(K_(graph_id), K_(graph_version), K_(source_element_id),
                K_(edge_element_id), K_(target_element_id), K_(lower_bound),
                K_(upper_bound), K_(direction), K_(path_mode), K_(row_shape),
-               K_(need_path));
+               K_(need_path), K_(any_shortest), K_(shortest_single_segment));
 };
 
 // Internal typed identity of one mapped vertex or edge. graph_id_ and

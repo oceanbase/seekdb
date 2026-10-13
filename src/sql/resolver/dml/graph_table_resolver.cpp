@@ -984,9 +984,10 @@ ParseNode *make_row_number(GraphRelationBuilder &builder,
       && row_number != nullptr) {
     order_by->children_[0] = sort_list;
     if (partition_key != nullptr) {
-      ParseNode *partition = builder.make(T_EXPR_LIST, 1);
+      ParseNode *partition = partition_key->type_ == T_EXPR_LIST
+          ? partition_key : builder.make(T_EXPR_LIST, 1);
       if (partition != nullptr) {
-        partition->children_[0] = partition_key;
+        if (partition != partition_key) { partition->children_[0] = partition_key; }
         window_clause->children_[0] = partition;
       }
     }
@@ -1269,7 +1270,10 @@ int qualify_paths_before_steps(GraphRelationBuilder &builder,
                                const ParseNode &base_from,
                                const ParseNode *base_where,
                                ParseNode *base_relation,
-                               ParseNode *select)
+                               ParseNode *select,
+                               const GraphBinding *shortest_source = nullptr,
+                               const GraphBinding *shortest_target = nullptr,
+                               ParseNode *shortest_depth = nullptr)
 {
   int ret = OB_SUCCESS;
   const ObString name = ObString::make_string("__g_step_matches");
@@ -1337,7 +1341,8 @@ int qualify_paths_before_steps(GraphRelationBuilder &builder,
     }
   }
   if (OB_SUCC(ret) && builder.error() == OB_SUCCESS) {
-    ParseNode *projects = builder.make(T_PROJECT_LIST, MAX(1, columns.count()));
+    const bool shortest = shortest_source != nullptr;
+    ParseNode *projects = builder.make(T_PROJECT_LIST, MAX(1, columns.count()) + (shortest ? 1 : 0));
     ParseNode *replacement = builder.make(T_ALIAS, 2);
     if (builder.error() == OB_SUCCESS) {
       for (int64_t i = 0; i < columns.count(); ++i) {
@@ -1345,10 +1350,88 @@ int qualify_paths_before_steps(GraphRelationBuilder &builder,
       }
       if (columns.empty()) { projects->children_[0] = builder.project(builder.integer(1), nullptr); }
       query->children_[PARSE_SELECT_SELECT] = projects;
+      if (shortest) {
+        // Rank qualified paths before COLUMNS evaluation and step expansion.
+        // Complete typed endpoint keys partition matches; equal-length paths
+        // deliberately have no tie-break guarantee for ANY SHORTEST.
+        if (shortest_target == nullptr || shortest_depth == nullptr) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          const GraphBinding *endpoints[] = {shortest_source, shortest_target};
+          ParseNode *partition = builder.make(T_EXPR_LIST,
+              shortest_source->element_->key_count_ + shortest_target->element_->key_count_);
+          ObArray<GraphParseNode> ordering;
+          int64_t position = 0;
+          for (int64_t endpoint = 0; partition != nullptr && endpoint < 2; ++endpoint) {
+            const GraphBinding &binding = *endpoints[endpoint];
+            for (int64_t k = 0; k < binding.element_->key_count_; ++k) {
+              partition->children_[position++] = builder.column(binding, binding.element_->key_columns_[k]);
+            }
+          }
+          const ObString rank_name = ObString::make_string("__g_shortest_rank");
+          // A literal hop in an unrolled branch must remain an expression,
+          // not a legacy positional ORDER BY index inside the window.
+          ParseNode *order_depth = builder.binary(T_OP_ADD, builder.clone(*shortest_depth), builder.integer(0));
+          if (OB_FAIL(ordering.push_back(GraphParseNode{order_depth}))) {
+          } else {
+            projects->children_[projects->num_child_ - 1] = builder.project(
+                make_row_number(builder, ordering, partition), builder.identifier(rank_name));
+          }
+          ParseNode *filtered = builder.make(T_SELECT, PARSE_SELECT_MAX_IDX);
+          ParseNode *ranked_alias = builder.identifier(ObString::make_string("__g_shortest_candidates"));
+          ParseNode *ranked_relation = builder.make(T_ALIAS, 2);
+          ParseNode *filtered_from = builder.make(T_FROM_LIST, 1);
+          ParseNode *filtered_where = builder.make(T_WHERE_CLAUSE, 2);
+          ParseNode *filtered_projects = builder.make(T_PROJECT_LIST, MAX(1, columns.count()));
+          if (OB_SUCC(ret) && builder.error() == OB_SUCCESS) {
+            builder.force_serial(filtered);
+            ranked_relation->children_[0] = query;
+            ranked_relation->children_[1] = ranked_alias;
+            filtered_from->children_[0] = ranked_relation;
+            filtered_where->children_[0] = builder.binary(T_OP_EQ,
+                builder.column(ranked_alias, rank_name), builder.integer(1));
+            for (int64_t i = 0; i < columns.count(); ++i) {
+              filtered_projects->children_[i] = builder.project(
+                  builder.column(ranked_alias, graph_node_name(*names.at(i).node_)), names.at(i).node_);
+            }
+            if (columns.empty()) { filtered_projects->children_[0] = builder.project(builder.integer(1), nullptr); }
+            filtered->children_[PARSE_SELECT_SELECT] = filtered_projects;
+            filtered->children_[PARSE_SELECT_FROM] = filtered_from;
+            filtered->children_[PARSE_SELECT_WHERE] = filtered_where;
+            query = filtered;
+          }
+        }
+      }
       replacement->children_[0] = query;
       replacement->children_[1] = alias;
       *base_relation = *replacement;
     }
+  }
+  return OB_SUCC(ret) ? builder.error() : ret;
+}
+
+// PER MATCH uses the same qualification/selection boundary as PER STEP.
+int select_shortest_matches(GraphRelationBuilder &builder,
+                            ParseNode *select,
+                            const GraphBinding &source,
+                            const GraphBinding &target,
+                            ParseNode *depth)
+{
+  int ret = OB_SUCCESS;
+  ParseNode *base_from = select->children_[PARSE_SELECT_FROM];
+  ParseNode *clause = select->children_[PARSE_SELECT_WHERE];
+  ParseNode *where = clause == nullptr ? nullptr : clause->children_[0];
+  ParseNode *relation = builder.clone(*base_from->children_[0]);
+  for (int64_t i = 1; i < base_from->num_child_; ++i) {
+    relation = builder.join(relation, builder.clone(*base_from->children_[i]), builder.integer(1));
+  }
+  ParseNode *from = builder.make(T_FROM_LIST, 1);
+  if (builder.error() == OB_SUCCESS) {
+    from->children_[0] = relation;
+    select->children_[PARSE_SELECT_FROM] = from;
+    select->children_[PARSE_SELECT_WHERE] = nullptr;
+    ret = qualify_paths_before_steps(builder, *base_from, where, relation, select,
+                                     &source, &target, depth);
   }
   return OB_SUCC(ret) ? builder.error() : ret;
 }
@@ -1612,7 +1695,12 @@ int build_recursive_step_rows(GraphRelationBuilder &builder,
       select->children_[PARSE_SELECT_FROM] = from;
       select->children_[PARSE_SELECT_SELECT] = rewritten;
       select->children_[PARSE_SELECT_WITH] = with_list;
-      ret = qualify_paths_before_steps(builder, base_from, base_where, qualified_relation, select);
+      ret = qualify_paths_before_steps(builder, base_from, base_where, qualified_relation, select,
+          !path_desc.any_shortest_ ? nullptr : composed_actual == nullptr
+              ? &result_source : &composed_actual->at(0),
+          !path_desc.any_shortest_ ? nullptr : composed_actual == nullptr
+              ? &result_target : &composed_actual->at(composed_actual->count() - 1),
+          builder.column(path_alias, depth_name));
     }
   }
   return OB_SUCC(ret) ? builder.error() : ret;
@@ -2513,6 +2601,12 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
           select->children_[PARSE_SELECT_WHERE] = clause;
         }
       }
+      if (OB_SUCC(ret) && path_desc.any_shortest_) {
+        ret = select_shortest_matches(builder, select,
+            composed_chain == nullptr ? result_source : composed_actual.at(0),
+            composed_chain == nullptr ? result_target : composed_actual.at(composed_actual.count() - 1),
+            builder.column(path_alias, DEPTH_NAME));
+      }
     }
   }
   if (OB_SUCC(ret) && builder.error() != OB_SUCCESS) {
@@ -2830,7 +2924,10 @@ int build_graph_path_branch(GraphRelationBuilder &builder,
       select->children_[PARSE_SELECT_SELECT] = rewritten_projects;
       if (qualified_base_from != nullptr) {
         ret = qualify_paths_before_steps(builder, *qualified_base_from, where,
-                                         qualified_base_relation, select);
+            qualified_base_relation, select,
+            path_desc.any_shortest_ ? &composed_actual.at(0) : nullptr,
+            path_desc.any_shortest_ ? &composed_actual.at(composed_actual.count() - 1) : nullptr,
+            builder.integer(hop));
       } else if (where != nullptr) {
         ParseNode *clause = builder.make(T_WHERE_CLAUSE, 2);
         if (clause == nullptr) {
@@ -2839,6 +2936,12 @@ int build_graph_path_branch(GraphRelationBuilder &builder,
           clause->children_[0] = where;
           select->children_[PARSE_SELECT_WHERE] = clause;
         }
+      }
+      if (OB_SUCC(ret) && path_desc.any_shortest_ && qualified_base_from == nullptr) {
+        ret = select_shortest_matches(builder, select,
+            composed_chain == nullptr ? vertices.at(0) : composed_actual.at(0),
+            composed_chain == nullptr ? *terminal : composed_actual.at(composed_actual.count() - 1),
+            builder.integer(hop));
       }
     }
   }
@@ -2887,6 +2990,7 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
   static const int64_t GRAPH_TABLE_SHAPE = 3;
   static const int64_t GRAPH_TABLE_PROJECTS = 4;
   static const int64_t GRAPH_TABLE_ALIAS = 5;
+  static const int64_t GRAPH_TABLE_SEARCH = 6;
   table_item = nullptr;
   ObString name;
   ObString database_name;
@@ -2900,7 +3004,7 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
   } else if (!get_stmt()->is_select_stmt()) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "GRAPH_TABLE as a DML target");
-  } else if (node.num_child_ != 6 || node.children_ == nullptr) {
+  } else if (node.num_child_ != 7 || node.children_ == nullptr) {
     ret = OB_ERR_UNEXPECTED;
   } else if (node.children_[GRAPH_TABLE_PATH_MODE] != nullptr
              && (node.children_[GRAPH_TABLE_PATH_MODE]->type_ != T_GRAPH_PATH_MODE
@@ -2931,6 +3035,7 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
     const ParseNode &chain = *node.children_[GRAPH_TABLE_PATTERN];
     const ParseNode *shape = node.children_[GRAPH_TABLE_SHAPE];
     const ParseNode &projects = *node.children_[GRAPH_TABLE_PROJECTS];
+    const bool any_shortest = node.children_[GRAPH_TABLE_SEARCH] != nullptr;
     int64_t quantified_segments = 0;
     int64_t quantified_index = 1;
     const ParseNode *quantifier = nullptr;
@@ -2991,6 +3096,10 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
       }
     }
     if (OB_SUCC(ret) && quantified_segments == 0) {
+      if (any_shortest) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "ANY SHORTEST without a bounded quantified graph segment");
+      }
       for (int64_t i = 0; OB_SUCC(ret) && i < chain.num_child_; ++i) {
         const ParseNode *filter = chain.children_[i]->children_[2];
         if (filter != nullptr) { ret = check_graph_expression(*filter, *graph, bindings); }
@@ -3082,6 +3191,8 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
             ? path_desc.lower_bound_ : quantifier->children_[1]->value_;
         path_desc.direction_ = static_cast<GraphPathDirection>(chain.children_[quantified_index]->value_);
         path_desc.path_mode_ = path_mode;
+        path_desc.any_shortest_ = any_shortest;
+        path_desc.shortest_single_segment_ = any_shortest && chain.num_child_ == 3;
         path_desc.row_shape_ = shape != nullptr && shape->value_ == 1
             ? GraphPathRowShape::PER_STEP : GraphPathRowShape::PER_MATCH;
         path_desc.need_path_ = path_desc.path_mode_ == GraphPathMode::TRAIL

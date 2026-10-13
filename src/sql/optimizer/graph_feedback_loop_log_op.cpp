@@ -636,10 +636,11 @@ int GraphFeedbackLoopLogOp::can_prune_duplicate_states(bool &can_prune)
 {
   int ret = OB_SUCCESS;
   can_prune = false;
+  const bool shortest = path_desc_.any_shortest_ && path_desc_.shortest_single_segment_;
   bool safe = can_use_basic_native_runtime()
       && path_desc_.path_mode_ == GraphPathMode::WALK
-      && path_desc_.row_shape_ == GraphPathRowShape::PER_MATCH
-      && !path_desc_.need_path_ && path_payload_exprs_.empty();
+      && (shortest || (path_desc_.row_shape_ == GraphPathRowShape::PER_MATCH
+                      && !path_desc_.need_path_ && path_payload_exprs_.empty()));
   ObArray<ObRawExpr *> keys;
   if (safe && OB_FAIL(get_seed_key_exprs(keys))) {
   }
@@ -651,7 +652,8 @@ int GraphFeedbackLoopLogOp::can_prune_duplicate_states(bool &can_prune)
         && keys.at(i)->get_result_type().get_type_class() != ObFloatTC;
   }
   ObLogicalOperator *boundary = get_parent();
-  while (safe && boundary != nullptr && boundary->get_type() != LOG_DISTINCT) {
+  const auto boundary_type = shortest ? LOG_WINDOW_FUNCTION : LOG_DISTINCT;
+  while (safe && boundary != nullptr && boundary->get_type() != boundary_type) {
     const auto type = boundary->get_type();
     safe = type == LOG_SUBPLAN_SCAN || type == LOG_JOIN
         || type == LOG_SORT || type == LOG_MATERIAL;
@@ -672,19 +674,28 @@ int GraphFeedbackLoopLogOp::can_prune_duplicate_states(bool &can_prune)
       ret = OB_ERR_UNEXPECTED;
     } else if (node == this) {
       // Native eligibility already checks the generated single-hop filters.
-      // No edge/history payload is observable in this path representation.
+      // ANY SHORTEST needs one witness per (binding, vertex, hop): subsequent
+      // WALK continuations do not depend on the earlier path. Keeping hop in
+      // this key also preserves cycles needed to meet a positive lower bound.
     } else {
       switch (node->get_type()) {
         case LOG_DISTINCT:
         case LOG_SUBPLAN_SCAN:
         case LOG_MATERIAL:
           break;
+        case LOG_WINDOW_FUNCTION:
+          safe = shortest && node == boundary;
+          break;
         case LOG_JOIN:
           safe = static_cast<ObLogJoin *>(node)->get_join_type() == INNER_JOIN;
           break;
         case LOG_SORT: {
           ObLogSort *sort = static_cast<ObLogSort *>(node);
-          safe = sort->get_topn_expr() == nullptr
+          // ROW_NUMBER()=1 may become a partition Top-N directly under the
+          // generated shortest selector. Equal-hop witnesses are interchangeable
+          // there; this does not authorize pruning below arbitrary user LIMIT.
+          safe = (sort->get_topn_expr() == nullptr
+                  || (shortest && sort->is_part_sort() && sort->get_parent() == boundary))
               && sort->get_topk_limit_expr() == nullptr
               && sort->get_pushdown_topn_filter_expr() == nullptr;
           break;
@@ -739,7 +750,7 @@ int GraphFeedbackLoopLogOp::get_plan_item_info(PlanText &plan_text,
   } else if (OB_FAIL(can_prune_duplicate_states(prune))) {
   } else {
     BEGIN_BUF_PRINT;
-    if (OB_FAIL(BUF_PRINTF("direction=%s, hops={%ld,%ld}, access=%s, mode=%s, runtime=%s, states=%s",
+    if (OB_FAIL(BUF_PRINTF("direction=%s, hops={%ld,%ld}, access=%s, mode=%s, runtime=%s, states=%s, search=%s",
                            path_desc_.direction_ == GraphPathDirection::IN
                                ? "IN" : path_desc_.direction_ == GraphPathDirection::BOTH ? "BOTH" : "OUT",
                            path_desc_.lower_bound_,
@@ -748,7 +759,8 @@ int GraphFeedbackLoopLogOp::get_plan_item_info(PlanText &plan_text,
                            path_mode_name(path_desc_.path_mode_),
                            can_use_basic_native_runtime()
                                ? "native" : "fallback",
-                           prune ? "binding_vertex_hop" : "paths"))) {
+                           prune ? "binding_vertex_hop" : "paths",
+                           path_desc_.any_shortest_ ? "any_shortest" : "all"))) {
     }
     END_BUF_PRINT(plan_item.special_predicates_, plan_item.special_predicates_len_);
   }
@@ -921,6 +933,8 @@ uint64_t GraphFeedbackLoopLogOp::hash(uint64_t seed) const
   seed = do_hash(static_cast<int64_t>(path_desc_.path_mode_), seed);
   seed = do_hash(static_cast<int64_t>(path_desc_.row_shape_), seed);
   seed = do_hash(path_desc_.need_path_, seed);
+  seed = do_hash(path_desc_.any_shortest_, seed);
+  seed = do_hash(path_desc_.shortest_single_segment_, seed);
   seed = expand_access_desc_.hash(seed);
   seed = do_hash(pull_to_local_, seed);
   seed = do_hash(static_cast<int64_t>(step_access_method_), seed);

@@ -571,6 +571,8 @@ private:
   GraphPathMode graph_path_mode_{static_cast<GraphPathMode>(0)};
   GraphPathRowShape graph_path_row_shape_{static_cast<GraphPathRowShape>(0)};
   bool graph_path_need_path_{false};
+  bool graph_path_any_shortest_{false};
+  bool graph_path_shortest_single_segment_{false};
   /* These fields are only used by normal select */
   bool is_distinct_;
   // Used for the sort column specified in the search by clause of the cte recursive statement
