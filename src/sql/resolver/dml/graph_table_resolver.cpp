@@ -374,7 +374,8 @@ bool contains_item_type(const ParseNode &root, ObItemType type)
 }
 
 int check_graph_expression(const ParseNode &root, const GraphSchema &graph,
-                           const ObIArray<GraphBinding> &bindings)
+                           const ObIArray<GraphBinding> &bindings,
+                           bool allow_outer_reference = false)
 {
   int ret = OB_SUCCESS;
   ObSEArray<GraphExpressionNode, 16> pending;
@@ -389,6 +390,7 @@ int check_graph_expression(const ParseNode &root, const GraphSchema &graph,
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "subqueries, aggregate or window functions inside GRAPH_TABLE");
     } else if (node->type_ == T_COLUMN_REF) {
       bool found = false;
+      bool graph_variable = false;
       if (node->num_child_ == 3 && node->children_[0] == nullptr
           && node->children_[1] != nullptr && node->children_[2] != nullptr
           && node->children_[2]->type_ == T_IDENT) {
@@ -397,6 +399,7 @@ int check_graph_expression(const ParseNode &root, const GraphSchema &graph,
         for (int64_t i = 0; !found && i < bindings.count(); ++i) {
           const GraphBinding &binding = bindings.at(i);
           if (ObSchemaNameComparator().compare(variable, graph_node_name(*binding.variable_)) == 0) {
+            graph_variable = true;
             for (int64_t j = 0; !found && j < graph.get_properties().count(); ++j) {
               const GraphProperty &p = graph.get_properties().at(j);
               found = p.element_id_ == binding.element_->id_
@@ -404,6 +407,11 @@ int check_graph_expression(const ParseNode &root, const GraphSchema &graph,
             }
           }
         }
+        // Only qualified names outside the complete graph-variable namespace
+        // may reach ordinary SQL correlation resolution. A declared variable
+        // with an unknown property must never fall through to an outer alias.
+        // Unqualified names stay forbidden to avoid capturing hidden columns.
+        found = found || (allow_outer_reference && !graph_variable);
       }
       if (!found) {
         ret = OB_NOT_SUPPORTED;
@@ -3191,7 +3199,11 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < chain.num_child_; ++i) {
         const ParseNode *filter = chain.children_[i]->children_[2];
-        if (filter != nullptr) { ret = check_graph_expression(*filter, *graph, bindings); }
+        if (filter != nullptr) {
+          // Normal derived-table resolution enforces LATERAL visibility and
+          // binds outer values as rescan parameters; fixed chains remain JOINs.
+          ret = check_graph_expression(*filter, *graph, bindings, true);
+        }
       }
       if (OB_SUCC(ret)) { ret = check_graph_expression(projects, *graph, bindings); }
     }
