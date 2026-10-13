@@ -1284,7 +1284,7 @@ int GraphExpandDasAccess::validate_edge_scan_request(
   if (OB_UNLIKELY(direction != path_desc_.direction_ || limit <= 0
                   || (can_partition_sources()
                       && sources.count()
-                         > GRAPH_EXPAND_MAX_INPUT_STATE_COUNT))) {
+                         > GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE))) {
     ret = OB_INVALID_ARGUMENT;
   }
   // Validate every source when a scan starts. Continuations use the immutable

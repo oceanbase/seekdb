@@ -36,7 +36,7 @@ namespace sql
 // Adjacency access limits one source partition independently of the caller's
 // query-memory budget. Full scans receive a complete BFS level so the edge
 // table is scanned only once; their size is governed by the work-area limit.
-static const int64_t GRAPH_EXPAND_MAX_INPUT_STATE_COUNT = 4096;
+static const int64_t GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE = 4096;
 static const int64_t GRAPH_EXPAND_MAX_EDGE_PAGE_SIZE = 4096;
 
 // Query-local hash index over typed graph identities. Compatible NUMBER and
@@ -220,6 +220,7 @@ public:
   bool is_open() const { return is_open_; }
   bool can_partition_sources() const
   { return access_.can_partition_sources(); }
+  int check_status() { return access_.check_status(); }
 
 private:
   struct SourceInputGroup

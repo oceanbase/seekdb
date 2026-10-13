@@ -1,0 +1,74 @@
+--disable_query_log
+DROP PROPERTY GRAPH IF EXISTS graph_shared;
+--disable_warnings
+DROP TABLE IF EXISTS gs_v,gs_e,gs_digit;
+--enable_warnings
+CREATE TABLE gs_digit (n INT PRIMARY KEY);
+INSERT INTO gs_digit VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+CREATE TABLE gs_v (id INT PRIMARY KEY,score INT);
+CREATE TABLE gs_e (eid INT PRIMARY KEY,src INT,dst INT);
+INSERT INTO gs_v
+ SELECT 1+d0.n+10*d1.n+100*d2.n+1000*d3.n,
+        10*(1+d0.n+10*d1.n+100*d2.n+1000*d3.n)
+ FROM gs_digit d0,gs_digit d1,gs_digit d2,gs_digit d3
+ WHERE d0.n+10*d1.n+100*d2.n+1000*d3.n<5000;
+INSERT INTO gs_v VALUES (10001,0),(10002,0),(10003,0);
+INSERT INTO gs_e SELECT id,id,10001+MOD(id,2) FROM gs_v WHERE id<=5000;
+INSERT INTO gs_e VALUES (20001,10001,10003),(20002,10001,10003),
+ (20003,10002,10003),(20004,10002,10003);
+CREATE PROPERTY GRAPH graph_shared
+ VERTEX TABLES(gs_v KEY(id) LABEL node PROPERTIES(id,score))
+ EDGE TABLES(gs_e KEY(eid) SOURCE KEY(src) REFERENCES gs_v(id)
+ DESTINATION KEY(dst) REFERENCES gs_v(id) LABEL link PROPERTIES(eid));
+--source mysql_test/include/create_plan_table.inc
+--enable_query_log
+--let $passes=2
+while ($passes)
+{
+  if ($passes == 1)
+  {
+    CREATE INDEX gs_out ON gs_e(src);
+    CREATE INDEX gs_in ON gs_e(dst);
+  }
+  --disable_result_log
+  DELETE FROM plan_table;
+  EXPLAIN INTO plan_table SET statement_id='shared_frontier'
+  SELECT COUNT(*) FROM GRAPH_TABLE(graph_shared MATCH
+   (a IS node WHERE a.id<=5000)-[e IS link]->{2}(b IS node)
+   COLUMNS(a.id AS seed,a.score AS score,b.id AS endpoint)) g;
+  --enable_result_log
+  SELECT COUNT(*)=1 AS native_walk FROM plan_table
+   WHERE statement_id='shared_frontier' AND operator='GRAPH FEEDBACK LOOP'
+   AND special_predicates LIKE '%runtime=native%states=paths%';
+  SELECT COUNT(*) AS paths,COUNT(DISTINCT seed) AS seeds,
+   SUM(score!=seed*10) AS wrong_score,SUM(endpoint!=10003) AS wrong_endpoint,
+   SUM(CAST(JSON_VALUE(edges,'$[0]') AS SIGNED)!=seed) AS wrong_path
+  FROM GRAPH_TABLE(graph_shared MATCH
+   (a IS node WHERE a.id<=5000)-[e IS link]->{2}(b IS node)
+   COLUMNS(a.id AS seed,a.score AS score,b.id AS endpoint,
+           JSON_ARRAYAGG(e.eid) AS edges)) g;
+  SELECT MIN(paths) AS min_paths,MAX(paths) AS max_paths FROM (
+   SELECT seed,COUNT(*) AS paths FROM GRAPH_TABLE(graph_shared MATCH
+    (a IS node WHERE a.id<=5000)-[e IS link]->{2}(b IS node)
+    COLUMNS(a.id AS seed)) g GROUP BY seed) p;
+  SELECT COUNT(*) AS paths,COUNT(DISTINCT seed) AS seeds,SUM(score!=seed*10) AS wrong_score
+  FROM GRAPH_TABLE(graph_shared MATCH
+   (a IS node WHERE a.id=10003)<-[e IS link]-{2}(b IS node)
+   COLUMNS(b.id AS seed,b.score AS score)) g;
+  SELECT COUNT(*) AS step_rows,COUNT(DISTINCT seed) AS seeds,
+         SUM(sn IS NULL) AS zero_hop_rows,SUM(score!=seed*10) AS wrong_score
+  FROM GRAPH_TABLE(graph_shared MATCH
+   (a IS node WHERE a.id<=5000)-[e IS link]->{0,2}(b IS node)
+   ONE ROW PER STEP(v1,se,v2)
+   COLUMNS(a.id AS seed,a.score AS score,ELEMENT_NUMBER(se) AS sn)) g;
+  PREPARE shared_cached FROM 'SELECT COUNT(*) AS paths,SUM(score) AS score_sum FROM GRAPH_TABLE(graph_shared MATCH (a IS node WHERE a.id<=?)-[e IS link]->{2}(b IS node) COLUMNS(a.id AS seed,a.score AS score)) g';
+  SET @seeds=5000;
+  EXECUTE shared_cached USING @seeds;
+  SET @seeds=3;
+  EXECUTE shared_cached USING @seeds;
+  DEALLOCATE PREPARE shared_cached;
+  --dec $passes
+}
+DROP TABLE plan_table;
+DROP PROPERTY GRAPH graph_shared;
+DROP TABLE gs_e,gs_v,gs_digit;

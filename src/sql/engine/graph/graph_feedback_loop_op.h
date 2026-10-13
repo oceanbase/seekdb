@@ -111,6 +111,14 @@ public:
   void reset();
 
 private:
+  struct SourceGroup
+  {
+    int64_t first_position_{-1};
+    int64_t last_position_{-1};
+    TO_STRING_KV(K_(first_position), K_(last_position));
+  };
+  int prepare_source_groups();
+  int append_input(int64_t position);
   int build_input_batch(int64_t start, int64_t &next_start);
   int consume_input_batch(GraphPathDirection direction,
                           GraphPathMode path_mode,
@@ -132,6 +140,10 @@ private:
   // One entry per (binding, typed vertex) in the NEXT BFS level only. Never a
   // global visited set: a vertex reached at different hops is not equivalent.
   GraphIdentityIndex next_state_index_;
+  // Indexed access partitions source groups, never their associated paths.
+  common::ObArray<SourceGroup> source_groups_;
+  common::ObArray<int64_t> next_source_positions_;
+  bool batch_by_source_groups_{false};
   int64_t input_batch_size_;
   int64_t memory_limit_;
   common::ObArray<int64_t> frontier_buffer_a_;

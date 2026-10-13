@@ -60,7 +60,7 @@ static constexpr int64_t GRAPH_EXPAND_INPUT_KEY_SLOT_MULTIPLIER = 2;
 static constexpr int64_t GRAPH_EXPAND_INPUT_KEY_BYTES_PER_INPUT =
     GRAPH_EXPAND_INPUT_KEY_SLOT_MULTIPLIER * sizeof(int64_t);
 static constexpr int64_t GRAPH_EXPAND_VERTEX_LOOKUP_BATCH_SIZE =
-    GRAPH_EXPAND_MAX_INPUT_STATE_COUNT;
+    GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE;
 
 namespace
 {
@@ -1042,9 +1042,6 @@ int GraphExpand::validate_and_account(const ObIArray<GraphExpandInput> &inputs)
   if (page_size_ <= 0 || page_size_ > GRAPH_EXPAND_MAX_EDGE_PAGE_SIZE
       || memory_limit_ <= 0) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (access_.can_partition_sources()
-             && inputs.count() > GRAPH_EXPAND_MAX_INPUT_STATE_COUNT) {
-    ret = OB_SIZE_OVERFLOW;
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < inputs.count(); ++i) {
     if (inputs.at(i).binding_id_ < 0 || inputs.at(i).path_state_id_ < 0
@@ -1056,7 +1053,7 @@ int GraphExpand::validate_and_account(const ObIArray<GraphExpandInput> &inputs)
     // Reserve the worst case of one distinct source per input: one identity
     // index entry/bucket, one group descriptor and one next-input link.
     const int64_t source_index_entry_bytes =
-        sizeof(GraphElementIdentity) + sizeof(int64_t);
+        sizeof(GraphElementIdentity) + 2 * sizeof(int64_t);
     const int64_t source_index_bucket_bytes = sizeof(int64_t);
     const int64_t existing_source_index_bytes =
         source_index_entry_bytes + source_index_bucket_bytes;
@@ -1122,6 +1119,10 @@ int GraphExpand::open(const ObIArray<GraphExpandInput> &inputs,
   } else if (OB_FAIL(access_.check_status())) {
   } else if (OB_FAIL(deep_copy_inputs(inputs))) {
   } else if (OB_FAIL(build_source_input_groups())) {
+  } else if (access_.can_partition_sources()
+             && source_identities_.count() > GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE) {
+    // Bound physical ranges, not the number of associated path/seed bindings.
+    ret = OB_SIZE_OVERFLOW;
   } else if (OB_FAIL(check_memory_limit())) {
   }
   if (OB_SUCC(ret)) {
