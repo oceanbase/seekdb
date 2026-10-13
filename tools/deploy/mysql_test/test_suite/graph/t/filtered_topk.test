@@ -72,6 +72,40 @@ while ($passes)
   WHERE a.n IS NULL OR f.n IS NULL OR a.n<>e.n OR f.n<>e.n;
   --disable_query_log
   DROP TABLE gf_expected,gf_actual,gf_forced;
+  --disable_result_log
+  DELETE FROM plan_table;
+  EXPLAIN INTO plan_table SET statement_id='joined'
+  SELECT /*+ USE_LATE_MATERIALIZATION */ g.id,d.id AS doc_id,d.body
+  FROM GRAPH_TABLE(gf_graph MATCH (a IS node WHERE a.id=1)-[e IS link]->{0,2}(b IS node)
+    COLUMNS(b.id AS id)) g LEFT JOIN gf_v d ON d.id=g.id AND MOD(d.id,3)=0
+  WHERE d.active=0 OR d.id IS NULL ORDER BY COALESCE(d.active,0),g.id DESC LIMIT 20 OFFSET 3;
+  --enable_result_log
+  --enable_query_log
+  SELECT COUNT(*) AS joined_narrow_topn FROM plan_table WHERE statement_id='joined'
+  AND operator='TOP-N SORT' AND projection NOT LIKE '%body%';
+  --disable_query_log
+  CREATE TABLE gf_expected AS WITH RECURSIVE p(endpoint,hops) AS (
+    SELECT id,0 FROM gf_v WHERE id=1
+    UNION ALL SELECT v.id,p.hops+1 FROM p JOIN gf_e e ON e.src=p.endpoint
+    JOIN gf_v v ON v.id=e.dst WHERE p.hops<2)
+  SELECT p.endpoint AS id,d.id AS doc_id,d.body FROM p
+  LEFT JOIN gf_v d ON d.id=p.endpoint AND MOD(d.id,3)=0
+  WHERE d.active=0 OR d.id IS NULL ORDER BY COALESCE(d.active,0),p.endpoint DESC LIMIT 20 OFFSET 3;
+  CREATE TABLE gf_actual AS SELECT /*+ USE_LATE_MATERIALIZATION */ g.id,d.id AS doc_id,d.body
+  FROM GRAPH_TABLE(gf_graph MATCH (a IS node WHERE a.id=1)-[e IS link]->{0,2}(b IS node)
+    COLUMNS(b.id AS id)) g LEFT JOIN gf_v d ON d.id=g.id AND MOD(d.id,3)=0
+  WHERE d.active=0 OR d.id IS NULL ORDER BY COALESCE(d.active,0),g.id DESC LIMIT 20 OFFSET 3;
+  --enable_query_log
+  SELECT COUNT(*) AS joined_rows,SUM(doc_id IS NULL) AS unmatched_rows,
+  SUM(doc_id IS NOT NULL) AS matched_rows FROM gf_actual;
+  SELECT COUNT(*) AS changed_joined_bag FROM (
+    SELECT id,doc_id,body,SUM(n) AS balance FROM (
+      SELECT id,doc_id,body,1 AS n FROM gf_expected
+      UNION ALL SELECT id,doc_id,body,-1 AS n FROM gf_actual
+    ) rows_with_sign GROUP BY id,doc_id,body HAVING SUM(n)<>0
+  ) changed;
+  --disable_query_log
+  DROP TABLE gf_expected,gf_actual;
   --dec $passes
 }
 --enable_query_log
@@ -99,5 +133,19 @@ DESTINATION KEY(dt,di,dc) REFERENCES gf_v(tenant,id,code) LABEL link PROPERTIES(
 SELECT /*+ USE_LATE_MATERIALIZATION */ * FROM GRAPH_TABLE(gf_graph MATCH
 (a IS node WHERE a.body='seed')-[e IS link]->{0,2}(b IS node WHERE b.active=1)
 COLUMNS(b.tenant AS tenant,b.id AS id,b.code AS code,b.body AS body)) g ORDER BY id DESC,code,tenant LIMIT 2;
+CREATE TABLE gf_docs LIKE gf_v;
+INSERT INTO gf_docs VALUES(1,2.50,'target','payload',1),
+(2,2.50,'target','wrong-tenant',1),(1,2.50,'other','wrong-code',1);
+PREPARE gf_joined FROM 'SELECT /*+ USE_LATE_MATERIALIZATION */ g.id,g.code,d.tenant AS doc_tenant,d.id AS doc_id,d.code AS doc_code,COALESCE(d.body,''missing'') AS body FROM GRAPH_TABLE(gf_graph MATCH (a IS node WHERE a.body=?)-[e IS link]->{0,2}(b IS node) COLUMNS(b.tenant AS tenant,b.id AS id,b.code AS code)) g LEFT JOIN gf_docs d ON d.tenant=g.tenant AND d.id=g.id AND d.code=g.code WHERE d.active=1 OR d.tenant IS NULL ORDER BY COALESCE(d.active,0),g.id,g.code,g.tenant LIMIT ? OFFSET ?';
+SET @seed_body='seed',@lim=3,@off=0;
+EXECUTE gf_joined USING @seed_body,@lim,@off;
+SET @seed_body='wanted',@lim=1;
+EXECUTE gf_joined USING @seed_body,@lim,@off;
+SET @seed_body='seed',@off=1;
+EXECUTE gf_joined USING @seed_body,@lim,@off;
+SET @seed_body='absent',@off=0;
+EXECUTE gf_joined USING @seed_body,@lim,@off;
+DEALLOCATE PREPARE gf_joined;
+DROP TABLE gf_docs;
 DROP PROPERTY GRAPH gf_graph;
 DROP TABLE gf_v,gf_e;

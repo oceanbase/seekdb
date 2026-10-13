@@ -74,8 +74,8 @@ int ObTransformLateMaterialization::try_graph_late_materialization(
   bool graph_input = false;
   bool deterministic = false;
   // This is a payload split, not a LIMIT push below qualification. Keep the
-  // complete original FROM/WHERE/ORDER/LIMIT in the inner query. Only a direct
-  // basic-table input (never the nullable side of an outer join) is copied out.
+  // complete original FROM/WHERE/ORDER/LIMIT in the inner query. A table inside
+  // a join tree may be null-extended; its late lookup must preserve that row.
   if (ctx_->eval_cost_ || !select.has_limit() || !select.has_order_by()
       || select.is_set_stmt() || select.has_group_by() || select.has_having()
       || select.has_rollup() || select.has_distinct() || select.has_window_function()
@@ -107,12 +107,12 @@ int ObTransformLateMaterialization::try_graph_late_materialization(
   } else if (OB_FAIL(ObRawExprUtils::extract_column_exprs(projected_exprs, projected_columns))) {
   }
   uint64_t table_id = OB_INVALID_ID;
+  bool preserve_null_rows = false;
   ObArray<uint64_t> payload_ids;
   for (int64_t i = 0; OB_SUCC(ret) && table_id == OB_INVALID_ID
-       && i < select.get_from_item_size(); ++i) {
-    const FromItem &from = select.get_from_item(i);
-    const TableItem *table = select.get_table_item_by_id(from.table_id_);
-    if (from.is_joined_ || table == nullptr || !table->is_basic_table()
+       && i < select.get_table_size(); ++i) {
+    const TableItem *table = select.get_table_item(i);
+    if (table == nullptr || !table->is_basic_table()
         || table->is_system_table_ || table->snapshot_query_expr_ != nullptr
         || table->is_has_sample_info()) {
       continue;
@@ -147,7 +147,16 @@ int ObTransformLateMaterialization::try_graph_late_materialization(
           ret = add_var_to_array_no_dup(payload_ids, column->get_column_id());
         }
       }
-      if (!payload_ids.empty()) { table_id = table->table_id_; }
+      if (!payload_ids.empty()) {
+        table_id = table->table_id_;
+        preserve_null_rows = true;
+        for (int64_t f = 0; f < select.get_from_item_size(); ++f) {
+          const FromItem &from = select.get_from_item(f);
+          if (!from.is_joined_ && from.table_id_ == table_id) {
+            preserve_null_rows = false;
+          }
+        }
+      }
     }
   }
   if (OB_SUCC(ret) && table_id != OB_INVALID_ID) {
@@ -157,7 +166,8 @@ int ObTransformLateMaterialization::try_graph_late_materialization(
     check_ctx.graph_lookup_ = true;
     cost_based_trans_tried_ = true;
     if (OB_FAIL(helper.fill_helper(stmt->get_query_ctx()))) {
-    } else if (OB_FAIL(build_graph_late_materialization(*stmt, table_id, payload_ids, candidate))) {
+    } else if (OB_FAIL(build_graph_late_materialization(*stmt, table_id, payload_ids,
+                                                       preserve_null_rows, candidate))) {
     } else if (OB_FAIL(accept_transform(parent_stmts, stmt, candidate, force_trans,
                                        false, trans_happened, false, &check_ctx))) {
     } else if (trans_happened && OB_FAIL(add_transform_hint(*stmt))) {
@@ -169,7 +179,7 @@ int ObTransformLateMaterialization::try_graph_late_materialization(
 
 int ObTransformLateMaterialization::build_graph_late_materialization(
     ObDMLStmt &stmt, uint64_t table_id, const ObIArray<uint64_t> &payload_ids,
-    ObDMLStmt *&trans_stmt)
+    bool preserve_null_rows, ObDMLStmt *&trans_stmt)
 {
   int ret = OB_SUCCESS;
   ObDMLStmt *inner_stmt = nullptr;
@@ -232,6 +242,21 @@ int ObTransformLateMaterialization::build_graph_late_materialization(
       } else if (OB_FAIL(replace_expr_skip_part(outer, old_columns, view_columns))) {
       } else if (OB_FAIL(generate_pk_join_conditions(lookup->ref_id_, table_id,
                                                      old_columns, view_columns, outer))) {
+      } else if (preserve_null_rows) {
+        // The inner query already chose the qualifying matches, including null
+        // extension and duplicate rows. Reconstruct only payloads by the full PK;
+        // an unmatched inner row must not disappear in this second lookup.
+        TableItem *lookup_join = nullptr;
+        if (OB_FAIL(ObTransformUtils::add_new_joined_table(ctx_, outer, LEFT_OUTER_JOIN,
+                                                          view_table, lookup,
+                                                          outer.get_condition_exprs(), lookup_join))) {
+        } else {
+          outer.get_condition_exprs().reset();
+          outer.get_from_items().reset();
+          ret = outer.add_from_item(lookup_join->table_id_, true);
+        }
+      }
+      if (OB_FAIL(ret)) {
       } else if (OB_FAIL(inner.formalize_stmt(ctx_->session_info_, false))) {
       } else if (OB_FAIL(outer.formalize_stmt(ctx_->session_info_, false))) {
       } else if (OB_FAIL(outer.formalize_stmt_expr_reference(ctx_->expr_factory_, ctx_->session_info_))) {

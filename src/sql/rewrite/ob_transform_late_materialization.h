@@ -79,6 +79,7 @@ private:
                                     ObDMLStmt *&stmt, bool force_trans, bool &trans_happened);
   int build_graph_late_materialization(ObDMLStmt &stmt, uint64_t table_id,
                                       const ObIArray<uint64_t> &payload_ids,
+                                      bool preserve_null_rows,
                                       ObDMLStmt *&trans_stmt);
   int check_stmt_need_late_materialization(const ObSelectStmt &stmt, const bool force_accept, bool &need);
   int generate_late_materialization_info(const ObSelectStmt &stmt,
