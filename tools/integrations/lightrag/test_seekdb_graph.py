@@ -21,7 +21,7 @@ import uuid
 
 import numpy as np
 from lightrag import LightRAG, QueryParam
-from lightrag.utils import EmbeddingFunc, Tokenizer
+from lightrag.utils import EmbeddingFunc, Tokenizer, compute_mdhash_id, make_relation_chunk_key
 
 from seekdb_graph import SeekDBGraphStorage, register
 
@@ -61,12 +61,12 @@ async def contract_checks():
         await graph.upsert_edge("B", "A", {"weight": 1})
         assert await graph.get_node("B") == {}
         assert await graph.get_edge("B", "A") == {"weight": 1, "source_id": "chunk1"}
-        assert await graph.get_node_edges("B") == [("A", "B")]
+        assert await graph.get_node_edges("B") == [("B", "A")]
         await sibling.upsert_edge("A", "namespace_only", {"value": 1})
         await other.upsert_edge("A", "workspace_only", {"value": 1})
         assert await graph.get_node_edges("A") == [("A", "B")]
         assert await graph.get_nodes_edges_batch(["A", "B", "missing"]) == {
-            "A": [("A", "B")], "B": [("A", "B")], "missing": []}
+            "A": [("A", "B")], "B": [("B", "A")], "missing": []}
         assert await graph.edge_degrees_batch([("A", "B"), ("missing", "A")]) == {
             ("A", "B"): 2, ("missing", "A"): 1}
         assert await graph.search_labels("quote'\\%_") == ["quote'\\%_"]
@@ -231,6 +231,10 @@ async def product_checks():
             for product in (baseline, replacement):
                 await product.ainsert_custom_kg(kg)
                 await product.ainsert_custom_kg(kg)  # product-level idempotent retry
+                # Separate ingestion timestamps deliberately: parity must not
+                # depend on both products writing in the same wall-clock second.
+                if product is baseline:
+                    await asyncio.sleep(1.1)
             for mode in ("local", "global", "hybrid", "mix"):
                 param = QueryParam(mode=mode, ll_keywords=["Alice"], hl_keywords=["employment"],
                                    top_k=20, chunk_top_k=20, max_total_tokens=12000, enable_rerank=False)
@@ -239,6 +243,27 @@ async def product_checks():
                 assert actual == expected, (mode, actual, expected)
                 assert actual["status"] == "success" and actual["chunks"], (mode, actual)
             print("actual LightRAG ingestion/retrieval: four modes passed", flush=True)
+            # Acme sorts before Alice. A canonical Acme->Alice incident pair
+            # would be skipped by LightRAG's requested-source merge collector.
+            for product in (baseline, replacement):
+                await product.amerge_entities(["Alice"], "Carol")
+                graph = product.chunk_entity_relation_graph
+                edge = await graph.get_edge("Acme", "Carol")
+                assert edge is not None and edge["source_id"], "merge dropped a live relation"
+                assert edge["file_path"] == "source-v1.txt"
+                assert await graph.get_node("Alice") is None
+                assert await graph.get_edge("Acme", "Alice") is None
+                assert await product.relationships_vdb.get_by_id(compute_mdhash_id("AcmeAlice", prefix="rel-")) is None
+                assert await product.relationships_vdb.get_by_id(compute_mdhash_id("AcmeCarol", prefix="rel-")) is not None
+                assert await product.relation_chunks.get_by_id(make_relation_chunk_key("Acme", "Alice")) is None
+                assert await product.relation_chunks.get_by_id(make_relation_chunk_key("Acme", "Carol")) is not None
+            original_edge = await baseline.chunk_entity_relation_graph.get_edge("Acme", "Carol")
+            replacement_edge = await replacement.chunk_entity_relation_graph.get_edge("Acme", "Carol")
+            assert isinstance(original_edge["created_at"], int)
+            assert isinstance(replacement_edge["created_at"], int)
+            assert {key: value for key, value in original_edge.items() if key != "created_at"} == {
+                key: value for key, value in replacement_edge.items() if key != "created_at"}
+            print("actual LightRAG merge: relation/vector/provenance preserved", flush=True)
         finally:
             await replacement.chunk_entity_relation_graph.drop()
             await baseline.finalize_storages()

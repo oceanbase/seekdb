@@ -15,11 +15,15 @@ Call register() before LightRAG(..., graph_storage="SeekDBGraphStorage").
 Vector/KV/document-status storage is unchanged. Tested against LightRAG commit
 453dce83d6d0354a06e46c8d4029a0895c4e054b; requires PyMySQL and Python >= 3.10.
 
-Every API call owns a connection/transaction. Blocking DB I/O runs in a worker,
+Every database operation owns a connection/transaction. Blocking DB I/O runs in a worker,
 not the event loop. A cancelled caller waits for that worker's terminal outcome;
 no write continues after the call returns. Cancellation/transport loss can still
 mean a committed write: mutations are idempotent and may safely be retried.
 No cross-storage (graph/vector/document) atomicity is promised.
+Keyset iterators use one snapshot per page; a consistent export requires quiescent
+writers. Labels are bounded to 2048 UTF-8 bytes, scopes to 512 bytes and graph-view
+depth to 16. These limits fail explicitly; graph-view truncation is reported in
+LightRAG's is_truncated field, not silently applied to ordinary graph retrieval.
 """
 
 from __future__ import annotations
@@ -236,7 +240,11 @@ class SeekDBGraphStorage(BaseGraphStorage):
         def read(cursor):
             if source_node_id not in self._nodes(cursor, [source_node_id]):
                 return None
-            return self._incident(cursor, [source_node_id])
+            # LightRAG entity merge/rename callers require the queried node
+            # first, as NetworkX.edges(node) returns it. Canonical storage order
+            # must not leak through this node-relative public API.
+            return [(source_node_id, dst if src == source_node_id else src)
+                    for src, dst in self._incident(cursor, [source_node_id])]
         return await self._run(read)
 
     async def get_nodes_edges_batch(self, node_ids):
@@ -246,7 +254,7 @@ class SeekDBGraphStorage(BaseGraphStorage):
                 if src in result:
                     result[src].append((src, dst))
                 if dst in result and src != dst:
-                    result[dst].append((src, dst))
+                    result[dst].append((dst, src))
             return result
         return await self._run(read)
 
