@@ -101,5 +101,33 @@ DEALLOCATE PREPARE composed_cached;
 SELECT * FROM GRAPH_TABLE(graph_social MATCH
  (a IS person)-[e IS knows]->{16}(b IS person)-[f IS knows]->(c IS person)
  COLUMNS(c.id AS endpoint)) g;
+--echo internal_aliases_do_not_capture_lateral_bindings
+SELECT __g_prefix_0_0.id,g.* FROM (SELECT 1 AS id) __g_prefix_0_0,LATERAL (
+ SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=__g_prefix_0_0.id)-[f IS knows]->(b IS person)
+ -[e IS knows]->{0}(c IS person)
+ COLUMNS(a.id AS start_id,f.id AS first_edge)) q
+) g ORDER BY start_id,first_edge;
+SELECT __g_fixed_0_4.id,g.* FROM (SELECT 1 AS id) __g_fixed_0_4,LATERAL (
+ SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=1)-[e IS knows]->{0,1}(b IS person)<-[f IS knows]-(c IS person WHERE c.id=__g_fixed_0_4.id)
+ COLUMNS(c.id AS endpoint,f.id AS last_edge,COUNT(e.id) AS hops)) q
+) g ORDER BY endpoint,last_edge,hops;
+--echo step_alias_case_and_successive_candidates
+SELECT g.* FROM (SELECT 1 AS id) __G_PREFIX_0_0,(SELECT 1 AS id) __g_prefix_1_0,LATERAL (
+ SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=__G_PREFIX_0_0.id AND a.id=__g_prefix_1_0.id)
+ -[f IS knows]->(b IS person)-[e IS knows]->{0}(c IS person)
+ ONE ROW PER STEP(v1,se,v2)
+ COLUMNS(v1.id AS src,se.id AS edge_id,v2.id AS dst,ELEMENT_NUMBER(se) AS n)) q
+) g ORDER BY edge_id;
+--echo heterogeneous_alias_scope
+SELECT COUNT(*) AS paths FROM (SELECT 2 AS id) __g_fixed_0_0,LATERAL (
+ SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=__g_fixed_0_0.id)-[f IS knows]->(b IS person)
+ -[e IS works]->{0,2}(c IS company)
+ ONE ROW PER STEP(v1,se,v2)
+ COLUMNS(v1.id AS src,se.id AS edge_id,v2.id AS dst)) q
+) g;
 DROP PROPERTY GRAPH graph_social;
 DROP TABLE composition_expected,graph_works,graph_knows,graph_company,graph_person;

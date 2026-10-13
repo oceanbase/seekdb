@@ -1261,6 +1261,98 @@ int make_edge_identity(GraphRelationBuilder &builder,
   return ret;
 }
 
+// Keep path qualification below row shaping. In particular, a volatile path
+// predicate must not be reevaluated for each step. The ordinary view-merge
+// rules retain non-deterministic derived queries. A derived table also supports
+// correlated rescans, unlike a materialized CTE. Only needed columns cross it.
+int qualify_paths_before_steps(GraphRelationBuilder &builder,
+                               const ParseNode &base_from,
+                               const ParseNode *base_where,
+                               ParseNode *base_relation,
+                               ParseNode *select)
+{
+  int ret = OB_SUCCESS;
+  const ObString name = ObString::make_string("__g_step_matches");
+  ParseNode *alias = builder.identifier(name);
+  ParseNode *query = builder.make(T_SELECT, PARSE_SELECT_MAX_IDX);
+  ParseNode *where = base_where == nullptr ? nullptr : builder.make(T_WHERE_CLAUSE, 2);
+  ObArray<GraphParseNode> pending;
+  ObArray<GraphParseNode> columns;
+  ObArray<GraphParseNode> names;
+  if (query == nullptr || select == nullptr || base_relation == nullptr) {
+    ret = builder.error() == OB_SUCCESS ? OB_ERR_UNEXPECTED : builder.error();
+  } else {
+    builder.force_serial(query);
+    query->children_[PARSE_SELECT_FROM] = builder.clone(base_from);
+    if (where != nullptr) {
+      where->children_[0] = builder.clone(*base_where);
+      query->children_[PARSE_SELECT_WHERE] = where;
+    }
+    // Do not lift references inside the traversal's WITH definition.
+    if (OB_FAIL(pending.push_back(GraphParseNode{select->children_[PARSE_SELECT_FROM]}))) {
+    } else if (OB_FAIL(pending.push_back(GraphParseNode{select->children_[PARSE_SELECT_SELECT]}))) {
+    }
+  }
+  while (OB_SUCC(ret) && !pending.empty()) {
+    ParseNode *node = pending.at(pending.count() - 1).node_;
+    pending.pop_back();
+    if (node == nullptr || node == base_relation) {
+      continue;
+    }
+    bool local_column = false;
+    if (node->type_ == T_COLUMN_REF && node->num_child_ == 3
+        && node->children_[1] != nullptr && node->children_[2] != nullptr) {
+      for (int64_t i = 0; !local_column && i < base_from.num_child_; ++i) {
+        const ParseNode *relation = base_from.children_[i];
+        local_column = relation->type_ == T_ALIAS && relation->num_child_ >= 2
+            && graph_name_equal(graph_node_name(*relation->children_[1]),
+                                graph_node_name(*node->children_[1]));
+      }
+    }
+    if (local_column) {
+      int64_t index = 0;
+      for (; index < columns.count(); ++index) {
+        const ParseNode *column = columns.at(index).node_;
+        if (graph_name_equal(graph_node_name(*column->children_[1]),
+                             graph_node_name(*node->children_[1]))
+            && graph_name_equal(graph_node_name(*column->children_[2]),
+                                graph_node_name(*node->children_[2]))) {
+          break;
+        }
+      }
+      if (index == columns.count()) {
+        if (OB_FAIL(columns.push_back(GraphParseNode{builder.clone(*node)}))) {
+        } else if (OB_FAIL(names.push_back(GraphParseNode{
+            builder.internal_identifier("__g_match_column_", 0, index)}))) {
+        }
+      }
+      if (OB_SUCC(ret) && builder.error() == OB_SUCCESS) {
+        ParseNode *replacement = builder.column(alias, graph_node_name(*names.at(index).node_));
+        if (replacement != nullptr) { *node = *replacement; }
+      }
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < node->num_child_; ++i) {
+        ret = pending.push_back(GraphParseNode{node->children_[i]});
+      }
+    }
+  }
+  if (OB_SUCC(ret) && builder.error() == OB_SUCCESS) {
+    ParseNode *projects = builder.make(T_PROJECT_LIST, MAX(1, columns.count()));
+    ParseNode *replacement = builder.make(T_ALIAS, 2);
+    if (builder.error() == OB_SUCCESS) {
+      for (int64_t i = 0; i < columns.count(); ++i) {
+        projects->children_[i] = builder.project(columns.at(i).node_, names.at(i).node_);
+      }
+      if (columns.empty()) { projects->children_[0] = builder.project(builder.integer(1), nullptr); }
+      query->children_[PARSE_SELECT_SELECT] = projects;
+      replacement->children_[0] = query;
+      replacement->children_[1] = alias;
+      *base_relation = *replacement;
+    }
+  }
+  return OB_SUCC(ret) ? builder.error() : ret;
+}
+
 // Expand one path relation against a tiny step-number relation. The feedback
 // loop is referenced exactly once; UNION branches over paths would duplicate
 // the traversal because recursive CTE references are inlined by the resolver.
@@ -1329,6 +1421,7 @@ int build_recursive_step_rows(GraphRelationBuilder &builder,
   for (int64_t i = 1; i < base_from.num_child_; ++i) {
     relation = builder.join(relation, builder.clone(*base_from.children_[i]), builder.integer(1));
   }
+  ParseNode *qualified_relation = relation;
   // Zero-hop paths emit step 0 only; non-empty paths emit steps 1..depth.
   ParseNode *step_condition = builder.choose(zero,
       builder.binary(T_OP_EQ, builder.column(path_alias, depth_name), builder.integer(0)),
@@ -1479,13 +1572,7 @@ int build_recursive_step_rows(GraphRelationBuilder &builder,
       select->children_[PARSE_SELECT_FROM] = from;
       select->children_[PARSE_SELECT_SELECT] = rewritten;
       select->children_[PARSE_SELECT_WITH] = with_list;
-      if (base_where != nullptr) {
-        ParseNode *clause = builder.make(T_WHERE_CLAUSE, 2);
-        if (clause != nullptr) {
-          clause->children_[0] = builder.clone(*base_where);
-          select->children_[PARSE_SELECT_WHERE] = clause;
-        }
-      }
+      ret = qualify_paths_before_steps(builder, base_from, base_where, qualified_relation, select);
     }
   }
   return OB_SUCC(ret) ? builder.error() : ret;
@@ -1500,6 +1587,49 @@ int build_recursive_step_rows(GraphRelationBuilder &builder,
 // Attach singleton segments to the two endpoints of the quantified segment.
 // The loop still enumerates only its own segment; these joins retain each
 // prefix/suffix binding rather than collapsing paths with equal endpoints.
+int make_composed_alias(GraphRelationBuilder &builder, const ParseNode &chain,
+                        const char *prefix, int64_t index, ParseNode *&alias)
+{
+  struct NodeRef
+  {
+    const ParseNode *node_ = nullptr;
+    TO_STRING_KV(KP_(node));
+  };
+  int ret = OB_SUCCESS;
+  ObArray<NodeRef> pending;
+  ObArray<ObString> qualifiers;
+  if (OB_FAIL(pending.push_back(NodeRef{&chain}))) {
+  }
+  while (OB_SUCC(ret) && !pending.empty()) {
+    const ParseNode *node = pending.at(pending.count() - 1).node_;
+    pending.pop_back();
+    if (node->type_ == T_COLUMN_REF && node->num_child_ == 3
+        && node->children_[1] != nullptr) {
+      ret = qualifiers.push_back(graph_node_name(*node->children_[1]));
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < node->num_child_; ++i) {
+      if (node->children_[i] != nullptr) { ret = pending.push_back(NodeRef{node->children_[i]}); }
+    }
+  }
+  // Correlated references survive lowering. Generated aliases must not turn
+  // one of those outer references into a reference to a hidden local table.
+  // Check the entire chain because several element filters share SQL scopes.
+  alias = nullptr;
+  for (int64_t candidate = 0; OB_SUCC(ret) && alias == nullptr; ++candidate) {
+    ParseNode *name = builder.internal_identifier(prefix, candidate, index);
+    if (name == nullptr) {
+      ret = builder.error();
+    } else {
+      bool conflicts = false;
+      for (int64_t i = 0; !conflicts && i < qualifiers.count(); ++i) {
+        conflicts = graph_name_equal(graph_node_name(*name), qualifiers.at(i));
+      }
+      if (!conflicts) { alias = name; }
+    }
+  }
+  return ret;
+}
+
 int append_fixed_path_segments(GraphRelationBuilder &builder,
                                const GraphSchema &graph,
                                const ObString &database_name,
@@ -1522,10 +1652,14 @@ int append_fixed_path_segments(GraphRelationBuilder &builder,
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < patterns.count(); ++i) {
     GraphBinding binding = patterns.at(i);
-    binding.variable_ = builder.internal_identifier("__g_fixed_", 0, i);
-    if (i == quantified_index - 1) { binding = source; }
-    if (i == quantified_index + 1) { binding = target; }
-    ret = actual.push_back(binding);
+    if (i == quantified_index - 1) {
+      binding = source;
+    } else if (i == quantified_index + 1) {
+      binding = target;
+    } else {
+      ret = make_composed_alias(builder, chain, "__g_fixed_", i, binding.variable_);
+    }
+    if (OB_SUCC(ret)) { ret = actual.push_back(binding); }
   }
   ParseNode *extended = nullptr;
   if (OB_SUCC(ret)) {
@@ -1655,9 +1789,12 @@ int build_graph_prefix_seed(GraphRelationBuilder &builder,
   ObArray<GraphBinding> prefix;
   for (int64_t i = 0; OB_SUCC(ret) && i < quantified_index; ++i) {
     GraphBinding binding = patterns.at(i);
-    binding.variable_ = builder.internal_identifier("__g_prefix_", 0, i);
-    if (i == quantified_index - 1) { binding = seed; }
-    ret = prefix.push_back(binding);
+    if (i == quantified_index - 1) {
+      binding = seed;
+    } else {
+      ret = make_composed_alias(builder, chain, "__g_prefix_", i, binding.variable_);
+    }
+    if (OB_SUCC(ret)) { ret = prefix.push_back(binding); }
   }
   ParseNode *extended = builder.make(T_FROM_LIST, quantified_index);
   if (OB_SUCC(ret) && extended == nullptr) {
@@ -2437,8 +2574,45 @@ int build_graph_path_branch(GraphRelationBuilder &builder,
   ObArray<GraphConditionalBinding> from_alternatives;
   ObArray<GraphConditionalBinding> edge_alternatives;
   ObArray<GraphConditionalBinding> to_alternatives;
+  ParseNode *qualified_base_from = nullptr;
+  ParseNode *qualified_base_relation = nullptr;
   if (OB_SUCC(ret) && composed_chain != nullptr
       && path_desc.row_shape_ == GraphPathRowShape::PER_STEP) {
+    // Enumerate steps after qualifying the one heterogeneous path, rather
+    // than copying the path query (and its volatile filters) into each step.
+    qualified_base_from = builder.clone(*from);
+    qualified_base_relation = from->children_[0];
+    for (int64_t i = 1; i < from->num_child_; ++i) {
+      qualified_base_relation = builder.join(
+          qualified_base_relation, from->children_[i], builder.integer(1));
+    }
+    const int64_t step_count = hop + (composed_chain->num_child_ - 3) / 2;
+    const ObString step_name = ObString::make_string("__g_step");
+    ParseNode *step_alias = builder.identifier(ObString::make_string("__g_steps"));
+    ParseNode *step_number = builder.column(step_alias, step_name);
+    ParseNode *step_query = builder.make(T_SELECT, PARSE_SELECT_MAX_IDX);
+    ParseNode *step_set = builder.make(T_SET_UNION_ALL, step_count);
+    ParseNode *step_relation = builder.make(T_ALIAS, 2);
+    for (int64_t i = 0; builder.error() == OB_SUCCESS && i < step_count; ++i) {
+      ParseNode *branch = builder.make(T_SELECT, PARSE_SELECT_MAX_IDX);
+      ParseNode *projection = builder.make(T_PROJECT_LIST, 1);
+      if (builder.error() == OB_SUCCESS) {
+        projection->children_[0] = builder.project(builder.integer(i + 1), builder.identifier(step_name));
+        branch->children_[PARSE_SELECT_SELECT] = projection;
+        builder.force_serial(branch);
+        step_set->children_[i] = branch;
+      }
+    }
+    if (builder.error() == OB_SUCCESS) {
+      step_set->value_ = step_count;
+      step_query->children_[PARSE_SELECT_SET] = step_set;
+      step_relation->children_[0] = step_query;
+      step_relation->children_[1] = step_alias;
+      from = builder.make(T_FROM_LIST, 1);
+      if (from != nullptr) {
+        from->children_[0] = builder.join(qualified_base_relation, step_relation, builder.integer(1));
+      }
+    }
     ObArray<GraphParseNode> ordering;
     int64_t position = 1;
     for (int64_t i = 1; OB_SUCC(ret) && i < composed_actual.count(); i += 2) {
@@ -2447,7 +2621,7 @@ int build_graph_path_branch(GraphRelationBuilder &builder,
         const GraphBinding &left = i == quantified_index ? vertices.at(j) : composed_actual.at(i - 1);
         const GraphBinding &edge = i == quantified_index ? edges.at(j) : composed_actual.at(i);
         const GraphBinding &right = i == quantified_index ? vertices.at(j + 1) : composed_actual.at(i + 1);
-        ParseNode *condition = builder.integer(step == position ? 1 : 0);
+        ParseNode *condition = builder.binary(T_OP_EQ, step_number, builder.integer(position));
         if (OB_FAIL(from_alternatives.push_back(GraphConditionalBinding{left, condition}))) {
         } else if (OB_FAIL(edge_alternatives.push_back(GraphConditionalBinding{edge, condition}))) {
         } else if (OB_FAIL(to_alternatives.push_back(GraphConditionalBinding{right, condition}))) {
@@ -2464,10 +2638,11 @@ int build_graph_path_branch(GraphRelationBuilder &builder,
       expr_bindings.at(2).conditional_ = &to_alternatives;
       for (int64_t i = 0; i < 3; ++i) {
         expr_bindings.at(i).kind_ = GraphExprBindingKind::SCALAR;
-        expr_bindings.at(i).element_number_ = 2 * step - 1 + i;
+        expr_bindings.at(i).element_number_expr_ = builder.binary(T_OP_ADD,
+            builder.binary(T_OP_MUL, step_number, builder.integer(2)), builder.integer(i - 1));
       }
-      // All step branches order the complete edge sequence, including fixed
-      // edges. A dense rank therefore names the same path in every branch.
+      // All step copies order the complete edge sequence, including fixed
+      // edges. A dense rank therefore names the same path in every copy.
       match_number = builder.binary(T_OP_ADD,
           builder.binary(T_OP_MUL,
               builder.binary(T_OP_MINUS, make_row_number(builder, ordering, nullptr, true),
@@ -2488,7 +2663,10 @@ int build_graph_path_branch(GraphRelationBuilder &builder,
       builder.force_serial(select);
       select->children_[PARSE_SELECT_FROM] = from;
       select->children_[PARSE_SELECT_SELECT] = rewritten_projects;
-      if (where != nullptr) {
+      if (qualified_base_from != nullptr) {
+        ret = qualify_paths_before_steps(builder, *qualified_base_from, where,
+                                         qualified_base_relation, select);
+      } else if (where != nullptr) {
         ParseNode *clause = builder.make(T_WHERE_CLAUSE, 2);
         if (clause == nullptr) {
           ret = builder.error();
@@ -2817,7 +2995,7 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
              ++hop) {
           const int64_t first_step = path_desc.row_shape_ == GraphPathRowShape::PER_STEP
               ? (composed ? 1 : (hop == 0 ? 0 : 1)) : -1;
-          const int64_t last_step = path_desc.row_shape_ == GraphPathRowShape::PER_STEP
+          const int64_t last_step = composed_steps ? first_step : path_desc.row_shape_ == GraphPathRowShape::PER_STEP
               ? hop + (composed ? (chain.num_child_ - 3) / 2 : 0) : -1;
           for (int64_t step = first_step; OB_SUCC(ret) && step <= last_step; ++step) {
             ParseNode *branch = nullptr;

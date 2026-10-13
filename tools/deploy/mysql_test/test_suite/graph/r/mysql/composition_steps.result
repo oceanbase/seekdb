@@ -1,3 +1,56 @@
+volatile_suffix_filters_keep_complete_paths
+SELECT COUNT(*) AS incomplete_paths FROM (
+SELECT m FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=1)-[e IS knows]->{2}(b IS person)
+<-[f IS knows WHERE RAND(1)<0.5]-(c IS person)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS n)) g
+GROUP BY m HAVING COUNT(*)<>3 OR COUNT(DISTINCT n)<>3) invalid;
+incomplete_paths
+0
+SELECT COUNT(*) AS incomplete_paths FROM (
+SELECT m FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=1)-[e IS knows]->{2}(b IS person)
+<-[f IS knows]-(c IS person WHERE RAND(1)<0.5)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS n)) g
+GROUP BY m HAVING COUNT(*)<>3 OR COUNT(DISTINCT n)<>3) invalid;
+incomplete_paths
+0
+volatile_heterogeneous_path_is_not_reevaluated_per_step
+SELECT COUNT(*) AS incomplete_paths FROM (
+SELECT m FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=2)<-[f IS knows WHERE RAND(1)<0.5]-(b IS person)
+-[e IS works]->{0,2}(c IS company)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS n)) g
+GROUP BY m HAVING COUNT(*)<>2 OR COUNT(DISTINCT n)<>2) invalid;
+incomplete_paths
+0
+volatile_path_filter_with_lateral_rescan
+SELECT COUNT(*) AS incomplete_paths FROM (
+SELECT s.binding,g.m FROM (SELECT 1 AS binding,1 AS id UNION ALL SELECT 2,1 UNION ALL SELECT 3,2) s,
+LATERAL (SELECT * FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=s.id)-[e IS knows]->{2}(b IS person)
+<-[f IS knows WHERE RAND(1)<0.5]-(c IS person)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS n)) paths) g
+GROUP BY s.binding,g.m HAVING COUNT(*)<>3 OR COUNT(DISTINCT g.n)<>3) invalid;
+incomplete_paths
+0
+volatile_lateral_filter_preserves_each_seed
+SELECT s.binding,g.source,g.endpoint,COUNT(*) AS steps
+FROM (SELECT 1 AS binding,1 AS id UNION ALL SELECT 2,1 UNION ALL SELECT 3,2) s,
+LATERAL (SELECT * FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=s.id)-[e IS knows]->{2}(b IS person)
+<-[f IS knows WHERE RAND(1)<1]-(c IS person)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(a.id AS source,c.id AS endpoint,ELEMENT_NUMBER(se) AS n)) paths) g
+GROUP BY s.binding,g.source,g.endpoint ORDER BY s.binding,g.source,g.endpoint;
+binding	source	endpoint	steps
+1	1	2	6
+2	1	2	6
+3	2	3	3
 suffix_steps
 SELECT * FROM GRAPH_TABLE(graph_social MATCH
 (a IS person WHERE a.id=1)-[e IS knows]->{0,2}(b IS person)<-[f IS knows]-(c IS person)
