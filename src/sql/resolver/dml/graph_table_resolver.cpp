@@ -2040,6 +2040,75 @@ int build_graph_prefix_seed(GraphRelationBuilder &builder,
   return OB_SUCC(ret) ? builder.error() : ret;
 }
 
+// The recursive anchor/step already verify vertex existence. When results use
+// only integral vertex keys, their values are exactly represented in the path
+// row and the two final vertex lookups add no information. Do not generalize
+// this to collation/tolerance equality: an edge's stored key can compare equal
+// to a vertex key while having a different representation (e.g. "a" vs "A").
+int replace_graph_key_projections(GraphRelationBuilder &builder,
+                                  const GraphBinding &source,
+                                  const GraphBinding &target,
+                                  ParseNode *path_alias,
+                                  ParseNode &projects,
+                                  bool &replaced)
+{
+  int ret = OB_SUCCESS;
+  bool safe = true;
+  replaced = false;
+  const GraphBinding *bindings[] = {&source, &target};
+  const char *prefixes[] = {"__g_source_key_", "__g_current_key_"};
+  ObArray<GraphParseNode> pending;
+  ObArray<GraphParseNode> columns;
+  ObArray<GraphParseNode> replacements;
+  for (int64_t b = 0; safe && b < ARRAYSIZEOF(bindings); ++b) {
+    for (int64_t k = 0; safe && k < bindings[b]->element_->key_count_; ++k) {
+      const ObColumnSchemaV2 *column = bindings[b]->table_->get_column_schema(
+          bindings[b]->element_->key_columns_[k]);
+      safe = column != nullptr && ob_is_integer_type(column->get_data_type());
+    }
+  }
+  if (safe && OB_FAIL(pending.push_back(GraphParseNode{&projects}))) {
+  }
+  while (OB_SUCC(ret) && safe && !pending.empty()) {
+    ParseNode *node = pending.at(pending.count() - 1).node_;
+    pending.pop_back();
+    if (node == nullptr) { continue; }
+    if (node->type_ == T_COLUMN_REF && node->num_child_ == 3
+        && node->children_[1] != nullptr && node->children_[2] != nullptr) {
+      for (int64_t b = 0; OB_SUCC(ret) && safe && b < ARRAYSIZEOF(bindings); ++b) {
+        const GraphBinding &binding = *bindings[b];
+        if (graph_name_equal(graph_node_name(*node->children_[1]),
+                             graph_node_name(*binding.variable_))) {
+          int64_t key = 0;
+          for (; key < binding.element_->key_count_; ++key) {
+            const ObColumnSchemaV2 *column = binding.table_->get_column_schema(
+                binding.element_->key_columns_[key]);
+            if (graph_name_equal(graph_node_name(*node->children_[2]),
+                                 column->get_column_name_str())) { break; }
+          }
+          safe = key < binding.element_->key_count_;
+          if (safe && OB_FAIL(columns.push_back(GraphParseNode{node}))) {
+          } else if (safe && OB_FAIL(replacements.push_back(GraphParseNode{
+              make_internal_column(builder, path_alias, prefixes[b], key)}))) {
+          }
+        }
+      }
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < node->num_child_; ++i) {
+        ret = pending.push_back(GraphParseNode{node->children_[i]});
+      }
+    }
+  }
+  if (OB_SUCC(ret) && builder.error() != OB_SUCCESS) { ret = builder.error(); }
+  if (OB_SUCC(ret) && safe) {
+    for (int64_t i = 0; i < columns.count(); ++i) {
+      *columns.at(i).node_ = *replacements.at(i).node_;
+    }
+    replaced = true;
+  }
+  return ret;
+}
+
 int build_recursive_graph_match(GraphRelationBuilder &builder,
                                 const GraphSchema &graph,
                                 const ObString &database_name,
@@ -2678,7 +2747,23 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
         && OB_FAIL(rewrite_graph_projects(builder, graph, database_name, projects,
                                           expr_bindings, match_number,
                                           rewritten_projects))) {
-    } else if (OB_SUCC(ret)
+    }
+    if (OB_SUCC(ret) && target_filter == nullptr && composed_chain == nullptr
+        && !alternating && !path_desc.any_shortest_
+        && path_desc.direction_ != GraphPathDirection::BOTH) {
+      bool replaced = false;
+      if (OB_FAIL(replace_graph_key_projections(builder, result_source, result_target,
+                                               path_alias, *rewritten_projects, replaced))) {
+      } else if (replaced) {
+        // Only the hop lower bound remains. Source filters ran in the anchor;
+        // endpoint filters and composed/step/shortest shapes retain lookups.
+        from = builder.make(T_FROM_LIST, 1);
+        if (from != nullptr) { from->children_[0] = builder.relation(CTE_NAME, path_alias); }
+        where = builder.binary(T_OP_GE, builder.column(path_alias, DEPTH_NAME),
+                                builder.integer(path_desc.lower_bound_));
+      }
+    }
+    if (OB_SUCC(ret)
                && OB_ISNULL(select = builder.make(T_SELECT, PARSE_SELECT_MAX_IDX))) {
       ret = builder.error();
     } else if (OB_SUCC(ret)) {
