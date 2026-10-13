@@ -279,4 +279,3 @@ destination	hops	multiplicity
 DEALLOCATE PREPARE graph_ip_query;
 DROP PROPERTY GRAPH graph_index_predicates;
 DROP TABLE graph_ip_edge,graph_ip_vertex,graph_ip_digit;
-ok
