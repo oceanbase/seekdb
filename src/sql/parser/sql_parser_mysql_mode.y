@@ -702,7 +702,10 @@ expr_list:
 expr %prec LOWER_COMMA
 {
   /* every mysql's item(same as ob's expr) has its own name */
-  if (OB_UNLIKELY((NULL == $1->str_value_)) && $1->type_ != T_VARCHAR) {
+  /* Empty string literals have a NULL value pointer. Do not replace their
+     semantic value with the source spelling when assigning expression names. */
+  if (OB_UNLIKELY((NULL == $1->str_value_))
+      && $1->type_ != T_VARCHAR && $1->type_ != T_NCHAR && $1->type_ != T_HEX_STRING) {
     dup_string($1, result, @1.first_column, @1.last_column);
   }
   malloc_list_node($$, result->malloc_pool_, T_EXPR_LIST, 2, 1, $1);
@@ -728,7 +731,8 @@ expr
 {
   $$ = $1;
   /* every mysql's item(same as ob's expr) has its own name */
-  if (OB_UNLIKELY((NULL == $$->str_value_)) && $$->type_ != T_NCHAR && $$->type_ != T_VARCHAR) {
+  if (OB_UNLIKELY((NULL == $$->str_value_))
+      && $$->type_ != T_NCHAR && $$->type_ != T_VARCHAR && $$->type_ != T_HEX_STRING) {
     dup_string($$, result, @1.first_column, @1.last_column);
   }
 }
@@ -10690,7 +10694,8 @@ sort_key:
 expr opt_asc_desc
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_SORT_KEY, 2, $1, $2);
-  if (NULL == $1->str_value_) {
+  if (NULL == $1->str_value_
+      && $1->type_ != T_VARCHAR && $1->type_ != T_NCHAR && $1->type_ != T_HEX_STRING) {
     dup_string($1, result, @1.first_column, @1.last_column);
   }
 }
@@ -10717,7 +10722,8 @@ sort_key_opt_null:
 expr opt_asc_desc_null
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_SORT_KEY, 2, $1, $2);
-  if (NULL == $1->str_value_) {
+  if (NULL == $1->str_value_
+      && $1->type_ != T_VARCHAR && $1->type_ != T_NCHAR && $1->type_ != T_HEX_STRING) {
     dup_string($1, result, @1.first_column, @1.last_column);
   }
 }
