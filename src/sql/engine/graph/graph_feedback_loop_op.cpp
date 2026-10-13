@@ -1226,6 +1226,40 @@ int GraphFeedbackLoopSpec::bind_expand_scans(
   return ret;
 }
 
+int GraphFeedbackLoopSpec::remove_native_edge_identity_filters(const ObIArray<ObExpr *> &filters)
+{
+  int ret = OB_SUCCESS;
+  ObArray<ObExpr *> retained;
+  for (int64_t i = 0; i < filters.count(); ++i) {
+    bool above_das = false;
+    for (int64_t j = 0; !above_das && j < edge_scan_desc_.filters_.count(); ++j) {
+      above_das = filters.at(i) == edge_scan_desc_.filters_.at(j);
+    }
+    if (!above_das) {
+      // Only batch-scan dynamic predicates are guaranteed to stay above DAS.
+      // Do not reuse a storage ctdef that may still evaluate a recursive param.
+      set_native_step_supported(false);
+      set_reuse_adjacency(false);
+    }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < edge_scan_desc_.filters_.count(); ++i) {
+    ObExpr *expr = edge_scan_desc_.filters_.at(i);
+    bool identity_filter = false;
+    for (int64_t j = 0; !identity_filter && j < filters.count(); ++j) {
+      identity_filter = expr == filters.at(j);
+    }
+    if (!identity_filter) {
+      ret = retained.push_back(expr);
+    }
+  }
+  // Do not modify the original table-scan spec/ctdef: TRAIL and other fallback
+  // shapes still execute that recursive child and require its join predicates.
+  if (OB_SUCC(ret)) {
+    ret = edge_scan_desc_.filters_.assign(retained);
+  }
+  return ret;
+}
+
 int GraphFeedbackLoopOp::inner_open()
 {
   int ret = OB_SUCCESS;

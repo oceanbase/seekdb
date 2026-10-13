@@ -1240,6 +1240,24 @@ int ObStaticEngineCG::generate_spec(GraphFeedbackLoopLogOp &op,
                K(target_scan_op_id));
     }
   }
+  ObArray<ObRawExpr *> identity_filters;
+  ObArray<ObRawExpr *> identity_raw_exprs;
+  ObArray<ObExpr *> identity_rt_exprs;
+  if (OB_SUCC(ret) && OB_FAIL(op.get_native_edge_identity_filters(identity_filters))) {
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < identity_filters.count(); ++i) {
+    ObExpr *expr = nullptr;
+    if (OB_FAIL(ObStaticEngineExprCG::generate_rt_expr(
+            *identity_filters.at(i), identity_raw_exprs, expr))) {
+    } else if (OB_ISNULL(expr)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(identity_rt_exprs.push_back(expr))) {
+    }
+  }
+  if (OB_SUCC(ret)
+      && OB_FAIL(spec.remove_native_edge_identity_filters(identity_rt_exprs))) {
+    LOG_WARN("failed to remove native graph identity filters", K(ret));
+  }
   // These expressions are also owned by the recursive child. Do not register
   // them as feedback-loop calc expressions: native DAS evaluates just their
   // edge-value argument and invalidates that subtree for every scanned edge.

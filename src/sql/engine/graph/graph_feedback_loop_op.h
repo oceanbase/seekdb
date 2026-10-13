@@ -196,6 +196,7 @@ public:
   int bind_expand_scans(uint64_t source_scan_op_id,
                         uint64_t edge_scan_op_id,
                         uint64_t target_scan_op_id);
+  int remove_native_edge_identity_filters(const common::ObIArray<ObExpr *> &filters);
 
   const GraphPathDesc &get_path_desc() const { return path_desc_; }
   const GraphExpandAccessDesc &get_expand_access_desc() const

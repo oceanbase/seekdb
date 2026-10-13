@@ -189,7 +189,8 @@ int retain_native_edge_range_filters(ObLogTableScan &edge_scan,
 bool is_native_graph_step_supported(
     const ObLogicalOperator *root,
     const ObLogTableScan *edge_scan,
-    const ObLogTableScan *target_scan)
+    const ObLogTableScan *target_scan,
+    const GraphExpandAccessDesc &access)
 {
   bool supported = root != nullptr;
   if (supported && root == edge_scan) {
@@ -198,6 +199,20 @@ bool is_native_graph_step_supported(
     // side effects must not change when the recursive child is bypassed.
     supported = are_native_scan_filters_supported(root->get_filter_exprs())
         && are_native_scan_filters_supported(root->get_startup_exprs());
+    const ObIArray<ObRawExpr *> *filters[] = {
+        &root->get_filter_exprs(), &root->get_startup_exprs()};
+    for (int64_t a = 0; supported && a < ARRAYSIZEOF(filters); ++a) {
+      for (int64_t i = 0; supported && i < filters[a]->count(); ++i) {
+        const ObRawExpr &expr = *filters[a]->at(i);
+        if (a == 0 && is_native_identity_range(expr, *edge_scan, *edge_scan, access)) {
+          // Frontier identity matching replaces this generated equality.
+          // Codegen checks its final placement before removing the native copy;
+          // batch-scan selection/filter pushdown have not been finalized here.
+        } else {
+          supported = has_only_outer_graph_parameters(expr, *edge_scan);
+        }
+      }
+    }
   } else if (supported && root == target_scan) {
     // The current vertex lookup validates identity/existence only. Until it
     // evaluates target scan filters with relational cadence, any such filter
@@ -216,7 +231,7 @@ bool is_native_graph_step_supported(
   }
   for (int64_t i = 0; supported && i < root->get_num_of_child(); ++i) {
     supported = is_native_graph_step_supported(
-        root->get_child(i), edge_scan, target_scan);
+        root->get_child(i), edge_scan, target_scan, access);
   }
   return supported;
 }
@@ -460,7 +475,13 @@ bool GraphFeedbackLoopLogOp::can_reuse_adjacency(ObIArray<ObRawExpr *> *paramete
       edge == nullptr ? nullptr : &edge->get_startup_exprs()};
   for (int64_t a = 0; safe && a < ARRAYSIZEOF(filters); ++a) {
     for (int64_t i = 0; safe && i < filters[a]->count(); ++i) {
-      safe = OB_SUCCESS == pending.push_back(filters[a]->at(i));
+      const ObRawExpr *expr = filters[a]->at(i);
+      if (a == 0 && expr != nullptr
+          && is_native_identity_range(*expr, *edge, *edge, expand_access_desc_)) {
+        // Native frontier matching replaces this recursive join parameter.
+      } else {
+        safe = OB_SUCCESS == pending.push_back(expr);
+      }
     }
   }
   for (int64_t i = 0; safe && i < path_payload_exprs_.count(); ++i) {
@@ -602,12 +623,32 @@ int GraphFeedbackLoopLogOp::initialize_expand_access()
     // The current DAS descriptor describes one endpoint orientation. Keep the
     // bidirectional relational step intact rather than dropping its OR branch.
     native_step_supported_ = path_desc_.direction_ != GraphPathDirection::BOTH
-        && is_native_graph_step_supported(step, edge_scan, target_scan);
+        && is_native_graph_step_supported(step, edge_scan, target_scan, expand_access_desc_);
     if (OB_FAIL(retain_native_edge_range_filters(
             *edge_scan, *target_scan, expand_access_desc_, native_step_supported_))) {
       LOG_WARN("failed to retain graph edge range filters", K(ret));
     } else if (OB_FAIL(initialize_path_payloads(*edge_scan))) {
       LOG_WARN("failed to bind native graph path payloads", K(ret));
+    }
+  }
+  return ret;
+}
+
+int GraphFeedbackLoopLogOp::get_native_edge_identity_filters(
+    ObIArray<ObRawExpr *> &exprs) const
+{
+  int ret = OB_SUCCESS;
+  const ObLogTableScan *edge = find_internal_scan(get_child(second_child), GRAPH_STEP_EDGE_ALIAS);
+  if (OB_ISNULL(edge)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    const ObIArray<ObRawExpr *> &filters = edge->get_filter_exprs();
+    for (int64_t i = 0; OB_SUCC(ret) && i < filters.count(); ++i) {
+      if (OB_ISNULL(filters.at(i))) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (is_native_identity_range(*filters.at(i), *edge, *edge, expand_access_desc_)) {
+        ret = exprs.push_back(filters.at(i));
+      }
     }
   }
   return ret;

@@ -66,6 +66,7 @@ public:
                              uint64_t &target_scan_op_id) const;
   int get_seed_key_exprs(common::ObIArray<ObRawExpr *> &exprs) const;
   int get_native_runtime_exprs(common::ObIArray<ObRawExpr *> &exprs);
+  int get_native_edge_identity_filters(common::ObIArray<ObRawExpr *> &exprs) const;
   const common::ObIArray<ObRawExpr *> &get_path_payload_exprs() const
   { return path_payload_exprs_; }
   const GraphPathDesc &get_path_desc() const { return path_desc_; }
