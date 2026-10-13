@@ -1020,7 +1020,6 @@ int rewrite_graph_filter(GraphRelationBuilder &builder,
                          const GraphBinding *binding,
                          const GraphBinding *forbidden_one,
                          const GraphBinding *forbidden_two,
-                         bool allow_outer,
                          ParseNode *&condition)
 {
   int ret = OB_SUCCESS;
@@ -1040,8 +1039,12 @@ int rewrite_graph_filter(GraphRelationBuilder &builder,
                                            forbidden_two, nullptr, -1,
                                            !forbidden_two->element_->is_vertex()))) {
     } else {
+      // Preserve references outside the graph-variable namespace for normal
+      // LATERAL resolution. Each outer row may supply its own seed, edge
+      // predicate or endpoint constraint. Other declared graph variables stay
+      // forbidden here; they are not mistaken for outer correlation.
       GraphExprRewriter rewriter(builder, graph, database_name, expr_bindings,
-                                 nullptr, allow_outer);
+                                 nullptr, true);
       ret = rewriter.rewrite(*filter, condition);
     }
   }
@@ -1520,7 +1523,7 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
     if (OB_SUCC(ret) && source_filter != nullptr
         && OB_FAIL(rewrite_graph_filter(builder, graph, database_name, source_filter,
                                         *source_pattern.variable_, &seed,
-                                        &edge_pattern, &target_pattern, true,
+                                        &edge_pattern, &target_pattern,
                                         condition))) {
     } else if (OB_SUCC(ret)) {
       builder.append_condition(condition, anchor_where);
@@ -1624,7 +1627,7 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
       if (edge_filter != nullptr
           && OB_FAIL(rewrite_graph_filter(builder, graph, database_name, edge_filter,
                                           *edge_pattern.variable_, &edge,
-                                          &source_pattern, &target_pattern, false,
+                                          &source_pattern, &target_pattern,
                                           condition))) {
       } else {
         builder.append_condition(condition, recursive_where);
@@ -1761,7 +1764,7 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
       if (target_filter != nullptr
           && OB_FAIL(rewrite_graph_filter(builder, graph, database_name, target_filter,
                                           *target_pattern.variable_, &result_target,
-                                          &source_pattern, &edge_pattern, false,
+                                          &source_pattern, &edge_pattern,
                                           condition))) {
       } else {
         builder.append_condition(condition, where);
@@ -1960,7 +1963,7 @@ int build_graph_path_branch(GraphRelationBuilder &builder,
     if (source_filter != nullptr
         && OB_FAIL(rewrite_graph_filter(builder, graph, database_name, source_filter,
                                         *source_pattern.variable_, &vertices.at(0),
-                                        &edge_pattern, &target_pattern, true,
+                                        &edge_pattern, &target_pattern,
                                         condition))) {
     } else {
       builder.append_condition(condition, where);
@@ -1970,7 +1973,7 @@ int build_graph_path_branch(GraphRelationBuilder &builder,
       if (edge_filter != nullptr
           && OB_FAIL(rewrite_graph_filter(builder, graph, database_name, edge_filter,
                                           *edge_pattern.variable_, &edges.at(i),
-                                          &source_pattern, &target_pattern, false,
+                                          &source_pattern, &target_pattern,
                                           condition))) {
       } else {
         builder.append_condition(condition, where);
@@ -1980,7 +1983,7 @@ int build_graph_path_branch(GraphRelationBuilder &builder,
       if (OB_SUCC(ret) && target_filter != nullptr
         && OB_FAIL(rewrite_graph_filter(builder, graph, database_name, target_filter,
                                         *target_pattern.variable_, terminal,
-                                        &source_pattern, &edge_pattern, false,
+                                        &source_pattern, &edge_pattern,
                                         condition))) {
     } else if (OB_SUCC(ret)) {
       builder.append_condition(condition, where);
