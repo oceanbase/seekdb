@@ -647,9 +647,18 @@ int GraphFeedbackLoopLogOp::can_prune_duplicate_states(bool &can_prune)
               && sort->get_pushdown_topn_filter_expr() == nullptr;
           break;
         }
-        case LOG_TABLE_SCAN:
-          safe = static_cast<ObLogTableScan *>(node)->get_limit_expr() == nullptr;
+        case LOG_TABLE_SCAN: {
+          ObLogTableScan *scan = static_cast<ObLogTableScan *>(node);
+          // Deterministic scalar expressions do not make sampling, virtual
+          // tables or ranked retrieval stable across a correlated rescan.
+          safe = scan->get_limit_expr() == nullptr && !scan->is_sample_scan()
+              && !scan->is_vec_idx_scan() && !scan->is_text_retrieval_scan()
+              && !scan->has_es_match() && !scan->has_merge_fts_index()
+              && !scan->has_func_lookup()
+              && (scan->get_table_type() == share::schema::USER_TABLE
+                  || scan->get_table_type() == share::schema::USER_INDEX);
           break;
+        }
         default:
           safe = false;
       }

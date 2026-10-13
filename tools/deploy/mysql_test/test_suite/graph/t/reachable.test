@@ -186,3 +186,20 @@ SELECT DISTINCT endpoint FROM GRAPH_TABLE(graph_reach MATCH
 DROP TABLE plan_table;
 DROP PROPERTY GRAPH graph_reach;
 DROP TABLE gr_e,gr_v;
+--echo collation_equivalent_edges_return_canonical_vertex_keys
+CREATE TABLE gr_v (id VARCHAR(10) COLLATE utf8mb4_general_ci PRIMARY KEY);
+CREATE TABLE gr_e (eid INT PRIMARY KEY,src VARCHAR(10) COLLATE utf8mb4_general_ci,dst VARCHAR(10) COLLATE utf8mb4_general_ci);
+INSERT INTO gr_v VALUES ('A'),('B');
+INSERT INTO gr_e VALUES (1,'a','b'),(2,'A','B');
+CREATE PROPERTY GRAPH graph_reach
+VERTEX TABLES(gr_v KEY(id) LABEL node PROPERTIES(id))
+EDGE TABLES(gr_e KEY(eid) SOURCE KEY(src) REFERENCES gr_v(id)
+ DESTINATION KEY(dst) REFERENCES gr_v(id) LABEL link PROPERTIES(eid));
+SELECT HEX(endpoint) AS key_hex FROM GRAPH_TABLE(graph_reach MATCH
+ (a IS node WHERE a.id='a')-[e IS link]->{1,2}(b IS node)
+ COLUMNS(b.id AS endpoint)) g ORDER BY key_hex;
+SELECT DISTINCT HEX(endpoint) AS key_hex FROM GRAPH_TABLE(graph_reach MATCH
+ (a IS node WHERE a.id='a')-[e IS link]->{1,2}(b IS node)
+ COLUMNS(b.id AS endpoint)) g ORDER BY key_hex;
+DROP PROPERTY GRAPH graph_reach;
+DROP TABLE gr_e,gr_v;
