@@ -1,0 +1,103 @@
+--disable_query_log
+CREATE TABLE gf_v(id INT PRIMARY KEY,body VARCHAR(2048),active INT);
+CREATE TABLE gf_e(id INT PRIMARY KEY,src INT,dst INT);
+CREATE TABLE gf_digit(n INT PRIMARY KEY);
+INSERT INTO gf_digit VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+INSERT INTO gf_v SELECT a.n+10*b.n+100*c.n+1000*d.n+1,
+CONCAT(a.n+10*b.n+100*c.n+1000*d.n+1,':',REPEAT('x',1024)),MOD(a.n,2)
+FROM gf_digit a,gf_digit b,gf_digit c,gf_digit d;
+UPDATE gf_v SET body=NULL WHERE id=9997;
+INSERT INTO gf_e SELECT 2*id,1,id FROM gf_v WHERE id>1;
+INSERT INTO gf_e SELECT 2*id+1,1,id FROM gf_v WHERE id>1;
+INSERT INTO gf_e VALUES(30000,1,1),(30001,1,20000);
+CREATE PROPERTY GRAPH gf_graph VERTEX TABLES(gf_v KEY(id) LABEL node PROPERTIES(id,body,active))
+EDGE TABLES(gf_e KEY(id) SOURCE KEY(src) REFERENCES gf_v(id) DESTINATION KEY(dst) REFERENCES gf_v(id) LABEL link PROPERTIES(id));
+--source mysql_test/include/create_plan_table.inc
+ALTER TABLE plan_table MODIFY other_xml LONGTEXT;
+--let $passes=2
+while ($passes)
+{
+  if ($passes == 1)
+  {
+    CREATE INDEX gf_out ON gf_e(src,id,dst);
+  }
+  --disable_result_log
+  DELETE FROM plan_table;
+  EXPLAIN INTO plan_table SET statement_id='auto'
+  SELECT * FROM GRAPH_TABLE(gf_graph MATCH (a IS node WHERE a.id=1)
+  -[e IS link]->{0,2}(b IS node WHERE b.active=0) COLUMNS(b.id AS id,b.body AS body)) g
+  ORDER BY id DESC LIMIT 20;
+  EXPLAIN INTO plan_table SET statement_id='disabled'
+  SELECT /*+ NO_USE_LATE_MATERIALIZATION */ * FROM GRAPH_TABLE(gf_graph MATCH (a IS node WHERE a.id=1)
+  -[e IS link]->{0,2}(b IS node WHERE b.active=0) COLUMNS(b.id AS id,b.body AS body)) g
+  ORDER BY id DESC LIMIT 20;
+  EXPLAIN INTO plan_table SET statement_id='body_rank'
+  SELECT * FROM GRAPH_TABLE(gf_graph MATCH (a IS node WHERE a.id=1)
+  -[e IS link]->{0,2}(b IS node WHERE b.active=0) COLUMNS(b.id AS id,b.body AS body)) g
+  ORDER BY body,id DESC LIMIT 20;
+  EXPLAIN INTO plan_table SET statement_id='no_limit'
+  SELECT * FROM GRAPH_TABLE(gf_graph MATCH (a IS node WHERE a.id=1)
+  -[e IS link]->{0,2}(b IS node WHERE b.active=0) COLUMNS(b.id AS id,b.body AS body)) g
+  ORDER BY id DESC;
+  --enable_result_log
+  --enable_query_log
+  SELECT COUNT(*) AS narrow_topn FROM plan_table WHERE statement_id='auto'
+  AND operator='TOP-N SORT' AND projection NOT LIKE '%body%';
+  SELECT COUNT(*) AS late_payload_get FROM plan_table WHERE statement_id='auto'
+  AND object_alias LIKE '__g_result_target%' AND operator='TABLE GET' AND projection LIKE '%body%';
+  SELECT statement_id,COUNT(*) AS wide_topn FROM plan_table
+  WHERE statement_id IN ('disabled','body_rank') AND operator='TOP-N SORT'
+  AND projection LIKE '%body%' GROUP BY statement_id ORDER BY statement_id;
+  SELECT COUNT(*) AS single_unlimited_target_read FROM plan_table WHERE statement_id='no_limit'
+  AND object_alias LIKE '__g_result_target%';
+  --disable_query_log
+  CREATE TABLE gf_expected AS WITH RECURSIVE p(endpoint,hops) AS (
+    SELECT id,0 FROM gf_v WHERE id=1
+    UNION ALL SELECT v.id,p.hops+1 FROM p JOIN gf_e e ON e.src=p.endpoint
+    JOIN gf_v v ON v.id=e.dst WHERE p.hops<2)
+  SELECT v.id,v.body FROM p JOIN gf_v v ON v.id=p.endpoint WHERE v.active=0 ORDER BY v.id DESC LIMIT 20;
+  CREATE TABLE gf_actual AS SELECT * FROM GRAPH_TABLE(gf_graph MATCH (a IS node WHERE a.id=1)
+  -[e IS link]->{0,2}(b IS node WHERE b.active=0) COLUMNS(b.id AS id,b.body AS body)) g ORDER BY id DESC LIMIT 20;
+  CREATE TABLE gf_forced AS SELECT /*+ USE_LATE_MATERIALIZATION */ * FROM GRAPH_TABLE(gf_graph MATCH
+  (a IS node WHERE a.id=1)-[e IS link]->{0,2}(b IS node WHERE b.active=0)
+  COLUMNS(b.id AS id,b.body AS body)) g ORDER BY id DESC LIMIT 20;
+  --enable_query_log
+  SELECT 'expected' AS shape,COUNT(*) AS rows_found,MIN(id),MAX(id) FROM gf_expected
+  UNION ALL SELECT 'auto',COUNT(*),MIN(id),MAX(id) FROM gf_actual
+  UNION ALL SELECT 'forced',COUNT(*),MIN(id),MAX(id) FROM gf_forced;
+  SELECT COUNT(*) AS changed_bag FROM
+  (SELECT id,body,COUNT(*) AS n FROM gf_expected GROUP BY id,body) e
+  LEFT JOIN (SELECT id,body,COUNT(*) AS n FROM gf_actual GROUP BY id,body) a ON a.id=e.id AND a.body<=>e.body
+  LEFT JOIN (SELECT id,body,COUNT(*) AS n FROM gf_forced GROUP BY id,body) f ON f.id=e.id AND f.body<=>e.body
+  WHERE a.n IS NULL OR f.n IS NULL OR a.n<>e.n OR f.n<>e.n;
+  --disable_query_log
+  DROP TABLE gf_expected,gf_actual,gf_forced;
+  --dec $passes
+}
+--enable_query_log
+PREPARE gf_cached FROM 'SELECT /*+ USE_LATE_MATERIALIZATION */ id,LEFT(body,5) AS prefix FROM GRAPH_TABLE(gf_graph MATCH (a IS node WHERE a.id=?)-[e IS link]->{0,2}(b IS node WHERE b.active=?) COLUMNS(b.id AS id,b.body AS body)) g ORDER BY id DESC LIMIT ? OFFSET ?';
+SET @seed=1,@active=0,@lim=3,@off=3;
+EXECUTE gf_cached USING @seed,@active,@lim,@off;
+SET @seed=10000,@active=1,@off=0;
+EXECUTE gf_cached USING @seed,@active,@lim,@off;
+SET @seed=20000;
+EXECUTE gf_cached USING @seed,@active,@lim,@off;
+DEALLOCATE PREPARE gf_cached;
+DROP PROPERTY GRAPH gf_graph;
+DROP TABLE gf_v,gf_e,gf_digit,plan_table;
+--echo complete_typed_composite_key_lookup
+CREATE TABLE gf_v(tenant INT,id DECIMAL(20,2),code VARCHAR(20) COLLATE utf8mb4_general_ci,
+body VARCHAR(20),active INT,PRIMARY KEY(tenant,id,code));
+CREATE TABLE gf_e(edge_id INT PRIMARY KEY,st INT,si DECIMAL(20,2),sc VARCHAR(20) COLLATE utf8mb4_general_ci,
+dt INT,di DECIMAL(20,2),dc VARCHAR(20) COLLATE utf8mb4_general_ci);
+INSERT INTO gf_v VALUES(1,1.25,'Root','seed',1),(1,2.50,'TARGET','wanted',1),
+(2,2.50,'TARGET','wrong-tenant',1),(1,2.50,'OTHER','wrong-code',1);
+INSERT INTO gf_e VALUES(1,1,1.25,'root',1,2.50,'target'),(2,1,1.25,'root',1,2.50,'target');
+CREATE PROPERTY GRAPH gf_graph VERTEX TABLES(gf_v KEY(tenant,id,code) LABEL node PROPERTIES(tenant,id,code,body,active))
+EDGE TABLES(gf_e KEY(edge_id) SOURCE KEY(st,si,sc) REFERENCES gf_v(tenant,id,code)
+DESTINATION KEY(dt,di,dc) REFERENCES gf_v(tenant,id,code) LABEL link PROPERTIES(edge_id));
+SELECT /*+ USE_LATE_MATERIALIZATION */ * FROM GRAPH_TABLE(gf_graph MATCH
+(a IS node WHERE a.body='seed')-[e IS link]->{0,2}(b IS node WHERE b.active=1)
+COLUMNS(b.tenant AS tenant,b.id AS id,b.code AS code,b.body AS body)) g ORDER BY id DESC,code,tenant LIMIT 2;
+DROP PROPERTY GRAPH gf_graph;
+DROP TABLE gf_v,gf_e;

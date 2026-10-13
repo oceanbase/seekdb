@@ -52,6 +52,7 @@ private:
     ObSEArray<uint64_t, 2> check_sort_indexs_;  // global index of partition table is ok even if there is no sort op
     uint64_t late_table_id_;
     uint64_t base_index_;
+    bool graph_lookup_ = false;
 
     TO_STRING_KV(K_(late_material_indexs),
                  K_(check_sort_indexs),
@@ -74,6 +75,11 @@ private:
                  K_(project_col_in_view));
   };
   int check_hint_validity(const ObDMLStmt &stmt, bool &force_trans, bool &force_no_trans);
+  int try_graph_late_materialization(common::ObIArray<ObParentDMLStmt> &parent_stmts,
+                                    ObDMLStmt *&stmt, bool force_trans, bool &trans_happened);
+  int build_graph_late_materialization(ObDMLStmt &stmt, uint64_t table_id,
+                                      const ObIArray<uint64_t> &payload_ids,
+                                      ObDMLStmt *&trans_stmt);
   int check_stmt_need_late_materialization(const ObSelectStmt &stmt, const bool force_accept, bool &need);
   int generate_late_materialization_info(const ObSelectStmt &stmt,
                                          ObLateMaterializationInfo &info,

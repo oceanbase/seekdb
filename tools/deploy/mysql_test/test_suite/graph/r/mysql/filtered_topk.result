@@ -1,0 +1,100 @@
+SELECT COUNT(*) AS narrow_topn FROM plan_table WHERE statement_id='auto'
+  AND operator='TOP-N SORT' AND projection NOT LIKE '%body%';
+narrow_topn
+1
+SELECT COUNT(*) AS late_payload_get FROM plan_table WHERE statement_id='auto'
+  AND object_alias LIKE '__g_result_target%' AND operator='TABLE GET' AND projection LIKE '%body%';
+late_payload_get
+1
+SELECT statement_id,COUNT(*) AS wide_topn FROM plan_table
+WHERE statement_id IN ('disabled','body_rank') AND operator='TOP-N SORT'
+  AND projection LIKE '%body%' GROUP BY statement_id ORDER BY statement_id;
+statement_id	wide_topn
+body_rank	1
+disabled	1
+SELECT COUNT(*) AS single_unlimited_target_read FROM plan_table WHERE statement_id='no_limit'
+  AND object_alias LIKE '__g_result_target%';
+single_unlimited_target_read
+1
+SELECT 'expected' AS shape,COUNT(*) AS rows_found,MIN(id),MAX(id) FROM gf_expected
+UNION ALL SELECT 'auto',COUNT(*),MIN(id),MAX(id) FROM gf_actual
+UNION ALL SELECT 'forced',COUNT(*),MIN(id),MAX(id) FROM gf_forced;
+shape	rows_found	MIN(id)	MAX(id)
+expected	20	9991	9999
+auto	20	9991	9999
+forced	20	9991	9999
+SELECT COUNT(*) AS changed_bag FROM
+(SELECT id,body,COUNT(*) AS n FROM gf_expected GROUP BY id,body) e
+LEFT JOIN (SELECT id,body,COUNT(*) AS n FROM gf_actual GROUP BY id,body) a ON a.id=e.id AND a.body<=>e.body
+LEFT JOIN (SELECT id,body,COUNT(*) AS n FROM gf_forced GROUP BY id,body) f ON f.id=e.id AND f.body<=>e.body
+WHERE a.n IS NULL OR f.n IS NULL OR a.n<>e.n OR f.n<>e.n;
+changed_bag
+0
+SELECT COUNT(*) AS narrow_topn FROM plan_table WHERE statement_id='auto'
+  AND operator='TOP-N SORT' AND projection NOT LIKE '%body%';
+narrow_topn
+1
+SELECT COUNT(*) AS late_payload_get FROM plan_table WHERE statement_id='auto'
+  AND object_alias LIKE '__g_result_target%' AND operator='TABLE GET' AND projection LIKE '%body%';
+late_payload_get
+1
+SELECT statement_id,COUNT(*) AS wide_topn FROM plan_table
+WHERE statement_id IN ('disabled','body_rank') AND operator='TOP-N SORT'
+  AND projection LIKE '%body%' GROUP BY statement_id ORDER BY statement_id;
+statement_id	wide_topn
+body_rank	1
+disabled	1
+SELECT COUNT(*) AS single_unlimited_target_read FROM plan_table WHERE statement_id='no_limit'
+  AND object_alias LIKE '__g_result_target%';
+single_unlimited_target_read
+1
+SELECT 'expected' AS shape,COUNT(*) AS rows_found,MIN(id),MAX(id) FROM gf_expected
+UNION ALL SELECT 'auto',COUNT(*),MIN(id),MAX(id) FROM gf_actual
+UNION ALL SELECT 'forced',COUNT(*),MIN(id),MAX(id) FROM gf_forced;
+shape	rows_found	MIN(id)	MAX(id)
+expected	20	9991	9999
+auto	20	9991	9999
+forced	20	9991	9999
+SELECT COUNT(*) AS changed_bag FROM
+(SELECT id,body,COUNT(*) AS n FROM gf_expected GROUP BY id,body) e
+LEFT JOIN (SELECT id,body,COUNT(*) AS n FROM gf_actual GROUP BY id,body) a ON a.id=e.id AND a.body<=>e.body
+LEFT JOIN (SELECT id,body,COUNT(*) AS n FROM gf_forced GROUP BY id,body) f ON f.id=e.id AND f.body<=>e.body
+WHERE a.n IS NULL OR f.n IS NULL OR a.n<>e.n OR f.n<>e.n;
+changed_bag
+0
+PREPARE gf_cached FROM 'SELECT /*+ USE_LATE_MATERIALIZATION */ id,LEFT(body,5) AS prefix FROM GRAPH_TABLE(gf_graph MATCH (a IS node WHERE a.id=?)-[e IS link]->{0,2}(b IS node WHERE b.active=?) COLUMNS(b.id AS id,b.body AS body)) g ORDER BY id DESC LIMIT ? OFFSET ?';
+SET @seed=1,@active=0,@lim=3,@off=3;
+EXECUTE gf_cached USING @seed,@active,@lim,@off;
+id	prefix
+9999	9999:
+9997	NULL
+9997	NULL
+SET @seed=10000,@active=1,@off=0;
+EXECUTE gf_cached USING @seed,@active,@lim,@off;
+id	prefix
+10000	10000
+SET @seed=20000;
+EXECUTE gf_cached USING @seed,@active,@lim,@off;
+id	prefix
+DEALLOCATE PREPARE gf_cached;
+DROP PROPERTY GRAPH gf_graph;
+DROP TABLE gf_v,gf_e,gf_digit,plan_table;
+complete_typed_composite_key_lookup
+CREATE TABLE gf_v(tenant INT,id DECIMAL(20,2),code VARCHAR(20) COLLATE utf8mb4_general_ci,
+body VARCHAR(20),active INT,PRIMARY KEY(tenant,id,code));
+CREATE TABLE gf_e(edge_id INT PRIMARY KEY,st INT,si DECIMAL(20,2),sc VARCHAR(20) COLLATE utf8mb4_general_ci,
+dt INT,di DECIMAL(20,2),dc VARCHAR(20) COLLATE utf8mb4_general_ci);
+INSERT INTO gf_v VALUES(1,1.25,'Root','seed',1),(1,2.50,'TARGET','wanted',1),
+(2,2.50,'TARGET','wrong-tenant',1),(1,2.50,'OTHER','wrong-code',1);
+INSERT INTO gf_e VALUES(1,1,1.25,'root',1,2.50,'target'),(2,1,1.25,'root',1,2.50,'target');
+CREATE PROPERTY GRAPH gf_graph VERTEX TABLES(gf_v KEY(tenant,id,code) LABEL node PROPERTIES(tenant,id,code,body,active))
+EDGE TABLES(gf_e KEY(edge_id) SOURCE KEY(st,si,sc) REFERENCES gf_v(tenant,id,code)
+DESTINATION KEY(dt,di,dc) REFERENCES gf_v(tenant,id,code) LABEL link PROPERTIES(edge_id));
+SELECT /*+ USE_LATE_MATERIALIZATION */ * FROM GRAPH_TABLE(gf_graph MATCH
+(a IS node WHERE a.body='seed')-[e IS link]->{0,2}(b IS node WHERE b.active=1)
+COLUMNS(b.tenant AS tenant,b.id AS id,b.code AS code,b.body AS body)) g ORDER BY id DESC,code,tenant LIMIT 2;
+tenant	id	code	body
+1	2.50	TARGET	wanted
+1	2.50	TARGET	wanted
+DROP PROPERTY GRAPH gf_graph;
+DROP TABLE gf_v,gf_e;

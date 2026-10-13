@@ -46,6 +46,9 @@ int ObTransformLateMaterialization::transform_one_stmt(ObIArray<ObParentDMLStmt>
   } else if (OB_FAIL(check_hint_validity(*stmt, force_trans, force_no_trans))) {
   } else if (force_no_trans) {
     OPT_TRACE("hint reject transform");
+  } else if (OB_FAIL(try_graph_late_materialization(parent_stmts, stmt, force_trans,
+                                                   trans_happened))) {
+  } else if (trans_happened) {
   } else if (FALSE_IT(select_stmt = static_cast<const ObSelectStmt*>(stmt))) {
   } else if (OB_FAIL(check_stmt_need_late_materialization(*select_stmt, force_trans, can_trans))) {
   } else if (!can_trans) {
@@ -59,6 +62,182 @@ int ObTransformLateMaterialization::transform_one_stmt(ObIArray<ObParentDMLStmt>
   } else {
   }
   OPT_TRACE_END_SECTION;
+  return ret;
+}
+
+int ObTransformLateMaterialization::try_graph_late_materialization(
+    ObIArray<ObParentDMLStmt> &parent_stmts, ObDMLStmt *&stmt,
+    bool force_trans, bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  ObSelectStmt &select = *static_cast<ObSelectStmt *>(stmt);
+  bool graph_input = false;
+  bool deterministic = false;
+  // This is a payload split, not a LIMIT push below qualification. Keep the
+  // complete original FROM/WHERE/ORDER/LIMIT in the inner query. Only a direct
+  // basic-table input (never the nullable side of an outer join) is copied out.
+  if (ctx_->eval_cost_ || !select.has_limit() || !select.has_order_by()
+      || select.is_set_stmt() || select.has_group_by() || select.has_having()
+      || select.has_rollup() || select.has_distinct() || select.has_window_function()
+      || select.has_subquery() || select.has_for_update() || select.is_calc_found_rows()
+      || select.get_select_into() != nullptr || select.get_limit_percent_expr() != nullptr
+      || select.is_fetch_with_ties() || select.is_recursive_union()
+      || !select.get_part_exprs().empty()) {
+    return ret;
+  }
+  for (int64_t i = 0; i < select.get_table_size(); ++i) {
+    const TableItem *table = select.get_table_item(i);
+    graph_input |= table->is_generated_table() && table->ref_query_ != nullptr
+        && table->ref_query_->is_graph_feedback_loop();
+  }
+  if (!graph_input || OB_FAIL(select.check_relation_exprs_deterministic(deterministic))
+      || !deterministic) {
+    return ret;
+  }
+  ObArray<ObRawExpr *> required_exprs;
+  ObArray<ObRawExpr *> required_columns;
+  ObArray<ObRawExpr *> projected_exprs;
+  ObArray<ObRawExpr *> projected_columns;
+  ObStmtExprGetter visitor;
+  visitor.set_relation_scope();
+  visitor.remove_scope(SCOPE_SELECT);
+  if (OB_FAIL(select.get_relation_exprs(required_exprs, visitor))) {
+  } else if (OB_FAIL(ObRawExprUtils::extract_column_exprs(required_exprs, required_columns))) {
+  } else if (OB_FAIL(select.get_relation_exprs(projected_exprs, SCOPE_SELECT))) {
+  } else if (OB_FAIL(ObRawExprUtils::extract_column_exprs(projected_exprs, projected_columns))) {
+  }
+  uint64_t table_id = OB_INVALID_ID;
+  ObArray<uint64_t> payload_ids;
+  for (int64_t i = 0; OB_SUCC(ret) && table_id == OB_INVALID_ID
+       && i < select.get_from_item_size(); ++i) {
+    const FromItem &from = select.get_from_item(i);
+    const TableItem *table = select.get_table_item_by_id(from.table_id_);
+    if (from.is_joined_ || table == nullptr || !table->is_basic_table()
+        || table->is_system_table_ || table->snapshot_query_expr_ != nullptr
+        || table->is_has_sample_info()) {
+      continue;
+    }
+    const ObTableSchema *schema = nullptr;
+    if (OB_FAIL(ctx_->sql_schema_guard_->get_table_schema(table->ref_id_, schema))) {
+    } else if (OB_ISNULL(schema)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (schema->get_part_level() != PARTITION_LEVEL_ZERO
+               || !schema->get_rowkey_info().is_valid()) {
+      continue;
+    } else {
+      bool enum_key = false;
+      bool complete_key = true;
+      ObArray<uint64_t> key_ids;
+      if (OB_FAIL(contain_enum_set_rowkeys(schema->get_rowkey_info(), enum_key))) {
+      } else if (enum_key) {
+        continue;
+      } else if (OB_FAIL(schema->get_rowkey_info().get_column_ids(key_ids))) {
+      }
+      for (int64_t k = 0; OB_SUCC(ret) && complete_key && k < key_ids.count(); ++k) {
+        complete_key = select.get_column_expr_by_id(table->table_id_, key_ids.at(k)) != nullptr;
+      }
+      if (!complete_key) { continue; }
+      for (int64_t c = 0; OB_SUCC(ret) && c < projected_columns.count(); ++c) {
+        ObColumnRefRawExpr *column = static_cast<ObColumnRefRawExpr *>(projected_columns.at(c));
+        const ObColumnSchemaV2 *column_schema = schema->get_column_schema(column->get_column_id());
+        if (column->get_table_id() == table->table_id_ && column_schema != nullptr
+            && !column_schema->is_rowkey_column() && !column_schema->is_generated_column()
+            && ob_is_string_type(column_schema->get_data_type())
+            && !ObOptimizerUtil::find_item(required_columns, projected_columns.at(c))) {
+          ret = add_var_to_array_no_dup(payload_ids, column->get_column_id());
+        }
+      }
+      if (!payload_ids.empty()) { table_id = table->table_id_; }
+    }
+  }
+  if (OB_SUCC(ret) && table_id != OB_INVALID_ID) {
+    ObTryTransHelper helper;
+    ObDMLStmt *candidate = nullptr;
+    ObCostBasedLateMaterializationCtx check_ctx;
+    check_ctx.graph_lookup_ = true;
+    cost_based_trans_tried_ = true;
+    if (OB_FAIL(helper.fill_helper(stmt->get_query_ctx()))) {
+    } else if (OB_FAIL(build_graph_late_materialization(*stmt, table_id, payload_ids, candidate))) {
+    } else if (OB_FAIL(accept_transform(parent_stmts, stmt, candidate, force_trans,
+                                       false, trans_happened, false, &check_ctx))) {
+    } else if (trans_happened && OB_FAIL(add_transform_hint(*stmt))) {
+    }
+    if (OB_SUCC(ret)) { ret = helper.finish(trans_happened, stmt->get_query_ctx(), ctx_); }
+  }
+  return ret;
+}
+
+int ObTransformLateMaterialization::build_graph_late_materialization(
+    ObDMLStmt &stmt, uint64_t table_id, const ObIArray<uint64_t> &payload_ids,
+    ObDMLStmt *&trans_stmt)
+{
+  int ret = OB_SUCCESS;
+  ObDMLStmt *inner_stmt = nullptr;
+  ObArray<ObRawExpr *> old_columns;
+  ObArray<ObRawExpr *> inner_columns;
+  ObArray<ObRawExpr *> view_columns;
+  TableItem *view_table = nullptr;
+  if (OB_FAIL(ObTransformUtils::deep_copy_stmt(*ctx_->stmt_factory_, *ctx_->expr_factory_,
+                                              &stmt, trans_stmt))) {
+  } else if (OB_FAIL(ObTransformUtils::deep_copy_stmt(*ctx_->stmt_factory_, *ctx_->expr_factory_,
+                                                     trans_stmt, inner_stmt))) {
+  } else {
+    ObSelectStmt &outer = *static_cast<ObSelectStmt *>(trans_stmt);
+    ObSelectStmt &inner = *static_cast<ObSelectStmt *>(inner_stmt);
+    TableItem *lookup = outer.get_table_item_by_id(table_id);
+    for (int64_t i = 0; OB_SUCC(ret) && i < outer.get_column_size(); ++i) {
+      const ColumnItem &column = outer.get_column_items().at(i);
+      if (column.table_id_ == table_id && ObOptimizerUtil::find_item(payload_ids, column.column_id_)) {
+        continue;
+      }
+      ObRawExpr *inner_column = inner.get_column_expr_by_id(column.table_id_, column.column_id_);
+      if (OB_ISNULL(inner_column)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(old_columns.push_back(column.expr_))) {
+      } else if (OB_FAIL(inner_columns.push_back(inner_column))) {
+      }
+    }
+    if (OB_SUCC(ret)) {
+      inner.get_select_items().reset();
+      inner.set_select_into(nullptr);
+      if (OB_FAIL(ObTransformUtils::create_select_item(*ctx_->allocator_, inner_columns, &inner))) {
+      } else if (OB_FAIL(inner.adjust_statement_id(ctx_->allocator_, ctx_->src_qb_name_, ctx_->src_hash_val_))) {
+      } else if (OB_FAIL(inner.update_stmt_table_id(ctx_->allocator_, outer))) {
+      }
+    }
+    if (OB_SUCC(ret)) {
+      outer.get_from_items().reset();
+      outer.get_joined_tables().reset();
+      outer.get_semi_infos().reset();
+      outer.get_condition_exprs().reset();
+      outer.get_table_items().reset();
+      outer.get_part_exprs().reset();
+      outer.get_check_constraint_items().reset();
+      outer.set_limit_offset(nullptr, nullptr);
+      outer.set_limit_percent_expr(nullptr);
+      outer.set_fetch_with_ties(false);
+      outer.set_has_fetch(false);
+      for (int64_t i = outer.get_column_size() - 1; OB_SUCC(ret) && i >= 0; --i) {
+        const ColumnItem &column = outer.get_column_items().at(i);
+        if (column.table_id_ != table_id) { ret = outer.remove_column_item(column.table_id_, column.column_id_); }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(outer.get_table_items().push_back(lookup))) {
+      } else if (OB_FAIL(outer.add_from_item(table_id))) {
+      } else if (OB_FAIL(ObTransformUtils::add_new_table_item(ctx_, &outer, &inner, view_table))) {
+      } else if (OB_FAIL(outer.add_from_item(view_table->table_id_))) {
+      } else if (OB_FAIL(outer.rebuild_tables_hash())) {
+      } else if (OB_FAIL(ObTransformUtils::create_columns_for_view(ctx_, *view_table, &outer, view_columns))) {
+      } else if (OB_FAIL(outer.update_column_item_rel_id())) {
+      } else if (OB_FAIL(replace_expr_skip_part(outer, old_columns, view_columns))) {
+      } else if (OB_FAIL(generate_pk_join_conditions(lookup->ref_id_, table_id,
+                                                     old_columns, view_columns, outer))) {
+      } else if (OB_FAIL(inner.formalize_stmt(ctx_->session_info_, false))) {
+      } else if (OB_FAIL(outer.formalize_stmt(ctx_->session_info_, false))) {
+      } else if (OB_FAIL(outer.formalize_stmt_expr_reference(ctx_->expr_factory_, ctx_->session_info_))) {
+      }
+    }
+  }
   return ret;
 }
 
@@ -926,6 +1105,8 @@ int ObTransformLateMaterialization::is_expected_plan(ObLogPlan *plan,
   is_expected = false;
   if (OB_ISNULL(plan) || OB_ISNULL(local_ctx)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (local_ctx->graph_lookup_) {
+    is_expected = true;
   } else if (is_trans_plan) {
     if (OB_FAIL(check_transform_plan_expected(plan->get_plan_root(), *local_ctx, is_expected))) {
     }
