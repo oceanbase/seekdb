@@ -18,6 +18,8 @@
 #include "sql/engine/graph/graph_feedback_loop_op.h"
 #include "sql/engine/graph/graph_binding_store.h"
 #include "sql/engine/graph/graph_expand_das_access.h"
+#include "sql/engine/graph/graph_cached_access.h"
+#include "sql/engine/ob_physical_plan.h"
 #include "sql/engine/ob_sql_mem_mgr_processor.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "share/ob_errno.h"
@@ -122,7 +124,8 @@ int64_t saturated_stat_add(int64_t left, int64_t right)
 
 // Owns the native graph components as one allocation so their reference
 // dependencies are constructed and destroyed in a fixed order. It remains
-// query-local; no state is shared by rescans or concurrent executions.
+// query-local. Only proven parameter-independent adjacency entries survive
+// rescans; no bindings, paths or state are shared with another execution.
 class GraphFeedbackRuntime final
 {
 public:
@@ -132,7 +135,8 @@ public:
       : eval_ctx_(eval_ctx),
         access_(exec_ctx, eval_ctx,
                 binding_store_.get_work_area_allocator()),
-        expand_(binding_store_.get_work_area_allocator(), access_,
+        cached_access_(binding_store_.get_work_area_allocator(), access_, memory_limit),
+        expand_(binding_store_.get_work_area_allocator(), cached_access_,
                 GRAPH_EXPAND_MAX_EDGE_PAGE_SIZE,
                 memory_limit),
         frontier_(binding_store_.get_work_area_allocator(), expand_,
@@ -153,6 +157,16 @@ public:
                    spec.get_source_scan_desc(), spec.get_edge_scan_desc(),
                    spec.get_target_scan_desc()))) {
       LOG_WARN("failed to initialize graph expand access", K(ret));
+    }
+    if (OB_SUCC(ret)) {
+      const ObPhysicalPlanCtx *plan_ctx = eval_ctx_.exec_ctx_.get_physical_plan_ctx();
+      // Also check the complete physical statement: a SELECT subplan may
+      // belong to DML or a statement with locking/side-effecting PL functions.
+      cached_access_.set_enabled(spec.reuse_adjacency()
+          && plan_ctx != nullptr && plan_ctx->get_phy_plan() != nullptr
+          && plan_ctx->get_phy_plan()->is_plain_select()
+          && spec.get_edge_scan_desc().get_tsc_ctdef().snapshot_item_.snapshot_query_type_
+                 == TableItem::NOT_USING);
     }
     return ret;
   }
@@ -338,10 +352,11 @@ public:
     return ret;
   }
 
-  void reset()
+  void reset(bool keep_adjacency = false)
   {
     payload_allocator_.reset();
     frontier_.reset();
+    if (!keep_adjacency) { cached_access_.clear(); }
     binding_store_.reset();
     next_output_index_ = 0;
     seeds_loaded_ = false;
@@ -598,6 +613,7 @@ private:
   GraphBindingStore binding_store_{};
   ObEvalCtx &eval_ctx_;
   GraphExpandDasAccess access_;
+  GraphCachedAccess cached_access_;
   GraphExpand expand_;
   GraphFeedbackFrontier frontier_;
   common::ObArenaAllocator payload_allocator_;
@@ -1290,7 +1306,7 @@ int GraphFeedbackLoopOp::inner_get_next_batch(int64_t max_row_cnt)
 int GraphFeedbackLoopOp::inner_rescan()
 {
   update_native_monitor_info();
-  reset_native_runtime();
+  reset_native_runtime(true);
   return use_native_runtime_
       ? ObOperator::inner_rescan()
       : RecursivePumpOp::inner_rescan();
@@ -1377,10 +1393,10 @@ void GraphFeedbackLoopOp::update_native_monitor_info()
   }
 }
 
-void GraphFeedbackLoopOp::reset_native_runtime()
+void GraphFeedbackLoopOp::reset_native_runtime(bool keep_adjacency)
 {
   if (native_runtime_ != nullptr) {
-    native_runtime_->reset();
+    native_runtime_->reset(keep_adjacency);
   }
 }
 
@@ -1418,6 +1434,7 @@ OB_SERIALIZE_MEMBER((GraphFeedbackLoopSpec, RecursivePumpSpec),
                     output_row_desc_,
                     native_step_supported_,
                     prune_duplicate_states_,
+                    reuse_adjacency_,
                     seed_key_exprs_,
                     source_scan_desc_,
                     edge_scan_desc_,

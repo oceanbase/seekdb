@@ -181,6 +181,7 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/graph/graph_binding_store.cpp",
             "src/sql/engine/graph/graph_feedback_loop_op.cpp",
             "src/sql/engine/graph/graph_expand.cpp",
+            "src/sql/engine/graph/graph_cached_access.cpp",
             "src/sql/engine/graph/graph_expand_das_access.cpp",
             "src/sql/engine/graph/graph_path_state_store.cpp",
             "src/sql/engine/window_function/ob_window_function_op.cpp",

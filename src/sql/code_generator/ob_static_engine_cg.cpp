@@ -1212,6 +1212,7 @@ int ObStaticEngineCG::generate_spec(GraphFeedbackLoopLogOp &op,
     spec.set_expand_access(op.get_expand_access_desc());
     spec.set_native_step_supported(op.is_native_step_supported());
     spec.set_prune_duplicate_states(prune_duplicate_states);
+    spec.set_reuse_adjacency(op.can_reuse_adjacency());
     if (OB_FAIL(spec.init_output_row_desc())) {
       LOG_WARN("failed to initialize graph feedback output row", K(ret),
                K(op.get_path_desc()), K(op.get_expand_access_desc()));

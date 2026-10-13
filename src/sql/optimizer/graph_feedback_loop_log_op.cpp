@@ -380,6 +380,46 @@ bool GraphFeedbackLoopLogOp::can_use_basic_native_runtime() const
              anchor->get_output_exprs().count(), path_payload_exprs_.count());
 }
 
+bool GraphFeedbackLoopLogOp::can_reuse_adjacency() const
+{
+  const ObLogTableScan *edge = find_internal_scan(get_child(second_child), GRAPH_STEP_EDGE_ALIAS);
+  const ObDMLStmt *root = get_plan()->get_optimizer_context().get_root_stmt();
+  bool safe = can_use_basic_native_runtime() && edge != nullptr
+      && expand_access_desc_.uses_adjacency_index() && root != nullptr
+      && root->is_select_stmt() && !static_cast<const ObSelectStmt *>(root)->has_for_update();
+  ObArray<const ObRawExpr *> pending;
+  const ObIArray<ObRawExpr *> *filters[] = {edge == nullptr ? nullptr : &edge->get_filter_exprs(),
+      edge == nullptr ? nullptr : &edge->get_startup_exprs()};
+  for (int64_t a = 0; safe && a < ARRAYSIZEOF(filters); ++a) {
+    for (int64_t i = 0; safe && i < filters[a]->count(); ++i) {
+      safe = OB_SUCCESS == pending.push_back(filters[a]->at(i));
+    }
+  }
+  for (int64_t i = 0; safe && i < path_payload_exprs_.count(); ++i) {
+    ObRawExpr *payload = path_payload_exprs_.at(i);
+    safe = payload != nullptr && payload->get_param_count() == 3
+        && OB_SUCCESS == pending.push_back(payload->get_param_expr(2));
+  }
+  // Only pure scalar operations over this edge and statement constants are
+  // reusable. No recursive/outer execution parameter, variable or UDF may be
+  // omitted from a cache key. Unproven expressions retain uncached execution.
+  while (safe && !pending.empty()) {
+    const ObRawExpr *expr = pending.at(pending.count() - 1);
+    pending.pop_back();
+    safe = expr != nullptr && expr->is_deterministic() && !expr->has_flag(CNT_DYNAMIC_PARAM);
+    if (safe && expr->is_column_ref_expr()) {
+      safe = static_cast<const ObColumnRefRawExpr *>(expr)->get_table_id() == edge->get_table_id();
+    } else if (safe && !expr->is_const_expr()) {
+      safe = (expr->is_op_expr() || expr->get_expr_type() == T_FUN_SYS_CAST)
+          && expr->get_param_count() > 0;
+      for (int64_t i = 0; safe && i < expr->get_param_count(); ++i) {
+        safe = OB_SUCCESS == pending.push_back(expr->get_param_expr(i));
+      }
+    }
+  }
+  return safe;
+}
+
 int GraphFeedbackLoopLogOp::initialize_path_payloads(ObLogTableScan &edge_scan)
 {
   int ret = OB_SUCCESS;

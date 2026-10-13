@@ -188,6 +188,8 @@ public:
   }
   void set_prune_duplicate_states(bool prune) { prune_duplicate_states_ = prune; }
   bool prune_duplicate_states() const { return prune_duplicate_states_; }
+  void set_reuse_adjacency(bool reuse) { reuse_adjacency_ = reuse; }
+  bool reuse_adjacency() const { return reuse_adjacency_; }
   int init_output_row_desc();
   int bind_expand_scans(uint64_t source_scan_op_id,
                         uint64_t edge_scan_op_id,
@@ -233,6 +235,7 @@ private:
   GraphFeedbackRowDesc output_row_desc_{};
   bool native_step_supported_{false};
   bool prune_duplicate_states_{false};
+  bool reuse_adjacency_{false};
   // Evaluated after the anchor child produces a row. The expression order is
   // the source element's declared key order, so it can be copied directly into
   // a typed GraphElementIdentity without inspecting generated column names.
@@ -266,7 +269,7 @@ private:
   int get_next_native_row();
   void init_native_monitor_info();
   void update_native_monitor_info();
-  void reset_native_runtime();
+  void reset_native_runtime(bool keep_adjacency = false);
   void destroy_native_runtime();
   const GraphFeedbackLoopSpec &get_graph_spec() const
   { return static_cast<const GraphFeedbackLoopSpec &>(spec_); }
