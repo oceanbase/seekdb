@@ -47,6 +47,86 @@ bool are_native_scan_filters_supported(
   return supported;
 }
 
+// Only these generated equalities are enforced by GraphExpand's source
+// association and endpoint lookup. Other range predicates must still be
+// evaluated after the native executor replaces the relational scan ranges.
+bool is_native_identity_range(const ObRawExpr &expr,
+                              const ObLogTableScan &scan,
+                              const ObLogTableScan &edge_scan,
+                              const GraphExpandAccessDesc &access)
+{
+  bool identity_range = false;
+  if (expr.get_expr_type() == T_OP_EQ && expr.get_param_count() == 2) {
+    for (int64_t side = 0; !identity_range && side < 2; ++side) {
+      const ObRawExpr *column = expr.get_param_expr(side);
+      const ObRawExpr *param = expr.get_param_expr(1 - side);
+      if (column != nullptr && column->is_column_ref_expr()
+          && param != nullptr && param->is_exec_param_expr()) {
+        const ObRawExpr *ref = static_cast<const ObExecParamRawExpr *>(param)->get_ref_expr();
+        if (ref != nullptr && ref->is_column_ref_expr()) {
+          const ObColumnRefRawExpr &key = *static_cast<const ObColumnRefRawExpr *>(column);
+          const ObColumnRefRawExpr &bound = *static_cast<const ObColumnRefRawExpr *>(ref);
+          const bool is_edge = &scan == &edge_scan;
+          const int64_t key_count = is_edge ? access.source_key_count_ : access.target_key_count_;
+          for (int64_t i = 0; !identity_range && i < key_count; ++i) {
+            identity_range = key.get_table_id() == scan.get_table_id()
+                && key.get_column_id() == (is_edge ? access.edge_current_columns_[i]
+                                                  : access.target_key_columns_[i])
+                && (is_edge
+                    ? bound.is_cte_generated_column()
+                        && bound.get_cte_generate_column_projector_offset()
+                            == GRAPH_FEEDBACK_DEPTH_COLUMN_COUNT + access.source_key_count_ + i
+                    : bound.get_table_id() == edge_scan.get_table_id()
+                        && bound.get_column_id() == access.edge_next_columns_[i]);
+          }
+        }
+      }
+    }
+  }
+  return identity_range;
+}
+
+int retain_native_edge_range_filters(ObLogTableScan &edge_scan,
+                                     const ObLogTableScan &target_scan,
+                                     const GraphExpandAccessDesc &access,
+                                     bool &supported)
+{
+  int ret = OB_SUCCESS;
+  ObArray<ObRawExpr *> edge_filters;
+  const ObLogTableScan *scans[] = {&edge_scan, &target_scan};
+  for (int64_t s = 0; OB_SUCC(ret) && supported && s < ARRAYSIZEOF(scans); ++s) {
+    const ObLogTableScan &scan = *scans[s];
+    for (int64_t i = 0; OB_SUCC(ret) && supported && i < scan.get_range_conditions().count(); ++i) {
+      ObRawExpr *expr = scan.get_range_conditions().at(i);
+      if (OB_ISNULL(expr)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (is_native_identity_range(*expr, scan, edge_scan, access)) {
+        // The native frontier/lookup enforces this generated join equality.
+      } else if (&scan != &edge_scan || !expr->is_deterministic()
+                 || expr->has_flag(CNT_DYNAMIC_PARAM)) {
+        // Target lookup is existence-only, and recursive join parameters are
+        // not populated when that child is bypassed. Keep these on fallback.
+        supported = false;
+      } else if (OB_FAIL(add_var_to_array_no_dup(edge_filters, expr))) {
+      }
+    }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && supported && i < edge_filters.count(); ++i) {
+    ObArray<ObRawExpr *> columns;
+    if (OB_FAIL(ObRawExprUtils::extract_column_exprs(edge_filters.at(i), columns))) {
+    } else if (OB_FAIL(add_var_to_array_no_dup(edge_scan.get_filter_exprs(), edge_filters.at(i)))) {
+    }
+    for (int64_t j = 0; OB_SUCC(ret) && j < columns.count(); ++j) {
+      if (OB_FAIL(add_var_to_array_no_dup(edge_scan.get_access_exprs(), columns.at(j)))) {
+      } else if (OB_FAIL(edge_scan.add_runtime_access_expr(columns.at(j)))) {
+      }
+    }
+  }
+  // The normal table-scan expression allocation pass reclassifies these
+  // filters for covering scans and index-back before code generation.
+  return ret;
+}
+
 bool is_native_graph_step_supported(
     const ObLogicalOperator *root,
     const ObLogTableScan *edge_scan,
@@ -344,6 +424,10 @@ int GraphFeedbackLoopLogOp::initialize_expand_access()
         : GraphFeedbackAccessMethod::FULL_SCAN;
     native_step_supported_ = is_native_graph_step_supported(
         step, edge_scan, target_scan);
+    if (OB_FAIL(retain_native_edge_range_filters(
+            *edge_scan, *target_scan, expand_access_desc_, native_step_supported_))) {
+      LOG_WARN("failed to retain graph edge range filters", K(ret));
+    }
   }
   return ret;
 }
