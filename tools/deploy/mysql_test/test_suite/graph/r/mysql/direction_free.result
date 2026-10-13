@@ -1,3 +1,15 @@
+SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person)-[e IS knows]-(b IS person)
+COLUMNS(b.id AS endpoint)) g;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near '(b IS person)
+COLUMNS(b.id AS endpoint)) g' at line 1
+SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person)-[f IS knows]-(b IS person)-[e IS knows]->{1,2}(c IS person)
+COLUMNS(c.id AS endpoint)) g;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near '(b IS person)-[e IS knows]->{1,2}(c IS person)
+COLUMNS(c.id AS endpoint)) g' at line 1
+SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person)-[e IS knows]-{1,2}(b IS person)-[f IS knows]-(c IS person)
+COLUMNS(c.id AS endpoint)) g;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near '(c IS person)
+COLUMNS(c.id AS endpoint)) g' at line 1
 SELECT * FROM GRAPH_TABLE(graph_social MATCH
 (a IS person WHERE a.id=1)-[e IS knows]-{0,2}(b IS person)
 COLUMNS(a.id AS seed,b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g

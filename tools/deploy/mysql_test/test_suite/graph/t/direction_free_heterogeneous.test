@@ -1,6 +1,16 @@
 --disable_query_log
 --source mysql_test/test_suite/graph/mapping_fixture.sql
 --enable_query_log
+SELECT COUNT(*) AS paths,MAX(hops) AS max_hops,SUM(hops) AS total_hops FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=1)-[e IS works]-{0,16}(b IS person)
+ COLUMNS(COUNT(e.id) AS hops)) g;
+SELECT COUNT(*) AS steps,COUNT(DISTINCT m) AS matches FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=1)-[e IS works]-{0,16}(b IS person)
+ ONE ROW PER STEP(v1,se,v2) COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS n)) g;
+SELECT COUNT(*) AS mixed_seed_matches FROM (SELECT m FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person)-[e IS knows]-{1,2}(b IS person)
+ ONE ROW PER STEP(v1,se,v2) COLUMNS(a.id AS seed,MATCHNUM() AS m)) g
+ GROUP BY m HAVING COUNT(DISTINCT seed)>1) bad;
 SELECT * FROM GRAPH_TABLE(graph_social MATCH
  (a IS person WHERE a.id=1)-[e IS works]-{0,4}(b IS person)
  COLUMNS(a.id AS seed,b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g ORDER BY hops;

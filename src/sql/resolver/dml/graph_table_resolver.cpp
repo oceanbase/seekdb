@@ -2961,9 +2961,10 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
     for (int64_t i = 0; OB_SUCC(ret) && i < chain.num_child_; ++i) {
       const ParseNode &pattern = *chain.children_[i];
       GraphBinding binding = {nullptr, nullptr, pattern.children_[0]};
-      if ((i % 2) == 1 && pattern.value_ != 0 && pattern.value_ != 1 && pattern.value_ != 2) {
+      if ((i % 2) == 1 && pattern.value_ != 0 && pattern.value_ != 1
+          && !(pattern.value_ == 2 && quantifier != nullptr && i == quantified_index)) {
         ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "undirected graph path segments");
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "unquantified undirected graph path segments");
       } else {
         binding.element_ = graph->get_element(graph_node_name(*pattern.children_[1]));
       }
