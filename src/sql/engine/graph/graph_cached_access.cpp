@@ -135,7 +135,12 @@ int GraphCachedAccess::begin(const ObIArray<GraphElementIdentity> &sources)
 {
   int ret = OB_SUCCESS;
   release();
-  bypass_ = !enabled_ || !child_.can_partition_sources();
+  // Partitionability controls frontier batching, not cache correctness. A
+  // full scan filters against the complete miss-source set in one pass; only
+  // after that scan completes can each requested source become a cache entry.
+  // Never expose can_partition_sources() as true merely because reuse is on:
+  // doing so would turn a whole-frontier scan into one full scan per batch.
+  bypass_ = !enabled_;
   for (int64_t i = 0; !bypass_ && i < sources.count(); ++i) {
     const ObRowkey &key = sources.at(i).rowkey_;
     for (int64_t k = 0; k < key.get_obj_cnt(); ++k) {

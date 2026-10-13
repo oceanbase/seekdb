@@ -22,6 +22,7 @@
 #include "sql/optimizer/ob_log_sort.h"
 #include "sql/optimizer/ob_log_table_scan.h"
 #include "sql/optimizer/ob_opt_est_cost.h"
+#include "sql/resolver/ddl/ob_explain_stmt.h"
 #include "sql/resolver/dml/ob_select_stmt.h"
 
 using namespace oceanbase;
@@ -387,8 +388,14 @@ bool GraphFeedbackLoopLogOp::can_reuse_adjacency() const
 {
   const ObLogTableScan *edge = find_internal_scan(get_child(second_child), GRAPH_STEP_EDGE_ALIAS);
   const ObDMLStmt *root = get_plan()->get_optimizer_context().get_root_stmt();
+  // EXPLAIN describes the enclosed statement's eligibility. The wrapper is
+  // not a SELECT, but must not make a reusable SELECT appear non-reusable.
+  // The runtime still independently rejects non-plain/locking statements.
+  if (root != nullptr && root->is_explain_stmt()) {
+    root = static_cast<const ObExplainStmt *>(root)->get_explain_query_stmt();
+  }
   bool safe = can_use_basic_native_runtime() && edge != nullptr
-      && expand_access_desc_.uses_adjacency_index() && root != nullptr
+      && root != nullptr
       && root->is_select_stmt() && !static_cast<const ObSelectStmt *>(root)->has_for_update();
   ObArray<const ObRawExpr *> pending;
   const ObIArray<ObRawExpr *> *filters[] = {edge == nullptr ? nullptr : &edge->get_filter_exprs(),
@@ -753,7 +760,7 @@ int GraphFeedbackLoopLogOp::get_plan_item_info(PlanText &plan_text,
   } else if (OB_FAIL(can_prune_duplicate_states(prune))) {
   } else {
     BEGIN_BUF_PRINT;
-    if (OB_FAIL(BUF_PRINTF("direction=%s, hops={%ld,%ld}, access=%s, mode=%s, runtime=%s, states=%s, search=%s",
+    if (OB_FAIL(BUF_PRINTF("direction=%s, hops={%ld,%ld}, access=%s, mode=%s, runtime=%s, states=%s, search=%s, adjacency_reuse=%s",
                            path_desc_.direction_ == GraphPathDirection::IN
                                ? "IN" : path_desc_.direction_ == GraphPathDirection::BOTH ? "BOTH" : "OUT",
                            path_desc_.lower_bound_,
@@ -763,7 +770,8 @@ int GraphFeedbackLoopLogOp::get_plan_item_info(PlanText &plan_text,
                            can_use_basic_native_runtime()
                                ? "native" : "fallback",
                            prune ? "binding_vertex_hop" : "paths",
-                           path_desc_.any_shortest_ ? "any_shortest" : "all"))) {
+                           path_desc_.any_shortest_ ? "any_shortest" : "all",
+                           can_reuse_adjacency() ? "eligible" : "off"))) {
     }
     END_BUF_PRINT(plan_item.special_predicates_, plan_item.special_predicates_len_);
   }

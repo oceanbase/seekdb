@@ -1,0 +1,245 @@
+drop table if exists plan_table;
+create table plan_table (
+statement_id varchar(30),
+plan_id int,
+gmt_create timestamp,
+remarks varchar(4000),
+operator varchar(255),
+options varchar(255),
+object_node varchar(40),
+object_owner varchar(128),
+object_name varchar(128),
+object_alias varchar(261),
+object_instance int,
+object_type varchar(30),
+optimizer varchar(4000),
+search_columns int,
+id int,
+parent_id int,
+depth int,
+position int,
+is_last_child int,
+cost int,
+cardinality int,
+bytes int,
+rowset int,
+other_tag varchar(4000),
+partition_start varchar(4000),
+partition_stop varchar(4000),
+partition_id int,
+other varchar(4000),
+distribution varchar(64),
+cpu_cost int,
+io_cost int,
+temp_space int,
+access_predicates varchar(4000),
+filter_predicates varchar(4000),
+startup_predicates varchar(4000),
+projection varchar(4000),
+special_predicates longtext,
+time int,
+qblock_name varchar(128),
+other_xml varchar(4000)
+);
+EXPLAIN INTO plan_table SET statement_id='fullscan_reuse'
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=1)-[e IS knows WHERE e.since>=2020]->{0,4}(b IS person)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g;
+EXPLAIN INTO plan_table SET statement_id='fullscan_correlated'
+SELECT s.binding_id,g.endpoint FROM fs_seeds s,LATERAL (
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=s.cutoff]->{1,2}(b IS person)
+COLUMNS(b.id AS endpoint)) p) g;
+SELECT COUNT(*)=1 AS fullscan_reuse_eligible FROM plan_table
+WHERE statement_id='fullscan_reuse' AND operator='GRAPH FEEDBACK LOOP'
+ AND special_predicates LIKE '%access=full-scan, mode=WALK, runtime=native%adjacency_reuse=eligible%';
+fullscan_reuse_eligible
+1
+SELECT COUNT(*) AS unsafe_correlated_reuse FROM plan_table
+WHERE statement_id='fullscan_correlated' AND operator='GRAPH FEEDBACK LOOP'
+ AND special_predicates LIKE '%adjacency_reuse=eligible%';
+unsafe_correlated_reuse
+0
+DROP TABLE plan_table;
+unindexed_cycles_keep_complete_path_multiplicity
+SELECT s.binding_id,g.endpoint,g.hops,g.edges FROM fs_seeds s,LATERAL (
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=2020]->{0,4}(b IS person)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) p
+) g ORDER BY s.binding_id,g.hops,CAST(g.edges AS CHAR);
+binding_id	endpoint	hops	edges
+1	1	0	NULL
+1	2	1	[10]
+1	2	1	[11]
+1	3	2	[10, 12]
+1	3	2	[11, 12]
+1	1	3	[10, 12, 13]
+1	1	3	[11, 12, 13]
+1	2	4	[10, 12, 13, 10]
+1	2	4	[10, 12, 13, 11]
+1	2	4	[11, 12, 13, 10]
+1	2	4	[11, 12, 13, 11]
+2	1	0	NULL
+2	2	1	[10]
+2	2	1	[11]
+2	3	2	[10, 12]
+2	3	2	[11, 12]
+2	1	3	[10, 12, 13]
+2	1	3	[11, 12, 13]
+2	2	4	[10, 12, 13, 10]
+2	2	4	[10, 12, 13, 11]
+2	2	4	[11, 12, 13, 10]
+2	2	4	[11, 12, 13, 11]
+3	5	0	NULL
+4	5	0	NULL
+5	3	0	NULL
+5	1	1	[13]
+5	2	2	[13, 10]
+5	2	2	[13, 11]
+5	3	3	[13, 10, 12]
+5	3	3	[13, 11, 12]
+5	1	4	[13, 10, 12, 13]
+5	1	4	[13, 11, 12, 13]
+mixed_hit_and_miss_sources_and_empty_adjacency
+INSERT INTO graph_knows VALUES(30,1,3,2030),(31,2,5,2030);
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=1)-[e IS knows]->{1,4}(b IS person)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g
+ORDER BY hops,CAST(edges AS CHAR);
+endpoint	hops	edges
+2	1	[10]
+2	1	[11]
+3	1	[30]
+3	2	[10, 12]
+5	2	[10, 31]
+3	2	[11, 12]
+5	2	[11, 31]
+1	2	[30, 13]
+1	3	[10, 12, 13]
+1	3	[11, 12, 13]
+2	3	[30, 13, 10]
+2	3	[30, 13, 11]
+3	3	[30, 13, 30]
+2	4	[10, 12, 13, 10]
+2	4	[10, 12, 13, 11]
+3	4	[10, 12, 13, 30]
+2	4	[11, 12, 13, 10]
+2	4	[11, 12, 13, 11]
+3	4	[11, 12, 13, 30]
+3	4	[30, 13, 10, 12]
+5	4	[30, 13, 10, 31]
+3	4	[30, 13, 11, 12]
+5	4	[30, 13, 11, 31]
+1	4	[30, 13, 30, 13]
+incoming_reuse_keeps_edge_and_step_evidence
+SELECT s.binding_id,g.hops,g.step_no,g.src,g.eid,g.dst FROM fs_seeds s,LATERAL (
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=s.seed)<-[e IS knows WHERE e.since>=2020]-{1,2}(b IS person)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(COUNT(e.id) AS hops,ELEMENT_NUMBER(se) AS step_no,v1.id AS src,se.id AS eid,v2.id AS dst)) p
+) g ORDER BY s.binding_id,g.hops,g.eid,g.step_no,g.src,g.dst;
+binding_id	hops	step_no	src	eid	dst
+1	1	2	1	13	3
+1	2	4	3	12	2
+1	2	2	1	13	3
+1	2	2	1	13	3
+1	2	4	3	30	1
+2	1	2	1	13	3
+2	2	4	3	12	2
+2	2	2	1	13	3
+2	2	2	1	13	3
+2	2	4	3	30	1
+3	1	2	5	31	2
+3	2	4	2	10	1
+3	2	4	2	11	1
+3	2	2	5	31	2
+3	2	2	5	31	2
+4	1	2	5	31	2
+4	2	4	2	10	1
+4	2	4	2	11	1
+4	2	2	5	31	2
+4	2	2	5	31	2
+5	1	2	3	12	2
+5	1	2	3	30	1
+5	2	4	2	10	1
+5	2	4	2	11	1
+5	2	2	3	12	2
+5	2	2	3	12	2
+5	2	4	1	13	3
+5	2	2	3	30	1
+correlated_predicates_must_not_reuse_another_binding_cutoff
+SELECT s.binding_id,g.endpoint,g.hops FROM fs_seeds s,LATERAL (
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=s.cutoff]->{1,2}(b IS person)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) p
+) g ORDER BY s.binding_id,g.hops,g.endpoint;
+binding_id	endpoint	hops
+1	2	1
+1	2	1
+1	3	1
+1	1	2
+1	3	2
+1	3	2
+1	5	2
+1	5	2
+2	3	1
+2	1	2
+5	1	1
+5	2	2
+5	2	2
+5	3	2
+SELECT s.binding_id,COUNT(*) AS paths FROM fs_seeds s,LATERAL (
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=s.seed)-[e IS knows WHERE RAND(1)<1]->{1,2}(b IS person)
+COLUMNS(b.id AS endpoint)) p
+) g GROUP BY s.binding_id ORDER BY s.binding_id;
+binding_id	paths
+1	8
+2	8
+5	4
+statement_boundaries_and_read_your_writes
+PREPARE fs_cached FROM 'SELECT s.binding_id,COUNT(*) AS paths FROM fs_seeds s,LATERAL (SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=?]->{1}(b IS person) COLUMNS(b.id AS endpoint)) p) g GROUP BY s.binding_id ORDER BY s.binding_id';
+SET @cutoff=2020;
+EXECUTE fs_cached USING @cutoff;
+binding_id	paths
+1	3
+2	3
+5	1
+START TRANSACTION;
+DELETE FROM graph_person WHERE id=2;
+EXECUTE fs_cached USING @cutoff;
+binding_id	paths
+1	1
+2	1
+5	1
+ROLLBACK;
+SET @cutoff=2022;
+EXECUTE fs_cached USING @cutoff;
+binding_id	paths
+1	1
+2	1
+5	1
+DEALLOCATE PREPARE fs_cached;
+full_scan_page_completion_and_repeated_seeds
+SELECT s.binding_id,COUNT(*) AS paths FROM fs_seeds s,LATERAL (
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=s.seed)-[e IS knows]->{1}(b IS person)
+COLUMNS(b.id AS endpoint)) p
+) g GROUP BY s.binding_id ORDER BY s.binding_id;
+binding_id	paths
+1	5003
+2	5003
+5	1
+optional_cache_budget_does_not_truncate_the_full_scan
+SELECT s.binding_id,COUNT(*) AS paths FROM fs_seeds s,LATERAL (
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=s.seed)-[e IS knows]->{1}(b IS person)
+COLUMNS(b.id AS endpoint)) p
+) g GROUP BY s.binding_id ORDER BY s.binding_id;
+binding_id	paths
+1	5003
+2	5003
+5	1
+DROP TABLE fs_digit,fs_seeds;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;
