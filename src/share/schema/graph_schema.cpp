@@ -192,14 +192,6 @@ int GraphSchema::from_catalog_definition(const ObString &definition)
   GraphSchema decoded;
   if (definition.empty()) {
     ret = OB_DESERIALIZE_ERROR;
-  } else if (static_cast<unsigned char>(definition.ptr()[0]) == 1) {
-    // The unreleased binary catalog used UNIS version 1. Read it without
-    // rewriting during schema refresh; all subsequent catalog writes use JSON.
-    int64_t pos = 0;
-    if (OB_FAIL(decoded.deserialize(definition.ptr(), definition.length(), pos))) {
-    } else if (pos != definition.length()) {
-      ret = OB_DESERIALIZE_ERROR;
-    }
   } else {
     ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
     ObJsonNode *root = nullptr;
@@ -210,8 +202,8 @@ int GraphSchema::from_catalog_definition(const ObString &definition)
     ObString name;
     ObArray<GraphElement> element_values;
     ObArray<GraphProperty> property_values;
-    // Strict JSON with unique keys: malformed/truncated JSON is never retried
-    // as binary. Reject embedded NULs rather than silently parsing a prefix.
+    // Require strict JSON with unique keys. Reject embedded NULs rather than
+    // silently parsing a prefix.
     if (MEMCHR(definition.ptr(), '\0', definition.length()) != nullptr) {
       ret = OB_DESERIALIZE_ERROR;
     } else if (OB_FAIL(ObJsonParser::get_tree(&allocator, definition, root,
