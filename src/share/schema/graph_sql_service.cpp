@@ -32,21 +32,16 @@ namespace schema
 {
 namespace
 {
-int fill_graph_columns(const GraphSchema &schema, ObIAllocator &allocator,
-                       ObDMLSqlSplicer &sql)
+int fill_graph_columns(const GraphSchema &schema, ObDMLSqlSplicer &sql)
 {
   int ret = OB_SUCCESS;
-  const int64_t size = schema.get_serialize_size();
-  char *buffer = static_cast<char *>(allocator.alloc(size));
-  int64_t pos = 0;
-  if (buffer == nullptr) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(schema.serialize(buffer, size, pos))) {
+  ObSqlString json;
+  if (OB_FAIL(schema.to_catalog_json(json))) {
   } else if (OB_FAIL(sql.add_pk_column("graph_id", schema.get_graph_id()))) {
   } else if (OB_FAIL(sql.add_column("database_id", schema.get_database_id()))) {
   } else if (OB_FAIL(sql.add_column("define_user_id", schema.get_define_user_id()))) {
   } else if (OB_FAIL(sql.add_column("name", ObHexEscapeSqlStr(schema.get_name())))) {
-  } else if (OB_FAIL(sql.add_column("definition", ObHexEscapeSqlStr(ObString(pos, buffer))))) {
+  } else if (OB_FAIL(sql.add_column("definition", ObHexEscapeSqlStr(json.string())))) {
   }
   return ret;
 }
@@ -81,10 +76,9 @@ int GraphSqlService::load_database_graphs(uint64_t database_id, ObISQLClient &cl
       while (OB_SUCC(ret) && OB_SUCC(ret = result->next())) {
         ObString definition;
         GraphSchema graph;
-        int64_t pos = 0;
         if (OB_FAIL(result->get_varchar("definition", definition))) {
-        } else if (OB_FAIL(graph.deserialize(definition.ptr(), definition.length(), pos))) {
-        } else if (pos != definition.length() || graph.get_database_id() != database_id) {
+        } else if (OB_FAIL(graph.from_catalog_definition(definition))) {
+        } else if (graph.get_database_id() != database_id) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(graphs.push_back(graph))) {
         }
@@ -181,12 +175,11 @@ int GraphSqlService::create_graph(const GraphSchema &schema, const ObString &ddl
                                  ObISQLClient &client)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
   ObDMLSqlSplicer columns;
   ObSqlString sql;
   if (!schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(fill_graph_columns(schema, allocator, columns))) {
+  } else if (OB_FAIL(fill_graph_columns(schema, columns))) {
   } else if (OB_FAIL(columns.splice_insert_sql(OB_ALL_PROPERTY_GRAPH_TNAME, sql))) {
   } else if (OB_FAIL(execute_graph_write(client, sql))) {
   } else if (OB_FAIL(write_history(schema, schema.get_schema_version(), false, client))) {
@@ -216,10 +209,9 @@ int GraphSqlService::write_history(const GraphSchema &schema, int64_t version,
                                   bool deleted, ObISQLClient &client)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
   ObDMLSqlSplicer columns;
   ObSqlString sql;
-  if (OB_FAIL(fill_graph_columns(schema, allocator, columns))) {
+  if (OB_FAIL(fill_graph_columns(schema, columns))) {
   } else if (OB_FAIL(columns.add_pk_column("schema_version", version))) {
   } else if (OB_FAIL(columns.add_column("is_deleted", deleted ? 1 : 0))) {
   } else if (OB_FAIL(columns.splice_insert_sql(OB_ALL_PROPERTY_GRAPH_HISTORY_TNAME, sql))) {

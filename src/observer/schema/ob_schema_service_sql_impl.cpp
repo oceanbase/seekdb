@@ -6341,14 +6341,13 @@ int ObSchemaServiceSQLImpl::fetch_graphs(ObISQLClient &sql_client,
             int64_t database_id = -1;
             int64_t define_user_id = -1;
             int64_t version = OB_INVALID_VERSION;
-            int64_t pos = 0;
             if (OB_FAIL(result->get_varchar("definition", definition))) {
             } else if (OB_FAIL(result->get_varchar("name", name))) {
             } else if (OB_FAIL(result->get_int("database_id", database_id))) {
             } else if (OB_FAIL(result->get_int("define_user_id", define_user_id))) {
             } else if (OB_FAIL(result->get_int("schema_version", version))) {
-            } else if (OB_FAIL(graph.deserialize(definition.ptr(), definition.length(), pos))) {
-            } else if (pos != definition.length() || graph.get_graph_id() != id
+            } else if (OB_FAIL(graph.from_catalog_definition(definition))) {
+            } else if (graph.get_graph_id() != id
                        || graph.get_database_id() != database_id || graph.get_define_user_id() != define_user_id
                        || graph.get_name() != name || graph.get_schema_version() != version) {
               ret = OB_ERR_UNEXPECTED;

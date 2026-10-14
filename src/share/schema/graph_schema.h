@@ -17,6 +17,7 @@
 #pragma once
 
 #include "lib/utility/utility.h"
+#include "lib/string/ob_sql_string.h"
 #include "share/schema/ob_schema_struct.h"
 
 namespace oceanbase
@@ -84,6 +85,10 @@ public:
   bool is_valid() const override;
   bool is_valid_definition() const;
   int assign(const GraphSchema &other);
+  // Catalog definitions are versioned JSON text, independent of UNIS used by
+  // in-memory/RPC schema objects. The reader also accepts pre-JSON catalogs.
+  int to_catalog_json(common::ObSqlString &json) const;
+  int from_catalog_definition(const common::ObString &definition);
   int64_t get_convert_size() const override;
   int set_name(const common::ObString &name) { return deep_copy_str(name, name_); }
   int set_elements(const common::ObIArray<GraphElement> &elements);

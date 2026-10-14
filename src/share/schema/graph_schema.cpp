@@ -19,6 +19,8 @@
 #include "share/schema/ob_table_schema.h"
 #include "share/schema/ob_column_schema.h"
 #include "share/schema/ob_schema_utils.h"
+#include "common/json_type/ob_json_parse.h"
+#include "common/json_type/ob_json_tree.h"
 
 namespace oceanbase
 {
@@ -27,6 +29,263 @@ namespace share
 namespace schema
 {
 using namespace common;
+
+namespace
+{
+constexpr uint64_t GRAPH_CATALOG_FORMAT_VERSION = 1;
+
+int append_graph_json_string(ObSqlString &json, const ObString &value)
+{
+  int ret = OB_SUCCESS;
+  ObJsonString node(value);
+  ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
+  ObJsonBuffer buffer(&allocator);
+  if (OB_FAIL(node.print(buffer, true))) {
+  } else if (OB_FAIL(json.append(buffer.ptr(), buffer.length()))) {
+  }
+  return ret;
+}
+
+int append_graph_json_columns(ObSqlString &json, const uint64_t *columns, int64_t count)
+{
+  int ret = json.append("[");
+  for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+    ret = json.append_fmt("%s%lu", i == 0 ? "" : ",", columns[i]);
+  }
+  if (OB_SUCC(ret)) { ret = json.append("]"); }
+  return ret;
+}
+
+int graph_json_field(const ObIJsonBase &object, const char *key, ObIJsonBase *&value)
+{
+  int ret = OB_SUCCESS;
+  value = nullptr;
+  if (object.json_type() != ObJsonNodeType::J_OBJECT) {
+    ret = OB_DESERIALIZE_ERROR;
+  } else if (OB_FAIL(object.get_object_value(ObString::make_string(key), value))) {
+    if (ret == OB_SEARCH_NOT_FOUND) { ret = OB_DESERIALIZE_ERROR; }
+  } else if (value == nullptr) {
+    ret = OB_DESERIALIZE_ERROR;
+  }
+  return ret;
+}
+
+int graph_json_uint(const ObIJsonBase &node, uint64_t &value)
+{
+  int ret = OB_SUCCESS;
+  if (node.json_type() == ObJsonNodeType::J_UINT) {
+    value = node.get_uint();
+  } else if (node.json_type() == ObJsonNodeType::J_INT && node.get_int() >= 0) {
+    value = static_cast<uint64_t>(node.get_int());
+  } else {
+    // Do not round floating-point IDs or coerce strings/null into identities.
+    ret = OB_DESERIALIZE_ERROR;
+  }
+  return ret;
+}
+
+int graph_json_uint_field(const ObIJsonBase &object, const char *key, uint64_t &value)
+{
+  int ret = OB_SUCCESS;
+  ObIJsonBase *node = nullptr;
+  if (OB_FAIL(graph_json_field(object, key, node))) {
+  } else if (OB_FAIL(graph_json_uint(*node, value))) {
+  }
+  return ret;
+}
+
+int graph_json_string_field(const ObIJsonBase &object, const char *key, ObString &value)
+{
+  int ret = OB_SUCCESS;
+  ObIJsonBase *node = nullptr;
+  if (OB_FAIL(graph_json_field(object, key, node))) {
+  } else if (node->json_type() != ObJsonNodeType::J_STRING
+             || node->get_data_length() > INT32_MAX) {
+    ret = OB_DESERIALIZE_ERROR;
+  } else {
+    value.assign_ptr(node->get_data(), node->get_data_length());
+  }
+  return ret;
+}
+
+int graph_json_array_field(const ObIJsonBase &object, const char *key, ObIJsonBase *&array)
+{
+  int ret = graph_json_field(object, key, array);
+  if (OB_SUCC(ret) && array->json_type() != ObJsonNodeType::J_ARRAY) {
+    ret = OB_DESERIALIZE_ERROR;
+  }
+  return ret;
+}
+
+int graph_json_columns(const ObIJsonBase &object, const char *key,
+                       uint64_t *columns, int64_t &count)
+{
+  int ret = OB_SUCCESS;
+  ObIJsonBase *array = nullptr;
+  if (OB_FAIL(graph_json_array_field(object, key, array))) {
+  } else if (array->element_count() == 0
+             || array->element_count() > OB_USER_MAX_ROWKEY_COLUMN_NUMBER) {
+    ret = OB_DESERIALIZE_ERROR;
+  } else {
+    count = array->element_count();
+    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+      ObIJsonBase *value = nullptr;
+      if (OB_FAIL(array->get_array_element(i, value))) {
+      } else if (value == nullptr) {
+        ret = OB_DESERIALIZE_ERROR;
+      } else if (OB_FAIL(graph_json_uint(*value, columns[i]))) {
+      }
+    }
+  }
+  return ret;
+}
+} // namespace
+
+int GraphSchema::to_catalog_json(ObSqlString &json) const
+{
+  int ret = OB_SUCCESS;
+  json.reset();
+  if (!is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(json.append_fmt(
+      "{\"format_version\":%lu,\"graph_id\":%lu,\"database_id\":%lu,"
+      "\"define_user_id\":%lu,\"schema_version\":%ld,\"name\":",
+      GRAPH_CATALOG_FORMAT_VERSION, graph_id_, database_id_, define_user_id_, schema_version_))) {
+  } else if (OB_FAIL(append_graph_json_string(json, name_))) {
+  } else if (OB_FAIL(json.append(",\"elements\":["))) {
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < elements_.count(); ++i) {
+    const GraphElement &e = elements_.at(i);
+    if (OB_FAIL(json.append_fmt("%s{\"kind\":\"%s\",\"id\":%lu,\"table_id\":%lu,\"label\":",
+                               i == 0 ? "" : ",", e.is_vertex() ? "vertex" : "edge",
+                               e.id_, e.table_id_))) {
+    } else if (OB_FAIL(append_graph_json_string(json, e.label_))) {
+    } else if (OB_FAIL(json.append(",\"key_columns\":"))) {
+    } else if (OB_FAIL(append_graph_json_columns(json, e.key_columns_, e.key_count_))) {
+    }
+    if (OB_SUCC(ret) && !e.is_vertex()) {
+      if (OB_FAIL(json.append_fmt(",\"source_id\":%lu,\"destination_id\":%lu,\"source_columns\":",
+                                  e.source_id_, e.destination_id_))) {
+      } else if (OB_FAIL(append_graph_json_columns(json, e.source_columns_, e.source_key_count_))) {
+      } else if (OB_FAIL(json.append(",\"destination_columns\":"))) {
+      } else if (OB_FAIL(append_graph_json_columns(json, e.destination_columns_, e.destination_key_count_))) {
+      }
+    }
+    if (OB_SUCC(ret)) { ret = json.append("}"); }
+  }
+  if (OB_SUCC(ret)) { ret = json.append("],\"properties\":["); }
+  for (int64_t i = 0; OB_SUCC(ret) && i < properties_.count(); ++i) {
+    const GraphProperty &p = properties_.at(i);
+    if (OB_FAIL(json.append_fmt("%s{\"element_id\":%lu,\"column_id\":%lu,\"name\":",
+                               i == 0 ? "" : ",", p.element_id_, p.column_id_))) {
+    } else if (OB_FAIL(append_graph_json_string(json, p.name_))) {
+    } else if (OB_FAIL(json.append("}"))) {
+    }
+  }
+  if (OB_SUCC(ret)) { ret = json.append("]}"); }
+  return ret;
+}
+
+int GraphSchema::from_catalog_definition(const ObString &definition)
+{
+  int ret = OB_SUCCESS;
+  GraphSchema decoded;
+  if (definition.empty()) {
+    ret = OB_DESERIALIZE_ERROR;
+  } else if (static_cast<unsigned char>(definition.ptr()[0]) == 1) {
+    // The unreleased binary catalog used UNIS version 1. Read it without
+    // rewriting during schema refresh; all subsequent catalog writes use JSON.
+    int64_t pos = 0;
+    if (OB_FAIL(decoded.deserialize(definition.ptr(), definition.length(), pos))) {
+    } else if (pos != definition.length()) {
+      ret = OB_DESERIALIZE_ERROR;
+    }
+  } else {
+    ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
+    ObJsonNode *root = nullptr;
+    ObIJsonBase *elements = nullptr;
+    ObIJsonBase *properties = nullptr;
+    uint64_t format_version = 0;
+    uint64_t schema_version = 0;
+    ObString name;
+    ObArray<GraphElement> element_values;
+    ObArray<GraphProperty> property_values;
+    // Strict JSON with unique keys: malformed/truncated JSON is never retried
+    // as binary. Reject embedded NULs rather than silently parsing a prefix.
+    if (MEMCHR(definition.ptr(), '\0', definition.length()) != nullptr) {
+      ret = OB_DESERIALIZE_ERROR;
+    } else if (OB_FAIL(ObJsonParser::get_tree(&allocator, definition, root,
+               ObJsonParser::JSN_STRICT_FLAG | ObJsonParser::JSN_UNIQUE_FLAG))) {
+    } else if (root == nullptr) {
+      ret = OB_DESERIALIZE_ERROR;
+    } else if (OB_FAIL(graph_json_uint_field(*root, "format_version", format_version))) {
+    } else if (format_version != GRAPH_CATALOG_FORMAT_VERSION) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "property graph catalog JSON format version");
+    } else if (OB_FAIL(graph_json_uint_field(*root, "graph_id", decoded.graph_id_))) {
+    } else if (OB_FAIL(graph_json_uint_field(*root, "database_id", decoded.database_id_))) {
+    } else if (OB_FAIL(graph_json_uint_field(*root, "define_user_id", decoded.define_user_id_))) {
+    } else if (OB_FAIL(graph_json_uint_field(*root, "schema_version", schema_version))) {
+    } else if (schema_version == 0 || schema_version > INT64_MAX) {
+      ret = OB_DESERIALIZE_ERROR;
+    } else if (OB_FAIL(graph_json_string_field(*root, "name", name))) {
+    } else if (OB_FAIL(decoded.set_name(name))) {
+    } else if (OB_FAIL(graph_json_array_field(*root, "elements", elements))) {
+    } else if (OB_FAIL(graph_json_array_field(*root, "properties", properties))) {
+    } else {
+      decoded.schema_version_ = static_cast<int64_t>(schema_version);
+    }
+    for (uint64_t i = 0; OB_SUCC(ret) && i < elements->element_count(); ++i) {
+      GraphElement e;
+      ObString kind;
+      ObIJsonBase *node = nullptr;
+      if (OB_FAIL(elements->get_array_element(i, node))) {
+      } else if (node == nullptr) {
+        ret = OB_DESERIALIZE_ERROR;
+      } else if (OB_FAIL(graph_json_string_field(*node, "kind", kind))) {
+      } else if (kind != "vertex" && kind != "edge") {
+        ret = OB_DESERIALIZE_ERROR;
+      } else if (OB_FAIL(graph_json_uint_field(*node, "id", e.id_))) {
+      } else if (OB_FAIL(graph_json_uint_field(*node, "table_id", e.table_id_))) {
+      } else if (OB_FAIL(graph_json_string_field(*node, "label", e.label_))) {
+      } else if (OB_FAIL(graph_json_columns(*node, "key_columns", e.key_columns_, e.key_count_))) {
+      }
+      if (OB_SUCC(ret) && kind == "edge") {
+        if (OB_FAIL(graph_json_uint_field(*node, "source_id", e.source_id_))) {
+        } else if (e.source_id_ == OB_INVALID_ID) {
+          ret = OB_DESERIALIZE_ERROR;
+        } else if (OB_FAIL(graph_json_uint_field(*node, "destination_id", e.destination_id_))) {
+        } else if (OB_FAIL(graph_json_columns(*node, "source_columns", e.source_columns_, e.source_key_count_))) {
+        } else if (OB_FAIL(graph_json_columns(*node, "destination_columns", e.destination_columns_, e.destination_key_count_))) {
+        }
+      }
+      if (OB_SUCC(ret)) { ret = element_values.push_back(e); }
+    }
+    for (uint64_t i = 0; OB_SUCC(ret) && i < properties->element_count(); ++i) {
+      GraphProperty p;
+      ObIJsonBase *node = nullptr;
+      if (OB_FAIL(properties->get_array_element(i, node))) {
+      } else if (node == nullptr) {
+        ret = OB_DESERIALIZE_ERROR;
+      } else if (OB_FAIL(graph_json_uint_field(*node, "element_id", p.element_id_))) {
+      } else if (OB_FAIL(graph_json_uint_field(*node, "column_id", p.column_id_))) {
+      } else if (OB_FAIL(graph_json_string_field(*node, "name", p.name_))) {
+      } else if (OB_FAIL(property_values.push_back(p))) {
+      }
+    }
+    if (OB_SUCC(ret)) { ret = decoded.set_elements(element_values); }
+    if (OB_SUCC(ret)) { ret = decoded.set_properties(property_values); }
+  }
+  if (OB_SUCC(ret)) {
+    if (!decoded.is_valid()) {
+      ret = OB_DESERIALIZE_ERROR;
+    } else {
+      // Commit only a completely validated definition, with owned strings.
+      ret = assign(decoded);
+    }
+  }
+  return ret;
+}
 
 OB_SERIALIZE_MEMBER(GraphProperty, element_id_, column_id_, name_);
 
