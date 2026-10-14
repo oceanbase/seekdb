@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_SQL_ENGINE_GRAPH_DDL_EXECUTOR_H_
-#define OCEANBASE_SQL_ENGINE_GRAPH_DDL_EXECUTOR_H_
+#pragma once
 namespace oceanbase
 {
 namespace sql
@@ -29,4 +28,3 @@ public:
 };
 } // namespace sql
 } // namespace oceanbase
-#endif

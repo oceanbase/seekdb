@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_SQL_RESOLVER_GRAPH_SHOW_RESOLVER_H_
-#define OCEANBASE_SQL_RESOLVER_GRAPH_SHOW_RESOLVER_H_
+#pragma once
 #include "sql/resolver/dml/ob_select_resolver.h"
 namespace oceanbase
 {
@@ -29,4 +28,3 @@ public:
 };
 } // namespace sql
 } // namespace oceanbase
-#endif

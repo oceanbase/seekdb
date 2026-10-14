@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_SHARE_SCHEMA_GRAPH_SQL_SERVICE_H_
-#define OCEANBASE_SHARE_SCHEMA_GRAPH_SQL_SERVICE_H_
+#pragma once
 
 #include "share/schema/ob_ddl_sql_service.h"
 #include "share/schema/graph_schema.h"
@@ -53,4 +52,3 @@ private:
 } // namespace schema
 } // namespace share
 } // namespace oceanbase
-#endif

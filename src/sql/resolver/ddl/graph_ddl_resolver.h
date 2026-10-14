@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_SQL_RESOLVER_GRAPH_DDL_RESOLVER_H_
-#define OCEANBASE_SQL_RESOLVER_GRAPH_DDL_RESOLVER_H_
+#pragma once
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
 #include "sql/resolver/ddl/graph_ddl_stmt.h"
 namespace oceanbase
@@ -40,4 +39,3 @@ private:
 };
 } // namespace sql
 } // namespace oceanbase
-#endif
