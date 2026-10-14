@@ -871,6 +871,20 @@ int GraphFeedbackLoopLogOp::can_prune_duplicate_states(bool &can_prune)
         // A filter pushed onto the loop itself also runs once per output path.
         // Native scan eligibility does not cover these post-traversal filters.
         ret = node->ObLogicalOperator::get_op_exprs(exprs);
+      } else if (node->get_type() == LOG_SORT) {
+        // This proof also runs during code generation and EXPLAIN. Sort's
+        // get_op_exprs() creates encoded sort keys, so calling it here can
+        // replace the key used by CG after the expression frame is built.
+        // Inspect the original keys and existing metadata without changing
+        // the sort. Encoded keys are derived from these same expressions.
+        ObLogSort *sort = static_cast<ObLogSort *>(node);
+        if (OB_FAIL(sort->ObLogicalOperator::get_op_exprs(exprs))) {
+        } else if (OB_FAIL(sort->get_sort_exprs(exprs))) {
+        } else if (sort->get_topn_expr() != nullptr
+                   && OB_FAIL(exprs.push_back(sort->get_topn_expr()))) {
+        } else if (sort->get_part_cnt() > 0
+                   && OB_FAIL(exprs.push_back(sort->get_hash_sortkey().expr_))) {
+        }
       } else {
         ret = node->get_op_exprs(exprs);
       }

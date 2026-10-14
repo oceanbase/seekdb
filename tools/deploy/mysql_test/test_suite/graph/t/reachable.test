@@ -71,6 +71,24 @@ while ($passes)
   DEALLOCATE PREPARE reachable_cached;
   --dec $passes
 }
+# Force encoded sorting even on this small fixture. Pruning eligibility is
+# inspected after expression-frame allocation and must not create new keys.
+--echo encoded_sort_pruning_is_read_only
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='reach_encoded'
+SELECT /*+ OPT_PARAM('ENABLE_NEWSORT' 'true') */ DISTINCT g.*
+FROM GRAPH_TABLE(graph_reach MATCH
+ (a IS node WHERE a.id=1)-[e IS link WHERE e.kind=1]->{3,4}(b IS node WHERE b.id=1)
+ COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g ORDER BY hops;
+--enable_result_log
+SELECT /*+ OPT_PARAM('ENABLE_NEWSORT' 'true') */ DISTINCT g.*
+FROM GRAPH_TABLE(graph_reach MATCH
+ (a IS node WHERE a.id=1)-[e IS link WHERE e.kind=1]->{3,4}(b IS node WHERE b.id=1)
+ COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g ORDER BY hops;
+SELECT /*+ OPT_PARAM('ENABLE_NEWSORT' 'false') */ DISTINCT g.*
+FROM GRAPH_TABLE(graph_reach MATCH
+ (a IS node WHERE a.id=1)-[e IS link WHERE e.kind=1]->{3,4}(b IS node WHERE b.id=1)
+ COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g ORDER BY hops;
 --echo duplicate_sensitive_consumers_keep_paths
 --disable_result_log
 DELETE FROM plan_table;
