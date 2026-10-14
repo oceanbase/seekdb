@@ -174,6 +174,70 @@ async def contract_checks():
             await item.drop()
 
 
+async def snapshot_export_checks():
+    workspace = "snapshot_export_" + uuid.uuid4().hex
+    reader, writer = storage(workspace), storage(workspace)
+    sibling = storage(workspace, "other")
+    for item in (reader, writer, sibling):
+        await item.initialize()
+    original = reader._all_nodes
+    reached, resume = threading.Event(), threading.Event()
+    task = None
+    try:
+        assert await reader.export_snapshot() == {"nodes": [], "edges": []}
+        keys = ["", "A", "a", "中文"]
+        await writer.upsert_nodes_batch([(key, {"version": 1, "source_id": "doc1"}) for key in keys])
+        await writer.upsert_edges_batch([("", "A", {"version": 1, "source_id": "chunk1"}),
+                                         ("A", "A", {"legacy": True})])
+        await sibling.upsert_edge("hidden", "A", {"version": 9})
+        expected = {"nodes": await reader.get_all_nodes(), "edges": await reader.get_all_edges()}
+        assert [row["id"] for row in expected["nodes"]] == keys
+        assert len(expected["edges"]) == 2
+        assert await reader.export_snapshot() == expected
+
+        def paused(cursor):
+            rows = original(cursor)  # Establish the real DB snapshot first.
+            reached.set()
+            if not resume.wait(10):
+                raise RuntimeError("snapshot export resume timed out")
+            return rows
+        reader._all_nodes = paused
+        task = asyncio.create_task(reader.export_snapshot())
+        assert await asyncio.to_thread(reached.wait, 10), "nodes were not read"
+        # Delete both old edges, then create different endpoints while the
+        # reader is paused. Both commits must finish before its edge SELECT.
+        await writer.delete_node("A")
+        await writer.upsert_edge("new", "中文", {"version": 2, "source_id": "chunk2"})
+        resume.set()
+        assert await task == expected, "export combined different graph snapshots"
+        reader._all_nodes = original
+        current = await reader.export_snapshot()
+        assert {row["id"] for row in current["nodes"]} == {"", "a", "中文", "new"}
+        assert len(current["edges"]) == 1 and current["edges"][0]["version"] == 2
+
+        original_edges = reader._all_edges
+        def fail_edges(cursor):
+            raise RuntimeError("intentional export failure")
+        reader._all_edges = fail_edges
+        try:
+            try:
+                await reader.export_snapshot()
+                raise AssertionError("partial snapshot returned")
+            except RuntimeError as error:
+                assert str(error) == "intentional export failure"
+        finally:
+            reader._all_edges = original_edges
+        assert await reader.export_snapshot() == current
+        print("adapter snapshot export: passed", flush=True)
+    finally:
+        resume.set()
+        if task is not None:
+            await asyncio.gather(task, return_exceptions=True)
+        reader._all_nodes = original
+        await reader.drop()
+        await sibling.drop()
+
+
 async def concurrent_batch_checks():
     workspace = "batch_snapshot_" + uuid.uuid4().hex
     reader, first, second = [storage(workspace) for _ in range(3)]
@@ -443,6 +507,7 @@ async def retry_checks():
 async def main():
     await contract_checks()
     await retry_checks()
+    await snapshot_export_checks()
     await concurrent_batch_checks()
     await product_checks()
 

@@ -20,8 +20,10 @@ not the event loop. A cancelled caller waits for that worker's terminal outcome;
 no write continues after the call returns. Cancellation/transport loss can still
 mean a committed write: mutations are idempotent and may safely be retried.
 No cross-storage (graph/vector/document) atomicity is promised.
-Keyset iterators use one snapshot per page; a consistent export requires quiescent
-writers. Labels are bounded to 2048 UTF-8 bytes, scopes to 512 bytes and graph-view
+Keyset iterators use one snapshot per page; export_snapshot() reads nodes and
+edges together in one transaction for offline community analysis. It materializes
+the whole namespace in client memory; it is not a streaming or incremental export.
+Labels are bounded to 2048 UTF-8 bytes, scopes to 512 bytes and graph-view
 depth to 16. These limits fail explicitly; graph-view truncation is reported in
 LightRAG's is_truncated field, not silently applied to ordinary graph retrieval.
 """
@@ -407,12 +409,13 @@ class SeekDBGraphStorage(BaseGraphStorage):
             return [_label(row["node_key"]) for row in cursor.fetchall()]
         return await self._run(read)
 
+    def _all_nodes(self, cursor):
+        cursor.execute("SELECT node_key,attributes FROM lr_seekdb_nodes WHERE scope_id=%s ORDER BY node_key",
+                       (self._scope,))
+        return [{**_json(row["attributes"]), "id": _label(row["node_key"])} for row in cursor.fetchall()]
+
     async def get_all_nodes(self):
-        def read(cursor):
-            cursor.execute("SELECT node_key,attributes FROM lr_seekdb_nodes WHERE scope_id=%s ORDER BY node_key",
-                           (self._scope,))
-            return [{**_json(row["attributes"]), "id": _label(row["node_key"])} for row in cursor.fetchall()]
-        return await self._run(read)
+        return await self._run(self._all_nodes)
 
     def _all_edges(self, cursor, after=None, limit=None):
         sql = ("SELECT a.node_key AS src,b.node_key AS dst,e.attributes FROM lr_seekdb_edges e "
@@ -431,6 +434,24 @@ class SeekDBGraphStorage(BaseGraphStorage):
 
     async def get_all_edges(self):
         return await self._run(self._all_edges)
+
+    async def export_snapshot(self):
+        """Return {nodes, edges} from one namespace and one RR snapshot.
+
+        Adapter-specific extension, not a LightRAG BaseGraphStorage method.
+        Uses the get_all_nodes/get_all_edges record shapes, including isolated
+        nodes and stored source/version attributes. Undirected relationships
+        retain the adapter's single canonical edge record, without mirroring.
+        No truncation or partial result is returned on failure. This snapshot
+        covers graph storage only, not external vector/document stores, and
+        carries no resumable snapshot token. Memory cost is O(nodes + edges +
+        attributes); use only for namespaces that fit in client memory.
+        """
+        def read(cursor):
+            # Do not compose the public async getters: each owns a different
+            # transaction and may see a different graph during concurrent writes.
+            return {"nodes": self._all_nodes(cursor), "edges": self._all_edges(cursor)}
+        return await self._run(read)
 
     async def iter_edges(self, batch_size):
         if batch_size <= 0:
