@@ -393,8 +393,8 @@ bool GraphElement::references_column(uint64_t column_id) const
   return found;
 }
 
-GraphSchema::GraphSchema() : ObSchema() { reset(); }
-GraphSchema::GraphSchema(ObIAllocator *allocator) : ObSchema(allocator) { reset(); }
+GraphSchema::GraphSchema() = default;
+GraphSchema::GraphSchema(ObIAllocator *allocator) : ObSchema(allocator) {}
 
 void GraphSchema::reset()
 {

@@ -117,13 +117,13 @@ public:
                K_(name), K_(elements), K_(properties));
 
 private:
-  uint64_t graph_id_;
-  uint64_t database_id_;
-  uint64_t define_user_id_;
-  int64_t schema_version_;
-  common::ObString name_;
-  common::ObArrayHelper<GraphElement> elements_;
-  common::ObArrayHelper<GraphProperty> properties_;
+  uint64_t graph_id_ = OB_INVALID_ID;
+  uint64_t database_id_ = OB_INVALID_ID;
+  uint64_t define_user_id_ = OB_INVALID_ID;
+  int64_t schema_version_ = OB_INVALID_VERSION;
+  common::ObString name_{};
+  common::ObArrayHelper<GraphElement> elements_{};
+  common::ObArrayHelper<GraphProperty> properties_{};
   DISALLOW_COPY_AND_ASSIGN(GraphSchema);
 };
 // Graph definitions are immutable once published in a Schema manager. Updates
