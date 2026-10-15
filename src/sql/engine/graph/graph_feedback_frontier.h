@@ -62,8 +62,10 @@ public:
   int get_frontier_path(
       int64_t index,
       const common::ObIArray<GraphPathState> *&path);
-  int64_t get_hop() const { return hop_ + (expanding_ ? 1 : 0); }
-  int64_t get_frontier_count() const { return output_state_ids().count(); }
+  // Visible output belongs to the next hop while expansion is in progress.
+  int64_t get_output_hop() const { return hop_ + (expanding_ ? 1 : 0); }
+  // Cumulative states of the visible level, not the latest call's batch size.
+  int64_t get_output_state_count() const { return output_state_ids().count(); }
   bool is_expanding() const { return expanding_; }
   int64_t get_path_state_count() const { return state_store_.count(); }
   int64_t get_peak_memory() const { return peak_memory_bytes_; }
@@ -72,13 +74,21 @@ public:
   const GraphExpandStats &get_last_hop_stats() const
   { return hop_stats_.last(); }
   GraphExpandStats get_pending_hop_stats() const;
-  bool empty() const { return output_state_ids().empty(); }
+  // Empty output does not imply traversal completion while is_expanding().
+  bool output_empty() const { return output_state_ids().empty(); }
 
   // Clears path history and both frontier buffers for close, rescan, or any
   // terminal error. The referenced GraphExpand object remains reusable.
   void reset();
 
 private:
+  // These helpers share the controller's state; failures are reset by expand().
+  int begin_hop(GraphPathDirection direction, GraphPathMode path_mode,
+                bool prune_duplicate_states);
+  int finish_hop();
+  int accept_extension(const GraphExpandOutput &extension, GraphPathMode path_mode,
+                       bool prune_duplicate_states, bool &accepted) const;
+  int save_extension(const GraphExpandOutput &extension, bool prune_duplicate_states);
   int consume_input_batch(GraphPathDirection direction,
                           GraphPathMode path_mode,
                           bool prune_duplicate_states,

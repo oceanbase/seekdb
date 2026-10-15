@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/graph/graph_expand.h"
-#include "common/wide_integer/ob_wide_integer.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "share/ob_errno.h"
 #include "sql/engine/expr/ob_expr_util.h"
@@ -69,239 +68,22 @@ int64_t saturated_nonnegative_add(int64_t left, int64_t right)
 
 } // namespace
 
-GraphIdentityIndex::GraphIdentityIndex(ObIAllocator &allocator)
-    : bucket_heads_(OB_MALLOC_NORMAL_BLOCK_SIZE,
-                    ModulePageAllocator(allocator, "GraphIdIndex")),
-      entries_(OB_MALLOC_NORMAL_BLOCK_SIZE,
-               ModulePageAllocator(allocator, "GraphIdIndex"))
-{
-}
-
-int GraphIdentityIndex::init(int64_t expected_count)
-{
-  int ret = OB_SUCCESS;
-  reset();
-  if (OB_UNLIKELY(expected_count < 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid graph identity count", K(ret), K(expected_count));
-  } else {
-    const int64_t bucket_count = std::max<int64_t>(1, expected_count);
-    if (OB_FAIL(bucket_heads_.prepare_allocate(bucket_count))) {
-      LOG_WARN("failed to allocate graph identity buckets", K(ret),
-               K(bucket_count));
-    } else {
-      for (int64_t i = 0; i < bucket_heads_.count(); ++i) {
-        bucket_heads_.at(i) = -1;
-      }
-    }
-  }
-  return ret;
-}
-
-int GraphIdentityIndex::calc_compatible_hash(
-    const GraphElementIdentity &identity,
-    uint64_t &hash) const
-{
-  int ret = OB_SUCCESS;
-  hash = do_hash(identity.graph_id_, 0);
-  hash = do_hash(identity.element_id_, hash);
-  for (int64_t i = 0;
-       OB_SUCC(ret) && i < identity.rowkey_.get_obj_cnt(); ++i) {
-    const ObObj &key = identity.rowkey_.get_obj_ptr()[i];
-    if (key.is_decimal_int()) {
-      // Graph endpoint compatibility follows ordinary key comparison and
-      // permits DECIMAL_INT <-> NUMBER as well as different decimal scales.
-      // ObObj's raw hash includes the concrete type and decimal scale, so
-      // normalize this numeric domain before choosing a hash bucket. The
-      // index still uses the full typed identity for collision equality.
-      ObNumStackOnceAlloc number_allocator;
-      number::ObNumber number;
-      ObObj normalized;
-      if (OB_FAIL(wide::to_number(key.get_decimal_int(), key.get_int_bytes(),
-                                  key.get_scale(), number_allocator, number))) {
-        LOG_WARN("failed to normalize graph decimal identity", K(ret), K(key));
-      } else {
-        normalized.set_number(ObNumberType, number);
-        ret = normalized.hash(hash, hash);
-      }
-    } else if (key.get_type_class() == ObNumberTC) {
-      // Signed and unsigned NUMBER values share comparison semantics for
-      // non-negative values. Hash both with the same canonical type so a
-      // legal NUMBER <-> DECIMAL_INT endpoint mapping reaches one bucket.
-      ObObj normalized;
-      normalized.set_number(ObNumberType, key.get_number());
-      ret = normalized.hash(hash, hash);
-    } else if (key.get_type_class() == ObDoubleTC) {
-      // Fixed-scale DOUBLE comparison is tolerance based and can compare
-      // equal across different declared scales. No value-dependent hash can
-      // preserve that non-exact equality for every boundary value, so keep
-      // DOUBLE keys in a type bucket and let typed equality resolve collisions.
-      hash = do_hash(key.get_type(), hash);
-    } else {
-      ret = key.hash(hash, hash);
-    }
-  }
-  return ret;
-}
-
-int GraphIdentityIndex::get_bucket(
-    const GraphElementIdentity &identity,
-    int64_t &bucket,
-    int64_t binding_id) const
-{
-  int ret = OB_SUCCESS;
-  uint64_t hash = 0;
-  bucket = -1;
-  if (bucket_heads_.empty()) {
-    ret = OB_NOT_INIT;
-  } else if (OB_FAIL(calc_compatible_hash(identity, hash))) {
-    LOG_WARN("failed to hash graph identity", K(ret), K(identity));
-  } else {
-    bucket = static_cast<int64_t>(do_hash(binding_id, hash) % bucket_heads_.count());
-  }
-  return ret;
-}
-
-int GraphIdentityIndex::find(const GraphElementIdentity &identity,
-                             int64_t &entry_index,
-                             bool &found,
-                             int64_t binding_id) const
-{
-  int ret = OB_SUCCESS;
-  int64_t visited = 0;
-  entry_index = -1;
-  found = false;
-  int64_t bucket = -1;
-  if (OB_UNLIKELY(!identity.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid graph identity lookup", K(ret), K(identity));
-  } else if (OB_FAIL(get_bucket(identity, bucket, binding_id))) {
-    LOG_WARN("failed to locate graph identity bucket", K(ret), K(identity));
-  } else {
-    if (OB_UNLIKELY(bucket < 0 || bucket >= bucket_heads_.count())) {
-      ret = OB_NOT_INIT;
-      LOG_WARN("graph identity index is not initialized", K(ret), K(bucket));
-    } else {
-      int64_t current = bucket_heads_.at(bucket);
-      while (OB_SUCC(ret) && !found && current >= 0) {
-        if (OB_UNLIKELY(current >= entries_.count()
-                        || visited++ >= entries_.count())) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("corrupted graph identity hash chain", K(ret), K(current),
-                   K(visited), "entry_count", entries_.count());
-        } else if (entries_.at(current).binding_id_ == binding_id
-                   && entries_.at(current).identity_ == identity) {
-          entry_index = current;
-          found = true;
-        } else {
-          current = entries_.at(current).next_entry_;
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int GraphIdentityIndex::get_or_insert(
-    const GraphElementIdentity &identity,
-    int64_t &entry_index,
-    bool &inserted,
-    int64_t binding_id)
-{
-  int ret = OB_SUCCESS;
-  bool found = false;
-  inserted = false;
-  if (OB_FAIL(find(identity, entry_index, found, binding_id))) {
-  } else if (found) {
-  } else if (OB_FAIL(grow_buckets())) {
-  } else {
-    int64_t bucket = -1;
-    if (OB_FAIL(get_bucket(identity, bucket, binding_id))) {
-      LOG_WARN("failed to locate graph identity bucket", K(ret), K(identity));
-    } else {
-      Entry entry;
-      entry.identity_ = identity;
-      entry.binding_id_ = binding_id;
-      entry.next_entry_ = bucket_heads_.at(bucket);
-      if (OB_FAIL(entries_.push_back(entry))) {
-        LOG_WARN("failed to append graph identity entry", K(ret), K(identity));
-      } else {
-        entry_index = entries_.count() - 1;
-        bucket_heads_.at(bucket) = entry_index;
-        inserted = true;
-      }
-    }
-  }
-  return ret;
-}
-
-int GraphIdentityIndex::grow_buckets()
-{
-  int ret = OB_SUCCESS;
-  // Reachable frontiers can grow far beyond their input level's size. Keep a
-  // bounded load factor instead of degrading to linear chains at a high-degree
-  // vertex. Entry positions (used by existing adjacency callers) stay stable.
-  if (entries_.count() >= bucket_heads_.count()) {
-    if (bucket_heads_.count() > INT64_MAX / 2) {
-      ret = OB_SIZE_OVERFLOW;
-    } else if (OB_FAIL(bucket_heads_.prepare_allocate(bucket_heads_.count() * 2))) {
-    } else {
-      for (int64_t i = 0; i < bucket_heads_.count(); ++i) {
-        bucket_heads_.at(i) = -1;
-      }
-      for (int64_t i = 0; OB_SUCC(ret) && i < entries_.count(); ++i) {
-        Entry &entry = entries_.at(i);
-        int64_t bucket = -1;
-        if (OB_FAIL(get_bucket(entry.identity_, bucket, entry.binding_id_))) {
-        } else {
-          entry.next_entry_ = bucket_heads_.at(bucket);
-          bucket_heads_.at(bucket) = i;
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-void GraphIdentityIndex::reset()
-{
-  bucket_heads_.reset();
-  entries_.reset();
-}
-
 GraphExpand::GraphExpand(ObIAllocator &allocator,
                          IGraphExpandAccess &access,
                          int64_t page_size,
                          int64_t memory_limit)
   : access_(access),
     identity_allocator_(allocator),
-    source_input_index_(allocator),
+    input_bindings_(allocator, access, memory_limit),
     existing_source_index_(allocator),
     page_size_(page_size),
     memory_limit_(memory_limit),
-    fixed_memory_bytes_(0),
-    direction_(GraphPathDirection::OUT),
-    inputs_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "GraphExpand")),
-    input_key_slots_(OB_MALLOC_NORMAL_BLOCK_SIZE,
-                     ModulePageAllocator(allocator, "GraphExpand")),
-    source_identities_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "GraphExpand")),
-    source_input_groups_(OB_MALLOC_NORMAL_BLOCK_SIZE,
-                         ModulePageAllocator(allocator, "GraphExpand")),
-    next_input_indices_(OB_MALLOC_NORMAL_BLOCK_SIZE,
-                        ModulePageAllocator(allocator, "GraphExpand")),
     source_lookup_batch_(OB_MALLOC_NORMAL_BLOCK_SIZE,
                          ModulePageAllocator(allocator, "GraphExpand")),
     source_lookup_results_(OB_MALLOC_NORMAL_BLOCK_SIZE,
                            ModulePageAllocator(allocator, "GraphExpand")),
     existing_sources_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "GraphExpand")),
-    edge_page_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "GraphExpand")),
-    target_identities_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "GraphExpand")),
-    existing_targets_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator, "GraphExpand")),
-    edge_index_(0),
-    input_index_(-1),
-    has_after_edge_(false),
-    end_(false),
-    is_open_(false)
+    edge_page_(allocator)
 {
 }
 
@@ -322,188 +104,20 @@ int GraphExpand::deep_copy_identity(const GraphElementIdentity &source,
   return ret;
 }
 
-int GraphExpand::deep_copy_inputs(const ObIArray<GraphExpandInput> &inputs)
-{
-  int ret = OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && i < inputs.count(); ++i) {
-    GraphExpandInput stable;
-    stable.binding_id_ = inputs.at(i).binding_id_;
-    stable.path_state_id_ = inputs.at(i).path_state_id_;
-    if (i % GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE == 0 && OB_FAIL(access_.check_status())) {
-    } else if (OB_FAIL(deep_copy_identity(inputs.at(i).source_identity_,
-                                   stable.source_identity_))) {
-    } else if (OB_FAIL(inputs_.push_back(stable))) {
-    }
-  }
-  return ret;
-}
-
-int GraphExpand::validate_input_keys(
-    const ObIArray<GraphExpandInput> &inputs)
-{
-  int ret = OB_SUCCESS;
-  if (!inputs.empty()) {
-    if (OB_UNLIKELY(inputs.count()
-                    > (INT64_MAX - (OB_MALLOC_NORMAL_BLOCK_SIZE - 1))
-                          / GRAPH_EXPAND_INPUT_KEY_BYTES_PER_INPUT)) {
-      ret = OB_SIZE_OVERFLOW;
-    } else {
-      const int64_t slot_count =
-          inputs.count() * GRAPH_EXPAND_INPUT_KEY_SLOT_MULTIPLIER;
-      if (OB_FAIL(input_key_slots_.prepare_allocate(slot_count))) {
-        LOG_WARN("failed to allocate graph input key index", K(ret),
-                 K(slot_count));
-      } else if (OB_FAIL(check_memory_limit())) {
-        LOG_WARN("graph input key index exceeds memory limit", K(ret),
-                 K(slot_count));
-      }
-      for (int64_t i = 0; OB_SUCC(ret) && i < slot_count; ++i) {
-        if (i % GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE == 0 && OB_FAIL(access_.check_status())) {
-        } else {
-          input_key_slots_.at(i) = -1;
-        }
-      }
-      for (int64_t i = 0; OB_SUCC(ret) && i < inputs.count(); ++i) {
-        if (i % GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE == 0 && OB_FAIL(access_.check_status())) {
-          break;
-        }
-        const GraphExpandInput &input = inputs.at(i);
-        uint64_t hash = do_hash(input.binding_id_, 0);
-        hash = do_hash(input.path_state_id_, hash);
-        int64_t slot = static_cast<int64_t>(hash % slot_count);
-        int64_t probed = 0;
-        while (OB_SUCC(ret) && input_key_slots_.at(slot) >= 0
-               && probed < slot_count) {
-          const GraphExpandInput &existing =
-              inputs.at(input_key_slots_.at(slot));
-          if (input.binding_id_ == existing.binding_id_
-              && input.path_state_id_ == existing.path_state_id_) {
-            ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("duplicate graph expand input key", K(ret), K(i),
-                     "existing_index", input_key_slots_.at(slot), K(input));
-          } else {
-            slot = (slot + 1) % slot_count;
-            ++probed;
-          }
-        }
-        if (OB_SUCC(ret) && OB_UNLIKELY(probed >= slot_count)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("graph input key index is full", K(ret), K(i),
-                   K(slot_count));
-        } else if (OB_SUCC(ret)) {
-          input_key_slots_.at(slot) = i;
-        }
-      }
-    }
-  }
-  input_key_slots_.reset();
-  return ret;
-}
-
-int GraphExpand::build_source_input_groups()
-{
-  int ret = OB_SUCCESS;
-  source_input_groups_enabled_ = true;
-  for (int64_t i = 0;
-       OB_SUCC(ret) && source_input_groups_enabled_ && i < inputs_.count(); ++i) {
-    if (i % GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE == 0 && OB_FAIL(access_.check_status())) {
-      break;
-    }
-    const ObRowkey &rowkey = inputs_.at(i).source_identity_.rowkey_;
-    for (int64_t key = 0;
-         source_input_groups_enabled_ && key < rowkey.get_obj_cnt(); ++key) {
-      source_input_groups_enabled_ =
-          rowkey.get_obj_ptr()[key].get_type_class() != ObDoubleTC;
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (!source_input_groups_enabled_) {
-    // Fixed-scale DOUBLE rowkey equality is tolerance based and therefore not
-    // transitive. One input can match more than one apparent source group, so
-    // a single-result hash lookup is unsafe; retain the linear bag-semantic
-    // matching path for the whole batch.
-    for (int64_t i = 0; OB_SUCC(ret) && i < inputs_.count(); ++i) {
-      if (i % GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE == 0 && OB_FAIL(access_.check_status())) {
-      } else if (OB_FAIL(push_unique(source_identities_,
-                              inputs_.at(i).source_identity_))) {
-        LOG_WARN("failed to append graph source identity", K(ret), K(i));
-      }
-    }
-  } else {
-    if (OB_FAIL(source_input_index_.init(inputs_.count()))) {
-      LOG_WARN("failed to initialize graph source input index", K(ret),
-               "input_count", inputs_.count());
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < inputs_.count(); ++i) {
-      int64_t group_index = -1;
-      bool inserted = false;
-      if (i % GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE == 0 && OB_FAIL(access_.check_status())) {
-      } else if (OB_FAIL(source_input_index_.get_or_insert(
-              inputs_.at(i).source_identity_, group_index, inserted))) {
-        LOG_WARN("failed to index graph source input", K(ret), K(i));
-      } else if (inserted
-                 && OB_UNLIKELY(group_index != source_input_groups_.count()
-                                || group_index != source_identities_.count())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("graph source input index is inconsistent", K(ret), K(i),
-                 K(group_index), "group_count", source_input_groups_.count(),
-                 "source_count", source_identities_.count());
-      } else if (inserted
-                 && OB_FAIL(source_identities_.push_back(
-                     inputs_.at(i).source_identity_))) {
-        LOG_WARN("failed to append graph source identity", K(ret), K(i));
-      } else if (inserted
-                 && OB_FAIL(source_input_groups_.push_back(SourceInputGroup()))) {
-        LOG_WARN("failed to append graph source input group", K(ret), K(i));
-      } else if (OB_UNLIKELY(group_index < 0
-                             || group_index >= source_input_groups_.count())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid graph source input group", K(ret), K(i),
-                 K(group_index), "group_count", source_input_groups_.count());
-      } else if (OB_FAIL(next_input_indices_.push_back(-1))) {
-        LOG_WARN("failed to append graph source input link", K(ret), K(i));
-      } else {
-        SourceInputGroup &group = source_input_groups_.at(group_index);
-        if (group.last_input_ >= 0) {
-          next_input_indices_.at(group.last_input_) = i;
-        } else {
-          group.first_input_ = i;
-        }
-        group.last_input_ = i;
-      }
-    }
-    if (OB_SUCC(ret)
-        && OB_UNLIKELY(source_input_index_.count()
-                           != source_input_groups_.count()
-                       || source_input_groups_.count()
-                           != source_identities_.count()
-                       || next_input_indices_.count() != inputs_.count())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("graph source input groups are incomplete", K(ret),
-               "index_count", source_input_index_.count(),
-               "group_count", source_input_groups_.count(),
-               "source_count", source_identities_.count(),
-               "link_count", next_input_indices_.count(),
-               "input_count", inputs_.count());
-    }
-  }
-  return ret;
-}
-
 int GraphExpand::lookup_source_vertices()
 {
   int ret = OB_SUCCESS;
   existing_sources_.reuse();
   for (int64_t start = 0;
-       OB_SUCC(ret) && start < source_identities_.count();) {
+       OB_SUCC(ret) && start < input_bindings_.sources().count();) {
     source_lookup_batch_.reuse();
     source_lookup_results_.reuse();
     const int64_t batch_count = std::min(
         GRAPH_EXPAND_VERTEX_LOOKUP_BATCH_SIZE,
-        source_identities_.count() - start);
+        input_bindings_.sources().count() - start);
     const int64_t end = start + batch_count;
     for (int64_t i = start; OB_SUCC(ret) && i < end; ++i) {
-      if (OB_FAIL(source_lookup_batch_.push_back(source_identities_.at(i)))) {
+      if (OB_FAIL(source_lookup_batch_.push_back(input_bindings_.sources().at(i)))) {
         LOG_WARN("failed to append graph source lookup request", K(ret), K(i));
       }
     }
@@ -538,44 +152,10 @@ int GraphExpand::lookup_source_vertices()
   return ret;
 }
 
-int GraphExpand::start_edge_input_group(const GraphExpandEdge &edge)
-{
-  int ret = OB_SUCCESS;
-  int64_t group_index = -1;
-  bool found = false;
-  if (OB_UNLIKELY(input_group_started_)) {
-    ret = OB_INIT_TWICE;
-    LOG_WARN("graph edge input group is already started", K(ret),
-             K_(edge_index), K_(input_index));
-  } else if (OB_FAIL(source_input_index_.find(
-                 edge.source_identity_, group_index, found))) {
-    LOG_WARN("failed to find graph edge input group", K(ret), K(edge));
-  } else if (OB_UNLIKELY(!found || group_index < 0
-                         || group_index >= source_input_groups_.count())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("graph edge has no source input group", K(ret), K(edge),
-             K(group_index), K(found));
-  } else {
-    const SourceInputGroup &group = source_input_groups_.at(group_index);
-    if (OB_UNLIKELY(group.first_input_ < 0
-                    || group.first_input_ >= inputs_.count()
-                    || group.last_input_ < group.first_input_
-                    || group.last_input_ >= inputs_.count())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid graph source input group", K(ret), K(group_index),
-               K(group), "input_count", inputs_.count());
-    } else {
-      input_index_ = group.first_input_;
-      input_group_started_ = true;
-    }
-  }
-  return ret;
-}
-
 int GraphExpand::build_existing_source_index()
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!source_input_groups_enabled_)) {
+  if (OB_UNLIKELY(!input_bindings_.grouped())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(existing_source_index_.init(existing_sources_.count()))) {
     LOG_WARN("failed to initialize existing graph source index", K(ret),
@@ -589,7 +169,7 @@ int GraphExpand::build_existing_source_index()
     const GraphElementIdentity &identity = existing_sources_.at(i);
     if (OB_UNLIKELY(!identity.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(source_input_index_.find(
+    } else if (OB_FAIL(input_bindings_.find_source(
                    identity, request_index, requested))) {
       LOG_WARN("failed to find requested graph source", K(ret), K(identity));
     } else if (OB_UNLIKELY(!requested)) {
@@ -603,39 +183,6 @@ int GraphExpand::build_existing_source_index()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("graph source lookup returned a duplicate row", K(ret),
                K(identity), K(existing_index));
-    }
-  }
-  return ret;
-}
-
-int GraphExpand::stabilize_identities(ObIArray<GraphElementIdentity> &identities)
-{
-  int ret = OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && i < identities.count(); ++i) {
-    GraphElementIdentity stable;
-    if (OB_FAIL(deep_copy_identity(identities.at(i), stable))) {
-    } else {
-      identities.at(i) = stable;
-    }
-  }
-  return ret;
-}
-
-int GraphExpand::stabilize_edge_page()
-{
-  int ret = OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && i < edge_page_.count(); ++i) {
-    GraphExpandEdge stable;
-    if (OB_FAIL(deep_copy_identity(edge_page_.at(i).source_identity_,
-                                   stable.source_identity_))) {
-    } else if (OB_FAIL(deep_copy_identity(edge_page_.at(i).edge_identity_,
-                                          stable.edge_identity_))) {
-    } else if (OB_FAIL(deep_copy_identity(edge_page_.at(i).target_identity_,
-                                          stable.target_identity_))) {
-    } else if (OB_FAIL(stable.payload_.deep_copy(edge_page_.at(i).payload_,
-                                                identity_allocator_))) {
-    } else {
-      edge_page_.at(i) = stable;
     }
   }
   return ret;
@@ -660,19 +207,12 @@ int64_t GraphExpand::used_memory() const
   // Compare the conservative preflight reservation with actual resident
   // capacity so small batches still account every allocated container block.
   const int64_t container_parts[] = {
-      inputs_.get_data_size(),
-      input_key_slots_.get_data_size(),
-      source_identities_.get_data_size(),
-      source_input_index_.used_memory(),
+      input_bindings_.used_memory(),
       existing_source_index_.used_memory(),
-      source_input_groups_.get_data_size(),
-      next_input_indices_.get_data_size(),
       source_lookup_batch_.get_data_size(),
       source_lookup_results_.get_data_size(),
       existing_sources_.get_data_size(),
-      edge_page_.get_data_size(),
-      target_identities_.get_data_size(),
-      existing_targets_.get_data_size()};
+      edge_page_.used_memory()};
   int64_t container_bytes = 0;
   for (int64_t i = 0; container_bytes < INT64_MAX
                           && i < ARRAYSIZEOF(container_parts); ++i) {
@@ -760,7 +300,7 @@ int GraphExpand::validate_and_account(const ObIArray<GraphExpandInput> &inputs)
     const int64_t existing_source_index_bytes =
         source_index_entry_bytes + source_index_bucket_bytes;
     const int64_t source_input_group_bytes =
-        sizeof(SourceInputGroup) + sizeof(int64_t);
+        3 * sizeof(int64_t);
     const int64_t per_input = sizeof(GraphExpandInput)
         + 2 * sizeof(GraphElementIdentity)
         + source_index_entry_bytes + source_index_bucket_bytes
@@ -801,10 +341,6 @@ int GraphExpand::validate_and_account(const ObIArray<GraphExpandInput> &inputs)
       }
     }
   }
-  if (OB_SUCC(ret) && OB_FAIL(validate_input_keys(inputs))) {
-    LOG_WARN("invalid graph expand input keys", K(ret),
-             "input_count", inputs.count());
-  }
   return ret;
 }
 
@@ -819,27 +355,26 @@ int GraphExpand::open(const ObIArray<GraphExpandInput> &inputs,
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(validate_and_account(inputs))) {
   } else if (OB_FAIL(access_.check_status())) {
-  } else if (OB_FAIL(deep_copy_inputs(inputs))) {
-  } else if (OB_FAIL(build_source_input_groups())) {
+  } else if (OB_FAIL(input_bindings_.init(inputs))) {
   } else if (access_.can_partition_sources()
-             && source_identities_.count() > GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE) {
+             && input_bindings_.sources().count() > GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE) {
     // Bound physical ranges, not the number of associated path/seed bindings.
     ret = OB_SIZE_OVERFLOW;
   } else if (OB_FAIL(check_memory_limit())) {
   }
   if (OB_SUCC(ret)) {
     stats_.input_states_ = inputs.count();
-    stats_.distinct_sources_ = source_identities_.count();
-    if (source_identities_.empty()) {
+    stats_.distinct_sources_ = input_bindings_.sources().count();
+    if (input_bindings_.sources().empty()) {
       end_ = true;
     } else if (OB_FAIL(lookup_source_vertices())) {
     } else if (existing_sources_.empty()) {
       end_ = true;
-    } else if (source_input_groups_enabled_
+    } else if (input_bindings_.grouped()
                && OB_FAIL(build_existing_source_index())) {
-    } else if (!source_input_groups_enabled_
+    } else if (!input_bindings_.grouped()
                && OB_FAIL(validate_lookup_result(
-                   source_identities_, existing_sources_))) {
+                   input_bindings_.sources(), existing_sources_))) {
     } else if (OB_FAIL(check_memory_limit())) {
     }
   }
@@ -857,30 +392,27 @@ int GraphExpand::load_next_page()
   bool page_end = false;
   int64_t scanned_edges = 0;
   edge_page_.reuse();
-  target_identities_.reuse();
-  existing_targets_.reuse();
   edge_index_ = 0;
-  input_index_ = source_input_groups_enabled_ ? -1 : 0;
   input_group_started_ = false;
   if (OB_FAIL(access_.check_status())) {
   } else if (OB_FAIL(access_.scan_edges(existing_sources_, direction_,
-                                        has_after_edge_ ? &after_edge_ : nullptr,
-                                        page_size_, edge_page_, scanned_edges,
+                                        edge_page_.continuation(),
+                                        page_size_, edge_page_.edges(), scanned_edges,
                                         page_end))) {
   } else if (OB_FAIL(access_.check_status())) {
-  } else if (edge_page_.count() > page_size_
-             || (edge_page_.empty() && !page_end)) {
+  } else if (edge_page_.edges().count() > page_size_
+             || (edge_page_.edges().empty() && !page_end)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(stabilize_edge_page())) {
+  } else if (OB_FAIL(edge_page_.stabilize_edge_page())) {
   } else if (OB_FAIL(check_memory_limit())) {
   }
-  for (int64_t i = 0; OB_SUCC(ret) && i < edge_page_.count(); ++i) {
-    const GraphExpandEdge &edge = edge_page_.at(i);
+  for (int64_t i = 0; OB_SUCC(ret) && i < edge_page_.edges().count(); ++i) {
+    const GraphExpandEdge &edge = edge_page_.edges().at(i);
     bool source_exists = false;
     if (!edge.source_identity_.is_valid() || !edge.edge_identity_.is_valid()
         || !edge.target_identity_.is_valid()) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (source_input_groups_enabled_) {
+    } else if (input_bindings_.grouped()) {
       int64_t source_index = -1;
       if (OB_FAIL(existing_source_index_.find(
               edge.source_identity_, source_index, source_exists))) {
@@ -891,41 +423,39 @@ int GraphExpand::load_next_page()
     }
     if (OB_SUCC(ret)
         && (!source_exists
-            || (has_after_edge_ && edge.edge_identity_ == after_edge_))) {
+            || (edge_page_.continuation() != nullptr
+                && edge.edge_identity_ == *edge_page_.continuation()))) {
       ret = OB_ERR_UNEXPECTED;
     }
     for (int64_t j = 0; OB_SUCC(ret) && j < i; ++j) {
-      if (edge.edge_identity_ == edge_page_.at(j).edge_identity_) {
+      if (edge.edge_identity_ == edge_page_.edges().at(j).edge_identity_) {
         ret = OB_ERR_UNEXPECTED;
       }
     }
-    if (OB_SUCC(ret) && OB_FAIL(push_unique(target_identities_, edge.target_identity_))) {
+    if (OB_SUCC(ret) && OB_FAIL(push_unique(edge_page_.targets(), edge.target_identity_))) {
     }
   }
   if (OB_SUCC(ret)) {
     stats_.scanned_edges_ = saturated_nonnegative_add(
         stats_.scanned_edges_, scanned_edges);
   }
-  if (OB_SUCC(ret) && !edge_page_.empty()) {
-    stats_.looked_up_vertices_ += target_identities_.count();
+  if (OB_SUCC(ret) && !edge_page_.edges().empty()) {
+    stats_.looked_up_vertices_ += edge_page_.targets().count();
     if (OB_FAIL(access_.lookup_vertices(
-            target_identities_, existing_targets_,
+            edge_page_.targets(), edge_page_.existing_targets(),
             GraphVertexLookupPhase::TARGET))) {
     } else if (OB_FAIL(access_.check_status())) {
-    } else if (OB_FAIL(stabilize_identities(existing_targets_))) {
+    } else if (OB_FAIL(edge_page_.stabilize_targets())) {
     } else if (OB_FAIL(check_memory_limit())) {
-    } else if (OB_FAIL(validate_lookup_result(target_identities_, existing_targets_))) {
+    } else if (OB_FAIL(validate_lookup_result(edge_page_.targets(), edge_page_.existing_targets()))) {
     } else {
-      for (int64_t i = 0; i < edge_page_.count(); ++i) {
-        if (!contains(existing_targets_, edge_page_.at(i).target_identity_)) {
+      for (int64_t i = 0; i < edge_page_.edges().count(); ++i) {
+        if (!contains(edge_page_.existing_targets(), edge_page_.edges().at(i).target_identity_)) {
           ++stats_.orphan_edges_;
         }
       }
-      if (OB_FAIL(deep_copy_identity(edge_page_.at(edge_page_.count() - 1).edge_identity_,
-                                     after_edge_))) {
+      if (OB_FAIL(edge_page_.save_continuation())) {
       } else if (OB_FAIL(check_memory_limit())) {
-      } else {
-        has_after_edge_ = true;
       }
     }
   }
@@ -942,70 +472,35 @@ int GraphExpand::get_next_row(GraphExpandOutput &output)
     ret = OB_NOT_INIT;
   }
   while (OB_SUCC(ret)) {
-    if (edge_index_ >= edge_page_.count()) {
+    if (edge_index_ >= edge_page_.edges().count()) {
       if (end_) {
         ret = OB_ITER_END;
       } else if (OB_FAIL(load_next_page())) {
-      } else if (edge_page_.empty() && end_) {
+      } else if (edge_page_.edges().empty() && end_) {
         ret = OB_ITER_END;
       }
     }
     if (OB_SUCC(ret)) {
-      const GraphExpandEdge &edge = edge_page_.at(edge_index_);
-      if (contains(existing_targets_, edge.target_identity_)) {
-        if (source_input_groups_enabled_) {
-          if (!input_group_started_
-              && OB_FAIL(start_edge_input_group(edge))) {
-          }
-          while (OB_SUCC(ret) && input_index_ >= 0) {
-            if (OB_UNLIKELY(input_index_ >= inputs_.count()
-                            || input_index_ >= next_input_indices_.count())) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("invalid graph source input link", K(ret),
-                       K_(input_index), "input_count", inputs_.count(),
-                       "link_count", next_input_indices_.count());
-            } else if (OB_FAIL(access_.check_status())) {
-            } else {
-              const int64_t current_input = input_index_;
-              const GraphExpandInput &input = inputs_.at(current_input);
-              if (OB_UNLIKELY(!(input.source_identity_
-                                == edge.source_identity_))) {
-                ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("graph source input group is corrupted", K(ret),
-                         K(current_input), K(input), K(edge));
-              } else {
-                input_index_ = next_input_indices_.at(current_input);
-                output.binding_id_ = input.binding_id_;
-                output.path_state_id_ = input.path_state_id_;
-                output.edge_identity_ = edge.edge_identity_;
-                output.target_identity_ = edge.target_identity_;
-                output.edge_payload_ = edge.payload_;
-                ++stats_.output_states_;
-                return OB_SUCCESS;
-              }
-            }
-          }
-        } else {
-          while (OB_SUCC(ret) && input_index_ < inputs_.count()) {
-            if (OB_FAIL(access_.check_status())) {
-            } else {
-              const GraphExpandInput &input = inputs_.at(input_index_++);
-              if (input.source_identity_ == edge.source_identity_) {
-                output.binding_id_ = input.binding_id_;
-                output.path_state_id_ = input.path_state_id_;
-                output.edge_identity_ = edge.edge_identity_;
-                output.target_identity_ = edge.target_identity_;
-                output.edge_payload_ = edge.payload_;
-                ++stats_.output_states_;
-                return OB_SUCCESS;
-              }
-            }
-          }
+      const GraphExpandEdge &edge = edge_page_.edges().at(edge_index_);
+      if (contains(edge_page_.existing_targets(), edge.target_identity_)) {
+        const GraphExpandInput *input = nullptr;
+        if (!input_group_started_) {
+          if (OB_FAIL(input_bindings_.begin_edge(edge.source_identity_))) {
+          } else { input_group_started_ = true; }
+        }
+        if (OB_SUCC(ret) && OB_FAIL(input_bindings_.next_input(edge.source_identity_, input))) {
+        } else if (OB_SUCC(ret) && input != nullptr) {
+          output.binding_id_ = input->binding_id_;
+          output.path_state_id_ = input->path_state_id_;
+          output.edge_identity_ = edge.edge_identity_;
+          output.target_identity_ = edge.target_identity_;
+          output.edge_payload_ = edge.payload_;
+          ++stats_.output_states_;
+          return OB_SUCCESS;
         }
       }
       if (OB_SUCC(ret)) {
         ++edge_index_;
-        input_index_ = source_input_groups_enabled_ ? -1 : 0;
         input_group_started_ = false;
       }
     }
@@ -1031,27 +526,16 @@ int GraphExpand::fail(int error)
 void GraphExpand::release()
 {
   access_.release();
-  inputs_.reset();
-  input_key_slots_.reset();
-  source_input_index_.reset();
+  input_bindings_.reset();
   existing_source_index_.reset();
-  source_identities_.reset();
-  source_input_groups_.reset();
-  next_input_indices_.reset();
   source_lookup_batch_.reset();
   source_lookup_results_.reset();
   existing_sources_.reset();
   edge_page_.reset();
-  target_identities_.reset();
-  existing_targets_.reset();
-  after_edge_.reset();
   identity_allocator_.reuse();
   edge_index_ = 0;
-  input_index_ = -1;
-  has_after_edge_ = false;
   end_ = false;
   is_open_ = false;
-  source_input_groups_enabled_ = true;
   input_group_started_ = false;
   fixed_memory_bytes_ = 0;
 }

@@ -153,16 +153,16 @@ public:
   // may still be required for levels below the lower bound.
   bool has_output_frontier(const GraphFeedbackLoopSpec &spec) const
   {
-    const int64_t hop = frontier_.get_hop();
+    const int64_t hop = frontier_.get_output_hop();
     return seeds_loaded_
-        && !frontier_.empty()
+        && !frontier_.output_empty()
         && hop >= spec.get_lower_bound()
         && hop <= spec.get_upper_bound();
   }
 
   int64_t get_output_count(const GraphFeedbackLoopSpec &spec) const
   {
-    return has_output_frontier(spec) ? frontier_.get_frontier_count() : 0;
+    return has_output_frontier(spec) ? frontier_.get_output_state_count() : 0;
   }
 
   GraphExpandStats get_cumulative_stats() const
@@ -235,8 +235,8 @@ public:
           ++next_output_index_;
         }
       } else if (!frontier_.is_expanding()
-                 && (frontier_.empty()
-                     || frontier_.get_hop() >= spec.get_upper_bound())) {
+                 && (frontier_.output_empty()
+                     || frontier_.get_output_hop() >= spec.get_upper_bound())) {
         ret = OB_ITER_END;
       } else if (OB_FAIL(advance_frontier(spec))) {
         if (ret != OB_ITER_END) {
@@ -286,12 +286,12 @@ public:
     // Restore the caller's scalar output slot even when the cursor stays open
     // at a yield; otherwise the first output can be written past slot zero.
     ObEvalCtx::BatchInfoScopeGuard batch_guard(eval_ctx_);
-    const int64_t current_hop = frontier_.get_hop();
+    const int64_t current_hop = frontier_.get_output_hop();
     if (OB_UNLIKELY(!seeds_loaded_)) {
       ret = OB_NOT_INIT;
       LOG_WARN("graph feedback seeds are not loaded", K(ret));
     } else if (!frontier_.is_expanding()
-               && (frontier_.empty() || current_hop >= spec.get_upper_bound())) {
+               && (frontier_.output_empty() || current_hop >= spec.get_upper_bound())) {
       ret = OB_ITER_END;
     } else if (OB_FAIL(frontier_.expand(spec.get_direction(),
                                         spec.get_path_mode(),
@@ -303,9 +303,9 @@ public:
       }
     } else {
       if (!frontier_.is_expanding()) { accumulate_last_hop_stats(); }
-      if (frontier_.empty() && !frontier_.is_expanding()) {
+      if (frontier_.output_empty() && !frontier_.is_expanding()) {
         ret = OB_ITER_END;
-      } else if (frontier_.get_hop() != current_hop) {
+      } else if (frontier_.get_output_hop() != current_hop) {
         next_output_index_ = 0;
       }
     }

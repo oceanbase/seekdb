@@ -126,4 +126,40 @@ uses_adjacency_index
 1
 DROP TABLE plan_table;
 DROP PROPERTY GRAPH graph_page;
+CREATE TABLE graph_page_string_v (id VARCHAR(32) PRIMARY KEY);
+CREATE TABLE graph_page_string_e (
+id VARCHAR(32) PRIMARY KEY,src VARCHAR(32),dst VARCHAR(32),note VARCHAR(256)
+);
+INSERT INTO graph_page_string_v VALUES ('source'),('target');
+INSERT INTO graph_page_string_e
+SELECT CONCAT('edge-',LPAD(id,8,'0')),'source','target',
+CONCAT('payload-',LPAD(id,8,'0'),REPEAT('x',200))
+FROM graph_page_edge WHERE src=1;
+CREATE PROPERTY GRAPH graph_page
+VERTEX TABLES(graph_page_string_v KEY(id) LABEL node PROPERTIES(id))
+EDGE TABLES(graph_page_string_e KEY(id)
+SOURCE KEY(src) REFERENCES graph_page_string_v(id)
+DESTINATION KEY(dst) REFERENCES graph_page_string_v(id)
+LABEL link PROPERTIES(id,note));
+SELECT COUNT(*) AS steps,COUNT(DISTINCT edge_key) AS distinct_edges,
+SUM(src='source' AND dst='target') AS valid_endpoints,
+SUM(note=CONCAT('payload-',SUBSTRING(edge_key,6),REPEAT('x',200))) AS valid_payloads
+FROM GRAPH_TABLE(graph_page MATCH
+(a IS node WHERE a.id='source')-[e IS link]->{1}(b IS node)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(v1.id AS src,se.id AS edge_key,se.note AS note,v2.id AS dst)) g;
+steps	distinct_edges	valid_endpoints	valid_payloads
+4105	4105	4105	4105
+CREATE INDEX graph_page_string_out ON graph_page_string_e(src,id);
+SELECT COUNT(*) AS steps,COUNT(DISTINCT edge_key) AS distinct_edges,
+SUM(src='source' AND dst='target') AS valid_endpoints,
+SUM(note=CONCAT('payload-',SUBSTRING(edge_key,6),REPEAT('x',200))) AS valid_payloads
+FROM GRAPH_TABLE(graph_page MATCH
+(a IS node WHERE a.id='source')-[e IS link]->{1}(b IS node)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(v1.id AS src,se.id AS edge_key,se.note AS note,v2.id AS dst)) g;
+steps	distinct_edges	valid_endpoints	valid_payloads
+4105	4105	4105	4105
+DROP PROPERTY GRAPH graph_page;
+DROP TABLE graph_page_string_e,graph_page_string_v;
 DROP TABLE graph_page_edge,graph_page_vertex,graph_page_digit;

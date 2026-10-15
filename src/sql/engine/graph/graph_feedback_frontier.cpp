@@ -123,6 +123,100 @@ int GraphFeedbackFrontier::add_seed(
   return ret;
 }
 
+int GraphFeedbackFrontier::begin_hop(
+    GraphPathDirection direction, GraphPathMode path_mode, bool prune_duplicate_states)
+{
+  int ret = OB_SUCCESS;
+  next_state_ids_->reuse();
+  next_state_index_.reset();
+  if (OB_FAIL(input_batcher_.begin_level(*current_state_ids_, hop_, batch_memory_budget()))) {
+    LOG_WARN("failed to group graph frontier sources", K(ret), K_(hop));
+  } else {
+    hop_stats_.begin(current_state_ids_->count(), input_batcher_.has_source_index()
+        || !expand_.can_partition_sources() || current_state_ids_->count() <= input_batch_size_);
+  }
+  if (OB_SUCC(ret) && prune_duplicate_states
+             && OB_FAIL(next_state_index_.init(current_state_ids_->count()))) {
+  }
+  if (OB_SUCC(ret) && OB_FAIL(check_memory_limit())) {
+  } else if (OB_SUCC(ret)) {
+    active_direction_ = direction;
+    active_path_mode_ = path_mode;
+    active_prune_duplicate_states_ = prune_duplicate_states;
+    expanding_ = true;
+  }
+  return ret;
+}
+
+int GraphFeedbackFrontier::finish_hop()
+{
+  int ret = OB_SUCCESS;
+  // Only a fully consumed level can become the input to the following hop.
+  std::swap(current_state_ids_, next_state_ids_);
+  next_state_ids_->reuse();
+  ++hop_;
+  expanding_ = false;
+  if (OB_FAIL(check_memory_limit())) {
+  } else {
+    hop_stats_.finish(input_batcher_.source_count(),
+                      input_batcher_.has_source_index(), current_state_ids_->count());
+    LOG_TRACE("completed graph frontier hop", K_(hop), "stats", hop_stats_.last());
+    input_batcher_.finish_level();
+    next_state_index_.reset();
+  }
+  return ret;
+}
+
+int GraphFeedbackFrontier::accept_extension(
+    const GraphExpandOutput &extension, GraphPathMode path_mode,
+    bool prune_duplicate_states, bool &accepted) const
+{
+  int ret = OB_SUCCESS;
+  bool repeated_edge = false;
+  bool repeated_state = false;
+  int64_t entry_index = -1;
+  accepted = false;
+  // TRAIL checks one path's ancestry; optional pruning checks only equal
+  // binding/vertex states in this next level, never a global visited set.
+  if (path_mode == GraphPathMode::TRAIL
+      && OB_FAIL(state_store_.contains_edge(
+          extension.path_state_id_, extension.edge_identity_, repeated_edge))) {
+    LOG_WARN("failed to inspect graph path edge history", K(ret), K(extension));
+  } else if (prune_duplicate_states
+             && OB_FAIL(next_state_index_.find(extension.target_identity_,
+                 entry_index, repeated_state, extension.binding_id_))) {
+    LOG_WARN("failed to probe reachable graph state", K(ret));
+  } else {
+    accepted = !repeated_edge && !repeated_state;
+  }
+  return ret;
+}
+
+int GraphFeedbackFrontier::save_extension(
+    const GraphExpandOutput &extension, bool prune_duplicate_states)
+{
+  int ret = OB_SUCCESS;
+  int64_t entry_index = -1;
+  int64_t child_state_id = GRAPH_INVALID_PATH_STATE_ID;
+  GraphPathState child;
+  bool inserted = false;
+  if (OB_FAIL(state_store_.add_child(extension, child_state_id))) {
+    LOG_WARN("failed to add graph frontier child", K(ret), K(extension));
+  } else if (OB_FAIL(next_state_ids_->push_back(child_state_id))) {
+    LOG_WARN("failed to append next graph frontier state", K(ret),
+             K(child_state_id));
+  } else if (prune_duplicate_states
+             && OB_FAIL(state_store_.get_state(child_state_id, child))) {
+  } else if (prune_duplicate_states
+             && OB_FAIL(next_state_index_.get_or_insert(
+                 child.current_identity_, entry_index, inserted, child.binding_id_))) {
+    // Index the stable state-store copy, never the reusable DAS page.
+    LOG_WARN("failed to index reachable graph state", K(ret));
+  } else if (OB_FAIL(check_memory_limit())) {
+  }
+  return ret;
+}
+
 int GraphFeedbackFrontier::consume_input_batch(
     GraphPathDirection direction,
     GraphPathMode path_mode,
@@ -141,9 +235,6 @@ int GraphFeedbackFrontier::consume_input_batch(
   }
   while (OB_SUCC(ret) && next_state_ids_->count() < output_end) {
     GraphExpandOutput extension;
-    bool repeated_edge = false;
-    bool repeated_state = false;
-    int64_t entry_index = -1;
     int next_ret = expand_.get_next_row(extension);
     if (next_ret == OB_ITER_END) {
       batch_end = true;
@@ -151,33 +242,10 @@ int GraphFeedbackFrontier::consume_input_batch(
     } else if (OB_SUCCESS != next_ret) {
       ret = next_ret;
       LOG_WARN("failed to read graph frontier extension", K(ret));
-    } else if (path_mode == GraphPathMode::TRAIL
-               && OB_FAIL(state_store_.contains_edge(
-                   extension.path_state_id_, extension.edge_identity_,
-                   repeated_edge))) {
-      LOG_WARN("failed to inspect graph path edge history", K(ret),
-               K(extension));
-    } else if (prune_duplicate_states
-               && OB_FAIL(next_state_index_.find(extension.target_identity_,
-                   entry_index, repeated_state, extension.binding_id_))) {
-      LOG_WARN("failed to probe reachable graph state", K(ret));
-    } else if (!repeated_edge && !repeated_state) {
-      int64_t child_state_id = GRAPH_INVALID_PATH_STATE_ID;
-      GraphPathState child;
-      bool inserted = false;
-      if (OB_FAIL(state_store_.add_child(extension, child_state_id))) {
-        LOG_WARN("failed to add graph frontier child", K(ret), K(extension));
-      } else if (OB_FAIL(next_state_ids_->push_back(child_state_id))) {
-        LOG_WARN("failed to append next graph frontier state", K(ret),
-                 K(child_state_id));
-      } else if (prune_duplicate_states
-                 && OB_FAIL(state_store_.get_state(child_state_id, child))) {
-      } else if (prune_duplicate_states
-                 && OB_FAIL(next_state_index_.get_or_insert(
-                     child.current_identity_, entry_index, inserted, child.binding_id_))) {
-        // Index the stable state-store copy, never the reusable DAS page.
-        LOG_WARN("failed to index reachable graph state", K(ret));
-      } else if (OB_FAIL(check_memory_limit())) {
+    } else {
+      bool accepted = false;
+      if (OB_FAIL(accept_extension(extension, path_mode, prune_duplicate_states, accepted))) {
+      } else if (accepted && OB_FAIL(save_extension(extension, prune_duplicate_states))) {
       }
     }
   }
@@ -227,24 +295,7 @@ int GraphFeedbackFrontier::expand(GraphPathDirection direction,
              "path_mode", static_cast<int64_t>(path_mode));
   } else {
     if (!expanding_) {
-      next_state_ids_->reuse();
-      next_state_index_.reset();
-      if (OB_FAIL(input_batcher_.begin_level(*current_state_ids_, hop_, batch_memory_budget()))) {
-        LOG_WARN("failed to group graph frontier sources", K(ret), K_(hop));
-      } else {
-        hop_stats_.begin(current_state_ids_->count(), input_batcher_.has_source_index()
-            || !expand_.can_partition_sources() || current_state_ids_->count() <= input_batch_size_);
-      }
-      if (OB_SUCC(ret) && prune_duplicate_states
-                 && OB_FAIL(next_state_index_.init(current_state_ids_->count()))) {
-      }
-      if (OB_SUCC(ret) && OB_FAIL(check_memory_limit())) {
-      } else if (OB_SUCC(ret)) {
-        active_direction_ = direction;
-        active_path_mode_ = path_mode;
-        active_prune_duplicate_states_ = prune_duplicate_states;
-        expanding_ = true;
-      }
+      ret = begin_hop(direction, path_mode, prune_duplicate_states);
     }
     const int64_t output_end = next_state_ids_->count() > INT64_MAX - OUTPUT_BATCH_SIZE
         ? INT64_MAX : next_state_ids_->count() + OUTPUT_BATCH_SIZE;
@@ -260,20 +311,9 @@ int GraphFeedbackFrontier::expand(GraphPathDirection direction,
       }
     }
     if (OB_SUCC(ret) && !batch_open_ && input_batcher_.exhausted()) {
-      std::swap(current_state_ids_, next_state_ids_);
-      next_state_ids_->reuse();
-      ++hop_;
-      expanding_ = false;
-      if (OB_FAIL(check_memory_limit())) {
-      } else {
-        hop_stats_.finish(input_batcher_.source_count(),
-                          input_batcher_.has_source_index(), current_state_ids_->count());
-        LOG_TRACE("completed graph frontier hop", K_(hop), "stats", hop_stats_.last());
-        input_batcher_.finish_level();
-        next_state_index_.reset();
-      }
+      ret = finish_hop();
     } else if (OB_SUCC(ret)) {
-      LOG_TRACE("yielded graph frontier batch", "hop", get_hop(),
+      LOG_TRACE("yielded graph frontier batch", "hop", get_output_hop(),
                 "stats", get_pending_hop_stats());
     }
   }
@@ -294,7 +334,7 @@ int GraphFeedbackFrontier::get_frontier_state(
              "frontier_count", output_state_ids().count());
   } else if (OB_FAIL(state_store_.get_state(output_state_ids().at(index),
                                              state))) {
-  } else if (OB_UNLIKELY(state.hop_ != get_hop())) {
+  } else if (OB_UNLIKELY(state.hop_ != get_output_hop())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("graph frontier state hop is inconsistent", K(ret), K_(hop),
              K(state));
