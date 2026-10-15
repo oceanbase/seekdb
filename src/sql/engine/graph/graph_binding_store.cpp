@@ -46,26 +46,25 @@ int GraphWorkAreaAllocator::init(int64_t memory_limit)
 
 void *GraphWorkAreaAllocator::alloc(int64_t size)
 {
-  return alloc(size, attr_);
-}
-
-void *GraphWorkAreaAllocator::alloc(
-    int64_t size,
-    const lib::ObMemAttr &attr)
-{
   void *ptr = nullptr;
   const int64_t used = total();
   const int64_t header_size = common::TrackedAllocator::header_size();
-  UNUSED(attr);
   if (size <= 0 || memory_limit_ <= 0) {
   } else if (used < 0 || used > memory_limit_
              || size > INT64_MAX - header_size
              || size + header_size > memory_limit_ - used) {
     limit_exceeded_ = true;
-  } else if (OB_NOT_NULL(ptr = tracked_allocator_.alloc(size, attr_))) {
+  } else if (OB_NOT_NULL(ptr = tracked_allocator_.alloc(size))) {
     ++allocation_count_;
   }
   return ptr;
+}
+
+void *GraphWorkAreaAllocator::alloc(int64_t size, const lib::ObMemAttr &attr)
+{
+  // All graph allocations retain the shared work-area attribution.
+  UNUSED(attr);
+  return alloc(size);
 }
 
 void GraphWorkAreaAllocator::free(void *ptr)

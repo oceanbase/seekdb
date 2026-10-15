@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_OPT
 
 #include "sql/optimizer/graph_feedback_loop_log_op.h"
+#include "sql/engine/graph/graph_feedback_row_desc.h"
 #include "sql/optimizer/ob_join_order.h"
 #include "sql/optimizer/ob_log_join.h"
 #include "sql/optimizer/ob_log_sort.h"

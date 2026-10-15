@@ -83,30 +83,6 @@ bool GraphExpandAccessDesc::is_valid() const
       && valid_graph_columns(edge_next_columns_, target_key_count_);
 }
 
-bool supports_basic_native_graph_feedback(
-    const GraphPathDesc &path_desc,
-    const GraphExpandAccessDesc &access_desc,
-    int64_t output_expr_count,
-    int64_t payload_expr_count)
-{
-  bool supported = path_desc.is_valid() && access_desc.is_valid();
-  if (supported) {
-    const int64_t fixed_output_count = 1 + access_desc.source_key_count_
-        + access_desc.target_key_count_
-        + (path_desc.needs_edge_key_history()
-           ? path_desc.upper_bound_ * access_desc.edge_key_count_ : 0);
-    supported = path_desc.direction_ != GraphPathDirection::BOTH
-        && path_desc.source_element_id_ == path_desc.target_element_id_
-        && path_desc.path_mode_ == GraphPathMode::WALK
-        && (!path_desc.need_path_ || payload_expr_count > 0
-            || path_desc.row_shape_ == GraphPathRowShape::PER_STEP)
-        && access_desc.source_table_id_ == access_desc.target_table_id_
-        && payload_expr_count >= 0
-        && output_expr_count == fixed_output_count + payload_expr_count;
-  }
-  return supported;
-}
-
 int build_graph_expand_access_desc(const GraphPathDesc &path_desc,
                                    uint64_t edge_access_table_id,
                                    ObSchemaGetterGuard &schema_guard,

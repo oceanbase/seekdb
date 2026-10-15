@@ -89,7 +89,10 @@ public:
   // in-memory/RPC schema objects. The catalog reader accepts JSON only.
   int to_catalog_json(common::ObSqlString &json) const;
   int from_catalog_definition(const common::ObString &definition);
-  int64_t get_convert_size() const override;
+  // Object and owned strings/arrays needed by a deep copy, not encoded bytes.
+  int64_t get_deep_copy_size() const;
+  // Preserve the ObSchema polymorphic memory-accounting interface.
+  int64_t get_convert_size() const override { return get_deep_copy_size(); }
   int set_name(const common::ObString &name) { return deep_copy_str(name, name_); }
   int set_elements(const common::ObIArray<GraphElement> &elements);
   int set_properties(const common::ObIArray<GraphProperty> &properties);
@@ -143,7 +146,7 @@ public:
   const common::ObIArray<GraphSchema *> &get_all() const { return graphs_; }
 private:
   common::ObIAllocator &allocator_;
-  common::ObSEArray<GraphSchema *, 4> graphs_;
+  common::ObArray<GraphSchema *> graphs_{};
   DISALLOW_COPY_AND_ASSIGN(GraphMgr);
 };
 } // namespace schema

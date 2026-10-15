@@ -23,9 +23,6 @@
 #include "sql/das/ob_das_utils.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/ob_operator.h"
-#include "sql/engine/expr/ob_expr_json_func_helper.h"
-#include "share/ob_json_access_utils.h"
-#include "lib/utility/ob_smart_call.h"
 #include "sql/engine/graph/graph_das_access_utils.h"
 namespace oceanbase
 {
@@ -34,23 +31,6 @@ namespace sql
 {
 namespace
 {
-
-int clear_payload_eval_flags(ObExpr &expr, ObEvalCtx &ctx)
-{
-  int ret = OB_SUCCESS;
-  // DAS owns column datums. Only invalidate calculated values above those
-  // leaves; nested JSON_OBJECT/CAST expressions must not reuse the last edge.
-  if (expr.arg_cnt_ > 0) {
-    expr.clear_evaluated_flag(ctx);
-    for (uint32_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
-      if (OB_ISNULL(expr.args_[i])) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(SMART_CALL(clear_payload_eval_flags(*expr.args_[i], ctx)))) {
-      }
-    }
-  }
-  return ret;
-}
 
 bool identity_matches(const GraphElementIdentity &identity,
                       uint64_t graph_id,
@@ -82,39 +62,6 @@ int evaluate_filters(ObEvalCtx &eval_ctx,
   return ret;
 }
 
-int bind_column_exprs(const ObDASScanCtDef &ctdef,
-                      const uint64_t *column_ids,
-                      int64_t column_count,
-                      ObExpr **exprs)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(column_ids == nullptr || exprs == nullptr
-                  || column_count <= 0
-                  || column_count > OB_USER_MAX_ROWKEY_COLUMN_NUMBER)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(ctdef.access_column_ids_.count()
-                         != ctdef.pd_expr_spec_.access_exprs_.count())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("graph edge DAS access columns and expressions do not match",
-             K(ret), K(ctdef.access_column_ids_.count()),
-             K(ctdef.pd_expr_spec_.access_exprs_.count()));
-  }
-  for (int64_t key = 0; OB_SUCC(ret) && key < column_count; ++key) {
-    for (int64_t column = 0;
-         exprs[key] == nullptr && column < ctdef.access_column_ids_.count();
-         ++column) {
-      if (ctdef.access_column_ids_.at(column) == column_ids[key]) {
-        exprs[key] = ctdef.pd_expr_spec_.access_exprs_.at(column);
-      }
-    }
-    if (OB_ISNULL(exprs[key])) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("graph edge identity column is absent from DAS output", K(ret),
-               K(key), K(column_ids[key]), K(ctdef.ref_table_id_));
-    }
-  }
-  return ret;
-}
 } // namespace
 
 GraphEdgeScanCursor::GraphEdgeScanCursor(ObExecContext &exec_ctx,
@@ -170,43 +117,14 @@ int GraphEdgeScanCursor::release()
   return ret;
 }
 
-int GraphEdgeScanCursor::materialize_identity(
-    uint64_t element_id, int64_t key_count, ObExpr *const *key_exprs,
-    GraphElementIdentity &identity)
-{
-  return graph_das_detail::materialize_identity(
-      eval_ctx_, identity_page_allocator_, path_desc_.graph_id_,
-      element_id, key_count, key_exprs, identity);
-}
-
 bool GraphEdgeScanCursor::EdgeScanBinding::is_valid() const
 {
-  bool valid = edge_element_id_ != OB_INVALID_ID
-      && edge_table_id_ != OB_INVALID_ID
-      && access_table_id_ != OB_INVALID_ID
-      && source_key_count_ > 0
-      && source_key_count_ <= OB_USER_MAX_ROWKEY_COLUMN_NUMBER
-      && edge_key_count_ > 0
-      && edge_key_count_ <= OB_USER_MAX_ROWKEY_COLUMN_NUMBER
-      && target_key_count_ > 0
-      && target_key_count_ <= OB_USER_MAX_ROWKEY_COLUMN_NUMBER
-      && scan_desc_ != nullptr
-      && access_ctdef_ != nullptr
-      && output_ctdef_ != nullptr
-      && scan_desc_->ref_table_id_ == edge_table_id_
-      && access_ctdef_->ref_table_id_ == access_table_id_
+  return scan_desc_ != nullptr && access_ctdef_ != nullptr && output_ctdef_ != nullptr
+      && scan_desc_->ref_table_id_ != OB_INVALID_ID
+      && access_ctdef_->ref_table_id_ != OB_INVALID_ID
       && (output_ctdef_ == access_ctdef_
-          || output_ctdef_->ref_table_id_ == edge_table_id_);
-  for (int64_t i = 0; valid && i < source_key_count_; ++i) {
-    valid = source_columns_[i] != OB_INVALID_ID && source_exprs_[i] != nullptr;
-  }
-  for (int64_t i = 0; valid && i < edge_key_count_; ++i) {
-    valid = edge_columns_[i] != OB_INVALID_ID && edge_exprs_[i] != nullptr;
-  }
-  for (int64_t i = 0; valid && i < target_key_count_; ++i) {
-    valid = target_columns_[i] != OB_INVALID_ID && target_exprs_[i] != nullptr;
-  }
-  return valid;
+          || output_ctdef_->ref_table_id_ == scan_desc_->ref_table_id_)
+      && source_.is_valid() && edge_.is_valid() && target_.is_valid();
 }
 
 int64_t GraphEdgeScanCursor::used_memory() const
@@ -316,35 +234,15 @@ int GraphEdgeScanCursor::init_edge_binding(
   } else if (OB_ISNULL(output_ctdef)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    candidate.edge_element_id_ = path_desc.edge_element_id_;
-    candidate.edge_table_id_ = access_desc.edge_table_id_;
-    candidate.access_table_id_ = access_desc.edge_access_table_id_;
-    candidate.source_key_count_ = access_desc.source_key_count_;
-    candidate.edge_key_count_ = access_desc.edge_key_count_;
-    candidate.target_key_count_ = access_desc.target_key_count_;
     candidate.scan_desc_ = &scan_desc;
     candidate.access_ctdef_ = access_ctdef;
     candidate.output_ctdef_ = output_ctdef;
-    for (int64_t i = 0; i < candidate.source_key_count_; ++i) {
-      candidate.source_columns_[i] = access_desc.edge_current_columns_[i];
-    }
-    for (int64_t i = 0; i < candidate.edge_key_count_; ++i) {
-      candidate.edge_columns_[i] = access_desc.edge_key_columns_[i];
-    }
-    for (int64_t i = 0; i < candidate.target_key_count_; ++i) {
-      candidate.target_columns_[i] = access_desc.edge_next_columns_[i];
-    }
-    if (OB_FAIL(bind_column_exprs(*output_ctdef, candidate.source_columns_,
-                                  candidate.source_key_count_,
-                                  candidate.source_exprs_))) {
-    } else if (OB_FAIL(bind_column_exprs(*output_ctdef,
-                                         candidate.edge_columns_,
-                                         candidate.edge_key_count_,
-                                         candidate.edge_exprs_))) {
-    } else if (OB_FAIL(bind_column_exprs(*output_ctdef,
-                                         candidate.target_columns_,
-                                         candidate.target_key_count_,
-                                         candidate.target_exprs_))) {
+    if (OB_FAIL(candidate.source_.init(
+            *output_ctdef, access_desc.edge_current_columns_, access_desc.source_key_count_))) {
+    } else if (OB_FAIL(candidate.edge_.init(
+            *output_ctdef, access_desc.edge_key_columns_, access_desc.edge_key_count_))) {
+    } else if (OB_FAIL(candidate.target_.init(
+            *output_ctdef, access_desc.edge_next_columns_, access_desc.target_key_count_))) {
     }
   }
   if (OB_SUCC(ret)) {
@@ -386,97 +284,6 @@ int GraphEdgeScanCursor::save_edge_cursor(
   return ret;
 }
 
-int GraphEdgeScanCursor::edge_row_has_null_endpoint(bool &has_null) const
-{
-  int ret = OB_SUCCESS;
-  has_null = false;
-  for (int endpoint = 0; OB_SUCC(ret) && !has_null && endpoint < 2;
-       ++endpoint) {
-    const int64_t key_count = endpoint == 0 ? edge_binding_.source_key_count_
-                                            : edge_binding_.target_key_count_;
-    ObExpr *const *key_exprs = endpoint == 0 ? edge_binding_.source_exprs_
-                                              : edge_binding_.target_exprs_;
-    for (int64_t key = 0; OB_SUCC(ret) && !has_null && key < key_count; ++key) {
-      ObDatum *datum = nullptr;
-      if (OB_ISNULL(key_exprs[key])) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(key_exprs[key]->eval(eval_ctx_, datum))) {
-      } else if (OB_ISNULL(datum)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        has_null = datum->is_null();
-      }
-    }
-  }
-  return ret;
-}
-
-int GraphEdgeScanCursor::materialize_edge(GraphExpandEdge &edge,
-                                           bool &matches)
-{
-  int ret = OB_SUCCESS;
-  bool has_null_endpoint = false;
-  edge = GraphExpandEdge();
-  matches = false;
-  if (OB_UNLIKELY(!edge_binding_.is_valid())) {
-    ret = OB_NOT_INIT;
-  } else if (OB_FAIL(edge_row_has_null_endpoint(has_null_endpoint))) {
-  } else if (has_null_endpoint) {
-    // SQL equality does not join a NULL endpoint to a frontier or vertex key,
-    // so this physical row is not a graph-edge match.
-  } else if (OB_FAIL(materialize_identity(
-                 path_desc_.source_element_id_, edge_binding_.source_key_count_,
-                 edge_binding_.source_exprs_, edge.source_identity_))) {
-  } else if (OB_FAIL(materialize_identity(
-                 path_desc_.edge_element_id_, edge_binding_.edge_key_count_,
-                 edge_binding_.edge_exprs_, edge.edge_identity_))) {
-  } else if (OB_FAIL(materialize_identity(
-                 path_desc_.target_element_id_, edge_binding_.target_key_count_,
-                 edge_binding_.target_exprs_, edge.target_identity_))) {
-  } else {
-    matches = true;
-  }
-  return ret;
-}
-
-int GraphEdgeScanCursor::materialize_edge_payload(GraphEdgePayload &payload)
-{
-  int ret = OB_SUCCESS;
-  const GraphExpandScanDesc *desc = edge_binding_.scan_desc_;
-  if (OB_ISNULL(desc)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (!desc->payload_exprs_.empty()) {
-    MultimodeAlloctor json_allocator(identity_page_allocator_);
-    const int64_t count = desc->payload_exprs_.count();
-    ObObj *cells = static_cast<ObObj *>(identity_page_allocator_.alloc(sizeof(ObObj) * count));
-    if (OB_ISNULL(cells)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      new(cells) ObObj[count];
-      payload.values_.assign(cells, count);
-      for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-        ObExpr *append_expr = desc->payload_exprs_.at(i);
-        ObIJsonBase *value = nullptr;
-        ObString binary;
-        if (OB_ISNULL(append_expr) || append_expr->arg_cnt_ != 3
-            || OB_ISNULL(append_expr->args_[2])) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(clear_payload_eval_flags(*append_expr->args_[2], eval_ctx_))) {
-        } else if (OB_FAIL(ObJsonExprHelper::get_json_val(
-                       *append_expr, eval_ctx_, &json_allocator, 2, value))) {
-        } else if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(
-                       value, binary, &identity_page_allocator_))) {
-        } else {
-          // This is one encoded JSON value, including SQL NULL as JSON null.
-          // It is not a serialized identity used for graph equality.
-          cells[i].set_varbinary(binary);
-        }
-      }
-    }
-  }
-  return ret;
-}
-
 int GraphEdgeScanCursor::validate_edge_scan_request(
     const ObIArray<GraphElementIdentity> &sources,
     GraphPathDirection direction,
@@ -496,14 +303,14 @@ int GraphEdgeScanCursor::validate_edge_scan_request(
        OB_SUCC(ret) && after_edge == nullptr && i < sources.count(); ++i) {
     if (!identity_matches(sources.at(i), path_desc_.graph_id_,
                           path_desc_.source_element_id_,
-                          edge_binding_.source_key_count_)) {
+                          edge_binding_.source_.key_count_)) {
       ret = OB_INVALID_ARGUMENT;
     }
   }
   if (OB_SUCC(ret) && after_edge != nullptr
       && !identity_matches(*after_edge, path_desc_.graph_id_,
                            path_desc_.edge_element_id_,
-                           edge_binding_.edge_key_count_)) {
+                           edge_binding_.edge_.key_count_)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_SUCC(ret) && after_edge != nullptr
              && (!edge_scan_active_ || !has_edge_cursor_
@@ -562,7 +369,7 @@ int GraphEdgeScanCursor::build_adjacency_ranges(
 {
   int ret = OB_SUCCESS;
   const ObDASScanCtDef *scan_ctdef = edge_binding_.access_ctdef_;
-  const int64_t prefix_count = edge_binding_.source_key_count_;
+  const int64_t prefix_count = edge_binding_.source_.key_count_;
   const int64_t rowkey_count = scan_ctdef == nullptr
       ? 0 : scan_ctdef->table_param_.get_read_info().get_schema_rowkey_count();
   if (OB_UNLIKELY(!access_desc_.uses_adjacency_index()
@@ -601,7 +408,7 @@ int GraphEdgeScanCursor::build_adjacency_ranges(
         }
         if (OB_SUCC(ret)) {
           ObNewRange range;
-          range.table_id_ = edge_binding_.access_table_id_;
+          range.table_id_ = access_desc_.edge_access_table_id_;
           range.start_key_.assign(start_keys, rowkey_count);
           range.end_key_.assign(end_keys, rowkey_count);
           range.border_flag_.set_inclusive_start();
@@ -670,7 +477,7 @@ int GraphEdgeScanCursor::start_full_edge_scan(bool &empty)
   if (OB_SUCC(ret) && !empty) {
     ObNewRange whole_range;
     whole_range.set_whole_range();
-    whole_range.table_id_ = edge_binding_.access_table_id_;
+    whole_range.table_id_ = access_desc_.edge_access_table_id_;
     // DASOpResultIter keeps its current task and row iterator between calls,
     // so a page can end in one tablet and resume there before advancing to the
     // next tablet. SQL does not promise a global row order without ORDER BY.
@@ -814,6 +621,7 @@ int GraphEdgeScanCursor::get_edge_page(
 {
   int ret = OB_SUCCESS;
   bool finished = false;
+  GraphEdgeRowMaterializer materializer(eval_ctx_, identity_page_allocator_, path_desc_);
   const GraphExpandScanDesc *scan_desc = edge_binding_.scan_desc_;
   if (OB_UNLIKELY(!edge_scan_active_ || edge_scan_rtdef_ == nullptr
                   || scan_desc == nullptr)) {
@@ -911,7 +719,8 @@ int GraphEdgeScanCursor::get_edge_page(
           LOG_WARN("injected graph edge scan error", K(ret), K(scanned_edges));
         } else if (OB_FAIL(evaluate_filters(eval_ctx_, scan_desc->filters_,
                                             filtered))) {
-        } else if (!filtered && OB_FAIL(materialize_edge(edge, matches))) {
+        } else if (!filtered && OB_FAIL(materializer.materialize_edge(
+                       edge_binding_.source_, edge_binding_.edge_, edge_binding_.target_, edge, matches))) {
         } else if (!filtered && matches
                    && OB_FAIL(edge_source_index_.find(
                        edge.source_identity_, source_index, source_found))) {
@@ -926,7 +735,7 @@ int GraphEdgeScanCursor::get_edge_page(
           // iterator, not a global seek key. Tablet task order need not match
           // edge rowkey order, and no output ordering is exposed without an
           // outer ORDER BY.
-          if (OB_FAIL(materialize_edge_payload(edge.payload_))) {
+          if (OB_FAIL(materializer.materialize_payload(*scan_desc, edge.payload_))) {
           } else if (OB_FAIL(edges.push_back(edge))) {
           } else if (OB_FAIL(save_edge_cursor(edge.edge_identity_))) {
           }

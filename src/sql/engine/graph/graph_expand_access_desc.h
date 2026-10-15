@@ -81,15 +81,5 @@ int build_graph_expand_access_desc(
     const GraphPathDesc &path_desc, uint64_t edge_access_table_id,
     share::schema::ObSchemaGetterGuard &schema_guard, GraphExpandAccessDesc &output);
 
-// Native feedback materializes hop count, source/current keys and supported
-// ordered edge-value arrays in the generated recursive row. Keep this predicate
-// shared by EXPLAIN and execution so a plan never advertises a runtime that the
-// physical operator will reject.
-bool supports_basic_native_graph_feedback(
-    const GraphPathDesc &path_desc,
-    const GraphExpandAccessDesc &access_desc,
-    int64_t output_expr_count,
-    int64_t payload_expr_count = 0);
-
 } // namespace sql
 } // namespace oceanbase

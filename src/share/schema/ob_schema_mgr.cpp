@@ -3091,7 +3091,7 @@ int ObSchemaMgr::get_schema_statistics(common::ObIArray<ObSchemaStatisticsInfo> 
     schema_info.schema_type_ = PROPERTY_GRAPH_SCHEMA;
     schema_info.count_ = graph_mgr_.get_all().count();
     for (int64_t i = 0; i < graph_mgr_.get_all().count(); ++i) {
-      schema_info.size_ += graph_mgr_.get_all().at(i)->get_convert_size();
+      schema_info.size_ += graph_mgr_.get_all().at(i)->get_deep_copy_size();
     }
     ret = schema_infos.push_back(schema_info);
   }

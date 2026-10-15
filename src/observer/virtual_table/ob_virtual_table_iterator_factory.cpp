@@ -897,7 +897,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
         END_CREATE_VT_ITER_SWITCH_LAMBDA
 
         BEGIN_CREATE_VT_ITER_SWITCH_LAMBDA
-          case OB_ALL_VIRTUAL_PG_GRAPHS_TID: {
+          case OB_ALL_VIRTUAL_PROPERTY_GRAPHS_TID: {
             GraphMetadataTable *metadata = nullptr;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(GraphMetadataTable, metadata))) {
               metadata->set_kind(GraphMetadataTable::Kind::GRAPHS);
@@ -905,7 +905,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             }
             break;
           }
-          case OB_ALL_VIRTUAL_PG_ELEMENTS_TID: {
+          case OB_ALL_VIRTUAL_PROPERTY_GRAPH_ELEMENTS_TID: {
             GraphMetadataTable *metadata = nullptr;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(GraphMetadataTable, metadata))) {
               metadata->set_kind(GraphMetadataTable::Kind::ELEMENTS);
@@ -913,7 +913,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             }
             break;
           }
-          case OB_ALL_VIRTUAL_PG_KEYS_TID: {
+          case OB_ALL_VIRTUAL_PROPERTY_GRAPH_KEYS_TID: {
             GraphMetadataTable *metadata = nullptr;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(GraphMetadataTable, metadata))) {
               metadata->set_kind(GraphMetadataTable::Kind::KEYS);
@@ -921,7 +921,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             }
             break;
           }
-          case OB_ALL_VIRTUAL_PG_EDGE_RELATIONSHIPS_TID: {
+          case OB_ALL_VIRTUAL_PROPERTY_GRAPH_EDGE_RELATIONSHIPS_TID: {
             GraphMetadataTable *metadata = nullptr;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(GraphMetadataTable, metadata))) {
               metadata->set_kind(GraphMetadataTable::Kind::EDGE_RELATIONSHIPS);
@@ -929,7 +929,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             }
             break;
           }
-          case OB_ALL_VIRTUAL_PG_LABELS_TID: {
+          case OB_ALL_VIRTUAL_PROPERTY_GRAPH_LABELS_TID: {
             GraphMetadataTable *metadata = nullptr;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(GraphMetadataTable, metadata))) {
               metadata->set_kind(GraphMetadataTable::Kind::LABELS);
@@ -937,7 +937,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             }
             break;
           }
-          case OB_ALL_VIRTUAL_PG_ELEMENT_LABELS_TID: {
+          case OB_ALL_VIRTUAL_PROPERTY_GRAPH_ELEMENT_LABELS_TID: {
             GraphMetadataTable *metadata = nullptr;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(GraphMetadataTable, metadata))) {
               metadata->set_kind(GraphMetadataTable::Kind::ELEMENT_LABELS);
@@ -945,7 +945,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             }
             break;
           }
-          case OB_ALL_VIRTUAL_PG_LABEL_PROPERTIES_TID: {
+          case OB_ALL_VIRTUAL_PROPERTY_GRAPH_LABEL_PROPERTIES_TID: {
             GraphMetadataTable *metadata = nullptr;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(GraphMetadataTable, metadata))) {
               metadata->set_kind(GraphMetadataTable::Kind::LABEL_PROPERTIES);
@@ -953,7 +953,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             }
             break;
           }
-          case OB_ALL_VIRTUAL_PG_PROPERTY_DEFINITIONS_TID: {
+          case OB_ALL_VIRTUAL_PROPERTY_GRAPH_PROPERTY_DEFINITIONS_TID: {
             GraphMetadataTable *metadata = nullptr;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(GraphMetadataTable, metadata))) {
               metadata->set_kind(GraphMetadataTable::Kind::PROPERTY_DEFINITIONS);

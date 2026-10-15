@@ -18,9 +18,7 @@
 
 #include "sql/engine/graph/graph_expand.h"
 #include "sql/engine/graph/graph_expand_access_desc.h"
-#include "sql/engine/graph/graph_frontier_input_batcher.h"
-#include "sql/engine/graph/graph_hop_stats_collector.h"
-#include "sql/engine/graph/graph_path_state_store.h"
+#include "sql/engine/graph/graph_feedback_row_desc.h"
 #include "sql/engine/recursive_cte/ob_recursive_union_all_op.h"
 #include "sql/engine/graph/graph_expand_scan_desc.h"
 
@@ -30,128 +28,6 @@ namespace sql
 {
 
 class GraphFeedbackRuntime;
-
-// Positional layout of the generated recursive row consumed by the native
-// feedback runtime. It deliberately uses expression indexes rather than the
-// temporary __g_* aliases created by the SQL lowering.
-struct GraphFeedbackRowDesc
-{
-  OB_UNIS_VERSION(1);
-public:
-  int init(const GraphPathDesc &path_desc,
-           const GraphExpandAccessDesc &access_desc,
-           int64_t output_count);
-  bool is_valid(const GraphPathDesc &path_desc,
-                const GraphExpandAccessDesc &access_desc) const;
-  bool supports_basic_native_output(
-      const GraphPathDesc &path_desc,
-      const GraphExpandAccessDesc &access_desc,
-      int64_t payload_count) const;
-
-  int64_t depth_expr_index_{0};
-  int64_t source_key_expr_begin_{0};
-  int64_t source_key_expr_count_{0};
-  int64_t current_key_expr_begin_{0};
-  int64_t current_key_expr_count_{0};
-  int64_t trail_key_expr_begin_{0};
-  int64_t trail_key_expr_count_{0};
-  // Optional JSON edge-identity/property arrays follow the fixed fields.
-  int64_t payload_expr_begin_{0};
-  int64_t payload_expr_count_{0};
-  int64_t output_expr_count_{0};
-  TO_STRING_KV(K_(depth_expr_index), K_(source_key_expr_begin),
-               K_(source_key_expr_count), K_(current_key_expr_begin),
-               K_(current_key_expr_count), K_(trail_key_expr_begin),
-               K_(trail_key_expr_count), K_(payload_expr_begin),
-               K_(payload_expr_count), K_(output_expr_count));
-};
-
-// Query-local owner of a breadth-first path frontier. expand() converts the
-// input path-state IDs into GraphExpandInput batches and yields bounded groups
-// of accepted children. Only a complete level becomes the next input frontier.
-// GraphFeedbackLoopOp uses this controller for its conservative
-// native subset and retains the recursive-SQL child as a semantic fallback.
-class GraphFeedbackFrontier final
-{
-public:
-  GraphFeedbackFrontier(common::ObIAllocator &allocator,
-                        GraphExpand &expand,
-                        int64_t input_batch_size,
-                        int64_t memory_limit);
-  ~GraphFeedbackFrontier() = default;
-
-  // Seeds may only be added to the zero-hop frontier. Duplicate seed rows are
-  // intentionally assigned independent path states to preserve bag semantics.
-  int add_seed(int64_t binding_id,
-               const GraphElementIdentity &source_identity);
-
-  // Produces a bounded batch from the next hop, or resumes that same hop.
-  // A partially produced hop is visible to the consumer but never becomes
-  // input to the following hop until all its extensions have been consumed.
-  // This is scheduling, not truncation: further calls return every path.
-  // WALK normally accepts every extension; a proven
-  // duplicate-insensitive consumer can merge equal binding/vertex states at
-  // this hop. TRAIL rejects edges in the extension's own history. An empty current
-  // frontier returns OB_ITER_END without modifying the controller.
-  int expand(GraphPathDirection direction, GraphPathMode path_mode,
-             bool prune_duplicate_states = false);
-
-  int get_frontier_state(int64_t index, GraphPathState &state) const;
-  // Reconstructs one current frontier entry from its zero-hop root through
-  // the current vertex. The returned query-local view is reused by the next
-  // call and remains valid only until then or reset().
-  int get_frontier_path(
-      int64_t index,
-      const common::ObIArray<GraphPathState> *&path);
-  int64_t get_hop() const { return hop_ + (expanding_ ? 1 : 0); }
-  int64_t get_frontier_count() const { return output_state_ids().count(); }
-  bool is_expanding() const { return expanding_; }
-  int64_t get_path_state_count() const { return state_store_.count(); }
-  int64_t get_peak_memory() const { return peak_memory_bytes_; }
-  // Statistics for the most recently completed source-hop -> target-hop
-  // expansion. They aggregate every physical input batch in that BFS level.
-  const GraphExpandStats &get_last_hop_stats() const
-  { return hop_stats_.last(); }
-  GraphExpandStats get_pending_hop_stats() const;
-  bool empty() const { return output_state_ids().empty(); }
-
-  // Clears path history and both frontier buffers for close, rescan, or any
-  // terminal error. The referenced GraphExpand object remains reusable.
-  void reset();
-
-private:
-  int consume_input_batch(GraphPathDirection direction,
-                          GraphPathMode path_mode,
-                          bool prune_duplicate_states,
-                          int64_t output_end);
-  const common::ObIArray<int64_t> &output_state_ids() const
-  { return expanding_ ? *next_state_ids_ : *current_state_ids_; }
-  int64_t batch_memory_budget() const;
-  int check_memory_limit();
-  int fail(int error);
-
-private:
-  GraphExpand &expand_;
-  GraphPathStateStore state_store_;
-  GraphFrontierInputBatcher input_batcher_;
-  GraphHopStatsCollector hop_stats_;
-  // One entry per (binding, typed vertex) in the NEXT BFS level only. Never a
-  // global visited set: a vertex reached at different hops is not equivalent.
-  GraphIdentityIndex next_state_index_;
-  int64_t input_batch_size_;
-  int64_t memory_limit_;
-  common::ObArray<int64_t> frontier_buffer_a_;
-  common::ObArray<int64_t> frontier_buffer_b_;
-  common::ObArray<int64_t> *current_state_ids_{nullptr};
-  common::ObArray<int64_t> *next_state_ids_{nullptr};
-  common::ObArray<GraphPathState> path_buffer_;
-  int64_t hop_{0};
-  int64_t peak_memory_bytes_{0};
-  bool expanding_{false};
-  bool batch_open_{false};
-
-  DISALLOW_COPY_AND_ASSIGN(GraphFeedbackFrontier);
-};
 
 // The graph operator has its own semantic spec while temporarily sharing the
 // recursive row-pump mechanics used by recursive CTE.  A later increment can
@@ -219,8 +95,10 @@ public:
   bool can_use_basic_native_runtime() const
   {
     return native_step_supported_
-        && output_row_desc_.supports_basic_native_output(
-        path_desc_, expand_access_desc_, edge_scan_desc_.payload_exprs_.count());
+        && output_row_desc_.is_valid(path_desc_, expand_access_desc_)
+        && supports_basic_native_graph_feedback(
+            path_desc_, expand_access_desc_, output_row_desc_.output_expr_count_,
+            edge_scan_desc_.payload_exprs_.count());
   }
 
 private:

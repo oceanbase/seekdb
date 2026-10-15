@@ -552,7 +552,7 @@ int GraphSchema::assign(const GraphSchema &other)
   return ret;
 }
 
-int64_t GraphSchema::get_convert_size() const
+int64_t GraphSchema::get_deep_copy_size() const
 {
   int64_t size = sizeof(*this) + name_.length() + 1;
   for (int64_t i = 0; i < elements_.count(); ++i) {

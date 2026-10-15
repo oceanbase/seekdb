@@ -19,13 +19,13 @@
 #include "sql/engine/graph/graph_expand.h"
 #include "sql/engine/graph/graph_expand_access_desc.h"
 #include "sql/engine/graph/graph_expand_scan_desc.h"
+#include "sql/engine/graph/graph_edge_row_materializer.h"
 #include "sql/das/ob_das_ref.h"
 
 namespace oceanbase
 {
 namespace sql
 {
-class ObTableLocation;
 
 // Owns one stateful edge scan across pages, including index-back tasks.
 // Returned identities/payload borrow the current page arena. The caller must
@@ -55,28 +55,15 @@ private:
   struct EdgeScanBinding
   {
     bool is_valid() const;
-
-    uint64_t edge_element_id_{common::OB_INVALID_ID};
-    uint64_t edge_table_id_{common::OB_INVALID_ID};
-    uint64_t access_table_id_{common::OB_INVALID_ID};
-    int64_t source_key_count_{0};
-    int64_t edge_key_count_{0};
-    int64_t target_key_count_{0};
-    uint64_t source_columns_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
-    uint64_t edge_columns_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
-    uint64_t target_columns_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
+    // Borrowed scan metadata and expression mappings; table/element IDs and
+    // column IDs remain in path_desc_/access_desc_, not duplicated here.
     const GraphExpandScanDesc *scan_desc_{nullptr};
     const ObDASScanCtDef *access_ctdef_{nullptr};
     const ObDASScanCtDef *output_ctdef_{nullptr};
-    ObExpr *source_exprs_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
-    ObExpr *edge_exprs_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
-    ObExpr *target_exprs_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
-    TO_STRING_KV(K_(edge_element_id), K_(edge_table_id), K_(access_table_id),
-                 K_(source_key_count), K_(edge_key_count),
-                 K_(target_key_count),
-                 "source_columns", common::ObArrayWrap<uint64_t>(source_columns_, source_key_count_),
-                 "edge_columns", common::ObArrayWrap<uint64_t>(edge_columns_, edge_key_count_),
-                 "target_columns", common::ObArrayWrap<uint64_t>(target_columns_, target_key_count_),
+    GraphIdentityExprBinding source_{};
+    GraphIdentityExprBinding edge_{};
+    GraphIdentityExprBinding target_{};
+    TO_STRING_KV(K_(source), K_(edge), K_(target),
                  KP_(scan_desc), KP_(access_ctdef), KP_(output_ctdef));
   };
 
@@ -86,13 +73,7 @@ private:
                         const GraphExpandAccessDesc &access_desc,
                         const GraphExpandScanDesc &scan_desc,
                         EdgeScanBinding &binding);
-  int materialize_identity(uint64_t element_id, int64_t key_count,
-                           ObExpr *const *key_exprs,
-                           GraphElementIdentity &identity);
   int save_edge_cursor(const GraphElementIdentity &identity);
-  int edge_row_has_null_endpoint(bool &has_null) const;
-  int materialize_edge(GraphExpandEdge &edge, bool &matches);
-  int materialize_edge_payload(GraphEdgePayload &payload);
   int validate_edge_scan_request(
       const common::ObIArray<GraphElementIdentity> &sources,
       GraphPathDirection direction,

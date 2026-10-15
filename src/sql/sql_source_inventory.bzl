@@ -180,6 +180,8 @@ SQL_UNITY_GROUPS = [
         srcs = [
             "src/sql/engine/graph/graph_binding_store.cpp",
             "src/sql/engine/graph/graph_feedback_loop_op.cpp",
+            "src/sql/engine/graph/graph_feedback_frontier.cpp",
+            "src/sql/engine/graph/graph_feedback_row_desc.cpp",
             "src/sql/engine/graph/graph_frontier_input_batcher.cpp",
             "src/sql/engine/graph/graph_hop_stats_collector.cpp",
             "src/sql/engine/graph/graph_expand.cpp",
@@ -189,6 +191,7 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/graph/graph_expand_das_access.cpp",
             "src/sql/engine/graph/graph_vertex_lookup.cpp",
             "src/sql/engine/graph/graph_edge_scan_cursor.cpp",
+            "src/sql/engine/graph/graph_edge_row_materializer.cpp",
             "src/sql/engine/graph/graph_das_access_utils.cpp",
             "src/sql/engine/graph/graph_expand_scan_desc.cpp",
             "src/sql/engine/graph/graph_path_state_store.cpp",

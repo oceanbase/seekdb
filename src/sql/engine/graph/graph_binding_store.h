@@ -44,11 +44,12 @@ public:
   void clear_limit_exceeded() { limit_exceeded_ = false; }
 
 private:
-  lib::ObMemAttr attr_{"GraphFeedback", common::ObCtxIds::WORK_AREA};
-  common::ObMalloc base_allocator_{attr_};
+  common::ObMalloc base_allocator_{};
   common::MemoryUsageTracker tracker_{};
+  // TrackedAllocator owns a copy and supplies it to the base allocator.
   common::TrackedAllocator tracked_allocator_{
-      base_allocator_, &tracker_, attr_};
+      base_allocator_, &tracker_,
+      lib::ObMemAttr("GraphFeedback", common::ObCtxIds::WORK_AREA)};
   int64_t memory_limit_{0};
   int64_t allocation_count_{0};
   bool limit_exceeded_{false};
