@@ -29,6 +29,18 @@ Write review comments in English.
 
 ## Required Checks
 
+- **Module and class design:** Check new or substantially redesigned components
+  against the Single Responsibility Principle (SRP), separation of concerns,
+  and high cohesion with low coupling. Identify independently changing
+  responsibilities, overly broad interfaces, and inheritance that violates
+  substitution contracts or exists only for code reuse. Prefer composition
+  at concrete responsibility boundaries, but keep tightly coupled state-machine
+  transitions and invariants together. Class length or method count alone is
+  not a defect; do not demand speculative abstractions or unrelated refactors.
+  Report a design finding only when it meets the Blocker/Major threshold below:
+  name the conflicting responsibilities and demonstrate the resulting supported
+  behavior, lifecycle, resource, or test-evidence gap. A general preference to
+  split a class is not sufficient.
 - **Error propagation:** Check `ret`, `OB_FAIL`, and `OB_SUCC` flows for lost or
   overwritten errors, work continuing after failure, incorrect success
   returns, partial side effects, and missing cleanup. Recognize established
