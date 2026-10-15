@@ -637,8 +637,9 @@ int GraphFeedbackLoopLogOp::initialize_expand_access()
     LOG_WARN("graph feedback internal scan is missing", K(ret),
              K(source_scan), K(edge_scan), K(target_scan), KPC(anchor),
              KPC(step));
-  } else if (OB_FAIL(expand_access_desc_.init(
-                 path_desc_, edge_scan->get_index_table_id(), *schema_guard))) {
+  } else if (OB_FAIL(build_graph_expand_access_desc(
+                 path_desc_, edge_scan->get_index_table_id(), *schema_guard,
+                 expand_access_desc_))) {
     LOG_WARN("failed to initialize graph expand access", K(ret), K_(path_desc),
              "edge_access_table_id", edge_scan->get_index_table_id());
   } else if (OB_FAIL(retain_graph_edge_columns(

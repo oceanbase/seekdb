@@ -17,6 +17,7 @@
 #pragma once
 
 #include "sql/engine/graph/graph_expand.h"
+#include "sql/engine/graph/graph_expand_access_desc.h"
 #include "sql/engine/graph/graph_frontier_input_batcher.h"
 #include "sql/engine/graph/graph_hop_stats_collector.h"
 #include "sql/engine/graph/graph_path_state_store.h"

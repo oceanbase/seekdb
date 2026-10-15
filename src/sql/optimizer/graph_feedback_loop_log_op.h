@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "sql/engine/graph/graph_expand.h"
+#include "sql/engine/graph/graph_expand_access_desc.h"
 #include "sql/optimizer/ob_logical_operator.h"
 
 namespace oceanbase
