@@ -697,12 +697,8 @@ GraphFeedbackFrontier::GraphFeedbackFrontier(ObIAllocator &allocator,
                                              int64_t memory_limit)
     : expand_(expand),
       state_store_(allocator, memory_limit),
-      hop_source_index_(allocator),
+      input_batcher_(allocator, state_store_, expand, input_batch_size),
       next_state_index_(allocator),
-      source_groups_(OB_MALLOC_NORMAL_BLOCK_SIZE,
-                     ModulePageAllocator(allocator, "GraphFrontier")),
-      next_source_positions_(OB_MALLOC_NORMAL_BLOCK_SIZE,
-                             ModulePageAllocator(allocator, "GraphFrontier")),
       input_batch_size_(input_batch_size),
       memory_limit_(memory_limit),
       frontier_buffer_a_(OB_MALLOC_NORMAL_BLOCK_SIZE,
@@ -711,8 +707,6 @@ GraphFeedbackFrontier::GraphFeedbackFrontier(ObIAllocator &allocator,
                          ModulePageAllocator(allocator, "GraphFrontier")),
       current_state_ids_(&frontier_buffer_a_),
       next_state_ids_(&frontier_buffer_b_),
-      input_batch_(OB_MALLOC_NORMAL_BLOCK_SIZE,
-                   ModulePageAllocator(allocator, "GraphFrontier")),
       path_buffer_(OB_MALLOC_NORMAL_BLOCK_SIZE,
                    ModulePageAllocator(allocator, "GraphPathResult"))
 {
@@ -724,13 +718,11 @@ int GraphFeedbackFrontier::check_memory_limit()
   int64_t used = state_store_.used_memory();
   const int64_t buffer_a_bytes = frontier_buffer_a_.get_data_size();
   const int64_t buffer_b_bytes = frontier_buffer_b_.get_data_size();
-  const int64_t input_bytes = input_batch_.get_data_size();
+  const int64_t input_bytes = input_batcher_.used_memory();
   const int64_t path_bytes = path_buffer_.get_data_size();
-  const int64_t hop_source_index_bytes = hop_source_index_.used_memory();
   const int64_t memory_parts[] = {
       buffer_a_bytes, buffer_b_bytes, input_bytes, path_bytes,
-      hop_source_index_bytes, next_state_index_.used_memory(), expand_.used_memory(),
-      source_groups_.get_data_size(), next_source_positions_.get_data_size()};
+      next_state_index_.used_memory(), expand_.used_memory()};
 
   if (OB_UNLIKELY(memory_limit_ <= 0)) {
     ret = OB_INVALID_ARGUMENT;
@@ -753,116 +745,29 @@ int GraphFeedbackFrontier::check_memory_limit()
              K_(memory_limit));
   } else if (OB_SUCC(ret)) {
     peak_memory_bytes_ = std::max(peak_memory_bytes_, used);
-    if (collecting_hop_stats_) {
-      current_hop_stats_.peak_path_memory_ = std::max(
-          current_hop_stats_.peak_path_memory_, used);
-    }
+    hop_stats_.record_memory(used);
   }
   return ret;
-}
-
-int GraphFeedbackFrontier::start_hop_stats()
-{
-  int ret = OB_SUCCESS;
-  GraphPathState first_state;
-  current_hop_stats_ = GraphExpandStats();
-  collecting_hop_stats_ = true;
-  hop_source_index_.reset();
-  current_hop_stats_.input_states_ = current_state_ids_->count();
-  if (OB_UNLIKELY(current_state_ids_->empty())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("cannot collect stats for an empty graph frontier", K(ret));
-  } else if (OB_FAIL(state_store_.get_state(current_state_ids_->at(0),
-                                             first_state))) {
-    LOG_WARN("failed to inspect graph hop source type", K(ret));
-  } else {
-    hop_source_index_enabled_ =
-        !identity_has_double_key(first_state.current_identity_);
-    current_hop_stats_.distinct_sources_exact_ =
-        hop_source_index_enabled_
-        || !expand_.can_partition_sources()
-        || current_state_ids_->count() <= input_batch_size_;
-    if (hop_source_index_enabled_
-        && OB_FAIL(hop_source_index_.init(current_state_ids_->count()))) {
-      LOG_WARN("failed to initialize graph hop source index", K(ret),
-               "input_count", current_state_ids_->count());
-    } else if (OB_FAIL(check_memory_limit())) {
-      LOG_WARN("graph hop source index exceeds memory limit", K(ret),
-               "input_count", current_state_ids_->count());
-    }
-  }
-  return ret;
-}
-
-int GraphFeedbackFrontier::record_hop_source(
-    const GraphElementIdentity &source_identity)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!collecting_hop_stats_ || !source_identity.is_valid())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid graph hop source statistics state", K(ret),
-             K_(collecting_hop_stats), K(source_identity));
-  } else if (hop_source_index_enabled_) {
-    int64_t source_index = -1;
-    bool inserted = false;
-    if (OB_UNLIKELY(identity_has_double_key(source_identity))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("graph hop source key type changed within one level", K(ret),
-               K(source_identity));
-    } else if (OB_FAIL(hop_source_index_.get_or_insert(
-                   source_identity, source_index, inserted))) {
-      LOG_WARN("failed to record graph hop source", K(ret),
-               K(source_identity));
-    }
-  }
-  return ret;
-}
-
-void GraphFeedbackFrontier::accumulate_expand_stats()
-{
-  const GraphExpandStats &batch_stats = expand_.get_stats();
-  if (!hop_source_index_enabled_) {
-    current_hop_stats_.distinct_sources_ = saturated_stat_add(
-        current_hop_stats_.distinct_sources_,
-        batch_stats.distinct_sources_);
-  }
-  current_hop_stats_.scanned_edges_ = saturated_stat_add(
-      current_hop_stats_.scanned_edges_, batch_stats.scanned_edges_);
-  current_hop_stats_.looked_up_vertices_ = saturated_stat_add(
-      current_hop_stats_.looked_up_vertices_,
-      batch_stats.looked_up_vertices_);
-  current_hop_stats_.orphan_edges_ = saturated_stat_add(
-      current_hop_stats_.orphan_edges_, batch_stats.orphan_edges_);
-}
-
-void GraphFeedbackFrontier::finish_hop_stats()
-{
-  if (hop_source_index_enabled_) {
-    current_hop_stats_.distinct_sources_ = hop_source_index_.count();
-  }
-  // GraphExpand counts every candidate extension. The frontier count records
-  // the paths actually accepted after path-mode rules such as TRAIL.
-  current_hop_stats_.output_states_ = current_state_ids_->count();
-  last_hop_stats_ = current_hop_stats_;
-  collecting_hop_stats_ = false;
-  hop_source_index_.reset();
 }
 
 GraphExpandStats GraphFeedbackFrontier::get_pending_hop_stats() const
 {
-  GraphExpandStats stats = current_hop_stats_;
-  if (batch_open_) {
-    const GraphExpandStats &batch = expand_.get_stats();
-    if (!hop_source_index_enabled_) {
-      stats.distinct_sources_ = saturated_stat_add(stats.distinct_sources_, batch.distinct_sources_);
-    }
-    stats.scanned_edges_ = saturated_stat_add(stats.scanned_edges_, batch.scanned_edges_);
-    stats.looked_up_vertices_ = saturated_stat_add(stats.looked_up_vertices_, batch.looked_up_vertices_);
-    stats.orphan_edges_ = saturated_stat_add(stats.orphan_edges_, batch.orphan_edges_);
+  return hop_stats_.snapshot(input_batcher_.source_count(),
+      input_batcher_.has_source_index(), next_state_ids_->count(),
+      batch_open_ ? &expand_.get_stats() : nullptr);
+}
+
+int64_t GraphFeedbackFrontier::batch_memory_budget() const
+{
+  int64_t remaining = memory_limit_;
+  const int64_t parts[] = {state_store_.used_memory(),
+      frontier_buffer_a_.get_data_size(), frontier_buffer_b_.get_data_size(),
+      path_buffer_.get_data_size(), next_state_index_.used_memory(), expand_.used_memory()};
+  for (int64_t part : parts) {
+    if (part < 0 || part > remaining) { return 0; }
+    remaining -= part;
   }
-  if (hop_source_index_enabled_) { stats.distinct_sources_ = hop_source_index_.count(); }
-  stats.output_states_ = next_state_ids_->count();
-  return stats;
+  return remaining;
 }
 
 int GraphFeedbackFrontier::add_seed(
@@ -891,102 +796,6 @@ int GraphFeedbackFrontier::add_seed(
   return ret;
 }
 
-int GraphFeedbackFrontier::prepare_source_groups()
-{
-  int ret = OB_SUCCESS;
-  source_groups_.reuse();
-  next_source_positions_.reuse();
-  // DOUBLE tolerance equality is non-transitive. Preserve its bounded linear
-  // matching path rather than assigning each input to only one source group.
-  batch_by_source_groups_ = expand_.can_partition_sources() && hop_source_index_enabled_;
-  for (int64_t i = 0; OB_SUCC(ret) && batch_by_source_groups_
-                          && i < current_state_ids_->count(); ++i) {
-    GraphPathState state;
-    int64_t group_index = -1;
-    bool inserted = false;
-    if (i % input_batch_size_ == 0 && OB_FAIL(expand_.check_status())) {
-    } else if (OB_FAIL(state_store_.get_state(current_state_ids_->at(i), state))) {
-    } else if (OB_UNLIKELY(state.hop_ != hop_)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(hop_source_index_.get_or_insert(
-                   state.current_identity_, group_index, inserted))) {
-    } else if (inserted && OB_FAIL(source_groups_.push_back(SourceGroup()))) {
-    } else if (OB_UNLIKELY(group_index < 0 || group_index >= source_groups_.count())) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(next_source_positions_.push_back(-1))) {
-    } else {
-      SourceGroup &group = source_groups_.at(group_index);
-      if (group.last_position_ >= 0) {
-        next_source_positions_.at(group.last_position_) = i;
-      } else {
-        group.first_position_ = i;
-      }
-      group.last_position_ = i;
-      ret = check_memory_limit();
-    }
-  }
-  return ret;
-}
-
-int GraphFeedbackFrontier::append_input(int64_t position)
-{
-  int ret = OB_SUCCESS;
-  GraphPathState state;
-  GraphExpandInput input;
-  if (OB_UNLIKELY(position < 0 || position >= current_state_ids_->count())) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(state_store_.get_state(current_state_ids_->at(position), state))) {
-  } else if (OB_UNLIKELY(state.hop_ != hop_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(state_store_.make_expand_input(current_state_ids_->at(position), input))) {
-  } else if (OB_FAIL(input_batch_.push_back(input))) {
-  } else if (!batch_by_source_groups_ && OB_FAIL(record_hop_source(input.source_identity_))) {
-  } else if (input_batch_.count() % input_batch_size_ == 0
-             && OB_FAIL(expand_.check_status())) {
-  } else if (OB_FAIL(check_memory_limit())) {
-  }
-  return ret;
-}
-
-int GraphFeedbackFrontier::build_input_batch(int64_t start,
-                                             int64_t &next_start)
-{
-  int ret = OB_SUCCESS;
-  next_start = start;
-  input_batch_.reuse();
-  const int64_t input_units = batch_by_source_groups_
-      ? source_groups_.count() : current_state_ids_->count();
-  if (OB_UNLIKELY(start < 0 || start >= input_units
-                  || input_batch_size_ <= 0
-                  || input_batch_size_ > GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid graph frontier input batch", K(ret), K(start),
-             "frontier_count", current_state_ids_->count(),
-             K_(input_batch_size));
-  } else {
-    // Keep all bindings of a source together, even when they occur far apart
-    // in the frontier. Full scans still receive the complete level.
-    const int64_t batch_size = expand_.can_partition_sources()
-        ? input_batch_size_ : current_state_ids_->count();
-    const int64_t count = std::min(batch_size,
-                                   input_units - start);
-    next_start = start + count;
-    for (int64_t i = start; OB_SUCC(ret) && i < next_start; ++i) {
-      int64_t position = batch_by_source_groups_ ? source_groups_.at(i).first_position_ : i;
-      while (OB_SUCC(ret) && position >= 0) {
-        if (OB_FAIL(append_input(position))) {
-          LOG_WARN("failed to append grouped graph input", K(ret), K(position));
-        } else {
-          position = batch_by_source_groups_ ? next_source_positions_.at(position) : -1;
-        }
-      }
-    }
-    if (OB_SUCC(ret) && OB_FAIL(check_memory_limit())) {
-    }
-  }
-  return ret;
-}
-
 int GraphFeedbackFrontier::consume_input_batch(
     GraphPathDirection direction,
     GraphPathMode path_mode,
@@ -996,9 +805,9 @@ int GraphFeedbackFrontier::consume_input_batch(
   int ret = OB_SUCCESS;
   bool batch_end = false;
   if (!batch_open_) {
-    if (OB_FAIL(expand_.rescan(input_batch_, direction))) {
+    if (OB_FAIL(expand_.rescan(input_batcher_.batch(), direction))) {
       LOG_WARN("failed to open graph expand for frontier batch", K(ret),
-               "input_count", input_batch_.count());
+               "input_count", input_batcher_.batch().count());
     } else {
       batch_open_ = true;
     }
@@ -1051,7 +860,7 @@ int GraphFeedbackFrontier::consume_input_batch(
   if (OB_SUCC(ret) && OB_FAIL(check_memory_limit())) {
   }
   if (OB_SUCC(ret) && batch_end) {
-    accumulate_expand_stats();
+    hop_stats_.add_batch(expand_.get_stats());
   }
   // Keep the current DAS page/cursor alive while the parent consumes this
   // output batch. close/rescan/error releases it even if LIMIT stops early.
@@ -1086,43 +895,43 @@ int GraphFeedbackFrontier::expand(GraphPathDirection direction,
     if (!expanding_) {
       next_state_ids_->reuse();
       next_state_index_.reset();
-      next_input_start_ = 0;
-      if (OB_FAIL(start_hop_stats())) {
-        LOG_WARN("failed to start graph hop statistics", K(ret), K_(hop));
-      } else if (OB_FAIL(prepare_source_groups())) {
+      if (OB_FAIL(input_batcher_.begin_level(*current_state_ids_, hop_, batch_memory_budget()))) {
         LOG_WARN("failed to group graph frontier sources", K(ret), K_(hop));
-      } else if (prune_duplicate_states
-                 && OB_FAIL(next_state_index_.init(current_state_ids_->count()))) {
-      } else if (OB_FAIL(check_memory_limit())) {
       } else {
+        hop_stats_.begin(current_state_ids_->count(), input_batcher_.has_source_index()
+            || !expand_.can_partition_sources() || current_state_ids_->count() <= input_batch_size_);
+      }
+      if (OB_SUCC(ret) && prune_duplicate_states
+                 && OB_FAIL(next_state_index_.init(current_state_ids_->count()))) {
+      }
+      if (OB_SUCC(ret) && OB_FAIL(check_memory_limit())) {
+      } else if (OB_SUCC(ret)) {
         expanding_ = true;
       }
     }
-    const int64_t input_units = batch_by_source_groups_
-        ? source_groups_.count() : current_state_ids_->count();
     const int64_t output_end = saturated_stat_add(next_state_ids_->count(), OUTPUT_BATCH_SIZE);
-    while (OB_SUCC(ret) && (batch_open_ || next_input_start_ < input_units)
+    while (OB_SUCC(ret) && (batch_open_ || !input_batcher_.exhausted())
            && next_state_ids_->count() < output_end) {
       if (!batch_open_) {
-        int64_t next_start = next_input_start_;
-        if (OB_FAIL(build_input_batch(next_input_start_, next_start))) {
-        } else {
-          next_input_start_ = next_start;
+        if (OB_FAIL(input_batcher_.next_batch(batch_memory_budget()))) {
+        } else if (OB_FAIL(check_memory_limit())) {
         }
       }
       if (OB_SUCC(ret) && OB_FAIL(consume_input_batch(
               direction, path_mode, prune_duplicate_states, output_end))) {
       }
     }
-    if (OB_SUCC(ret) && !batch_open_ && next_input_start_ == input_units) {
+    if (OB_SUCC(ret) && !batch_open_ && input_batcher_.exhausted()) {
       std::swap(current_state_ids_, next_state_ids_);
       next_state_ids_->reuse();
       ++hop_;
       expanding_ = false;
       if (OB_FAIL(check_memory_limit())) {
       } else {
-        finish_hop_stats();
-        LOG_TRACE("completed graph frontier hop", K_(hop), K_(last_hop_stats));
+        hop_stats_.finish(input_batcher_.source_count(),
+                          input_batcher_.has_source_index(), current_state_ids_->count());
+        LOG_TRACE("completed graph frontier hop", K_(hop), "stats", hop_stats_.last());
+        input_batcher_.finish_level();
         next_state_index_.reset();
       }
     } else if (OB_SUCC(ret)) {
@@ -1188,15 +997,12 @@ int GraphFeedbackFrontier::fail(int error)
 void GraphFeedbackFrontier::reset()
 {
   expand_.release();
+  // Release borrowed identities and access batches before their state store.
+  input_batcher_.reset();
+  next_state_index_.reset();
   state_store_.reset();
   frontier_buffer_a_.reset();
   frontier_buffer_b_.reset();
-  input_batch_.reset();
-  hop_source_index_.reset();
-  next_state_index_.reset();
-  source_groups_.reset();
-  next_source_positions_.reset();
-  batch_by_source_groups_ = false;
   // ModulePageAllocator may wrap the query arena, whose individual free() is
   // a no-op. Keep this reusable result block across rescans so reset does not
   // lose the only pointer to memory that remains charged to the query.
@@ -1205,13 +1011,9 @@ void GraphFeedbackFrontier::reset()
   next_state_ids_ = &frontier_buffer_b_;
   hop_ = 0;
   peak_memory_bytes_ = 0;
-  current_hop_stats_ = GraphExpandStats();
-  last_hop_stats_ = GraphExpandStats();
-  collecting_hop_stats_ = false;
-  hop_source_index_enabled_ = true;
+  hop_stats_.reset();
   expanding_ = false;
   batch_open_ = false;
-  next_input_start_ = 0;
 }
 
 GraphFeedbackLoopSpec::GraphFeedbackLoopSpec(common::ObIAllocator &allocator,
@@ -1459,6 +1261,9 @@ int GraphFeedbackLoopOp::init_native_runtime()
   return ret;
 }
 
+// TODO: Revisit these monitor slots after settling the SeekDB diagnostics interface.
+// These slots currently have no virtual-table output (frontier statistics have
+// separate TRACE logs); remove this plumbing if no supported consumer needs it.
 void GraphFeedbackLoopOp::init_native_monitor_info()
 {
   op_monitor_info_.otherstat_1_id_ =

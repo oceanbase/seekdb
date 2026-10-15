@@ -1,7 +1,7 @@
 --disable_query_log
 DROP PROPERTY GRAPH IF EXISTS graph_shared;
 --disable_warnings
-DROP TABLE IF EXISTS gs_v,gs_e,gs_digit;
+DROP TABLE IF EXISTS gs_v,gs_e,gs_digit,gs_float_v,gs_float_e;
 --enable_warnings
 CREATE TABLE gs_digit (n INT PRIMARY KEY);
 INSERT INTO gs_digit VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
@@ -69,6 +69,58 @@ while ($passes)
   DEALLOCATE PREPARE shared_cached;
   --dec $passes
 }
+--disable_query_log
+DROP PROPERTY GRAPH graph_shared;
+CREATE TABLE gs_float_v (id DOUBLE PRIMARY KEY,score INT);
+CREATE TABLE gs_float_e (eid INT PRIMARY KEY,src DOUBLE,dst DOUBLE);
+INSERT INTO gs_float_v SELECT * FROM gs_v;
+INSERT INTO gs_float_e SELECT * FROM gs_e;
+CREATE PROPERTY GRAPH graph_shared
+ VERTEX TABLES(gs_float_v KEY(id) LABEL node PROPERTIES(id,score))
+ EDGE TABLES(gs_float_e KEY(eid) SOURCE KEY(src) REFERENCES gs_float_v(id)
+ DESTINATION KEY(dst) REFERENCES gs_float_v(id) LABEL link PROPERTIES(eid));
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='float_full'
+SELECT COUNT(*) AS paths,COUNT(DISTINCT seed) AS seeds,
+ SUM(endpoint!=10003) AS wrong_endpoint,
+ SUM(CAST(JSON_VALUE(edges,'$[0]') AS SIGNED)!=seed) AS wrong_path
+FROM GRAPH_TABLE(graph_shared MATCH
+ (a IS node WHERE a.id<=5000)-[e IS link]->{2}(b IS node)
+ COLUMNS(a.id AS seed,b.id AS endpoint,JSON_ARRAYAGG(e.eid) AS edges)) g;
+--enable_result_log
+--enable_query_log
+--echo floating_sources_preserve_paths_without_hash_grouping_full_scan
+SELECT COUNT(*)=1 AS native_full_scan FROM plan_table
+WHERE statement_id='float_full' AND operator='GRAPH FEEDBACK LOOP'
+AND special_predicates LIKE '%access=full-scan%runtime=native%';
+SELECT COUNT(*) AS paths,COUNT(DISTINCT seed) AS seeds,
+ SUM(endpoint!=10003) AS wrong_endpoint,
+ SUM(CAST(JSON_VALUE(edges,'$[0]') AS SIGNED)!=seed) AS wrong_path
+FROM GRAPH_TABLE(graph_shared MATCH
+ (a IS node WHERE a.id<=5000)-[e IS link]->{2}(b IS node)
+ COLUMNS(a.id AS seed,b.id AS endpoint,JSON_ARRAYAGG(e.eid) AS edges)) g;
+CREATE INDEX gsf_out ON gs_float_e(src);
+--disable_query_log
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='float_index'
+SELECT COUNT(*) AS paths,COUNT(DISTINCT seed) AS seeds,
+ SUM(endpoint!=10003) AS wrong_endpoint,
+ SUM(CAST(JSON_VALUE(edges,'$[0]') AS SIGNED)!=seed) AS wrong_path
+FROM GRAPH_TABLE(graph_shared MATCH
+ (a IS node WHERE a.id<=5000)-[e IS link]->{2}(b IS node)
+ COLUMNS(a.id AS seed,b.id AS endpoint,JSON_ARRAYAGG(e.eid) AS edges)) g;
+--enable_result_log
+--enable_query_log
+--echo floating_sources_preserve_paths_across_input_batches
+SELECT COUNT(*)=1 AS native_index_scan FROM plan_table
+WHERE statement_id='float_index' AND operator='GRAPH FEEDBACK LOOP'
+AND special_predicates LIKE '%access=index-scan%runtime=native%';
+SELECT COUNT(*) AS paths,COUNT(DISTINCT seed) AS seeds,
+ SUM(endpoint!=10003) AS wrong_endpoint,
+ SUM(CAST(JSON_VALUE(edges,'$[0]') AS SIGNED)!=seed) AS wrong_path
+FROM GRAPH_TABLE(graph_shared MATCH
+ (a IS node WHERE a.id<=5000)-[e IS link]->{2}(b IS node)
+ COLUMNS(a.id AS seed,b.id AS endpoint,JSON_ARRAYAGG(e.eid) AS edges)) g;
 DROP TABLE plan_table;
 DROP PROPERTY GRAPH graph_shared;
-DROP TABLE gs_e,gs_v,gs_digit;
+DROP TABLE gs_e,gs_v,gs_digit,gs_float_e,gs_float_v;

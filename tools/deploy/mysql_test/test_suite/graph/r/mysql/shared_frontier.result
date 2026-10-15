@@ -98,6 +98,35 @@ EXECUTE shared_cached USING @seeds;
 paths	score_sum
 6	120
 DEALLOCATE PREPARE shared_cached;
+floating_sources_preserve_paths_without_hash_grouping_full_scan
+SELECT COUNT(*)=1 AS native_full_scan FROM plan_table
+WHERE statement_id='float_full' AND operator='GRAPH FEEDBACK LOOP'
+AND special_predicates LIKE '%access=full-scan%runtime=native%';
+native_full_scan
+1
+SELECT COUNT(*) AS paths,COUNT(DISTINCT seed) AS seeds,
+SUM(endpoint!=10003) AS wrong_endpoint,
+SUM(CAST(JSON_VALUE(edges,'$[0]') AS SIGNED)!=seed) AS wrong_path
+FROM GRAPH_TABLE(graph_shared MATCH
+(a IS node WHERE a.id<=5000)-[e IS link]->{2}(b IS node)
+COLUMNS(a.id AS seed,b.id AS endpoint,JSON_ARRAYAGG(e.eid) AS edges)) g;
+paths	seeds	wrong_endpoint	wrong_path
+10000	5000	0	0
+CREATE INDEX gsf_out ON gs_float_e(src);
+floating_sources_preserve_paths_across_input_batches
+SELECT COUNT(*)=1 AS native_index_scan FROM plan_table
+WHERE statement_id='float_index' AND operator='GRAPH FEEDBACK LOOP'
+AND special_predicates LIKE '%access=index-scan%runtime=native%';
+native_index_scan
+1
+SELECT COUNT(*) AS paths,COUNT(DISTINCT seed) AS seeds,
+SUM(endpoint!=10003) AS wrong_endpoint,
+SUM(CAST(JSON_VALUE(edges,'$[0]') AS SIGNED)!=seed) AS wrong_path
+FROM GRAPH_TABLE(graph_shared MATCH
+(a IS node WHERE a.id<=5000)-[e IS link]->{2}(b IS node)
+COLUMNS(a.id AS seed,b.id AS endpoint,JSON_ARRAYAGG(e.eid) AS edges)) g;
+paths	seeds	wrong_endpoint	wrong_path
+10000	5000	0	0
 DROP TABLE plan_table;
 DROP PROPERTY GRAPH graph_shared;
-DROP TABLE gs_e,gs_v,gs_digit;
+DROP TABLE gs_e,gs_v,gs_digit,gs_float_e,gs_float_v;

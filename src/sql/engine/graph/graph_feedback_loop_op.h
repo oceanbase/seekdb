@@ -17,6 +17,8 @@
 #pragma once
 
 #include "sql/engine/graph/graph_expand.h"
+#include "sql/engine/graph/graph_frontier_input_batcher.h"
+#include "sql/engine/graph/graph_hop_stats_collector.h"
 #include "sql/engine/graph/graph_path_state_store.h"
 #include "sql/engine/recursive_cte/ob_recursive_union_all_op.h"
 #include "sql/engine/graph/graph_expand_scan_desc.h"
@@ -108,7 +110,7 @@ public:
   // Statistics for the most recently completed source-hop -> target-hop
   // expansion. They aggregate every physical input batch in that BFS level.
   const GraphExpandStats &get_last_hop_stats() const
-  { return last_hop_stats_; }
+  { return hop_stats_.last(); }
   GraphExpandStats get_pending_hop_stats() const;
   bool empty() const { return output_state_ids().empty(); }
 
@@ -117,59 +119,35 @@ public:
   void reset();
 
 private:
-  struct SourceGroup
-  {
-    int64_t first_position_{-1};
-    int64_t last_position_{-1};
-    TO_STRING_KV(K_(first_position), K_(last_position));
-  };
-  int prepare_source_groups();
-  int append_input(int64_t position);
-  int build_input_batch(int64_t start, int64_t &next_start);
   int consume_input_batch(GraphPathDirection direction,
                           GraphPathMode path_mode,
                           bool prune_duplicate_states,
                           int64_t output_end);
   const common::ObIArray<int64_t> &output_state_ids() const
   { return expanding_ ? *next_state_ids_ : *current_state_ids_; }
-  int start_hop_stats();
-  int record_hop_source(const GraphElementIdentity &source_identity);
-  void accumulate_expand_stats();
-  void finish_hop_stats();
+  int64_t batch_memory_budget() const;
   int check_memory_limit();
   int fail(int error);
 
 private:
   GraphExpand &expand_;
   GraphPathStateStore state_store_;
-  // Tracks distinct source identities across all physical batches in one hop.
-  // Tolerance-compared DOUBLE keys cannot use an equality-compatible hash and
-  // therefore retain GraphExpand's bounded, per-batch source counts instead.
-  GraphIdentityIndex hop_source_index_;
+  GraphFrontierInputBatcher input_batcher_;
+  GraphHopStatsCollector hop_stats_;
   // One entry per (binding, typed vertex) in the NEXT BFS level only. Never a
   // global visited set: a vertex reached at different hops is not equivalent.
   GraphIdentityIndex next_state_index_;
-  // Indexed access partitions source groups, never their associated paths.
-  common::ObArray<SourceGroup> source_groups_;
-  common::ObArray<int64_t> next_source_positions_;
-  bool batch_by_source_groups_{false};
   int64_t input_batch_size_;
   int64_t memory_limit_;
   common::ObArray<int64_t> frontier_buffer_a_;
   common::ObArray<int64_t> frontier_buffer_b_;
   common::ObArray<int64_t> *current_state_ids_{nullptr};
   common::ObArray<int64_t> *next_state_ids_{nullptr};
-  common::ObArray<GraphExpandInput> input_batch_;
   common::ObArray<GraphPathState> path_buffer_;
   int64_t hop_{0};
   int64_t peak_memory_bytes_{0};
-  GraphExpandStats current_hop_stats_{};
-  GraphExpandStats last_hop_stats_{};
-  bool collecting_hop_stats_{false};
-  bool hop_source_index_enabled_{true};
   bool expanding_{false};
   bool batch_open_{false};
-  int64_t next_input_start_{0};
 
   DISALLOW_COPY_AND_ASSIGN(GraphFeedbackFrontier);
 };

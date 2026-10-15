@@ -958,6 +958,8 @@ SQL_PRIVATE_HEADERS = [
     "engine/graph/graph_cached_access.h",
     "engine/graph/graph_expand_das_access.h",
     "engine/graph/graph_feedback_loop_op.h",
+    "engine/graph/graph_frontier_input_batcher.h",
+    "engine/graph/graph_hop_stats_collector.h",
     "engine/graph/graph_path_spec.h",
     "engine/graph/graph_path_state_store.h",
     "engine/join/ob_basic_nested_loop_join_op.h",
