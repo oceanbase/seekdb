@@ -17,35 +17,12 @@
 #pragma once
 
 #include "sql/engine/graph/graph_expand.h"
-#include "lib/allocator/ob_malloc.h"
+#include "sql/engine/graph/graph_adjacency_cache.h"
 
 namespace oceanbase
 {
 namespace sql
 {
-
-// An optional allocation sub-budget, backed by the same query work area as
-// paths and bindings. Exhausting this budget disables reuse, never truncates
-// graph output; failure of the underlying query allocator remains an error.
-class GraphCacheAllocator final : public common::ObIAllocator
-{
-public:
-  GraphCacheAllocator(common::ObIAllocator &parent, int64_t limit)
-      : tracked_(parent, &tracker_), limit_(limit) {}
-  void *alloc(int64_t size) override;
-  void *alloc(int64_t size, const lib::ObMemAttr &) override { return alloc(size); }
-  void free(void *ptr) override;
-  int64_t total() const override;
-  int64_t used() const override { return total(); }
-  bool budget_exceeded() const { return budget_exceeded_; }
-  void clear_budget_error() { budget_exceeded_ = false; }
-private:
-  common::MemoryUsageTracker tracker_{};
-  common::TrackedAllocator tracked_;
-  int64_t limit_{0};
-  int64_t allocations_{0};
-  bool budget_exceeded_{false};
-};
 
 // Statement/operator-local adjacency reuse. Only complete successful reads
 // become entries. The owner must include all outer filter parameters in the
@@ -76,42 +53,10 @@ public:
                  int64_t limit, common::ObIArray<GraphExpandEdge> &edges,
                  int64_t &scanned_edges, bool &end) override;
 private:
-  struct Context
-  {
-    common::ObString key_{};
-    uint64_t hash_{0};
-    int64_t next_{-1};
-    TO_STRING_KV(K_(hash), K_(next));
-  };
-  struct Entry
-  {
-    int64_t first_edge_{-1};
-    int64_t last_edge_{-1};
-    bool complete_{false};
-    TO_STRING_KV(K_(first_edge), K_(last_edge), K_(complete));
-  };
-  struct Edge
-  {
-    GraphExpandEdge value_{};
-    int64_t next_{-1};
-    TO_STRING_KV(K_(value), K_(next));
-  };
   int begin(const common::ObIArray<GraphElementIdentity> &sources);
-  int begin_recording();
-  int record(const common::ObIArray<GraphExpandEdge> &edges, bool end);
-  int recover_cache_budget(int ret);
-  int grow_context_buckets();
-  void reset_cache();
-  int copy_identity(const GraphElementIdentity &source, GraphElementIdentity &dest);
 
   IGraphExpandAccess &child_;
-  GraphCacheAllocator cache_allocator_;
-  common::ObArenaAllocator identities_;
-  GraphIdentityIndex index_;
-  common::ObArray<Entry> entries_;
-  common::ObArray<Edge> cached_edges_;
-  common::ObArray<Context> contexts_;
-  common::ObArray<int64_t> context_buckets_;
+  GraphAdjacencyCache cache_;
   // Request-local arrays are not backed by the optional cache sub-budget.
   common::ObArray<int64_t> hits_;
   common::ObArray<GraphElementIdentity> misses_;
@@ -119,14 +64,8 @@ private:
   GraphElementIdentity child_cursor_{};
   int64_t hit_position_{0};
   int64_t hit_edge_{-1};
-  int64_t first_new_entry_{-1};
-  // Zero denotes parameter-independent reads; positive IDs are private cache
-  // namespaces, NOT seed binding IDs or graph element IDs. -1 bypasses reuse.
-  int64_t context_id_{0};
-  bool parameterized_{false};
   bool enabled_{false};
   bool bypass_{true};
-  bool recording_{false};
   bool child_has_cursor_{false};
 };
 

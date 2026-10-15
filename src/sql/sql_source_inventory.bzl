@@ -184,6 +184,7 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/graph/graph_hop_stats_collector.cpp",
             "src/sql/engine/graph/graph_expand.cpp",
             "src/sql/engine/graph/graph_cached_access.cpp",
+            "src/sql/engine/graph/graph_adjacency_cache.cpp",
             "src/sql/engine/graph/graph_expand_das_access.cpp",
             "src/sql/engine/graph/graph_path_state_store.cpp",
             "src/sql/engine/window_function/ob_window_function_op.cpp",

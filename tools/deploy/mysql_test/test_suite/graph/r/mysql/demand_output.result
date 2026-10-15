@@ -14,6 +14,10 @@ SELECT COUNT(*) AS partial_rescan_sorts FROM plan_table WHERE statement_id='part
  AND operator LIKE '%SORT%';
 partial_rescan_sorts
 0
+SELECT COUNT(*) AS parameter_partial_reuse FROM plan_table WHERE statement_id='parameter_partial'
+ AND special_predicates LIKE '%runtime=native%adjacency_reuse=eligible%';
+parameter_partial_reuse
+1
 DROP TABLE plan_table;
 explicit_limit_does_not_materialize_the_complete_high_degree_hop
 SELECT /*+ USE_NL(@SEL$3 __g_result_source __g_result_target) LEADING(@SEL$3 __g_path __g_result_source __g_result_target) */ COUNT(*) AS limited_paths FROM (
@@ -70,6 +74,17 @@ binding_id	paths
 1	140
 2	1
 3	140
+parameter_context_switch_after_partial_recording
+SELECT /*+ USE_NL(@SEL$3 __g_result_source __g_result_target) LEADING(@SEL$3 __g_path __g_result_source __g_result_target) */ s.binding_id,COUNT(*) AS paths
+FROM gd_seed s,LATERAL (
+SELECT * FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=s.cache_seed)
+-[e IS link WHERE e.id>=s.cutoff]->{1}(b IS node WHERE b.id=s.resume_target)
+COLUMNS(b.id AS endpoint)) g LIMIT 140) p
+GROUP BY s.binding_id ORDER BY s.binding_id;
+binding_id	paths
+1	140
+2	1
+3	1
 SELECT COUNT(*) AS step_rows,SUM(sn=2) AS first_steps,SUM(sn=4) AS second_steps
 FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=1)
 -[e IS link]->{2}(b IS node) ONE ROW PER STEP(v1,se,v2)
@@ -107,6 +122,10 @@ SELECT COUNT(*) AS partial_rescan_sorts FROM plan_table WHERE statement_id='part
  AND operator LIKE '%SORT%';
 partial_rescan_sorts
 0
+SELECT COUNT(*) AS parameter_partial_reuse FROM plan_table WHERE statement_id='parameter_partial'
+ AND special_predicates LIKE '%runtime=native%adjacency_reuse=eligible%';
+parameter_partial_reuse
+1
 DROP TABLE plan_table;
 explicit_limit_does_not_materialize_the_complete_high_degree_hop
 SELECT /*+ USE_NL(@SEL$3 __g_result_source __g_result_target) LEADING(@SEL$3 __g_path __g_result_source __g_result_target) */ COUNT(*) AS limited_paths FROM (
@@ -163,6 +182,17 @@ binding_id	paths
 1	140
 2	1
 3	140
+parameter_context_switch_after_partial_recording
+SELECT /*+ USE_NL(@SEL$3 __g_result_source __g_result_target) LEADING(@SEL$3 __g_path __g_result_source __g_result_target) */ s.binding_id,COUNT(*) AS paths
+FROM gd_seed s,LATERAL (
+SELECT * FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=s.cache_seed)
+-[e IS link WHERE e.id>=s.cutoff]->{1}(b IS node WHERE b.id=s.resume_target)
+COLUMNS(b.id AS endpoint)) g LIMIT 140) p
+GROUP BY s.binding_id ORDER BY s.binding_id;
+binding_id	paths
+1	140
+2	1
+3	1
 SELECT COUNT(*) AS step_rows,SUM(sn=2) AS first_steps,SUM(sn=4) AS second_steps
 FROM GRAPH_TABLE(gd_graph MATCH (a IS node WHERE a.id=1)
 -[e IS link]->{2}(b IS node) ONE ROW PER STEP(v1,se,v2)
