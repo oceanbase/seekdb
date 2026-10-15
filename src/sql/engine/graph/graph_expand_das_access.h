@@ -51,6 +51,10 @@ public:
                  common::ObIArray<GraphExpandEdge> &edges,
                  int64_t &scanned_edges, bool &end) override;
   bool is_initialized() const { return initialized_; }
+  bool has_live_edge_scan_resources() const
+  { return edge_cursor_.has_live_edge_scan_resources(); }
+  bool edge_scan_resources_released() const
+  { return edge_cursor_.edge_scan_resources_released(); }
 private:
   ObExecContext &exec_ctx_;
   GraphVertexLookup vertex_lookup_;

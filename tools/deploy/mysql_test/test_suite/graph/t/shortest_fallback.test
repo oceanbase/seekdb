@@ -75,5 +75,29 @@ SELECT * FROM GRAPH_TABLE(sp_graph MATCH ANY SHORTEST (a IS a WHERE a.name='A1')
  COLUMNS(b.name AS endpoint,ELEMENT_NUMBER(se) AS n,v1.name AS src,v2.name AS dst,COUNT(e.id) AS hops)) g ORDER BY endpoint,n;
 SELECT * FROM GRAPH_TABLE(sp_graph MATCH ANY SHORTEST (a IS b)-[e IS e]-{0,3}(b IS a)
  COLUMNS(b.name AS endpoint,COUNT(e.id) AS hops)) g ORDER BY endpoint;
+--disable_query_log
+# Equal first key components must not merge distinct composite endpoints.
+# Undirected heterogeneous traversal uses the recursive SQL fallback and
+# ROW_NUMBER ranking; a directed one-hop mapping would bypass that executor.
+INSERT INTO sp_b VALUES(X'4100',2.50,'B2');
+INSERT INTO sp_e VALUES(13,1,X'4100',2.50);
+--source mysql_test/include/create_plan_table.inc
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='composite_shortest'
+SELECT * FROM GRAPH_TABLE(sp_graph MATCH ANY SHORTEST
+ (a IS a WHERE a.name='A1')-[e IS e]-{1,3}(b IS b)
+ COLUMNS(b.name AS endpoint,COUNT(e.id) AS hops)) g ORDER BY endpoint;
+--enable_result_log
+--echo shortest_fallback_preserves_all_composite_endpoint_keys
+SELECT COUNT(*)=1 AS composite_fallback FROM plan_table
+ WHERE statement_id='composite_shortest' AND operator='RECURSIVE UNION ALL';
+SELECT COUNT(*)>=1 AS composite_shortest_ranking FROM plan_table
+ WHERE statement_id='composite_shortest' AND operator='WINDOW FUNCTION'
+ AND LOWER(special_predicates) LIKE '%row_number%';
+SELECT * FROM GRAPH_TABLE(sp_graph MATCH ANY SHORTEST
+ (a IS a WHERE a.name='A1')-[e IS e]-{1,3}(b IS b)
+ COLUMNS(b.name AS endpoint,COUNT(e.id) AS hops)) g ORDER BY endpoint;
+DROP TABLE plan_table;
+--enable_query_log
 DROP PROPERTY GRAPH sp_graph;
 DROP TABLE sp_e,sp_b,sp_a;

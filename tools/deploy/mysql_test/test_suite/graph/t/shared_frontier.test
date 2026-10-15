@@ -67,6 +67,31 @@ while ($passes)
   SET @seeds=3;
   EXECUTE shared_cached USING @seeds;
   DEALLOCATE PREPARE shared_cached;
+  --disable_query_log
+  --disable_result_log
+  EXPLAIN INTO plan_table SET statement_id='shared_shortest'
+  SELECT * FROM GRAPH_TABLE(graph_shared MATCH ANY SHORTEST
+   (a IS node WHERE a.id<=5000)-[e IS link]->{2}(b IS node)
+   COLUMNS(a.id AS seed,a.score AS score,b.id AS endpoint,
+           COUNT(e.eid) AS hops,JSON_ARRAYAGG(e.eid) AS edges)) g;
+  --enable_result_log
+  --echo shortest_converged_frontier_preserves_each_seed_binding
+  SELECT COUNT(*)=1 AS native_shortest_binding_states FROM plan_table
+   WHERE statement_id='shared_shortest' AND operator='GRAPH FEEDBACK LOOP'
+   AND special_predicates LIKE '%runtime=native, states=binding_vertex_hop, search=any_shortest%';
+  # The second edge can be either parallel edge, but must match seed parity.
+  SELECT COUNT(*) AS paths,COUNT(DISTINCT seed) AS seeds,
+   SUM(NOT (score<=>seed*10)) AS wrong_score,
+   SUM(NOT (endpoint<=>10003)) AS wrong_endpoint,
+   SUM(NOT (hops<=>2) OR NOT (JSON_LENGTH(edges)<=>2)) AS wrong_length,
+   SUM(NOT (CAST(JSON_VALUE(edges,'$[0]') AS SIGNED)<=>seed)) AS wrong_first_edge,
+   SUM(COALESCE(CAST(JSON_VALUE(edges,'$[1]') AS SIGNED)
+       NOT IN (20001+2*MOD(seed,2),20002+2*MOD(seed,2)),1)) AS wrong_second_edge
+  FROM GRAPH_TABLE(graph_shared MATCH ANY SHORTEST
+   (a IS node WHERE a.id<=5000)-[e IS link]->{2}(b IS node)
+   COLUMNS(a.id AS seed,a.score AS score,b.id AS endpoint,
+           COUNT(e.eid) AS hops,JSON_ARRAYAGG(e.eid) AS edges)) g;
+  --enable_query_log
   --dec $passes
 }
 --disable_query_log

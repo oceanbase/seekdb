@@ -17,6 +17,8 @@ COUNT(*)
 5
 SELECT COUNT(*) FROM GRAPH_TABLE(graph_social MATCH(a IS person)-[e IS knows]->(b IS person) COLUMNS(e.id AS id)) g;
 ERROR 42000: SELECT command denied to user 'graph_reader'@'%' for table 'graph_knows'
+SELECT * FROM GRAPH_TABLE(graph_social MATCH(a IS person WHERE a.id=1)-[e IS knows]->{1,2}(b IS person) COLUMNS(b.id AS destination,JSON_ARRAYAGG(e.id) AS edges)) g ORDER BY destination,CAST(edges AS CHAR);
+ERROR 42000: SELECT command denied to user 'graph_reader'@'%' for table 'graph_knows'
 DROP PROPERTY GRAPH graph_social;
 Got one of the listed errors
 REVOKE SELECT ON test.graph_person FROM graph_reader;
@@ -38,6 +40,32 @@ CREATE PROPERTY GRAPH graph_denied VERTEX TABLES(graph_person KEY(id) LABEL pers
 ERROR 42000: Access denied for user 'graph_reader'@'%' to database 'test'
 SHOW CREATE PROPERTY GRAPH graph_denied;
 ERROR 42S02: Table 'test.graph_denied' doesn't exist
+GRANT SELECT(id,src,dst) ON test.graph_knows TO graph_reader;
+native_path_with_only_required_columns
+SELECT * FROM GRAPH_TABLE(graph_social MATCH(a IS person WHERE a.id=1)-[e IS knows]->{1,2}(b IS person) COLUMNS(b.id AS destination,JSON_ARRAYAGG(e.id) AS edges)) g ORDER BY destination,CAST(edges AS CHAR);
+destination	edges
+2	[10]
+2	[11]
+3	[10, 12]
+3	[11, 12]
+filter_only_column_requires_select
+SELECT * FROM GRAPH_TABLE(graph_social MATCH(a IS person WHERE a.id=1)-[e IS knows WHERE e.since>=2021]->{1,2}(b IS person) COLUMNS(b.id AS destination,JSON_ARRAYAGG(e.id) AS edges)) g ORDER BY destination,CAST(edges AS CHAR);
+Got one of the listed errors
+GRANT SELECT(since) ON test.graph_knows TO graph_reader;
+PREPARE graph_native_auth FROM 'SELECT * FROM GRAPH_TABLE(graph_social MATCH(a IS person WHERE a.id=1)-[e IS knows WHERE e.since>=2021]->{1,2}(b IS person) COLUMNS(b.id AS destination,JSON_ARRAYAGG(e.id) AS edges)) g ORDER BY destination,CAST(edges AS CHAR)';
+EXECUTE graph_native_auth;
+destination	edges
+2	[11]
+3	[11, 12]
+REVOKE SELECT(since) ON test.graph_knows FROM graph_reader;
+EXECUTE graph_native_auth;
+Got one of the listed errors
+GRANT SELECT(since) ON test.graph_knows TO graph_reader;
+EXECUTE graph_native_auth;
+destination	edges
+2	[11]
+3	[11, 12]
+DEALLOCATE PREPARE graph_native_auth;
 DROP USER graph_reader;
 DROP PROPERTY GRAPH graph_social;
 DROP TABLE graph_works,graph_knows,graph_company,graph_person;

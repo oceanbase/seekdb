@@ -24,6 +24,7 @@
 #include "sql/engine/ob_sql_mem_mgr_processor.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "share/ob_errno.h"
+#include "share/ob_debug_sync.h"
 #include "sql/engine/table/ob_table_scan_op.h"
 #include "sql/engine/expr/ob_expr_json_func_helper.h"
 #include "share/ob_json_access_utils.h"
@@ -313,6 +314,17 @@ public:
       reset();
     }
     return ret;
+  }
+
+  bool is_resuming_output() const
+  { return frontier_.is_expanding() && next_output_index_ == 1; }
+  bool has_live_edge_scan_resources() const
+  { return access_.has_live_edge_scan_resources(); }
+  bool resources_released() const
+  {
+    return access_.edge_scan_resources_released()
+        && access_.used_memory() == 0 && binding_store_.count() == 0
+        && !frontier_.is_expanding() && frontier_.output_empty();
   }
 
   void reset(bool keep_adjacency = false)
@@ -769,7 +781,16 @@ int GraphFeedbackLoopOp::get_next_native_row()
 {
   int ret = OB_SUCCESS;
   clear_evaluated_flag();
-  if (OB_UNLIKELY(!use_native_runtime_)) {
+  // The previous invocation returned a row from a yielded frontier batch.
+  // Pause before the operator status check, with the cross-page DAS cursor
+  // still owned by the runtime, to exercise cancellation between calls.
+  if (native_runtime_ != nullptr && native_runtime_->is_resuming_output()
+      && native_runtime_->has_live_edge_scan_resources()) {
+    const int sync_ret = DEBUG_SYNC(GRAPH_FEEDBACK_BEFORE_RESUME);
+    if (OB_SUCC(ret)) { ret = sync_ret; }
+  }
+  if (OB_SUCCESS != ret) {
+  } else if (OB_UNLIKELY(!use_native_runtime_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("native graph feedback runtime is not selected", K(ret));
   } else if (OB_ISNULL(native_runtime_) || OB_ISNULL(left_)) {
@@ -790,6 +811,16 @@ int GraphFeedbackLoopOp::get_next_native_row()
     // Release any open DAS scan and frontier state on every terminal error,
     // rather than relying solely on the executor's later close/destroy pass.
     reset_native_runtime();
+    if (native_runtime_ != nullptr) {
+      if (OB_UNLIKELY(!native_runtime_->resources_released())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("graph runtime resources remain after terminal cleanup", K(ret));
+      }
+      const int sync_ret = DEBUG_SYNC(GRAPH_FEEDBACK_AFTER_ERROR_CLEANUP);
+      if (OB_SUCCESS != sync_ret) {
+        LOG_WARN("graph terminal cleanup debug sync failed", K(sync_ret), K(ret));
+      }
+    }
   }
   return ret;
 }

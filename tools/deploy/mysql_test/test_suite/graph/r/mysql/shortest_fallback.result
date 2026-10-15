@@ -121,5 +121,13 @@ COLUMNS(b.name AS endpoint,COUNT(e.id) AS hops)) g ORDER BY endpoint;
 endpoint	hops
 A1	1
 A2	1
+shortest_fallback_preserves_all_composite_endpoint_keys
+composite_fallback
+1
+composite_shortest_ranking
+1
+endpoint	hops
+B1	1
+B2	1
 DROP PROPERTY GRAPH sp_graph;
 DROP TABLE sp_e,sp_b,sp_a;

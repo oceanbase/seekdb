@@ -41,6 +41,8 @@ public:
            const GraphExpandScanDesc &edge_scan);
   int release();
   int64_t used_memory() const;
+  bool has_live_edge_scan_resources() const;
+  bool edge_scan_resources_released() const;
   bool can_partition_sources() const { return access_desc_.uses_adjacency_index(); }
   int scan_edges(const common::ObIArray<GraphElementIdentity> &sources,
                  GraphPathDirection direction,
@@ -96,8 +98,6 @@ private:
       common::ObIArray<GraphExpandEdge> &edges,
       int64_t &scanned_edges,
       bool &end);
-  bool has_live_edge_scan_resources() const;
-  bool edge_scan_resources_released() const;
   int reset_edge_scan(int ret, bool retain_allocator_page);
   int build_edge_source_index(
       const common::ObIArray<GraphElementIdentity> &sources);

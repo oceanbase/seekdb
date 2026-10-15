@@ -1,7 +1,7 @@
 --disable_query_log
 DROP PROPERTY GRAPH IF EXISTS graph_social;
 --disable_warnings
-DROP TABLE IF EXISTS graph_works,graph_knows,graph_company,graph_person;
+DROP TABLE IF EXISTS graph_remap_edge,graph_remap_vertex,graph_works,graph_knows,graph_company,graph_person;
 --enable_warnings
 --source mysql_test/test_suite/graph/mapping_fixture.sql
 --enable_query_log
@@ -22,11 +22,46 @@ SET @graph_id=2;
 EXECUTE graph_filter_cached USING @graph_id;
 DEALLOCATE PREPARE graph_filter_cached;
 EXECUTE graph_cached;
+--disable_query_log
+--source mysql_test/include/create_plan_table.inc
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='native_lifecycle'
+SELECT * FROM GRAPH_TABLE(graph_social MATCH(a IS person WHERE a.id=1)-[e IS knows]->{1,2}(b IS person) COLUMNS(b.id AS destination,JSON_ARRAYAGG(e.id) AS edges)) g ORDER BY destination,CAST(edges AS CHAR);
+--enable_result_log
+--enable_query_log
+SELECT COUNT(*)=1 AS uses_native_lifecycle FROM plan_table WHERE statement_id='native_lifecycle' AND operator='GRAPH FEEDBACK LOOP' AND special_predicates LIKE '%runtime=native%';
+--disable_query_log
+DROP TABLE plan_table;
+--enable_query_log
+PREPARE graph_native_cached FROM 'SELECT * FROM GRAPH_TABLE(graph_social MATCH(a IS person WHERE a.id=1)-[e IS knows]->{1,2}(b IS person) COLUMNS(b.id AS destination,JSON_ARRAYAGG(e.id) AS edges)) g ORDER BY destination,CAST(edges AS CHAR)';
+EXECUTE graph_native_cached;
+--echo base_table_rows_before_dropping_graph
+SELECT * FROM graph_person ORDER BY id;
+SELECT * FROM graph_company ORDER BY id;
+SELECT * FROM graph_knows ORDER BY id;
+SELECT * FROM graph_works ORDER BY id;
 DROP PROPERTY GRAPH graph_social;
-CREATE PROPERTY GRAPH graph_social VERTEX TABLES(graph_company KEY(id) LABEL person PROPERTIES(id));
+--echo dropping_graph_preserves_all_vertex_and_edge_rows
+SELECT * FROM graph_person ORDER BY id;
+SELECT * FROM graph_company ORDER BY id;
+SELECT * FROM graph_knows ORDER BY id;
+SELECT * FROM graph_works ORDER BY id;
+--error ER_NO_SUCH_TABLE
+EXECUTE graph_native_cached;
+CREATE TABLE graph_remap_vertex(id BIGINT PRIMARY KEY);
+CREATE TABLE graph_remap_edge(id BIGINT PRIMARY KEY,src BIGINT,dst BIGINT);
+INSERT INTO graph_remap_vertex VALUES(1),(7),(8);
+INSERT INTO graph_remap_edge VALUES(70,1,7),(71,1,7),(72,7,8);
+CREATE PROPERTY GRAPH graph_social VERTEX TABLES(graph_remap_vertex KEY(id) LABEL person PROPERTIES(id))
+ EDGE TABLES(graph_remap_edge KEY(id) SOURCE KEY(src) REFERENCES graph_remap_vertex(id)
+ DESTINATION KEY(dst) REFERENCES graph_remap_vertex(id) LABEL knows PROPERTIES(id));
+--echo cached_native_path_uses_recreated_graph_mapping
+EXECUTE graph_native_cached;
+DEALLOCATE PREPARE graph_native_cached;
 EXECUTE graph_cached;
 DEALLOCATE PREPARE graph_cached;
 DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_remap_edge,graph_remap_vertex;
 DROP TABLE graph_works,graph_knows,graph_company,graph_person;
 CREATE TABLE graph_vertex2(tenant BIGINT,id BIGINT,name VARCHAR(40),PRIMARY KEY(tenant,id));
 CREATE TABLE graph_edge2(tenant BIGINT,id BIGINT,src_tenant BIGINT,src BIGINT,dst_tenant BIGINT,dst BIGINT,PRIMARY KEY(tenant,id));

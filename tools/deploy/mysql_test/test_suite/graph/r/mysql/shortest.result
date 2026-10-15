@@ -171,3 +171,29 @@ recovered
 DROP TABLE shortest_expected,plan_table;
 DROP PROPERTY GRAPH graph_social;
 DROP TABLE graph_works,graph_knows,graph_company,graph_person;
+shortest_filter_before_distance_and_terminal_after_expansion
+native_full_scan
+1
+verified_fallback
+1
+endpoint	hops	edge_count	first_edge	second_edge
+3	2	2	11	12
+endpoint	hops	edge_count	first_edge	second_edge
+3	1	1	10	NULL
+endpoint	hops	edge_count	first_edge	second_edge
+3	2	2	11	12
+endpoint	hops	edge_count	first_edge	second_edge
+3	1	1	10	NULL
+shortest_filter_before_distance_and_terminal_after_expansion
+native_index_scan
+1
+verified_fallback
+1
+endpoint	hops	edge_count	first_edge	second_edge
+3	2	2	11	12
+endpoint	hops	edge_count	first_edge	second_edge
+3	1	1	10	NULL
+endpoint	hops	edge_count	first_edge	second_edge
+3	2	2	11	12
+endpoint	hops	edge_count	first_edge	second_edge
+3	1	1	10	NULL

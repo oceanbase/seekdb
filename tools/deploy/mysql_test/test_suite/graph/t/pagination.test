@@ -1,7 +1,9 @@
 --disable_query_log
 DROP PROPERTY GRAPH IF EXISTS graph_page;
+DROP PROPERTY GRAPH IF EXISTS graph_page_partition;
 --disable_warnings
 DROP TABLE IF EXISTS graph_page_edge,graph_page_vertex,graph_page_digit;
+DROP TABLE IF EXISTS graph_page_string_e,graph_page_string_v,graph_page_partition_e;
 --enable_warnings
 --enable_query_log
 
@@ -92,7 +94,6 @@ WHERE statement_id='page_index_scan'
   AND operator='GRAPH FEEDBACK LOOP'
   AND special_predicates LIKE '%access=index-scan%';
 
-DROP TABLE plan_table;
 DROP PROPERTY GRAPH graph_page;
 
 # Variable-length identities and payloads must survive scanner/lookup reuse,
@@ -130,4 +131,82 @@ while ($passes)
 }
 DROP PROPERTY GRAPH graph_page;
 DROP TABLE graph_page_string_e,graph_page_string_v;
+# Each explicitly named partition exceeds the 4096-edge page size. The
+# leading identity id restarts at 1 in every tablet, so neither tablet order
+# can be mistaken for a globally increasing (id,bucket) resume key.
+CREATE TABLE graph_page_partition_e (
+  id BIGINT NOT NULL,bucket INT NOT NULL,
+  src BIGINT NOT NULL,dst BIGINT NOT NULL,note VARCHAR(256),
+  PRIMARY KEY(id,bucket)
+) PARTITION BY LIST(bucket) (
+  PARTITION p_nine VALUES IN (9),
+  PARTITION p_one VALUES IN (1)
+);
+INSERT INTO graph_page_partition_e
+SELECT id,9,1,2,CONCAT('partition-9-edge-',id,REPEAT('x',200))
+FROM graph_page_edge WHERE src=1;
+INSERT INTO graph_page_partition_e
+SELECT id,1,1,2,CONCAT('partition-1-edge-',id,REPEAT('x',200))
+FROM graph_page_edge WHERE src=1;
+CREATE PROPERTY GRAPH graph_page_partition
+VERTEX TABLES(graph_page_vertex KEY(id) LABEL node PROPERTIES(id,name))
+EDGE TABLES(graph_page_partition_e KEY(id,bucket)
+  SOURCE KEY(src) REFERENCES graph_page_vertex(id)
+  DESTINATION KEY(dst) REFERENCES graph_page_vertex(id)
+  LABEL link PROPERTIES(id,bucket,note));
+
+--echo partition_pages_full_scan_preserves_every_identity_and_payload
+SELECT COUNT(*) AS steps,COUNT(DISTINCT edge_id,bucket) AS distinct_edges,
+       SUM(bucket=1) AS p_one_edges,SUM(bucket=9) AS p_nine_edges,
+       SUM(edge_id BETWEEN 1 AND 4105) AS valid_ids,
+       SUM(src=1 AND dst=2 AND src_name='seed' AND dst_name='target') AS valid_endpoints,
+       SUM(note=CONCAT('partition-',bucket,'-edge-',edge_id,REPEAT('x',200))) AS valid_payloads
+FROM GRAPH_TABLE(graph_page_partition MATCH
+  (a IS node WHERE a.id=1)-[e IS link]->{1}(b IS node)
+  ONE ROW PER STEP(v1,se,v2)
+  COLUMNS(v1.id AS src,v1.name AS src_name,se.id AS edge_id,
+          se.bucket AS bucket,se.note AS note,v2.id AS dst,v2.name AS dst_name)) g;
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='partition_page_full'
+SELECT * FROM GRAPH_TABLE(graph_page_partition MATCH
+  (a IS node WHERE a.id=1)-[e IS link]->{1}(b IS node)
+  ONE ROW PER STEP(v1,se,v2)
+  COLUMNS(v1.id AS src,v1.name AS src_name,se.id AS edge_id,
+          se.bucket AS bucket,se.note AS note,v2.id AS dst,v2.name AS dst_name)) g;
+--enable_result_log
+SELECT COUNT(*)=1 AS uses_partitioned_full_scan
+FROM plan_table
+WHERE statement_id='partition_page_full'
+  AND operator='GRAPH FEEDBACK LOOP'
+  AND special_predicates LIKE '%access=full-scan%';
+# dst and note are deliberately absent: this LOCAL adjacency index must
+# fetch endpoint and variable-length property payloads from the base tablet.
+CREATE INDEX graph_page_partition_out ON graph_page_partition_e(src,id,bucket) LOCAL;
+--echo partition_pages_local_index_back_preserves_every_identity_and_payload
+SELECT COUNT(*) AS steps,COUNT(DISTINCT edge_id,bucket) AS distinct_edges,
+       SUM(bucket=1) AS p_one_edges,SUM(bucket=9) AS p_nine_edges,
+       SUM(edge_id BETWEEN 1 AND 4105) AS valid_ids,
+       SUM(src=1 AND dst=2 AND src_name='seed' AND dst_name='target') AS valid_endpoints,
+       SUM(note=CONCAT('partition-',bucket,'-edge-',edge_id,REPEAT('x',200))) AS valid_payloads
+FROM GRAPH_TABLE(graph_page_partition MATCH
+  (a IS node WHERE a.id=1)-[e IS link]->{1}(b IS node)
+  ONE ROW PER STEP(v1,se,v2)
+  COLUMNS(v1.id AS src,v1.name AS src_name,se.id AS edge_id,
+          se.bucket AS bucket,se.note AS note,v2.id AS dst,v2.name AS dst_name)) g;
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='partition_page_index'
+SELECT * FROM GRAPH_TABLE(graph_page_partition MATCH
+  (a IS node WHERE a.id=1)-[e IS link]->{1}(b IS node)
+  ONE ROW PER STEP(v1,se,v2)
+  COLUMNS(v1.id AS src,v1.name AS src_name,se.id AS edge_id,
+          se.bucket AS bucket,se.note AS note,v2.id AS dst,v2.name AS dst_name)) g;
+--enable_result_log
+SELECT COUNT(*)=1 AS uses_local_adjacency_index
+FROM plan_table
+WHERE statement_id='partition_page_index'
+  AND operator='GRAPH FEEDBACK LOOP'
+  AND special_predicates LIKE '%access=index-scan%';
+DROP PROPERTY GRAPH graph_page_partition;
+DROP TABLE graph_page_partition_e;
+DROP TABLE plan_table;
 DROP TABLE graph_page_edge,graph_page_vertex,graph_page_digit;

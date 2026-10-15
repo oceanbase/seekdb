@@ -380,3 +380,50 @@ positive_paths
 0
 DROP PROPERTY GRAPH graph_social;
 DROP TABLE graph_works,graph_knows,graph_company,graph_person;
+step_output_actual_sixteen_hop_history
+full_scan_expected_runtime
+1
+step_rows	first_edge_number	last_edge_number	last_source_number	last_target_number
+16	2	32	31	33
+vn1	sn	vn2	src	edge_id	weight	dst	target_name	hops
+1	2	3	1	1	10	2	v2	16
+3	4	5	2	2	20	3	v3	16
+5	6	7	3	3	30	4	v4	16
+7	8	9	4	4	40	5	v5	16
+9	10	11	5	5	50	6	v6	16
+11	12	13	6	6	60	7	v7	16
+13	14	15	7	7	70	8	v8	16
+15	16	17	8	8	80	9	v9	16
+17	18	19	9	9	90	10	v10	16
+19	20	21	10	10	100	11	v11	16
+21	22	23	11	11	110	12	v12	16
+23	24	25	12	12	120	13	v13	16
+25	26	27	13	13	130	14	v14	16
+27	28	29	14	14	140	15	v15	16
+29	30	31	15	15	150	16	v16	16
+31	32	33	16	16	160	17	v17	16
+path_edges	last_edge_id	last_target_id
+[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]	16	17
+index_scan_expected_runtime
+1
+step_rows	first_edge_number	last_edge_number	last_source_number	last_target_number
+16	2	32	31	33
+vn1	sn	vn2	src	edge_id	weight	dst	target_name	hops
+1	2	3	1	1	10	2	v2	16
+3	4	5	2	2	20	3	v3	16
+5	6	7	3	3	30	4	v4	16
+7	8	9	4	4	40	5	v5	16
+9	10	11	5	5	50	6	v6	16
+11	12	13	6	6	60	7	v7	16
+13	14	15	7	7	70	8	v8	16
+15	16	17	8	8	80	9	v9	16
+17	18	19	9	9	90	10	v10	16
+19	20	21	10	10	100	11	v11	16
+21	22	23	11	11	110	12	v12	16
+23	24	25	12	12	120	13	v13	16
+25	26	27	13	13	130	14	v14	16
+27	28	29	14	14	140	15	v15	16
+29	30	31	15	15	150	16	v16	16
+31	32	33	16	16	160	17	v17	16
+path_edges	last_edge_id	last_target_id
+[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]	16	17
