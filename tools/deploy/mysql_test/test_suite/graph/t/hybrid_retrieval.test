@@ -23,7 +23,7 @@ while ($passes)
   }
   --disable_query_log
   --source mysql_test/test_suite/graph/hybrid_retrieval_query.inc
-  --source mysql_test/test_suite/graph/hybrid_retrieval_oracle.inc
+  --source mysql_test/test_suite/graph/hybrid_retrieval_expected.inc
   --enable_query_log
   SELECT COUNT(*) AS mismatched_evidence_bags FROM (
    SELECT tenant,seed_chunk,seed_entity,seed_score,endpoint,hops,edges,chunk_id,
@@ -54,7 +54,7 @@ INSERT INTO hr_reference_seeds VALUES
  (1,100,1,ROUND(CAST(2 AS DECIMAL(24,16))/61,20)),
  (1,101,2,ROUND(CAST(2 AS DECIMAL(24,16))/62,20));
 --source mysql_test/test_suite/graph/hybrid_retrieval_query.inc
---source mysql_test/test_suite/graph/hybrid_retrieval_oracle.inc
+--source mysql_test/test_suite/graph/hybrid_retrieval_expected.inc
 --enable_query_log
 SELECT COUNT(*) AS overlapping_channel_bag_mismatches FROM (
  SELECT tenant,seed_chunk,seed_entity,seed_score,endpoint,hops,edges,chunk_id,

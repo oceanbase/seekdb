@@ -1,4 +1,4 @@
-# Independent bounded path enumeration: ordinary SQL JOINs, no GRAPH_TABLE.
+# Generate expected results independently using ordinary SQL JOINs, no GRAPH_TABLE.
 eval CREATE TABLE hr_expected AS WITH paths AS (
  SELECT s.tenant,s.chunk_id AS seed_chunk,s.entity_id AS seed_entity,s.seed_score,
   a.id AS endpoint,0 AS hops,CAST(NULL AS CHAR(200)) AS edges

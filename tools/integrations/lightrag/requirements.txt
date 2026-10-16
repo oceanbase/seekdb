@@ -1,2 +1,0 @@
-PyMySQL==1.2.3
-lightrag-hku @ git+https://github.com/HKUDS/LightRAG.git@453dce83d6d0354a06e46c8d4029a0895c4e054b
