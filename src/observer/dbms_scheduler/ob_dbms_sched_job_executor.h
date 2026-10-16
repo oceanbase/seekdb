@@ -43,6 +43,7 @@ public:
   int init(
     common::ObMySQLProxy *sql_proxy, share::schema::ObMultiVersionSchemaService *schema_service);
   int run_dbms_sched_job(uint64_t job_id, const ObString &job_name);
+  int run_timer_driven_dbms_sched_job(const ObString &job_name);
   int init_env(ObDBMSSchedJobInfo &job_info, sql::ObSQLSessionInfo &session);
 
 private:
@@ -54,7 +55,7 @@ private:
     ObDBMSSchedJobInfo &job_info);
   int create_session(sql::ObFreeSessionCtx &free_session_ctx, sql::ObSQLSessionInfo *&session_info);
   int destroy_session(sql::ObFreeSessionCtx &free_session_ctx, sql::ObSQLSessionInfo *session_info);
-  int run_dbms_sched_job(ObDBMSSchedJobInfo &job_info);
+  int run_dbms_sched_job(ObDBMSSchedJobInfo &job_info, const bool update_scheduler_state);
 
   bool inited_;
   ObDBMSSchedTableOperator table_operator_;
