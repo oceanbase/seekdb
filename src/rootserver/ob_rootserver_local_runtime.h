@@ -65,7 +65,8 @@ public:
   virtual int check_server_empty(bool &is_empty) = 0;
   virtual int wait_until_change_stream_refreshed(
       common::ObMySQLProxy &mysql_proxy,
-      int64_t timeout_us) = 0;
+      int64_t timeout_us,
+      int64_t exempt_tx_id = 0) = 0;
 };
 
 inline ObIRootserverLocalRuntime *rootserver_local_runtime()

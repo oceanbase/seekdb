@@ -256,10 +256,18 @@ private:
   int write_to_vsag_(const common::ObIArray<ObASyncIndexEvent> &events,
       const ObCSVecIndexInfo &vec_info);
 
-  int init_schema_guard_();
+  int init_latest_schema_guard_();
+  int init_historical_schema_guard_();
+  int check_live_async_index_target_(
+      const schema::ObTableSchema &data_table_schema,
+      const schema::ObTableSchema &index_schema,
+      bool &is_live_target);
+  int has_live_async_index_target_(
+      const common::ObIArray<ObCSRow> &rows, bool &has_live_target);
 
   ObCSExecCtx &ctx_;
-  schema::ObSchemaGetterGuard schema_guard_;  // Per-thread; created in process().
+  schema::ObSchemaGetterGuard schema_guard_;         // Historical batch schema.
+  schema::ObSchemaGetterGuard latest_schema_guard_;  // Current schema for stale-work filtering.
   common::hash::ObHashMap<uint64_t, common::ObSEArray<ObCSVecIndexInfo, 4>> vec_index_cache_;
   common::hash::ObHashMap<uint64_t, uint64_t> tablet_to_table_;
 

@@ -67,7 +67,8 @@ public:
   /// Can be called from any node (RS / observer) as long as sql_client is valid.
   static int wait_refresh_scn(
       common::ObISQLClient &sql_client,
-      const int64_t timeout_us);
+      const int64_t timeout_us,
+      const int64_t exempt_tx_id = 0);
 
   /// Fetcher: consumes CLOG by transaction, pushes committed tx to Dispatcher.
   ObCSFetcher &get_fetcher() { return fetcher_; }

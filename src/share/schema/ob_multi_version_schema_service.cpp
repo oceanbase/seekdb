@@ -763,13 +763,21 @@ int ObMultiVersionSchemaService::construct_fallback_schema_mgr_(
       const ObSchemaMgr *src_mgr = NULL;
       ObSchemaMgrHandle src_mgr_handle;
       bool need_latest = false;
-      // for faster fallback, start from the schema_mgr with the nearest version
+      // For faster fallback, start from the nearest complete schema snapshot.
+      // Core/sys temporary versions contain only part of the schema: replaying
+      // the intervening DDL cannot recover user objects absent from that base.
       if (OB_FAIL(schema_mgr_cache->get_nearest(target_version, src_mgr, src_mgr_handle))) {
         if (OB_ENTRY_NOT_EXIST != ret) {
         } else {
           need_latest = true;
           ret = OB_SUCCESS;
         }
+      } else if (OB_NOT_NULL(src_mgr)
+                 && !ObSchemaService::is_formal_version(src_mgr->get_schema_version())) {
+        need_latest = true;
+        FLOG_INFO("[FALLBACK_SCHEMA] skip temporary reconstruction base",
+                  "from_version", src_mgr->get_schema_version(),
+                  K(target_version), K(latest_local_version));
       } else if (OB_ISNULL(src_mgr)
                  || llabs(src_mgr->get_schema_version() - target_version)
                       > llabs(latest_local_version - target_version)) {
@@ -779,9 +787,21 @@ int ObMultiVersionSchemaService::construct_fallback_schema_mgr_(
       if (OB_SUCC(ret) && need_latest) {
         src_mgr_handle.reset();
         if (OB_FAIL(schema_mgr_cache->get(latest_local_version, src_mgr, src_mgr_handle))) {
-        } else if (OB_ISNULL(src_mgr)) {
-          ret = OB_SCHEMA_ERROR;
+          if (OB_ENTRY_NOT_EXIST == ret) {
+            ret = OB_SCHEMA_EAGAIN;
+          }
+        } else if (OB_ISNULL(src_mgr)
+                   || src_mgr->get_schema_version() != latest_local_version) {
+          ret = OB_SCHEMA_EAGAIN;
         }
+      }
+      if (OB_SUCC(ret)
+          && (OB_ISNULL(src_mgr)
+              || src_mgr->get_schema_version() <= 0
+              || !ObSchemaService::is_formal_version(src_mgr->get_schema_version()))) {
+        // A refresh may not have published a complete formal version yet.
+        // Retry rather than cache an incomplete manager under target_version.
+        ret = OB_SCHEMA_EAGAIN;
       }
       if (OB_SUCC(ret)) {
         ObSchemaMgr *new_mgr = NULL;

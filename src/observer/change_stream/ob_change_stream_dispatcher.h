@@ -27,6 +27,7 @@
 #include "lib/container/ob_iarray.h"
 #include "lib/container/ob_ext_ring_buffer.h"
 #include "lib/atomic/ob_atomic.h"
+#include "lib/lock/ob_mutex.h"
 #include "lib/lock/ob_thread_cond.h"
 #include "common/ob_tablet_id.h"
 #include "common/rowkey/ob_store_rowkey.h"
@@ -122,6 +123,11 @@ public:
   int64_t epoch_;           // Creation epoch snapshot; mismatch with dispatcher.epoch_ → abort.
 
   ObMySQLTransaction trans_;
+  // All subtasks in a batch share trans_ and the per-batch plugin instances.
+  // ObMySQLTransaction/ObInnerSQLConnection are not safe for concurrent use,
+  // so serialize plugin processing while keeping row slicing and worker
+  // scheduling unchanged.
+  lib::ObMutex process_lock_;
 
   int64_t batch_sn_ = 0;            // Ring position of this batch; commit only when head.
   common::ObSEArray<ObCSTxInfo *, 4> tx_list_;  // References to tx in this batch (owned by Fetcher map).

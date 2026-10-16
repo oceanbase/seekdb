@@ -263,7 +263,8 @@ public:
   bool is_stopped();
   int wait_until_refreshed(
       common::ObMySQLProxy &mysql_proxy,
-      int64_t timeout_us) override;
+      int64_t timeout_us,
+      int64_t exempt_tx_id) override;
 
 public:
   //Refer to ObPurgeCompletedMonitorInfoTask
