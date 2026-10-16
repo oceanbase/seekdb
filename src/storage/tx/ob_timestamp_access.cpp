@@ -35,16 +35,18 @@ int ObTimestampAccess::get_number(int64_t &gts)
   return ret;
 }
 
-void ObTimestampAccess::get_virtual_info(int64_t &ts_value)
+int ObTimestampAccess::get_virtual_info(int64_t &ts_value)
 {
+  int ret = OB_SUCCESS;
   ObTimestampProvider provider = provider_.load(std::memory_order_acquire);
   if (nullptr != provider) {
-    if (OB_SUCCESS != provider(ts_value)) {
+    if (OB_FAIL(provider(ts_value))) {
       ts_value = 0;
     }
   } else {
-    ::oceanbase::share::server_service<ObTimestampService>()->get_virtual_info(ts_value);
+    ret = ::oceanbase::share::server_service<ObTimestampService>()->get_virtual_info(ts_value);
   }
+  return ret;
 }
 
 }

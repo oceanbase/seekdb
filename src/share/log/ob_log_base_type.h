@@ -41,7 +41,7 @@ enum ObLogBaseType
 
   DDL_LOG_BASE_TYPE = 5,
 
-  KEEP_ALIVE_LOG_BASE_TYPE = 6,
+  // 6 was used by the removed keep-alive log. Do not reuse.
 
   TIMESTAMP_LOG_BASE_TYPE = 7,
 
@@ -154,8 +154,6 @@ int log_base_type_to_string(const ObLogBaseType log_type,
     strncpy(str ,"TABLET_SEQ_SYNC", str_len);
   } else if (log_type == DDL_LOG_BASE_TYPE) {
     strncpy(str ,"DDL", str_len);
-  } else if (log_type == KEEP_ALIVE_LOG_BASE_TYPE) {
-    strncpy(str ,"KEEP_ALIVE", str_len);
   } else if (log_type == TIMESTAMP_LOG_BASE_TYPE) {
     strncpy(str ,"TIMESTAMP", str_len);
   } else if (log_type == TRANS_ID_LOG_BASE_TYPE) {

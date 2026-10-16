@@ -104,7 +104,17 @@ int ObIDService::submit_log_(const int64_t last_id, const int64_t limited_id)
     if (EXECUTE_COUNT_PER_SEC(10)) {
       TRANS_LOG(INFO, "no log required", K(limited_id), K(ATOMIC_LOAD(&limited_id_)));
     }
-  } else if (OB_FAIL(check_and_fill_ls())) {
+  } else {
+    ret = append_id_log_(last_id, limited_id);
+  }
+
+  return ret;
+}
+
+int ObIDService::append_id_log_(const int64_t last_id, const int64_t limited_id)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(check_and_fill_ls())) {
   } else {
     ObPresistIDLog ls_log(last_id, limited_id);
     palf::LSN lsn;
@@ -499,8 +509,7 @@ int ObPresistIDLogCb::on_success()
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "timestamp service is null", K(ret));
       } else {
-        timestamp_service->test_lock();
-        if (OB_FAIL(timestamp_service->handle_submit_callback(true, limited_id_, log_ts_))) {
+        if (OB_FAIL(timestamp_service->handle_persist_callback(true, limited_id_, log_ts_))) {
         }
         TRANS_LOG(INFO, "timestamp service handle log callback", K(ret), K_(limited_id), K_(log_ts));
       }
@@ -540,7 +549,7 @@ int ObPresistIDLogCb::on_failure()
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "timestamp service is null", K(ret));
       } else {
-        if (OB_FAIL(timestamp_service->handle_submit_callback(false, limited_id_, log_ts_))) {
+        if (OB_FAIL(timestamp_service->handle_persist_callback(false, limited_id_, log_ts_))) {
         }
         TRANS_LOG(INFO, "timestamp service handle log callback", K(ret), K_(limited_id), K_(log_ts));
       }
