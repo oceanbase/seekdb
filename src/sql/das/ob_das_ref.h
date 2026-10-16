@@ -242,6 +242,9 @@ public:
                       ObIDASTaskOp *&task_op);
   bool has_task() const { return !batched_tasks_.empty(); }
   int32_t get_das_task_cnt() const { return batched_tasks_.get_size(); }
+  // Includes retained arena capacity, unlike get_das_mem_used().
+  int64_t get_reuse_alloc_total() const
+  { return reuse_alloc_ == nullptr ? 0 : reuse_alloc_->total(); }
   ObDasParallelType get_parallel_type() { return das_parallel_ctx_.get_parallel_type(); }
   bool is_parallel_submit() { return get_parallel_type() != DAS_SERIALIZATION; }
   int64_t get_submitted_task_count() { return das_parallel_ctx_.get_submitted_task_count(); }
@@ -265,7 +268,8 @@ public:
   void set_expr_frame_info(const ObExprFrameInfo *info) { expr_frame_info_ = info; }
   ObEvalCtx &get_eval_ctx() { return eval_ctx_; };
   void reset();
-  void reuse();
+  // Terminal error cleanup passes false to release every reusable arena page.
+  void reuse(bool retain_one_page = true);
   void set_lookup_iter(DASOpResultIter *lookup_iter) { wild_datum_info_.lookup_iter_ = lookup_iter; }
   DASRefCountContext &get_das_ref_count_ctx() { return das_ref_count_ctx_; }
   void clear_task_map();

@@ -1,0 +1,133 @@
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST TRAIL
+(a IS person WHERE a.id=1)-[e IS knows]->{1,4}(b IS person)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g ORDER BY endpoint;
+endpoint	hops
+1	3
+2	1
+3	2
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=1)-[e IS knows]-{0,4}(b IS person)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g ORDER BY endpoint;
+endpoint	hops
+1	0
+2	1
+3	1
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=1)-[e IS works]-{1,4}(b IS company)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS n,v1.name AS src,se.id AS eid,v2.name AS dst,
+COUNT(e.id) AS hops)) g ORDER BY m,n;
+m	n	src	eid	dst	hops
+1	2	Alice	20	Acme	1
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=1)-[e IS works]->{0,4}(b IS company)
+COLUMNS(a.id AS seed,b.id AS endpoint,COUNT(e.id) AS hops)) g;
+seed	endpoint	hops
+1	1	1
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=3)-[f IS knows]->(b IS person)-[e IS knows]->{0,3}(c IS person)
+COLUMNS(a.id AS seed,c.id AS endpoint,COUNT(e.id) AS hops)) g ORDER BY endpoint;
+seed	endpoint	hops
+3	1	0
+3	2	1
+3	3	2
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=3)-[f IS knows]->(b IS person)-[e IS knows]->{0,3}(c IS person)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS n,v1.id AS src,v2.id AS dst,c.id AS endpoint,
+COUNT(e.id) AS hops)) g ORDER BY endpoint,n;
+m	n	src	dst	endpoint	hops
+1	2	3	1	1	0
+2	2	3	1	2	1
+2	4	1	2	2	1
+3	2	3	1	3	2
+3	4	1	2	3	2
+3	6	2	3	3	2
+INSERT INTO graph_works VALUES(21,1,1),(22,2,1);
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=1)-[e IS knows]->{0,3}(b IS person)-[f IS works]->(c IS company)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(ELEMENT_NUMBER(se) AS n,v1.name AS src,v2.name AS dst,COUNT(e.id) AS hops)) g ORDER BY n;
+n	src	dst	hops
+2	Alice	Acme	0
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=3)-[f IS knows]->(b IS person)-[e IS works]->{0,4}(c IS company)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(ELEMENT_NUMBER(se) AS n,v1.name AS src,v2.name AS dst,COUNT(e.id) AS hops)) g ORDER BY n;
+n	src	dst	hops
+2	Carol	Alice	1
+4	Alice	Acme	1
+SELECT s.id,g.endpoint,g.hops FROM (SELECT 1 AS id) s,
+LATERAL (SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=s.id AND RAND(1)<1)-[e IS knows]->{0,3}(b IS person)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) p) g ORDER BY endpoint;
+id	endpoint	hops
+1	1	0
+1	2	1
+1	3	2
+SELECT __g_step_matches.id,g.endpoint,g.hops FROM (SELECT 1 AS id) __g_step_matches,
+LATERAL (SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=__g_step_matches.id)-[e IS knows]->{0,3}(b IS person)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) p) g ORDER BY endpoint;
+id	endpoint	hops
+1	1	0
+1	2	1
+1	3	2
+SELECT __g_shortest_candidates.id,g.endpoint,g.hops FROM (SELECT 1 AS id) __g_shortest_candidates,
+LATERAL (SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=1)-[e IS knows]->{0,3}(b IS person WHERE b.id=__g_shortest_candidates.id)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) p) g ORDER BY endpoint;
+id	endpoint	hops
+1	1	0
+EXPLAIN INTO plan_table SET statement_id='volatile_shortest'
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=1)-[e IS knows]->{0,3}(b IS person WHERE RAND(1)<1)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g;
+SELECT COUNT(*)=1 AS volatile_keeps_paths FROM plan_table
+WHERE statement_id='volatile_shortest' AND operator='GRAPH FEEDBACK LOOP'
+ AND special_predicates LIKE '%states=paths%';
+volatile_keeps_paths
+1
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=1)-[e IS knows]->{0,3}(b IS person WHERE RAND(1)<1)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g ORDER BY endpoint;
+endpoint	hops
+1	0
+2	1
+3	2
+DROP TABLE plan_table;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;
+CREATE TABLE sp_a(id BIGINT PRIMARY KEY,name VARCHAR(20));
+CREATE TABLE sp_b(tenant VARBINARY(8),code DECIMAL(8,2),name VARCHAR(20),PRIMARY KEY(tenant,code));
+CREATE TABLE sp_e(id BIGINT PRIMARY KEY,src BIGINT,dt VARBINARY(8),dc DECIMAL(8,2));
+INSERT INTO sp_a VALUES(1,'A1'),(2,'A2');
+INSERT INTO sp_b VALUES(X'4100',1.25,'B1');
+INSERT INTO sp_e VALUES(10,1,X'4100',1.25),(11,2,X'4100',1.25),(12,1,X'4100',1.25);
+CREATE PROPERTY GRAPH sp_graph VERTEX TABLES
+(sp_a KEY(id) LABEL a PROPERTIES(name),sp_b KEY(tenant,code) LABEL b PROPERTIES(name))
+EDGE TABLES(sp_e KEY(id) SOURCE KEY(src) REFERENCES sp_a(id)
+DESTINATION KEY(dt,dc) REFERENCES sp_b(tenant,code) LABEL e PROPERTIES(id));
+SELECT * FROM GRAPH_TABLE(sp_graph MATCH ANY SHORTEST (a IS a WHERE a.name='A1')-[e IS e]-{2,4}(b IS a)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(b.name AS endpoint,ELEMENT_NUMBER(se) AS n,v1.name AS src,v2.name AS dst,COUNT(e.id) AS hops)) g ORDER BY endpoint,n;
+endpoint	n	src	dst	hops
+A1	2	A1	B1	2
+A1	4	B1	A1	2
+A2	2	A1	B1	2
+A2	4	B1	A2	2
+SELECT * FROM GRAPH_TABLE(sp_graph MATCH ANY SHORTEST (a IS b)-[e IS e]-{0,3}(b IS a)
+COLUMNS(b.name AS endpoint,COUNT(e.id) AS hops)) g ORDER BY endpoint;
+endpoint	hops
+A1	1
+A2	1
+shortest_fallback_preserves_all_composite_endpoint_keys
+composite_fallback
+1
+composite_shortest_ranking
+1
+endpoint	hops
+B1	1
+B2	1
+DROP PROPERTY GRAPH sp_graph;
+DROP TABLE sp_e,sp_b,sp_a;

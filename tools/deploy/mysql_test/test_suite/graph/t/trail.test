@@ -1,0 +1,227 @@
+--disable_query_log
+DROP PROPERTY GRAPH IF EXISTS graph_social;
+DROP PROPERTY GRAPH IF EXISTS graph_composite;
+--disable_warnings
+DROP TABLE IF EXISTS graph_works,graph_knows,graph_company,graph_person;
+DROP TABLE IF EXISTS gp_binding,gp_works,gp_company,gp_edge,gp_vertex;
+--enable_warnings
+--source mysql_test/test_suite/graph/mapping_fixture.sql
+--enable_query_log
+
+--echo trail_rejects_repeated_edges_but_allows_repeated_vertices
+SELECT COUNT(*) AS walk_paths FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS knows]->{4}(b IS person)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+  (a IS person WHERE a.id=1)-[e IS knows]->{4}(b IS person)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops,
+          JSON_ARRAYAGG(e.id) AS edge_ids)) g ORDER BY edge_ids;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+  (a IS person WHERE a.id=1)-[e IS knows]->{3}(b IS person)
+  COLUMNS(b.id AS destination,JSON_ARRAYAGG(e.id) AS edge_ids)) g
+  ORDER BY edge_ids;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+  (a IS person WHERE a.id=4)-[e IS knows]->{0,16}(b IS person)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops,
+          JSON_ARRAYAGG(e.id) AS edge_ids)) g ORDER BY hops;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+  (a IS person WHERE a.id=3)<-[e IS knows]-{1,4}(b IS person)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops,
+          JSON_ARRAYAGG(e.id) AS edge_ids)) g ORDER BY hops,edge_ids;
+
+--echo trail_one_row_per_step_and_fixed_chain
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+  (a IS person WHERE a.id=1)-[e IS knows]->{4}(b IS person)
+  ONE ROW PER STEP (v1,step_e,v2)
+  COLUMNS(JSON_ARRAYAGG(e.id) AS path_edges,MATCHNUM() AS match_no,
+          ELEMENT_NUMBER(step_e) AS step_no,v1.id AS from_id,
+          step_e.id AS edge_id,v2.id AS to_id)) g
+  ORDER BY path_edges,step_no;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+  (a IS person WHERE a.id=1)-[e1 IS knows]->(b IS person)
+  -[e2 IS knows]->(c IS person)-[e3 IS knows]->(d IS person)
+  -[e4 IS knows]->(f IS person)
+  COLUMNS(e1.id AS edge1,e2.id AS edge2,e3.id AS edge3,
+          e4.id AS edge4,f.id AS destination)) g
+  ORDER BY edge1,edge2,edge3,edge4;
+
+--echo prepared_trail_seed_parameter_rebinding_and_index_plan_invalidation
+PREPARE trail_cached FROM
+  'SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH TRAIL (a IS person WHERE a.id=?)-[e IS knows]->{0,4}(b IS person) COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g';
+SET @trail_seed=1;
+EXECUTE trail_cached USING @trail_seed;
+SET @trail_seed=4;
+EXECUTE trail_cached USING @trail_seed;
+SET @trail_seed=3;
+EXECUTE trail_cached USING @trail_seed;
+
+--source mysql_test/include/create_plan_table.inc
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='trail_full_scan'
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+  (a IS person WHERE a.id=1)-[e IS knows]->{0,4}(b IS person)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+--enable_result_log
+SELECT COUNT(*)=1 AS has_feedback_trail
+FROM plan_table
+WHERE statement_id='trail_full_scan'
+  AND operator='GRAPH FEEDBACK LOOP'
+  AND special_predicates LIKE '%direction=OUT, hops={0,4}, access=full-scan, mode=TRAIL%';
+
+CREATE INDEX graph_knows_out ON graph_knows(src,id);
+SET @trail_seed=1;
+EXECUTE trail_cached USING @trail_seed;
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='trail_out_index'
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+  (a IS person WHERE a.id=1)-[e IS knows]->{0,4}(b IS person)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+--enable_result_log
+SELECT COUNT(*)=1 AS has_feedback_trail_index
+FROM plan_table
+WHERE statement_id='trail_out_index'
+  AND operator='GRAPH FEEDBACK LOOP'
+  AND special_predicates LIKE '%direction=OUT, hops={0,4}, access=index-scan, mode=TRAIL%';
+
+DROP INDEX graph_knows_out ON graph_knows;
+SET @trail_seed=1;
+EXECUTE trail_cached USING @trail_seed;
+DEALLOCATE PREPARE trail_cached;
+DROP TABLE plan_table;
+
+--echo trail_uses_complete_composite_edge_identity
+--source mysql_test/test_suite/graph/fixture.sql
+CREATE PROPERTY GRAPH graph_composite
+  VERTEX TABLES (
+    gp_vertex KEY (tenant,id) LABEL person PROPERTIES (tenant,id,name)
+  )
+  EDGE TABLES (
+    gp_edge KEY (tenant,id)
+      SOURCE KEY (src_tenant,src) REFERENCES gp_vertex (tenant,id)
+      DESTINATION KEY (dst_tenant,dst) REFERENCES gp_vertex (tenant,id)
+      LABEL knows PROPERTIES (tenant,id,weight)
+  );
+SELECT * FROM GRAPH_TABLE(graph_composite MATCH TRAIL
+  (a IS person WHERE a.tenant=2 AND a.id=1)-[e IS knows]->{3}(b IS person)
+  COLUMNS(b.tenant AS destination_tenant,b.id AS destination_id,
+          JSON_ARRAYAGG(e.tenant) AS edge_tenants,
+          JSON_ARRAYAGG(e.id) AS edge_ids)) g
+  ORDER BY edge_ids;
+
+DROP PROPERTY GRAPH graph_composite;
+DROP TABLE gp_binding,gp_works,gp_company,gp_edge,gp_vertex;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;
+
+--echo trail_actual_sixteen_hop_history
+--disable_query_log
+CREATE TABLE history_v(id INT PRIMARY KEY,name VARCHAR(32));
+CREATE TABLE history_e(id INT PRIMARY KEY,src INT,dst INT,weight INT);
+INSERT INTO history_v VALUES (1,'v1'),(2,'v2'),(3,'v3'),(4,'v4'),(5,'v5'),(6,'v6'),(7,'v7'),(8,'v8'),(9,'v9'),(10,'v10'),(11,'v11'),(12,'v12'),(13,'v13'),(14,'v14'),(15,'v15'),(16,'v16'),(17,'v17');
+INSERT INTO history_e VALUES (1,1,2,10),(2,2,3,20),(3,3,4,30),(4,4,5,40),(5,5,6,50),(6,6,7,60),(7,7,8,70),(8,8,9,80),(9,9,10,90),(10,10,11,100),(11,11,12,110),(12,12,13,120),(13,13,14,130),(14,14,15,140),(15,15,16,150),(16,16,17,160);
+CREATE PROPERTY GRAPH history_graph
+VERTEX TABLES(history_v KEY(id) LABEL node PROPERTIES(id,name))
+EDGE TABLES(history_e KEY(id) SOURCE KEY(src) REFERENCES history_v(id)
+ DESTINATION KEY(dst) REFERENCES history_v(id) LABEL link PROPERTIES(id,weight));
+--source mysql_test/include/create_plan_table.inc
+ALTER TABLE plan_table MODIFY other_xml LONGTEXT;
+--let $history_passes=2
+while ($history_passes)
+{
+  if ($history_passes == 1)
+  {
+    CREATE INDEX history_out ON history_e(src,id);
+  }
+  --disable_result_log
+  DELETE FROM plan_table;
+  EXPLAIN INTO plan_table SET statement_id='history16'
+  SELECT * FROM GRAPH_TABLE(history_graph MATCH TRAIL
+    (a IS node WHERE a.id=1)-[e IS link]->{16}(b IS node)
+    ONE ROW PER STEP(v1,se,v2)
+    COLUMNS(ELEMENT_NUMBER(v1) AS vn1,ELEMENT_NUMBER(se) AS sn,
+            ELEMENT_NUMBER(v2) AS vn2,v1.id AS src,se.id AS edge_id,
+            se.weight AS weight,v2.id AS dst,v2.name AS target_name,
+            EDGE_ID(se) AS edge_identity,VERTEX_ID(v2) AS target_identity,
+            COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS path_edges)) g;
+  --enable_result_log
+  if ($history_passes == 2)
+  {
+    SELECT COUNT(*)=1 AS full_scan_expected_runtime FROM plan_table
+    WHERE statement_id='history16' AND operator='GRAPH FEEDBACK LOOP'
+      AND special_predicates LIKE '%access=full-scan%'
+      AND special_predicates LIKE '%runtime=fallback%';
+  }
+  if ($history_passes == 1)
+  {
+    SELECT COUNT(*)=1 AS index_scan_expected_runtime FROM plan_table
+    WHERE statement_id='history16' AND operator='GRAPH FEEDBACK LOOP'
+      AND special_predicates LIKE '%access=index-scan%'
+      AND special_predicates LIKE '%runtime=fallback%';
+  }
+  CREATE TABLE history_steps AS SELECT * FROM GRAPH_TABLE(history_graph MATCH TRAIL
+    (a IS node WHERE a.id=1)-[e IS link]->{16}(b IS node)
+    ONE ROW PER STEP(v1,se,v2)
+    COLUMNS(ELEMENT_NUMBER(v1) AS vn1,ELEMENT_NUMBER(se) AS sn,
+            ELEMENT_NUMBER(v2) AS vn2,v1.id AS src,se.id AS edge_id,
+            se.weight AS weight,v2.id AS dst,v2.name AS target_name,
+            EDGE_ID(se) AS edge_identity,VERTEX_ID(v2) AS target_identity,
+            COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS path_edges)) g;
+  SELECT COUNT(*) AS step_rows,MIN(sn) AS first_edge_number,
+         MAX(sn) AS last_edge_number,MAX(vn1) AS last_source_number,
+         MAX(vn2) AS last_target_number FROM history_steps;
+  SELECT vn1,sn,vn2,src,edge_id,weight,dst,target_name,hops
+  FROM history_steps ORDER BY sn;
+  SELECT path_edges,JSON_VALUE(edge_identity,'$.KEY_VALUE.id') AS last_edge_id,
+         JSON_VALUE(target_identity,'$.KEY_VALUE.id') AS last_target_id
+  FROM history_steps WHERE sn=32;
+  DROP TABLE history_steps;
+  --dec $history_passes
+}
+DROP TABLE plan_table;
+--echo sixteenth_target_revisits_first_vertex
+UPDATE history_e SET dst=1 WHERE id=16;
+SELECT COUNT(*) AS trail_paths FROM GRAPH_TABLE(history_graph MATCH TRAIL
+ (a IS node WHERE a.id=1)-[e IS link]->{16}(b IS node WHERE b.id=1)
+ COLUMNS(b.id AS endpoint)) g;
+SELECT COUNT(*) AS acyclic_paths FROM GRAPH_TABLE(history_graph MATCH ACYCLIC
+ (a IS node WHERE a.id=1)-[e IS link]->{16}(b IS node)
+ COLUMNS(b.id AS endpoint)) g;
+--echo sixteenth_edge_repeats_first_edge
+DELETE FROM history_e WHERE id=16;
+UPDATE history_e SET dst=1 WHERE id=15;
+SELECT COUNT(*) AS trail_paths FROM GRAPH_TABLE(history_graph MATCH TRAIL
+ (a IS node WHERE a.id=1)-[e IS link]->{16}(b IS node)
+ COLUMNS(b.id AS endpoint)) g;
+SELECT * FROM GRAPH_TABLE(history_graph MATCH
+ (a IS node WHERE a.id=1)-[e IS link]->{16}(b IS node)
+ COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g;
+DROP PROPERTY GRAPH history_graph;
+DROP TABLE history_e,history_v;
+--enable_query_log
+--echo trail_same_primary_key_in_distinct_edge_mappings
+--disable_query_log
+CREATE TABLE history_v(id INT PRIMARY KEY);
+CREATE TABLE history_e(id INT PRIMARY KEY,src INT,dst INT,weight INT);
+CREATE TABLE history_e2(id INT PRIMARY KEY,src INT,dst INT,weight INT);
+INSERT INTO history_v VALUES(1),(2),(3);
+INSERT INTO history_e VALUES(7,1,2,70);
+INSERT INTO history_e2 VALUES(7,2,3,700);
+CREATE PROPERTY GRAPH history_graph
+VERTEX TABLES(history_v KEY(id) LABEL node PROPERTIES(id))
+EDGE TABLES(
+ history_e KEY(id) SOURCE KEY(src) REFERENCES history_v(id)
+ DESTINATION KEY(dst) REFERENCES history_v(id) LABEL link PROPERTIES(id,weight),
+ history_e2 KEY(id) SOURCE KEY(src) REFERENCES history_v(id)
+ DESTINATION KEY(dst) REFERENCES history_v(id) LABEL link2 PROPERTIES(id,weight));
+SELECT sn,src,edge_id,weight,dst,suffix_hops,suffix_edge_ids,
+ JSON_VALUE(edge_identity,'$.ELEM_TABLE') AS edge_mapping
+FROM GRAPH_TABLE(history_graph MATCH TRAIL
+ (a IS node WHERE a.id=1)-[f IS link]->(b IS node)
+ -[e IS link2]->{1}(c IS node)
+ ONE ROW PER STEP(v1,se,v2)
+ COLUMNS(ELEMENT_NUMBER(se) AS sn,v1.id AS src,se.id AS edge_id,
+ se.weight AS weight,v2.id AS dst,COUNT(e.id) AS suffix_hops,
+ JSON_ARRAYAGG(e.id) AS suffix_edge_ids,EDGE_ID(se) AS edge_identity)) g ORDER BY sn;
+DROP PROPERTY GRAPH history_graph;
+DROP TABLE history_e2,history_e,history_v;
+--enable_query_log

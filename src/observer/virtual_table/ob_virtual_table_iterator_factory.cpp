@@ -35,6 +35,7 @@
 #include "observer/virtual_table/ob_information_user_privileges_table.h"
 #include "observer/virtual_table/ob_information_schema_privileges_table.h"
 #include "observer/virtual_table/ob_information_columns_table.h"
+#include "observer/virtual_table/graph_metadata_table.h"
 #include "observer/virtual_table/ob_information_parameters_table.h"
 #include "observer/virtual_table/ob_information_session_variables_table.h"
 #include "observer/virtual_table/ob_information_global_status_table.h"
@@ -896,6 +897,70 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
         END_CREATE_VT_ITER_SWITCH_LAMBDA
 
         BEGIN_CREATE_VT_ITER_SWITCH_LAMBDA
+          case OB_ALL_VIRTUAL_PROPERTY_GRAPHS_TID: {
+            GraphMetadataTable *metadata = nullptr;
+            if (OB_SUCC(NEW_VIRTUAL_TABLE(GraphMetadataTable, metadata))) {
+              metadata->set_kind(GraphMetadataTable::Kind::GRAPHS);
+              vt_iter = metadata;
+            }
+            break;
+          }
+          case OB_ALL_VIRTUAL_PROPERTY_GRAPH_ELEMENTS_TID: {
+            GraphMetadataTable *metadata = nullptr;
+            if (OB_SUCC(NEW_VIRTUAL_TABLE(GraphMetadataTable, metadata))) {
+              metadata->set_kind(GraphMetadataTable::Kind::ELEMENTS);
+              vt_iter = metadata;
+            }
+            break;
+          }
+          case OB_ALL_VIRTUAL_PROPERTY_GRAPH_KEYS_TID: {
+            GraphMetadataTable *metadata = nullptr;
+            if (OB_SUCC(NEW_VIRTUAL_TABLE(GraphMetadataTable, metadata))) {
+              metadata->set_kind(GraphMetadataTable::Kind::KEYS);
+              vt_iter = metadata;
+            }
+            break;
+          }
+          case OB_ALL_VIRTUAL_PROPERTY_GRAPH_EDGE_RELATIONSHIPS_TID: {
+            GraphMetadataTable *metadata = nullptr;
+            if (OB_SUCC(NEW_VIRTUAL_TABLE(GraphMetadataTable, metadata))) {
+              metadata->set_kind(GraphMetadataTable::Kind::EDGE_RELATIONSHIPS);
+              vt_iter = metadata;
+            }
+            break;
+          }
+          case OB_ALL_VIRTUAL_PROPERTY_GRAPH_LABELS_TID: {
+            GraphMetadataTable *metadata = nullptr;
+            if (OB_SUCC(NEW_VIRTUAL_TABLE(GraphMetadataTable, metadata))) {
+              metadata->set_kind(GraphMetadataTable::Kind::LABELS);
+              vt_iter = metadata;
+            }
+            break;
+          }
+          case OB_ALL_VIRTUAL_PROPERTY_GRAPH_ELEMENT_LABELS_TID: {
+            GraphMetadataTable *metadata = nullptr;
+            if (OB_SUCC(NEW_VIRTUAL_TABLE(GraphMetadataTable, metadata))) {
+              metadata->set_kind(GraphMetadataTable::Kind::ELEMENT_LABELS);
+              vt_iter = metadata;
+            }
+            break;
+          }
+          case OB_ALL_VIRTUAL_PROPERTY_GRAPH_LABEL_PROPERTIES_TID: {
+            GraphMetadataTable *metadata = nullptr;
+            if (OB_SUCC(NEW_VIRTUAL_TABLE(GraphMetadataTable, metadata))) {
+              metadata->set_kind(GraphMetadataTable::Kind::LABEL_PROPERTIES);
+              vt_iter = metadata;
+            }
+            break;
+          }
+          case OB_ALL_VIRTUAL_PROPERTY_GRAPH_PROPERTY_DEFINITIONS_TID: {
+            GraphMetadataTable *metadata = nullptr;
+            if (OB_SUCC(NEW_VIRTUAL_TABLE(GraphMetadataTable, metadata))) {
+              metadata->set_kind(GraphMetadataTable::Kind::PROPERTY_DEFINITIONS);
+              vt_iter = metadata;
+            }
+            break;
+          }
           case OB_ALL_VIRTUAL_INFORMATION_COLUMNS_TID: {
             ObInfoSchemaColumnsTable *columns = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObInfoSchemaColumnsTable, columns))) {

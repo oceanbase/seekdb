@@ -20,6 +20,7 @@
 #include "lib/literals/ob_literals.h"
 #include "share/ob_global_stat_proxy.h"
 #include "share/schema/ob_constraint.h"
+#include "share/schema/graph_sql_service.h"
 #include "share/schema/ob_partition_sql_helper.h"
 #include "share/ob_timezone_mgr.h"
 
@@ -675,7 +676,8 @@ int ObTableSqlService::drop_table(const ObTableSchema &table_schema,
   ObSqlString sql;
   
   const uint64_t table_id = table_schema.get_table_id();
-  if (OB_FAIL(check_ddl_allowed(table_schema))) {
+  if (OB_FAIL(GraphSqlService::check_table_ddl(sql_client, table_schema, nullptr))) {
+  } else if (OB_FAIL(check_ddl_allowed(table_schema))) {
   } else {
     // delete from __all_table_history
     if (OB_FAIL(delete_from_all_table_history(
@@ -927,7 +929,9 @@ int ObTableSqlService::update_single_column(
   const uint64_t table_id = new_column_schema.get_table_id();
 
   ObDMLSqlSplicer dml;
-  if (OB_FAIL(check_ddl_allowed(new_table_schema))) {
+  if (OB_FAIL(GraphSqlService::check_table_ddl(sql_client, origin_table_schema, &new_table_schema,
+                                               OB_INVALID_ID, &new_column_schema))) {
+  } else if (OB_FAIL(check_ddl_allowed(new_table_schema))) {
   } else if (OB_FAIL(gen_column_dml(new_column_schema, dml))) {
   } else if (!is_core_table(table_id)) {
     int64_t affected_rows = 0;
@@ -1810,7 +1814,11 @@ int ObTableSqlService::update_table_options(ObISQLClient &sql_client,
 {
   int ret = OB_SUCCESS;
   uint64_t table_id = table_schema.get_table_id();
-  if (OB_FAIL(inner_update_table_options_(sql_client, new_table_schema))) {
+  if (OB_FAIL(GraphSqlService::check_table_ddl(sql_client, table_schema, &new_table_schema))) {
+  } else if ((table_schema.get_table_name_str() != new_table_schema.get_table_name_str()
+              || table_schema.get_database_id() != new_table_schema.get_database_id())
+             && OB_FAIL(GraphSqlService::check_relation_name(sql_client, new_table_schema))) {
+  } else if (OB_FAIL(inner_update_table_options_(sql_client, new_table_schema))) {
   }
 
   if (OB_SUCC(ret)) {
@@ -1995,7 +2003,8 @@ int ObTableSqlService::delete_single_column(
   const uint64_t column_id = orig_column_schema.get_column_id();
 
   ObDMLSqlSplicer dml;
-  if (OB_FAIL(check_ddl_allowed(new_table_schema))) {
+  if (OB_FAIL(GraphSqlService::check_table_ddl(sql_client, new_table_schema, &new_table_schema, column_id))) {
+  } else if (OB_FAIL(check_ddl_allowed(new_table_schema))) {
   } else if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
                                                table_id)))
       || OB_FAIL(dml.add_pk_column("column_id", column_id))) {
@@ -2105,6 +2114,7 @@ int ObTableSqlService::batch_create_table(ObIArray<ObTableSchema> &tables,
       int64_t tmp = 0;
       if (OB_FAIL(table.check_valid(true/*count by byte*/))) {
       } else if (OB_FAIL(check_ddl_allowed(table))) {
+      } else if (OB_FAIL(GraphSqlService::check_relation_name(sql_client, table))) {
       } else if (table.is_view_table() && !table.is_sys_view()
           && !table.is_force_view() && table.get_column_count() <= 0) {
         ret = OB_ERR_UNEXPECTED;

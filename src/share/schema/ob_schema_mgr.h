@@ -32,6 +32,7 @@
 #include "share/schema/ob_sys_variable_mgr.h"
 #include "share/schema/ob_mock_fk_parent_table_mgr.h"
 #include "share/schema/ob_ai_model_mgr.h"
+#include "share/schema/graph_schema.h"
 
 namespace oceanbase
 {
@@ -438,6 +439,19 @@ public:
       const ObSimpleTriggerSchema *&trigger_schema) const;
 
   // ai model
+  const GraphSchema *get_graph_schema(uint64_t graph_id) const
+  { return graph_mgr_.get(graph_id); }
+  const GraphSchema *get_graph_schema(uint64_t database_id, const common::ObString &name,
+                                      common::ObNameCaseMode mode) const
+  { return graph_mgr_.get(database_id, name, mode); }
+  const common::ObIArray<GraphSchema *> &get_graph_schemas() const
+  { return graph_mgr_.get_all(); }
+  int add_graph_schema(const GraphSchema &schema) { return graph_mgr_.add(schema); }
+  int del_graph_schema(uint64_t graph_id) { return graph_mgr_.remove(graph_id); }
+  int del_graph(uint64_t graph_id) { return del_graph_schema(graph_id); }
+  int add_graphs(const common::ObIArray<GraphSchema> &schemas);
+  int get_graph_schema(uint64_t graph_id, const GraphSchema *&schema) const
+  { schema = graph_mgr_.get(graph_id); return common::OB_SUCCESS; }
   int get_ai_model_schema(
       const uint64_t &ai_model_id,
       const ObAiModelSchema *&ai_model_schema) const;
@@ -604,6 +618,7 @@ private:
   int64_t timestamp_in_slot_; // when schema mgr put in slot, we will set the timestamp
   int64_t allocator_idx_;
   ObAiModelMgr ai_model_mgr_;
+  GraphMgr graph_mgr_;
 };
 
 }//end of namespace schema

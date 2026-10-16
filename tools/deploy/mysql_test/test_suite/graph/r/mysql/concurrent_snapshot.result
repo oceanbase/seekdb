@@ -1,0 +1,210 @@
+SELECT COUNT(*)=1 AS native_snapshot_loop FROM plan_table
+WHERE statement_id='snapshot' AND operator='GRAPH FEEDBACK LOOP'
+    AND special_predicates LIKE '%runtime=native%';
+native_snapshot_loop
+1
+SELECT COUNT(*)=1 AS fullscan_snapshot_loop FROM plan_table
+WHERE statement_id='snapshot' AND special_predicates LIKE '%access=full-scan%';
+fullscan_snapshot_loop
+1
+snapshot_before_concurrent_replacement
+paths
+1:1:0:[]|2:1:1:[11]|2:1:1:[13]|3:1:2:[11, 12]|3:1:2:[13, 12]
+in_flight_statement_keeps_old_vertices_edges_and_properties
+paths
+1:1:0:[]|2:1:1:[11]|2:1:1:[13]|3:1:2:[11, 12]|3:1:2:[13, 12]
+next_statement_follows_transaction_isolation
+paths
+1:2:0:[]|4:2:1:[11]|4:2:1:[13]|3:2:2:[11, 12]|3:2:2:[13, 12]
+fresh_transaction_and_rebound_seed_see_committed_replacement
+paths
+1:2:0:[]|4:2:1:[11]|4:2:1:[13]|3:2:2:[11, 12]|3:2:2:[13, 12]
+paths
+3:2:0:[]
+paths
+1:2:0:[]|4:2:1:[11]|4:2:1:[13]|3:2:2:[11, 12]|3:2:2:[13, 12]
+snapshot_before_concurrent_replacement
+paths
+1:2:0:[]|4:2:1:[11]|4:2:1:[13]|3:2:2:[11, 12]|3:2:2:[13, 12]
+in_flight_statement_keeps_old_vertices_edges_and_properties
+paths
+1:2:0:[]|4:2:1:[11]|4:2:1:[13]|3:2:2:[11, 12]|3:2:2:[13, 12]
+next_statement_follows_transaction_isolation
+paths
+1:3:0:[]|2:3:1:[11]|2:3:1:[13]|3:3:2:[11, 12]|3:3:2:[13, 12]
+fresh_transaction_and_rebound_seed_see_committed_replacement
+paths
+1:3:0:[]|2:3:1:[11]|2:3:1:[13]|3:3:2:[11, 12]|3:3:2:[13, 12]
+paths
+3:3:0:[]
+paths
+1:3:0:[]|2:3:1:[11]|2:3:1:[13]|3:3:2:[11, 12]|3:3:2:[13, 12]
+snapshot_before_concurrent_replacement
+paths
+1:3:0:[]|2:3:1:[11]|2:3:1:[13]|3:3:2:[11, 12]|3:3:2:[13, 12]
+in_flight_statement_keeps_old_vertices_edges_and_properties
+paths
+1:3:0:[]|2:3:1:[11]|2:3:1:[13]|3:3:2:[11, 12]|3:3:2:[13, 12]
+next_statement_follows_transaction_isolation
+paths
+1:4:0:[]|4:4:1:[11]|4:4:1:[13]|3:4:2:[11, 12]|3:4:2:[13, 12]
+fresh_transaction_and_rebound_seed_see_committed_replacement
+paths
+1:4:0:[]|4:4:1:[11]|4:4:1:[13]|3:4:2:[11, 12]|3:4:2:[13, 12]
+paths
+3:4:0:[]
+paths
+1:4:0:[]|4:4:1:[11]|4:4:1:[13]|3:4:2:[11, 12]|3:4:2:[13, 12]
+snapshot_before_concurrent_replacement
+paths
+1:4:0:[]|4:4:1:[11]|4:4:1:[13]|3:4:2:[11, 12]|3:4:2:[13, 12]
+in_flight_statement_keeps_old_vertices_edges_and_properties
+paths
+1:4:0:[]|4:4:1:[11]|4:4:1:[13]|3:4:2:[11, 12]|3:4:2:[13, 12]
+next_statement_follows_transaction_isolation
+paths
+1:4:0:[]|4:4:1:[11]|4:4:1:[13]|3:4:2:[11, 12]|3:4:2:[13, 12]
+fresh_transaction_and_rebound_seed_see_committed_replacement
+paths
+1:5:0:[]|2:5:1:[11]|2:5:1:[13]|3:5:2:[11, 12]|3:5:2:[13, 12]
+paths
+3:5:0:[]
+paths
+1:5:0:[]|2:5:1:[11]|2:5:1:[13]|3:5:2:[11, 12]|3:5:2:[13, 12]
+snapshot_before_concurrent_replacement
+paths
+1:5:0:[]|2:5:1:[11]|2:5:1:[13]|3:5:2:[11, 12]|3:5:2:[13, 12]
+in_flight_statement_keeps_old_vertices_edges_and_properties
+paths
+1:5:0:[]|2:5:1:[11]|2:5:1:[13]|3:5:2:[11, 12]|3:5:2:[13, 12]
+next_statement_follows_transaction_isolation
+paths
+1:5:0:[]|2:5:1:[11]|2:5:1:[13]|3:5:2:[11, 12]|3:5:2:[13, 12]
+fresh_transaction_and_rebound_seed_see_committed_replacement
+paths
+1:6:0:[]|4:6:1:[11]|4:6:1:[13]|3:6:2:[11, 12]|3:6:2:[13, 12]
+paths
+3:6:0:[]
+paths
+1:6:0:[]|4:6:1:[11]|4:6:1:[13]|3:6:2:[11, 12]|3:6:2:[13, 12]
+snapshot_before_concurrent_replacement
+paths
+1:6:0:[]|4:6:1:[11]|4:6:1:[13]|3:6:2:[11, 12]|3:6:2:[13, 12]
+in_flight_statement_keeps_old_vertices_edges_and_properties
+paths
+1:6:0:[]|4:6:1:[11]|4:6:1:[13]|3:6:2:[11, 12]|3:6:2:[13, 12]
+next_statement_follows_transaction_isolation
+paths
+1:6:0:[]|4:6:1:[11]|4:6:1:[13]|3:6:2:[11, 12]|3:6:2:[13, 12]
+fresh_transaction_and_rebound_seed_see_committed_replacement
+paths
+1:7:0:[]|2:7:1:[11]|2:7:1:[13]|3:7:2:[11, 12]|3:7:2:[13, 12]
+paths
+3:7:0:[]
+paths
+1:7:0:[]|2:7:1:[11]|2:7:1:[13]|3:7:2:[11, 12]|3:7:2:[13, 12]
+SELECT COUNT(*)=1 AS native_snapshot_loop FROM plan_table
+WHERE statement_id='snapshot' AND operator='GRAPH FEEDBACK LOOP'
+    AND special_predicates LIKE '%runtime=native%';
+native_snapshot_loop
+1
+SELECT COUNT(*)=1 AS indexed_snapshot_loop FROM plan_table
+WHERE statement_id='snapshot' AND special_predicates LIKE '%access=index%';
+indexed_snapshot_loop
+1
+snapshot_before_concurrent_replacement
+paths
+1:1:0:[]|2:1:1:[11]|2:1:1:[13]|3:1:2:[11, 12]|3:1:2:[13, 12]
+in_flight_statement_keeps_old_vertices_edges_and_properties
+paths
+1:1:0:[]|2:1:1:[11]|2:1:1:[13]|3:1:2:[11, 12]|3:1:2:[13, 12]
+next_statement_follows_transaction_isolation
+paths
+1:2:0:[]|4:2:1:[11]|4:2:1:[13]|3:2:2:[11, 12]|3:2:2:[13, 12]
+fresh_transaction_and_rebound_seed_see_committed_replacement
+paths
+1:2:0:[]|4:2:1:[11]|4:2:1:[13]|3:2:2:[11, 12]|3:2:2:[13, 12]
+paths
+3:2:0:[]
+paths
+1:2:0:[]|4:2:1:[11]|4:2:1:[13]|3:2:2:[11, 12]|3:2:2:[13, 12]
+snapshot_before_concurrent_replacement
+paths
+1:2:0:[]|4:2:1:[11]|4:2:1:[13]|3:2:2:[11, 12]|3:2:2:[13, 12]
+in_flight_statement_keeps_old_vertices_edges_and_properties
+paths
+1:2:0:[]|4:2:1:[11]|4:2:1:[13]|3:2:2:[11, 12]|3:2:2:[13, 12]
+next_statement_follows_transaction_isolation
+paths
+1:3:0:[]|2:3:1:[11]|2:3:1:[13]|3:3:2:[11, 12]|3:3:2:[13, 12]
+fresh_transaction_and_rebound_seed_see_committed_replacement
+paths
+1:3:0:[]|2:3:1:[11]|2:3:1:[13]|3:3:2:[11, 12]|3:3:2:[13, 12]
+paths
+3:3:0:[]
+paths
+1:3:0:[]|2:3:1:[11]|2:3:1:[13]|3:3:2:[11, 12]|3:3:2:[13, 12]
+snapshot_before_concurrent_replacement
+paths
+1:3:0:[]|2:3:1:[11]|2:3:1:[13]|3:3:2:[11, 12]|3:3:2:[13, 12]
+in_flight_statement_keeps_old_vertices_edges_and_properties
+paths
+1:3:0:[]|2:3:1:[11]|2:3:1:[13]|3:3:2:[11, 12]|3:3:2:[13, 12]
+next_statement_follows_transaction_isolation
+paths
+1:4:0:[]|4:4:1:[11]|4:4:1:[13]|3:4:2:[11, 12]|3:4:2:[13, 12]
+fresh_transaction_and_rebound_seed_see_committed_replacement
+paths
+1:4:0:[]|4:4:1:[11]|4:4:1:[13]|3:4:2:[11, 12]|3:4:2:[13, 12]
+paths
+3:4:0:[]
+paths
+1:4:0:[]|4:4:1:[11]|4:4:1:[13]|3:4:2:[11, 12]|3:4:2:[13, 12]
+snapshot_before_concurrent_replacement
+paths
+1:4:0:[]|4:4:1:[11]|4:4:1:[13]|3:4:2:[11, 12]|3:4:2:[13, 12]
+in_flight_statement_keeps_old_vertices_edges_and_properties
+paths
+1:4:0:[]|4:4:1:[11]|4:4:1:[13]|3:4:2:[11, 12]|3:4:2:[13, 12]
+next_statement_follows_transaction_isolation
+paths
+1:4:0:[]|4:4:1:[11]|4:4:1:[13]|3:4:2:[11, 12]|3:4:2:[13, 12]
+fresh_transaction_and_rebound_seed_see_committed_replacement
+paths
+1:5:0:[]|2:5:1:[11]|2:5:1:[13]|3:5:2:[11, 12]|3:5:2:[13, 12]
+paths
+3:5:0:[]
+paths
+1:5:0:[]|2:5:1:[11]|2:5:1:[13]|3:5:2:[11, 12]|3:5:2:[13, 12]
+snapshot_before_concurrent_replacement
+paths
+1:5:0:[]|2:5:1:[11]|2:5:1:[13]|3:5:2:[11, 12]|3:5:2:[13, 12]
+in_flight_statement_keeps_old_vertices_edges_and_properties
+paths
+1:5:0:[]|2:5:1:[11]|2:5:1:[13]|3:5:2:[11, 12]|3:5:2:[13, 12]
+next_statement_follows_transaction_isolation
+paths
+1:5:0:[]|2:5:1:[11]|2:5:1:[13]|3:5:2:[11, 12]|3:5:2:[13, 12]
+fresh_transaction_and_rebound_seed_see_committed_replacement
+paths
+1:6:0:[]|4:6:1:[11]|4:6:1:[13]|3:6:2:[11, 12]|3:6:2:[13, 12]
+paths
+3:6:0:[]
+paths
+1:6:0:[]|4:6:1:[11]|4:6:1:[13]|3:6:2:[11, 12]|3:6:2:[13, 12]
+snapshot_before_concurrent_replacement
+paths
+1:6:0:[]|4:6:1:[11]|4:6:1:[13]|3:6:2:[11, 12]|3:6:2:[13, 12]
+in_flight_statement_keeps_old_vertices_edges_and_properties
+paths
+1:6:0:[]|4:6:1:[11]|4:6:1:[13]|3:6:2:[11, 12]|3:6:2:[13, 12]
+next_statement_follows_transaction_isolation
+paths
+1:6:0:[]|4:6:1:[11]|4:6:1:[13]|3:6:2:[11, 12]|3:6:2:[13, 12]
+fresh_transaction_and_rebound_seed_see_committed_replacement
+paths
+1:7:0:[]|2:7:1:[11]|2:7:1:[13]|3:7:2:[11, 12]|3:7:2:[13, 12]
+paths
+3:7:0:[]
+paths
+1:7:0:[]|2:7:1:[11]|2:7:1:[13]|3:7:2:[11, 12]|3:7:2:[13, 12]

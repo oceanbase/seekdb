@@ -115,6 +115,7 @@ ROOTSERVER_UNITY_GROUPS = [
             "src/rootserver/ob_partition_exchange.cpp",
             "src/rootserver/ob_alter_table_constraint_checker.cpp",
             "src/rootserver/ob_ai_model_ddl_service.cpp",
+            "src/rootserver/graph_ddl_service.cpp",
             "src/rootserver/ob_objpriv_mysql_ddl_service.cpp",
             "src/rootserver/ob_create_index_on_empty_table_helper.cpp",
         ],

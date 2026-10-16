@@ -189,6 +189,7 @@ OBSERVER_PRIVATE_HEADERS = [
     "virtual_table/ob_gv_sql.h",
     "virtual_table/ob_information_check_constraints_table.h",
     "virtual_table/ob_information_columns_table.h",
+    "virtual_table/graph_metadata_table.h",
     "virtual_table/ob_information_global_status_table.h",
     "virtual_table/ob_information_kvcache_table.h",
     "virtual_table/ob_information_parameters_table.h",

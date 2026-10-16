@@ -1,0 +1,59 @@
+--disable_query_log
+--source mysql_test/test_suite/graph/computed_bindings_fixture.inc
+--enable_query_log
+--let $passes=2
+while ($passes)
+{
+ if ($passes == 1)
+ {
+  CREATE INDEX cb_adjacency ON cb_edge(src,since,dst);
+ }
+ --disable_query_log
+ --source mysql_test/include/create_plan_table.inc
+ --disable_result_log
+ eval EXPLAIN INTO plan_table SET statement_id='cb_reuse' $cb_query;
+ eval EXPLAIN INTO plan_table SET statement_id='cb_derived' $cb_derived;
+ EXPLAIN INTO plan_table SET statement_id='cb_unproven'
+ SELECT s.id,g.endpoint FROM cb_seed s,LATERAL (
+ SELECT * FROM GRAPH_TABLE(cb_graph MATCH (a IS person WHERE a.id=s.seed)
+ -[e IS link WHERE REVERSE(e.kind)=s.kind]->{0,2}(b IS person)
+ COLUMNS(b.id AS endpoint)) p) g;
+ EXPLAIN INTO plan_table SET statement_id='cb_volatile'
+ SELECT s.id,g.endpoint FROM cb_seed s,LATERAL (
+ SELECT * FROM GRAPH_TABLE(cb_graph MATCH (a IS person WHERE a.id=s.seed)
+ -[e IS link WHERE e.since>=s.cutoff+RAND()]->{0,2}(b IS person)
+ COLUMNS(b.id AS endpoint)) p) g;
+ --enable_result_log
+ --enable_query_log
+ SELECT COUNT(*) AS computed_reuse_eligible FROM plan_table
+ WHERE statement_id='cb_reuse' AND special_predicates LIKE '%runtime=native%adjacency_reuse=eligible%';
+ SELECT COUNT(*) AS derived_reuse_eligible FROM plan_table
+ WHERE statement_id='cb_derived' AND special_predicates LIKE '%runtime=native%adjacency_reuse=eligible%';
+ SELECT COUNT(*) AS unproven_or_volatile_reuse FROM plan_table
+ WHERE statement_id IN ('cb_unproven','cb_volatile') AND special_predicates LIKE '%adjacency_reuse=eligible%';
+ DROP TABLE plan_table;
+ --disable_query_log
+ eval SELECT COUNT(*) AS computed_path_bag_mismatches FROM (
+ SELECT id,endpoint,hops,edges,SUM(n) AS difference FROM (
+ SELECT e.*,1 AS n FROM cb_expected e
+ UNION ALL SELECT q.*,-1 AS n FROM ($cb_query) q
+ ) bags GROUP BY id,endpoint,hops,edges HAVING SUM(n)<>0) differences;
+ eval $cb_query ORDER BY s.id,g.hops,edges;
+ eval SELECT COUNT(*) AS derived_path_bag_mismatches FROM (
+ SELECT id,endpoint,hops,edges,SUM(n) AS difference FROM (
+ SELECT e.*,1 AS n FROM cb_expected e
+ UNION ALL SELECT q.*,-1 AS n FROM ($cb_derived) q
+ ) bags GROUP BY id,endpoint,hops,edges HAVING SUM(n)<>0) differences;
+ --enable_query_log
+ PREPARE cb_cached FROM 'SELECT s.id,COUNT(*) AS paths FROM cb_seed s,LATERAL (SELECT * FROM GRAPH_TABLE(cb_graph MATCH (a IS person WHERE a.id=s.seed)-[e IS link WHERE e.since>=COALESCE(ABS(s.cutoff)+s.delta,?) AND LOWER(e.kind)=LOWER(COALESCE(s.kind,''knows''))]->{0,2}(b IS person) COLUMNS(b.id AS endpoint)) p) g GROUP BY s.id ORDER BY s.id';
+ SET @cb_default=2020;
+ EXECUTE cb_cached USING @cb_default;
+ SET @cb_default=2024;
+ EXECUTE cb_cached USING @cb_default;
+ SET @cb_default=2020;
+ EXECUTE cb_cached USING @cb_default;
+ DEALLOCATE PREPARE cb_cached;
+ --dec $passes
+}
+DROP PROPERTY GRAPH cb_graph;
+DROP TABLE cb_expected,cb_reference,cb_seed,cb_edge,cb_vertex;

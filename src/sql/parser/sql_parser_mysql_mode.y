@@ -456,6 +456,12 @@ END_P SET_VAR DELIMITER
 %type <node> set_type
 %type <node> drop_index_stmt hint_options opt_expr_as_list expr_as_list expr_with_opt_alias substr_params opt_comma substr_or_substring
 %type <node> /*frozen_type*/ opt_binary
+%token <non_reserved_keyword> PROPERTY GRAPH VERTEX EDGE LABEL DESTINATION GRAPH_TABLE STEP TRAIL ACYCLIC SHORTEST
+%type <node> create_property_graph_stmt drop_property_graph_stmt
+%type <node> graph_vertex_list graph_vertex graph_edge_list graph_edge opt_graph_edges
+%type <node> graph_columns graph_table_expr graph_chain graph_node_pattern graph_edge_pattern graph_filter
+%type <node> graph_projection_list graph_projection
+%type <node> graph_quantifier opt_graph_quantifier graph_table_shape opt_graph_table_shape graph_path_mode opt_graph_search
 %type <node> create_view_stmt view_name opt_column_list opt_tablet_id view_select_stmt opt_check_option opt_algorithm view_algorithm opt_definer opt_sql_security
 %type <node> name_list
 %type <node> opt_subpartitions runtime_selector opt_runtime_selector runtime_selector_target opt_flush_scope suspend_or_resume cache_name opt_cache_name file_id opt_file_id
@@ -608,6 +614,8 @@ stmt:
   | create_index_stmt       { $$ = $1; check_question_mark($$, result); }
   | drop_index_stmt         { $$ = $1; check_question_mark($$, result); }
   | kill_stmt               { $$ = $1; question_mark_issue($$, result); }
+  | create_property_graph_stmt
+  | drop_property_graph_stmt
   | create_view_stmt
   {
     $$ = $1;
@@ -694,7 +702,10 @@ expr_list:
 expr %prec LOWER_COMMA
 {
   /* every mysql's item(same as ob's expr) has its own name */
-  if (OB_UNLIKELY((NULL == $1->str_value_)) && $1->type_ != T_VARCHAR) {
+  /* Empty string literals have a NULL value pointer. Do not replace their
+     semantic value with the source spelling when assigning expression names. */
+  if (OB_UNLIKELY((NULL == $1->str_value_))
+      && $1->type_ != T_VARCHAR && $1->type_ != T_NCHAR && $1->type_ != T_HEX_STRING) {
     dup_string($1, result, @1.first_column, @1.last_column);
   }
   malloc_list_node($$, result->malloc_pool_, T_EXPR_LIST, 2, 1, $1);
@@ -720,7 +731,8 @@ expr
 {
   $$ = $1;
   /* every mysql's item(same as ob's expr) has its own name */
-  if (OB_UNLIKELY((NULL == $$->str_value_)) && $$->type_ != T_NCHAR && $$->type_ != T_VARCHAR) {
+  if (OB_UNLIKELY((NULL == $$->str_value_))
+      && $$->type_ != T_NCHAR && $$->type_ != T_VARCHAR && $$->type_ != T_HEX_STRING) {
     dup_string($$, result, @1.first_column, @1.last_column);
   }
 }
@@ -7380,6 +7392,259 @@ TABLE { $$ = NULL; }
  * create view
  *
  *****************************************************************************/
+create_property_graph_stmt:
+CREATE PROPERTY GRAPH relation_factor VERTEX TABLES '(' graph_vertex_list ')' opt_graph_edges
+{
+  ParseNode *vertices = NULL;
+  merge_nodes(vertices, result, T_GRAPH_ELEMENT_LIST, $8);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_CREATE_PROPERTY_GRAPH, 3, $4, vertices, $10);
+}
+;
+
+drop_property_graph_stmt:
+DROP PROPERTY GRAPH opt_if_exists relation_factor
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_DROP_PROPERTY_GRAPH, 2, $5, $4);
+}
+;
+
+graph_columns:
+column_name
+{ $$ = $1; }
+| graph_columns ',' column_name
+{ malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3); }
+;
+
+graph_vertex_list:
+graph_vertex
+{ $$ = $1; }
+| graph_vertex_list ',' graph_vertex
+{ malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3); }
+;
+
+graph_vertex:
+relation_factor KEY '(' graph_columns ')' LABEL relation_name PROPERTIES '(' graph_columns ')'
+{
+  ParseNode *keys = NULL;
+  ParseNode *properties = NULL;
+  merge_nodes(keys, result, T_COLUMN_LIST, $4);
+  merge_nodes(properties, result, T_COLUMN_LIST, $10);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_GRAPH_VERTEX, 4, $1, keys, $7, properties);
+}
+;
+
+opt_graph_edges:
+/* EMPTY */
+{ $$ = NULL; }
+| EDGE TABLES '(' graph_edge_list ')'
+{ merge_nodes($$, result, T_GRAPH_ELEMENT_LIST, $4); }
+;
+
+graph_edge_list:
+graph_edge
+{ $$ = $1; }
+| graph_edge_list ',' graph_edge
+{ malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3); }
+;
+
+graph_edge:
+relation_factor KEY '(' graph_columns ')'
+SOURCE KEY '(' graph_columns ')' REFERENCES relation_factor '(' graph_columns ')'
+DESTINATION KEY '(' graph_columns ')' REFERENCES relation_factor '(' graph_columns ')'
+LABEL relation_name PROPERTIES '(' graph_columns ')'
+{
+  ParseNode *keys = NULL, *source = NULL, *source_refs = NULL;
+  ParseNode *destination = NULL, *destination_refs = NULL, *properties = NULL;
+  merge_nodes(keys, result, T_COLUMN_LIST, $4);
+  merge_nodes(source, result, T_COLUMN_LIST, $9);
+  merge_nodes(source_refs, result, T_COLUMN_LIST, $14);
+  merge_nodes(destination, result, T_COLUMN_LIST, $19);
+  merge_nodes(destination_refs, result, T_COLUMN_LIST, $24);
+  merge_nodes(properties, result, T_COLUMN_LIST, $30);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_GRAPH_EDGE, 10,
+                          $1, keys, source, $12, source_refs,
+                          destination, $22, destination_refs, $27, properties);
+}
+;
+
+graph_table_expr:
+GRAPH_TABLE '(' relation_factor MATCH opt_graph_search graph_path_mode graph_chain opt_graph_table_shape COLUMNS '(' graph_projection_list ')' ')' opt_as relation_name
+{
+  UNUSED($14);
+  ParseNode *chain = NULL, *columns = NULL;
+  merge_nodes(chain, result, T_GRAPH_PATTERN, $7);
+  merge_nodes(columns, result, T_PROJECT_LIST, $11);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_GRAPH_TABLE, 7,
+                           $3, $6, chain, $8, columns, $15, $5);
+}
+;
+
+opt_graph_search:
+/* EMPTY */
+{ $$ = NULL; }
+| ANY SHORTEST
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_INT);
+  $$->value_ = 1;
+}
+;
+
+graph_path_mode:
+/* EMPTY */
+{ $$ = NULL; }
+| TRAIL
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_GRAPH_PATH_MODE);
+  $$->value_ = 1;
+}
+| SIMPLE
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_GRAPH_PATH_MODE);
+  $$->value_ = 2;
+}
+| ACYCLIC
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_GRAPH_PATH_MODE);
+  $$->value_ = 3;
+}
+;
+
+opt_graph_table_shape:
+/* EMPTY */
+{ $$ = NULL; }
+| graph_table_shape
+{ $$ = $1; }
+;
+
+graph_table_shape:
+ONE ROW PER MATCH
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_GRAPH_TABLE_SHAPE, 0);
+  $$->value_ = 0;
+}
+| ONE ROW PER STEP '(' relation_name ',' relation_name ',' relation_name ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_GRAPH_TABLE_SHAPE, 3, $6, $8, $10);
+  $$->value_ = 1;
+}
+| ONE ROW PER VERTEX '(' relation_name ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_GRAPH_TABLE_SHAPE, 1, $6);
+  $$->value_ = 2;
+}
+;
+
+graph_projection_list:
+graph_projection
+{ $$ = $1; }
+| graph_projection_list ',' graph_projection
+{ malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3); }
+;
+
+graph_projection:
+expr AS column_name
+{
+  ParseNode *alias_node = NULL;
+  malloc_non_terminal_node(alias_node, result->malloc_pool_, T_ALIAS, 2, $1, $3);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_PROJECT_STRING, 1, alias_node);
+  dup_expr_string($$, result, @1.first_column, @1.last_column);
+  dup_node_string($3, alias_node, result->malloc_pool_);
+  alias_node->param_num_ = 0;
+  alias_node->sql_str_off_ = @1.first_column;
+}
+;
+
+graph_chain:
+graph_node_pattern
+{ $$ = $1; }
+| graph_chain '-' graph_edge_pattern JSON_EXTRACT opt_graph_quantifier graph_node_pattern
+{
+  $3->value_ = 0;
+  $3->children_[3] = $5;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 3, $1, $3, $6);
+}
+| graph_chain COMP_LT '-' graph_edge_pattern '-' opt_graph_quantifier graph_node_pattern
+{
+  $4->value_ = 1;
+  $4->children_[3] = $6;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 3, $1, $4, $7);
+}
+| graph_chain '-' graph_edge_pattern '-' graph_quantifier graph_node_pattern
+{
+  $3->value_ = 2;
+  $3->children_[3] = $5;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 3, $1, $3, $6);
+}
+;
+
+opt_graph_quantifier:
+/* EMPTY */
+{ $$ = NULL; }
+| graph_quantifier
+{ $$ = $1; }
+;
+
+graph_quantifier:
+'{' INTNUM '}'
+{
+  $2->is_forbid_parameter_ = 1;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_GRAPH_QUANTIFIER, 2, $2, NULL);
+  $$->value_ = 0;
+  $$->is_tree_not_param_ = 1;
+}
+| '{' INTNUM ',' INTNUM '}'
+{
+  $2->is_forbid_parameter_ = 1;
+  $4->is_forbid_parameter_ = 1;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_GRAPH_QUANTIFIER, 2, $2, $4);
+  $$->value_ = 1;
+  $$->is_tree_not_param_ = 1;
+}
+| '{' ',' INTNUM '}'
+{
+  $3->is_forbid_parameter_ = 1;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_GRAPH_QUANTIFIER, 2, NULL, $3);
+  $$->value_ = 1;
+  $$->is_tree_not_param_ = 1;
+}
+| '{' INTNUM ',' '}'
+{
+  $2->is_forbid_parameter_ = 1;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_GRAPH_QUANTIFIER, 2, $2, NULL);
+  $$->value_ = 1;
+  $$->is_tree_not_param_ = 1;
+}
+| '*'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_GRAPH_QUANTIFIER, 2, NULL, NULL);
+  $$->value_ = 2;
+  $$->is_tree_not_param_ = 1;
+}
+| '+'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_GRAPH_QUANTIFIER, 2, NULL, NULL);
+  $$->value_ = 3;
+  $$->is_tree_not_param_ = 1;
+}
+;
+
+graph_node_pattern:
+'(' relation_name IS relation_name graph_filter ')'
+{ malloc_non_terminal_node($$, result->malloc_pool_, T_GRAPH_NODE_PATTERN, 3, $2, $4, $5); }
+;
+
+graph_edge_pattern:
+'[' relation_name IS relation_name graph_filter ']'
+{ malloc_non_terminal_node($$, result->malloc_pool_, T_GRAPH_EDGE_PATTERN, 4, $2, $4, $5, NULL); }
+;
+
+graph_filter:
+/* EMPTY */
+{ $$ = NULL; }
+| WHERE expr
+{ $$ = $2; }
+;
+
 create_view_stmt:
 create_with_opt_hint opt_replace opt_algorithm opt_definer opt_sql_security VIEW view_name opt_column_list AS view_select_stmt opt_check_option
 {
@@ -10429,7 +10694,8 @@ sort_key:
 expr opt_asc_desc
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_SORT_KEY, 2, $1, $2);
-  if (NULL == $1->str_value_) {
+  if (NULL == $1->str_value_
+      && $1->type_ != T_VARCHAR && $1->type_ != T_NCHAR && $1->type_ != T_HEX_STRING) {
     dup_string($1, result, @1.first_column, @1.last_column);
   }
 }
@@ -10456,7 +10722,8 @@ sort_key_opt_null:
 expr opt_asc_desc_null
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_SORT_KEY, 2, $1, $2);
-  if (NULL == $1->str_value_) {
+  if (NULL == $1->str_value_
+      && $1->type_ != T_VARCHAR && $1->type_ != T_NCHAR && $1->type_ != T_HEX_STRING) {
     dup_string($1, result, @1.first_column, @1.last_column);
   }
 }
@@ -10830,6 +11097,10 @@ tbl_name
   malloc_non_terminal_node($$, result->malloc_pool_, T_ALIAS, 6, $2, unname_node, unname_node, unname_node, unname_node, $3);
   unname_node->sql_str_off_ = @2.first_column;
   $$->value_ = 1; //lateral
+}
+| graph_table_expr
+{
+  $$ = $1;
 }
 | json_table_expr
 {
@@ -12667,6 +12938,11 @@ SHOW opt_extended_or_full TABLES opt_from_or_in_database_clause opt_show_conditi
   (void)($2);
   (void)$3;
   malloc_non_terminal_node($$, result->malloc_pool_, T_SHOW_CREATE_DATABASE, 2, $4, $5);
+}
+| SHOW create_with_opt_hint PROPERTY GRAPH relation_factor
+{
+  UNUSED($2);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_SHOW_CREATE_PROPERTY_GRAPH, 1, $5);
 }
 | SHOW create_with_opt_hint TABLE relation_factor
 {
@@ -17480,7 +17756,18 @@ literal
 ;
 
 unreserved_keyword:
-unreserved_keyword_for_role_name { $$=$1;}
+        PROPERTY
+|       GRAPH
+|       VERTEX
+|       EDGE
+|       LABEL
+|       DESTINATION
+|       GRAPH_TABLE
+|       STEP
+|       TRAIL
+|       ACYCLIC
+|       SHORTEST
+|unreserved_keyword_for_role_name { $$=$1;}
 | unreserved_keyword_ambiguous_roles { $$=$1;}
 ;
 

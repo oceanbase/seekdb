@@ -305,6 +305,7 @@ OBSERVER_UNITY_GROUPS = [
             "src/observer/virtual_table/ob_gv_sql.cpp",
             "src/observer/virtual_table/ob_information_check_constraints_table.cpp",
             "src/observer/virtual_table/ob_information_columns_table.cpp",
+            "src/observer/virtual_table/graph_metadata_table.cpp",
             "src/observer/virtual_table/ob_information_global_status_table.cpp",
             "src/observer/virtual_table/ob_information_kvcache_table.cpp",
             "src/observer/virtual_table/ob_information_parameters_table.cpp",

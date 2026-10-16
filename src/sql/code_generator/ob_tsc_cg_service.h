@@ -141,6 +141,8 @@ private:
                             bool &has_rowscn);
   int generate_pushdown_aggr_ctdef(const ObLogTableScan &op, const DASScanCGCtx &cg_ctx, ObDASScanCtDef &scan_ctdef);
   int generate_das_scan_ctdef(const ObLogTableScan &op, const DASScanCGCtx &cg_ctx, ObDASScanCtDef &scan_ctdef, bool &has_rowscn);
+  int generate_graph_lookup_ctdef(const ObLogTableScan &op,
+                                  ObTableScanCtDef &tsc_ctdef);
   int generate_table_param(const ObLogTableScan &op, const DASScanCGCtx &cg_ctx, ObDASScanCtDef &scan_ctdef, common::ObIArray<uint64_t> &tsc_out_cols);
   int extract_das_output_column_ids(const ObLogTableScan &op,
                                     ObDASScanCtDef &scan_ctdef,

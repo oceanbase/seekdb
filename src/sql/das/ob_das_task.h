@@ -328,6 +328,7 @@ public:
   {
   }
   int get_next_row();
+  int get_next_rows(int64_t &count, int64_t capacity);
   int next_result();
   const ObDASTabletLoc *get_tablet_loc() const { return (*task_iter_)->get_tablet_loc(); }
   bool is_end() const { return task_iter_.is_end(); }

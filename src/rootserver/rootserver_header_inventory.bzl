@@ -77,6 +77,7 @@ ROOTSERVER_PRIVATE_HEADERS = [
     "fork_table/ob_fork_table_task.h",
     "ob_ai_model_ddl_operator.h",
     "ob_ai_model_ddl_service.h",
+    "graph_ddl_service.h",
     "ob_alter_table_constraint_checker.h",
     "ob_create_index_on_empty_table_helper.h",
     "ob_ddl_sql_generator.h",

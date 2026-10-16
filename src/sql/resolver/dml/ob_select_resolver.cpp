@@ -27,6 +27,7 @@
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
 #include "sql/engine/expr/ob_expr_regexp_context.h"
 #include "sql/engine/expr/ob_json_param_type.h"
+#include "sql/engine/graph/graph_path_spec.h"
 #include "sql/parser/ob_parser_utils.h"
 
 #include "sql/executor/ob_memory_tracker.h"
@@ -501,6 +502,26 @@ int ObSelectResolver::set_stmt_set_type(ObSelectStmt *select_stmt,
       select_stmt->assign_set_op(ObSelectStmt::UNION);
       select_stmt->assign_set_all();
       break;
+    case T_GRAPH_FEEDBACK_LOOP: {
+      const GraphPathDesc *path_desc = params_.internal_graph_path_desc_;
+      if (OB_ISNULL(path_desc)
+          || OB_UNLIKELY(!path_desc->is_valid()
+                         || path_desc->lower_bound_ != set_node->int16_values_[0]
+                         || path_desc->upper_bound_ != set_node->int16_values_[1]
+                         || static_cast<int64_t>(path_desc->direction_)
+                                != set_node->int16_values_[2]
+                         || static_cast<int64_t>(path_desc->path_mode_)
+                                != set_node->int16_values_[3])) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("invalid generated graph feedback descriptor", K(ret),
+                 KPC(path_desc));
+      } else {
+        select_stmt->assign_set_op(ObSelectStmt::UNION);
+        select_stmt->assign_set_all();
+        select_stmt->set_graph_feedback_loop(true, *path_desc);
+      }
+      break;
+    }
     case T_SET_INTERSECT:
       select_stmt->assign_set_op(ObSelectStmt::INTERSECT);
       break;

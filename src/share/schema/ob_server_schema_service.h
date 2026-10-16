@@ -82,6 +82,7 @@ struct SchemaKey
     uint64_t routine_type_;
     uint64_t column_priv_id_;
     uint64_t ai_model_id_;
+    uint64_t graph_id_;
   };
   union {
     common::ObString table_name_;
@@ -198,6 +199,7 @@ struct SchemaKey
   {
     return ObColumnPrivIdKey(column_priv_id_);
   }
+  uint64_t get_graph_key() const { return graph_id_; }
   ObAiModelId get_ai_model_key() const
   {
     return ObAiModelId(ai_model_id_);
@@ -322,6 +324,7 @@ public:
   SCHEMA_KEY_FUNC(trigger);
   SCHEMA_KEY_FUNC(udt);
   SCHEMA_KEY_FUNC(ai_model);
+  SCHEMA_KEY_FUNC(graph);
   #undef SCHEMA_KEY_FUNC
 
   struct db_priv_hash_func
@@ -556,6 +559,7 @@ public:
   SCHEMA_KEYS_DEF(sys_variable, SysVariableKeys);
   SCHEMA_KEYS_DEF(mock_fk_parent_table, MockFKParentTableKeys);
   SCHEMA_KEYS_DEF(ai_model, AiModelKeys);
+  SCHEMA_KEYS_DEF(graph, GraphKeys);
   #undef SCHEMA_KEYS_DEF
   typedef common::hash::ObHashSet<SchemaKey, common::hash::NoPthreadDefendMode,
       db_priv_hash_func, db_priv_equal_to> DBPrivKeys;
@@ -634,6 +638,8 @@ public:
     // ai model
     AiModelKeys new_ai_model_keys_;
     AiModelKeys del_ai_model_keys_;
+    GraphKeys new_graph_keys_;
+    GraphKeys del_graph_keys_;
 
     int create(int64_t bucket_size);
 
@@ -660,6 +666,7 @@ public:
     common::ObArray<ObSimpleMockFKParentTableSchema> simple_mock_fk_parent_table_schemas_;
     common::ObArray<ObTableSchema *> non_sys_tables_;
     common::ObArray<ObAiModelSchema> simple_ai_model_schemas_;
+    common::ObArray<GraphSchema> simple_graph_schemas_;
     common::ObArenaAllocator allocator_;
   };
 
@@ -821,6 +828,7 @@ private:
   GET_INCREMENT_SCHEMA_KEY_FUNC_DECLARE(obj_mysql_priv);
   GET_INCREMENT_SCHEMA_KEY_FUNC_DECLARE(mock_fk_parent_table);
   GET_INCREMENT_SCHEMA_KEY_FUNC_DECLARE(ai_model);
+  GET_INCREMENT_SCHEMA_KEY_FUNC_DECLARE(graph);
 #undef GET_INCREMENT_SCHEMA_KEY_FUNC_DECLARE
 
 
@@ -847,6 +855,7 @@ private:
   APPLY_SCHEMA_TO_CACHE(obj_mysql_priv, ObPrivMgr);
   APPLY_SCHEMA_TO_CACHE(mock_fk_parent_table, ObMockFKParentTableMgr);
   APPLY_SCHEMA_TO_CACHE(ai_model, ObSchemaMgr);
+  APPLY_SCHEMA_TO_CACHE(graph, ObSchemaMgr);
 #undef APPLY_SCHEMA_TO_CACHE
 
   // replay log

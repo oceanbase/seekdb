@@ -1,0 +1,187 @@
+--disable_query_log
+--source mysql_test/test_suite/graph/mapping_fixture.sql
+--source mysql_test/include/create_plan_table.inc
+--enable_query_log
+SELECT shortest FROM (SELECT 7 AS shortest) ordinary_sql;
+# Independent SQL enumerates full path witnesses, then computes distances.
+# Do not require a particular edge when parallel shortest witnesses tie.
+CREATE TABLE shortest_expected AS
+WITH RECURSIVE paths(seed,endpoint,hops,edges) AS (
+ SELECT id,id,0,JSON_ARRAY() FROM graph_person
+ UNION ALL
+ SELECT p.seed,v.id,p.hops+1,JSON_ARRAY_APPEND(p.edges,'$',e.id)
+ FROM paths p JOIN graph_knows e ON e.src=p.endpoint
+ JOIN graph_person v ON v.id=e.dst WHERE p.hops<4
+) SELECT seed,endpoint,hops,CAST(edges AS CHAR(4000)) AS edges FROM paths;
+--let $passes=2
+while ($passes)
+{
+  if ($passes == 1)
+  {
+    CREATE INDEX shortest_out ON graph_knows(src,since,dst);
+    CREATE INDEX shortest_in ON graph_knows(dst,since,src);
+  }
+  CREATE TABLE shortest_actual AS SELECT seed,endpoint,hops,
+   CAST(COALESCE(edges,JSON_ARRAY()) AS CHAR(4000)) AS edges
+   FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+   (a IS person)-[e IS knows]->{2,4}(b IS person)
+   COLUMNS(a.id AS seed,b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g;
+  SELECT COUNT(*) AS missing_or_wrong_distances FROM
+   (SELECT seed,endpoint,MIN(hops) AS hops FROM shortest_expected WHERE hops>=2 GROUP BY seed,endpoint) e
+   LEFT JOIN shortest_actual a ON a.seed=e.seed AND a.endpoint=e.endpoint AND a.hops=e.hops
+   WHERE a.seed IS NULL;
+  SELECT COUNT(*) AS invalid_witnesses FROM shortest_actual a LEFT JOIN shortest_expected e
+   ON a.seed=e.seed AND a.endpoint=e.endpoint AND a.hops=e.hops AND a.edges=e.edges WHERE e.seed IS NULL;
+  SELECT COUNT(*) AS duplicate_pairs FROM
+   (SELECT seed,endpoint,COUNT(*) AS n FROM shortest_actual GROUP BY seed,endpoint HAVING n<>1) d;
+  SELECT COUNT(*) AS unexpected_pairs FROM shortest_actual a LEFT JOIN
+   (SELECT seed,endpoint,MIN(hops) AS hops FROM shortest_expected WHERE hops>=2 GROUP BY seed,endpoint) e
+   ON a.seed=e.seed AND a.endpoint=e.endpoint AND a.hops=e.hops WHERE e.seed IS NULL;
+  DROP TABLE shortest_actual;
+  --disable_result_log
+  EXPLAIN INTO plan_table SET statement_id='shortest_native'
+  SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+   (a IS person WHERE a.id=1)-[e IS knows]->{0,4}(b IS person)
+   COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g;
+  --enable_result_log
+  SELECT COUNT(*)=1 AS native_witness_pruning FROM plan_table
+   WHERE statement_id='shortest_native' AND operator='GRAPH FEEDBACK LOOP'
+   AND special_predicates LIKE '%runtime=native, states=binding_vertex_hop, search=any_shortest%';
+  DELETE FROM plan_table;
+  PREPARE shortest_cached FROM 'SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=?)-[e IS knows WHERE e.since>=?]->{0,4}(b IS person) COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g ORDER BY endpoint';
+  SET @seed=1,@since=2021;
+  EXECUTE shortest_cached USING @seed,@since;
+  SET @seed=3,@since=2023;
+  EXECUTE shortest_cached USING @seed,@since;
+  DEALLOCATE PREPARE shortest_cached;
+  --dec $passes
+}
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+ (a IS person WHERE a.id=1)-[e IS knows]->{0,4}(b IS person WHERE b.id=3)
+ ONE ROW PER STEP(v1,se,v2)
+ COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS n,v1.id AS src,v2.id AS dst,COUNT(e.id) AS hops)) g ORDER BY m,n;
+SELECT s.binding,g.endpoint,g.hops FROM (SELECT 1 AS binding,1 AS id UNION ALL SELECT 2,2 UNION ALL SELECT 3,1) s,
+LATERAL (SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+ (a IS person WHERE a.id=s.id)-[e IS knows]->{0,3}(b IS person)
+ COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) p) g ORDER BY s.binding,g.endpoint;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+ (a IS person WHERE a.id=3)<-[e IS knows]-{0,4}(b IS person)
+ COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g ORDER BY endpoint;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+ (a IS person WHERE a.id=5)-[e IS knows]->{0}(b IS person)
+ ONE ROW PER STEP(v1,se,v2)
+ COLUMNS(v1.id AS src,se.id AS eid,v2.id AS dst,ELEMENT_NUMBER(se) AS n,COUNT(e.id) AS hops)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+ (a IS person)-[e IS knows]->(b IS person) COLUMNS(b.id AS endpoint)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+ (a IS person)-[e IS knows]->{0,17}(b IS person) COLUMNS(b.id AS endpoint)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+ (a IS person)-[e IS knows]->{3,2}(b IS person) COLUMNS(b.id AS endpoint)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+ (a IS person)-[e IS knows]->*(b IS person) COLUMNS(b.id AS endpoint)) g;
+--echo shortest_search_avoids_exponential_walk_enumeration
+INSERT INTO graph_knows VALUES (40,4,4,2024),(41,4,4,2024),(42,4,4,2024),(43,4,4,2024),
+ (44,4,4,2024),(45,4,4,2024),(46,4,4,2024);
+--disable_query_log
+let $saved_hash_area_size=query_get_value(select value from oceanbase.__all_virtual_sys_parameter_stat where name='_hash_area_size', value, 1);
+ALTER SYSTEM SET _hash_area_size='4M';
+sleep 6;
+--enable_query_log
+SELECT hops,JSON_LENGTH(edges) AS edge_count FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+ (a IS person WHERE a.id=4)-[e IS knows]->{16}(b IS person)
+ COLUMNS(COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g;
+--error 11049
+SELECT COUNT(*) FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person WHERE a.id=4)-[e IS knows]->{0,16}(b IS person) COLUMNS(b.id AS endpoint)) g;
+SELECT COUNT(*) AS recovered FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+ (a IS person WHERE a.id=4)-[e IS knows]->{0,16}(b IS person) COLUMNS(b.id AS endpoint)) g;
+--disable_query_log
+eval ALTER SYSTEM SET _hash_area_size='$saved_hash_area_size';
+sleep 6;
+--enable_query_log
+DROP TABLE shortest_expected,plan_table;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;
+
+--disable_query_log
+# A -> T is ineligible at kind=1; only A -> B -> T survives.
+# B fails the terminal predicate but must still enter the next frontier.
+CREATE TABLE pruning_v(id INT PRIMARY KEY,name VARCHAR(8));
+CREATE TABLE pruning_e(id INT PRIMARY KEY,src INT,dst INT,kind INT);
+INSERT INTO pruning_v VALUES(1,'A'),(2,'B'),(3,'T');
+INSERT INTO pruning_e VALUES(10,1,3,0),(11,1,2,1),(12,2,3,1);
+CREATE PROPERTY GRAPH pruning_graph
+ VERTEX TABLES(pruning_v KEY(id) LABEL node PROPERTIES(id,name))
+ EDGE TABLES(pruning_e KEY(id) SOURCE KEY(src) REFERENCES pruning_v(id)
+ DESTINATION KEY(dst) REFERENCES pruning_v(id) LABEL link PROPERTIES(id,kind));
+--source mysql_test/include/create_plan_table.inc
+--let $pruning_passes=2
+while ($pruning_passes)
+{
+  if ($pruning_passes == 1)
+  {
+    CREATE INDEX pruning_out ON pruning_e(src,kind,dst);
+  }
+  --echo shortest_filter_before_distance_and_terminal_after_expansion
+  --disable_result_log
+  DELETE FROM plan_table;
+  EXPLAIN INTO plan_table SET statement_id='pruning_native'
+  SELECT * FROM GRAPH_TABLE(pruning_graph MATCH ANY SHORTEST
+   (a IS node WHERE a.id=1)-[e IS link WHERE e.kind>=1]->{1,2}
+   (b IS node WHERE b.name='T')
+   COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g;
+  EXPLAIN INTO plan_table SET statement_id='pruning_fallback'
+  SELECT * FROM GRAPH_TABLE(pruning_graph MATCH ANY SHORTEST TRAIL
+   (a IS node WHERE a.id=1)-[e IS link WHERE e.kind>=1]->{1,2}
+   (b IS node WHERE b.name='T')
+   COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g;
+  --enable_result_log
+  if ($pruning_passes == 2)
+  {
+    SELECT COUNT(*)=1 AS native_full_scan FROM plan_table
+     WHERE statement_id='pruning_native' AND operator='GRAPH FEEDBACK LOOP'
+     AND special_predicates LIKE '%access=full-scan%runtime=native, states=binding_vertex_hop, search=any_shortest%';
+  }
+  if ($pruning_passes == 1)
+  {
+    SELECT COUNT(*)=1 AS native_index_scan FROM plan_table
+     WHERE statement_id='pruning_native' AND operator='GRAPH FEEDBACK LOOP'
+     AND special_predicates LIKE '%access=index-scan%runtime=native, states=binding_vertex_hop, search=any_shortest%';
+  }
+  SELECT COUNT(*)=1 AS verified_fallback FROM plan_table
+   WHERE statement_id='pruning_fallback' AND operator='GRAPH FEEDBACK LOOP'
+   AND special_predicates LIKE '%runtime=fallback, states=paths, search=any_shortest%';
+  SELECT endpoint,hops,JSON_LENGTH(edges) AS edge_count,
+   JSON_VALUE(edges,'$[0]') AS first_edge,JSON_VALUE(edges,'$[1]') AS second_edge
+  FROM GRAPH_TABLE(pruning_graph MATCH ANY SHORTEST
+   (a IS node WHERE a.id=1)-[e IS link WHERE e.kind>=1]->{1,2}
+   (b IS node WHERE b.name='T')
+   COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g;
+  SELECT endpoint,hops,JSON_LENGTH(edges) AS edge_count,
+   JSON_VALUE(edges,'$[0]') AS first_edge,JSON_VALUE(edges,'$[1]') AS second_edge
+  FROM GRAPH_TABLE(pruning_graph MATCH ANY SHORTEST
+   (a IS node WHERE a.id=1)-[e IS link WHERE e.kind>=0]->{1,2}
+   (b IS node WHERE b.name='T')
+   COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g;
+  SELECT endpoint,hops,JSON_LENGTH(edges) AS edge_count,
+   JSON_VALUE(edges,'$[0]') AS first_edge,JSON_VALUE(edges,'$[1]') AS second_edge
+  FROM GRAPH_TABLE(pruning_graph MATCH ANY SHORTEST TRAIL
+   (a IS node WHERE a.id=1)-[e IS link WHERE e.kind>=1]->{1,2}
+   (b IS node WHERE b.name='T')
+   COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g;
+  SELECT endpoint,hops,JSON_LENGTH(edges) AS edge_count,
+   JSON_VALUE(edges,'$[0]') AS first_edge,JSON_VALUE(edges,'$[1]') AS second_edge
+  FROM GRAPH_TABLE(pruning_graph MATCH ANY SHORTEST TRAIL
+   (a IS node WHERE a.id=1)-[e IS link WHERE e.kind>=0]->{1,2}
+   (b IS node WHERE b.name='T')
+   COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g;
+  --dec $pruning_passes
+}
+DROP TABLE plan_table;
+DROP PROPERTY GRAPH pruning_graph;
+DROP TABLE pruning_e,pruning_v;
+--enable_query_log

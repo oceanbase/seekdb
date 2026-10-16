@@ -30,6 +30,11 @@ namespace oceanbase
 {
 namespace sql
 {
+struct GraphPathDesc;
+enum class GraphPathDirection : int8_t;
+enum class GraphPathMode : int8_t;
+enum class GraphPathRowShape : int8_t;
+
 enum SelectTypeAffectFoundRows
 {
   AFFECT_FOUND_ROWS,
@@ -342,6 +347,8 @@ public:
   int64_t get_aggr_item_size() const { return agg_items_.count(); }
   int64_t get_having_expr_size() const { return having_exprs_.count(); }
   void set_recursive_union(bool is_recursive_union) { is_recursive_cte_ = is_recursive_union; }
+  void set_graph_feedback_loop(bool is_graph_feedback_loop,
+                               const GraphPathDesc &path_desc);
   void assign_distinct() { is_distinct_ = true; }
   void assign_all() { is_distinct_ = false; }
   void assign_set_op(SetOperator op) { set_op_ = op; }
@@ -363,6 +370,8 @@ public:
   uint64_t get_show_table_id() const { return show_stmt_ctx_.show_table_id_; }
   bool is_distinct() const { return is_distinct_; }
   bool is_recursive_union() const { return is_recursive_cte_;}
+  bool is_graph_feedback_loop() const { return is_graph_feedback_loop_; }
+  GraphPathDesc get_graph_path_desc() const;
   bool is_set_distinct() const { return is_set_distinct_; }
   bool is_from_show_stmt() const { return show_stmt_ctx_.is_from_show_stmt_; }
   // view
@@ -549,6 +558,21 @@ private:
   SetOperator set_op_;
   /* these var is only used for recursive union */
   bool is_recursive_cte_;
+  // Internal bounded-WALK metadata carried by the generated recursive CTE.
+  bool is_graph_feedback_loop_;
+  uint64_t graph_path_graph_id_{common::OB_INVALID_ID};
+  int64_t graph_path_graph_version_{0};
+  uint64_t graph_path_source_element_id_{common::OB_INVALID_ID};
+  uint64_t graph_path_edge_element_id_{common::OB_INVALID_ID};
+  uint64_t graph_path_target_element_id_{common::OB_INVALID_ID};
+  int64_t graph_path_lower_bound_{0};
+  int64_t graph_path_upper_bound_{0};
+  GraphPathDirection graph_path_direction_{static_cast<GraphPathDirection>(0)};
+  GraphPathMode graph_path_mode_{static_cast<GraphPathMode>(0)};
+  GraphPathRowShape graph_path_row_shape_{static_cast<GraphPathRowShape>(0)};
+  bool graph_path_need_path_{false};
+  bool graph_path_any_shortest_{false};
+  bool graph_path_shortest_single_segment_{false};
   /* These fields are only used by normal select */
   bool is_distinct_;
   // Used for the sort column specified in the search by clause of the cte recursive statement

@@ -232,6 +232,10 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_GRANT_OBJ_MYSQL_PRIV, )                             \
   ACT(OB_DDL_DEL_OBJ_MYSQL_PRIV, )                               \
   ACT(OB_DDL_OBJ_MYSQL_PRIV_OPERATION_END, = 2140)               \
+  ACT(OB_DDL_PROPERTY_GRAPH_OPERATION_BEGIN, = 2151)            \
+  ACT(OB_DDL_CREATE_PROPERTY_GRAPH, )                           \
+  ACT(OB_DDL_DROP_PROPERTY_GRAPH, )                             \
+  ACT(OB_DDL_PROPERTY_GRAPH_OPERATION_END, = 2160)              \
   ACT(OB_DDL_MAX_OP,)
 
 DECLARE_ENUM(ObSchemaOperationType, op_type, OP_TYPE_DEF);
@@ -259,6 +263,7 @@ IS_DDL_TYPE(SYS_PRIV, sys_priv)
 IS_DDL_TYPE(OBJ_PRIV, obj_priv)
 IS_DDL_TYPE(MOCK_FK_PARENT_TABLE, mock_fk_parent_table)
 IS_DDL_TYPE(AI_MODEL, ai_model)
+IS_DDL_TYPE(PROPERTY_GRAPH, property_graph)
 
 struct ObSchemaOperation
 {
@@ -288,6 +293,7 @@ public:
     uint64_t routine_type_;
     uint64_t column_priv_id_;
     uint64_t ai_model_id_;
+    uint64_t graph_id_;
     uint64_t obj_type_;
   };
   union {
@@ -295,6 +301,7 @@ public:
     common::ObString mock_fk_parent_table_name_;
     common::ObString routine_name_;
     common::ObString ai_model_name_;
+    common::ObString graph_name_;
     common::ObString obj_name_;
   };
   ObSchemaOperationType op_type_;
@@ -505,6 +512,8 @@ class ObErrorSqlService;
 //table schema service interface layer
 class ObServerSchemaService;
 class ObAiModelSqlService;
+class GraphSqlService;
+class GraphSchema;
 class ObSchemaService
 {
 public:
@@ -543,6 +552,7 @@ public:
   DECLARE_GET_DDL_SQL_SERVICE_FUNC(SysVariable, sys_variable);
   //DECLARE_GET_DDL_SQL_SERVICE_FUNC(sys_priv, priv);
   DECLARE_GET_DDL_SQL_SERVICE_FUNC(AiModel, ai_model);
+  virtual GraphSqlService &get_graph_sql_service() = 0;
 
   /* sequence_id related */
   virtual int init_sequence_id_by_sys_leader_epoch(const int64_t sys_leader_epoch) = 0;
@@ -638,6 +648,7 @@ public:
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(obj_priv, ObObjPriv);
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(mock_fk_parent_table, ObSimpleMockFKParentTableSchema);
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(ai_model, ObAiModelSchema);
+  GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(graph, GraphSchema);
 
   // Get incremental schema operations between (base_version, new_schema_version].
   virtual int get_increment_schema_operations(const ObRefreshSchemaStatus &schema_status,
@@ -725,6 +736,7 @@ public:
   GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(obj_mysql_priv, ObObjMysqlPriv);
   GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(mock_fk_parent_table, ObSimpleMockFKParentTableSchema);
   GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(ai_model, ObAiModelSchema);
+  GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(graph, GraphSchema);
 
 
   //--------------For manaing recyclebin -----//

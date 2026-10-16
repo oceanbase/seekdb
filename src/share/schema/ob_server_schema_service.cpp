@@ -219,6 +219,8 @@ int ObServerSchemaService::AllSchemaKeys::create(int64_t bucket_size)
   } else if (OB_FAIL(del_mock_fk_parent_table_keys_.create(bucket_size))) {
   } else if (OB_FAIL(new_ai_model_keys_.create(bucket_size))) {
   } else if (OB_FAIL(del_ai_model_keys_.create(bucket_size))) {
+  } else if (OB_FAIL(new_graph_keys_.create(bucket_size))) {
+  } else if (OB_FAIL(del_graph_keys_.create(bucket_size))) {
   }
   return ret;
 }
@@ -1541,6 +1543,87 @@ int ObServerSchemaService::get_increment_ai_model_keys_reversely(
   return ret;
 }
 
+int ObServerSchemaService::get_increment_graph_keys(
+    const ObSchemaMgr &schema_mgr,
+    const ObSchemaOperation &schema_operation,
+    AllSchemaKeys &schema_keys)
+{
+  int ret = OB_SUCCESS;
+  if (!(schema_operation.op_type_ > OB_DDL_PROPERTY_GRAPH_OPERATION_BEGIN &&
+        schema_operation.op_type_ < OB_DDL_PROPERTY_GRAPH_OPERATION_END)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
+  } else {
+
+    uint64_t graph_id = schema_operation.graph_id_;
+    int64_t schema_version = schema_operation.schema_version_;
+    int hash_ret = OB_SUCCESS;
+    SchemaKey schema_key;
+
+    schema_key.graph_id_ = graph_id;
+    schema_key.schema_version_ = schema_version;
+
+    if (OB_DDL_DROP_PROPERTY_GRAPH == schema_operation.op_type_) {
+      hash_ret = schema_keys.new_graph_keys_.erase_refactored(schema_key);
+      if (OB_SUCCESS != hash_ret && OB_HASH_NOT_EXIST != hash_ret) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to del schema key from new_graph_keys_", K(ret), K(schema_key));
+      } else {
+        const GraphSchema *schema = nullptr;
+        if (OB_FAIL(schema_mgr.get_graph_schema(graph_id, schema))) {
+        } else if (OB_NOT_NULL(schema)) {
+          hash_ret = schema_keys.del_graph_keys_.set_refactored_1(schema_key, 1);
+          if (OB_SUCCESS != hash_ret) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("failed to add del graph id", K(hash_ret), K(ret));
+          }
+        }
+      }
+    } else {
+      hash_ret = schema_keys.new_graph_keys_.set_refactored_1(schema_key, 1);
+      if (OB_SUCCESS != hash_ret) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to add new graph id", K(hash_ret), K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObServerSchemaService::get_increment_graph_keys_reversely(
+    const ObSchemaMgr &schema_mgr,
+    const ObSchemaOperation &schema_operation,
+    AllSchemaKeys &schema_keys)
+{
+  int ret = OB_SUCCESS;
+  if (!(schema_operation.op_type_ > OB_DDL_PROPERTY_GRAPH_OPERATION_BEGIN &&
+        schema_operation.op_type_ < OB_DDL_PROPERTY_GRAPH_OPERATION_END)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
+  } else {
+
+    uint64_t graph_id = schema_operation.graph_id_;
+    int64_t schema_version = schema_operation.schema_version_;
+    SchemaKey schema_key;
+
+    schema_key.graph_id_ = graph_id;
+    schema_key.schema_version_ = schema_version;
+    bool is_delete = (OB_DDL_CREATE_PROPERTY_GRAPH == schema_operation.op_type_);
+    bool is_exist = false;
+    const GraphSchema *schema = nullptr;
+    if (OB_FAIL(schema_mgr.get_graph_schema(graph_id, schema))) {
+    } else if (OB_NOT_NULL(schema)) {
+      is_exist = true;
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(REPLAY_OP(schema_key, schema_keys.del_graph_keys_,
+          schema_keys.new_graph_keys_, is_delete, is_exist))) {
+      }
+    }
+  }
+  return ret;
+}
+
 // Cache the full system-variable schema for the server runtime.
 int ObServerSchemaService::add_sys_variable_schemas_to_cache(
     const SysVariableKeys &sys_variable_keys,
@@ -1658,6 +1741,7 @@ int ObServerSchemaService::fetch_increment_schemas(
   GET_BATCH_SCHEMAS(sys_variable, ObSimpleSysVariableSchema, SysVariableKeys);
   GET_BATCH_SCHEMAS(mock_fk_parent_table, ObSimpleMockFKParentTableSchema, MockFKParentTableKeys);
   GET_BATCH_SCHEMAS(ai_model, ObAiModelSchema, AiModelKeys);
+  GET_BATCH_SCHEMAS(graph, GraphSchema, GraphKeys);
 
   if (OB_SUCC(ret)) {
     ObArray<uint64_t> non_sys_table_ids;
@@ -1716,6 +1800,8 @@ int ObServerSchemaService::apply_increment_schema_to_cache(
   } else if (OB_FAIL(apply_mock_fk_parent_table_schema_to_cache(
              all_keys, simple_incre_schemas, schema_mgr.mock_fk_parent_table_mgr_))) {
   } else if (OB_FAIL(apply_ai_model_schema_to_cache(
+             all_keys, simple_incre_schemas, schema_mgr))) {
+  } else if (OB_FAIL(apply_graph_schema_to_cache(
              all_keys, simple_incre_schemas, schema_mgr))) {
   }
 
@@ -1788,6 +1874,7 @@ APPLY_SCHEMA_TO_CACHE_IMPL(ObPrivMgr, obj_priv, ObObjPriv, ObjPrivKeys);
 APPLY_SCHEMA_TO_CACHE_IMPL(ObPrivMgr, obj_mysql_priv, ObObjMysqlPriv, ObjMysqlPrivKeys);
 APPLY_SCHEMA_TO_CACHE_IMPL(ObMockFKParentTableMgr, mock_fk_parent_table, ObSimpleMockFKParentTableSchema, MockFKParentTableKeys);
 APPLY_SCHEMA_TO_CACHE_IMPL(ObSchemaMgr, ai_model, ObAiModelSchema, AiModelKeys);
+APPLY_SCHEMA_TO_CACHE_IMPL(ObSchemaMgr, graph, GraphSchema, GraphKeys);
 
 int ObServerSchemaService::update_schema_mgr(ObISQLClient &sql_client,
                                              const ObRefreshSchemaStatus &schema_status,
@@ -2019,6 +2106,10 @@ int ObServerSchemaService::replay_log(
             schema_operation.op_type_ < OB_DDL_AI_MODEL_OPERATION_END) {
           if (OB_FAIL(get_increment_ai_model_keys(schema_mgr, schema_operation, schema_keys))) {
           }
+        } else if (schema_operation.op_type_ > OB_DDL_PROPERTY_GRAPH_OPERATION_BEGIN &&
+            schema_operation.op_type_ < OB_DDL_PROPERTY_GRAPH_OPERATION_END) {
+          if (OB_FAIL(get_increment_graph_keys(schema_mgr, schema_operation, schema_keys))) {
+          }
         }
       }
     }
@@ -2112,6 +2203,10 @@ int ObServerSchemaService::replay_log_reversely(
       } else if (schema_operation.op_type_ > OB_DDL_AI_MODEL_OPERATION_BEGIN &&
                  schema_operation.op_type_ < OB_DDL_AI_MODEL_OPERATION_END) {
         if (OB_FAIL(get_increment_ai_model_keys_reversely(schema_mgr, schema_operation, schema_keys))) {
+        }
+      } else if (schema_operation.op_type_ > OB_DDL_PROPERTY_GRAPH_OPERATION_BEGIN &&
+                 schema_operation.op_type_ < OB_DDL_PROPERTY_GRAPH_OPERATION_END) {
+        if (OB_FAIL(get_increment_graph_keys_reversely(schema_mgr, schema_operation, schema_keys))) {
         }
       } else {
         // ingore other operaton.
@@ -2965,6 +3060,7 @@ int ObServerSchemaService::refresh_runtime_full_schema(
       INIT_ARRAY(ObObjMysqlPriv, obj_mysql_privs);
       INIT_ARRAY(ObSimpleMockFKParentTableSchema, simple_mock_fk_parent_tables);
       INIT_ARRAY(ObAiModelSchema, simple_ai_models);
+      INIT_ARRAY(GraphSchema, simple_graphs);
       #undef INIT_ARRAY
       ObSimpleSysVariableSchema simple_sys_variable;
 
@@ -3013,6 +3109,11 @@ int ObServerSchemaService::refresh_runtime_full_schema(
           sql_client, schema_status, schema_version, simple_ai_models))) {
         }
       }
+      if (OB_SUCC(ret)) {
+        if (OB_FAIL(schema_service_->get_all_graphs(
+          sql_client, schema_status, schema_version, simple_graphs))) {
+        }
+      }
 
       if (OB_SUCC(ret)) {
         if (OB_FAIL(schema_service_->get_all_obj_mysql_privs(
@@ -3042,6 +3143,7 @@ int ObServerSchemaService::refresh_runtime_full_schema(
                          simple_mock_fk_parent_tables))) {
       } else if (OB_FAIL(schema_mgr_for_cache->priv_mgr_.add_column_privs(column_privs))) {
       } else if (OB_FAIL(schema_mgr_for_cache->add_ai_models(simple_ai_models))) {
+      } else if (OB_FAIL(schema_mgr_for_cache->add_graphs(simple_graphs))) {
       }
 
       LOG_INFO("add runtime schemas finish", K(schema_version), K(schema_status),
