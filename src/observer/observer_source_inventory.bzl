@@ -408,8 +408,9 @@ OBSERVER_STANDALONE_SOURCES = [
 ]
 
 OBSERVER_IGNORED_SOURCES = [
-    "ios/driver/seekdb_lifecycle.cpp",
-    "ios/seekdb_ios.cpp",
+    "in_process/seekdb.cpp",
+    "in_process/seekdb_in_process.cpp",
+    "ios/seekdb_platform.cpp",
     "report/ob_tablet_meta_checker.cpp",
     "vector_index/ob_vector_index_async_task_scheduler.cpp",
     "virtual_table/ob_all_virtual_all_tables.cpp",

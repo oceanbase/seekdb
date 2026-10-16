@@ -1,10 +1,6 @@
 add_library(seekdb_ios_framework SHARED EXCLUDE_FROM_ALL
-  seekdb_lifecycle.cpp ../seekdb_ios.cpp seekdb.h)
-target_include_directories(seekdb_ios_framework PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
-target_compile_definitions(seekdb_ios_framework PRIVATE
-  SEEKDB_IOS_BUILD_ID="${SEEKDB_IOS_BUILD_ID}"
-  SEEKDB_IOS_HOOK_MODE="disabled")
-target_link_libraries(seekdb_ios_framework PRIVATE oceanbase_static sql_nio)
+  seekdb_platform.cpp "${CMAKE_CURRENT_SOURCE_DIR}/../in_process/seekdb.h")
+target_link_libraries(seekdb_ios_framework PRIVATE seekdb_in_process oceanbase_static sql_nio)
 target_link_options(seekdb_ios_framework PRIVATE
   "-Wl,-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/exports.txt")
 set(SEEKDB_IOS_FRAMEWORK_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/framework" CACHE PATH
@@ -15,7 +11,7 @@ set_target_properties(seekdb_ios_framework PROPERTIES
   OUTPUT_NAME SeekDB
   MACOSX_FRAMEWORK_IDENTIFIER org.oceanbase.seekdb
   MACOSX_FRAMEWORK_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.in"
-  PUBLIC_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/seekdb.h"
+  PUBLIC_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/../in_process/seekdb.h"
   LIBRARY_OUTPUT_DIRECTORY "${SEEKDB_IOS_FRAMEWORK_OUTPUT_DIRECTORY}"
   INSTALL_NAME_DIR "@rpath"
   BUILD_WITH_INSTALL_NAME_DIR TRUE

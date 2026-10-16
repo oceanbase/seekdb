@@ -8,6 +8,5 @@
 <key>CFBundleVersion</key><string>1</string>
 <key>CFBundleShortVersionString</key><string>1.0</string>
 <key>MinimumOSVersion</key><string>@CMAKE_OSX_DEPLOYMENT_TARGET@</string>
-<key>SeekDBSourceRevision</key><string>@SEEKDB_IOS_BUILD_ID@</string>
-<key>SeekDBTestHooks</key><string>disabled</string>
+<key>SeekDBSourceRevision</key><string>@SEEKDB_IN_PROCESS_BUILD_ID@</string>
 </dict></plist>

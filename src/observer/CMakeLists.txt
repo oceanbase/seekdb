@@ -175,27 +175,34 @@ else()
       ${CMAKE_BINARY_DIR}/src/observer/observer)
 endif()
 
-if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+if(NOT WIN32)
   execute_process(
     COMMAND git rev-parse --short=12 HEAD
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-    RESULT_VARIABLE SEEKDB_IOS_GIT_RESULT
-    OUTPUT_VARIABLE SEEKDB_IOS_BUILD_ID
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
-  string(LENGTH "${SEEKDB_IOS_BUILD_ID}" SEEKDB_IOS_BUILD_ID_LENGTH)
-  if(NOT SEEKDB_IOS_GIT_RESULT EQUAL 0 OR
-     NOT SEEKDB_IOS_BUILD_ID MATCHES "^[0-9a-f]+$" OR
-     NOT SEEKDB_IOS_BUILD_ID_LENGTH EQUAL 12)
-    message(FATAL_ERROR "Cannot determine the iOS runtime source revision")
+    RESULT_VARIABLE SEEKDB_IN_PROCESS_GIT_RESULT
+    OUTPUT_VARIABLE SEEKDB_IN_PROCESS_BUILD_ID
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET)
+  string(LENGTH "${SEEKDB_IN_PROCESS_BUILD_ID}" SEEKDB_IN_PROCESS_BUILD_ID_LENGTH)
+  if(NOT SEEKDB_IN_PROCESS_GIT_RESULT EQUAL 0 OR
+     NOT SEEKDB_IN_PROCESS_BUILD_ID MATCHES "^[0-9a-f]+$" OR
+     NOT SEEKDB_IN_PROCESS_BUILD_ID_LENGTH EQUAL 12)
+    if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+      message(FATAL_ERROR "Cannot determine the in-process runtime source revision")
+    endif()
+    set(SEEKDB_IN_PROCESS_BUILD_ID "unknown")
   endif()
-  add_library(seekdb_ios_runtime STATIC EXCLUDE_FROM_ALL ios/seekdb_ios.cpp)
-  target_include_directories(seekdb_ios_runtime PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/ios")
-  target_compile_definitions(seekdb_ios_runtime PRIVATE
-    SEEKDB_IOS_BUILD_ID="${SEEKDB_IOS_BUILD_ID}"
-    SEEKDB_IOS_HOOK_MODE="disabled")
-  target_link_libraries(seekdb_ios_runtime PUBLIC oceanbase_static sql_nio)
+  add_library(seekdb_in_process OBJECT EXCLUDE_FROM_ALL
+    in_process/seekdb.cpp in_process/seekdb_in_process.cpp)
+  target_include_directories(seekdb_in_process PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/in_process")
+  target_compile_definitions(seekdb_in_process PRIVATE
+    SEEKDB_IN_PROCESS_BUILD_ID="${SEEKDB_IN_PROCESS_BUILD_ID}")
+  target_link_libraries(seekdb_in_process PUBLIC oceanbase_static sql_nio)
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
   option(SEEKDB_IOS_FRAMEWORK "Build SeekDB.framework, which starts and stops the in-process iOS engine" OFF)
   if(SEEKDB_IOS_FRAMEWORK)
-    add_subdirectory(ios/driver)
+    add_subdirectory(ios)
   endif()
 endif()

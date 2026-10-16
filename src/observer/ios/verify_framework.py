@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import os
 import plistlib
 from pathlib import Path
 import re
@@ -27,7 +28,7 @@ def digest(path):
 
 def archive_inventory(build, source):
     """Resolve static libraries from the actual framework linker command."""
-    links = list(build.glob("src/observer/ios/driver/CMakeFiles/seekdb_ios_framework.dir/link.txt"))
+    links = list(build.glob("src/observer/ios/CMakeFiles/seekdb_ios_framework.dir/link.txt"))
     if len(links) != 1:
         raise ValueError("Framework link command is missing")
     tokens = shlex.split(links[0].read_text())
@@ -51,28 +52,43 @@ def archive_inventory(build, source):
     return result
 
 
+def copy_notices(package, destination):
+    for notice in package.iterdir():
+        if notice.is_file() and re.match(r"(?i)^(license|copying|copyright|notice)", notice.name):
+            target = destination / package.name
+            target.mkdir(exist_ok=True)
+            shutil.copyfile(notice, target / notice.name)
+    jemalloc_license = package / "vendor/jemalloc/COPYING"
+    if jemalloc_license.is_file():
+        target = destination / package.name
+        target.mkdir(exist_ok=True)
+        shutil.copyfile(jemalloc_license, target / "jemalloc-COPYING")
+
+
+def cargo_packages(lockfile):
+    packages = []
+    for block in lockfile.read_text().split("[[package]]")[1:]:
+        fields = dict(re.findall(r'^(name|version|source) = "([^"]*)"$', block, re.M))
+        if fields.get("source", "").startswith("registry+"):
+            packages.append(fields["name"] + "-" + fields["version"])
+    return packages
+
+
 def package_licenses(source, destination):
     """Preserve available local dependency notices and the complete Rust dependency lock."""
-    roots = [source / "deps/ios/sources"]
-    cargo_sources = source / "deps/ios/cargo/registry/src"
-    if cargo_sources.is_dir():
-        roots.extend(path for path in cargo_sources.iterdir() if path.is_dir())
-    for root in roots:
-        if not root.is_dir():
-            continue
-        for package in root.iterdir():
-            if not package.is_dir():
-                continue
-            for notice in package.iterdir():
-                if notice.is_file() and re.match(r"(?i)^(license|copying|copyright|notice)", notice.name):
-                    target = destination / package.name
-                    target.mkdir(exist_ok=True)
-                    shutil.copyfile(notice, target / notice.name)
-            jemalloc_license = package / "vendor/jemalloc/COPYING"
-            if jemalloc_license.is_file():
-                target = destination / package.name
-                target.mkdir(exist_ok=True)
-                shutil.copyfile(jemalloc_license, target / "jemalloc-COPYING")
+    sources = source / "deps/ios/sources"
+    if sources.is_dir():
+        for package in sources.iterdir():
+            if package.is_dir():
+                copy_notices(package, destination)
+    cargo_home = Path(os.environ.get("CARGO_HOME", Path.home() / ".cargo"))
+    registries = [path for path in (cargo_home / "registry/src").glob("*") if path.is_dir()]
+    for lockfile in (source / "rust/Cargo.lock", source / "deps/external/Cargo.lock"):
+        for name in cargo_packages(lockfile):
+            package = next((registry / name for registry in registries if (registry / name).is_dir()), None)
+            if package is None:
+                raise ValueError("Cargo package source for license notices is missing: " + name)
+            copy_notices(package, destination)
     shutil.copyfile(source / "LICENSE", destination / "seekdb-LICENSE")
     shutil.copyfile(source / "rust/Cargo.lock", destination.parent / "rust-Cargo.lock")
 
@@ -109,10 +125,10 @@ def main():
     info = plistlib.loads((binary.parent / "Info.plist").read_bytes())
     if info.get("CFBundleExecutable") != "SeekDB" or info.get("CFBundlePackageType") != "FMWK":
         raise ValueError("Invalid framework bundle identity")
-    if info.get("MinimumOSVersion") != args.deployment or info.get("SeekDBTestHooks") != "disabled":
-        raise ValueError("Invalid framework deployment or hook metadata")
+    if info.get("MinimumOSVersion") != args.deployment:
+        raise ValueError("Invalid framework deployment metadata")
     public_header = binary.parent / "Headers/seekdb.h"
-    if public_header.read_bytes() != (source / "src/observer/ios/driver/seekdb.h").read_bytes():
+    if public_header.read_bytes() != (source / "src/observer/in_process/seekdb.h").read_bytes():
         raise ValueError("Public C ABI header is missing or changed")
     if "DYLIB" not in output("otool", "-hv", str(binary)):
         raise ValueError("Expected MH_DYLIB")
@@ -133,24 +149,22 @@ def main():
     dependencies = [line.strip().split(" (", 1)[0] for line in output("otool", "-L", str(binary)).splitlines()[1:]]
     if any(dep != identity and not dep.startswith(("/usr/lib/", "/System/Library/")) for dep in dependencies):
         raise ValueError("Non-system dynamic dependency: " + repr(dependencies))
-    expected = set((source / "src/observer/ios/driver/exports.txt").read_text().splitlines())
+    expected = set((source / "src/observer/ios/exports.txt").read_text().splitlines())
     actual = {line.split()[-1] for line in output("nm", "-gU", str(binary)).splitlines() if line.strip()}
     if actual != expected:
         raise ValueError("Unexpected ABI exports: " + repr(actual ^ expected))
     markers = output("strings", str(binary))
-    if "SEEKDB_IOS_ARTIFACT_HOOK_MODE=disabled" not in markers or "SEEKDB_IOS_ARTIFACT_HOOK_MODE=enabled" in markers:
-        raise ValueError("Missing or conflicting disabled test hook marker")
     revision = output("git", "-C", str(source), "rev-parse", "HEAD").strip()
     if info.get("SeekDBSourceRevision") != revision[:12]:
         raise ValueError("Framework metadata does not match HEAD; reconfigure and rebuild")
-    if "SEEKDB_IOS_ARTIFACT_BUILD_ID=" + revision[:12] not in markers:
+    if "SEEKDB_IN_PROCESS_ARTIFACT_BUILD_ID=" + revision[:12] not in markers:
         raise ValueError("Framework binary does not match HEAD; reconfigure and rebuild")
     provenance = {
         "source_revision": revision,
         "source_dirty": bool(output("git", "-C", str(source), "status", "--porcelain").strip()),
         "source_diff_sha256": hashlib.sha256(subprocess.check_output(["git", "-C", str(source), "diff", "HEAD"])).hexdigest(),
         "platform": platform, "architecture": "arm64", "deployment_target": args.deployment,
-        "test_hooks": "disabled", "binary_sha256": digest(binary),
+        "binary_sha256": digest(binary),
         "public_header_sha256": digest(public_header),
         "dynamic_dependencies": dependencies, "static_dependencies": archive_inventory(build, source),
         "exported_symbols": sorted(actual),
