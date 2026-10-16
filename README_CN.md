@@ -64,6 +64,10 @@ MySQL 兼容 · 嵌入式 / 服务器双模式 · 向量 + 全文混合搜索 ·
 
 </div>
 
+## seekdb 特性概览
+
+https://github.com/user-attachments/assets/8f735c67-4d08-4040-8502-4c9a0f8b7708
+
 ## ⚡ 性能一览
 
 <div align="center">

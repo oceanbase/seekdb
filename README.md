@@ -64,6 +64,10 @@ MySQL-compatible · Embedded or Server · Hybrid Vector + Full-text Search · CO
 
 </div>
 
+## seekdb Feature Overview
+
+https://github.com/user-attachments/assets/8f735c67-4d08-4040-8502-4c9a0f8b7708
+
 ## ⚡ Performance at a Glance
 
 <div align="center">
