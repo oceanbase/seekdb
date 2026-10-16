@@ -550,10 +550,15 @@ public:
 struct ObQueryCtx
 {
 public:
-  ObQueryCtx()
+  static common::ModulePageAllocator make_query_ctx_array_allocator(common::ObIAllocator &allocator)
+  {
+    return common::ModulePageAllocator(allocator, common::ObModIds::OB_SE_ARRAY);
+  }
+
+  explicit ObQueryCtx(common::ObIAllocator &allocator)
     : question_marks_count_(0),
-      calculable_items_(),
-      ab_param_exprs_(),
+      calculable_items_(common::OB_MALLOC_NORMAL_BLOCK_SIZE, make_query_ctx_array_allocator(allocator)),
+      ab_param_exprs_(common::OB_MALLOC_NORMAL_BLOCK_SIZE, make_query_ctx_array_allocator(allocator)),
       fetch_cur_time_(true),
       is_contain_virtual_table_(false),
       is_contain_inner_table_(false),
@@ -565,7 +570,15 @@ public:
       subquery_count_(0),
       temp_table_count_(0),
       anonymous_view_count_(0),
-      all_user_variable_(),
+      variables_(common::OB_MALLOC_NORMAL_BLOCK_SIZE, make_query_ctx_array_allocator(allocator)),
+      all_plan_const_param_constraints_(common::OB_MALLOC_NORMAL_BLOCK_SIZE, make_query_ctx_array_allocator(allocator)),
+      all_possible_const_param_constraints_(common::OB_MALLOC_NORMAL_BLOCK_SIZE, make_query_ctx_array_allocator(allocator)),
+      all_equal_param_constraints_(common::OB_MALLOC_NORMAL_BLOCK_SIZE, make_query_ctx_array_allocator(allocator)),
+      var_init_exprs_(common::OB_MALLOC_NORMAL_BLOCK_SIZE, make_query_ctx_array_allocator(allocator)),
+      all_expr_constraints_(common::OB_MALLOC_NORMAL_BLOCK_SIZE, make_query_ctx_array_allocator(allocator)),
+      all_priv_constraints_(common::OB_MALLOC_NORMAL_BLOCK_SIZE, make_query_ctx_array_allocator(allocator)),
+      all_local_session_vars_(common::OB_MALLOC_NORMAL_BLOCK_SIZE, make_query_ctx_array_allocator(allocator)),
+      all_user_variable_(common::OB_MALLOC_NORMAL_BLOCK_SIZE, make_query_ctx_array_allocator(allocator)),
       need_match_all_params_(false),
       has_udf_(false),
       disable_udf_parallel_(false),
@@ -669,12 +682,12 @@ public:
 
 public:
   static const int64_t CALCULABLE_EXPR_NUM = 1;
-  typedef common::ObSEArray<ObHiddenColumnItem, CALCULABLE_EXPR_NUM, common::ModulePageAllocator, true> CalculableItems;
+  typedef common::ObSEArray<ObHiddenColumnItem, CALCULABLE_EXPR_NUM, common::ModulePageAllocator, false> CalculableItems;
 public:
   int64_t question_marks_count_;
   CalculableItems calculable_items_;
   //array binding param exprs, mark the all array binding param expr in the batch stmt
-  common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> ab_param_exprs_;
+  common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, false> ab_param_exprs_;
   common::ObSArray<share::schema::ObSchemaObjVersion> global_dependency_tables_;
   bool fetch_cur_time_;
   bool is_contain_virtual_table_;
@@ -688,16 +701,16 @@ public:
   int64_t temp_table_count_;
   int64_t anonymous_view_count_;
   // record all system variables or user variables in this statement
-  common::ObSArray<ObVarInfo, common::ModulePageAllocator, true> variables_;
-  common::ObSArray<ObPCConstParamInfo, common::ModulePageAllocator, true> all_plan_const_param_constraints_;
-  common::ObSArray<ObPCConstParamInfo, common::ModulePageAllocator, true> all_possible_const_param_constraints_;
-  common::ObSArray<ObPCParamEqualInfo, common::ModulePageAllocator, true> all_equal_param_constraints_;
-  common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> var_init_exprs_;
+  common::ObSArray<ObVarInfo, common::ModulePageAllocator, false> variables_;
+  common::ObSArray<ObPCConstParamInfo, common::ModulePageAllocator, false> all_plan_const_param_constraints_;
+  common::ObSArray<ObPCConstParamInfo, common::ModulePageAllocator, false> all_possible_const_param_constraints_;
+  common::ObSArray<ObPCParamEqualInfo, common::ModulePageAllocator, false> all_equal_param_constraints_;
+  common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, false> var_init_exprs_;
   common::ObDList<ObPreCalcExprConstraint> all_pre_calc_constraints_;
-  common::ObSArray<ObExprConstraint, common::ModulePageAllocator, true> all_expr_constraints_;
-  common::ObSArray<ObPCPrivInfo, common::ModulePageAllocator, true> all_priv_constraints_;
-  common::ObSArray<ObLocalSessionVar, common::ModulePageAllocator, true> all_local_session_vars_;
-  common::ObSArray<ObUserVarIdentRawExpr *, common::ModulePageAllocator, true> all_user_variable_;
+  common::ObSArray<ObExprConstraint, common::ModulePageAllocator, false> all_expr_constraints_;
+  common::ObSArray<ObPCPrivInfo, common::ModulePageAllocator, false> all_priv_constraints_;
+  common::ObSArray<ObLocalSessionVar, common::ModulePageAllocator, false> all_local_session_vars_;
+  common::ObSArray<ObUserVarIdentRawExpr *, common::ModulePageAllocator, false> all_user_variable_;
   common::hash::ObHashMap<uint64_t, ObObj, common::hash::NoPthreadDefendMode> calculable_expr_results_;
   bool need_match_all_params_; //only used for matching plans
   bool has_udf_;
