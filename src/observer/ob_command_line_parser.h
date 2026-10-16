@@ -23,7 +23,7 @@ namespace oceanbase {
 namespace observer {
 
 /**
- * 使用C标准库getopt_long实现的命令行参数解析器
+ * 不修改宿主 getopt 状态的可重入命令行参数解析器
  * 符合OceanBase编码规范
  */
 class ObCommandLineParser final {
@@ -38,7 +38,9 @@ public:
    * @param opts 服务器选项，解析结果会直接设置到这里
    * @return 解析结果，OB_SUCCESS表示成功
    */
-  int parse_args(int argc, char* argv[], ObServerOptions& opts);
+  // argc/argv contain only options, without a program name; (0, nullptr) uses defaults.
+  // OB_ITER_END means CLI help/version was printed; library mode never prints or exits.
+  int parse_args(int argc, const char *const argv[], ObServerOptions& opts, bool command_line = true);
 
   /**
    * 打印帮助信息
@@ -48,16 +50,20 @@ public:
   /**
    * 打印版本信息
    */
-  static void print_version();
+  void print_version() const;
 
 
 private:
   // 处理选项值
   int handle_option(int option, const char* value, ObServerOptions& opts);
+  int split_key_value(const ObString &str, ObString &key, ObString &value) const;
+  int append_key_value(const char *value, ObServerOptions::KeyValueArray &array) const;
+  int handle_tilde(ObSqlString &dir) const;
   // 设置字符串到ObString
   int set_ob_string(ObIAllocator& allocator, const char* value, ObString& target);
 
 private:
+  bool quiet_parser_ = false;
   // 解析结果状态
   bool help_requested_    = false;
   bool version_requested_ = false;

@@ -70,15 +70,6 @@ _OBSERVER_MAIN_GROUP_OBLIB_DEPS = {
         "//src/oblib:oblib_rpc_transport_services",
         "//src/oblib:oblib_rpc_transport_utilities",
     ],
-    "ob_main_1": [
-        "//src/oblib:oblib_collections_runtime",
-        "//src/oblib:oblib_core_utilities",
-        "//src/oblib:oblib_foundation_base",
-        "//src/oblib:oblib_foundation_services",
-        "//src/oblib:oblib_foundation_support",
-        "//src/oblib:oblib_io_primitives",
-        "//src/oblib:oblib_memory_utilities",
-    ],
 }
 
 def observer_main_group_oblib_deps(groups, base = {}):

@@ -18,6 +18,8 @@
 
 #include "config_bridge.h"
 #include "observer/ob_server_utils.h"
+#include "observer/ob_server_options.h"
+#include "lib/file/file_directory_utils.h"
 #include "share/ob_server_struct.h"
 #include "share/ob_share_util.h"
 #include "share/resource/ob_server_resource.h"
@@ -33,6 +35,40 @@ using namespace common;
 
 namespace observer
 {
+
+int ObServerUtils::prepare_directories(ObServerOptions &opts)
+{
+  int ret = OB_SUCCESS;
+  // handle absolute path
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(opts.base_dir_.ptr()))) {
+  } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(opts.base_dir_))) {
+  } else if (opts.base_dir_.ptr()[opts.base_dir_.length() - 1] != '/' && OB_FAIL(opts.base_dir_.append("/"))) {
+  }
+
+  if (OB_FAIL(ret) || opts.data_dir_.empty()) {
+  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(opts.data_dir_.ptr()))) {
+  } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(opts.data_dir_))) {
+  }
+  if (OB_FAIL(ret) || opts.redo_dir_.empty()) {
+  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(opts.redo_dir_.ptr()))) {
+  } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(opts.redo_dir_))) {
+  }
+  if (OB_FAIL(ret)) {
+  } else if (!opts.data_dir_.empty() && opts.base_dir_.string() == opts.data_dir_.string()) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  if (OB_FAIL(ret)) {
+  } else if (!opts.redo_dir_.empty() && opts.base_dir_.string() == opts.redo_dir_.string()) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  if (OB_FAIL(ret)) {
+  } else if (!opts.redo_dir_.empty() && !opts.data_dir_.empty() && opts.data_dir_.string() == opts.redo_dir_.string()) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+
+  return ret;
+}
 
 int ObServerUtils::get_server_ip(ObIAllocator *allocator, ObString &ipstr)
 {

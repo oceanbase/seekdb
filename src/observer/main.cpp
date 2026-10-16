@@ -496,11 +496,14 @@ static int parse_args(int argc, char *argv[], ObServerOptions &opts)
   bool config_file_exists = false;
 
   // Parse arguments and write the results directly into opts
-  if (OB_FAIL(parser.parse_args(argc, argv, opts))) {
+  ret = parser.parse_args(argc - 1, argv + 1, opts);
+  if (OB_ITER_END == ret) {
+    // Help/version are handled by the executable, never by the embedded API.
+    fflush(stderr);
+    _Exit(0);
+  }
+  if (OB_FAIL(ret)) {
     MPRINT("Failed to parse command line arguments, ret=%d", ret);
-  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(opts.base_dir_.ptr()))) {
-    MPRINT("Failed to create base dir. path='%s', system error=%s", opts.base_dir_.ptr(), strerror(errno));
-  } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(opts.base_dir_))) {
   }
 
   return ret;
@@ -702,6 +705,8 @@ int inner_main(int argc, char *argv[])
   }
 
   if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(ObServerUtils::prepare_directories(*opts))) {
+    MPRINT("Failed to prepare startup directories, ret=%d", ret);
   } else if (0 != chdir(opts->base_dir_.ptr())) {
     ret = OB_ERR_UNEXPECTED;
     MPRINT("Failed to change working directory to base dir. path='%s', system error='%s'",

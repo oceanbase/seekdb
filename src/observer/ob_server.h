@@ -61,6 +61,7 @@
 #include "observer/virtual_table/ob_virtual_data_access_service.h"
 
 #include "observer/ob_signal_handle.h"
+#include <atomic>
 #include "observer/ob_internal_table_refresh_adapter.h"
 #include "observer/ob_ls_runtime_adapter.h"
 #include "observer/ob_server_duty_task.h"
@@ -257,6 +258,8 @@ public:
   // until the server itself stops it.
   int start();
   int wait();
+  // Used only by the executable to monitor legacy subprocess clients.
+  int wait_no_client();
   void prepare_stop();
   bool is_prepare_stopped();
   void set_stop();
@@ -340,7 +343,7 @@ public:
   sql::ObConnectResourceMgr& get_conn_res_mgr() { return conn_res_mgr_; }
 private:
   int stop();
-  int wait_no_client();
+
 
 private:
   ObServer();
@@ -410,8 +413,8 @@ private:
 
   // self addr
   common::ObAddr self_addr_;
-  bool prepare_stop_;
-  bool stop_;
+  std::atomic<bool> prepare_stop_;
+  std::atomic<bool> stop_;
   bool need_bootstrap_;
   volatile bool has_stopped_;
   bool has_destroy_;

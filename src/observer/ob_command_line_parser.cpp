@@ -18,105 +18,24 @@
 
 #include "observer/ob_command_line_parser.h"
 
+#include <cstdlib>
+#include <cstring>
+#include <cstdio>
 #ifdef _WIN32
 #include <windows.h>
-#include <cstdlib>
-#include <cstring>
-#include <cstdio>
-#define no_argument 0
-#define required_argument 1
-struct option {
-  const char *name;
-  int has_arg;
-  int *flag;
-  int val;
-};
-static char *optarg_ptr = nullptr;
-static int optind_val = 1;
-#define optarg optarg_ptr
-#define optind optind_val
-static int getopt_long(int argc, char *const argv[], const char *short_opts,
-                       const struct option *long_opts, int *long_index) {
-  (void)long_index;
-  optarg_ptr = nullptr;
-  if (optind_val >= argc || argv[optind_val] == nullptr) return -1;
-  char *arg = argv[optind_val];
-  if (arg[0] != '-') return -1;
-  if (arg[1] == '-') {
-    arg += 2;
-    for (int i = 0; long_opts[i].name != nullptr; i++) {
-      const char *name = long_opts[i].name;
-      size_t nlen = strlen(name);
-      if (strncmp(arg, name, nlen) != 0) continue;
-      if (arg[nlen] == '=') {
-        if (long_opts[i].has_arg == required_argument) {
-          optarg_ptr = arg + nlen + 1;
-          optind_val++;
-          return long_opts[i].val;
-        }
-      } else if (arg[nlen] == '\0') {
-        if (long_opts[i].has_arg == required_argument && optind_val + 1 < argc) {
-          optarg_ptr = argv[optind_val + 1];
-          optind_val += 2;
-          return long_opts[i].val;
-        } else if (long_opts[i].has_arg == no_argument) {
-          optind_val++;
-          return long_opts[i].val;
-        }
-      }
-    }
-    return '?';
-  }
-  char c = arg[1];
-  if (c == '\0') return -1;
-  const char *p = strchr(short_opts, c);
-  if (!p) return '?';
-  if (p[1] == ':') {
-    if (arg[2] != '\0') {
-      optarg_ptr = arg + 2;
-    } else if (optind_val + 1 < argc) {
-      optarg_ptr = argv[optind_val + 1];
-      optind_val++;
-    } else {
-      return '?';
-    }
-  }
-  optind_val++;
-  return (unsigned char)c;
-}
 #else
-#include <getopt.h>
 #include <unistd.h>
-#endif
-#include <cstdlib>
-#include <cstring>
-#include <cstdio>
-
-#ifdef __APPLE__
-// macOS: use _exit instead of exit to skip static destructors
-// This is to work around memory deallocation issues during LLVM PassRegistry static destruction
-// LLVM is statically linked, its internal malloc/free calls do not go through DYLD_INTERPOSE,
-// but some memory is allocated via OceanBase's hooked_malloc (with Header),
-// when LLVM calls system free() to release this memory during destruction, it causes a crash
-// Note: _exit() is preferred over quick_exit() for better macOS compatibility (quick_exit may
-// not be available in libSystem.B.dylib on some macOS versions)
-#define OB_EXIT(code) _exit(code)
-#else
-#define OB_EXIT(code) exit(code)
 #endif
 
 #include "lib/oblog/ob_log.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/string/ob_sql_string.h"
-#include "lib/file/file_directory_utils.h"
 #include "share/ob_version.h"
 
-#define MPRINT(format, ...) fprintf(stderr, format "\n", ##__VA_ARGS__)
+#define MPRINT(format, ...) do { if (!quiet_parser_) fprintf(stderr, format "\n", ##__VA_ARGS__); } while (0)
 
 namespace oceanbase {
 namespace observer {
-
-const char *COPYRIGHT  = "Copyright (c) 2011-present OceanBase Inc.";
 
 static int get_executable_name(ObSqlString &exe_name)
 {
@@ -183,38 +102,10 @@ enum ObCommandOption {
 #endif
 };
 
-// Define long options
-static struct option long_options[] = {
-  {"initialize", no_argument,       0, COMMAND_OPTION_INITIALIZE}, // TODO wangyunlai.wyl remove me before 2025-12-01
-  {"variable",   required_argument, 0, COMMAND_OPTION_VARIABLE},
-  {"port",       required_argument, 0, 'P'},
-  {"nodaemon",   no_argument,       0, COMMAND_OPTION_NODAEMON},
-  {"use-ipv6",   no_argument,       0, '6'},
-  {"base-dir",   required_argument, 0, COMMAND_OPTION_BASE_DIR},
-  {"data-dir",   required_argument, 0, COMMAND_OPTION_DATA_DIR},
-  {"redo-dir",   required_argument, 0, COMMAND_OPTION_REDO_DIR},
-  {"log-level",  required_argument, 0, COMMAND_OPTION_LOG_LEVEL},
-  {"parameter",  required_argument, 0, COMMAND_OPTION_PARAMETER},
-  {"role", required_argument, 0, COMMAND_OPTION_ROLE},
-  {"embedded",   no_argument,       0, COMMAND_OPTION_EMBEDDED},
-#ifdef _WIN32
-  {"install-service", no_argument, 0, COMMAND_OPTION_INSTALL_SERVICE},
-  {"remove-service",  no_argument, 0, COMMAND_OPTION_REMOVE_SERVICE},
-  {"service",         no_argument, 0, COMMAND_OPTION_SERVICE},
-#endif
-  {"version",    no_argument,       0, 'V'},
-  {"help",       no_argument,       0, 'h'},
-  {0, 0, 0, 0}
-};
-
-// Define short options string
-static const char* short_options = "P:Vh6";
-
-
 /**
  * Split string into key and value by '='
  */
-static int split_key_value(const ObString &str, ObString &key, ObString &value)
+int ObCommandLineParser::split_key_value(const ObString &str, ObString &key, ObString &value) const
 {
   int ret = OB_SUCCESS;
   if (str.prefix_match("-")) {
@@ -231,7 +122,7 @@ static int split_key_value(const ObString &str, ObString &key, ObString &value)
   return ret;
 }
 
-static int append_key_value(const char *value, ObServerOptions::KeyValueArray &array)
+int ObCommandLineParser::append_key_value(const char *value, ObServerOptions::KeyValueArray &array) const
 {
   int ret = OB_SUCCESS;
   if (nullptr == value) {
@@ -254,7 +145,7 @@ static int append_key_value(const char *value, ObServerOptions::KeyValueArray &a
   return ret;
 }
 
-static int handle_tilde(ObSqlString &dir)
+int ObCommandLineParser::handle_tilde(ObSqlString &dir) const
 {
   int ret = OB_SUCCESS;
   if ((dir.length() == 1 && dir.ptr()[0] == '~') || (dir.string().prefix_match("~/"))) {
@@ -398,39 +289,102 @@ int ObCommandLineParser::handle_option(int option, const char* value, ObServerOp
   return ret;
 }
 
-int ObCommandLineParser::parse_args(int argc, char* argv[], ObServerOptions& opts)
+int ObCommandLineParser::parse_args(int argc, const char *const argv[], ObServerOptions& opts, bool command_line)
 {
   int ret = OB_SUCCESS;
 
-  // Reset option state
+  constexpr int no_argument = 0;
+  constexpr int required_argument = 1;
+  struct option { const char *name; int has_arg; int *flag; int val; };
+  // Define long options
+  constexpr option long_options[] = {
+    {"initialize", no_argument,       0, COMMAND_OPTION_INITIALIZE}, // TODO wangyunlai.wyl remove me before 2025-12-01
+    {"variable",   required_argument, 0, COMMAND_OPTION_VARIABLE},
+    {"port",       required_argument, 0, 'P'},
+    {"nodaemon",   no_argument,       0, COMMAND_OPTION_NODAEMON},
+    {"use-ipv6",   no_argument,       0, '6'},
+    {"base-dir",   required_argument, 0, COMMAND_OPTION_BASE_DIR},
+    {"data-dir",   required_argument, 0, COMMAND_OPTION_DATA_DIR},
+    {"redo-dir",   required_argument, 0, COMMAND_OPTION_REDO_DIR},
+    {"log-level",  required_argument, 0, COMMAND_OPTION_LOG_LEVEL},
+    {"parameter",  required_argument, 0, COMMAND_OPTION_PARAMETER},
+    {"role", required_argument, 0, COMMAND_OPTION_ROLE},
+    {"embedded",   no_argument,       0, COMMAND_OPTION_EMBEDDED},
+#ifdef _WIN32
+    {"install-service", no_argument, 0, COMMAND_OPTION_INSTALL_SERVICE},
+    {"remove-service",  no_argument, 0, COMMAND_OPTION_REMOVE_SERVICE},
+    {"service",         no_argument, 0, COMMAND_OPTION_SERVICE},
+#endif
+    {"version",    no_argument,       0, 'V'},
+    {"help",       no_argument,       0, 'h'},
+    {0, 0, 0, 0}
+  };
+
+  // Define short options string
+  constexpr char short_options[] = "P:Vh6";
+
+  quiet_parser_ = !command_line;
   help_requested_ = false;
   version_requested_ = false;
-
-  int option_index = 0;
-  int c;
-
-  // Parse arguments using getopt_long
-  while (OB_SUCC(ret) && (c = getopt_long(argc, argv, short_options, long_options, &option_index)) != -1) {
-    ret = handle_option(c, optarg, opts);
+  if (argc < 0 || (argc > 0 && argv == nullptr)) {
+    return OB_INVALID_ARGUMENT;
   }
-
-  // Check for non-option arguments
-  // optind is the index of the next unprocessed argument in argv after getopt_long finishes processing options
-  if (OB_SUCC(ret) && optind < argc) {
-    ret = OB_INVALID_ARGUMENT;
-    MPRINT("Invalid argument, unexpected non-option parameter: %s", argv[optind]);
-    print_help();
-    OB_EXIT(1);
+  // Keep parsing local to this call: getopt's process-global state belongs to
+  // the host, and must not be changed by an embedded library.
+  for (int i = 0; OB_SUCC(ret) && i < argc; ++i) {
+    const char *arg = argv[i];
+    if (arg == nullptr || arg[0] != '-' || arg[1] == '\0') {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (std::strcmp(arg, "--") == 0) {
+      if (i + 1 != argc) { ret = OB_INVALID_ARGUMENT; }
+      break;
+    } else if (arg[1] == '-') {
+      const char *name = arg + 2;
+      const char *equals = std::strchr(name, '=');
+      const size_t length = equals == nullptr ? std::strlen(name) : equals - name;
+      const option *found = nullptr;
+      for (const option *opt = long_options; opt->name != nullptr; ++opt) {
+        if (std::strlen(opt->name) == length && std::strncmp(name, opt->name, length) == 0) {
+          found = opt;
+          break;
+        }
+      }
+      const char *value = equals == nullptr ? nullptr : equals + 1;
+      if (found == nullptr || (found->has_arg == no_argument && equals != nullptr)) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        if (found->has_arg == required_argument && value == nullptr) {
+          value = ++i < argc ? argv[i] : nullptr;
+        }
+        if (found->has_arg == required_argument && value == nullptr) {
+          ret = OB_INVALID_ARGUMENT;
+        } else {
+          ret = handle_option(found->val, value, opts);
+        }
+      }
+    } else {
+      for (const char *short_arg = arg + 1; OB_SUCC(ret) && *short_arg != '\0'; ++short_arg) {
+        const char *spec = std::strchr(short_options, *short_arg);
+        if (spec == nullptr || *short_arg == ':') {
+          ret = OB_INVALID_ARGUMENT;
+        } else if (spec[1] == ':') {
+          const char *value = short_arg[1] != '\0' ? short_arg + 1 : (++i < argc ? argv[i] : nullptr);
+          ret = value == nullptr ? OB_INVALID_ARGUMENT : handle_option(*short_arg, value, opts);
+          break;
+        } else {
+          ret = handle_option(*short_arg, nullptr, opts);
+        }
+      }
+    }
   }
-
-  // Handle help and version requests
   if (OB_FAIL(ret)) {
-  } else if (help_requested_) {
-    print_help();
-    OB_EXIT(0);
-  } else if (version_requested_) {
-    print_version();
-    OB_EXIT(0);
+    return ret;
+  } else if (help_requested_ || version_requested_) {
+    if (command_line) {
+      if (help_requested_) { print_help(); } else { print_version(); }
+      return OB_ITER_END;
+    }
+    return OB_INVALID_ARGUMENT;
   }
 
   // Set default values
@@ -448,47 +402,6 @@ int ObCommandLineParser::parse_args(int argc, char* argv[], ObServerOptions& opt
     MPRINT("Failed to handle tilde in redo directory, ret=%d", ret);
   }
 
-  // handle absolute path
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(opts.base_dir_.ptr()))) {
-    MPRINT("Failed to create base dir. path='%s', system error=%s", opts.base_dir_.ptr(), strerror(errno));
-  } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(opts.base_dir_))) {
-    MPRINT("Failed to convert base dir to absolute path. path='%s', system error=%s", opts.base_dir_.ptr(), strerror(errno));
-  } else if (opts.base_dir_.ptr()[opts.base_dir_.length() - 1] != '/' && OB_FAIL(opts.base_dir_.append("/"))) {
-    MPRINT("Failed to append '/' to base dir. path='%s'", opts.base_dir_.ptr());
-  }
-
-  if (OB_FAIL(ret) || opts.data_dir_.empty()) {
-  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(opts.data_dir_.ptr()))) {
-    MPRINT("Failed to create data dir. path='%s', system error=%s", opts.data_dir_.ptr(), strerror(errno));
-  } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(opts.data_dir_))) {
-    MPRINT("Failed to convert data dir to absolute path. path='%s', system error=%s", opts.data_dir_.ptr(), strerror(errno));
-  }
-  if (OB_FAIL(ret) || opts.redo_dir_.empty()) {
-  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(opts.redo_dir_.ptr()))) {
-    MPRINT("Failed to create redo dir. path='%s', system error=%s", opts.redo_dir_.ptr(), strerror(errno));
-  } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(opts.redo_dir_))) {
-    MPRINT("Failed to convert redo dir to absolute path. path='%s', system error=%s", opts.redo_dir_.ptr(), strerror(errno));
-  }
-  if (OB_FAIL(ret)) {
-  } else if (!opts.data_dir_.empty() && opts.base_dir_.string() == opts.data_dir_.string()) {
-    ret = OB_INVALID_ARGUMENT;
-    MPRINT("Data directory cannot be the same as base directory. base_dir='%s', data_dir='%s'",
-      opts.base_dir_.ptr(), opts.data_dir_.ptr());
-  }
-  if (OB_FAIL(ret)) {
-  } else if (!opts.redo_dir_.empty() && opts.base_dir_.string() == opts.redo_dir_.string()) {
-    ret = OB_INVALID_ARGUMENT;
-    MPRINT("Redo directory cannot be the same as base directory. base_dir='%s', redo_dir='%s'",
-      opts.base_dir_.ptr(), opts.redo_dir_.ptr());
-  }
-  if (OB_FAIL(ret)) {
-  } else if (!opts.redo_dir_.empty() && !opts.data_dir_.empty() && opts.data_dir_.string() == opts.redo_dir_.string()) {
-    ret = OB_INVALID_ARGUMENT;
-    MPRINT("Redo directory cannot be the same as data directory. data_dir='%s', redo_dir='%s'",
-      opts.data_dir_.ptr(), opts.redo_dir_.ptr());
-  }
-
   return ret;
 }
 
@@ -497,7 +410,7 @@ void ObCommandLineParser::print_help() const
   ObSqlString exe_name;
   (void) get_executable_name(exe_name);
 
-  MPRINT("%s", COPYRIGHT);
+  MPRINT("Copyright (c) 2011-present OceanBase Inc.");
   MPRINT();
   MPRINT("Usage: %s [OPTIONS]\n", exe_name.ptr());
   MPRINT("Options:");
@@ -531,7 +444,7 @@ void ObCommandLineParser::print_help() const
   MPRINT();
 }
 
-void ObCommandLineParser::print_version()
+void ObCommandLineParser::print_version() const
 {
   ObSqlString exe_name;
   (void) get_executable_name(exe_name);
@@ -541,7 +454,7 @@ void ObCommandLineParser::print_version()
   MPRINT("BUILD_TIME: %s %s", build_date(), build_time());
   MPRINT("BUILD_FLAGS: %s", build_flags());
   MPRINT("BUILD_INFO: %s\n", build_info());
-  MPRINT("%s", COPYRIGHT);
+  MPRINT("Copyright (c) 2011-present OceanBase Inc.");
   MPRINT();
 }
 

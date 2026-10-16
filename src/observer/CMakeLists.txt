@@ -5,9 +5,10 @@ seekdb_apply_standalone_inventory(
 ob_server_add_target(ob_server)
 target_link_libraries(ob_server PUBLIC config)
 
-add_library(oceanbase_static STATIC EXCLUDE_FROM_ALL
+add_library(seekdb_static STATIC EXCLUDE_FROM_ALL
   ${CMAKE_CURRENT_BINARY_DIR}/ob_version.cpp)
-target_link_libraries(oceanbase_static PUBLIC
+set_target_properties(seekdb_static PROPERTIES OUTPUT_NAME seekdb)
+target_link_libraries(seekdb_static PUBLIC
   ob_base
   "${ob_objects}"
   ob_sql_static
@@ -90,7 +91,7 @@ target_link_libraries(seekdb PRIVATE
   $<$<AND:$<NOT:$<PLATFORM_ID:Darwin,iOS>>,$<NOT:$<PLATFORM_ID:Windows>>>:-Wl,--start-group>
   ob_main
   $<$<AND:$<NOT:$<PLATFORM_ID:Darwin,iOS>>,$<NOT:$<PLATFORM_ID:Windows>>>:ob_malloc>
-  oceanbase_static
+  seekdb_static
   ob_sql_static
   ob_storage_static
   ob_share_static
@@ -193,7 +194,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
   target_compile_definitions(seekdb_ios_runtime PRIVATE
     SEEKDB_IOS_BUILD_ID="${SEEKDB_IOS_BUILD_ID}"
     SEEKDB_IOS_HOOK_MODE="disabled")
-  target_link_libraries(seekdb_ios_runtime PUBLIC oceanbase_static sql_nio)
+  target_link_libraries(seekdb_ios_runtime PUBLIC seekdb_static sql_nio)
   option(SEEKDB_IOS_FRAMEWORK "Build SeekDB.framework, which starts and stops the in-process iOS engine" OFF)
   if(SEEKDB_IOS_FRAMEWORK)
     add_subdirectory(ios/driver)

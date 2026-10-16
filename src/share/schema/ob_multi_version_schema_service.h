@@ -17,6 +17,7 @@
 #ifndef OB_OCEANBASE_SCHEMA_MULTI_VERSION_SCHEMS_SERVICE_H_
 #define OB_OCEANBASE_SCHEMA_MULTI_VERSION_SCHEMS_SERVICE_H_
 
+#include <atomic>
 #include <pthread.h>
 #include "lib/charset/ob_charset.h"
 #include "lib/string/ob_string.h"
@@ -295,6 +296,8 @@ public:
 friend class tools::ObAgentTaskGenerator;
 friend class tools::ObAgentTaskWorker;
 friend class ObDDLEpochMgr;
+  // Wake schema-version waiters before their producer services are stopped.
+  void cancel_refresh_waits() { refresh_waits_stopped_.store(true); }
   virtual void stop();
   virtual void wait();
   virtual int destroy();
@@ -390,6 +393,7 @@ private:
   static const int64_t RESERVE_SCHEMA_MGR_CNT = 10;
 
   bool init_;
+  std::atomic<bool> refresh_waits_stopped_{false};
   ObISchemaRefreshScheduler *schema_refresh_scheduler_;
   ObSchemaPublishSignal *schema_publish_signal_;
   mutable lib::ObMutex schema_refresh_mutex_;//assert only one thread can refresh schema

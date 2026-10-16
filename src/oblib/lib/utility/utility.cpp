@@ -1524,7 +1524,7 @@ static int read_pid(const char *pidfile, long &pid)
   return ret;
 }
 
-static int use_daemon()
+int ob_daemonize()
 {
   int ret = OB_SUCCESS;
 #ifdef _WIN32
@@ -1601,7 +1601,7 @@ int start_daemon(const char *pidfile, bool skip_daemon)
   }
 
   // start daemon
-  if (OB_SUCC(ret) && !skip_daemon && OB_FAIL(use_daemon())) {
+  if (OB_SUCC(ret) && !skip_daemon && OB_FAIL(ob_daemonize())) {
     LOG_ERROR("create daemon process fail", K(ret));
   }
 

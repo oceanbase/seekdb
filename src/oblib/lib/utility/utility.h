@@ -774,6 +774,7 @@ inline int ob_cstrcopy(char *dest, int64_t dest_buflen, const ObString &src_str)
 
 const char* get_default_if();
 
+int ob_daemonize();
 int start_daemon(const char *pidfile, bool skip_daemon = false);
 
 int ob_alloc_printf(ObString &result, ObIAllocator &alloc, const char* fmt, va_list ap);

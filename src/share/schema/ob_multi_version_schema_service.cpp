@@ -1023,6 +1023,7 @@ ObMultiVersionSchemaService::~ObMultiVersionSchemaService()
 
 void ObMultiVersionSchemaService::stop()
 {
+  cancel_refresh_waits();
   ddl_trans_controller_.stop();
 }
 
@@ -1064,6 +1065,7 @@ int ObMultiVersionSchemaService::init(
 
   if (true == init_) {
     ret = OB_INIT_TWICE;
+  } else if (FALSE_IT(refresh_waits_stopped_.store(false))) {
   } else if (FALSE_IT(schema_refresh_scheduler_ = &schema_refresh_scheduler)) {
   } else if (FALSE_IT(schema_publish_signal_ = &schema_publish_signal)) {
   } else if (OB_FAIL(ObServerSchemaService::init(
@@ -1493,7 +1495,9 @@ int ObMultiVersionSchemaService::async_refresh_schema(const int64_t schema_versi
   int ret = OB_SUCCESS;
   int64_t local_schema_version = OB_INVALID_VERSION;
   bool check_formal = ObSchemaService::is_formal_version(schema_version);
-  if (!check_inner_stat()) {
+  if (refresh_waits_stopped_.load()) {
+    ret = OB_IN_STOP_STATE;
+  } else if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
   } else if (OB_FAIL(get_runtime_refreshed_schema_version(
                      local_schema_version))) {
@@ -1506,7 +1510,9 @@ int ObMultiVersionSchemaService::async_refresh_schema(const int64_t schema_versi
     const int64_t MAX_RETRY_CNT = 100 * 1000 * 1000L / RETRY_IDLE_TIME; // 100s at most
     const int64_t SUBMIT_TASK_FREQUENCE = 2 * 1000 * 1000L / RETRY_IDLE_TIME; // each 2s
     while (OB_SUCC(ret)) {
-      if (OB_FAIL(get_runtime_refreshed_schema_version(
+      if (refresh_waits_stopped_.load()) {
+        ret = OB_IN_STOP_STATE;
+      } else if (OB_FAIL(get_runtime_refreshed_schema_version(
                          local_schema_version))) {
       } else if (local_schema_version >= schema_version
                  && (!check_formal || ObSchemaService::is_formal_version(local_schema_version))) {

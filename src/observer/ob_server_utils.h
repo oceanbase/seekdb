@@ -57,9 +57,15 @@ using common::ObString;
 
 namespace observer
 {
+class ObServerOptions;
+
 class ObServerUtils
 {
 public:
+  // Create and resolve configured directories before changing the working directory.
+  // Returns errors to the caller without printing to the console.
+  static int prepare_directories(ObServerOptions &opts);
+
   // Get the server's ipstr.
   // @param [in] allocator.
   // @param [out] server's ip str.

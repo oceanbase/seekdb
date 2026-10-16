@@ -4,7 +4,7 @@ target_include_directories(seekdb_ios_framework PRIVATE "${CMAKE_CURRENT_SOURCE_
 target_compile_definitions(seekdb_ios_framework PRIVATE
   SEEKDB_IOS_BUILD_ID="${SEEKDB_IOS_BUILD_ID}"
   SEEKDB_IOS_HOOK_MODE="disabled")
-target_link_libraries(seekdb_ios_framework PRIVATE oceanbase_static sql_nio)
+target_link_libraries(seekdb_ios_framework PRIVATE seekdb_static sql_nio)
 target_link_options(seekdb_ios_framework PRIVATE
   "-Wl,-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/exports.txt")
 set(SEEKDB_IOS_FRAMEWORK_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/framework" CACHE PATH

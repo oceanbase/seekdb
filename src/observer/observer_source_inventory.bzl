@@ -395,7 +395,6 @@ OBSERVER_UNITY_GROUPS = [
 
 OBSERVER_MAIN_SOURCES = [
     struct(path = "src/observer/main.cpp", language = "c++", kind = "source"),
-    struct(path = "src/observer/ob_command_line_parser.cpp", language = "c++", kind = "source"),
 ]
 
 OBSERVER_RETRIEVAL_COMPOSITION_SOURCES = [
@@ -405,6 +404,8 @@ OBSERVER_RETRIEVAL_COMPOSITION_SOURCES = [
 OBSERVER_STANDALONE_SOURCES = [
     struct(path = "src/observer/ob_server.cpp", language = "c++", kind = "source"),
     struct(path = "src/observer/ob_service.cpp", language = "c++", kind = "source"),
+    struct(path = "src/observer/ob_command_line_parser.cpp", language = "c++", kind = "source"),
+    struct(path = "src/observer/seekdb_engine.cpp", language = "c++", kind = "source"),
 ]
 
 OBSERVER_IGNORED_SOURCES = [
