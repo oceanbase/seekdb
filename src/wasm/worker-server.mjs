@@ -143,12 +143,15 @@ export function installWorkerServer({listen, send, open = openRuntime}) {
     if (op === 'open') {
       if (opening) throw new Error('Worker already opened a database');
       opening = true;
+      const importStarted = performance.now();
       const {default: factory} = await import(message.moduleURL);
+      const loaderImportMs = performance.now() - importStarted;
       let compiledModule = message.compiledModule;
       runtime = await open(factory, {budgets: message.budgets, storage: message.storage,
         wasmURL: message.wasmURL, compiledModule, onCompiledModule: module => { compiledModule = module; },
         onFatal: error => send({fatal: errorRecord(error)})});
-      return message.wasmURL ? {compiledModule} : undefined;
+      return {startupTimings: {loaderImportMs, ...runtime.startupTimings},
+        ...(message.wasmURL ? {compiledModule} : {})};
     }
     if (!runtime || closing) throw new Error('Database is not open');
     if (op === 'connect') {

@@ -508,6 +508,7 @@ async function updateVersion() {
 }
 
 async function openDatabase() {
+  const started = performance.now();
   setState('loading', 'Loading WebAssembly and starting seekdb. The first start can take a few seconds…');
   try {
     if (!globalThis.isSecureContext || !globalThis.crossOriginIsolated || typeof SharedArrayBuffer === 'undefined') {
@@ -516,13 +517,24 @@ async function openDatabase() {
     const module = await import('./database.mjs');
     SqlError = module.SqlError;
     database = await module.Database.open({moduleURL: new URL('./seekdb_wasm_database.mjs', import.meta.url), wasmURL: new URL('./seekdb_wasm_database.wasm', import.meta.url), storage});
+    const connectStarted = performance.now();
+    setState('loading', 'Connecting to seekdb…');
     currentDatabase = 'test';
     session = await connectDefaultSession();
+    const versionStarted = performance.now();
     await updateVersion();
+    const versionFinished = performance.now();
     sqlOptions = {};
     try { localStorage.setItem(STORAGE_KEY, storage); } catch {}
     setState('ready', storage === 'opfs' ? 'Ready · root · data is kept in this browser' : 'Ready · root · SQL runs locally in a Web Worker');
     input.focus();
+    performance.measure('seekdb-shell-startup', {
+      start: started,
+      end: performance.now(),
+      detail: {storage, ...database.startupTimings,
+        connectMs: versionStarted - connectStarted,
+        versionQueryMs: versionFinished - versionStarted},
+    });
     return true;
   } catch (error) {
     await database?.close().catch(() => {});

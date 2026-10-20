@@ -71,11 +71,14 @@ async function waitForUnlockedFiles(deadline = 3000) {
 // than just a stop flag, acknowledges that ObServer has joined and destroyed.
 export async function openRuntime(factory, {budgets, storage, wasmURL, compiledModule,
   onCompiledModule = () => {}, onFatal = () => {}} = {}) {
+  const started = performance.now();
+  const timings = {compiledModuleReused: Boolean(compiledModule)};
   const args = [...runtimeArguments(budgets), storageMode(storage)];
   if (args.at(-1) === 'opfs') {
     if (!persistentStorageAvailable()) throw new Error('Persistent storage (OPFS) is not available in this Worker');
     await waitForUnlockedFiles();
   }
+  timings.storageWaitMs = performance.now() - started;
   let terminal;
   let finish;
   const exited = new Promise(resolve => { finish = resolve; });
@@ -94,6 +97,7 @@ export async function openRuntime(factory, {budgets, storage, wasmURL, compiledM
     instantiationFailed = new Promise((_, reject) => {
       options.instantiateWasm = (imports, receive) => {
         void (async () => {
+          const instantiateStarted = performance.now();
           let instance;
           if (compiledModule) {
             instance = new WebAssembly.Instance(compiledModule, imports);
@@ -108,21 +112,34 @@ export async function openRuntime(factory, {budgets, storage, wasmURL, compiledM
             instance = result.instance;
             compiledModule = result.module;
           }
+          // Includes fetch/streaming compilation on a cold start. It is a
+          // subset of moduleInitMs, not an additional sequential phase.
+          timings.wasmInstantiateMs = performance.now() - instantiateStarted;
           receive(instance, compiledModule);
           onCompiledModule(compiledModule);
         })().catch(reject);
       };
     });
   }
+  const moduleStarted = performance.now();
   const initialized = factory(options);
   const module = await (instantiationFailed ? Promise.race([initialized, instantiationFailed]) : initialized);
+  const databaseStarted = performance.now();
+  timings.moduleInitMs = databaseStarted - moduleStarted;
   while (!terminal && module._seekdb_runtime_state() !== 1) {
     await new Promise(resolve => setTimeout(resolve, 5));
   }
   if (terminal) throw terminal.error ?? new Error(`Database startup failed (exit ${terminal.code})`);
+  timings.databaseStartMs = performance.now() - databaseStarted;
+  // Older engine artifacts do not expose native startup phase measurements.
+  if (typeof module._seekdb_runtime_startup_ms === 'function') {
+    timings.nativeInitMs = module._seekdb_runtime_startup_ms(0);
+    timings.nativeStartMs = module._seekdb_runtime_startup_ms(1);
+  }
   let closing;
   const clients = new Set();
   return {
+    startupTimings: Object.freeze(timings),
     async connect({capacity = 65536, chunkBytes = 65536, maxPacketBytes = 64 * 1024 * 1024, ...auth} = {}) {
       if (closing || terminal) throw new Error('Database is closed');
       if (!Number.isInteger(capacity) || capacity < 1 || capacity > 16 * 1024 * 1024

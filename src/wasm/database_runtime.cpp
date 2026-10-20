@@ -42,6 +42,9 @@ namespace {
 enum State { STARTING = 0, READY = 1, CLOSING = 2, CLOSED = 3, FAILED = 4 };
 std::atomic<int> state{STARTING};
 std::atomic<bool> closing{false};
+// Written by main before publishing READY, then read by the owning Worker.
+double init_ms = 0;
+double start_ms = 0;
 
 bool directory(const char *path)
 {
@@ -65,6 +68,12 @@ bool positive_integer(const char *input, unsigned &value)
 extern "C" EMSCRIPTEN_KEEPALIVE int seekdb_runtime_state()
 {
   return state.load(std::memory_order_acquire);
+}
+
+extern "C" EMSCRIPTEN_KEEPALIVE double seekdb_runtime_startup_ms(int phase)
+{
+  if (state.load(std::memory_order_acquire) != READY) return -1;
+  return phase == 0 ? init_ms : phase == 1 ? start_ms : -1;
 }
 
 // Called only by the owning Worker, after it closes all memory connections.
@@ -161,8 +170,16 @@ int main(int argc, char **argv)
     if (!startup_timeout.is_timeout_set()) {
       ret = startup_timeout.set_timeout(5LL * 60 * 1000000);
     }
-    if (ret == OB_SUCCESS) ret = server.init(options);
-    if (ret == OB_SUCCESS) ret = server.start();
+    if (ret == OB_SUCCESS) {
+      const double begin = emscripten_get_now();
+      ret = server.init(options);
+      init_ms = emscripten_get_now() - begin;
+    }
+    if (ret == OB_SUCCESS) {
+      const double begin = emscripten_get_now();
+      ret = server.start();
+      start_ms = emscripten_get_now() - begin;
+    }
   }
   const bool started = ret == OB_SUCCESS;
   if (started) {

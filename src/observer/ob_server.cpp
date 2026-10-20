@@ -1220,6 +1220,10 @@ int ObServer::start()
                     DBA_STEP_INC_INFO(server_start),
                     "observer instance start begin.");
 
+#ifndef __EMSCRIPTEN__
+    // Browser Workers have no POSIX process signals. Emscripten's signal wait
+    // does not block like the native syscall, so SignalHandle would spin and
+    // compete with bootstrap and SQL workers. The host owns runtime shutdown.
     if (!in_process_) {
       if (FAILEDx(signal_handle_.start())) {
         LOG_ERROR("fail to start signal handler", KR(ret));
@@ -1227,6 +1231,7 @@ int ObServer::start()
         FLOG_INFO("success to start signal handler");
       }
     }
+#endif
     if (FAILEDx(startup_accel_handler_.start())) {
       LOG_ERROR("fail to start server startup task handler", KR(ret));
     } else {

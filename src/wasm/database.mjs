@@ -66,9 +66,13 @@ export class Database {
   #disposalPending = false;
   #discarded = false;
   #cleared = false;
+  #startupTimings;
+
+  get startupTimings() { return this.#startupTimings; }
 
   static async open({moduleURL, wasmURL, budgets, storage = 'memory', workerURL = new URL('./database-worker.mjs', import.meta.url),
     workerFactory = url => new Worker(url, {type: 'module'})} = {}) {
+    const started = performance.now();
     if (!moduleURL) throw new TypeError('moduleURL is required');
     if (wasmURL !== undefined) wasmURL = new URL(wasmURL, moduleURL).href;
     const cacheKey = wasmURL === undefined ? undefined : JSON.stringify([String(moduleURL), wasmURL]);
@@ -89,6 +93,7 @@ export class Database {
       if (cacheKey !== undefined && result?.compiledModule instanceof WebAssembly.Module) {
         cachedWasm = {key: cacheKey, module: result.compiledModule};
       }
+      db.#startupTimings = Object.freeze({...result?.startupTimings, openMs: performance.now() - started});
       return db;
     } catch (error) {
       if (db) await db.#dispose();
