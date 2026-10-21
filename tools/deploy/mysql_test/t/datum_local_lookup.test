@@ -67,7 +67,7 @@ SELECT /*+ INDEX(dl_batch k_g) */ id,payload FROM dl_batch FORCE INDEX(k_g) WHER
 CREATE TABLE dl_part(id INT,g INT,payload VARCHAR(32),PRIMARY KEY(id),KEY k_g(g))
  PARTITION BY RANGE(id)(PARTITION p0 VALUES LESS THAN(10),PARTITION p1 VALUES LESS THAN MAXVALUE);
 INSERT INTO dl_part VALUES(1,7,'one'),(11,7,'eleven'),(12,8,'twelve');
-PREPARE dl_partition FROM 'SELECT /*+ INDEX(dl_part k_g) */ id,payload FROM dl_part WHERE g=? ORDER BY id';
+PREPARE dl_partition FROM 'SELECT /*+ INDEX(dl_part k_g) */ id,payload FROM dl_part FORCE INDEX(k_g) WHERE g=? ORDER BY id';
 SET @g=7;
 EXECUTE dl_partition USING @g;
 SET @g=8;
