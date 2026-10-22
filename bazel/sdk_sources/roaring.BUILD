@@ -39,7 +39,7 @@ cc_library(
     copts = select({
         "@platforms//os:emscripten": [
             "-pthread",
-            "-fexceptions",
+            "-fwasm-exceptions",
         ],
         "//conditions:default": [],
     }),

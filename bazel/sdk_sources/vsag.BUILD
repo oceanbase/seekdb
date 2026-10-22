@@ -230,7 +230,7 @@ cc_library(
     copts = ["-std=c++17"] + select({
         "@platforms//os:emscripten": [
             "-pthread",
-            "-fexceptions",
+            "-fwasm-exceptions",
         ],
         "//conditions:default": [
             "-Xpreprocessor",

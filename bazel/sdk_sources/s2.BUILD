@@ -114,7 +114,7 @@ cc_library(
     }) + select({
         "@platforms//os:emscripten": [
             "-pthread",
-            "-fexceptions",
+            "-fwasm-exceptions",
         ],
         "//conditions:default": [],
     }),
