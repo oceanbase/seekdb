@@ -70,8 +70,8 @@ export class Database {
 
   get startupTimings() { return this.#startupTimings; }
 
-  static async open({moduleURL, wasmURL, budgets, storage = 'memory', workerURL = new URL('./database-worker.mjs', import.meta.url),
-    workerFactory = url => new Worker(url, {type: 'module'})} = {}) {
+  static async open({moduleURL, wasmURL, budgets, storage = 'memory', compiledModule,
+    workerURL = new URL('./database-worker.mjs', import.meta.url), workerFactory = url => new Worker(url, {type: 'module'})} = {}) {
     const started = performance.now();
     if (!moduleURL) throw new TypeError('moduleURL is required');
     if (wasmURL !== undefined) wasmURL = new URL(wasmURL, moduleURL).href;
@@ -88,12 +88,16 @@ export class Database {
     let db;
     try {
       db = new Database(workerFactory(workerURL), release);
+      const compileStarted = performance.now();
+      const provided = await Promise.resolve(compiledModule).catch(() => undefined);
+      const compileWaitMs = performance.now() - compileStarted;
       const result = await db.#request('open', {moduleURL: String(moduleURL), wasmURL, budgets, storage,
-        compiledModule: cacheKey !== undefined && cachedWasm?.key === cacheKey ? cachedWasm.module : undefined});
+        compiledModule: provided instanceof WebAssembly.Module ? provided
+          : cacheKey !== undefined && cachedWasm?.key === cacheKey ? cachedWasm.module : undefined});
       if (cacheKey !== undefined && result?.compiledModule instanceof WebAssembly.Module) {
         cachedWasm = {key: cacheKey, module: result.compiledModule};
       }
-      db.#startupTimings = Object.freeze({...result?.startupTimings, openMs: performance.now() - started});
+      db.#startupTimings = Object.freeze({...result?.startupTimings, compileWaitMs, openMs: performance.now() - started});
       return db;
     } catch (error) {
       if (db) await db.#dispose();

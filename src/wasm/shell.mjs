@@ -21,6 +21,10 @@ import {ENGINE_VERSION} from './engine-version.mjs';
 const MAX_RESULT_CHARACTERS = 100000;
 const MAX_TRANSCRIPT_CHARACTERS = 1000000;
 const STORAGE_KEY = 'seekdb-shell-storage-mode';
+const MODULE_URL = new URL('./seekdb_wasm_database.mjs', import.meta.url);
+const WASM_URL = new URL('./seekdb_wasm_database.wasm', import.meta.url);
+const engineCompilation = globalThis.crossOriginIsolated ? compileEngine() : undefined;
+engineCompilation?.catch(() => {});
 const QUERY_PREVIEW = {maxRows: 500, maxColumns: 100, maxCells: 20000, maxCellBytes: 480, maxBytes: 400000};
 const element = id => document.getElementById(id);
 const input = element('sql');
@@ -507,6 +511,14 @@ async function updateVersion() {
   }
 }
 
+async function compileEngine() {
+  const response = await fetch(WASM_URL);
+  if (!response.ok) throw new Error(`Could not load WebAssembly: HTTP ${response.status}`);
+  const streaming = typeof WebAssembly.compileStreaming === 'function'
+    && response.headers.get('Content-Type')?.split(';', 1)[0].trim() === 'application/wasm';
+  return streaming ? WebAssembly.compileStreaming(response) : WebAssembly.compile(await response.arrayBuffer());
+}
+
 async function openDatabase() {
   const started = performance.now();
   setState('loading', 'Loading WebAssembly and starting seekdb. The first start can take a few seconds…');
@@ -516,7 +528,7 @@ async function openDatabase() {
     }
     const module = await import('./database.mjs');
     SqlError = module.SqlError;
-    database = await module.Database.open({moduleURL: new URL('./seekdb_wasm_database.mjs', import.meta.url), wasmURL: new URL('./seekdb_wasm_database.wasm', import.meta.url), storage});
+    database = await module.Database.open({moduleURL: MODULE_URL, wasmURL: WASM_URL, storage, compiledModule: engineCompilation});
     const connectStarted = performance.now();
     setState('loading', 'Connecting to seekdb…');
     currentDatabase = 'test';

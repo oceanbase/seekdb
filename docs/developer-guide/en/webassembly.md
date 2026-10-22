@@ -67,5 +67,6 @@ await db.close();
 
 - `storage: 'memory'` keeps the data directory in Wasm memory and starts empty on every open. `storage: 'opfs'` keeps it in the `seekdb` directory of the origin private file system, needs OPFS and Web Locks, and can be open in only one page of an origin at a time.
 - `query` yields `columns`, `row` and `complete` events. Row values are each column's text bytes as `Uint8Array`, or `null` for SQL NULL.
+- `compiledModule` optionally takes a `WebAssembly.Module` compiled from `wasmURL`, or a promise for one, and the engine then skips its own download and compilation. A page can start `WebAssembly.compileStreaming(fetch(wasmURL))` before it loads the rest of the API, as the shell does. If the promise rejects, the engine loads `wasmURL` itself.
 - Each `Database.open` starts a new Worker and engine. `close()` waits for the engine to shut down and keeps OPFS data; `discard()` terminates the Worker at once and, for OPFS, removes the stored files; `Database.clearPersistentStorage()` removes the stored OPFS files without opening an engine.
 - No TCP port is opened: connect through `connect()`.

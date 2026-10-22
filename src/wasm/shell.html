@@ -23,6 +23,16 @@ limitations under the License.
   <title>seekdb shell · WebAssembly</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="./shell.css">
+  <link rel="modulepreload" href="./database.mjs">
+  <link rel="modulepreload" href="./runtime-host.mjs">
+  <link rel="modulepreload" href="./mysql-wire.mjs">
+  <link rel="modulepreload" href="./mysql-client.mjs">
+  <link rel="modulepreload" href="./mysql-transport.mjs">
+  <link rel="modulepreload" href="./mysql-auth.mjs">
+  <link rel="modulepreload" href="./database-worker.mjs">
+  <link rel="modulepreload" href="./worker-server.mjs">
+  <link rel="modulepreload" href="./seekdb_wasm_database.mjs">
+  <link rel="preload" href="./seekdb_wasm_database.wasm" as="fetch" crossorigin>
   <script type="module" src="./shell.mjs"></script>
 </head>
 <body>
