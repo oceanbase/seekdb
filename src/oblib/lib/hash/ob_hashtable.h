@@ -244,21 +244,11 @@ private:
 template<class _value_type, class _lock_type, class _cond_type = NCond>
 struct ObHashTableBucket : public MProtect
 {
-  mutable _lock_type lock;
-  mutable _cond_type cond;
+  mutable HashSync<_lock_type> lock;
+  mutable HashSync<_cond_type> cond;
   ObHashTableNode<_value_type> *node;
 
-  ObHashTableBucket() : node(NULL)
-  {
-    init_hash_lock(lock);
-    init_hash_cond(cond);
-  }
-
-  ~ObHashTableBucket()
-  {
-    destroy_hash_cond(cond);
-    destroy_hash_lock(lock);
-  }
+  ObHashTableBucket() : node(NULL) {}
 
   typedef ObHashTableBucketNodeIterator<_value_type, _lock_type, _cond_type> iterator;
   typedef ObHashTableBucketNodeConstIterator<_value_type, _lock_type, _cond_type> const_iterator;
@@ -301,11 +291,11 @@ struct ObBucketLockCond
   }
   typename _defendmode::lock_type &lock()
   {
-    return bucket_.lock;
+    return bucket_.lock.get();
   }
   typename _defendmode::cond_type &cond()
   {
-    return bucket_.cond;
+    return bucket_.cond.get();
   }
 private:
   bucket_type &bucket_;
