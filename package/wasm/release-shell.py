@@ -79,7 +79,7 @@ def package(build_dir, output, brotli=False):
             representations["gzip"] = file_record(compressed, output)
             if brotli_command:
                 compressed = path.with_name(path.name + ".br")
-                subprocess.run([brotli_command, "-q", "5", "-o", str(compressed), str(path)], check=True)
+                subprocess.run([brotli_command, "-q", "11", "-o", str(compressed), str(path)], check=True)
                 representations["br"] = file_record(compressed, output)
             records["/" + identity["path"]] = {
                 "content_type": CONTENT_TYPES[path.suffix],

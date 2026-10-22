@@ -178,7 +178,9 @@ the engine hash; it identifies the packaged files, not a verified source commit.
 The preview validates these hashes before listening and serves only listed assets.
 
 All assets have gzip files precompressed at level 6. Add `--brotli` to also
-generate Brotli quality 5 files using an existing `brotli` executable on `PATH`.
+generate Brotli quality 11 files using an existing `brotli` executable on `PATH`.
+At that level the engine takes about two minutes to compress and shrinks to about
+18 MiB, against about 23 MiB at quality 5 and 27 MiB with gzip.
 No additional dependency is required for gzip. The preview negotiates the stored
 representations using `Accept-Encoding`, and supports `HEAD` and conditional
 requests with an encoding-specific `ETag`.
