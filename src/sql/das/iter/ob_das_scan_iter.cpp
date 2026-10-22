@@ -263,10 +263,12 @@ int ObDASScanIter::add_datum_lookup_key(ObEvalCtx &eval_ctx,
   } else if (OB_ISNULL(buf = allocator.alloc(sizeof(blocksstable::ObStorageDatum) * key.count_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    key.datums_ = new (buf) blocksstable::ObStorageDatum[key.count_];
+    key.datums_ = static_cast<blocksstable::ObStorageDatum *>(buf);
     for (int64_t i = 0; OB_SUCC(ret) && i < key.count_; ++i) {
+      // Construct and fill each cell together, so initialization overwritten
+      // by the copy can be eliminated without a separate constructor loop.
+      blocksstable::ObStorageDatum &dest = *new (key.datums_ + i) blocksstable::ObStorageDatum();
       const ObDatum &datum = rowkey_exprs.at(i)->locate_expr_datum(eval_ctx);
-      blocksstable::ObStorageDatum &dest = key.datums_[i];
       if (!datum.is_null() && !datum.is_ext() && datum.len_ == sizeof(uint64_t)) {
         // Integer keys (and other eight-byte payloads) need one fixed-size
         // copy, without dispatching through the generic memcpy routine.
