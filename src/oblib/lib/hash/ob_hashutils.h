@@ -97,20 +97,18 @@ extern bool parsenode_equal(const _ParseNode *node1, const _ParseNode *node2, in
 // These are now available on all platforms for consistency.
 inline void init_hash_lock(pthread_rwlock_t &lock) { pthread_rwlock_init(&lock, NULL); }
 inline void init_hash_lock(pthread_mutex_t &lock) { pthread_mutex_init(&lock, NULL); }
+inline void init_hash_lock(pthread_spinlock_t &lock) { pthread_spin_init(&lock, PTHREAD_PROCESS_PRIVATE); }
 template <typename T> inline void init_hash_lock(T &lock) { (void)lock; }
 
 inline void init_hash_cond(pthread_cond_t &cond) { pthread_cond_init(&cond, NULL); }
 template <typename T> inline void init_hash_cond(T &cond) { (void)cond; }
 
-#ifdef _WIN32
-// PThreads4W synchronization objects own kernel handles in addition to memory.
 inline void destroy_hash_lock(pthread_rwlock_t &lock) { pthread_rwlock_destroy(&lock); }
 inline void destroy_hash_lock(pthread_mutex_t &lock) { pthread_mutex_destroy(&lock); }
 inline void destroy_hash_lock(pthread_spinlock_t &lock) { pthread_spin_destroy(&lock); }
 template <typename T> inline void destroy_hash_lock(T &lock) { (void)lock; }
 inline void destroy_hash_cond(pthread_cond_t &cond) { pthread_cond_destroy(&cond); }
 template <typename T> inline void destroy_hash_cond(T &cond) { (void)cond; }
-#endif
 
 namespace oceanbase
 {
@@ -1028,13 +1026,9 @@ class BigArrayTemp
                        array_size);
         ret = -1;
       } else {
-#if defined(__APPLE__) || defined(_WIN32)
         for (int64_t i = 0; i < array_size; ++i) {
           new (&array_[i]) T();
         }
-#else
-        memset(array_, 0, array_size * sizeof(T));
-#endif
         allocer_ = allocer;
         item_count_ = array_size;
       }
@@ -1043,11 +1037,9 @@ class BigArrayTemp
     void destroy()
     {
       if (NULL != allocer_ && NULL != array_) {
-#ifdef _WIN32
         for (int64_t i = 0; i < item_count_; ++i) {
           array_[i].~T();
         }
-#endif
         allocer_->free(array_);
       }
       array_ = NULL;
@@ -1102,7 +1094,9 @@ public:
                        array_size_);
         ret = -1;
       } else {
-        memset(blocks_, 0, blocks_num_ * sizeof(Block));
+        for (int64_t i = 0; i < blocks_num_; ++i) {
+          new (&blocks_[i]) Block();
+        }
         for (int64_t i = 0; i < blocks_num_; i++) {
           if (0 != blocks_[i].create(array_size_, &allocer_)) {
             ret = -1;
@@ -1120,7 +1114,7 @@ public:
   {
     if (NULL != blocks_) {
       for (int64_t i = 0; i < blocks_num_; i++) {
-        blocks_[i].destroy();
+        blocks_[i].~Block();
       }
       allocer_.free(blocks_);
     }
@@ -1238,18 +1232,10 @@ int do_create(Array &array, const int64_t total_size, const int64_t array_size, 
     ret = OB_ALLOCATE_MEMORY_FAILED;
     _OB_LOG(WARN, "alloc memory failed,size:%ld", total_size * item_size);
   } else {
-#if defined(__APPLE__) || defined(_WIN32)
-    // On macOS/Windows, we must call constructors to initialize complex types like pthread_rwlock_t
-    // because memset(0) is not sufficient for dynamic initialization.
-    // On Windows PThreads4W, pthread_mutex_t is a pointer and PTHREAD_MUTEX_INITIALIZER is -1 (not 0).
     typedef typename std::remove_pointer<Array>::type ItemType;
     for (int64_t i = 0; i < total_size; ++i) {
       new (&array[i]) ItemType();
     }
-#else
-    //BACKTRACE(WARN, total_size * item_size > 65536, "hashutil create init size=%ld", total_size * item_size);
-    memset(array, 0, total_size * item_size);
-#endif
   }
   return ret;
 }
@@ -1289,14 +1275,10 @@ template <class Array, class BucketAllocator>
 void do_destroy(Array &array, NormalPointerTag, BucketAllocator &alloc, const int64_t item_count)
 {
   if (NULL != array) {
-#ifdef _WIN32
     typedef typename std::remove_pointer<Array>::type ItemType;
     for (int64_t i = 0; i < item_count; ++i) {
       array[i].~ItemType();
     }
-#else
-    UNUSED(item_count);
-#endif
     alloc.free(array);
     array = NULL;
   }
@@ -1433,9 +1415,7 @@ public:
         HASH_WRITE_LOG_RET(HASH_FATAL, OB_ERR_UNEXPECTED, "SimpleAllocer memory leak");
       }
     }
-#ifdef _WIN32
     destroy_hash_lock(lock_);
-#endif
   }
   void set_leak_check(const bool check) { leak_check_ = check; }
   void set_attr(const ObMemAttr &attr) { allocer_.set_attr(attr); }

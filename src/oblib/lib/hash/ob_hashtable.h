@@ -250,19 +250,15 @@ struct ObHashTableBucket : public MProtect
 
   ObHashTableBucket() : node(NULL)
   {
-#if defined(__APPLE__) || defined(_WIN32)
     init_hash_lock(lock);
     init_hash_cond(cond);
-#endif
   }
 
-#ifdef _WIN32
   ~ObHashTableBucket()
   {
     destroy_hash_cond(cond);
     destroy_hash_lock(lock);
   }
-#endif
 
   typedef ObHashTableBucketNodeIterator<_value_type, _lock_type, _cond_type> iterator;
   typedef ObHashTableBucketNodeConstIterator<_value_type, _lock_type, _cond_type> const_iterator;
