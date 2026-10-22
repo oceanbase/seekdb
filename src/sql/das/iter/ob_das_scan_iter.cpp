@@ -266,7 +266,14 @@ int ObDASScanIter::add_datum_lookup_key(ObEvalCtx &eval_ctx,
     key.datums_ = new (buf) blocksstable::ObStorageDatum[key.count_];
     for (int64_t i = 0; OB_SUCC(ret) && i < key.count_; ++i) {
       const ObDatum &datum = rowkey_exprs.at(i)->locate_expr_datum(eval_ctx);
-      if (OB_FAIL(key.datums_[i].deep_copy_from_datum(datum, allocator))) {
+      blocksstable::ObStorageDatum &dest = key.datums_[i];
+      if (!datum.is_null() && !datum.is_ext() && datum.len_ == sizeof(uint64_t)) {
+        // Integer keys (and other eight-byte payloads) need one fixed-size
+        // copy, without dispatching through the generic memcpy routine.
+        dest.reuse();
+        dest.pack_ = datum.pack_;
+        MEMCPY(dest.buf_, datum.ptr_, sizeof(uint64_t));
+      } else if (OB_FAIL(dest.deep_copy_from_datum(datum, allocator))) {
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(datum_lookup_keys_.push_back(key))) {
