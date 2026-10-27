@@ -85,6 +85,19 @@ namespace common
 {
 namespace FileComponent
 {
+#ifdef _WIN32
+static int open_utf8_path(const char *path, int flags, int mode)
+{
+  wchar_t wide_path[OB_MAX_FILE_NAME_LENGTH];
+  if (0 == MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1,
+                               wide_path, OB_MAX_FILE_NAME_LENGTH)) {
+    errno = EINVAL;
+    return -1;
+  }
+  return ::_wopen(wide_path, flags, mode);
+}
+#endif
+
 template <class T>
 int open(const ObString &fname, const T &file, int &fd)
 {
@@ -109,11 +122,12 @@ int open(const ObString &fname, const T &file, int &fd)
     if (NULL == fname_ptr) {
       _OB_LOG(WARN, "prepare fname string fail fname=[%.*s]", fname.length(), fname.ptr());
       ret = OB_INVALID_ARGUMENT;
-    } else if (-1 == (fd = ::open(fname_ptr, file.get_open_flags()
 #ifdef _WIN32
-            | _O_BINARY
+    } else if (-1 == (fd = open_utf8_path(fname_ptr, file.get_open_flags() | _O_BINARY,
+                                         file.get_open_mode()))) {
+#else
+    } else if (-1 == (fd = ::open(fname_ptr, file.get_open_flags(), file.get_open_mode()))) {
 #endif
-            , file.get_open_mode()))) {
       if (ENOENT == errno) {
         ret = OB_FILE_NOT_EXIST;
       } else if (EEXIST == errno) {
