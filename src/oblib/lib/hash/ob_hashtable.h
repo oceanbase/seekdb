@@ -244,17 +244,11 @@ private:
 template<class _value_type, class _lock_type, class _cond_type = NCond>
 struct ObHashTableBucket : public MProtect
 {
-  mutable _lock_type lock;
-  mutable _cond_type cond;
+  mutable HashSync<_lock_type> lock;
+  mutable HashSync<_cond_type> cond;
   ObHashTableNode<_value_type> *node;
 
-  ObHashTableBucket() : node(NULL)
-  {
-#if defined(__APPLE__) || defined(_WIN32)
-    init_hash_lock(lock);
-    init_hash_cond(cond);
-#endif
-  }
+  ObHashTableBucket() : node(NULL) {}
 
   typedef ObHashTableBucketNodeIterator<_value_type, _lock_type, _cond_type> iterator;
   typedef ObHashTableBucketNodeConstIterator<_value_type, _lock_type, _cond_type> const_iterator;
@@ -297,11 +291,11 @@ struct ObBucketLockCond
   }
   typename _defendmode::lock_type &lock()
   {
-    return bucket_.lock;
+    return bucket_.lock.get();
   }
   typename _defendmode::cond_type &cond()
   {
-    return bucket_.cond;
+    return bucket_.cond.get();
   }
 private:
   bucket_type &bucket_;
@@ -864,7 +858,7 @@ public:
       allocer_ = NULL;
       //delete[] buckets_;
       //buckets_ = NULL;
-      hash::destroy(buckets_, *bucket_allocer_);
+      hash::destroy(buckets_, *bucket_allocer_, bucket_num_);
       bucket_num_ = 0;
       size_ = 0;
     }
@@ -1327,7 +1321,7 @@ public:
           }
         }
       }
-      hash::destroy(old_buckets, *bucket_allocer_);
+      hash::destroy(old_buckets, *bucket_allocer_, old_bucket_num);
     }
 
     return ret;
