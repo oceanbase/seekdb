@@ -40,7 +40,13 @@ static inline ssize_t ob_pread(int fd, void *buf, size_t count, int64_t offset) 
   ov.Offset = (DWORD)(offset & 0xFFFFFFFF);
   ov.OffsetHigh = (DWORD)(offset >> 32);
   DWORD nread = 0;
-  if (!ReadFile(h, buf, (DWORD)count, &nread, &ov)) { return -1; }
+  if (!ReadFile(h, buf, (DWORD)count, &nread, &ov)) {
+    if (GetLastError() == ERROR_HANDLE_EOF) {
+      errno = 0;
+      return 0;
+    }
+    return -1;
+  }
   return (ssize_t)nread;
 }
 #define pwrite ob_pwrite
