@@ -29,7 +29,8 @@ namespace common
 
 inline int ob_vsnprintf(char *buf, size_t size, const char *fmt, va_list args)
 {
-#if defined(__EMSCRIPTEN__) && __SIZEOF_LONG__ == 4
+// SeekDB format strings use LP64-width integer arguments on every target.
+#if defined(_WIN32) || (defined(__EMSCRIPTEN__) && __SIZEOF_LONG__ == 4)
   size_t extra = 0;
   bool conversion = false;
   for (const char *src = fmt; nullptr != src && '\0' != *src; ++src) {
