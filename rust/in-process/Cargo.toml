@@ -12,10 +12,3 @@ test = false
 [dependencies]
 cxx = "1"
 libc = "0.2"
-
-[build-dependencies]
-cbindgen = "=0.29.4"
-cxx-build = "1"
-
-[lints.clippy]
-missing_safety_doc = "allow"

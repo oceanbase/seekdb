@@ -179,7 +179,7 @@ def main():
     sdk_version = Path(__file__).with_name("emscripten-version").read_text().strip()
     version_error = f"Activate Emscripten {sdk_version} before running ./build.py init --wasm."
     try:
-        compiler = subprocess.run(["emcc", "--version"], stdout=subprocess.PIPE, text=True, check=True)
+        compiler = subprocess.run(["emcc", "--version"], stdout=subprocess.PIPE, universal_newlines=True, check=True)
     except (OSError, subprocess.CalledProcessError):
         raise SystemExit(version_error)
     if not re.search(r" " + re.escape(sdk_version) + r"([ -]|$)", compiler.stdout.partition("\n")[0]):

@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_lob_access_param.h"
 #include "storage/tx_storage/ob_access_service.h"
 #include "share/ob_server_struct.h"

@@ -25,7 +25,7 @@
 #include "sql/resolver/ob_resolver_utils.h"
 #include "share/ob_server_struct.h"
 #include "share/ob_share_util.h"
-#include "config_bridge.h"
+#include "rust/config.h"
 
 namespace oceanbase
 {

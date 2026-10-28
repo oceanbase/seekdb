@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_debug_sync.h"
 #include "share/config/ob_server_config.h"
 #include "share/ob_i_debug_sync_broadcaster.h"

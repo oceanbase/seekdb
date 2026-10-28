@@ -18,7 +18,7 @@
 
 
 #include "share/ob_server_struct.h"
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_server_runtime_controller.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"

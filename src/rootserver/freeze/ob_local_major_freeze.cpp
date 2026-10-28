@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "rootserver/freeze/ob_local_major_freeze.h"
 
 #include "share/ob_tablet_meta_table_compaction_operator.h"

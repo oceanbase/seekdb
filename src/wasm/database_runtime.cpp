@@ -77,10 +77,28 @@ extern "C" EMSCRIPTEN_KEEPALIVE void seekdb_runtime_close()
   closing.store(true, std::memory_order_release);
 }
 
-extern "C" EMSCRIPTEN_KEEPALIVE nio_memory_client *seekdb_runtime_connect(size_t capacity)
+extern "C" EMSCRIPTEN_KEEPALIVE nio::MemoryClient *seekdb_runtime_connect(size_t capacity)
 {
   if (state.load(std::memory_order_acquire) != READY || closing.load(std::memory_order_acquire)) return nullptr;
   return obmysql::global_sql_nio_server->connect_memory(capacity);
+}
+
+// Keep the JavaScript ABI here; CXX checks the Rust calls and their types.
+extern "C" EMSCRIPTEN_KEEPALIVE int64_t nio_memory_write(
+    const nio::MemoryClient *client, const char *buffer, int64_t length)
+{
+  return nio::memory_write(client, buffer, length);
+}
+
+extern "C" EMSCRIPTEN_KEEPALIVE int64_t nio_memory_read(
+    const nio::MemoryClient *client, char *buffer, int64_t length)
+{
+  return nio::memory_read(client, buffer, length);
+}
+
+extern "C" EMSCRIPTEN_KEEPALIVE void nio_memory_close(nio::MemoryClient *client)
+{
+  nio::memory_close(client);
 }
 
 extern "C" EMSCRIPTEN_KEEPALIVE int seekdb_runtime_set_external_tcp_port(unsigned port)

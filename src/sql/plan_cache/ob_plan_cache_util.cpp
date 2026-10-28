@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_PC
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_plan_cache_util.h"
 #include "sql/optimizer/ob_log_plan.h"
 using namespace oceanbase::share;

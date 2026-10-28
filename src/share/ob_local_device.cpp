@@ -33,7 +33,7 @@ struct iocb {
 struct io_event { void *data; struct iocb *obj; long res; long res2; };
 #endif
 #include "ob_local_device.h"
-#include "config_bridge.h"
+#include "rust/config.h"
 #ifdef __EMSCRIPTEN__
 #include "lib/file/wasm_file.h"
 #endif

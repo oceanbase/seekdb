@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_mvcc_trans_ctx.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"

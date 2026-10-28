@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_PC
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_plan_set.h"
 #include "sql/plan_cache/ob_pcv_set.h"
 

@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_OPT
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_log_plan.h"
 #include "sql/optimizer/ob_pwj_comparer.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"

@@ -15,7 +15,7 @@ def discover(arguments):
     output = Path(arguments[0])
     rustup, native_channel, wasm_channel = arguments[1:]
     exe = ".exe" if os.name == "nt" else ""
-    installed = subprocess.check_output([rustup, "toolchain", "list"], text=True)
+    installed = subprocess.check_output([rustup, "toolchain", "list"], universal_newlines=True)
     channels = {"native": native_channel}
     if any(line.startswith(wasm_channel + "-") for line in installed.splitlines()):
         channels["wasm"] = wasm_channel
@@ -35,7 +35,8 @@ def discover(arguments):
             config["python_libs"]["lib64/" + platstdlib.name] = str(platstdlib)
 
     for name, channel in channels.items():
-        cargo = Path(subprocess.check_output([rustup, "which", "cargo", "--toolchain", channel], text=True).strip())
+        cargo = Path(subprocess.check_output([rustup, "which", "cargo", "--toolchain", channel], universal_newlines=True).strip())
+        subprocess.check_output([rustup, "which", "rustc", "--toolchain", channel], universal_newlines=True)
         config["rust"][name] = str(cargo.parent.parent)
     (output / "toolchains.json").write_text(json.dumps(config))
 
@@ -49,7 +50,7 @@ def vendor(arguments):
     cargo = sysroot / "bin" / ("cargo" + exe)
     vendor = output / "vendor"
     # A registry alias avoids conflicting with existing names for the same mirror.
-    command = [str(cargo), "vendor", "--locked", "--respect-source-config",
+    command = [str(cargo), "vendor", "--quiet", "--locked", "--respect-source-config",
                "--config", 'source.crates-io.replace-with="seekdb"',
                "--config", 'registries.seekdb.index="sparse+https://rsproxy.cn/index/"',
                "--manifest-path", str(root / "rust/Cargo.toml"),

@@ -42,6 +42,21 @@ def _expand_command(value):
     return os.path.expanduser(value)
 
 
+def client_environment(client):
+    environment = os.environ.copy()
+    command = _expand_command(str(client))
+    executable = Path(shutil.which(command) or command).resolve()
+    environment["PATH"] = str(executable.parent) + os.pathsep + environment.get("PATH", "")
+    library_dirs = [str(executable.parent.parent / name) for name in ("lib", "lib64")
+                    if (executable.parent.parent / name).is_dir()]
+    if library_dirs:
+        variable = "DYLD_LIBRARY_PATH" if sys.platform == "darwin" else "LD_LIBRARY_PATH"
+        if environment.get(variable):
+            library_dirs.append(environment[variable])
+        environment[variable] = os.pathsep.join(library_dirs)
+    return environment
+
+
 def _executable_path(value):
     return Path(os.path.abspath(_expand_command(value))).resolve()
 
@@ -200,6 +215,7 @@ def command_wait_ready(args):
         try:
             result = subprocess.run(
                 command,
+                env=client_environment(args.client),
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 timeout=attempt_timeout,

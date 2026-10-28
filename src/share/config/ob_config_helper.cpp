@@ -17,7 +17,7 @@
 
 #include "ob_config_helper.h"
 #include "lib/utility/ob_smart_var.h"
-#include "config_bridge.h"
+#include "rust/config.h"
 
 #include "common/ob_store_format.h"
 #include "lib/ob_running_mode.h"

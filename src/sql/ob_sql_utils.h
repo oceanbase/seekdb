@@ -17,7 +17,7 @@
 #ifndef _OCEANBASE_SQL_OB_SQL_UTILS_H
 #define _OCEANBASE_SQL_OB_SQL_UTILS_H
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "common/ob_range.h"
 #include "sql/rewrite/ob_query_range_provider.h"
 #include "common/object/ob_object.h"

@@ -3,13 +3,12 @@ name = "sql-nio"
 version = "0.1.0"
 edition = "2021"
 publish = false
-description = "Rust reimplementation of seekdb's ObSqlNioImpl network engine, exposed over a C ABI."
+description = "Rust reimplementation of seekdb's ObSqlNioImpl network engine, exposed through CXX."
 
 # Accepted deviations from clippy defaults, with reasons. Keep this list short;
 # anything not listed here must stay clean under `cargo clippy -- -D warnings`.
 [lints.clippy]
-# The C ABI in include/nio.h fixes the FFI signatures; their arity is not ours
-# to choose.
+# Protocol descriptors cross the language boundary without extra allocations.
 too_many_arguments = "allow"
 
 [lib]
@@ -25,6 +24,7 @@ native-network = ["dep:mio", "dep:socket2", "dep:libc", "dep:windows-sys", "rust
 memory-transport = []
 
 [dependencies]
+cxx = "1"
 # mio = epoll (Linux) / kqueue (macOS) / IOCP (Windows), no async runtime.
 # os-ext: mio::windows::NamedPipe for the per-reactor pending-pipe acceptor.
 mio = { version = "1", optional = true, features = ["os-poll", "net", "os-ext"] }
@@ -46,9 +46,6 @@ rustls-pki-types = { version = "1", features = ["std"] }
 # handshake/verifier; this crate only turns the already-verified peer DER into
 # the account-policy fields exposed by the narrow C ABI.
 x509-parser = { version = "0.18", default-features = false }
-
-[build-dependencies]
-cbindgen = "=0.29.4"
 
 # libc::shutdown is only used on the Unix path.
 [target.'cfg(unix)'.dependencies]

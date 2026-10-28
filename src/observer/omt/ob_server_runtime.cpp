@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SERVER_OMT
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_server_runtime.h"
 #include "observer/ob_server.h"   // T3d
 #include "share/rc/ob_server_runtime.h"

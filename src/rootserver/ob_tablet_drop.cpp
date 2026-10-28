@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX RS
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_tablet_drop.h"
 #include "common/mysqlclient/ob_isql_connection.h"
 #include "share/ob_share_util.h"

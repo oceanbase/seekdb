@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_DAS
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "sql/das/iter/ob_das_global_lookup_iter.h"
 #include "sql/das/iter/ob_das_merge_iter.h"
 #include "sql/das/ob_das_attach_define.h"

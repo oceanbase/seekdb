@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_EXE
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_sql_trans_control.h"
 #include "data_plane/tablelock/ob_table_lock.h"
 #include "data_plane/transaction/ob_deadlock.h"

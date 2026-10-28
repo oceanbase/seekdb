@@ -22,10 +22,54 @@
 #include "share/ob_lob_access_utils.h"
 #include "share/ob_sql_client_decorator.h"
 #include "sql/optimizer/stat/ob_dbms_stats_history_manager.h"
+#include "lib/utility/utility.h"
+#include "sql/privilege_check/ob_privilege_check.h"
 
 namespace oceanbase {
 using namespace sql;
 namespace common {
+namespace {
+
+int check_stat_table_priv(ObExecContext &ctx, const ObTableStatParam &param,
+                          const ObPrivSet required_privs)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(ctx.get_sql_ctx()) || param.stat_own_.empty() || param.stat_tab_.empty()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(ObPrivilegeCheck::check_maintenance_priv(
+                         *ctx.get_sql_ctx(), param.stat_own_, param.stat_tab_, required_privs))) {
+  }
+  return ret;
+}
+
+// Object names need identifier quoting; data values use SQL hex literals below.
+int append_stat_identifier(const ObString &name, ObSqlString &sql)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(sql.append("`"))) {
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < name.length(); ++i) {
+      if ('`' == name.ptr()[i] && OB_FAIL(sql.append("`"))) {
+      } else if (OB_FAIL(sql.append(name.ptr() + i, 1))) {
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(sql.append("`"))) {
+    }
+  }
+  return ret;
+}
+
+int append_stat_table_name(const ObString &database, const ObString &table, ObSqlString &sql)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(append_stat_identifier(database, sql))) {
+  } else if (OB_FAIL(sql.append("."))) {
+  } else if (OB_FAIL(append_stat_identifier(table, sql))) {
+  }
+  return ret;
+}
+
+} // namespace
 
 #define CREATE_MYSQL_STAT_TABLE "(STATID VARCHAR(128), TYPE CHAR(1), VERSION DECIMAL,FLAGS DECIMAL,\
                                   C1 VARCHAR(128),C2 VARCHAR(128), C3 VARCHAR(128),C4 VARCHAR(128),\
@@ -39,7 +83,7 @@ namespace common {
 #define CHECK_STAT_SELECT_LIST "select statid, type, version, flags, c1, c2, c3, c4, n1, n2, n3,\
                                 n4, n5,n6, n7, n8, n9, d1, r1, r2, ob_spec1, ob_spec2, ob_spec3 "
 
-#define DELETE_STAT_TABLE "delete from %.*s where c5 = '%.*s' and c1 = '%.*s'"
+#define DELETE_STAT_TABLE "delete from %.*s where c5 = %.*s and c1 = %.*s"
 
 #define INSERT_STAT_TABLE "INSERT INTO %.*s (STATID, TYPE, VERSION, FLAGS, C1, C2, C3,\
                                              C4, C5, C6, N1, N2, N3, N4, N5, N6, N7, \
@@ -47,8 +91,8 @@ namespace common {
                                              R2, R3, CH1, CL1, BL1, OB_SPEC1, \
                                              OB_SPEC2, OB_SPEC3) "
 
-#define FETCH_TABLE_STAT "select null statid, '%c' type, '8' version, null flags, '%.*s' c1, \
-                          %.*s c2, %.*s c3, '%.*s' c4, '%.*s' c5, null c6, row_cnt n1, null n2,\
+#define FETCH_TABLE_STAT "select null statid, '%c' type, '8' version, null flags, %.*s c1, \
+                          %.*s c2, %.*s c3, %.*s c4, %.*s c5, null c6, row_cnt n1, null n2,\
                           avg_row_len n3, null n4, null n5, null n6, null n7, null n8, null n9,\
                           null n10, null n11, null n12, null n13, last_analyzed d1, null t1, \
                           null r1,null r2, null r3, null ch1, null cl1, null bl1, \
@@ -58,7 +102,7 @@ namespace common {
 
 #define FETCH_COLUMN_STAT "select null statid, 'C' type, '8' version, case stat.histogram_type \
                            when 1 then 4096 + 4 when 3 then 8192 + 4 when 4 then 4 else 0 end flags,\
-                           '%.*s' c1, %.*s c2, %.*s c3, %.*s c4, '%.*s' c5, null c6,\
+                           %.*s c1, %.*s c2, %.*s c3, %.*s c4, %.*s c5, null c6,\
                            stat.distinct_cnt n1, stat.density n2, stat.spare1 n3, stat.sample_size n4, \
                            stat.null_cnt n5, NULL n6, NULL n7, stat.avg_len n8, 1 n9, \
                            hist.endpoint_num n10, hist.endpoint_normalized_value n11, \
@@ -74,7 +118,7 @@ namespace common {
 #define FETCH_STAT_FROM_STAT_TABLE "select statid, type, version, %s,\
                                     c1, c2, c3, c4, c5, c6,n1, n2, n3, n4, n5, n6, n7, n8, n9, n10,\
                                     n11, n12, n13, d1,t1, r1, r2, r3, ch1, cl1, bl1, ob_spec1,\
-                                    ob_spec2, ob_spec3 from %.*s where c5 = '%.*s' and c1 = '%.*s'"
+                                    ob_spec2, ob_spec3 from %.*s where c5 = %.*s and c1 = %.*s"
 
 int ObDbmsStatsExportImport::create_stat_table(ObExecContext &ctx,
                                                const ObTableStatParam &param)
@@ -90,13 +134,12 @@ int ObDbmsStatsExportImport::create_mysql_stat_table(ObExecContext &ctx,
 {
   int ret = OB_SUCCESS;
   ObSqlString raw_sql;
-  if (OB_FAIL(raw_sql.append_fmt("CREATE TABLE `%.*s`.`%.*s`",
-                                 param.db_name_.length(), param.db_name_.ptr(),
-                                 param.tab_name_.length(), param.tab_name_.ptr()))) {
+  if (OB_FAIL(raw_sql.append("CREATE TABLE "))) {
+  } else if (OB_FAIL(append_stat_table_name(param.db_name_, param.tab_name_, raw_sql))) {
   } else if (OB_FAIL(raw_sql.append(CREATE_MYSQL_STAT_TABLE))) {
   } else if (OB_FAIL(raw_sql.append(";"))) {
   } else if (OB_FAIL(do_execute_sql(ctx, raw_sql))) {
-  } else {/*do nothing*/}
+  }
   return ret;
 }
 
@@ -105,23 +148,18 @@ int ObDbmsStatsExportImport::drop_stat_table(ObExecContext &ctx, const ObTableSt
   int ret = OB_SUCCESS;
   ObSqlString select_raw_sql;
   ObSqlString drop_raw_sql;
-  const char* check_table_str = "from `%.*s`.`%.*s` where 0 = 1;";
-  const char* drop_table_str = "DROP TABLE `%.*s`.`%.*s`";
-  if (OB_FAIL(select_raw_sql.append(CHECK_STAT_SELECT_LIST))) {
-  } else if (OB_FAIL(select_raw_sql.append_fmt(check_table_str,
-                                               param.db_name_.length(), param.db_name_.ptr(),
-                                               param.tab_name_.length(), param.tab_name_.ptr()))) {
+  ObSqlString table_name;
+  if (OB_FAIL(append_stat_table_name(param.db_name_, param.tab_name_, table_name))) {
+  } else if (OB_FAIL(select_raw_sql.append(CHECK_STAT_SELECT_LIST))) {
+  } else if (OB_FAIL(select_raw_sql.append_fmt("from %s where 0 = 1;", table_name.ptr()))) {
   } else if (OB_FAIL(do_execute_sql(ctx, select_raw_sql))) {
     if (ret == OB_ERR_BAD_FIELD_ERROR) {
       ret = OB_ERR_DBMS_STATS_PL;
       LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "Unable to drop table: does not appear to be a statistics table");
-    } else {
     }
-  } else if (OB_FAIL(drop_raw_sql.append_fmt(drop_table_str,
-                                             param.db_name_.length(), param.db_name_.ptr(),
-                                             param.tab_name_.length(), param.tab_name_.ptr()))) {
+  } else if (OB_FAIL(drop_raw_sql.append_fmt("DROP TABLE %s", table_name.ptr()))) {
   } else if (OB_FAIL(do_execute_sql(ctx, drop_raw_sql))) {
-  } else {/*do nothing*/}
+  }
   return ret;
 }
 
@@ -131,54 +169,58 @@ int ObDbmsStatsExportImport::export_table_stats(ObExecContext &ctx,
 {
   int ret = OB_SUCCESS;
   ObSqlString raw_sql;
+  ObSqlString db_name_literal;
+  ObSqlString tab_name_literal;
+  ObSqlString part_name_literal;
+  ObSqlString data_name_literal;
   ObSqlString delete_stat_sql;
   ObSqlString part_str;
   ObSqlString subpart_str;
   ObSqlString table_name_str;
   uint64_t valid_tab_id = ObSchemaUtils::get_extract_schema_id(param.table_id_);
   const char *from_table_name = "oceanbase.__all_table_stat";
-  const char *null_str = "NULL";
-  int32_t null_str_len = static_cast<int32_t>(strlen(null_str));
-  if (OB_FAIL(table_name_str.append_fmt("`%.*s`.`%.*s`",
-                                        param.stat_own_.length(), param.stat_own_.ptr(),
-                                        param.stat_tab_.length(), param.stat_tab_.ptr()))) {
+  if (OB_FAIL(check_stat_table_priv(ctx, param, OB_PRIV_INSERT | OB_PRIV_DELETE))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(param.db_name_, db_name_literal))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(param.tab_name_, tab_name_literal))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(param.part_name_, part_name_literal))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(param.is_index_stat_ ? data_name : ObString::make_string("NULL"), data_name_literal))) {
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(append_stat_table_name(param.stat_own_, param.stat_tab_, table_name_str))) {
   } else if (OB_FAIL(raw_sql.append_fmt(INSERT_STAT_TABLE,
                                         table_name_str.string().length(),
                                         table_name_str.string().ptr()))) {
   } else if (OB_FAIL(gen_part_and_subpart_sel_str(param, part_str, subpart_str))) {
   } else if (OB_FAIL(raw_sql.append_fmt(FETCH_TABLE_STAT,
                                         param.is_index_stat_ ? 'I' : 'T',
-                                        param.tab_name_.length(), param.tab_name_.ptr(),
+                                        tab_name_literal.string().length(), tab_name_literal.string().ptr(),
                                         part_str.string().length(), part_str.string().ptr(),
                                         subpart_str.string().length(), subpart_str.string().ptr(),
-                                        param.is_index_stat_ ? data_name.length() : null_str_len,
-                                        param.is_index_stat_ ? data_name.ptr() : null_str,
-                                        param.db_name_.length(), param.db_name_.ptr(),
+                                        data_name_literal.string().length(), data_name_literal.string().ptr(),
+                                        db_name_literal.string().length(), db_name_literal.string().ptr(),
                                         from_table_name,
                                         valid_tab_id))) {
   } else if (OB_FAIL(delete_stat_sql.append_fmt(DELETE_STAT_TABLE,
                                                 table_name_str.string().length(),
                                                 table_name_str.string().ptr(),
-                                                param.db_name_.length(), param.db_name_.ptr(),
-                                                param.tab_name_.length(), param.tab_name_.ptr()))) {
+                                                db_name_literal.string().length(), db_name_literal.string().ptr(),
+                                                tab_name_literal.string().length(), tab_name_literal.string().ptr()))) {
   } else if (!param.part_name_.empty()) {
     ObSEArray<int64_t, 4> partition_ids;
     ObSqlString partition_list;
     if (param.is_subpart_name_) {
       if (OB_UNLIKELY(param.part_infos_.count() != 1 && param.subpart_infos_.count() != 1)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(delete_stat_sql.append_fmt(" and c3 = '%.*s' and type = '%c';",
-                                                    param.part_name_.length(),
-                                                    param.part_name_.ptr(),
+      } else if (OB_FAIL(delete_stat_sql.append_fmt(" and c3 = %.*s and type = '%c';",
+                                                    part_name_literal.string().length(), part_name_literal.string().ptr(),
                                                     param.is_index_stat_ ? 'I' : 'T'))) {
       } else if (OB_FAIL(partition_ids.push_back(param.subpart_infos_.at(0).part_id_))) {
       } else {/*do nothing*/}
     } else {
       if (OB_UNLIKELY(param.part_infos_.count() != 1)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(delete_stat_sql.append_fmt(" and c2 = '%.*s' and type = '%c';",
-                                                    param.part_name_.length(),
-                                                    param.part_name_.ptr(),
+      } else if (OB_FAIL(delete_stat_sql.append_fmt(" and c2 = %.*s and type = '%c';",
+                                                    part_name_literal.string().length(), part_name_literal.string().ptr(),
                                                     param.is_index_stat_ ? 'I' : 'T'))) {
       } else if (OB_FAIL(partition_ids.push_back(param.part_infos_.at(0).part_id_))) {
       } else {
@@ -207,6 +249,9 @@ int ObDbmsStatsExportImport::export_column_stats(ObExecContext &ctx, const ObTab
 {
   int ret = OB_SUCCESS;
   ObSqlString raw_sql;
+  ObSqlString db_name_literal;
+  ObSqlString tab_name_literal;
+  ObSqlString part_name_literal;
   ObSqlString where_str;
   ObSqlString delete_where_str;
   ObSqlString delete_stat_sql;
@@ -217,23 +262,26 @@ int ObDbmsStatsExportImport::export_column_stats(ObExecContext &ctx, const ObTab
   uint64_t valid_tab_id = ObSchemaUtils::get_extract_schema_id(param.table_id_);
   const char *col_stat_table = "oceanbase.__all_column_stat";
   const char *hist_stat_table = "oceanbase.__all_histogram_stat";
-  if (!param.part_name_.empty()) {//specify part name
+  if (OB_FAIL(check_stat_table_priv(ctx, param, OB_PRIV_INSERT | OB_PRIV_DELETE))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(param.db_name_, db_name_literal))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(param.tab_name_, tab_name_literal))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(param.part_name_, part_name_literal))) {
+  }
+  if (OB_SUCC(ret) && !param.part_name_.empty()) {//specify part name
     ObSEArray<int64_t, 4> partition_ids;
     ObSqlString partition_list;
     if (param.is_subpart_name_) {
       if (OB_UNLIKELY(param.part_infos_.count() != 1 && param.subpart_infos_.count() != 1)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(delete_where_str.append_fmt(" and c3 = '%.*s'",
-                                                     param.part_name_.length(),
-                                                     param.part_name_.ptr()))) {
+      } else if (OB_FAIL(delete_where_str.append_fmt(" and c3 = %.*s",
+                                                     part_name_literal.string().length(), part_name_literal.string().ptr()))) {
       } else if (OB_FAIL(partition_ids.push_back(param.subpart_infos_.at(0).part_id_))) {
       } else {/*do nothing*/}
     } else {
       if (OB_UNLIKELY(param.part_infos_.count() != 1)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(delete_where_str.append_fmt(" and c2 = '%.*s'",
-                                                     param.part_name_.length(),
-                                                     param.part_name_.ptr()))) {
+      } else if (OB_FAIL(delete_where_str.append_fmt(" and c2 = %.*s",
+                                                     part_name_literal.string().length(), part_name_literal.string().ptr()))) {
       } else if (OB_FAIL(partition_ids.push_back(param.part_infos_.at(0).part_id_))) {
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < param.subpart_infos_.count(); ++i) {
@@ -251,34 +299,31 @@ int ObDbmsStatsExportImport::export_column_stats(ObExecContext &ctx, const ObTab
   if (OB_SUCC(ret) && param.column_params_.count() == 1) {//specify column name
     if (OB_FAIL(where_str.append_fmt(" and stat.COLUMN_ID = %lu",
                                      param.column_params_.at(0).column_id_))) {
-    } else if (OB_FAIL(delete_where_str.append_fmt(" and c4 = '%.*s'",
-                                                  param.column_params_.at(0).column_name_.length(),
-                                                  param.column_params_.at(0).column_name_.ptr()))) {
+    } else if (OB_FAIL(delete_where_str.append(" and c4 = "))) {
+    } else if (OB_FAIL(sql_append_hex_escape_str(param.column_params_.at(0).column_name_, delete_where_str))) {
     } else {/*do nothing*/}
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(table_name_str.append_fmt("`%.*s`.`%.*s`",
-                                          param.stat_own_.length(), param.stat_own_.ptr(),
-                                          param.stat_tab_.length(), param.stat_tab_.ptr()))) {
+    if (OB_FAIL(append_stat_table_name(param.stat_own_, param.stat_tab_, table_name_str))) {
     } else if (OB_FAIL(raw_sql.append_fmt(INSERT_STAT_TABLE,
                                           table_name_str.string().length(),
                                           table_name_str.string().ptr()))) {
     } else if (OB_FAIL(gen_part_and_subpart_sel_str(param, part_str, subpart_str))) {
     } else if (OB_FAIL(gen_col_sel_str(param, col_str))) {
     } else if (OB_FAIL(raw_sql.append_fmt(FETCH_COLUMN_STAT,
-                                          param.tab_name_.length(), param.tab_name_.ptr(),
+                                          tab_name_literal.string().length(), tab_name_literal.string().ptr(),
                                           part_str.string().length(), part_str.string().ptr(),
                                           subpart_str.string().length(), subpart_str.string().ptr(),
                                           col_str.string().length(), col_str.string().ptr(),
-                                          param.db_name_.length(), param.db_name_.ptr(),
+                                          db_name_literal.string().length(), db_name_literal.string().ptr(),
                                           col_stat_table,
                                           hist_stat_table,
                                           valid_tab_id))) {
     } else if (OB_FAIL(delete_stat_sql.append_fmt(DELETE_STAT_TABLE,
                                                   table_name_str.string().length(),
                                                   table_name_str.string().ptr(),
-                                                  param.db_name_.length(), param.db_name_.ptr(),
-                                                  param.tab_name_.length(), param.tab_name_.ptr()))) {
+                                                  db_name_literal.string().length(), db_name_literal.string().ptr(),
+                                                  tab_name_literal.string().length(), tab_name_literal.string().ptr()))) {
     } else if (OB_FAIL(raw_sql.append(where_str.string()))) {
     } else if (OB_FAIL(delete_stat_sql.append(delete_where_str.string()))) {
     } else if (OB_FAIL(raw_sql.append(";"))) {
@@ -293,19 +338,24 @@ int ObDbmsStatsExportImport::import_table_stats(ObExecContext &ctx, const ObTabl
 {
   int ret = OB_SUCCESS;
   ObSqlString raw_sql;
+  ObSqlString db_name_literal;
+  ObSqlString tab_name_literal;
   ObSqlString partition_list;
   ObSqlString column_list;
   ObSqlString table_name_str;
   const char *histflag = "cast(flags&29700 as decimal) histflg";
-  if (OB_FAIL(table_name_str.append_fmt("`%.*s`.`%.*s`",
-                                          param.stat_own_.length(), param.stat_own_.ptr(),
-                                          param.stat_tab_.length(), param.stat_tab_.ptr()))) {
+  if (OB_FAIL(check_stat_table_priv(ctx, param, OB_PRIV_SELECT))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(param.db_name_, db_name_literal))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(param.tab_name_, tab_name_literal))) {
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(append_stat_table_name(param.stat_own_, param.stat_tab_, table_name_str))) {
   } else if (OB_FAIL(raw_sql.append_fmt(FETCH_STAT_FROM_STAT_TABLE,
                                         histflag,
                                         table_name_str.string().length(),
                                         table_name_str.string().ptr(),
-                                        param.db_name_.length(), param.db_name_.ptr(),
-                                        param.tab_name_.length(), param.tab_name_.ptr()))) {
+                                        db_name_literal.string().length(), db_name_literal.string().ptr(),
+                                        tab_name_literal.string().length(), tab_name_literal.string().ptr()))) {
   } else if (!param.cascade_ && OB_FAIL(raw_sql.append_fmt(" and type = '%c'",
                                                            param.is_index_stat_ ? 'I' : 'T'))) {
   } else if (param.cascade_ && OB_FAIL(gen_import_column_list(param.column_params_, column_list))) {
@@ -326,19 +376,24 @@ int ObDbmsStatsExportImport::import_column_stats(ObExecContext &ctx, const ObTab
 {
   int ret = OB_SUCCESS;
   ObSqlString raw_sql;
+  ObSqlString db_name_literal;
+  ObSqlString tab_name_literal;
   ObSqlString partition_list;
   ObSqlString column_list;
   ObSqlString table_name_str;
   const char *histflag = "cast(flags&29700 as decimal) histflg";
-  if (OB_FAIL(table_name_str.append_fmt("`%.*s`.`%.*s`",
-                                          param.stat_own_.length(), param.stat_own_.ptr(),
-                                          param.stat_tab_.length(), param.stat_tab_.ptr()))) {
+  if (OB_FAIL(check_stat_table_priv(ctx, param, OB_PRIV_SELECT))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(param.db_name_, db_name_literal))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(param.tab_name_, tab_name_literal))) {
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(append_stat_table_name(param.stat_own_, param.stat_tab_, table_name_str))) {
   } else if (OB_FAIL(raw_sql.append_fmt(FETCH_STAT_FROM_STAT_TABLE,
                                         histflag,
                                         table_name_str.string().length(),
                                         table_name_str.string().ptr(),
-                                        param.db_name_.length(), param.db_name_.ptr(),
-                                        param.tab_name_.length(), param.tab_name_.ptr()))) {
+                                        db_name_literal.string().length(), db_name_literal.string().ptr(),
+                                        tab_name_literal.string().length(), tab_name_literal.string().ptr()))) {
   } else if (OB_FAIL(raw_sql.append(" and type = 'C'"))) {
   } else if (OB_FAIL(gen_import_column_list(param.column_params_, column_list))) {
   } else if (OB_FAIL(raw_sql.append_fmt(" and c4 in %s", column_list.ptr()))) {
@@ -1106,9 +1161,8 @@ int ObDbmsStatsExportImport::gen_part_and_subpart_sel_str(const ObTableStatParam
   } else if (OB_FAIL(part_str.append("CASE stat.PARTITION_ID"))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < param.part_infos_.count(); ++i) {
-      if (OB_FAIL(part_str.append_fmt(" WHEN %ld THEN '%.*s'", param.part_infos_.at(i).part_id_,
-                                                       param.part_infos_.at(i).part_name_.length(),
-                                                       param.part_infos_.at(i).part_name_.ptr()))) {
+      if (OB_FAIL(part_str.append_fmt(" WHEN %ld THEN ", param.part_infos_.at(i).part_id_))) {
+      } else if (OB_FAIL(sql_append_hex_escape_str(param.part_infos_.at(i).part_name_, part_str))) {
       } else {/*do nothing*/}
     }
     if (OB_SUCC(ret)) {
@@ -1118,10 +1172,8 @@ int ObDbmsStatsExportImport::gen_part_and_subpart_sel_str(const ObTableStatParam
       } else if (OB_FAIL(subpart_str.append("CASE stat.PARTITION_ID"))) {
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < param.subpart_infos_.count(); ++i) {
-          if (OB_FAIL(subpart_str.append_fmt(" WHEN %ld THEN '%.*s'",
-                                              param.subpart_infos_.at(i).part_id_,
-                                              param.subpart_infos_.at(i).part_name_.length(),
-                                              param.subpart_infos_.at(i).part_name_.ptr()))) {
+          if (OB_FAIL(subpart_str.append_fmt(" WHEN %ld THEN ", param.subpart_infos_.at(i).part_id_))) {
+          } else if (OB_FAIL(sql_append_hex_escape_str(param.subpart_infos_.at(i).part_name_, subpart_str))) {
           } else {
             ObString part_name;
             bool find_it = false;
@@ -1136,10 +1188,8 @@ int ObDbmsStatsExportImport::gen_part_and_subpart_sel_str(const ObTableStatParam
             }
             if (OB_SUCC(ret) && !find_it) {
               ret = OB_ERR_UNEXPECTED;
-            } else if (OB_FAIL(part_str.append_fmt(" WHEN %ld THEN '%.*s'",
-                                                    param.subpart_infos_.at(i).part_id_,
-                                                    part_name.length(),
-                                                    part_name.ptr()))) {
+            } else if (OB_FAIL(part_str.append_fmt(" WHEN %ld THEN ", param.subpart_infos_.at(i).part_id_))) {
+            } else if (OB_FAIL(sql_append_hex_escape_str(part_name, part_str))) {
             } else {/*do nothing*/}
           }
         }
@@ -1169,10 +1219,8 @@ int ObDbmsStatsExportImport::gen_col_sel_str(const ObTableStatParam &param,
   } else if (OB_FAIL(col_str.append("CASE stat.COLUMN_ID"))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < param.column_params_.count(); ++i) {
-      if (OB_FAIL(col_str.append_fmt(" WHEN %lu THEN '%.*s'",
-                                     param.column_params_.at(i).column_id_,
-                                     param.column_params_.at(i).column_name_.length(),
-                                     param.column_params_.at(i).column_name_.ptr()))) {
+      if (OB_FAIL(col_str.append_fmt(" WHEN %lu THEN ", param.column_params_.at(i).column_id_))) {
+      } else if (OB_FAIL(sql_append_hex_escape_str(param.column_params_.at(i).column_name_, col_str))) {
       } else {/*do nothing*/}
     }
     if (OB_SUCC(ret)) {
@@ -1227,11 +1275,9 @@ int ObDbmsStatsExportImport::gen_import_partition_list(const ObTableStatParam &p
     for (int64_t i = 0; OB_SUCC(ret) && i < param.part_infos_.count(); ++i) {
       const char *prefix = (i == 0 ? "(c3 is NULL and c2 in (" : " ");
       const char *suffix = (i == param.part_infos_.count() - 1 ? "))" : ",");
-      if (OB_FAIL(partition_list.append_fmt("%s'%.*s'%s",
-                                            prefix,
-                                            param.part_infos_.at(i).part_name_.length(),
-                                            param.part_infos_.at(i).part_name_.ptr(),
-                                            suffix))) {
+      if (OB_FAIL(partition_list.append(prefix))) {
+      } else if (OB_FAIL(sql_append_hex_escape_str(param.part_infos_.at(i).part_name_, partition_list))) {
+      } else if (OB_FAIL(partition_list.append_fmt("%s", suffix))) {
       } else {
         need_or = true;
       }
@@ -1244,11 +1290,9 @@ int ObDbmsStatsExportImport::gen_import_partition_list(const ObTableStatParam &p
     for (int64_t i = 0; OB_SUCC(ret) && i < param.subpart_infos_.count(); ++i) {
       const char *prefix = (i == 0 ? "c3 in (" : " ");
       char suffix = (i == param.subpart_infos_.count() - 1 ? ')' : ',');
-      if (OB_FAIL(partition_list.append_fmt("%s'%.*s'%c",
-                                            prefix,
-                                            param.subpart_infos_.at(i).part_name_.length(),
-                                            param.subpart_infos_.at(i).part_name_.ptr(),
-                                            suffix))) {
+      if (OB_FAIL(partition_list.append(prefix))) {
+      } else if (OB_FAIL(sql_append_hex_escape_str(param.subpart_infos_.at(i).part_name_, partition_list))) {
+      } else if (OB_FAIL(partition_list.append_fmt("%c", suffix))) {
       } else {/*do nothing*/}
     }
   }
@@ -1265,11 +1309,9 @@ int ObDbmsStatsExportImport::gen_import_column_list(const ObIArray<ObColumnStatP
     for (int64_t i = 0; OB_SUCC(ret) && i < column_param.count(); ++i) {
       const char *prefix = (i == 0 ? " (" : " ");
       char suffix = (i == column_param.count() - 1 ? ')' : ',');
-      if (OB_FAIL(column_list.append_fmt("%s'%.*s'%c",
-                                            prefix,
-                                            column_param.at(i).column_name_.length(),
-                                            column_param.at(i).column_name_.ptr(),
-                                            suffix))) {
+      if (OB_FAIL(column_list.append(prefix))) {
+      } else if (OB_FAIL(sql_append_hex_escape_str(column_param.at(i).column_name_, column_list))) {
+      } else if (OB_FAIL(column_list.append_fmt("%c", suffix))) {
       } else {/*do nothing*/}
     }
   }

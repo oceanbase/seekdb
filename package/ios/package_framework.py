@@ -12,7 +12,7 @@ import tarfile
 
 
 def output(*command):
-    return subprocess.check_output(command, text=True)
+    return subprocess.check_output(command, universal_newlines=True)
 
 
 def digest(path):

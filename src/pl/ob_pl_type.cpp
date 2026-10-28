@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX PL
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_pl_type.h"
 #include "src/sql/resolver/ob_resolver_utils.h"
 #include "pl/ob_pl_package.h"

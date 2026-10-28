@@ -71,11 +71,11 @@ def source_package(name, environment):
 def verify_archive(archive, simulator, environment):
     """Reject archives with non-arm64 or wrong-platform Mach-O members."""
     arches = subprocess.check_output(["xcrun", "lipo", "-archs", str(archive)],
-                                     env=environment, text=True).strip()
+                                     env=environment, universal_newlines=True).strip()
     if arches != "arm64":
         raise RuntimeError("Unexpected archive architectures: " + arches)
     output = subprocess.check_output(["xcrun", "otool", "-l", str(archive)],
-                                     env=environment, text=True)
+                                     env=environment, universal_newlines=True)
     platforms = set(re.findall(r"^\s*platform\s+(\S+)", output, re.MULTILINE))
     expected = {"7", "IOSSIMULATOR"} if simulator else {"2", "IOS"}
     if not platforms or not platforms.issubset(expected):
@@ -146,7 +146,7 @@ def target_environment(sdk, options, environment, prefix=None):
         triple += "-simulator"
     for variable, tool in (("CC", "clang"), ("CXX", "clang++"), ("AR", "ar"), ("RANLIB", "ranlib")):
         result[variable] = subprocess.check_output(
-            ["xcrun", "--sdk", sdk_name, "--find", tool], env=environment, text=True).strip()
+            ["xcrun", "--sdk", sdk_name, "--find", tool], env=environment, universal_newlines=True).strip()
     flags = "-O2 -fPIC -target " + triple + " -isysroot " + shlex.quote(sdk)
     result["CFLAGS"] = flags
     result["CXXFLAGS"] = flags
@@ -220,7 +220,7 @@ def build_icu(source, build, prefix, sdk, options, environment):
     host_env = dict(environment)
     host_env.pop("IPHONEOS_DEPLOYMENT_TARGET", None)
     host_env["SDKROOT"] = subprocess.check_output(
-        ["xcrun", "--sdk", "macosx", "--show-sdk-path"], env=host_env, text=True).strip()
+        ["xcrun", "--sdk", "macosx", "--show-sdk-path"], env=host_env, universal_newlines=True).strip()
     common = ["--enable-static", "--disable-shared", "--disable-tests", "--disable-samples",
               "--disable-extras", "--disable-icuio", "--with-data-packaging=static"]
     run([source / "configure", *common], host_build, host_env)
@@ -319,7 +319,7 @@ def main():
         environment.pop(name, None)
     sdk_name = "iphonesimulator" if options.simulator else "iphoneos"
     sdk = subprocess.check_output(["xcrun", "--sdk", sdk_name, "--show-sdk-path"],
-                                  env=environment, text=True).strip()
+                                  env=environment, universal_newlines=True).strip()
     environment["SDKROOT"] = sdk
     environment["IPHONEOS_DEPLOYMENT_TARGET"] = options.deployment_target
     prefix = ROOT / "deps/ios" / sdk_name / "devel"

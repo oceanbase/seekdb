@@ -18,7 +18,7 @@
 #define OCEANBASE_SHARE_OB_DDL_COMMON_H
 
 namespace oceanbase { namespace common { struct ObDatum; } }
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "lib/allocator/page_arena.h"
 #include "share/config/ob_server_config.h"
 #include "share/schema/ob_table_schema.h"

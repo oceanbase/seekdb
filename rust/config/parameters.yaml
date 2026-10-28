@@ -359,7 +359,7 @@
 
 - name: _enable_defensive_check
   type: INT_WITH_CHECKER
-  default: "1"
+  default: "0"
   section: OBSERVER
   edit_level: DYNAMIC_EFFECTIVE
   description: "specifies whether allow to do some defensive checks when the query is executed, 0 means defensive check is disabled, 1 means normal defensive check is enabled, 2 means more strict defensive check is enabled, such as check partition id validity"

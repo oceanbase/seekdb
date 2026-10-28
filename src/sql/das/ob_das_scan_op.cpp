@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_DAS
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_das_scan_op.h"
 #include "data_plane/access/ob_tablet_scan.h"
 #include "share/rc/ob_server_runtime.h"

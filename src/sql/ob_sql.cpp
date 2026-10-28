@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "sql/ob_sql.h"
 #include "lib/json/ob_json_print_utils.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"

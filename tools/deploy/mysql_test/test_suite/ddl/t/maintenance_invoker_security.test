@@ -1,0 +1,93 @@
+# Maintenance APIs use the effective invoker; prefs and indexed query results verify effects.
+--disable_warnings
+DROP DATABASE IF EXISTS maintenance_authz_db;
+DROP USER IF EXISTS 'maintenance_authz_owner'@'%';
+DROP USER IF EXISTS 'maintenance_authz_caller'@'%';
+--enable_warnings
+CREATE DATABASE maintenance_authz_db;
+CREATE USER 'maintenance_authz_owner'@'%';
+CREATE USER 'maintenance_authz_caller'@'%';
+CREATE TABLE maintenance_authz_db.t_stats(id INT);
+CREATE TABLE maintenance_authz_db.t_vector(id INT PRIMARY KEY, embedding VECTOR(3),
+  VECTOR INDEX v_idx(embedding) WITH (distance=l2, type=hnsw));
+INSERT INTO maintenance_authz_db.t_vector VALUES (1, '[1,0,0]'), (2, '[0,1,0]');
+GRANT SELECT, INSERT ON maintenance_authz_db.t_stats TO 'maintenance_authz_owner'@'%';
+GRANT INDEX ON maintenance_authz_db.t_vector TO 'maintenance_authz_owner'@'%';
+GRANT CREATE ROUTINE, ALTER ROUTINE, EXECUTE ON maintenance_authz_db.* TO 'maintenance_authz_owner'@'%';
+delimiter |;
+CREATE DEFINER='maintenance_authz_owner'@'%' PROCEDURE maintenance_authz_db.stats_definer()
+SQL SECURITY DEFINER
+BEGIN
+  CALL DBMS_STATS.SET_TABLE_PREFS('maintenance_authz_db', 't_stats', 'STALE_PERCENT', '20');
+END|
+CREATE DEFINER='maintenance_authz_owner'@'%' PROCEDURE maintenance_authz_db.stats_invoker()
+SQL SECURITY INVOKER
+BEGIN
+  CALL DBMS_STATS.SET_TABLE_PREFS('maintenance_authz_db', 't_stats', 'STALE_PERCENT', '30');
+END|
+CREATE DEFINER='maintenance_authz_owner'@'%' PROCEDURE maintenance_authz_db.vector_definer()
+SQL SECURITY DEFINER
+BEGIN
+  CALL DBMS_VECTOR.REFRESH_INDEX('maintenance_authz_db.v_idx', 'maintenance_authz_db.t_vector', 'embedding', 100000, 'FAST');
+END|
+CREATE DEFINER='maintenance_authz_owner'@'%' PROCEDURE maintenance_authz_db.vector_invoker()
+SQL SECURITY INVOKER
+BEGIN
+  CALL DBMS_VECTOR.REFRESH_INDEX('maintenance_authz_db.v_idx', 'maintenance_authz_db.t_vector', 'embedding', 100000, 'FAST');
+END|
+delimiter ;|
+GRANT EXECUTE ON maintenance_authz_db.* TO 'maintenance_authz_caller'@'%';
+connect (maintenance_owner,$OBMYSQL_MS0,maintenance_authz_owner,,maintenance_authz_db,$OBMYSQL_PORT);
+SELECT CURRENT_USER() AS actor;
+CALL DBMS_STATS.SET_TABLE_PREFS('maintenance_authz_db', 't_stats', 'STALE_PERCENT', '10');
+SELECT DBMS_STATS.GET_PREFS('STALE_PERCENT', 'maintenance_authz_db', 't_stats') AS stale_percent;
+CALL DBMS_VECTOR.REFRESH_INDEX('maintenance_authz_db.v_idx', 'maintenance_authz_db.t_vector', 'embedding', 100000, 'FAST');
+connection default;
+SELECT /*+ INDEX(t_vector v_idx) */ id FROM maintenance_authz_db.t_vector
+ORDER BY l2_distance(embedding, '[1,0,0]') APPROXIMATE LIMIT 1;
+connect (maintenance_caller,$OBMYSQL_MS0,maintenance_authz_caller,,maintenance_authz_db,$OBMYSQL_PORT);
+SELECT CURRENT_USER() AS actor;
+# A rejected write of 40 must leave the owner value 10 unchanged.
+--error 1142
+CALL DBMS_STATS.SET_TABLE_PREFS('maintenance_authz_db', 't_stats', 'STALE_PERCENT', '40');
+connection default;
+SELECT DBMS_STATS.GET_PREFS('STALE_PERCENT', 'maintenance_authz_db', 't_stats') AS stale_percent;
+connection maintenance_caller;
+--error 1142
+CALL DBMS_VECTOR.REFRESH_INDEX('maintenance_authz_db.v_idx', 'maintenance_authz_db.t_vector', 'embedding', 100000, 'FAST');
+connection default;
+SELECT /*+ INDEX(t_vector v_idx) */ id FROM maintenance_authz_db.t_vector
+ORDER BY l2_distance(embedding, '[1,0,0]') APPROXIMATE LIMIT 1;
+connection maintenance_caller;
+CALL maintenance_authz_db.stats_definer();
+connection default;
+SELECT DBMS_STATS.GET_PREFS('STALE_PERCENT', 'maintenance_authz_db', 't_stats') AS stale_percent;
+connection maintenance_caller;
+CALL maintenance_authz_db.vector_definer();
+connection default;
+SELECT /*+ INDEX(t_vector v_idx) */ id FROM maintenance_authz_db.t_vector
+ORDER BY l2_distance(embedding, '[1,0,0]') APPROXIMATE LIMIT 1;
+connection maintenance_caller;
+# The invoker wrapper tries 30; rejected maintenance must retain the definer value 20.
+--error 1142
+CALL maintenance_authz_db.stats_invoker();
+connection default;
+SELECT DBMS_STATS.GET_PREFS('STALE_PERCENT', 'maintenance_authz_db', 't_stats') AS stale_percent;
+connection maintenance_caller;
+--error 1142
+CALL maintenance_authz_db.vector_invoker();
+connection default;
+SELECT /*+ INDEX(t_vector v_idx) */ id FROM maintenance_authz_db.t_vector
+ORDER BY l2_distance(embedding, '[1,0,0]') APPROXIMATE LIMIT 1;
+disconnect maintenance_owner;
+disconnect maintenance_caller;
+# DROP DATABASE may retain routines in the recycle bin; remove definer references first.
+DROP PROCEDURE maintenance_authz_db.stats_definer;
+DROP PROCEDURE maintenance_authz_db.stats_invoker;
+DROP PROCEDURE maintenance_authz_db.vector_definer;
+DROP PROCEDURE maintenance_authz_db.vector_invoker;
+SELECT COUNT(*) AS routines_remaining FROM information_schema.ROUTINES
+WHERE ROUTINE_SCHEMA = 'maintenance_authz_db';
+DROP DATABASE maintenance_authz_db;
+DROP USER 'maintenance_authz_owner'@'%';
+DROP USER 'maintenance_authz_caller'@'%';

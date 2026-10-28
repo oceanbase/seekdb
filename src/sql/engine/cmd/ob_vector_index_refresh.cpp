@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "sql/engine/cmd/ob_vector_index_refresh.h"
 #include "sql/ob_sql_utils.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"

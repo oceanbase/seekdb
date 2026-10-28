@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_schema_struct.h"
 #include "share/system_variable/ob_system_variable_alias.h"  // OB_SV_READ_ONLY, previously hidden behind a removed sql include chain, make the dependency explicit
 #include "share/ob_timezone_mgr.h"

@@ -1,0 +1,21 @@
+# Regression for #1477: eliminating NOT pairs must preserve the operand type
+# expected by IFNULL, including casts already added to its scalar subquery.
+SELECT 1 FROM dual WHERE IFNULL((SELECT FALSE), !(!(1 LIKE 'x')));
+
+# Control cases from the issue.
+SELECT 1 FROM dual WHERE IFNULL((SELECT FALSE), !(1 LIKE 'x'));
+SELECT 1 FROM dual WHERE IFNULL(FALSE, !(!(1 LIKE 'x')));
+
+# Exercise both IFNULL branches and SQL three-valued boolean semantics.
+SELECT 1 FROM dual WHERE IFNULL((SELECT TRUE), !(!(1 LIKE 'x')));
+SELECT 1 FROM dual WHERE IFNULL((SELECT NULL), !(!(1 LIKE '1')));
+SELECT 1 FROM dual WHERE IFNULL((SELECT NULL), !(!(1 LIKE 'x')));
+SELECT IFNULL((SELECT NULL), !(!(NULL LIKE 'x'))) AS value;
+SELECT IFNULL((SELECT NULL), !(!(!(!(1 LIKE '1'))))) AS value;
+
+# A non-boolean operand still needs boolean conversion after removing NOTs.
+SELECT IFNULL((SELECT NULL), !(!(2))) AS value;
+
+# IFNULL's first argument also has a NOT-pair simplification path.
+SELECT IFNULL(!(!(1 LIKE '1')), (SELECT FALSE)) AS value;
+SELECT IFNULL(!(!(NULL LIKE 'x')), (SELECT TRUE)) AS value;

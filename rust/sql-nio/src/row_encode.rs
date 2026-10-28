@@ -14,10 +14,6 @@
 
 use crate::*;
 
-pub const NIO_FRAME_ERROR: c_int = -1;
-pub const NIO_FRAME_OK: c_int = 0;
-pub const NIO_FRAME_NEED_MORE: c_int = 1;
-
 pub(crate) unsafe fn clear_framed_len(framed_len: *mut i64) {
     if !framed_len.is_null() {
         unsafe { framed_len.write(0) };
@@ -532,8 +528,7 @@ pub(crate) unsafe fn encode_mysql_field(
 ///
 /// `row_view`, its cell array, and all non-empty byte views must remain
 /// readable and immutable for this call. None may overlap `buffer`.
-#[no_mangle]
-pub unsafe extern "C" fn nio_encode_mysql_packed_row_blob(
+pub unsafe fn nio_encode_mysql_packed_row_blob(
     buffer: *mut c_char,
     buffer_len: i64,
     row_view: *const NioMysqlRowView,

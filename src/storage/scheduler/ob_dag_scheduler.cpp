@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "share/ob_server_struct.h"
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "data_plane/scheduler/ob_dag_scheduler.h"
 #include "data_plane/scheduler/ob_sys_task_stat.h"
 #include "share/rc/ob_server_runtime.h"

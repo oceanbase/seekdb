@@ -266,7 +266,7 @@ pub(crate) struct Conn {
 }
 
 impl Conn {
-    pub(crate) fn sess(&self) -> *mut c_void {
+    pub(crate) fn sess(&self) -> *mut ObSqlSockSession {
         self.session_storage.as_ptr()
     }
 
@@ -407,8 +407,7 @@ pub(crate) fn consume_input(buf: &mut Vec<u8>, pos: &mut usize, amount: usize) {
 
 /// # Safety
 /// `sess` is a live C++ session pointer.
-#[no_mangle]
-pub unsafe extern "C" fn nio_set_shutdown(sess: *mut c_void, generation: u64) -> c_int {
+pub unsafe fn nio_set_shutdown(sess: *mut ObSqlSockSession, generation: u64) -> c_int {
     if let Some(conn) = conn_of(sess) {
         let g = conn.mu.lock().unwrap();
         let still_owned = match g.final_response {
@@ -430,8 +429,7 @@ pub unsafe extern "C" fn nio_set_shutdown(sess: *mut c_void, generation: u64) ->
 
 /// # Safety
 /// `sess` is a live C++ session pointer.
-#[no_mangle]
-pub unsafe extern "C" fn nio_shutdown(sess: *mut c_void) {
+pub unsafe fn nio_shutdown(sess: *mut ObSqlSockSession) {
     if let Some(conn) = conn_of(sess) {
         publish_shutdown(&conn);
         let mut g = conn.mu.lock().unwrap();
@@ -444,8 +442,7 @@ pub unsafe extern "C" fn nio_shutdown(sess: *mut c_void) {
 
 /// # Safety
 /// `sess` is a live C++ session pointer.
-#[no_mangle]
-pub unsafe extern "C" fn nio_bind_sql_session(sess: *mut c_void) {
+pub unsafe fn nio_bind_sql_session(sess: *mut ObSqlSockSession) {
     if let Some(conn) = conn_of(sess) {
         conn.max_packet_size
             .store(MAX_LOGICAL_PAYLOAD, Ordering::Release);
@@ -455,8 +452,7 @@ pub unsafe extern "C" fn nio_bind_sql_session(sess: *mut c_void) {
 
 /// # Safety
 /// `sess` is a live C++ session pointer.
-#[no_mangle]
-pub unsafe extern "C" fn nio_release_sql_session(sess: *mut c_void) -> c_int {
+pub unsafe fn nio_release_sql_session(sess: *mut ObSqlSockSession) -> c_int {
     if let Some(conn) = conn_of_live_or_retired(sess) {
         conn.sql_session_bound.store(false, Ordering::Release);
         let _ = conn.waker.wake();

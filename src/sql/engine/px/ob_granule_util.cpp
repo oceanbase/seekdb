@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_EXE
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_granule_util.h"
 #include "data_plane/access/ob_parallel_range_task_planner.h"
 #include "share/config/ob_server_config.h"

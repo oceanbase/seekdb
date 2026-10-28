@@ -21,6 +21,8 @@
 #include "sql/rewrite/ob_equal_analysis.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/resolver/dml/ob_select_resolver.h"
+#include "sql/resolver/dml/ob_delete_stmt.h"
+#include "sql/resolver/dml/ob_update_stmt.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
 #include "sql/rewrite/ob_expand_aggregate_utils.h"
 #include "sql/ob_sql_utils.h"

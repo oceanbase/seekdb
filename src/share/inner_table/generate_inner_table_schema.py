@@ -1430,7 +1430,7 @@ def generate_unified_local_virtual_table_cpp():
     f.write('#include "lib/oblog/ob_log.h"\n')
     f.write('#include "lib/time/ob_time_utility.h"\n')
     f.write('#include "lib/utility/ob_print_utils.h"\n')
-    f.write('#include \"config_bridge.h\"\n\n')
+    f.write('#include \"rust/config.h\"\n\n')
     f.write('#include <string_view>\n')
     f.write('#include "share/inner_table/local_table_schema.h"\n')
     f.write('namespace oceanbase\n')

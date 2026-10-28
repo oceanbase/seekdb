@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 #define PRINT_TS_WRAPPER(x) (ObPrintTableStore(*(x.get_member())))
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_partition_merge_policy.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/compaction/ob_compaction_progress.h"

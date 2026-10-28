@@ -17,7 +17,7 @@
 #ifndef _OB_OPTIMIZER_CONTEXT_H
 #define _OB_OPTIMIZER_CONTEXT_H 1
 #include "share/rc/ob_server_runtime.h"
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"

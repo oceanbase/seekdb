@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "observer/virtual_table/ob_all_virtual_server.h"
 #include "share/rc/ob_server_runtime.h"
 

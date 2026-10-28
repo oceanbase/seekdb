@@ -17,7 +17,7 @@
 #ifndef OCEANBAE_LIB_OB_TRUNCATED_STRING_H_
 #define OCEANBAE_LIB_OB_TRUNCATED_STRING_H_
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "lib/string/ob_string.h"
 #include "share/config/ob_server_config.h"
 

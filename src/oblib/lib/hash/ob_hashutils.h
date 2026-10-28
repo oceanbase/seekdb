@@ -139,7 +139,12 @@ public:
       destroy_hash_sync(value_);
     }
   }
-  T &get() { return value_; }
+  bool is_initialized() const { return initialized_; }
+  T &get()
+  {
+    abort_unless(initialized_);
+    return value_;
+  }
 private:
   T value_;
   bool initialized_;
@@ -1455,6 +1460,10 @@ public:
   int reserve(int64_t node_num)
   {
     int ret = OB_SUCCESS;
+    if (!lock_.is_initialized()) {
+      HASH_WRITE_LOG_RET(HASH_WARNING, OB_NOT_INIT, "allocator lock is not initialized");
+      return OB_NOT_INIT;
+    }
     mutexlocker locker(lock_.get());
     int needed = node_num / NODE_NUM;
     while (nblocks_ > needed) {
@@ -1481,6 +1490,10 @@ public:
   T *alloc(TYPES&... args)
   {
     T *ret = NULL;
+    if (!lock_.is_initialized()) {
+      HASH_WRITE_LOG_RET(HASH_WARNING, OB_NOT_INIT, "allocator lock is not initialized");
+      return NULL;
+    }
     mutexlocker locker(lock_.get());
     if (NULL != block_free_list_) {
       Block *block = block_free_list_;
@@ -1526,6 +1539,10 @@ public:
   }
   void free(T *data)
   {
+    if (!lock_.is_initialized()) {
+      HASH_WRITE_LOG_RET(HASH_WARNING, OB_NOT_INIT, "allocator lock is not initialized");
+      return;
+    }
     mutexlocker locker(lock_.get());
     if (NULL == data) {
       HASH_WRITE_LOG_RET(HASH_WARNING, OB_INVALID_ARGUMENT, "invalid param null pointer");

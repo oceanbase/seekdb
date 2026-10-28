@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_OPT
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_logical_operator.h"
 #include "sql/engine/ob_operator_factory.h"
 #include "sql/rewrite/ob_transform_utils.h"

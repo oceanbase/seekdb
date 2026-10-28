@@ -44,7 +44,7 @@ Build the existing C++ tests on Linux without running them:
 
 See [Writing and running unit tests](docs/developer-guide/en/unittest.md) for target discovery and Google Test filtering.
 
-Run the affected mysqltest cases when a change alters SQL or server behavior. See [Running mysqltest](docs/developer-guide/en/mysqltest.md) for the current `obd.sh` workflow.
+Run the affected mysqltest cases when a change alters SQL or server behavior. See [Running mysqltest](docs/developer-guide/en/mysqltest.md) for case selection, local execution, and recording expected results.
 
 ## Prepare the change
 

@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SHARE
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "data_plane/transaction/ob_transaction_isolation.h"
 #include "ob_system_variable.h"
 #include "share/config/ob_config_helper.h"

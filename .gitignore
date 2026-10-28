@@ -178,12 +178,9 @@ tools/deploy/run/
 tools/deploy/server.list
 tools/deploy/server_list
 tools/deploy/tools
-tools/deploy/.obd
 tools/deploy/distributed-with-proxy.yaml
 tools/deploy/distributed.yaml
-tools/deploy/obd_profile.sh
 tools/deploy/single-with-proxy.yaml
-tools/deploy/single.yaml
 tools/deploy/bmsqlobp_test.yaml
 tools/deploy/oci_test.yaml
 tools/deploy/mirror_create

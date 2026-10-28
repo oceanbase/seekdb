@@ -21,6 +21,7 @@ filegroup(
     name = "archive_files",
     srcs = [
         "devtools/bin/llvm-ar",
+        "devtools/bin/llvm-nm",
         "devtools/bin/llvm-ranlib",
     ],
 )

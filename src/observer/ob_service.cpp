@@ -18,7 +18,7 @@
 
 
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/time/ob_time_utility.h"
 #include "ob_service.h"

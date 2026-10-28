@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_storage_object_handle.h"
 #include "storage/blocksstable/ob_block_manager.h"
 #include "share/ob_io_device_helper.h"

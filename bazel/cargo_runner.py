@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import shlex
 import shutil
 import subprocess
 import tarfile
@@ -18,6 +19,8 @@ parser.add_argument("--sources", required=True)
 parser.add_argument("--target", default="")
 parser.add_argument("--cc", required=True)
 parser.add_argument("--ar", required=True)
+parser.add_argument("--ld")
+parser.add_argument("--nm")
 parser.add_argument("command", nargs=argparse.REMAINDER)
 args = parser.parse_args()
 work = Path(args.work_dir).absolute()
@@ -59,7 +62,7 @@ environment.update({
     "HOME": str(home), "USERPROFILE": str(home),
     "CARGO_HOME": str(cargo_home), "CARGO_NET_OFFLINE": "true",
     "CARGO": str(cargo), "RUSTC": str(rustc),
-    "CARGO_WORKSPACE": str(workspace),
+    "CARGO_WORKSPACE": str(workspace), "CARGO_VENDOR": str(vendor),
     "CARGO_TARGET_DIR": str(work / "target"),
 })
 if os.name != "nt":
@@ -74,7 +77,7 @@ environment["PYTHONHOME"] = str(Path(environment["PYTHONHOME"]).absolute())
 target = args.target
 if not target:
     environment.update({"CC": str(cc), "CXX": str(cc), "AR": str(ar)})
-    version = subprocess.check_output([str(rustc), "-vV"], text=True)
+    version = subprocess.check_output([str(rustc), "-vV"], universal_newlines=True)
     target = next(line.split(": ", 1)[1] for line in version.splitlines() if line.startswith("host: "))
 if target:
     target = target.replace("-", "_")
@@ -84,9 +87,23 @@ if target:
     # MSVC Rust targets use link.exe syntax, not the C compiler's syntax.
     if not target.endswith("_msvc"):
         environment["CARGO_TARGET_" + target.upper() + "_LINKER"] = str(cc)
+if args.ld:
+    # Rust links and nested Autoconf probes must use Bazel's selected linker.
+    link_arg = "--ld-path=" + str(Path(args.ld).absolute())
+    encoded = environment.get("CARGO_ENCODED_RUSTFLAGS")
+    if encoded is None:
+        rustflags = shlex.split(environment.get(
+            "RUSTFLAGS", environment.get("CARGO_TARGET_" + target.upper() + "_RUSTFLAGS", "")))
+    else:
+        rustflags = encoded.split("\x1f") if encoded else []
+    environment["CARGO_ENCODED_RUSTFLAGS"] = "\x1f".join(rustflags + ["-C", "link-arg=" + link_arg])
+    environment["LDFLAGS"] = " ".join(shlex.quote(argument) for argument in shlex.split(environment.get("LDFLAGS", "")) + [link_arg])
+    environment["RANLIB"] = " ".join(shlex.quote(argument) for argument in [str(ar), "s"])
+if args.nm:
+    environment["NM"] = str(Path(args.nm).absolute())
 command = args.command[1:] if args.command[:1] == ["--"] else args.command
 for index, argument in enumerate(command):
-    for key in ("CARGO_WORKSPACE", "CARGO_TARGET_DIR", "CARGO"):
+    for key in ("CARGO_WORKSPACE", "CARGO_TARGET_DIR", "CARGO", "CARGO_VENDOR"):
         argument = argument.replace("${" + key + "}", environment[key])
     command[index] = argument
 status = subprocess.call(command, env=environment)

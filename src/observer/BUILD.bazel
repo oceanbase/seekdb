@@ -363,6 +363,7 @@ filegroup(
 )
 
 _CORE_LINK_DEPS = [
+    "//rust:bridges",
     "//src/oblib:ob_malloc_objects",
     ":observer_version",
     "//src/sql:sql_runtime_simd",
@@ -398,8 +399,7 @@ _TAIL_LINK_DEPS = select({
 ]
 
 _ORDERED_LINK_FILES = [
-    "//rust:sql_nio_archive",
-    "//rust:config_archive",
+    "//rust:archive",
 ] + select({
     "//bazel:sanity_enabled": ["//deps/external:jemalloc_archive"],
     "//conditions:default": [],
@@ -504,6 +504,13 @@ alias(
 )
 
 cc_library(
+    name = "in_process_api",
+    srcs = ["in_process/seekdb.cpp"],
+    hdrs = ["in_process/seekdb.h"],
+    deps = ["//rust:in_process_headers"],
+)
+
+cc_library(
     name = "_unittest_in_process_entry",
     testonly = True,
     srcs = ["in_process/in_process_server.cpp"],
@@ -541,7 +548,7 @@ final_link(
     ) + select({
         # The shared test runtime retains the Rust in-process bridge, including
         # its reference to run_server. Supply the real implementation on Linux.
-        "@platforms//os:linux": [":_unittest_in_process_entry"],
+        "@platforms//os:linux": [":_unittest_in_process_entry", ":in_process_api"],
         "//conditions:default": [],
     }),
     ordered_link_files = _ORDERED_LINK_FILES,

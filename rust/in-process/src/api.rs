@@ -12,51 +12,54 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::cell::RefCell;
-use std::ffi::{c_char, c_int, c_uint, c_void, CStr, CString};
+use std::ffi::CString;
 use std::fs;
 use std::mem;
 use std::os::unix::fs::symlink;
-use std::ptr;
+use std::str;
 
+use crate::bridge::ffi::{OpenCode, Parameter};
 use crate::engine::{self, StartError};
 use crate::parameters;
 use crate::platform;
 
-use SeekdbReturnCode::{SEEKDB_INTERNAL_ERROR, SEEKDB_INVALID_ARGUMENT, SEEKDB_SUCCESS};
-
 const ALIAS_SOCKET: &str = "/r/sql.sock";
 
-pub type SeekdbHandle = *mut c_void;
+pub struct OpenResult(Result<Connection, StartError>);
 
-#[repr(C)]
-#[allow(non_camel_case_types)]
-pub enum SeekdbReturnCode {
-    SEEKDB_SUCCESS = 0,
-    SEEKDB_INTERNAL_ERROR = -1,
-    SEEKDB_INVALID_ARGUMENT = -2,
-    SEEKDB_NO_MORE_ROWS = -3,
+impl OpenResult {
+    pub fn status(&self) -> OpenCode {
+        match &self.0 {
+            Ok(_) => OpenCode::Success,
+            Err(StartError::InvalidArgument(_)) => OpenCode::InvalidArgument,
+            Err(StartError::Internal(_)) => OpenCode::InternalError,
+        }
+    }
+
+    pub fn error(&self) -> &str {
+        match &self.0 {
+            Ok(_) => "",
+            Err(StartError::InvalidArgument(message) | StartError::Internal(message)) => message,
+        }
+    }
+
+    pub fn socket_path(&self) -> &[u8] {
+        match &self.0 {
+            Ok(connection) => connection.socket_path.as_bytes_with_nul(),
+            Err(_) => &[],
+        }
+    }
 }
 
-#[repr(C)]
-pub struct SeekdbConnectionOptions {
-    pub transport: *const c_char,
-    pub port: c_uint,
-    pub host: *const c_char,
-    pub unix_socket: *const c_char,
-    pub named_pipe: *const c_char,
-    pub user: *const c_char,
-}
-
-struct Handle {
+struct Connection {
     socket_path: CString,
     alias_directory: Option<String>,
 }
 
-impl Handle {
-    fn new(engine_socket: &str, alias_patterns: &[String]) -> Option<Handle> {
+impl Connection {
+    fn new(engine_socket: &str, alias_patterns: &[String]) -> Option<Connection> {
         if engine_socket.len() < sun_path_capacity() {
-            return Some(Handle {
+            return Some(Connection {
                 socket_path: CString::new(engine_socket).ok()?,
                 alias_directory: None,
             });
@@ -65,7 +68,7 @@ impl Handle {
             .iter()
             .filter(|pattern| pattern.len() + ALIAS_SOCKET.len() < sun_path_capacity())
             .find_map(|pattern| make_temporary_directory(pattern))?;
-        let mut handle = Handle {
+        let mut handle = Connection {
             socket_path: CString::default(),
             alias_directory: Some(alias_directory.clone()),
         };
@@ -78,7 +81,7 @@ impl Handle {
     }
 }
 
-impl Drop for Handle {
+impl Drop for Connection {
     fn drop(&mut self) {
         if let Some(directory) = &self.alias_directory {
             let _ = fs::remove_file(format!("{directory}/r"));
@@ -100,113 +103,35 @@ fn make_temporary_directory(pattern: &str) -> Option<String> {
     String::from_utf8(template).ok()
 }
 
-thread_local! {
-    static LAST_OPEN_ERROR: RefCell<CString> = RefCell::new(CString::default());
-}
-
-fn set_last_open_error(message: &str) {
-    LAST_OPEN_ERROR.with(|error| *error.borrow_mut() = CString::new(message).unwrap_or_default());
-}
-
-fn open_failed(code: SeekdbReturnCode, message: &str) -> c_int {
-    set_last_open_error(message);
-    code as c_int
-}
-
-unsafe fn read_parameters(
-    parameters: *const *const c_char,
-) -> Result<Vec<(String, String)>, &'static str> {
+fn read_parameters(parameters: &[Parameter]) -> Result<Vec<(String, String)>, &'static str> {
     let mut pairs = Vec::new();
-    if parameters.is_null() {
-        return Ok(pairs);
-    }
-    let mut index = 0;
-    while !(*parameters.add(index)).is_null() {
-        let key = CStr::from_ptr(*parameters.add(index));
-        let value = *parameters.add(index + 1);
-        if key.to_bytes().is_empty() || value.is_null() {
+    for parameter in parameters {
+        if parameter.key.is_empty() {
             return Err("parameters must be key/value pairs with non-empty keys");
         }
-        let (Ok(key), Ok(value)) = (key.to_str(), CStr::from_ptr(value).to_str()) else {
+        let (Ok(key), Ok(value)) = (
+            str::from_utf8(&parameter.key),
+            str::from_utf8(&parameter.value),
+        ) else {
             return Err("parameters must be valid UTF-8");
         };
         parameters::check(key, value)?;
         pairs.push((key.to_owned(), value.to_owned()));
-        index += 2;
     }
     Ok(pairs)
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn seekdb_open(
-    db_dir: *const c_char,
-    parameters: *mut *const c_char,
-    out_handle: *mut SeekdbHandle,
-) -> c_int {
-    set_last_open_error("");
-    if out_handle.is_null() {
-        return open_failed(SEEKDB_INVALID_ARGUMENT, "out_handle must not be NULL");
-    }
-    *out_handle = ptr::null_mut();
-    let pairs = match read_parameters(parameters) {
-        Ok(pairs) => pairs,
-        Err(message) => return open_failed(SEEKDB_INVALID_ARGUMENT, message),
-    };
-    let directory = if db_dir.is_null() {
-        None
-    } else {
-        match CStr::from_ptr(db_dir).to_str() {
-            Ok(directory) => Some(directory),
-            Err(_) => {
-                return open_failed(SEEKDB_INVALID_ARGUMENT, "the directory must be valid UTF-8")
-            }
-        }
-    };
+pub fn open(directory: &[u8], parameters: &[Parameter]) -> Box<OpenResult> {
+    Box::new(OpenResult(open_connection(directory, parameters)))
+}
+
+fn open_connection(directory: &[u8], parameters: &[Parameter]) -> Result<Connection, StartError> {
+    let pairs = read_parameters(parameters).map_err(StartError::InvalidArgument)?;
+    let directory = str::from_utf8(directory)
+        .map_err(|_| StartError::InvalidArgument("the directory must be valid UTF-8"))?;
     let startup = parameters::startup();
     let initial = parameters::initial(&pairs, &startup);
-    match engine::start(directory, startup, initial) {
-        Err(StartError::InvalidArgument(message)) => open_failed(SEEKDB_INVALID_ARGUMENT, message),
-        Err(StartError::Internal(message)) => open_failed(SEEKDB_INTERNAL_ERROR, message),
-        Ok(socket_path) => match Handle::new(&socket_path, &platform::socket_alias_patterns()) {
-            Some(handle) => {
-                *out_handle = Box::into_raw(Box::new(handle)).cast();
-                SEEKDB_SUCCESS as c_int
-            }
-            None => open_failed(SEEKDB_INTERNAL_ERROR, "cannot prepare the Unix socket path"),
-        },
-    }
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn seekdb_connection_options(
-    handle: SeekdbHandle,
-    out_options: *mut SeekdbConnectionOptions,
-) -> c_int {
-    if handle.is_null() || out_options.is_null() {
-        return SEEKDB_INVALID_ARGUMENT as c_int;
-    }
-    let handle = &*handle.cast::<Handle>();
-    out_options.write(SeekdbConnectionOptions {
-        transport: c"unix_socket".as_ptr(),
-        port: 0,
-        host: ptr::null(),
-        unix_socket: handle.socket_path.as_ptr(),
-        named_pipe: ptr::null(),
-        user: c"root".as_ptr(),
-    });
-    SEEKDB_SUCCESS as c_int
-}
-
-#[no_mangle]
-pub extern "C" fn seekdb_last_open_error() -> *const c_char {
-    LAST_OPEN_ERROR.with(|error| error.borrow().as_ptr())
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn seekdb_close(handle: SeekdbHandle) -> c_int {
-    if handle.is_null() {
-        return SEEKDB_INVALID_ARGUMENT as c_int;
-    }
-    drop(Box::from_raw(handle.cast::<Handle>()));
-    SEEKDB_SUCCESS as c_int
+    let socket_path = engine::start(Some(directory), startup, initial)?;
+    Connection::new(&socket_path, &platform::socket_alias_patterns())
+        .ok_or(StartError::Internal("cannot prepare the Unix socket path"))
 }

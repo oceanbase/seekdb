@@ -71,6 +71,10 @@ jobs:
           git -C "$GITHUB_WORKSPACE" checkout --force --detach FETCH_HEAD
           git -C "$GITHUB_WORKSPACE" clean -ffdx
 
+      - name: Test local development tools
+        shell: bash
+        run: python3 -m unittest discover -s tools/deploy/tests -v
+
       # Source 与 run_attempt 无关：下游 job 重跑时直接复用同一提交的快照。
       - name: Persist source snapshot to NFS
         shell: bash
@@ -99,15 +103,6 @@ jobs:
             echo "RUSTUP_HOME=$CACHE_ROOT/rustup/$RUST_CONFIG"
           } >> "$GITHUB_ENV"
           echo "$CACHE_ROOT/cargo/bin" >> "$GITHUB_PATH"
-
-      - name: Setup Rust
-        uses: ./.github/actions/setup-rust
-        with:
-          cache: 'false'
-        env:
-          RUSTUP_INIT_URL: https://rsproxy.cn/rustup-init.sh
-          RUSTUP_DIST_SERVER: https://rsproxy.cn
-          RUSTUP_UPDATE_ROOT: https://rsproxy.cn/rustup
 
       - name: Compile
         id: compile
@@ -277,7 +272,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          python3 .github/script/seekdb/mysqltest_for_seekdb.py merge \
+          python3 tools/deploy/mysqltest.py merge \
             --results-dir slice_results \
             --slice-count "${{ env.MYSQLTEST_SLICES }}" \
             --run-id "${{ github.run_id }}" \

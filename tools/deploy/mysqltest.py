@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run and merge SeekDB mysqltest slices without OBD."""
+"""Run local SeekDB mysqltest cases and merge CI slice results."""
 
 from __future__ import print_function
 
@@ -14,6 +14,8 @@ import subprocess
 import sys
 import time
 
+import sdb
+
 
 CASE_TIMEOUT = 3600
 MAX_CASE_RETRIES = 3
@@ -21,6 +23,7 @@ READY_TIMEOUT = 600
 MYSQLTEST_USER = "admin"
 MYSQLTEST_PASSWORD = "admin"
 MYSQLTEST_DATABASE = "test"
+REPO_ROOT = Path(__file__).resolve().parents[2]
 RESULT_MISMATCH_MESSAGES = (
     "Result content mismatch",
     "Result length mismatch",
@@ -143,6 +146,7 @@ def execute_init_sql(obclient, host, port, deploy_dir):
                 result = subprocess.run(
                     command,
                     cwd=str(deploy_dir),
+                    env=sdb.client_environment(obclient),
                     stdin=sql_input,
                     check=False,
                 )
@@ -156,17 +160,20 @@ def execute_init_sql(obclient, host, port, deploy_dir):
 
 def prepare_instance(args, repo_root, sdb_script, deploy_dir):
     destroy_instance(sdb_script, args.base_dir, repo_root)
+    start_arguments = [
+        "--binary",
+        args.seekdb,
+        "--base-dir",
+        args.base_dir,
+        "--port",
+        args.port,
+    ]
+    for parameter in args.parameter:
+        start_arguments.extend(("--parameter", parameter))
     run_sdb(
         sdb_script,
         "start",
-        (
-            "--binary",
-            args.seekdb,
-            "--base-dir",
-            args.base_dir,
-            "--port",
-            args.port,
-        ),
+        start_arguments,
         "start seekdb",
         repo_root,
     )
@@ -246,7 +253,12 @@ def load_excluded_case_names(config_path):
     return case_names
 
 
-def discover_cases(repo_root):
+def selection_values(values):
+    return {item.strip() for value in values for item in value.split(",") if item.strip()}
+
+
+def discover_cases(repo_root, suites=(), test_set=(), include_excluded=False,
+                   check_results=True):
     config_path = repo_root / "tools" / "deploy" / "mysqltest_config.yaml"
     mysql_test_dir = repo_root / "tools" / "deploy" / "mysql_test"
     test_dir = mysql_test_dir / "t"
@@ -287,7 +299,40 @@ def discover_cases(repo_root):
             )
         )
 
-    case_names = [name for name in available_cases if name not in excluded_cases]
+    suites = selection_values(suites)
+    requested_cases = selection_values(test_set)
+    known_suites = {case.test_file.parent.parent.name for case in available_cases.values()
+                    if case.test_file.parent.parent.parent == suite_dir}
+    unknown_suites = sorted(suites - known_suites)
+    if unknown_suites:
+        raise RunnerError("unknown mysqltest suites: {}".format(", ".join(unknown_suites)))
+    candidates = {
+        name: case for name, case in available_cases.items()
+        if not suites or (case.test_file.parent.parent.parent == suite_dir
+                          and case.test_file.parent.parent.name in suites)
+    }
+    if requested_cases:
+        selected = set()
+        for requested in sorted(requested_cases):
+            matches = ([requested] if requested in candidates else
+                       [name for name, case in candidates.items()
+                        if case.test_file.stem == requested])
+            if not matches:
+                raise RunnerError("unknown mysqltest case: {}".format(requested))
+            if len(matches) > 1:
+                raise RunnerError("ambiguous mysqltest case {}: {}; use suite.case".format(
+                    requested, ", ".join(sorted(matches))))
+            selected.update(matches)
+        candidates = {name: case for name, case in candidates.items() if name in selected}
+    if not include_excluded:
+        explicitly_excluded = requested_cases and sorted(set(candidates) & excluded_cases)
+        if explicitly_excluded:
+            raise RunnerError("selected mysqltest cases are excluded: {}; "
+                              "use --include-excluded to run them".format(
+                                  ", ".join(explicitly_excluded)))
+        candidates = {name: case for name, case in candidates.items()
+                      if name not in excluded_cases}
+    case_names = list(candidates)
     if not case_names:
         raise RunnerError(
             "no mysqltest cases left after applying exclude-set in {}".format(
@@ -295,7 +340,8 @@ def discover_cases(repo_root):
             )
         )
     missing_results = [
-        name for name in case_names if not available_cases[name].result_file.is_file()
+        name for name in case_names
+        if check_results and not available_cases[name].result_file.is_file()
     ]
     if missing_results:
         raise RunnerError(
@@ -303,13 +349,11 @@ def discover_cases(repo_root):
                 ", ".join(missing_results)
             )
         )
-    return [available_cases[name] for name in case_names]
+    return [candidates[name] for name in case_names]
 
 
 def mysqltest_environment(args):
-    environment = os.environ.copy()
-    client_bin = str(args.obclient.parent)
-    environment["PATH"] = client_bin + os.pathsep + environment.get("PATH", "")
+    environment = sdb.client_environment(args.obclient)
     environment.update(
         {
             "OBMYSQL_PORT": str(args.port),
@@ -341,6 +385,9 @@ def run_case(args, deploy_dir, case, tmp_dir, log_dir):
         "--timer-file={}".format(log_dir / "timer"),
         "--tail-lines=20",
     ]
+    if args.record:
+        case.result_file.parent.mkdir(parents=True, exist_ok=True)
+        command.append("--record")
     case_name = case.name
     reject_file = log_dir / (case.result_file.stem + ".reject")
     try:
@@ -474,7 +521,7 @@ def write_json(path, payload):
 
 
 def command_run(args):
-    repo_root = Path(__file__).resolve().parents[3]
+    repo_root = REPO_ROOT
     deploy_dir = repo_root / "tools" / "deploy"
     sdb_script = Path(__file__).resolve().with_name("sdb.py")
     args.seekdb = absolute_path(args.seekdb)
@@ -487,11 +534,19 @@ def command_run(args):
     selected_cases = []
     failed_cases = []
     error = None
+    instance_prepared = False
     args.work_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        all_cases = discover_cases(repo_root)
+        all_cases = discover_cases(
+            repo_root, args.suite, args.test_set, args.include_excluded,
+            check_results=not args.record,
+        )
         selected_cases = all_cases[args.slice_index :: args.slice_count]
+        for executable in (args.seekdb, args.obclient, args.mysqltest):
+            if not executable.is_file() or not os.access(str(executable), os.X_OK):
+                raise RunnerError("missing or non-executable binary: {}".format(executable))
+        instance_prepared = True
         prepare_instance(args, repo_root, sdb_script, deploy_dir)
         tmp_dir = args.work_dir / "tmp"
         log_dir = args.work_dir / "mysqltest_log"
@@ -501,7 +556,8 @@ def command_run(args):
         for index, case in enumerate(selected_cases):
             return_code = None
             output = ""
-            for retry_index in range(MAX_CASE_RETRIES + 1):
+            retries = 0 if args.record else MAX_CASE_RETRIES
+            for retry_index in range(retries + 1):
                 if retry_index > 0:
                     print(
                         "[ RETRY   ] {} ({}/{})".format(
@@ -533,9 +589,9 @@ def command_run(args):
                 file=sys.stderr,
             )
     finally:
-        cleanup_error = destroy_instance(
+        cleanup_error = (destroy_instance(
             sdb_script, args.base_dir, repo_root, check=False
-        )
+        ) if instance_prepared else None)
         if cleanup_error:
             error = "{}; {}".format(error, cleanup_error) if error else cleanup_error
 
@@ -570,7 +626,7 @@ def unique(items):
 
 
 def command_merge(args):
-    repo_root = Path(__file__).resolve().parents[3]
+    repo_root = REPO_ROOT
     results_dir = absolute_path(args.results_dir)
     output_path = absolute_path(args.output)
     failed_cases = []
@@ -657,20 +713,52 @@ def positive_int(value):
     return number
 
 
+def command_list(args):
+    try:
+        for case in discover_cases(REPO_ROOT, args.suite, args.test_set,
+                                   args.include_excluded, check_results=False):
+            print(case.name)
+    except RunnerError as exc:
+        print("[mysqltest][ERROR] {}".format(exc), file=sys.stderr)
+        return 1
+    return 0
+
+
+def add_selection_arguments(parser):
+    parser.add_argument("--suite", action="append", default=[],
+                        help="suite names, comma-separated or repeated")
+    parser.add_argument("--test-set", action="append", default=[],
+                        help="case names (prefer suite.case), comma-separated or repeated")
+    parser.add_argument("--include-excluded", action="store_true",
+                        help="include cases disabled in mysqltest_config.yaml")
+
+
 def create_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command")
 
-    run = subparsers.add_parser("run", help="run one mysqltest slice")
-    run.add_argument("--seekdb", required=True, help="seekdb executable")
-    run.add_argument("--obclient", required=True, help="obclient executable")
-    run.add_argument("--mysqltest", required=True, help="mysqltest executable")
+    listing = subparsers.add_parser("list", help="list cases without starting an instance")
+    add_selection_arguments(listing)
+    listing.set_defaults(handler=command_list)
+
+    run = subparsers.add_parser("run", help="run mysqltest cases in a disposable instance")
+    add_selection_arguments(run)
+    run.add_argument("--seekdb", default=str(REPO_ROOT / "build/bin/src/observer/seekdb"),
+                     help="seekdb executable (default: build/bin/src/observer/seekdb)")
+    run.add_argument("--obclient", default=str(REPO_ROOT / "deps/3rd/u01/obclient/bin/obclient"),
+                     help="obclient executable from build.py init")
+    run.add_argument("--mysqltest", default=str(REPO_ROOT / "deps/3rd/u01/obclient/bin/mysqltest"),
+                     help="mysqltest executable from build.py init")
     run.add_argument("--base-dir", required=True, help="seekdb base directory")
     run.add_argument("--work-dir", required=True, help="slice output directory")
     run.add_argument("--host", default="127.0.0.1")
     run.add_argument("--port", type=positive_int, default=2881)
-    run.add_argument("--slice-index", type=non_negative_int, required=True)
-    run.add_argument("--slice-count", type=positive_int, required=True)
+    run.add_argument("--slice-index", type=non_negative_int, default=0)
+    run.add_argument("--slice-count", type=positive_int, default=1)
+    run.add_argument("--record", action="store_true",
+                     help="write selected cases' expected .result files")
+    run.add_argument("--parameter", action="append", default=[],
+                     help="seekdb key=value parameter; may be repeated")
     run.set_defaults(handler=command_run)
 
     merge = subparsers.add_parser("merge", help="merge mysqltest slice results")
@@ -691,6 +779,12 @@ def main(argv=None):
         return 2
     if args.command == "run" and args.slice_index >= args.slice_count:
         parser.error("slice-index must be smaller than slice-count")
+    if args.command in ("run", "list"):
+        if ((args.suite and not selection_values(args.suite)) or
+                (args.test_set and not selection_values(args.test_set))):
+            parser.error("--suite and --test-set must contain at least one name")
+    if args.command == "run" and args.record and not (args.test_set or args.suite):
+        parser.error("--record requires --test-set or --suite")
     return args.handler(args)
 
 

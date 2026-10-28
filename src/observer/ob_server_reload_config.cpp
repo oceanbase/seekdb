@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_server_reload_config.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"  // previously hidden behind the allocator_mgr.h include chain, make the dependency explicit
 #include "share/rc/ob_server_runtime.h"

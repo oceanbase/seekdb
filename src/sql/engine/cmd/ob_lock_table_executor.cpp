@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "sql/engine/cmd/ob_lock_table_executor.h"
 #include "sql/resolver/ddl/ob_lock_table_stmt.h"
 #include "sql/engine/ob_exec_context.h"

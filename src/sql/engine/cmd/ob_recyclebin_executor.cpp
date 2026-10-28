@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "sql/engine/cmd/ob_recyclebin_executor.h"
 #include "query/command/ob_root_service_serialization.h"
 #include "query/command/ob_root_command_service.h"

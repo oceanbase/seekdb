@@ -43,7 +43,7 @@ def prepare_workspace(repo, build, spec):
     metadata = json.loads(subprocess.check_output([
         "cargo", "metadata", "--locked", "--offline", "--format-version", "1",
         "--manifest-path", str(workspace / "Cargo.toml"),
-    ], cwd=workspace, text=True))
+    ], cwd=workspace, universal_newlines=True))
     package = next(package for package in metadata["packages"]
                    if package["name"] == "spdlog-rs" and package["version"] == spec["version"])
     original = Path(package["manifest_path"]).parent

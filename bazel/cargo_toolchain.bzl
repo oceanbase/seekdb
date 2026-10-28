@@ -53,17 +53,18 @@ def _local_cargo_repository_impl(ctx):
     python = ctx.which("python" if ctx.os.name.startswith("windows") else "python3")
     rustup = ctx.which("rustup")
     if not python or not rustup:
-        fail("Install Python 3 and rustup before building seekdb")
+        fail("Install Python 3 and run ./build.py init before building seekdb")
     ctx.read(ctx.attr.prepare)
     native_pin = ctx.read(ctx.attr.rust_toolchain)
     channel = [line.split('"')[1] for line in native_pin.splitlines() if line.startswith("channel =")][0]
     wasm_channel = ctx.read(ctx.attr.wasm_toolchain).strip()
+    ctx.report_progress("Locating Rust " + channel + " and Python toolchains")
     result = ctx.execute([
         python, ctx.path(ctx.attr.prepare), "discover", str(ctx.path(".")),
         str(rustup), channel, wasm_channel,
-    ], timeout = 600, quiet = True)
+    ], environment = {"RUSTUP_AUTO_INSTALL": "0"}, timeout = 600, quiet = True)
     if result.return_code:
-        fail("Cannot prepare Cargo toolchain: " + result.stderr)
+        fail("Cannot prepare Cargo toolchain; run ./build.py init: " + result.stderr)
     config = json.decode(ctx.read("toolchains.json"))
     ctx.symlink(config["python"], "python/bin/python" + config["exe"])
     ctx.symlink(config["python"], "python/bin/python3" + config["exe"])
@@ -102,10 +103,11 @@ def _cargo_sources_repository_impl(ctx):
         library = config["rust"]["wasm"] + "/lib/rustlib/src/rust/library/"
         for name in ["Cargo.lock", "Cargo.toml", "sysroot/Cargo.toml"]:
             ctx.read(library + name)
+    ctx.report_progress("Fetching locked Cargo dependencies (" + ctx.attr.kind + ")")
     result = ctx.execute([
         config["python"], ctx.path(ctx.attr.prepare), "vendor", str(ctx.workspace_root),
         str(ctx.path(".")), ctx.path(ctx.attr.toolchain_metadata), ctx.attr.kind,
-    ], timeout = 600, quiet = True)
+    ], timeout = 600, quiet = False)
     if result.return_code:
         fail("Cannot fetch locked Cargo dependencies: " + result.stderr)
     ctx.file("BUILD.bazel", 'exports_files(["vendor.tar"])\n')

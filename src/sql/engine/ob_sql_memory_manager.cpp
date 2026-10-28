@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_sql_memory_manager.h"
 #include "sql/engine/px/ob_px_util.h"
 #include "share/rc/ob_server_runtime.h"

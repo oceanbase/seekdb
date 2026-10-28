@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SERVER
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "share/config/ob_config_helper.h"
 #include "ob_server_duty_task.h"
 #include "share/rc/ob_server_runtime.h"

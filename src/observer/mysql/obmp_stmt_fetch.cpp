@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SERVER
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "observer/mysql/obmp_stmt_fetch.h"
 #include "query/protocol/ob_mysql_protocol_util.h"
 #include "share/ob_lob_access_utils.h"

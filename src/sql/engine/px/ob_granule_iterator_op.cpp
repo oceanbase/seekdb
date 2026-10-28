@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_granule_iterator_op.h"
 #include "src/sql/engine/dml/ob_table_modify_op.h"
 #include "sql/engine/px/p2p_datahub/ob_runtime_filter_msg.h"
