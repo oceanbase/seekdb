@@ -18,22 +18,12 @@ SDK_HEADERS = {
     "absl_headers": _headers("absl"),
     "boost_headers": _headers("boost"),
     "curl_headers": _headers("curl"),
-    "fast_float_headers": _headers("fast_float", ["include", "include/fast_float"]),
-    "icu_headers": {"hdrs": ["include/icu/**/*.h", "include/unicode/*.h"], "includes": ["include", "include/icu", "include/icu/common", "include/icu/i18n"]},
     "libaio_headers": {"hdrs": ["include/libaio.h"], "includes": ["include"]},
-    "libunwind_headers": {"hdrs": ["include/libunwind*.h", "include/unwind.h"], "includes": ["include"]},
     "libxml2_headers": _headers("libxml2", ["include/libxml2"]),
     "mariadb_headers": _headers("mariadb", ["include", "include/mariadb"]),
     "openssl_headers": _headers("openssl"),
-    "protobuf_c_headers": _headers("protobuf-c"),
-    "protobuf_cpp_headers": _headers("google/protobuf"),
-    "grpc_headers": {
-        "hdrs": ["include/" + directory + "/**/*." + extension for directory in ["grpc", "grpc++", "grpcpp"] for extension in _HEADER_EXTENSIONS],
-        "includes": ["include"],
-    },
     "rapidjson_headers": _headers("rapidjson"),
     "roaring_headers": _headers("roaring"),
-    "s2_headers": _headers("s2"),
     "vsag_headers": _headers("vsag"),
     "zlib_headers": {"hdrs": ["include/zconf.h", "include/zlib.h"], "includes": ["include"]},
     "windows_headers": {"hdrs": ["include/pthread*.h", "include/_ptw32.h", "include/sched.h", "include/semaphore.h", "include/dirent.h"], "includes": ["include"]},
@@ -51,7 +41,6 @@ SDK_IMPORTS = {
         "includes": ["include"],
     },
     "libssl": {"static_library": "lib/libssl.a"},
-    "libunwind": {"static_library": "lib/libunwind.a"},
     "zlib": {"static_library": "lib/libz.a"},
 }
 
@@ -59,12 +48,8 @@ SDK_IMPORTS.update({
     name: {"static_library": "lib/" + archive}
     for name, archive in {
         "libxml2": "libxml2.a",
-        "protobuf_c": "libprotobuf-c.a",
         "curl": "libcurl.a",
         "lzma": "liblzma.a",
-        "icu_common": "libicuuc.a",
-        "icu_i18n": "libicui18n.a",
-        "icu_data": "libicudata.a",
     }.items()
 })
 
@@ -92,31 +77,19 @@ _WINDOWS_SHARED = {
     "zlib": ("lib/zlib.lib", "bin/zlib1.dll", []),
     "iconv": ("lib/iconv.lib", "bin/iconv-2.dll", []),
     "libxml2": ("lib/libxml2.lib", "bin/libxml2.dll", [":zlib", ":iconv"]),
-    "protobuf_c": ("lib/protobuf-c.lib", "bin/protobuf-c.dll", []),
     "curl": ("lib/libcurl.lib", "bin/libcurl.dll", [":zlib"]),
-    "icu_common": ("lib/icuuc.lib", "bin/icuuc78.dll", [":icu_data"]),
-    "icu_i18n": ("lib/icuin.lib", "bin/icuin78.dll", [":icu_common"]),
-    "icu_data": ("lib/icudt.lib", "bin/icudt78.dll", []),
     "abseil_dll": ("lib/abseil_dll.lib", "bin/abseil_dll.dll", []),
-    "protobuf_cpp": ("lib/libprotobuf.lib", "bin/libprotobuf.dll", [":absl", ":utf8_range"]),
     "roaring": ("lib/roaring.lib", "bin/roaring.dll", []),
     "pthreads": ("lib/pthreadVC3.lib", "bin/pthreadVC3.dll", []),
-    "cares": ("lib/cares.lib", "bin/cares.dll", []),
-    "re2": ("lib/re2.lib", "bin/re2.dll", [":absl"]),
     "openmp": ("vsag/libomp.lib", "vsag_bin/libomp.dll", []),
 }
 
 _WINDOWS_HEADER_LIBRARIES = {
     "absl_headers": [":absl"],
     "curl_headers": [":curl"],
-    "icu_headers": [":icu_i18n"],
     "libxml2_headers": [":libxml2"],
     "openssl_headers": [":libssl"],
-    "protobuf_c_headers": [":protobuf_c"],
-    "protobuf_cpp_headers": [":protobuf_cpp"],
-    "grpc_headers": [":grpc"],
     "roaring_headers": [":roaring"],
-    "s2_headers": [":s2"],
     "vsag_headers": [":vsag"],
     "zlib_headers": [":zlib"],
     "windows_headers": [":pthreads", ":compiler_runtime"],
@@ -135,13 +108,6 @@ def _windows_libraries():
     # Archives within one upstream package stay private to its library target.
     archives = {
         "absl": (native.glob(["lib/absl_*.lib"]), [":abseil_dll"]),
-        "s2": (["lib/s2.lib"], [":absl", ":libssl"]),
-        "utf8_range": (["lib/utf8_range.lib", "lib/utf8_validity.lib"], []),
-        "grpc": (["lib/" + name + ".lib" for name in [
-            "grpc++", "grpc", "gpr", "address_sorting", "libupb",
-        ]] + native.glob(["lib/upb_*.lib"]), [
-            ":absl", ":protobuf_cpp", ":cares", ":re2", ":zlib", ":libssl",
-        ]),
         "vsag": (["vsag/" + name + ".lib" for name in [
             "cpuinfo", "simd", "vsag_static", "diskann", "openblas",
             "antlr4-runtime-static", "antlr4-autogen", "fmt",
@@ -167,10 +133,8 @@ def sdk_targets(windows = False):
     for name, attributes in SDK_HEADERS.items():
         if windows and name in _WINDOWS_HEADER_LIBRARIES:
             attributes = attributes | {"deps": _WINDOWS_HEADER_LIBRARIES[name]}
-        if windows and name in ["absl_headers", "protobuf_cpp_headers"]:
-            attributes = attributes | {"defines": ["ABSL_CONSUME_DLL" if name == "absl_headers" else "PROTOBUF_USE_DLLS"]}
-        if windows and name == "protobuf_cpp_headers":
-            attributes = attributes | {"hdrs": attributes["hdrs"] + ["include/utf8_range.h", "include/utf8_validity.h"]}
+        if windows and name == "absl_headers":
+            attributes = attributes | {"defines": ["ABSL_CONSUME_DLL"]}
         cc_library(name = name, **(attributes | {"hdrs": native.glob(attributes["hdrs"], allow_empty = True)}))
     for name, attributes in SDK_IMPORTS.items():
         if windows:
@@ -180,23 +144,20 @@ def sdk_targets(windows = False):
         native.filegroup(name = name, **(attributes | {"srcs": native.glob(attributes["srcs"], allow_empty = True)}))
     if windows:
         _windows_libraries()
-        native.exports_files(["protoc/protoc.exe", "grpc_tools/grpc_cpp_plugin.exe"])
-        native.filegroup(name = "protoc_runtime", srcs = native.glob(["protoc/*.dll", "grpc_tools/*.dll"]))
 
 _SOURCE_HEADERS = {
     "absl_headers": ("abseil", "abseil"),
     "roaring_headers": ("roaring", "roaring"),
-    "s2_headers": ("s2_ios", "s2_wasm"),
     "vsag_headers": ("vsag_ios", "vsag_wasm"),
 }
 
 def sdk_aliases():
     cc_library(
         name = "base_libraries",
-        deps = [":libcrypto", ":libssl", ":libxml2", ":protobuf_c"] + select({
+        deps = [":libcrypto", ":libssl", ":libxml2"] + select({
             "@platforms//os:emscripten": [],
-            "@platforms//os:windows": [":curl", ":icu_common", ":icu_data", ":icu_i18n", ":zlib"],
-            "//conditions:default": [":curl", ":icu_common", ":icu_data", ":icu_i18n", ":lzma", ":zlib"],
+            "@platforms//os:windows": [":curl", ":zlib"],
+            "//conditions:default": [":curl", ":lzma", ":zlib"],
         }),
     )
     for name in list(SDK_HEADERS) + list(SDK_IMPORTS) + list(SDK_FILEGROUPS) + HOST_FILES + NATIVE_LINK_FILES:
@@ -213,8 +174,6 @@ def sdk_aliases():
             elif name == "boost_headers":
                 ios = "@sdk_boost//:library"
                 simulator = ios
-            elif name == "icu_headers":
-                wasm = "@sdk_icu//:library"
             actual = select({
                 "@platforms//os:android": "@third_party_android//:" + name,
                 "@platforms//os:emscripten": wasm,

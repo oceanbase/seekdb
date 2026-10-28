@@ -222,7 +222,8 @@ int ObSNIODeviceWrapper::init(
     const int64_t block_size,
     const int64_t data_disk_percentage,
     const int64_t data_disk_size,
-    const ObILocalDeviceSpaceProvider &space_provider)
+    const ObILocalDeviceSpaceProvider &space_provider,
+    const LocalIOConfig &io_config)
 {
   int ret = OB_SUCCESS;
   const int64_t MAX_IOD_OPT_CNT = 5;
@@ -252,7 +253,7 @@ int ObSNIODeviceWrapper::init(
   }
 
   if (OB_SUCC(ret) && OB_NOT_NULL(local_device_)) {
-    if (OB_FAIL(local_device_->init(iod_opts, space_provider))) {
+    if (OB_FAIL(local_device_->init(iod_opts, io_config, &space_provider))) {
     } else {
       is_inited_ = true;
       LOG_INFO("finish to init io device", K(ret), K(data_dir), K(sstable_dir), K(block_size),
@@ -1209,6 +1210,7 @@ int ObIODeviceLocalFileOp::open_block_file(
     const int64_t file_size,
     const int64_t disk_percentage,
     const int64_t reserved_size,
+    const LocalIOConfig &io_config,
     BlockFileAttr &block_file_attr)
 {
   int ret = OB_SUCCESS;
@@ -1233,6 +1235,7 @@ int ObIODeviceLocalFileOp::open_block_file(
 #ifdef _WIN32
     open_flag |= _O_BINARY;
 #endif
+    open_flag = io_config.file_flags(open_flag);
     if ((block_file_attr.block_fd_ = ::open(block_file_attr.store_path_, open_flag,
                                             S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH)) < 0) {
       ret = OB_IO_ERROR;

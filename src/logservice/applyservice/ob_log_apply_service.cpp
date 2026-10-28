@@ -523,7 +523,7 @@ int ObApplyStatus::is_apply_done(bool &is_done,
   return ret;
 }
 
-int ObApplyStatus::start_local_append()
+int ObApplyStatus::start_local_append(const SCN &recovered_scn)
 {
   int ret = OB_SUCCESS;
   WLockGuardWithRetryInterval guard(lock_, WRLOCK_RETRY_INTERVAL_US, WRLOCK_RETRY_INTERVAL_US);
@@ -533,11 +533,16 @@ int ObApplyStatus::start_local_append()
   } else if (is_in_stop_state_) {
     ret = OB_NOT_RUNNING;
     CLOG_LOG(INFO, "apply status has been stopped");
+  } else if (!recovered_scn.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
   } else if (accepting_append_) {
-    CLOG_LOG(INFO, "local append has already started", KPC(this));
+    CLOG_LOG(INFO, "local append has already started", K(recovered_scn), KPC(this));
   } else {
+    lib::ObMutexGuard progress_guard(mutex_);
+    max_applied_cb_scn_ = std::max(max_applied_cb_scn_, recovered_scn);
+    last_check_scn_ = max_applied_cb_scn_;
     accepting_append_ = true;
-    CLOG_LOG(INFO, "apply status start_local_append success", KPC(this));
+    CLOG_LOG(INFO, "apply status start_local_append success", K(recovered_scn), KPC(this));
   }
   return ret;
 }
@@ -755,16 +760,13 @@ int ObApplyStatus::update_last_check_scn_()
   int ret = OB_SUCCESS;
   SCN palf_max_scn;
   if (OB_FAIL(palf_handle_.get_max_scn(palf_max_scn))) {
-  } else if (max_applied_cb_scn_.is_valid() && palf_max_scn < max_applied_cb_scn_) {
-    //Defensive check, palf's max_scn should not regress to before the agreed max_applied_cb_scn_
-    ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(ERROR, "invalid palf_max_scn", K(ret), K(palf_max_scn), KPC(this));
   } else if (OB_FAIL(ap_sv_->wait_append_sync())) {
   } else {
     for (int64_t i = 0; i < APPLY_TASK_QUEUE_SIZE; ++i) {
       cb_queues_[i].set_snapshot_check_submit_cb_cnt();
     }
-    last_check_scn_ = palf_max_scn;
+    // Recovery may cover an empty SCN interval beyond the current physical tail.
+    last_check_scn_ = std::max(palf_max_scn, max_applied_cb_scn_);
   }
   return ret;
 }
@@ -1063,7 +1065,7 @@ int ObLogApplyService::is_apply_done(bool &is_done,
   return ret;
 }
 
-int ObLogApplyService::start_local_append()
+int ObLogApplyService::start_local_append(const SCN &recovered_scn)
 {
   int ret = OB_SUCCESS;
   ObApplyStatus *apply_status = NULL;
@@ -1075,7 +1077,7 @@ int ObLogApplyService::start_local_append()
   } else if (NULL == (apply_status = guard.get_apply_status())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "apply status is not exist", K(ret));
-  } else if (OB_FAIL(apply_status->start_local_append())) {
+  } else if (OB_FAIL(apply_status->start_local_append(recovered_scn))) {
   } else {
     CLOG_LOG(INFO, "apply service start_local_append success");
   }

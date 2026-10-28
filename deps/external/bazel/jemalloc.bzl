@@ -16,48 +16,24 @@
 
 load("@rules_cc//cc:cc_import.bzl", "cc_import")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
-load("//bazel:cargo.bzl", "CARGO_ACTION_ATTRS", "CARGO_TOOLCHAINS", "cargo_action")
-load("//bazel:platforms.bzl", "target_platform")
+load("@rules_rust//rust:rust_common.bzl", "BuildInfo")
+load("//bazel:platforms.bzl", "PLATFORM_ATTRS", "target_platform")
 
 def _jemalloc_build_impl(ctx):
-    archive = ctx.actions.declare_file("jemalloc/lib/libjemalloc_pic.a")
-    public_header = ctx.actions.declare_file(
-        "jemalloc/include/jemalloc/jemalloc.h",
-    )
-    cargo_target = ctx.actions.declare_directory("jemalloc/cargo-work")
-
-    platform = target_platform(ctx)
-    command = """export CFLAGS='-O2 -fPIC'
-export MAKEFLAGS=
-export JEMALLOC_SYS_OUTPUT_DIR="$PWD/$1"
-export JEMALLOC_SYS_CONFIGURE_ARGS='--with-jemalloc-prefix=je_'
-manifest="$CARGO_WORKSPACE/$2"
-"""
-    if platform.os == "ios":
-        command += """export CC="$(xcrun --sdk %s --find clang)"
-export AR="$(xcrun --sdk %s --find ar)"
-target="arm64-apple-ios$IPHONEOS_DEPLOYMENT_TARGET%s"
-export CFLAGS="-O2 -fPIC -target $target -isysroot $SDKROOT"
-export CPPFLAGS= LDFLAGS=
-export JEMALLOC_SYS_CONFIGURE_ARGS='--with-jemalloc-prefix=je_
---host=aarch64-apple-ios
---with-lg-page=14
---disable-zone-allocator'
-""" % (platform.ios_sdk, platform.ios_sdk, "-simulator" if platform.ios_sdk == "iphonesimulator" else "")
-    command += '"$CARGO" build --offline --locked --release --jobs 4 --manifest-path "$manifest"'
-    if platform.rust_target:
-        command += " --target " + platform.rust_target
-    cargo_action(
-        ctx,
-        command = command,
-        sources = [ctx.file.external_src, ctx.file.lockfile, ctx.file.manifest],
+    windows = target_platform(ctx).os == "windows"
+    archive_name = "jemalloc.lib" if windows else "libjemalloc_pic.a"
+    built_archive = "jemalloc_s.lib" if windows else "libjemalloc_pic.a"
+    archive = ctx.actions.declare_file("jemalloc/lib/" + archive_name)
+    public_header = ctx.actions.declare_file("jemalloc/include/jemalloc/jemalloc.h")
+    output = ctx.attr.build_script[BuildInfo].out_dir
+    ctx.actions.run_shell(
+        inputs = [output],
         outputs = [archive, public_header],
-        work_dir = cargo_target,
-        arguments = [archive.dirname + "/..", ctx.file.manifest.path],
-        mnemonic = "SeekdbJemallocBuild",
-        progress_message = "Building seekdb-jemalloc-sys for " + platform.os,
+        arguments = [output.path, archive.path, public_header.path, built_archive],
+        command = 'cp "$1/jemalloc-build/lib/$4" "$2" && cp "$1/jemalloc-build/include/jemalloc/jemalloc.h" "$3"',
+        mnemonic = "JemallocArtifacts",
+        use_default_shell_env = windows,
     )
-
     return [
         DefaultInfo(files = depset([archive, public_header])),
         OutputGroupInfo(
@@ -69,28 +45,23 @@ export JEMALLOC_SYS_CONFIGURE_ARGS='--with-jemalloc-prefix=je_
 _jemalloc_build = rule(
     implementation = _jemalloc_build_impl,
     attrs = {
-        "external_src": attr.label(allow_single_file = True, mandatory = True),
-        "lockfile": attr.label(allow_single_file = True, mandatory = True),
-        "manifest": attr.label(allow_single_file = True, mandatory = True),
-    } | CARGO_ACTION_ATTRS,
-    fragments = ["cpp", "apple"],
-    toolchains = CARGO_TOOLCHAINS,
+        "build_script": attr.label(default = "@external_crates//:jemalloc_build", providers = [BuildInfo]),
+    } | PLATFORM_ATTRS,
 )
 
-def jemalloc(name, external_src, lockfile, manifest):
-    """Declares the jemalloc Cargo build and its C++ archive/header targets."""
+def jemalloc(name):
+    """Expose the native outputs of the rules_rust build script to C++."""
     build_target = "_%s_build" % name
     public_header_target = "%s_public_header" % name
 
     _jemalloc_build(
         name = build_target,
-        external_src = external_src,
-        lockfile = lockfile,
-        manifest = manifest,
         target_compatible_with = select({
             "@platforms//os:linux": [],
             "@platforms//os:macos": [],
             "@platforms//os:ios": [],
+            "@platforms//os:windows": [],
+            "@platforms//os:android": [],
             "//conditions:default": ["@platforms//:incompatible"],
         }),
     )
@@ -118,5 +89,5 @@ def jemalloc(name, external_src, lockfile, manifest):
     cc_import(
         name = "%s_library" % name,
         static_library = ":%s_archive" % name,
-        visibility = ["//src/oblib:__pkg__"],
+        visibility = ["//src/oblib:__pkg__", "//unittest/oblib:__pkg__"],
     )

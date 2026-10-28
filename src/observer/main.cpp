@@ -54,7 +54,6 @@ static void seekdb_cov_init_profile_file(int argc, char **argv)
 #include "lib/oblog/ob_easy_log.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/oblog/ob_warning_buffer.h"
-#include "lib/signal/ob_signal_struct.h"
 #include "lib/utility/ob_defer.h"
 #include "observer/ob_command_line_parser.h"
 #include "observer/ob_server.h"
@@ -541,9 +540,6 @@ static void print_limit(const char *name, const int resource)
       _OB_LOG(INFO, "[%s] %-24s = %ld", __func__, name, limit.rlim_cur);
     }
   }
-  if (RLIMIT_CORE == resource) {
-    g_rlimit_core = limit.rlim_cur;
-  }
 }
 
 static void print_all_limits()
@@ -650,8 +646,6 @@ int inner_main(int argc, char *argv[])
     return OB_ERR_UNEXPECTED;
   }
 #endif
-  // LLVM removed: the LLVM symbolizer is gone; sanity (ASAN/UBSAN) builds keep
-  // backtrace_symbolize_func at its default (NULL) -> unsymbolized frames.
 #if defined(_WIN32) || defined(__ANDROID__)
   snprintf(ob_get_tname(), OB_THREAD_NAME_BUF_LEN, "seekdb");
 #else
@@ -733,9 +727,6 @@ int inner_main(int argc, char *argv[])
     MPRINT("    Start seekdb with --nodaemon if you don't want to start as a daemon process.");
     if (OB_FAIL(start_daemon(PID_FILE_NAME))) {
       MPRINT("Start seekdb as a daemon failed. Did you started seekdb already?");
-    } else if (!restore_allocator_after_fork()) {
-      ret = OB_ERR_UNEXPECTED;
-      MPRINT("Failed to restore allocator state after starting daemon process.");
     }
   } else if (opts->nodaemon_) {
     if (OB_FAIL(start_daemon(PID_FILE_NAME, true/*skip_daemon*/))) {

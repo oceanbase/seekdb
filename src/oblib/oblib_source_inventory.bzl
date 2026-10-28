@@ -10,9 +10,7 @@ OBLIB_UNITY_GROUPS = {
                 "src/oblib/common/ob_hex_utils_base.cpp",
                 "src/oblib/common/ob_accuracy.cpp",
                 "src/oblib/common/ob_field.cpp",
-                "src/oblib/common/ob_file_common_header.cpp",
                 "src/oblib/common/ob_range.cpp",
-                "src/oblib/common/ob_record_header.cpp",
                 "src/oblib/common/ob_role.cpp",
                 "src/oblib/common/ob_store_format.cpp",
                 "src/oblib/common/ob_store_range.cpp",
@@ -31,7 +29,6 @@ OBLIB_UNITY_GROUPS = {
                 "src/oblib/common/object/ob_obj_type.cpp",
                 "src/oblib/common/object/ob_object.cpp",
                 "src/oblib/common/row/ob_row.cpp",
-                "src/oblib/common/row/ob_row_checksum.cpp",
                 "src/oblib/common/row/ob_row_desc.cpp",
                 "src/oblib/common/row/ob_row_store.cpp",
                 "src/oblib/common/row/ob_row_util.cpp",
@@ -39,19 +36,6 @@ OBLIB_UNITY_GROUPS = {
                 "src/oblib/common/rowkey/ob_rowkey_info.cpp",
                 "src/oblib/common/rowkey/ob_store_rowkey.cpp",
                 "src/oblib/common/sql_mode/ob_sql_mode_utils.cpp",
-            ],
-        ),
-        struct(
-            name = "oblib_common_log_0",
-            language = "c++",
-            srcs = [
-                "src/oblib/common/log/ob_log_cursor.cpp",
-                "src/oblib/common/log/ob_log_data_writer.cpp",
-                "src/oblib/common/log/ob_log_dir_scanner.cpp",
-                "src/oblib/common/log/ob_log_entry.cpp",
-                "src/oblib/common/log/ob_log_generator.cpp",
-                "src/oblib/common/log/ob_log_reader.cpp",
-                "src/oblib/common/log/ob_single_log_reader.cpp",
             ],
         ),
         struct(
@@ -174,8 +158,6 @@ OBLIB_UNITY_GROUPS = {
                 "src/oblib/lib/alloc/ob_malloc_allocator.cpp",
                 "src/oblib/lib/allocator/ob_block_alloc_mgr.cpp",
                 "src/oblib/lib/allocator/ob_concurrent_fifo_allocator.cpp",
-                "src/oblib/lib/alloc/ob_ctx_define.cpp",
-                "src/oblib/lib/allocator/ob_delay_free_allocator.cpp",
                 "src/oblib/lib/allocator/ob_fifo_allocator.cpp",
                 "src/oblib/lib/allocator/ob_hazard_ref.cpp",
                 "src/oblib/lib/allocator/ob_jemalloc_sanity.cpp",
@@ -209,14 +191,6 @@ OBLIB_UNITY_GROUPS = {
             ],
         ),
         struct(
-            name = "oblib_lib_codec_0",
-            language = "c++",
-            srcs = [
-                "src/oblib/lib/codec/ob_fast_bp_func.cpp",
-                "src/oblib/lib/codec/ob_generated_scalar_bp_func.cpp",
-            ],
-        ),
-        struct(
             name = "oblib_lib_common_0",
             language = "c++",
             srcs = [
@@ -235,11 +209,8 @@ OBLIB_UNITY_GROUPS = {
             language = "c++",
             srcs = [
                 "src/oblib/lib/encode/ob_base64_encode.cpp",
-                "src/oblib/lib/encode/ob_quoted_printable_encode.cpp",
-                "src/oblib/lib/encode/ob_uuencode.cpp",
                 "src/oblib/lib/atomic/ob_atomic_reference.cpp",
                 "src/oblib/lib/checksum/ob_crc64.cpp",
-                "src/oblib/lib/checksum/ob_parity_check.cpp",
                 "src/oblib/lib/cpu/ob_cpu_topology.cpp",
                 "src/oblib/lib/encrypt/ob_encrypted_helper.cpp",
                 "src/oblib/lib/file/file_directory_utils.cpp",
@@ -274,7 +245,6 @@ OBLIB_UNITY_GROUPS = {
             language = "c++",
             srcs = [
                 "src/oblib/lib/queue/ob_link_queue.cpp",
-                "src/oblib/lib/queue/ob_ms_queue.cpp",
                 "src/oblib/lib/random/ob_random.cpp",
                 "src/oblib/lib/rc/context.cpp",
                 "src/oblib/lib/rc/ob_rc.cpp",
@@ -291,7 +261,6 @@ OBLIB_UNITY_GROUPS = {
                 "src/oblib/lib/task/ob_timer_monitor.cpp",
                 "src/oblib/lib/task/ob_timer_service.cpp",
                 "src/oblib/lib/thread_local/ob_tsi_utils.cpp",
-                "src/oblib/lib/thread_local/thread_buffer.cpp",
                 "src/oblib/lib/time/Time.cpp",
                 "src/oblib/lib/time/ob_cur_time.cpp",
                 "src/oblib/lib/time/ob_time_utility.cpp",
@@ -335,7 +304,6 @@ OBLIB_UNITY_GROUPS = {
                 "src/oblib/lib/lock/ob_thread_cond.cpp",
                 "src/oblib/lib/lock/ob_rwlock.cpp",
                 "src/oblib/lib/lock/ob_futex.cpp",
-                "src/oblib/lib/lock/ob_bucket_qsync_lock.cpp",
                 "src/oblib/lib/lock/ob_qsync_lock.cpp",
             ],
         ),
@@ -359,29 +327,12 @@ OBLIB_UNITY_GROUPS = {
             ],
         ),
         struct(
-            name = "oblib_lib_signal_0",
-            language = "c++",
-            srcs = [
-                "src/oblib/lib/signal/ob_signal_handlers.cpp",
-                "src/oblib/lib/signal/ob_signal_struct.cpp",
-                "src/oblib/lib/signal/ob_signal_utils.cpp",
-            ],
-        ),
-        struct(
-            name = "oblib_lib_signal_0",
-            language = "c",
-            srcs = [
-                "src/oblib/lib/signal/ob_libunwind.c",
-            ],
-        ),
-        struct(
             name = "oblib_lib_thread_0",
             language = "c++",
             srcs = [
                 "src/oblib/lib/thread/ob_async_task_queue.cpp",
                 "src/oblib/lib/thread/ob_dynamic_thread_pool.cpp",
                 "src/oblib/lib/thread/ob_reentrant_thread.cpp",
-                "src/oblib/lib/thread/ob_map_queue_thread_pool.cpp",
                 "src/oblib/lib/thread/protected_stack_allocator.cpp",
                 "src/oblib/lib/thread/thread.cpp",
                 "src/oblib/lib/thread/threads.cpp",
@@ -414,16 +365,6 @@ OBLIB_UNITY_GROUPS = {
             language = "c++",
             srcs = [
                 "src/oblib/lib/container/ob_bitmap.cpp",
-            ],
-        ),
-    ],
-    "src/oblib/lib:oblib_lib_simd": [
-        struct(
-            name = "oblib_lib_simd_codec_simd_0",
-            language = "c++",
-            srcs = [
-                "src/oblib/lib/codec/ob_fast_delta.cpp",
-                "src/oblib/lib/codec/ob_generated_unalign_simd_bp_func.cpp",
             ],
         ),
     ],

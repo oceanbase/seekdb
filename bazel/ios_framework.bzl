@@ -78,8 +78,9 @@ def ios_framework():
             "in_process/seekdb.h",
             "ios/exports.txt",
             "//:LICENSE",
-            "//rust:Cargo.lock",
-            "@cargo_native_sources//:vendor.tar",
+            "//:Cargo.lock",
+            "//package/ios:rust_licenses",
+            "//package/ios:rust_license_files",
             "//bazel/sdk_sources:ios_source_metadata",
             "//bazel/sdk_sources:ios_licenses",
             "//bazel/third_party:ios_base_metadata",
@@ -97,8 +98,8 @@ def ios_framework():
               ' --binary "$(location :_ios_framework_link)" --config "$(location :_ios_build_config)"' +
               ' --header "$(location in_process/seekdb.h)" --exports "$(location ios/exports.txt)"' +
               ' --link-inputs "$(location :_ios_framework_link_manifest)"' +
-              ' --rust-lock "$(location //rust:Cargo.lock)"' +
-              ' --cargo-sources "$(location @cargo_native_sources//:vendor.tar)"' +
+              ' --rust-lock "$(location //:Cargo.lock)"' +
+              ' --rust-licenses "$(location //package/ios:rust_licenses)"' +
               ' --source-metadata $(locations //bazel/sdk_sources:ios_source_metadata)' +
               ' $(locations //bazel/third_party:ios_base_metadata)' +
               ' --licenses $(location //:LICENSE) $(locations //bazel/sdk_sources:ios_licenses)' +

@@ -33,7 +33,6 @@ alter system set_tp tp_name = ERRSIM_FAST_NLJ_RANGE_GENERATOR_CHECK, error_code 
 alter system set_tp tp_name = EN_THROW_DS_ERROR, error_code = 4016, frequency = 1;
 alter system set _enable_var_assign_use_das = true;
 alter system set _enable_spf_batch_rescan = true;
-alter system set _max_px_workers_per_cpu = 10;
 
 delimiter /
 drop procedure if exists exec_sql;/

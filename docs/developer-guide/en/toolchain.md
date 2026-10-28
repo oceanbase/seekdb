@@ -4,7 +4,9 @@ seekdb uses Bazel, Rust, and a repository-managed compiler and dependency set. I
 
 ## Rust
 
-`./build.py init` installs rustup if needed, then prepares the toolchain, components, and targets declared in `rust/rust-toolchain.toml`. The repository pins Rust `1.98.1`. Run `init` before the first build and after changing the toolchain file. Downloads and installation logs are shown in the terminal; `build` reports a missing toolchain and asks you to run `init`.
+`./build.py init` installs rustup if needed, then prepares the toolchain, components, and targets declared in `rust-toolchain.toml`. The repository pins Rust `1.98.1`. Run `init` before the first build and after changing the toolchain file. Downloads and installation logs are shown in the terminal; `build` reports a missing toolchain and asks you to run `init`.
+
+Native init requires only the host Rust standard library and clippy. The Android, iOS device, and iOS simulator init options install their Rust targets on demand. CI installs the Windows GNU target explicitly before its cross-platform check. Host and cross targets use the same pinned toolchain.
 
 Rustup downloads use [RsProxy](https://rsproxy.cn/) by default. Set `RUSTUP_DIST_SERVER` or `RUSTUP_UPDATE_ROOT` before invoking `build.py` to use another source. `RUSTUP_INIT_URL` can override the rustup installer URL. These defaults apply only to the build process and its children; the script does not edit shell profiles or change the default Rust toolchain.
 
@@ -67,14 +69,22 @@ See [Homebrew optimization](homebrew.md) if a mirror is required.
 
 Install Python 3 and Visual Studio 2022 Build Tools with the **Desktop development with C++** workload. The project dependency SDK includes LLVM 18.1.8; no separate LLVM installation is needed.
 
-Open **x64 Native Tools Command Prompt for VS 2022** in the repository root and initialize the parser tools and dependency SDK:
+The bundled jemalloc build also requires a POSIX shell, core utilities (including `chmod`), `awk`, `grep`, `sed`, and GNU Make. A full Git for Windows installation provides the shell and most utilities; minimal Git distributions may omit required commands. MSYS2 can supply the build tools with `pacman -S make coreutils gawk grep sed`. Add the required tool directories to the build process's `PATH`, keeping Visual Studio's compiler and linker directories first. These utilities run the build scripts; the library is compiled with clang-cl and the MSVC runtime.
+
+Open **x64 Native Tools Command Prompt for VS 2022** in the repository root, check that the build utilities are available, then initialize the parser tools and dependency SDK:
 
 ```bat
+where sh
+where make
+where chmod
+where lib
 python build.py init
 python build.py build seekdb
 ```
 
 `build.py` selects clang-cl from `deps\3rd\tools\llvm18`. The executable is `build\bin\src\observer\seekdb\seekdb.exe`. The build retains `_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH` to bypass the compiler version check in newer MSVC standard library headers, for both project C++ and Cargo's C++ bridges.
+
+The Windows allocator uses the bundled jemalloc `je_` APIs. Server startup sets decay to 1000/0 ms for new arenas and arena 0 through `je_mallctl`, before logger workers start. Background threads remain disabled because the upstream Windows backend does not support them.
 
 The DLLs required by the executable are emitted in the same directory, including the MSVC runtime. Packaging consumes this build output; it does not search the dependency SDK for server DLLs.
 

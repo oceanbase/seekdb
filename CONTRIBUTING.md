@@ -7,7 +7,7 @@ Thank you for contributing to seekdb. This document is the canonical contributio
 - Search the [issue tracker](https://github.com/oceanbase/seekdb/issues) before opening a new issue.
 - Bug fixes should include a regression test whenever practical.
 - Discuss large features and user-visible design changes with maintainers before implementation.
-- Read the [Developer Guide](docs/developer-guide/en/README.md) for the toolchain, build, test, and coding guidance.
+- Read the [Developer Guide](docs/developer-guide/en/README.md) for toolchain, build, and test guidance.
 - Follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Prepare a fork

@@ -20,20 +20,15 @@ test = false
 
 [features]
 default = ["native-network"]
-native-network = ["dep:mio", "dep:socket2", "dep:libc", "dep:windows-sys", "rustls/ring"]
+native-network = ["dep:mio", "dep:socket2", "dep:libc", "dep:windows-sys"]
 memory-transport = []
 
 [dependencies]
 cxx = "1"
-# mio = epoll (Linux) / kqueue (macOS) / IOCP (Windows), no async runtime.
-# os-ext: mio::windows::NamedPipe for the per-reactor pending-pipe acceptor.
-mio = { version = "1", optional = true, features = ["os-poll", "net", "os-ext"] }
 # flate2 = zlib for the compressed MySQL protocol.
 flate2 = "1"
 # Direct-indexed storage for the reactor's mio Token -> connection hot table.
 slab = "0.4"
-# TCP keepalive configuration for accepted sockets on every supported OS.
-socket2 = { version = "0.6", optional = true, features = ["all"] }
 # TLS for the MySQL channel. default-features=false drops the aws-lc-rs
 # provider; `ring`
 # ships pre-generated assembly and needs only the C compiler already required
@@ -47,8 +42,14 @@ rustls-pki-types = { version = "1", features = ["std"] }
 # the account-policy fields exposed by the narrow C ABI.
 x509-parser = { version = "0.18", default-features = false }
 
-# libc::shutdown is only used on the Unix path.
-[target.'cfg(unix)'.dependencies]
+[target.'cfg(not(target_os = "emscripten"))'.dependencies]
+# mio = epoll (Linux) / kqueue (macOS) / IOCP (Windows), no async runtime.
+# os-ext: mio::windows::NamedPipe for the per-reactor pending-pipe acceptor.
+mio = { version = "1", optional = true, features = ["os-poll", "net", "os-ext"] }
+socket2 = { version = "0.6", optional = true, features = ["all"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring"] }
+
+[target.'cfg(all(unix, not(target_os = "emscripten")))'.dependencies]
 libc = { version = "0.2", optional = true }
 
 # CreateNamedPipeW for re-armed pipe instances (mio's NamedPipe::new only

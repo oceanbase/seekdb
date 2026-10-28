@@ -124,6 +124,16 @@ public:
   ObPLEnumSetCtx *enum_set_ctx_;
 };
 
+// Borrowed services; the SQL request or compilation unit owns all outputs.
+struct PLExprResolveContext
+{
+  ObPLResolveCtx &resolve_ctx_;
+  ObRawExprFactory &expr_factory_;
+  IPLSymbolResolver &symbols_;
+  ObPLAstUnit *compile_unit_;
+};
+
+class CallExprResolver;
 class ObPLPackageAST;
 class ObPLResolver
 {
@@ -512,7 +522,7 @@ public:
                                         uint64_t actual_param_type_id,
                                         uint64_t formal_param_type_id,
                                         bool &is_compatible);
-  int64_t combine_line_and_col(const ObStmtLoc &loc);
+  static int64_t combine_line_and_col(const ObStmtLoc &loc);
   int resolve_routine_decl_param_list(const ParseNode *param_list,
       ObPLAstUnit &package_ast,
       ObPLRoutineInfo &routine_info);
@@ -631,12 +641,12 @@ private:
   int build_raw_expr(const ParseNode *node, ObPLAstUnit &unit_ast, ObRawExpr *&expr,
                      const ObPLDataType *expected_type = NULL);
   int get_actually_pl_type(const ObPLDataType *&type);
-  int set_cm_warn_on_fail(ObRawExpr *&expr);
+  static int set_cm_warn_on_fail(ObRawExpr *&expr);
   int check_access_external_state(ObRawExpr *&expr,
                                   bool &has_access_external_state);
   int analyze_expr_type(ObRawExpr *&expr,
                         ObPLAstUnit &unit_ast);
-  int set_udf_expr_line_number(ObRawExpr *expr, uint64_t line_number);
+  static int set_udf_expr_line_number(ObRawExpr *expr, uint64_t line_number);
   int resolve_expr(const ParseNode *node, ObPLAstUnit &unit_ast,
                    sql::ObRawExpr *&expr, uint64_t line_number = 0, /* where this expr called */
                    bool need_add = true, const ObPLDataType *expected_type = NULL,
@@ -750,7 +760,7 @@ private:
   int check_in_param_type_legal(const share::schema::ObIRoutineParam *param_info, const ObRawExpr* param);
   int resolve_inout_param(ObRawExpr *param_expr, ObPLRoutineParamMode param_mode, int64_t &out_idx);
   int resolve_interface_pragma(const ObStmtNodeTree *parse_tree, ObPLPackageAST &ast);
-  int check_collection_expr_illegal(const ObRawExpr *expr, bool &is_obj_acc);
+  static int check_collection_expr_illegal(const ObRawExpr *expr, bool &is_obj_acc);
 
 private:
   int check_duplicate_condition(const ObPLConditionValue &value,
@@ -823,8 +833,8 @@ private:
                      common::ObIArray<sql::ObOpRawExpr*> &op_exprs,
                      bool is_prepare_protocol/*= false*/);
   int check_expr_result_type(const ObRawExpr *expr, ObPLIntegerType &pl_integer_type, bool &is_anonymos_arg);
-  bool is_need_add_checker(const ObPLIntegerType &type, const ObRawExpr *expr);
-  int add_pl_integer_checker_expr(ObRawExprFactory &expr_factory,
+  static bool is_need_add_checker(const ObPLIntegerType &type, const ObRawExpr *expr);
+  static int add_pl_integer_checker_expr(ObRawExprFactory &expr_factory,
                                   const ObPLIntegerType &type,
                                   int32_t lower,
                                   int32_t upper,
@@ -835,7 +845,7 @@ private:
   int check_params_legal_in_body_routine(ObPLFunctionAST &routine_ast,
                                          const ObPLRoutineInfo *parent_routine_info,
                                          const ObPLRoutineInfo *body_routine_info);
-  int check_expr_can_pre_calc(ObRawExpr *expr, bool &pre_calc);
+  static int check_expr_can_pre_calc(ObRawExpr *expr, bool &pre_calc);
   int transform_subquery_expr(const ParseNode *node,
                               ObRawExpr *&expr,
                               const ObPLDataType *expected_type,
@@ -845,6 +855,11 @@ private:
   int transform_to_new_assign_stmt(ObIArray<int64_t> &transform_array, ObPLAssignStmt *&old_stmt);
 
   int replace_to_const_expr_if_need(ObRawExpr *&expr);
+  static int replace_to_const_expr_if_need(ObRawExpr *&expr,
+      ObPLResolveCtx &resolve_ctx, ObRawExprFactory &expr_factory);
+  static int formalize_expr(ObRawExpr &expr, PLExprResolveContext &ctx);
+  static int finish_resolve_expr(ObRawExpr *&expr, PLExprResolveContext &ctx,
+      uint64_t line_number, bool need_add, const ObPLDataType *expected_type, bool is_add_bool);
   int resolve_external_types_from_expr(ObRawExpr &expr);
   int add_external_cursor(ObPLBlockNS &ns,
                           const ObPLBlockNS *external_ns,
@@ -948,6 +963,7 @@ private:
                               const ObPLBlockNS &ns);
   int fast_check_status(uint64_t n = 0xFF) const;
 private:
+  friend class CallExprResolver;
   ObPLResolveCtx resolve_ctx_;
   ObPLExternalNS external_ns_;
   sql::ObRawExprFactory expr_factory_;
@@ -962,6 +978,29 @@ private:
   ObArray<ObPLStmt *> goto_stmts_; // index of goto statements, used for secondary parsing.
   ObItemType item_type_;
   mutable uint64_t fast_check_status_times_;
+};
+
+// One environment per CALL; ordinary arguments do not construct a function AST
+// or statement block. Expressions that require PL compilation use the old path.
+class CallExprResolver
+{
+public:
+  explicit CallExprResolver(sql::ObResolverParams &params);
+  int resolve(const ParseNode &node, ObRawExpr *&expr, ObPLDependencyTable *deps = NULL);
+private:
+  int init();
+  sql::ObResolverParams &params_;
+  ParamStore placeholder_params_;
+  ObPLResolveCtx resolve_ctx_;
+  ObPLExternalNS external_ns_;
+  ObPLSymbolTable symbol_table_;
+  ObPLUserTypeTable type_table_;
+  ObPLRoutineTable routine_table_;
+  ObPLDependencyTable deps_;
+  ObPLBlockNS namespace_;
+  ObRawExprFactory expr_factory_;
+  bool inited_;
+  bool enabled_;
 };
 
 class ObPLSwitchDatabaseGuard

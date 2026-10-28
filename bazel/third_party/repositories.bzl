@@ -26,8 +26,6 @@ def _windows_sdk(repository_ctx):
     for source, destination in {
         "vcpkg/x64-windows/lib": "lib",
         "vcpkg/x64-windows/bin": "bin",
-        "vcpkg/x64-windows/tools/protobuf": "protoc",
-        "vcpkg/x64-windows/tools/grpc": "grpc_tools",
         "openssl/lib/VC/x64/MD": "openssl",
         "openssl/bin": "openssl_bin",
         "vsag/lib": "vsag",
@@ -67,7 +65,7 @@ def _third_party_headers_repository_impl(repository_ctx):
         libraries = prefix + "/lib"
         libraries64 = libraries
     source_headers = [
-        "absl", "s2", "roaring", "vsag", "fmt", "cpuinfo.h", "seekdb-vsag",
+        "absl", "roaring", "vsag", "fmt", "cpuinfo.h", "seekdb-vsag",
         "omp.h", "ompx.h", "omp-tools.h", "ompt.h", "lapack.h", "lapacke.h",
         "lapacke_config.h", "lapacke_mangling.h", "lapacke_utils.h", "cblas.h",
     ]
@@ -89,7 +87,7 @@ def _third_party_headers_repository_impl(repository_ctx):
         libraries64 = libraries
     elif platform == "wasm":
         for child in repository_ctx.path(headers).readdir():
-            if child.basename not in source_headers + ["icu", "unicode"]:
+            if child.basename not in source_headers:
                 repository_ctx.symlink(child, "include/" + child.basename)
     else:
         repository_ctx.symlink(headers, "include")

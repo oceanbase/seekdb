@@ -20,7 +20,6 @@
 #include "common/mysqlclient/ob_isql_connection.h"
 #include "share/ob_dml_sql_splicer.h"
 #include "share/ob_sql_client_decorator.h"
-#include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
 
 #define ALL_HISTOGRAM_STAT_COLUMN_NAME "table_id, "      \
                                        "partition_id, "  \
@@ -1008,7 +1007,7 @@ int ObOptStatSqlService::fill_table_stat(common::sqlclient::ObMySQLResult &resul
     } else {
       stat.set_last_analyzed(static_cast<int64_t>(int_value));
       if (!stat.is_locked()) {
-        stat.set_stat_expired_time(ObTimeUtility::current_time() + ObOptStatMonitorCheckTask::CHECK_INTERVAL);
+        stat.set_stat_expired_time(ObTimeUtility::current_time() + OPT_STATS_MAINTENANCE_INTERVAL_US);
       }
     }
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, sample_size, stat, int64_t);
@@ -1701,7 +1700,7 @@ int ObOptStatSqlService::fetch_table_rowcnt(const uint64_t table_id,
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        int64_t expired_time = ObTimeUtility::current_time() + ObOptStatMonitorCheckTask::CHECK_INTERVAL;
+        int64_t expired_time = ObTimeUtility::current_time() + OPT_STATS_MAINTENANCE_INTERVAL_US;
         while (OB_SUCC(ret)) {
           int64_t tablet_idx = 0;
           int64_t row_cnt_idx = 1;

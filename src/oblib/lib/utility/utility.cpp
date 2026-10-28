@@ -20,6 +20,11 @@
 #include "lib/utility/ob_printf.h"
 #include "lib/alloc/alloc_func.h"
 #include "dirent.h"
+#ifndef __EMSCRIPTEN__
+#include <openssl/bio.h>
+#include <openssl/pem.h>
+#include <openssl/x509.h>
+#endif
 #if defined(__APPLE__)
 #include <sys/sysctl.h>
 #elif defined(__ANDROID__)

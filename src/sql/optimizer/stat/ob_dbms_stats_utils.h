@@ -88,6 +88,10 @@ public:
                                  bool need_index_table,
                                  bool &is_valid);
 
+  static bool is_automatic_stat_monitoring_table(const int64_t table_id);
+
+  static bool is_automatic_column_usage_table(const int64_t table_id);
+
   static int check_is_sys_table(share::schema::ObSchemaGetterGuard &schema_guard,
                                    const int64_t table_id,
                                    bool &is_valid);

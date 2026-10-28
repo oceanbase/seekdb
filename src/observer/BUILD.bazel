@@ -29,6 +29,8 @@ _OBSERVER_GENERATED_SOURCE_REPLACEMENTS = {
 
 
 _OBSERVER_NATIVE_DEPS = [
+    "//src/share:startup_result",
+    "//src/share:local_io_config",
     "//rust:sql_nio_headers",
     "//src/oblib/easy:easy",
     "//src/oblib:common_sql_mode",
@@ -159,7 +161,6 @@ _OBSERVER_NATIVE_DEPS = [
     "//bazel/third_party:openssl_headers",
     "//bazel/third_party:rapidjson_headers",
     "//bazel/third_party:roaring_headers",
-    "//bazel/third_party:s2_headers",
     "//bazel/third_party:vsag_headers",
     "//bazel/third_party:zlib_headers",
 ]
@@ -227,7 +228,6 @@ grouped_unity_cc_library(
         "//src/oblib:oblib_common",
         "//src/oblib:oblib_compression",
         "//src/oblib:oblib_concurrency_primitives",
-        "//src/oblib:oblib_db_log",
         "//src/oblib:oblib_db_meta",
         "//src/oblib:oblib_encoding_primitives",
         "//src/oblib:oblib_foundation",
@@ -261,7 +261,6 @@ grouped_unity_cc_library(
         "//src/oblib:oblib_common",
         "//src/oblib:oblib_compression",
         "//src/oblib:oblib_concurrency_primitives",
-        "//src/oblib:oblib_db_log",
         "//src/oblib:oblib_db_meta",
         "//src/oblib:oblib_foundation",
         "//src/oblib:oblib_io_primitives",
@@ -290,7 +289,6 @@ grouped_unity_cc_library(
         "//src/oblib:oblib_common",
         "//src/oblib:oblib_compression",
         "//src/oblib:oblib_concurrency_primitives",
-        "//src/oblib:oblib_db_log",
         "//src/oblib:oblib_db_meta",
         "//src/oblib:oblib_diagnostics_primitives",
         "//src/oblib:oblib_foundation",
@@ -402,6 +400,8 @@ _ORDERED_LINK_FILES = [
 ] + select({
     "@platforms//os:linux": ["//deps/external:jemalloc_archive"],
     "@platforms//os:macos": ["//deps/external:jemalloc_archive"],
+    "@platforms//os:windows": ["//deps/external:jemalloc_archive"],
+    "@platforms//os:android": ["//deps/external:jemalloc_archive"],
     "//conditions:default": [],
 }) + select({
     "@platforms//os:windows": [],
@@ -440,6 +440,8 @@ _EXECUTABLE_LINKOPTS = select({
     "@platforms//os:windows": ["/INCREMENTAL:NO", "/OPT:REF", "/OPT:ICF"],
     "@platforms//os:android": ["-pie", "-fopenmp", "-static-openmp", "-Wl,--gc-sections", "-Wl,--build-id=sha1"],
     "@platforms//os:macos": [
+        # Retain jemalloc's standalone malloc-zone registration constructor.
+        "-Wl,-u,_je_zone_register",
         "-Wl,-dead_strip",
         "-Wl,-framework,Security",
         "-Wl,-framework,CoreFoundation",

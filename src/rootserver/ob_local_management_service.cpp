@@ -2785,7 +2785,6 @@ int ObLocalManagementService::set_config_after_bootstrap_()
 
   const char* configs[][2] = {
     {"enable_record_trace_log", "false"},
-    {"_enable_dbms_job_package", "false"},
     {"_bloom_filter_ratio", "3"},
     {"_enable_mysql_compatible_dates", "true"}
   };

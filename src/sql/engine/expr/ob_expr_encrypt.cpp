@@ -586,7 +586,7 @@ int ObExprEncrypt::eval_encrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res
     char tmp_res[14];
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
     ObIAllocator &calc_alloc = alloc_guard.get_allocator();
-    
+
     if (src.is_null()) {
       res.set_null();
     } else if (src.get_string().empty()) {

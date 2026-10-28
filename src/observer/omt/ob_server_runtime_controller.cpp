@@ -132,17 +132,19 @@ static ObLogRuntimeConfig current_log_runtime_config()
 
 static int init_log_service(
     ObLogService *&log_service,
-    storage::ObLogStorageAdapter *log_storage_adapter)
+    storage::ObLogStorageAdapter *log_storage_adapter,
+    ObServerLogBlockMgr &log_block_mgr,
+    common::ObIODevice *log_device)
 {
   int ret = OB_SUCCESS;
   const auto *runtime = share::server_runtime();
   const share::ObServerModuleInitCtx *module_init_ctx =
       OB_ISNULL(runtime) ? nullptr : runtime->get_module_init_ctx();
   if (OB_ISNULL(module_init_ctx) || OB_ISNULL(GCTX.local_store_)
-      || OB_ISNULL(::oceanbase::share::server_service<::oceanbase::logservice::ObServerLogBlockMgr>())) {
+      || OB_ISNULL(log_device)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "log service composition is incomplete", KR(ret),
-        KP(module_init_ctx), KP(::oceanbase::share::server_service<::oceanbase::logservice::ObServerLogBlockMgr>()));
+        KP(module_init_ctx), KP(log_device));
   } else if (OB_FAIL(ObLogService::server_module_init(
       log_service,
       module_init_ctx->palf_options_,
@@ -151,14 +153,14 @@ static int init_log_service(
       OB_FILE_SYSTEM_ROUTER.get_clog_dir(),
       GCTX.self_addr(),
       log_storage_adapter,
-      ::oceanbase::share::server_service<::oceanbase::logservice::ObServerLogBlockMgr>(),
-      &LOCAL_DEVICE_INSTANCE,
+      &log_block_mgr,
+      log_device,
       &OB_IO_MANAGER,
       false,
       config::cpu_quota_concurrency(),
       current_log_runtime_config()))) {
   } else {
-    ::oceanbase::share::server_service<::oceanbase::logservice::ObServerLogBlockMgr>()->bind_log_service(*log_service);
+    log_block_mgr.bind_log_service(*log_service);
   }
   return ret;
 }
@@ -1221,6 +1223,7 @@ int ObServer::obs_construct_modules()
     BIND_SERVICE(global_iterator_pool, storage::ObGlobalIteratorPool);
     BIND_SERVICE(diagnose_tablet_mgr, compaction::ObDiagnoseTabletMgr);
     BIND_SERVICE(change_stream_mgr, share::ObChangeStreamMgr);
+    BIND_SERVICE(change_stream_service, query::ObIChangeStreamService);
     BIND_SERVICE(vector_index_service, query::ObIVectorIndexService);
     BIND_SERVICE(data_access_service, sql::ObDataAccessService);
     BIND_SERVICE(dag_warning_history_manager, share::ObDagWarningHistoryManager);
@@ -1293,7 +1296,7 @@ int ObServer::obs_init_modules()
     SERVER_LOG(WARN, "mods_log_storage_adapter_ fail", KR(ret));
   }
   if (OB_SUCC(ret) && OB_FAIL(init_log_service(
-      mods_log_service_, mods_log_storage_adapter_))) {
+      mods_log_service_, mods_log_storage_adapter_, log_block_mgr_, log_device_.get_local_device()))) {
     SERVER_LOG(WARN, "mods_log_service_ fail", KR(ret));
   }
   if (OB_SUCC(ret) && OB_FAIL(ObLSService::server_module_init(mods_ls_service_))) { SERVER_LOG(WARN, "mods_ls_service_ fail", KR(ret)); }
@@ -1404,7 +1407,7 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(ObAiService::server_module_init(mods_ai_service_))) { SERVER_LOG(WARN, "mods_ai_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObChangeStreamMgr::server_module_init(
       mods_change_stream_mgr_,
-      *mods_log_storage_adapter_,
+      *mods_log_service_->get_palf_env(),
       schema_publish_signal_,
       share::server_runtime()))) {
     SERVER_LOG(WARN, "mods_change_stream_mgr_ fail", KR(ret));
@@ -1670,6 +1673,7 @@ void ObServer::obs_destroy_modules()
   UNBIND_SERVICE(storage::ObGlobalIteratorPool);
   UNBIND_SERVICE(compaction::ObDiagnoseTabletMgr);
   UNBIND_SERVICE(share::ObChangeStreamMgr);
+  UNBIND_SERVICE(query::ObIChangeStreamService);
   UNBIND_SERVICE(query::ObIVectorIndexService);
   UNBIND_SERVICE(sql::ObDataAccessService);
   UNBIND_SERVICE(share::ObDagWarningHistoryManager);

@@ -6,24 +6,11 @@
       "sha256": "dcf71b9cba8dc0ca9940c4b316a0c796be8fab42b070bb6b7cab62b48f0e66c4",
       "source_directory": "abseil-cpp-20211102.0"
     },
-    "s2": {
-      "version": "0.10.0",
-      "url": "https://codeload.github.com/google/s2geometry/tar.gz/refs/tags/v0.10.0",
-      "sha256": "1c17b04f1ea20ed09a67a83151ddd5d8529716f509dde49a8190618d70532a3d",
-      "source_directory": "s2geometry-0.10.0"
-    },
     "roaring": {
       "version": "3.0.0",
       "url": "https://codeload.github.com/RoaringBitmap/CRoaring/tar.gz/refs/tags/v3.0.0",
       "sha256": "25183bc54ab650d964256d547869a34573a13d06f7e6a369b79e77f5c1feb8ba",
       "source_directory": "CRoaring-3.0.0"
-    },
-    "icu": {
-      "version": "69.1",
-      "url": "https://github.com/unicode-org/icu/releases/download/release-69-1/icu4c-69_1-src.tgz",
-      "sha256": "4cba7b7acd1d3c42c44bb0c14be6637098c7faf2b330ce876bc5f3b915d09745",
-      "source_directory": "icu",
-      "data_sha256": "c2a655a0e9f216854c3e92745d0e73b5e6bff780f95a39aee81ee8349d0f2bc2"
     },
     "vsag": {
       "version": "129b82c",
@@ -106,18 +93,6 @@
     }
   },
   "patches": {
-    "s2_wasm_port": {
-      "path": "src/s2/base/port.h",
-      "description": "Use the Emscripten musl byteswap header rather than redeclaring byte swaps after other headers include it.",
-      "input_sha256": "326e3f40a6ccffccc0bf7c13fc77eaf2c946fccba1b017b27d3dd867814fec8c",
-      "output_sha256": "9b7ab6f578ba4f6b72fbd70acefc5a1a486b484c6ad4505ce73e01a177263b0c",
-      "replacements": [
-        [
-          "#elif defined(__GLIBC__) || defined(__BIONIC__) || defined(__ASYLO__) || ",
-          "#elif defined(__EMSCRIPTEN__) || defined(__GLIBC__) || defined(__BIONIC__) || defined(__ASYLO__) || "
-        ]
-      ]
-    },
     "vsag_dataset_paths": {
       "path": "src/dataset_impl.cpp",
       "description": "DeepCopy must preserve absent optional Paths instead of dereferencing a null string array.",

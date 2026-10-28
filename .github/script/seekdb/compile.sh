@@ -4,7 +4,7 @@ workspace="${GITHUB_WORKSPACE:?}"
 task_dir="${SEEKDB_TASK_DIR:?}"
 cd "$workspace"
 mkdir -p "$task_dir"
-args=(--jobs="${BUILD_JOBS:-32}")
+args=(--jobs="${BUILD_JOBS:-32}" --lockfile_mode=error)
 case "${PACKAGE_TYPE:-release}" in
   release) ;;
   sanity) args+=(--sanity) ;;
@@ -19,7 +19,7 @@ if [[ -n "${FORWARDING_HOST:-}" ]]; then
 fi
 started=$SECONDS
 # Trust the CI proxy's CA alongside the bundled public CAs.
-bazel_java_home=$(python3 ./build.py info --batch java-home)
+bazel_java_home=$(python3 ./build.py info --batch --lockfile_mode=error java-home)
 bazel_trust_store="$task_dir/bazel-cacerts"
 install -m 644 "$bazel_java_home/lib/security/cacerts" "$bazel_trust_store"
 "$bazel_java_home/bin/keytool" -importcert -noprompt -alias ci-root \

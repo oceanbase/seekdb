@@ -117,7 +117,6 @@ _ROOTSERVER_NATIVE_DEPS = [
     "//bazel/third_party:openssl_headers",
     "//bazel/third_party:rapidjson_headers",
     "//bazel/third_party:roaring_headers",
-    "//bazel/third_party:s2_headers",
     "//bazel/third_party:vsag_headers",
     "//bazel/third_party:zlib_headers",
 ]
@@ -340,7 +339,6 @@ grouped_unity_cc_library(
         "//src/oblib:oblib_common",
         "//src/oblib:oblib_compression",
         "//src/oblib:oblib_concurrency_primitives",
-        "//src/oblib:oblib_db_log",
         "//src/oblib:oblib_db_meta",
         "//src/oblib:oblib_foundation",
         "//src/oblib:oblib_io_primitives",

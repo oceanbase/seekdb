@@ -1,4 +1,5 @@
 ############# root #############
+/target/
 *.a
 *.bak
 *.gcda
@@ -184,40 +185,6 @@ tools/deploy/single-with-proxy.yaml
 tools/deploy/bmsqlobp_test.yaml
 tools/deploy/oci_test.yaml
 tools/deploy/mirror_create
-tools/obtest/1.0.6_beta/
-tools/obtest/1.1.1_beta/
-tools/obtest/1_*
-tools/obtest/2_*
-tools/obtest/3_*
-tools/obtest/4_*
-tools/obtest/agent/*
-tools/obtest/agent/agentrestore.conf.template
-tools/obtest/agent/agentserver.conf.template
-tools/obtest/bin/
-tools/obtest/clean.sh
-tools/obtest/collected_log/
-tools/obtest/conf/configure.ini
-tools/obtest/conf/configure.ini_yongle
-tools/obtest/etc/
-tools/obtest/lib/libobserver.so
-tools/obtest/lib/libobserver.so.0
-tools/obtest/lib/libobserver.so.0.0.0
-tools/obtest/log/
-tools/obtest/mytest.log*
-tools/obtest/oblog/
-tools/obtest/observer.debug
-tools/obtest/rollback_sql_post.txt
-tools/obtest/run/
-tools/obtest/server_list
-tools/obtest/upgrade_sql_post.txt
-tools/obtest/upgrade_sql_pre.txt
-tools/obtest/velocity.log*
-tools/obtest/y.log*
-tools/obtest/yclean.sh
-tools/obtest/ycopy.sh
-tools/obtest/admin/
-tools/obtest/.run_test.list
-tools/obtest/sql/backup_restore/meta_db_init.sql
 
 ############# unittest #############
 unittest/**/test_*
@@ -256,6 +223,7 @@ test/var
 .worktrees/
 .claude/
 CLAUDE.md
+!/CLAUDE.md
 .omo/
 seekdb_data/
 

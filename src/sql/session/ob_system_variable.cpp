@@ -2178,26 +2178,6 @@ int ObSysVarOnUpdateFuncs::start_trans_by_set_trans_char_(
   return ret;
 }
 
-int ObSysVarOnUpdateFuncs::update_sql_mode(ObExecContext &ctx,
-                                           const ObSetVar &set_var,
-                                           const ObBasicSysVar &sys_var,
-                                           const common::ObObj &val)
-{
-  UNUSED(ctx);
-  UNUSED(sys_var);
-  UNUSED(val);
-  int ret = OB_SUCCESS;
-  if (set_var.set_scope_== ObSetVar::SET_SCOPE_GLOBAL) {
-    //nothing to do
-  } else {
-    //Handle MODE_NO_BACKSLASH_ESCAPES
-    //Whether to treat backslashes as escape characters. Stored in a system variable,
-    //Temporarily not supported.
-  }
-  return ret;
-}
-
-
 int ObSysVarToObjFuncs::to_obj_charset(ObIAllocator &allocator,
                                        const ObBasicSessionInfo &session,
                                        const ObBasicSysVar &sys_var,

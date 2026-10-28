@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
+#include "share/schema/ob_schema_getter_guard.h"
 #include "ob_table_sql_service.h"
 #include <inttypes.h>
 #include "lib/literals/ob_literals.h"

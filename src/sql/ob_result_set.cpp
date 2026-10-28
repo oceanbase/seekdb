@@ -138,7 +138,8 @@ OB_INLINE int ObResultSet::open_plan()
     has_top_limit_ = physical_plan_->has_top_limit();
     // PX admission is done in do_open_plan (right before execute_plan), not here.
     if (OB_SUCC(ret)) {
-      if (THIS_WORKER.is_timeout()) {
+      // The cached clock can lag behind short query deadlines.
+      if (THIS_WORKER.get_timeout_remain() <= 0) {
         // packet may have stayed in the queue for too long, by here it has already timed out,
         // If here is not checked, it will continue to run, likely entering other modules,
         // Other modules detect a timeout, causing confusion in other modules, therefore adding a timeout check here.

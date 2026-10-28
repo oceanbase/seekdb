@@ -25,7 +25,7 @@
 #include "standby/restore/ob_standby_restore_tablet_builder.h"
 #include "standby/restore/ob_tablet_copy_finish_task.h"
 #include "standby/restore/ob_sstable_copy_finish_task.h"
-#include "standby/ob_standby_grpc.h"
+#include "standby/standby_rpc.h"
 #include "standby/ob_standby_palf_base_info.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/ls/ob_ls_meta.h"
@@ -116,7 +116,7 @@ int ObStandbySSTableCopier::prepare_replay_base(
   static const int64_t RPC_TIMEOUT_US = 60L * 1000L * 1000L;
   standby::ObFetchStandbyPalfBaseInfoArg arg;
   standby::ObFetchStandbyPalfBaseInfoResult result;
-  standby::ObStandbyGrpcClient client;
+  standby::StandbyRpcClient client;
   restore_checkpoint_scn.reset();
   palf_base_info.reset();
   source_end_scn.reset();
@@ -140,7 +140,7 @@ int ObStandbySSTableCopier::prepare_replay_base(
     LOG_WARN("source returned invalid restore checkpoint", K(ret), K(source_ls_meta_));
   } else if (FALSE_IT(arg.replay_start_scn_ = restore_checkpoint_scn)) {
   } else if (OB_FAIL(client.init(src_, RPC_TIMEOUT_US, config_->rpc_tls_enabled_))) {
-    LOG_WARN("failed to init grpc client for replay base", K(ret), K_(src));
+    LOG_WARN("failed to init RPC client for replay base", K(ret), K_(src));
   } else if (OB_FAIL(client.fetch_standby_palf_base_info(arg, result))) {
     LOG_WARN("failed to fetch source palf replay base", K(ret), K_(src), K(arg));
   } else if (!result.is_valid()) {
@@ -322,13 +322,16 @@ int ObStandbySSTableCopier::build_table_info_(
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_id_array.count(); ++i) {
       ObTabletHandle tablet_handle;
-      if (OB_FAIL(ls->get_tablet(tablet_id_array.at(i), tablet_handle))) {
+      if (OB_FAIL(ls->get_tablet(tablet_id_array.at(i), tablet_handle,
+          ObTabletCommon::DEFAULT_GET_TABLET_NO_WAIT, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
         if (OB_TABLET_NOT_EXIST == ret) {
           LOG_INFO("local tablet not exist, skip sstable info fetch", K(ret), K(tablet_id_array.at(i)));
           ret = OB_SUCCESS;
         } else {
           LOG_WARN("failed to get local tablet", K(ret), K(tablet_id_array.at(i)));
         }
+      } else if (tablet_handle.get_obj()->is_empty_shell()) {
+        LOG_INFO("local tablet is empty shell, skip sstable info fetch", K(tablet_id_array.at(i)));
       } else if (OB_FAIL(tablet_handle_array.push_back(tablet_handle))) {
         LOG_WARN("failed to push tablet handle", K(ret), K(tablet_id_array.at(i)));
       }
@@ -427,7 +430,8 @@ int ObStandbySSTableCopier::finish_tablet_restore_(
   if (OB_ISNULL(ls) || !tablet_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid finish tablet restore argument", K(ret), KP(ls), K(tablet_id));
-  } else if (OB_FAIL(ls->get_tablet(tablet_id, tablet_handle))) {
+  } else if (OB_FAIL(ls->get_tablet(tablet_id, tablet_handle,
+      ObTabletCommon::DEFAULT_GET_TABLET_NO_WAIT, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
     if (OB_TABLET_NOT_EXIST == ret) {
       LOG_INFO("standby tablet not exist or is empty shell, skip finish restore", K(ret), K(tablet_id));
       ret = OB_SUCCESS;
@@ -437,6 +441,8 @@ int ObStandbySSTableCopier::finish_tablet_restore_(
   } else if (OB_ISNULL(tablet = tablet_handle.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("standby tablet is null", K(ret), K(tablet_id));
+  } else if (tablet->is_empty_shell()) {
+    LOG_INFO("standby tablet is empty shell, skip finish restore", K(tablet_id));
   } else if (tablet->get_tablet_meta().local_status_.is_restore_status_full()) {
     LOG_INFO("standby tablet restore already complete", K(tablet_id));
   } else if (OB_FAIL(ls->update_tablet_restore_status(tablet_id, restore_status))) {
