@@ -104,8 +104,6 @@ eval ALTER SYSTEM SET _hash_area_size='$saved_hash_area_size';
 sleep 6;
 --enable_query_log
 --echo shortest_bound_goal_and_cross_hop_visited
---disable_result_log
---disable_query_log
 EXPLAIN INTO plan_table SET statement_id='shortest_goal'
 SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
  (a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=2)
@@ -119,8 +117,6 @@ SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
  (a IS person WHERE a.id=1)-[e IS knows]->{1,6}
  (b IS person WHERE b.id=2 AND b.age>=18)
  COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
---enable_query_log
---enable_result_log
 SELECT COUNT(*)=1 AS bound_goal FROM plan_table
 WHERE statement_id='shortest_goal' AND operator='GRAPH FEEDBACK LOOP'
 AND special_predicates LIKE '%visited=cross_hop, goal=bound_key%';
