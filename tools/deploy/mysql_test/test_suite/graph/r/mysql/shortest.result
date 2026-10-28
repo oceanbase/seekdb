@@ -168,6 +168,57 @@ SELECT COUNT(*) AS recovered FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
 (a IS person WHERE a.id=4)-[e IS knows]->{0,16}(b IS person) COLUMNS(b.id AS endpoint)) g;
 recovered
 1
+shortest_bound_goal_and_cross_hop_visited
+SELECT COUNT(*)=1 AS bound_goal FROM plan_table
+WHERE statement_id='shortest_goal' AND operator='GRAPH FEEDBACK LOOP'
+AND special_predicates LIKE '%visited=cross_hop, goal=bound_key%';
+bound_goal
+1
+SELECT COUNT(*)=1 AS cross_hop_visited FROM plan_table
+WHERE statement_id='shortest_reach' AND operator='GRAPH FEEDBACK LOOP'
+AND special_predicates LIKE '%visited=cross_hop, goal=none%';
+cross_hop_visited
+1
+SELECT COUNT(*)=1 AS extra_terminal_filter_disables_goal FROM plan_table
+WHERE statement_id='shortest_extra_target' AND operator='GRAPH FEEDBACK LOOP'
+AND special_predicates LIKE '%goal=none%';
+extra_terminal_filter_disables_goal
+1
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=2)
+COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+distance
+1
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=3)
+COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+distance
+2
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=5)
+COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+distance
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=1)
+COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+distance
+3
+SELECT personId FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person)
+COLUMNS(b.id AS personId)) g WHERE personId<>1 ORDER BY personId;
+personId
+2
+3
+PREPARE shortest_goal_cached FROM 'SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=?) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0';
+SET @goal=2;
+EXECUTE shortest_goal_cached USING @goal;
+distance
+1
+SET @goal=3;
+EXECUTE shortest_goal_cached USING @goal;
+distance
+2
+DEALLOCATE PREPARE shortest_goal_cached;
 DROP TABLE shortest_expected,plan_table;
 DROP PROPERTY GRAPH graph_social;
 DROP TABLE graph_works,graph_knows,graph_company,graph_person;

@@ -109,10 +109,15 @@ struct GraphPathDesc
   // Only a single segment permits binding/vertex/hop witness pruning; fixed
   // segments can observe prefix identity or constrain the selected suffix.
   bool shortest_single_segment_ = false;
+  // The resolver proved that the terminal filter is exactly a full primary-
+  // key equality. A native shortest search may stop at that target only after
+  // the optimizer also finds a usable, typed runtime value for every key.
+  bool shortest_goal_key_filter_ = false;
   TO_STRING_KV(K_(graph_id), K_(graph_version), K_(source_element_id),
                K_(edge_element_id), K_(target_element_id), K_(lower_bound),
                K_(upper_bound), K_(direction), K_(path_mode), K_(row_shape),
-               K_(need_path), K_(any_shortest), K_(shortest_single_segment));
+               K_(need_path), K_(any_shortest), K_(shortest_single_segment),
+               K_(shortest_goal_key_filter));
 };
 
 // Internal typed identity of one mapped vertex or edge. graph_id_ and

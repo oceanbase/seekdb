@@ -382,6 +382,7 @@ void ObSelectStmt::set_graph_feedback_loop(
   graph_path_need_path_ = path_desc.need_path_;
   graph_path_any_shortest_ = path_desc.any_shortest_;
   graph_path_shortest_single_segment_ = path_desc.shortest_single_segment_;
+  graph_path_shortest_goal_key_filter_ = path_desc.shortest_goal_key_filter_;
 }
 
 GraphPathDesc ObSelectStmt::get_graph_path_desc() const
@@ -400,6 +401,7 @@ GraphPathDesc ObSelectStmt::get_graph_path_desc() const
   path_desc.need_path_ = graph_path_need_path_;
   path_desc.any_shortest_ = graph_path_any_shortest_;
   path_desc.shortest_single_segment_ = graph_path_shortest_single_segment_;
+  path_desc.shortest_goal_key_filter_ = graph_path_shortest_goal_key_filter_;
   return path_desc;
 }
 

@@ -21,6 +21,7 @@
 #include "sql/optimizer/ob_join_order.h"
 #include "sql/optimizer/ob_log_join.h"
 #include "sql/optimizer/ob_log_sort.h"
+#include "sql/optimizer/ob_log_subplan_scan.h"
 #include "sql/optimizer/ob_log_table_scan.h"
 #include "sql/optimizer/ob_opt_est_cost.h"
 #include "sql/resolver/ddl/ob_explain_stmt.h"
@@ -966,16 +967,63 @@ int GraphFeedbackLoopLogOp::can_prune_duplicate_states(bool &can_prune)
   return ret;
 }
 
+int GraphFeedbackLoopLogOp::get_shortest_goal_value_expr(
+    ObRawExpr *&value_expr) const
+{
+  value_expr = nullptr;
+  const ObLogicalOperator *parent = get_parent();
+  if (path_desc_.shortest_goal_key_filter_
+      && path_desc_.any_shortest_ && path_desc_.shortest_single_segment_
+      && path_desc_.path_mode_ == GraphPathMode::WALK
+      && path_desc_.row_shape_ == GraphPathRowShape::PER_MATCH
+      && !path_desc_.need_path_ && expand_access_desc_.target_key_count_ == 1
+      && parent != nullptr && parent->get_type() == LOG_SUBPLAN_SCAN
+      && parent->get_num_of_child() == 1 && parent->get_child(0) == this) {
+    const ObLogSubPlanScan &scan = *static_cast<const ObLogSubPlanScan *>(parent);
+    const uint64_t goal_column_id = common::OB_APP_MIN_COLUMN_ID
+        + GRAPH_FEEDBACK_DEPTH_COLUMN_COUNT + expand_access_desc_.source_key_count_;
+    for (int64_t i = 0; value_expr == nullptr && i < scan.get_filter_exprs().count(); ++i) {
+      ObRawExpr *filter = scan.get_filter_exprs().at(i);
+      if (filter != nullptr && filter->get_expr_type() == T_OP_EQ
+          && filter->get_param_count() == 2) {
+        for (int64_t side = 0; value_expr == nullptr && side < 2; ++side) {
+          ObRawExpr *key = filter->get_param_expr(side);
+          ObRawExpr *value = filter->get_param_expr(1 - side);
+          if (key != nullptr && key->is_column_ref_expr() && value != nullptr) {
+            const ObColumnRefRawExpr &column = *static_cast<const ObColumnRefRawExpr *>(key);
+            // Restrict this fast path to identical SQL key/value types. A
+            // comparison that needs an implicit cast remains in the parent.
+            if (column.get_table_id() == scan.get_subquery_id()
+                && column.get_column_id() == goal_column_id
+                && value->is_const_expr() && value->is_deterministic()
+                && !value->has_flag(CNT_COLUMN)
+                && !value->has_flag(CNT_SUB_QUERY)
+                && value->get_result_type().get_type()
+                    == key->get_result_type().get_type()
+                && value->get_result_type().get_collation_type()
+                    == key->get_result_type().get_collation_type()) {
+              value_expr = value;
+            }
+          }
+        }
+      }
+    }
+  }
+  return OB_SUCCESS;
+}
+
 int GraphFeedbackLoopLogOp::get_plan_item_info(PlanText &plan_text,
                                                ObSqlPlanItem &plan_item)
 {
   int ret = OB_SUCCESS;
   bool prune = false;
+  ObRawExpr *goal_value = nullptr;
   if (OB_FAIL(ObLogicalOperator::get_plan_item_info(plan_text, plan_item))) {
   } else if (OB_FAIL(can_prune_duplicate_states(prune))) {
+  } else if (prune && OB_FAIL(get_shortest_goal_value_expr(goal_value))) {
   } else {
     BEGIN_BUF_PRINT;
-    if (OB_FAIL(BUF_PRINTF("direction=%s, hops={%ld,%ld}, access=%s, mode=%s, runtime=%s, states=%s, search=%s, adjacency_reuse=%s",
+    if (OB_FAIL(BUF_PRINTF("direction=%s, hops={%ld,%ld}, access=%s, mode=%s, runtime=%s, states=%s, search=%s, visited=%s, goal=%s, adjacency_reuse=%s",
                            path_desc_.direction_ == GraphPathDirection::IN
                                ? "IN" : path_desc_.direction_ == GraphPathDirection::BOTH ? "BOTH" : "OUT",
                            path_desc_.lower_bound_,
@@ -986,6 +1034,11 @@ int GraphFeedbackLoopLogOp::get_plan_item_info(PlanText &plan_text,
                                ? "native" : "fallback",
                            prune ? "binding_vertex_hop" : "paths",
                            path_desc_.any_shortest_ ? "any_shortest" : "all",
+                           prune && path_desc_.any_shortest_
+                               && path_desc_.shortest_single_segment_
+                               && can_use_basic_native_runtime()
+                                   ? "cross_hop" : "per_hop",
+                           goal_value != nullptr ? "bound_key" : "none",
                            can_reuse_adjacency() ? "eligible" : "off"))) {
     }
     END_BUF_PRINT(plan_item.special_predicates_, plan_item.special_predicates_len_);
@@ -1161,6 +1214,7 @@ uint64_t GraphFeedbackLoopLogOp::hash(uint64_t seed) const
   seed = do_hash(path_desc_.need_path_, seed);
   seed = do_hash(path_desc_.any_shortest_, seed);
   seed = do_hash(path_desc_.shortest_single_segment_, seed);
+  seed = do_hash(path_desc_.shortest_goal_key_filter_, seed);
   seed = expand_access_desc_.hash(seed);
   seed = do_hash(pull_to_local_, seed);
   seed = do_hash(static_cast<int64_t>(step_access_method_), seed);

@@ -85,7 +85,7 @@ int GraphFeedbackFrontier::check_memory_limit()
 GraphExpandStats GraphFeedbackFrontier::get_pending_hop_stats() const
 {
   return hop_stats_.snapshot(input_batcher_.source_count(),
-      input_batcher_.has_source_index(), next_state_ids_->count(),
+      input_batcher_.has_exact_source_count(), next_state_ids_->count(),
       batch_open_ ? &expand_.get_stats() : nullptr);
 }
 
@@ -127,19 +127,42 @@ int GraphFeedbackFrontier::begin_hop(
     GraphPathDirection direction, GraphPathMode path_mode, bool prune_duplicate_states)
 {
   int ret = OB_SUCCESS;
+  const int64_t next_hop = hop_ + 1;
+  const bool retain_seen = prune_duplicate_states && shortest_lower_bound_ >= 0
+      && hop_ > 0
+      && next_hop > shortest_lower_bound_;
   next_state_ids_->reuse();
-  next_state_index_.reset();
+  if (!retain_seen) { next_state_index_.reset(); }
   if (OB_UNLIKELY(!retain_path_history_ && path_mode != GraphPathMode::WALK)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("graph path mode requires retained history", K(ret), K(path_mode));
-  } else if (OB_FAIL(input_batcher_.begin_level(*current_state_ids_, hop_, batch_memory_budget()))) {
+  } else if (OB_FAIL(input_batcher_.begin_level(
+                 *current_state_ids_, hop_, batch_memory_budget(),
+                 shortest_lower_bound_ >= 0 && prune_duplicate_states
+                     && path_mode == GraphPathMode::WALK && !retain_path_history_
+                     && state_store_.root_count() == 1))) {
     LOG_WARN("failed to group graph frontier sources", K(ret), K_(hop));
   } else {
-    hop_stats_.begin(current_state_ids_->count(), input_batcher_.has_source_index()
+    hop_stats_.begin(current_state_ids_->count(), input_batcher_.has_exact_source_count()
         || !expand_.can_partition_sources() || current_state_ids_->count() <= input_batch_size_);
   }
-  if (OB_SUCC(ret) && prune_duplicate_states
+  if (OB_SUCC(ret) && prune_duplicate_states && !retain_seen
              && OB_FAIL(next_state_index_.init(current_state_ids_->count()))) {
+  }
+  // A zero-hop result dominates every later return to the same seed. For a
+  // positive lower bound, do not index roots: a positive-length cycle back
+  // to the seed can be the first eligible shortest witness.
+  for (int64_t i = 0; OB_SUCC(ret) && prune_duplicate_states
+       && shortest_lower_bound_ == 0 && hop_ == 0
+       && i < current_state_ids_->count(); ++i) {
+    GraphPathState root;
+    int64_t entry_index = -1;
+    bool inserted = false;
+    if (OB_FAIL(state_store_.get_state(current_state_ids_->at(i), root))) {
+    } else if (OB_FAIL(next_state_index_.get_or_insert(
+                   root.current_identity_, entry_index, inserted, root.binding_id_))) {
+      LOG_WARN("failed to index zero-hop graph state", K(ret), K(i));
+    }
   }
   if (OB_SUCC(ret) && OB_FAIL(check_memory_limit())) {
   } else if (OB_SUCC(ret)) {
@@ -154,6 +177,10 @@ int GraphFeedbackFrontier::begin_hop(
 int GraphFeedbackFrontier::finish_hop()
 {
   int ret = OB_SUCCESS;
+  // The batcher may count unique sources directly from the input frontier.
+  // Save that count before swapping and reusing its backing array.
+  const int64_t source_count = input_batcher_.source_count();
+  const bool exact_source_count = input_batcher_.has_exact_source_count();
   // Only a fully consumed level can become the input to the following hop.
   std::swap(current_state_ids_, next_state_ids_);
   next_state_ids_->reuse();
@@ -161,11 +188,21 @@ int GraphFeedbackFrontier::finish_hop()
   expanding_ = false;
   if (OB_FAIL(check_memory_limit())) {
   } else {
-    hop_stats_.finish(input_batcher_.source_count(),
-                      input_batcher_.has_source_index(), current_state_ids_->count());
+    hop_stats_.finish(source_count, exact_source_count, current_state_ids_->count());
     LOG_TRACE("completed graph frontier hop", K_(hop), "stats", hop_stats_.last());
     input_batcher_.finish_level();
-    next_state_index_.reset();
+    // Endpoint-only shortest states have no parent chain. The old frontier
+    // has been fully consumed, so retain only roots and this completed level.
+    if (shortest_lower_bound_ >= 0 && !retain_path_history_
+        && OB_FAIL(state_store_.compact_endpoint_frontier(*current_state_ids_))) {
+      LOG_WARN("failed to compact graph shortest frontier", K(ret), K_(hop));
+    }
+    // The first eligible level establishes the shortest depth of each
+    // binding/vertex. Keep its index for later levels only in that mode.
+    if (!(active_prune_duplicate_states_ && shortest_lower_bound_ >= 0
+          && hop_ >= shortest_lower_bound_)) {
+      next_state_index_.reset();
+    }
   }
   return ret;
 }
@@ -179,8 +216,9 @@ int GraphFeedbackFrontier::accept_extension(
   bool repeated_state = false;
   int64_t entry_index = -1;
   accepted = false;
-  // TRAIL checks one path's ancestry; optional pruning checks only equal
-  // binding/vertex states in this next level, never a global visited set.
+  // TRAIL checks one path's ancestry. In the proven shortest mode, this index
+  // also contains states from earlier eligible BFS levels; otherwise it only
+  // contains states from the next level being built.
   if (path_mode == GraphPathMode::TRAIL
       && OB_FAIL(state_store_.contains_edge(
           extension.path_state_id_, extension.edge_identity_, repeated_edge))) {
@@ -271,7 +309,8 @@ int GraphFeedbackFrontier::consume_input_batch(
 
 int GraphFeedbackFrontier::expand(GraphPathDirection direction,
                                   GraphPathMode path_mode,
-                                  bool prune_duplicate_states)
+                                  bool prune_duplicate_states,
+                                  int64_t shortest_lower_bound)
 {
   int ret = OB_SUCCESS;
   // A scheduling quantum, never a result/fanout limit. In particular a high
@@ -284,6 +323,19 @@ int GraphFeedbackFrontier::expand(GraphPathDirection direction,
     LOG_WARN("graph frontier hop parameters changed during continuation", K(ret),
              K_(hop), K(direction), K(path_mode), K(prune_duplicate_states),
              K_(active_direction), K_(active_path_mode), K_(active_prune_duplicate_states));
+  } else if (shortest_mode_configured_
+             && shortest_lower_bound != shortest_lower_bound_) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("graph shortest pruning bound changed during traversal", K(ret),
+             K(shortest_lower_bound), K_(shortest_lower_bound));
+  } else if (shortest_mode_configured_ && shortest_lower_bound_ >= 0
+             && hop_ > 0
+             && (direction != active_direction_ || path_mode != active_path_mode_
+                 || prune_duplicate_states != active_prune_duplicate_states_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("graph shortest traversal parameters changed", K(ret),
+             K(direction), K(path_mode), K(prune_duplicate_states),
+             K_(active_direction), K_(active_path_mode), K_(active_prune_duplicate_states));
   } else if (current_state_ids_->empty()) {
     ret = OB_ITER_END;
   } else if (OB_UNLIKELY(hop_ >= GRAPH_PATH_MAX_HOPS
@@ -291,12 +343,21 @@ int GraphFeedbackFrontier::expand(GraphPathDirection direction,
                              && direction != GraphPathDirection::IN)
                          || (path_mode != GraphPathMode::WALK
                              && path_mode != GraphPathMode::TRAIL)
-                         || (prune_duplicate_states && path_mode != GraphPathMode::WALK))) {
+                         || (prune_duplicate_states && path_mode != GraphPathMode::WALK)
+                         || shortest_lower_bound < -1
+                         || shortest_lower_bound > GRAPH_PATH_MAX_HOPS
+                         || (shortest_lower_bound >= 0
+                             && (!prune_duplicate_states
+                                 || path_mode != GraphPathMode::WALK)))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid graph frontier expansion", K(ret), K_(hop),
              "direction", static_cast<int64_t>(direction),
              "path_mode", static_cast<int64_t>(path_mode));
   } else {
+    if (!shortest_mode_configured_) {
+      shortest_lower_bound_ = shortest_lower_bound;
+      shortest_mode_configured_ = true;
+    }
     if (!expanding_) {
       ret = begin_hop(direction, path_mode, prune_duplicate_states);
     }
@@ -397,6 +458,8 @@ void GraphFeedbackFrontier::reset()
   active_direction_ = GraphPathDirection::OUT;
   active_path_mode_ = GraphPathMode::WALK;
   active_prune_duplicate_states_ = false;
+  shortest_lower_bound_ = -1;
+  shortest_mode_configured_ = false;
   expanding_ = false;
   batch_open_ = false;
 }

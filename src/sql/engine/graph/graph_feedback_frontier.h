@@ -47,14 +47,19 @@ public:
   // A partially produced hop is visible to the consumer but never becomes
   // input to the following hop until all its extensions have been consumed.
   // This is scheduling, not truncation: further calls return every path.
-  // Continuations of one hop must use the same direction, path mode and
-  // pruning flag. A mismatch is a terminal error and clears the frontier.
-  // WALK normally accepts every extension; a proven
-  // duplicate-insensitive consumer can merge equal binding/vertex states at
-  // this hop. TRAIL rejects edges in the extension's own history. An empty current
-  // frontier returns OB_ITER_END without modifying the controller.
+  // Continuations of one hop must use the same parameters; shortest pruning
+  // parameters remain fixed across the whole traversal. A mismatch is a
+  // terminal error and clears the frontier. WALK normally accepts every
+  // extension. A proven duplicate-insensitive consumer may merge equal
+  // binding/vertex states in one hop. For a proven single-segment ANY SHORTEST
+  // query, shortest_lower_bound >= 0 also rejects states first seen at an
+  // earlier eligible hop. Earlier hops must still be explored: a cycle can be
+  // the shortest path satisfying a positive lower bound. -1 retains the
+  // original per-hop behavior. TRAIL checks each path's own edge history.
+  // An empty current frontier returns OB_ITER_END without changing state.
   int expand(GraphPathDirection direction, GraphPathMode path_mode,
-             bool prune_duplicate_states = false);
+             bool prune_duplicate_states = false,
+             int64_t shortest_lower_bound = -1);
 
   int get_frontier_state(int64_t index, GraphPathState &state) const;
   // Returns the root-to-leaf history when retained, otherwise only the root
@@ -108,8 +113,9 @@ private:
   GraphPathStateStore state_store_;
   GraphFrontierInputBatcher input_batcher_;
   GraphHopStatsCollector hop_stats_;
-  // One entry per (binding, typed vertex) in the NEXT BFS level only. Never a
-  // global visited set: a vertex reached at different hops is not equivalent.
+  // Per-hop (binding, typed vertex) index by default. Only proven ANY SHORTEST
+  // retains entries across hops starting at the first eligible output level.
+  // Identity backing belongs to state_store_ and outlives this index.
   GraphIdentityIndex next_state_index_;
   int64_t input_batch_size_;
   int64_t memory_limit_;
@@ -124,6 +130,8 @@ private:
   GraphPathDirection active_direction_{GraphPathDirection::OUT};
   GraphPathMode active_path_mode_{GraphPathMode::WALK};
   bool active_prune_duplicate_states_{false};
+  int64_t shortest_lower_bound_{-1};
+  bool shortest_mode_configured_{false};
   bool expanding_{false};
   bool batch_open_{false};
   bool retain_path_history_{true};

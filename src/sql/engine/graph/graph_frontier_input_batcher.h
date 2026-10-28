@@ -37,13 +37,16 @@ public:
   // unchanged during each call; the owner recomputes the budget between calls.
   // The state IDs and their identities must outlive this level's access cursor.
   int begin_level(const common::ObIArray<int64_t> &states, int64_t hop,
-                  int64_t memory_budget);
+                  int64_t memory_budget, bool sources_unique_by_shortest);
   int next_batch(int64_t memory_budget);
   bool exhausted() const { return state_ids_ == nullptr || next_position_ == input_units(); }
   const common::ObIArray<GraphExpandInput> &batch() const { return input_batch_; }
   int64_t used_memory() const;
-  bool has_source_index() const { return source_index_enabled_; }
-  int64_t source_count() const { return source_index_.count(); }
+  bool has_exact_source_count() const
+  { return unique_sources_ || source_index_enabled_; }
+  int64_t source_count() const
+  { return unique_sources_ && state_ids_ != nullptr
+      ? state_ids_->count() : source_index_.count(); }
   // Called after the access cursor is released and final statistics are read.
   void finish_level();
   void reset();
@@ -74,6 +77,7 @@ private:
   int64_t next_position_{0};
   bool source_index_enabled_{false};
   bool batch_by_source_groups_{false};
+  bool unique_sources_{false};
   DISALLOW_COPY_AND_ASSIGN(GraphFrontierInputBatcher);
 };
 
