@@ -18,6 +18,7 @@
 #define OCEANBASE_SHARE_IO_OB_IO_CALIBRATION_H
 
 #include "lib/thread/threads.h"
+#include <inttypes.h>
 #include "lib/queue/ob_fixed_queue.h"
 #include "lib/container/ob_array_iterator.h"
 #include "lib/container/ob_array_wrap.h"
@@ -52,7 +53,7 @@ public:
   void reset();
   bool is_valid() const;
   bool operator==(const ObIOBenchResult &other) const;
-  DEFINE_TO_STRING(BUF_PRINTF("mode:%d, size:%ld, iops:%.2f, rt_us:%.2f", (int)mode_, size_, iops_, rt_us_));
+  DEFINE_TO_STRING(BUF_PRINTF("mode:%d, size:%" PRId64 ", iops:%.2f, rt_us:%.2f", (int)mode_, size_, iops_, rt_us_));
 public:
   ObIOMode mode_;
   int64_t size_;

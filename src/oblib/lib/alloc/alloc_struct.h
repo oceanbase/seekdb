@@ -152,24 +152,6 @@ private:
   ObMemAttr old_attr_;
 };
 
-class ObLightBacktraceGuard
-{
-public:
-  explicit ObLightBacktraceGuard(const bool enable) : last_(tl_enable())
-  {
-    tl_enable() = enable;
-  }
-  ~ObLightBacktraceGuard() { tl_enable() = last_; }
-  static bool is_enabled() { return tl_enable(); }
-private:
-  static bool &tl_enable()
-  {
-    static __thread bool enable = true;
-    return enable;
-  }
-  const bool last_;
-};
-
 } // end namespace lib
 } // end namespace oceanbase
 

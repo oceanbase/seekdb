@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "rust/config.h"
+#include <inttypes.h>
 #include "common/ob_timeout_ctx.h"
 #include "common/mysqlclient/ob_isql_connection.h"
 #include "ob_ddl_redefinition_task.h"
@@ -221,7 +222,7 @@ int ObDDLRedefinitionSSTableBuildTask::process()
 void ObDDLRedefinitionSSTableBuildTask::add_event_info(const int ret, const ObString &ddl_event_stmt)
 {
   char table_id_buffer[256];
-  snprintf(table_id_buffer, sizeof(table_id_buffer), "object_id:%ld, target_object_id:%ld", data_table_id_, dest_table_id_);
+  snprintf(table_id_buffer, sizeof(table_id_buffer), "object_id:%" PRId64 ", target_object_id:%" PRId64, data_table_id_, dest_table_id_);
   MANAGEMENT_EVENT_ADD("ddl scheduler", ddl_event_stmt.ptr(),
     "ret", ret,
     K_(trace_id),
@@ -1311,16 +1312,16 @@ int ObDDLRedefinitionTask::sync_table_level_stats_info(common::ObMySQLTransactio
   int64_t partition_id = data_table_schema.is_partitioned_table() ? -1 : object_id_;
   int64_t target_partition_id = new_table_schema.is_partitioned_table() ? -1 : target_object_id_;
 
-  if (OB_FAIL(sql_string.assign_fmt("UPDATE %s SET table_id = %ld, partition_id = %ld"
-      " WHERE table_id = %ld and partition_id = %ld",
+  if (OB_FAIL(sql_string.assign_fmt("UPDATE %s SET table_id = %" PRIu64 ", partition_id = %" PRId64
+      " WHERE table_id = %" PRIu64 " and partition_id = %" PRId64,
       OB_ALL_TABLE_STAT_TNAME, target_object_id_, target_partition_id,
       object_id_, partition_id))) {
   } else if (OB_FAIL(trans.write(sql_string.ptr(), affected_rows))) {
   } else if (OB_UNLIKELY(affected_rows < 0)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (!need_sync_history) {// do not need to sync history.
-  } else if (OB_FAIL(history_sql_string.assign_fmt("UPDATE %s SET table_id = %ld, partition_id = %ld"
-      " WHERE table_id = %ld and partition_id = %ld",
+  } else if (OB_FAIL(history_sql_string.assign_fmt("UPDATE %s SET table_id = %" PRIu64 ", partition_id = %" PRId64
+      " WHERE table_id = %" PRIu64 " and partition_id = %" PRId64,
       OB_ALL_TABLE_STAT_HISTORY_TNAME, target_object_id_, target_partition_id,
       object_id_, partition_id))) {
   } else if (OB_FAIL(trans.write(history_sql_string.ptr(), affected_rows))) {
@@ -1453,13 +1454,13 @@ int ObDDLRedefinitionTask::sync_one_column_table_level_stats_info(common::ObMySQ
   int64_t partition_id = data_table_schema.is_partitioned_table() ? -1 : object_id_;
   int64_t target_partition_id = new_table_schema.is_partitioned_table() ? -1 : target_object_id_;
 
-  if (OB_FAIL(column_sql_string.assign_fmt("UPDATE %s SET table_id = %ld, partition_id = %ld, column_id = %ld"
-      " WHERE table_id = %ld and partition_id = %ld and column_id = %ld",
+  if (OB_FAIL(column_sql_string.assign_fmt("UPDATE %s SET table_id = %" PRIu64 ", partition_id = %" PRId64 ", column_id = %" PRIu64
+      " WHERE table_id = %" PRIu64 " and partition_id = %" PRId64 " and column_id = %" PRIu64,
       OB_ALL_COLUMN_STAT_TNAME, target_object_id_, target_partition_id, new_col_id,
       object_id_, partition_id,
       old_col_id))) {
-  } else if (OB_FAIL(histogram_sql_string.assign_fmt("UPDATE %s SET table_id = %ld, partition_id = %ld, column_id = %ld"
-      " WHERE table_id = %ld and partition_id = %ld and column_id = %ld",
+  } else if (OB_FAIL(histogram_sql_string.assign_fmt("UPDATE %s SET table_id = %" PRIu64 ", partition_id = %" PRId64 ", column_id = %" PRIu64
+      " WHERE table_id = %" PRIu64 " and partition_id = %" PRId64 " and column_id = %" PRIu64,
       OB_ALL_HISTOGRAM_STAT_TNAME, target_object_id_, target_partition_id, new_col_id,
       object_id_, partition_id,
       old_col_id))) {
@@ -1467,13 +1468,13 @@ int ObDDLRedefinitionTask::sync_one_column_table_level_stats_info(common::ObMySQ
   } else if (OB_FAIL(trans.write(histogram_sql_string.ptr(), affected_rows))) {
   } else if (!need_sync_history) { // do not need to sync history
   } else if (OB_FAIL(column_history_sql_string.assign_fmt(
-      "UPDATE %s SET table_id = %ld, partition_id = %ld, column_id = %ld"
-      " WHERE table_id = %ld and partition_id = %ld and column_id = %ld",
+      "UPDATE %s SET table_id = %" PRIu64 ", partition_id = %" PRId64 ", column_id = %" PRIu64
+      " WHERE table_id = %" PRIu64 " and partition_id = %" PRId64 " and column_id = %" PRIu64,
       OB_ALL_COLUMN_STAT_HISTORY_TNAME, target_object_id_, target_partition_id, new_col_id,
       object_id_, partition_id, old_col_id))) {
   } else if (OB_FAIL(histogram_history_sql_string.assign_fmt(
-      "UPDATE %s SET table_id = %ld, partition_id = %ld, column_id = %ld"
-      " WHERE table_id = %ld and partition_id = %ld and column_id = %ld",
+      "UPDATE %s SET table_id = %" PRIu64 ", partition_id = %" PRId64 ", column_id = %" PRIu64
+      " WHERE table_id = %" PRIu64 " and partition_id = %" PRId64 " and column_id = %" PRIu64,
       OB_ALL_HISTOGRAM_STAT_HISTORY_TNAME, target_object_id_, target_partition_id, new_col_id,
       object_id_, partition_id, old_col_id))) {
   } else if (OB_FAIL(trans.write(column_history_sql_string.ptr(), affected_rows))) {
@@ -1565,21 +1566,21 @@ int ObDDLRedefinitionTask::generate_sync_partition_level_stats_sql(const char *t
   if (OB_UNLIKELY(src_partition_ids.count() != dest_partition_ids.count() || batch_end < batch_start
       || batch_end >= dest_partition_ids.count())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(sql_string.append_fmt("UPDATE %s SET table_id=%ld, partition_id=(case partition_id",
+  } else if (OB_FAIL(sql_string.append_fmt("UPDATE %s SET table_id=%" PRIu64 ", partition_id=(case partition_id",
         table_name, target_object_id_))) {
   } else {
     for (int64_t i = batch_start; OB_SUCC(ret) && i <= batch_end; i++) {
       const uint64_t src_partition_id = src_partition_ids.at(i);
       const uint64_t dest_partition_id = dest_partition_ids.at(i);
-      if (OB_FAIL(sql_string.append_fmt(" when %ld then %ld", src_partition_id, dest_partition_id))) {
+      if (OB_FAIL(sql_string.append_fmt(" when %" PRIu64 " then %" PRIu64, src_partition_id, dest_partition_id))) {
       } else if (batch_end != i) {
-        if (OB_FAIL(in_partitions_sql.append_fmt("%ld, ", src_partition_id))) {
+        if (OB_FAIL(in_partitions_sql.append_fmt("%" PRIu64 ", ", src_partition_id))) {
         }
-      } else if (OB_FAIL(in_partitions_sql.append_fmt("%ld", src_partition_id))) {
+      } else if (OB_FAIL(in_partitions_sql.append_fmt("%" PRIu64, src_partition_id))) {
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(sql_string.append_fmt(" else partition_id end) where table_id=%ld and partition_id in (%.*s)",
+    } else if (OB_FAIL(sql_string.append_fmt(" else partition_id end) where table_id=%" PRIu64 " and partition_id in (%.*s)",
           object_id_,
           static_cast<int>(in_partitions_sql.length()), in_partitions_sql.ptr()))) {
     }
@@ -1603,20 +1604,20 @@ int ObDDLRedefinitionTask::generate_sync_column_partition_level_stats_sql(const 
   if (OB_UNLIKELY(src_partition_ids.count() != dest_partition_ids.count() || batch_end < batch_start
       || batch_end >= dest_partition_ids.count())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(sql_string.append_fmt("UPDATE %s SET table_id=%ld, column_id=%ld, partition_id=(case partition_id",
+  } else if (OB_FAIL(sql_string.append_fmt("UPDATE %s SET table_id=%" PRIu64 ", column_id=%" PRIu64 ", partition_id=(case partition_id",
         table_name, target_object_id_, new_col_id))) {
   } else {
     for (int64_t i = batch_start; OB_SUCC(ret) && i <= batch_end; i++) {
       const uint64_t src_partition_id = src_partition_ids.at(i);
       const uint64_t dest_partition_id = dest_partition_ids.at(i);
-      if (OB_FAIL(sql_string.append_fmt(" when %ld then %ld", src_partition_id, dest_partition_id))) {
+      if (OB_FAIL(sql_string.append_fmt(" when %" PRIu64 " then %" PRIu64, src_partition_id, dest_partition_id))) {
       } else if (batch_end != i) {
-        if (OB_FAIL(in_partitions_sql.append_fmt("%ld, ", src_partition_id))) {
+        if (OB_FAIL(in_partitions_sql.append_fmt("%" PRIu64 ", ", src_partition_id))) {
         }
-      } else if (OB_FAIL(in_partitions_sql.append_fmt("%ld", src_partition_id))) {
+      } else if (OB_FAIL(in_partitions_sql.append_fmt("%" PRIu64, src_partition_id))) {
       }
     }
-    if (FAILEDx(sql_string.append_fmt(" else partition_id end) where table_id=%ld and partition_id in (%.*s) and column_id=%ld",
+    if (FAILEDx(sql_string.append_fmt(" else partition_id end) where table_id=%" PRIu64 " and partition_id in (%.*s) and column_id=%" PRIu64,
           object_id_,
           static_cast<int>(in_partitions_sql.length()), in_partitions_sql.ptr(), old_col_id))) {
     }
@@ -1630,7 +1631,7 @@ int ObDDLRedefinitionTask::sync_table_prefs(common::ObMySQLTransaction &trans)
   ObSqlString sql_string;
   int64_t affected_rows = 0;
   if (OB_FAIL(sql_string.assign_fmt("INSERT IGNORE INTO %s(table_id,pname,valnum,valchar,chgtime,spare1)"
-          " SELECT %ld, pname, valnum, valchar, chgtime, spare1 FROM %s WHERE TABLE_ID = %ld",
+          " SELECT %" PRIu64 ", pname, valnum, valchar, chgtime, spare1 FROM %s WHERE TABLE_ID = %" PRIu64,
       OB_ALL_OPTSTAT_USER_PREFS_TNAME, target_object_id_, OB_ALL_OPTSTAT_USER_PREFS_TNAME, object_id_))) {
   } else if (OB_FAIL(trans.write(sql_string.ptr(), affected_rows))) {
   } else if (OB_UNLIKELY(affected_rows < 0)) {
@@ -1781,7 +1782,7 @@ int ObDDLRedefinitionTask::get_child_task_ids(char *buf, int64_t len)
       if (OB_FAIL(databuff_printf(buf,
                                   MAX_LONG_OPS_MESSAGE_LENGTH,
                                   pos,
-                                  "%ld ",
+                                  "%" PRId64 " ",
                                   child_task_id))) {
       }
       ++iter;

@@ -16,7 +16,8 @@
  
 #define USING_LOG_PREFIX SQL_EXE
 #include "ob_expr_encrypt.h"
-#include <openssl/evp.h>
+#include <limits>
+#include "rust/crypto.h"
 #include "sql/engine/ob_exec_context.h"
 
 using namespace oceanbase::share;
@@ -26,6 +27,108 @@ namespace oceanbase
 {
 namespace sql
 {
+
+namespace
+{
+rust::Slice<const uint8_t> crypto_bytes(const ObString &value)
+{
+  return {reinterpret_cast<const uint8_t *>(value.empty() ? "" : value.ptr()),
+          static_cast<size_t>(value.length())};
+}
+
+int crypto_result_error(const crypto::OperationResult &result)
+{
+  int ret = OB_SUCCESS;
+  switch (result.code) {
+    case crypto::Code::Ok: break;
+    case crypto::Code::Allocation: ret = OB_ALLOCATE_MEMORY_FAILED; break;
+    case crypto::Code::InvalidArgument: ret = OB_INVALID_ARGUMENT; break;
+    case crypto::Code::Unsupported: ret = OB_NOT_SUPPORTED; break;
+    default: ret = OB_ERR_UNEXPECTED; break;
+  }
+  if (OB_SUCCESS != ret) {
+    LOG_WARN("crypto operation failed", K(ret), K(result.backend_code));
+  }
+  return ret;
+}
+
+int encrypt_des_value(const ObExpr &expr, ObEvalCtx &ctx, const ObString &src,
+                     const ObString &password, bool has_password, uint8_t key_number,
+                     ObDatum &res, int64_t datum_idx)
+{
+  int ret = OB_SUCCESS;
+  const size_t src_length = static_cast<size_t>(src.length());
+  if (src_length > std::numeric_limits<size_t>::max() - 9) {
+    ret = OB_SIZE_OVERFLOW;
+  } else {
+    const size_t res_length = (src_length / 8 + 1) * 8 + 1;
+    if (res_length > static_cast<uint64_t>(INT64_MAX)) {
+      ret = OB_SIZE_OVERFLOW;
+    } else {
+      char *res_buf = expr.get_str_res_mem(ctx, res_length, datum_idx);
+      if (OB_ISNULL(res_buf)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else {
+        const auto result = crypto::des_encrypt_into(crypto_bytes(src), crypto_bytes(password),
+            has_password, key_number, {reinterpret_cast<uint8_t *>(res_buf), res_length});
+        if (OB_FAIL(crypto_result_error(result))) {
+        } else if (result.size > res_length) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          res.set_string(res_buf, result.size);
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int decrypt_des_value(const ObExpr &expr, ObEvalCtx &ctx, const ObString &src,
+                     const ObString &password, bool has_password, ObDatum &res,
+                     int64_t datum_idx)
+{
+  int ret = OB_SUCCESS;
+  const size_t res_length = static_cast<size_t>(src.length());
+  char *res_buf = expr.get_str_res_mem(ctx, res_length, datum_idx);
+  if (OB_ISNULL(res_buf)) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else {
+    const auto result = crypto::des_decrypt_into(crypto_bytes(src), crypto_bytes(password),
+        has_password, {reinterpret_cast<uint8_t *>(res_buf), res_length});
+    if (result.code == crypto::Code::InvalidCiphertext) {
+      res.set_null();
+    } else if (OB_FAIL(crypto_result_error(result))) {
+    } else if (result.size > res_length) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      res.set_string(res_buf, result.size);
+    }
+  }
+  return ret;
+}
+
+int crypt_value(const ObExpr &expr, ObEvalCtx &ctx, const ObString &src,
+                const char *salt, ObDatum &res, int64_t datum_idx)
+{
+  int ret = OB_SUCCESS;
+  const size_t res_length = 13;
+  char *res_buf = expr.get_str_res_mem(ctx, res_length, datum_idx);
+  if (OB_ISNULL(res_buf)) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else {
+    const auto result = crypto::des_crypt_into(crypto_bytes(src),
+        {reinterpret_cast<const uint8_t *>(salt), 2},
+        {reinterpret_cast<uint8_t *>(res_buf), res_length});
+    if (OB_FAIL(crypto_result_error(result))) {
+    } else if (result.size > res_length) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      res.set_string(res_buf, result.size);
+    }
+  }
+  return ret;
+}
+}
 
 ObExprDesEncrypt::ObExprDesEncrypt(ObIAllocator& alloc)
     : ObFuncExprOperator(alloc,
@@ -83,10 +186,6 @@ int ObExprDesEncrypt::eval_des_encrypt_with_default(const ObExpr &expr, ObEvalCt
     ObDatum &src = expr.locate_param_datum(ctx, 0);
     bool is_null = false;
     uint key_number = 0;
-    struct DesKeySchedule keyschedule;
-    DES_cblock ivec;
-    //des-key-file is not supported, use default key
-    MEMSET(&keyschedule, 0, sizeof(keyschedule));
     if (src.is_null()) {
       res.set_null();
       is_null = true;
@@ -109,12 +208,8 @@ int ObExprDesEncrypt::eval_des_encrypt_with_default(const ObExpr &expr, ObEvalCt
       if (src_str.empty()) {
         res.set_string(src_str);
       } else {
-        size_t res_length = src_str.length() + (8 - src_str.length() % 8);
-        char *res_buf = expr.get_str_res_mem(ctx, res_length + 1);
-        if (OB_FAIL(ob_des_encrypt(ctx, src_str, keyschedule, key_number, res_buf))) {
-        } else {
-          res.set_string(res_buf, res_length + 1);
-        }
+        ret = encrypt_des_value(expr, ctx, src_str, ObString(), false, key_number,
+                                res, expr.get_datum_idx(ctx));
       }
     }
   }
@@ -127,9 +222,6 @@ int ObExprDesEncrypt::eval_des_encrypt_batch_with_default(const ObExpr &expr, Ob
   ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   bool has_key = (2 == expr.arg_cnt_);
-  struct DesKeySchedule keyschedule;
-  //des-key-file is not supported, use default key
-  MEMSET(&keyschedule, 0, sizeof(keyschedule));
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else if (has_key) {
     if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
@@ -167,12 +259,8 @@ int ObExprDesEncrypt::eval_des_encrypt_batch_with_default(const ObExpr &expr, Ob
         } else if (src_str.empty()) {
           res_datum.at(j)->set_string(src_str);
         } else {
-          size_t res_length = src_str.length() + (8 - src_str.length() % 8);
-          char *res_buf = expr.get_str_res_mem(ctx, res_length + 1, j);
-          if (OB_FAIL(ob_des_encrypt(ctx, src_str, keyschedule, key_number, res_buf))) {
-          } else {
-            res_datum.at(j)->set_string(res_buf, res_length + 1);
-          }
+          ret = encrypt_des_value(expr, ctx, src_str, ObString(), false, key_number,
+                                  *res_datum.at(j), j);
         }
       }
     }
@@ -187,8 +275,6 @@ int ObExprDesEncrypt::eval_des_encrypt_with_key(const ObExpr &expr, ObEvalCtx &c
   } else {
     ObDatum &src = expr.locate_param_datum(ctx, 0);
     ObDatum &key = expr.locate_param_datum(ctx, 1);
-    struct DesKeyBlock keyblock;
-    struct DesKeySchedule keyschedule;
     if (src.is_null()) {
       res.set_null();
     } else if (key.is_null()) {
@@ -199,22 +285,10 @@ int ObExprDesEncrypt::eval_des_encrypt_with_key(const ObExpr &expr, ObEvalCtx &c
     } else if (src.get_string().empty()) {
       res.set_string(src.get_string());
     } else {
-      const ObString key_str = key.get_string().empty() ? ObString(""): key.get_string();
+      const ObString key_str = key.get_string();
       ObString src_str = src.get_string();
-      size_t res_length = src_str.length() + (8 - src_str.length() % 8);
-      char *res_buf = expr.get_str_res_mem(ctx, res_length + 1);
-      DES_cblock ivec;
-      MEMSET(&ivec, 0, sizeof(ivec));
-      EVP_BytesToKey(EVP_des_ede3_cbc(), EVP_md5(), NULL,
-            reinterpret_cast<const uchar*>(key_str.ptr()), static_cast<int>(key_str.length()),
-            1, reinterpret_cast<uchar*>(&keyblock), ivec);
-      DES_set_key_unchecked(&keyblock.key1,&keyschedule.ks1);
-      DES_set_key_unchecked(&keyblock.key2,&keyschedule.ks2);
-      DES_set_key_unchecked(&keyblock.key3,&keyschedule.ks3);
-      if (OB_FAIL(ob_des_encrypt(ctx, src_str, keyschedule, 127, res_buf))) {
-      } else {
-        res.set_string(res_buf, res_length + 1);
-      }
+      ret = encrypt_des_value(expr, ctx, src_str, key_str, true, 127,
+                              res, expr.get_datum_idx(ctx));
     }
   }
   return ret;
@@ -224,7 +298,6 @@ int ObExprDesEncrypt::eval_des_encrypt_batch_with_key(const ObExpr &expr, ObEval
                                     const ObBitVector &skip, const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  struct DesKeySchedule keyschedule;
   ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
@@ -232,9 +305,6 @@ int ObExprDesEncrypt::eval_des_encrypt_batch_with_key(const ObExpr &expr, ObEval
   } else {
     ObDatumVector src_array = expr.args_[0]->locate_expr_datumvector(ctx);
     ObDatumVector key_array = expr.args_[1]->locate_expr_datumvector(ctx);
-    struct DesKeyBlock keyblock;
-    struct DesKeySchedule keyschedule;
-    DES_cblock ivec;
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
       if (skip.at(j) || eval_flags.at(j)) {
         continue;
@@ -250,51 +320,12 @@ int ObExprDesEncrypt::eval_des_encrypt_batch_with_key(const ObExpr &expr, ObEval
       } else if (src_array.at(j)->get_string().empty()) {
         res_datum.at(j)->set_string(src_array.at(j)->get_string());
       } else {
-        const ObString key_str = key_array.at(j)->get_string().empty() ? ObString(""): key_array.at(j)->get_string();
+        const ObString key_str = key_array.at(j)->get_string();
         ObString src_str = src_array.at(j)->get_string();
-        size_t res_length = src_str.length() + (8 - src_str.length() % 8);
-        char *res_buf = expr.get_str_res_mem(ctx, res_length + 1, j);
-        MEMSET(&ivec, 0, sizeof(ivec));
-        EVP_BytesToKey(EVP_des_ede3_cbc(), EVP_md5(), NULL,
-              reinterpret_cast<const uchar*>(key_str.ptr()), static_cast<int>(key_str.length()),
-              1, reinterpret_cast<uchar*>(&keyblock), ivec);
-        DES_set_key_unchecked(&keyblock.key1,&keyschedule.ks1);
-        DES_set_key_unchecked(&keyblock.key2,&keyschedule.ks2);
-        DES_set_key_unchecked(&keyblock.key3,&keyschedule.ks3);
-        if (OB_FAIL(ob_des_encrypt(ctx, src_str, keyschedule, 127, res_buf))) {
-        } else {
-          res_datum.at(j)->set_string(res_buf, res_length + 1);
-        }
+        ret = encrypt_des_value(expr, ctx, src_str, key_str, true, 127,
+                                *res_datum.at(j), j);
       }
     }
-  }
-  return ret;
-}
-
-int ObExprDesEncrypt::ob_des_encrypt(ObEvalCtx &ctx, const ObString &src, struct DesKeySchedule &keyschedule, uint key_number, char *res_buf) {
-  int ret = OB_SUCCESS;
-  size_t tail = 8 - src.length() % 8;
-  size_t res_length = src.length() + tail;
-  char *arg_buf = NULL;
-  DES_cblock ivec;
-  ObEvalCtx::TempAllocGuard alloc_guard(ctx);
-  ObIAllocator &calc_alloc = alloc_guard.get_allocator();
-  arg_buf = static_cast<char *>(calc_alloc.alloc(res_length));
-  if (OB_ISNULL(arg_buf)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else {
-    MEMCPY(arg_buf, src.ptr(), src.length());
-    MEMCPY(arg_buf + src.length(), "********", tail);
-    arg_buf[res_length - 1] = static_cast<char>(tail);
-    res_buf[0] = static_cast<char>(128 | key_number);
-    memset(&ivec, 0, sizeof(ivec));
-    DES_ede3_cbc_encrypt((const uchar*)(arg_buf),
-                        reinterpret_cast<uchar*>(res_buf + 1),
-                        res_length,
-                        &keyschedule.ks1,
-                        &keyschedule.ks2,
-                        &keyschedule.ks3,
-                        &ivec, true);
   }
   return ret;
 }
@@ -367,16 +398,13 @@ int ObExprDesDecrypt::eval_des_decrypt(const ObExpr &expr, ObEvalCtx &ctx,
   } else {
     bool need_decrypt = false;
     ObDatum &src = expr.locate_param_datum(ctx, 0);
-    struct DesKeyBlock keyblock;
-    struct DesKeySchedule keyschedule;
-    DES_cblock ivec;
     ObString src_str;
     //get key and check if res should be null or empty
     if (src.is_null()) {
       res.set_null();
     } else {
       src_str = src.get_string();
-      if (src_str.length() < 9 || src_str.length() % 8 != 1 || !(src_str.ptr()[0] & 128)) {
+      if (!crypto::is_des_encrypted(crypto_bytes(src_str))) {
         //src is not encrypted
         res.set_string(src_str);
       } else if (1 == expr.arg_cnt_) {
@@ -390,8 +418,6 @@ int ObExprDesDecrypt::eval_des_decrypt(const ObExpr &expr, ObEvalCtx &ctx,
           LOG_USER_WARN(OB_ERR_INVALID_PARAM_TO_PROCEDURE,func_name.length(),func_name.ptr());
           LOG_WARN("invalid param to procedure des_encrypt", K(ret), K(key_num));
         } else {
-          //des-key-file is not supported, use default key
-          MEMSET(&keyschedule, 0, sizeof(keyschedule));
           need_decrypt = true;
         }
       } else {
@@ -402,36 +428,16 @@ int ObExprDesDecrypt::eval_des_decrypt(const ObExpr &expr, ObEvalCtx &ctx,
           LOG_USER_WARN(OB_ERR_INVALID_PARAM_TO_PROCEDURE,func_name.length(),func_name.ptr());
           LOG_WARN("invalid param to procedure des_encrypt", K(ret));
         } else {
-          const ObString key_str = key.get_string().empty() ? ObString(""): key.get_string();
-          MEMSET(&ivec, 0, sizeof(ivec));
-          EVP_BytesToKey(EVP_des_ede3_cbc(), EVP_md5(), NULL,
-                reinterpret_cast<const uchar*>(key_str.ptr()), static_cast<int>(key_str.length()),
-                1, reinterpret_cast<uchar*>(&keyblock), ivec);
-          DES_set_key_unchecked(&keyblock.key1,&keyschedule.ks1);
-          DES_set_key_unchecked(&keyblock.key2,&keyschedule.ks2);
-          DES_set_key_unchecked(&keyblock.key3,&keyschedule.ks3);
           need_decrypt = true;
         }
       }
     }
     //do descrypt
     if (OB_SUCC(ret) && need_decrypt) {
-      char* result_buf = expr.get_str_res_mem(ctx, src_str.length() + 1);
-      uint tail = 0;
-      MEMSET(&ivec, 0, sizeof(ivec));
-      DES_ede3_cbc_encrypt(reinterpret_cast<const uchar*>(src_str.ptr() + 1),
-                          reinterpret_cast<uchar*>(result_buf),
-                          src_str.length() - 1,
-                          &keyschedule.ks1,
-                          &keyschedule.ks2,
-                          &keyschedule.ks3,
-                          &ivec, false);
-      tail = static_cast<uint>(static_cast<uchar>(result_buf[src_str.length() - 2]));
-      if (tail > 8) {
-        res.set_null();
-      } else {
-        res.set_string(result_buf, src_str.length() - 1 - tail);
-      }
+      const bool has_password = 2 == expr.arg_cnt_;
+      const ObString password = has_password ? expr.locate_param_datum(ctx, 1).get_string() : ObString();
+      ret = decrypt_des_value(expr, ctx, src_str, password, has_password,
+                              res, expr.get_datum_idx(ctx));
     }
   }
   return ret;
@@ -440,15 +446,10 @@ int ObExprDesDecrypt::eval_des_decrypt(const ObExpr &expr, ObEvalCtx &ctx,
 int ObExprDesDecrypt::eval_des_decrypt_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  struct DesKeySchedule keyschedule;
-  struct DesKeyBlock keyblock;
-  DES_cblock ivec;
   ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   ObDatumVector src_array;
   ObDatumVector key_array;
-  //des-key-file is not supported, use default key
-  MEMSET(&keyschedule, 0, sizeof(keyschedule));
 
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else {
@@ -472,7 +473,7 @@ int ObExprDesDecrypt::eval_des_decrypt_batch(const ObExpr &expr, ObEvalCtx &ctx,
       } else {
         const ObString src_str = src_array.at(j)->get_string();
         bool need_descrypt = false;
-        if (src_str.length() < 9 || src_str.length() % 8 != 1 || !(src_str.ptr()[0] & 128)) {
+        if (!crypto::is_des_encrypted(crypto_bytes(src_str))) {
           //src is not encrypted
           res_datum.at(j)->set_string(src_str);
         } else if (1 == expr.arg_cnt_) {
@@ -494,34 +495,14 @@ int ObExprDesDecrypt::eval_des_decrypt_batch(const ObExpr &expr, ObEvalCtx &ctx,
           LOG_USER_WARN(OB_ERR_INVALID_PARAM_TO_PROCEDURE,func_name.length(),func_name.ptr());
           LOG_WARN("invalid param to procedure des_encrypt", K(ret));
         } else {
-          const ObString key_str = key_array.at(j)->get_string().empty() ? ObString(""): key_array.at(j)->get_string();
-          MEMSET(&ivec, 0, sizeof(ivec));
-          EVP_BytesToKey(EVP_des_ede3_cbc(), EVP_md5(), NULL,
-                reinterpret_cast<const uchar*>(key_str.ptr()), static_cast<int>(key_str.length()),
-                1, reinterpret_cast<uchar*>(&keyblock), ivec);
-          DES_set_key_unchecked(&keyblock.key1,&keyschedule.ks1);
-          DES_set_key_unchecked(&keyblock.key2,&keyschedule.ks2);
-          DES_set_key_unchecked(&keyblock.key3,&keyschedule.ks3);
           need_descrypt = true;
         }
         //do descrypt
         if (OB_SUCC(ret) && need_descrypt) {
-          char *result_buf = expr.get_str_res_mem(ctx, src_str.length() + 1, j);
-          uint tail = 0;
-          MEMSET(&ivec, 0, sizeof(ivec));
-          DES_ede3_cbc_encrypt(reinterpret_cast<const uchar*>(src_str.ptr() + 1),
-                              reinterpret_cast<uchar*>(result_buf),
-                              src_str.length() - 1,
-                              &keyschedule.ks1,
-                              &keyschedule.ks2,
-                              &keyschedule.ks3,
-                              &ivec, false);
-          tail = static_cast<uint>(static_cast<uchar>(result_buf[src_str.length() - 2]));
-          if (tail > 8) {
-            res_datum.at(j)->set_null();
-          } else {
-            res_datum.at(j)->set_string(result_buf, src_str.length() - 1 - tail);
-          }
+          const bool has_password = 2 == expr.arg_cnt_;
+          const ObString password = has_password ? key_array.at(j)->get_string() : ObString();
+          ret = decrypt_des_value(expr, ctx, src_str, password, has_password,
+                                  *res_datum.at(j), j);
         }
       }
     }
@@ -582,11 +563,7 @@ int ObExprEncrypt::eval_encrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res
     char salt[3];
     ObDatum &src = expr.locate_param_datum(ctx, 0);
     bool need_encrypt = false;
-    char *tmp_src = NULL;
-    char tmp_res[14];
-    ObEvalCtx::TempAllocGuard alloc_guard(ctx);
-    ObIAllocator &calc_alloc = alloc_guard.get_allocator();
-    
+
     if (src.is_null()) {
       res.set_null();
     } else if (src.get_string().empty()) {
@@ -617,20 +594,7 @@ int ObExprEncrypt::eval_encrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res
       }
     }
     if (OB_SUCC(ret) && need_encrypt) {
-      tmp_src = static_cast<char *>(calc_alloc.alloc(src.get_string().length() + 1));
-      if (OB_ISNULL(tmp_src)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        size_t len = 0;
-        char * res_buf = NULL;
-        MEMCPY(tmp_src, src.get_string().ptr(), src.get_string().length());
-        tmp_src[src.get_string().length()] = 0;
-        DES_fcrypt(tmp_src, salt, tmp_res);
-        len = STRLEN(tmp_res);
-        res_buf = expr.get_str_res_mem(ctx, len);
-        MEMCPY(res_buf, tmp_res, len);
-        res.set_string(res_buf, len);
-      }
+      ret = crypt_value(expr, ctx, src.get_string(), salt, res, expr.get_datum_idx(ctx));
     }
   }
   return ret;
@@ -642,10 +606,6 @@ int ObExprEncrypt::eval_encrypt_batch(const ObExpr &expr, ObEvalCtx &ctx, const 
   ObDatumVector key_array;
   ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-  char *tmp_src = NULL;
-  char *tmp_res = NULL;
-  ObEvalCtx::TempAllocGuard alloc_guard(ctx);
-  ObIAllocator &calc_alloc = alloc_guard.get_allocator();
   char salt[3];
   
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
@@ -669,15 +629,12 @@ int ObExprEncrypt::eval_encrypt_batch(const ObExpr &expr, ObEvalCtx &ctx, const 
     }
   }
   if (OB_SUCC(ret)) {
-    char *tmp_src = NULL;
-    size_t cur_tmp_src_maxlen = 0;
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
       if (skip.at(j) || eval_flags.at(j)) {
         continue;
       }
       eval_flags.set(j);
       bool need_encrypt = false;
-      char tmp_res[14];
       if (src_array.at(j)->is_null()) {
         res_datum.at(j)->set_null();
       } else if (src_array.at(j)->get_string().empty()) {
@@ -697,24 +654,7 @@ int ObExprEncrypt::eval_encrypt_batch(const ObExpr &expr, ObEvalCtx &ctx, const 
         need_encrypt = true;
       }
       if (OB_SUCC(ret) && need_encrypt) {
-        ObString src_str = src_array.at(j)->get_string();
-        if (cur_tmp_src_maxlen <= src_str.length()) {
-          tmp_src = static_cast<char *>(calc_alloc.alloc(src_str.length() + 1));
-          if (OB_ISNULL(tmp_src)) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-          } else {
-            cur_tmp_src_maxlen = src_str.length() + 1;
-          }
-        } else {}
-          size_t len = 0;
-          char * res_buf = NULL;
-          MEMCPY(tmp_src, src_str.ptr(), src_str.length());
-          tmp_src[src_str.length()] = 0;
-          DES_fcrypt(tmp_src, salt, tmp_res);
-          len = STRLEN(tmp_res);
-          res_buf = expr.get_str_res_mem(ctx, len, j);
-          MEMCPY(res_buf, tmp_res, len);
-          res_datum.at(j)->set_string(res_buf, len);
+        ret = crypt_value(expr, ctx, src_array.at(j)->get_string(), salt, *res_datum.at(j), j);
       }
     }
   }

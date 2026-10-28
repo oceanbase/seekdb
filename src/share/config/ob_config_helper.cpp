@@ -197,28 +197,6 @@ bool ObConfigTempStoreFormatChecker::check(const char *text) const
   return is_valid;
 }
 
-bool ObConfigPxBFGroupSizeChecker::check(const char *text) const
-{
-  bool is_valid = false;
-  ObString str("auto");
-  if (0 == str.case_compare(text)) {
-    is_valid = true;
-  // max_number: 2^64 - 1
-  } else if (strlen(text) <= 20 && strlen(text) > 0) {
-    is_valid = true;
-    for (int i = 0; i < strlen(text); ++i) {
-      if (0 == i && (text[i] <= '0' || text[i] > '9')) {
-        is_valid = false;
-        break;
-      } else if (text[i] < '0' || text[i] > '9') {
-        is_valid = false;
-        break;
-      }
-    }
-  }
-  return is_valid;
-}
-
 bool ObConfigRowFormatChecker::check(const char *text) const
 {
   bool is_valid = false;
@@ -441,66 +419,6 @@ int64_t ObConfigTimeParser::get(const char *str, bool &valid)
   }
 
   return value;
-}
-
-bool ObCallClientAuthMethodChecker::check(const char *text) const
-{
-  ObString v_str(text);
-  return 0 == v_str.case_compare("NONE") ||
-         0 == v_str.case_compare("SSL_NO_ENCRYPT") ||
-         0 == v_str.case_compare("SSL_IO");
-}
-
-bool ObCallServerAuthMethodChecker::is_valid_server_auth_method(const ObString &str) const
-{
-  return 0 == str.case_compare("NONE") ||
-         0 == str.case_compare("SSL_NO_ENCRYPT") ||
-         0 == str.case_compare("SSL_IO") ||
-         0 == str.case_compare("ALL");
-}
-
-bool ObCallServerAuthMethodChecker::check(const char *text) const
-{
-  bool bret = true;
-  int MAX_METHOD_LENGTH = 256;
-  char tmp_str[MAX_METHOD_LENGTH];
-  size_t str_len = STRLEN(text);
-  if (str_len >= MAX_METHOD_LENGTH) {
-    bret = false;
-  } else {
-    MEMCPY(tmp_str, text, str_len);
-    tmp_str[str_len] = 0;
-    ObString str(str_len, reinterpret_cast<const char *>(tmp_str));
-    if (NULL == str.find(',')) {
-      bret = is_valid_server_auth_method(str);
-    } else {
-      //split by comma
-      char *token = NULL;
-      char *save = NULL;
-      char *str_token = tmp_str;
-      int hint = 0;
-      do {
-        token = strtok_r(str_token, ",", &save);
-        str_token = NULL;
-        if (token) {
-          hint = 1;
-          ObString tmp(STRLEN(token), reinterpret_cast<const char *>(token));
-          ObString tmp_to_check = tmp.trim();
-          if (is_valid_server_auth_method(tmp_to_check)) {
-          } else {
-            bret = false;
-            break;
-          }
-        } else {
-          if (!hint) {
-            bret = false;
-          }
-          break;
-        }
-      } while(true);
-    }
-  }
-  return bret;
 }
 
 int64_t ObConfigRuntimeFilterChecker::get_runtime_filter_type(const char *str, int64_t len)

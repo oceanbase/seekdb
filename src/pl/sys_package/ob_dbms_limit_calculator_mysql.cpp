@@ -1,4 +1,5 @@
 #include "share/resource_limit_calculator/ob_resource_limit_calculator.h"
+#include <inttypes.h>
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -74,7 +75,7 @@ int ObDBMSLimitCalculator::parse_dict_like_args_(
   char key[50] = "";
   int64_t value = 0;
   // parse the argument like: "ls: 1, tablet: 2, xxxx"
-  while (OB_SUCC(ret) && sscanf(ptr, "%[^:]: %ld", key, &value) == 2) {
+  while (OB_SUCC(ret) && sscanf(ptr, "%[^:]: %" PRId64 "", key, &value) == 2) {
     int64_t type = get_logic_res_type_by_name(key);
     if (!is_valid_logic_res_type(type)) {
       ret = OB_INVALID_ARGUMENT;
@@ -99,7 +100,7 @@ int ObDBMSLimitCalculator::get_json_result_(
   } else if (OB_FAIL(databuff_printf(buf,
                                      buf_len,
                                      pos,
-                                     "[{\"physical_resource_name\": \"%s\", \"min_value\": \"%ld\"}",
+                                     "[{\"physical_resource_name\": \"%s\", \"min_value\": \"%" PRId64 "\"}",
                                      get_phy_res_type_name(i),
                                      value))) {
   } else {
@@ -110,7 +111,7 @@ int ObDBMSLimitCalculator::get_json_result_(
       } else if (OB_FAIL(databuff_printf(buf,
                                          buf_len,
                                          pos,
-                                         ", {\"physical_resource_name\": \"%s\", \"min_value\": \"%ld\"}",
+                                         ", {\"physical_resource_name\": \"%s\", \"min_value\": \"%" PRId64 "\"}",
                                          get_phy_res_type_name(i),
                                          value))) {
       }

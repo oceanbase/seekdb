@@ -17,6 +17,7 @@
 #ifndef  OCEANBASE_COMMON_FILE_H_
 #define  OCEANBASE_COMMON_FILE_H_
 #include <stdlib.h>
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <pthread.h>
@@ -38,34 +39,7 @@
 #else
 #include <malloc.h>
 #endif
-#if defined(__APPLE__) || defined(__ANDROID__)
-#ifndef OB_LIBAIO_STUB_DEFINED
-#define OB_LIBAIO_STUB_DEFINED
-#include <stddef.h>
-// Stub types for libaio (not available on macOS/Android)
-typedef unsigned long io_context_t;
-struct iocb {
-  void *data;
-  short aio_lio_opcode;
-  int aio_fildes;
-  void *aio_buf;
-  size_t aio_nbytes;
-  long long aio_offset;
-};
-struct io_event { void *data; struct iocb *obj; long res; long res2; };
-static inline int io_submit(io_context_t, long, struct iocb**) { return -1; }
-static inline int io_getevents(io_context_t, long, long, struct io_event*, struct timespec*) { return -1; }
-static inline int io_setup(unsigned, io_context_t*) { return -1; }
-static inline int io_destroy(io_context_t) { return -1; }
-static inline int io_cancel(io_context_t, struct iocb*, struct io_event*) { return -1; }
-static inline void io_prep_pwrite(struct iocb *iocb, int fd, void *buf, size_t count, long long offset) {
-  iocb->aio_fildes = fd; iocb->aio_buf = buf; iocb->aio_nbytes = count; iocb->aio_offset = offset; iocb->aio_lio_opcode = 1;
-}
-static inline void io_prep_pread(struct iocb *iocb, int fd, void *buf, size_t count, long long offset) {
-  iocb->aio_fildes = fd; iocb->aio_buf = buf; iocb->aio_nbytes = count; iocb->aio_offset = offset; iocb->aio_lio_opcode = 0;
-}
-#endif // OB_LIBAIO_STUB_DEFINED
-#elif defined(__linux__)
+#if defined(__linux__) && !defined(__ANDROID__)
 #include <libaio.h>
 #endif
 #include "lib/ob_define.h"
@@ -416,7 +390,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // This legacy appender requires libaio. The local device has its own I/O path.
-#if !defined(__APPLE__) && !defined(_WIN32) && !defined(__EMSCRIPTEN__)
+#if defined(__linux__) && !defined(__ANDROID__)
 #define __USE_AIO_FILE
 #endif
 #ifdef __USE_AIO_FILE
@@ -479,7 +453,7 @@ ObWaitablePool<T, SIZE>::~ObWaitablePool()
   }
   if (NULL != objs_) {
     if (SIZE != counter) {
-      _OB_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "still have %ld node not been free, memory=%p will leek", SIZE - counter, objs_);
+      _OB_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "still have %" PRId64 " node not been free, memory=%p will leek", SIZE - counter, objs_);
     } else {
       ob_free(objs_);
     }

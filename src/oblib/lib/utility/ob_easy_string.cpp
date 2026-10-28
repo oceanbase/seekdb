@@ -123,7 +123,7 @@ int easy_vsnprintf(char *buf, size_t size, const char *fmt, va_list args)
 
             case 'l':
                 fmt++;
-#if defined(_LP64) || defined(_WIN64)
+#ifdef _LP64
                 length_modifier ++;
 #endif
 
@@ -166,9 +166,11 @@ int easy_vsnprintf(char *buf, size_t size, const char *fmt, va_list args)
                 i64 = (length_modifier >= 1) ? va_arg(args, int64_t) : va_arg(args, int);
                 if (i64 < 0) {
                     *buf++ = '-';
-                    i64 = -i64;
+                    ui64 = 0ULL - static_cast<uint64_t>(i64);
+                } else {
+                    ui64 = static_cast<uint64_t>(i64);
                 }
-                p = easy_sprintf_num(buf, last, i64, zero, 0, width, sign);
+                p = easy_sprintf_num(buf, last, ui64, zero, 0, width, sign);
                 buf = p;
                 break;
 

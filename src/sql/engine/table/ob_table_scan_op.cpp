@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "data_plane/transaction/ob_transaction_version.h"
+#include <inttypes.h>
 
 
 #include "ob_table_scan_op.h"
@@ -581,8 +582,8 @@ int ObTableScanSpec::explain_index_selection_info(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(BUF_PRINTF(
-                "table_rows:%ld, physical_range_rows:%ld, logical_range_rows:%ld, "
-                "index_back_rows:%ld, output_rows:%ld",
+                "table_rows:%" PRId64 ", physical_range_rows:%" PRId64 ", logical_range_rows:%" PRId64 ", "
+                "index_back_rows:%" PRId64 ", output_rows:%" PRId64 "",
                 table_row_count_, phy_query_range_row_count_, query_range_row_count_,
                 index_back_row_count_, output_row_count_))) {
   }
@@ -640,12 +641,12 @@ int ObTableScanSpec::explain_index_selection_info(
 
   if (OB_SUCC(ret) && est_records_.count() > 0) {
     // print est row count infos
-    if (OB_FAIL(BUF_PRINTF(", estimation info[table_id:%ld,", est_records_.at(0).table_id_))) {
+    if (OB_FAIL(BUF_PRINTF(", estimation info[table_id:%" PRId64 ",", est_records_.at(0).table_id_))) {
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < est_records_.count(); ++i) {
       const ObEstRowCountRecord &record = est_records_.at(i);
       if (OB_FAIL(BUF_PRINTF(
-                  " (table_type:%ld, version:%ld-%ld-%ld, logical_rc:%ld, physical_rc:%ld)%c",
+                  " (table_type:%" PRId64 ", version:%" PRId64 "-%" PRId64 "-%" PRId64 ", logical_rc:%" PRId64 ", physical_rc:%" PRId64 ")%c",
                   record.table_type_,
                   record.version_range_.base_version_,
                   record.version_range_.multi_version_start_,
@@ -3507,7 +3508,7 @@ int ObTableScanOp::inner_get_next_spatial_index_row()
           const ObSrsBoundsItem *srs_bound = NULL;
           common::ObISrsProvider *srs_provider = get_exec_ctx().get_srs_provider();
           
-          ObS2Cellids cellids;
+          ObSpatialCellIds cellids;
           ObString mbr_val(0, static_cast<char *>(domain_index_.mbr_buffer_));
 
           ObArenaAllocator tmp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);

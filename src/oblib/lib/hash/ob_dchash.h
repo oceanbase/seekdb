@@ -18,6 +18,7 @@
 #define OCEANBASE_HASH_OB_DCHASH_H_
 
 #include "lib/hash/ob_darray.h"
+#include <inttypes.h>
 #include "lib/queue/ob_link.h"
 #include "lib/allocator/ob_qsync.h"
 #include "lib/metrics/ob_counter.h"
@@ -256,7 +257,7 @@ public:
       min_size_(min_size), max_size_(max_size), target_size_(min_size)
   {
     if (OB_UNLIKELY(min_size_ < BATCH_SIZE)) {
-      _OB_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "min_size(%ld) is smaller than BATCH_SIZE(%u)", min_size_, BATCH_SIZE);
+      _OB_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "min_size(%" PRId64 ") is smaller than BATCH_SIZE(%u)", min_size_, BATCH_SIZE);
       min_size_ = BATCH_SIZE;
     }
     if (OB_UNLIKELY(min_size_ > max_size_)) {
@@ -367,7 +368,7 @@ private:
     if (cur_size > (int64_t)target_size ||
         cur_size < (int64_t)target_size/shrink_threshold) {
       ATOMIC_STORE(&target_size_, next2n(cur_size));
-      _OB_LOG(INFO, "DCHash: change_size: %s this=%p node_count=%ld new_size=%ld",
+      _OB_LOG(INFO, "DCHash: change_size: %s this=%p node_count=%" PRId64 " new_size=%" PRId64 "",
            typeid(key_t).name(), this, cur_size, next2n(cur_size));
     }
   }
@@ -420,7 +421,7 @@ private:
   Array* alloc_array(Array* prev, int64_t size) {
     Array* array = NULL;
     if (NULL != (array = (Array*)alloc_.alloc(Array::calc_nbytes(size)))) {
-      _OB_LOG(INFO, "DCHash: alloc_array: %s this=%p array=%p array_size=%ld prev_array=%p",
+      _OB_LOG(INFO, "DCHash: alloc_array: %s this=%p array=%p array_size=%" PRId64 " prev_array=%p",
            typeid(key_t).name(), this, array, size, prev);
       new(array)Array(prev, size);
     }
@@ -429,7 +430,7 @@ private:
 
   void destroy_array(Array* array) {
     if (NULL != array) {
-      _OB_LOG(INFO, "DCHash: destroy_array: %s this=%p array=%p array_size=%ld",
+      _OB_LOG(INFO, "DCHash: destroy_array: %s this=%p array=%p array_size=%" PRId64 "",
            typeid(key_t).name(), this, array, array->capacity());
       alloc_.free(array);
       array = NULL;

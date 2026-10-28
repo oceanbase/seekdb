@@ -19,7 +19,6 @@
 #include <cinttypes>                                     // PRIu64
 #include <cstdint>                                       // UINT64_MAX
 #include <string.h>                                      // strncmp...
-#include <dirent.h>                                      // dirent
 #include <fcntl.h>                                       // O_RDONLY, O_RDWR, O_SYNC
 #ifdef __APPLE__
 // macOS doesn't support O_DIRECT, define it as 0 (no-op)

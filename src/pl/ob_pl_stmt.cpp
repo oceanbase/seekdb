@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX PL
 
 #include "ob_pl_stmt.h"
+#include <inttypes.h>
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/resolver/ob_stmt_resolver.h"
 #include "pl/ob_pl_dependency_util.h"
@@ -158,14 +159,15 @@ int ObPLLabelTable::add_label(const common::ObString &name,
                               ObPLStmt *stmt)
 {
   int ret = OB_SUCCESS;
-  if (count_ < 0 || count_ >= FUNC_MAX_LABELS) {
+  if (get_count() >= FUNC_MAX_LABELS) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "label count greater than 1024");
   } else {
-    labels_[count_].label_ = name;
-    labels_[count_].type_ = type;
-    labels_[count_].next_stmt_ = stmt;
-    count_++;
+    ObPLLabel label;
+    label.label_ = name;
+    label.type_ = type;
+    label.next_stmt_ = stmt;
+    OZ (labels_.push_back(label));
   }
   return ret;
 }
@@ -204,12 +206,13 @@ int ObPLConditionTable::init(ObPLConditionTable &parent_condition_table)
 int ObPLConditionTable::add_condition(const common::ObString &name, const ObPLConditionValue &value)
 {
   int ret = OB_SUCCESS;
-  if (count_ < 0 || count_ >= FUNC_MAX_CONDITIONS) {
+  if (get_count() >= FUNC_MAX_CONDITIONS) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    conditions_[count_].set_name(name);
-    conditions_[count_].set_value(value);
-    count_++;
+    ObPLCondition condition;
+    condition.set_name(name);
+    condition.set_value(value);
+    OZ (conditions_.push_back(condition));
   }
   return ret;
 }
@@ -871,6 +874,7 @@ int ObPLBlockNS::add_label(const ObString &name,
       ret = OB_ERR_REDEFINE_LABEL;
     } else if (OB_FAIL(labels_.push_back(get_label_table()->get_count()))) {
     } else if (OB_FAIL(get_label_table()->add_label(name, type, stmt))) {
+      labels_.pop_back();
     } else { /*do nothing*/ }
   }
   return ret;
@@ -896,6 +900,7 @@ int ObPLBlockNS::add_condition(const common::ObString &name,
   } else {
     if (OB_FAIL(conditions_.push_back(get_condition_table()->get_count()))) {
     } else if (OB_FAIL(get_condition_table()->add_condition(name, value))) {
+      conditions_.pop_back();
     } else { /*do nothing*/ }
   }
   return ret;
@@ -2660,33 +2665,33 @@ int64_t ObPLBlockNS::to_string(char* buf, const int64_t buf_len) const
   if (OB_ISNULL(buf) || buf_len <= 0) {
   } else {
     databuff_printf(buf, buf_len, pos,
-      "TYPE:%d, DB_NAME:%s, PKG_NAME: %s, PKG_ID: %ld," \
-        "PKG_VERSION: %ld, ROUTINE_ID: %ld EXPLICT_BLOCK: %d\n",
+      "TYPE:%d, DB_NAME:%s, PKG_NAME: %s, PKG_ID: %" PRId64 "," \
+        "PKG_VERSION: %" PRId64 ", ROUTINE_ID: %" PRId64 " EXPLICT_BLOCK: %d\n",
       type_, db_name_.ptr(), package_name_.ptr(),
       package_id_, package_version_, routine_id_, explicit_block_);
-    databuff_printf(buf, buf_len, pos, "\t TYPES(%ld): \t\t[", types_.count());
+    databuff_printf(buf, buf_len, pos, "\t TYPES(%" PRId64 "): \t\t[", types_.count());
     for (int64_t i = 0; i < types_.count(); ++i) {
-      databuff_printf(buf, buf_len, pos, "%ld,", types_.at(i));
+      databuff_printf(buf, buf_len, pos, "%" PRId64 ",", types_.at(i));
     }
-    databuff_printf(buf, buf_len, pos, "]\n\t SYMBOLS(%ld): \t\t[", symbols_.count());
+    databuff_printf(buf, buf_len, pos, "]\n\t SYMBOLS(%" PRId64 "): \t\t[", symbols_.count());
     for (int64_t i = 0; i < symbols_.count(); ++i) {
-      databuff_printf(buf, buf_len, pos, "%ld,", symbols_.at(i));
+      databuff_printf(buf, buf_len, pos, "%" PRId64 ",", symbols_.at(i));
     }
-    databuff_printf(buf, buf_len, pos, "]\n\t LABLES(%ld): \t\t[", labels_.count());
+    databuff_printf(buf, buf_len, pos, "]\n\t LABLES(%" PRId64 "): \t\t[", labels_.count());
     for (int64_t i = 0; i < labels_.count(); ++i) {
-      databuff_printf(buf, buf_len, pos, "%ld,", labels_.at(i));
+      databuff_printf(buf, buf_len, pos, "%" PRId64 ",", labels_.at(i));
     }
-    databuff_printf(buf, buf_len, pos, "]\n\t CONDITIONS(%ld): \t[", conditions_.count());
+    databuff_printf(buf, buf_len, pos, "]\n\t CONDITIONS(%" PRId64 "): \t[", conditions_.count());
     for (int64_t i = 0; i < conditions_.count(); ++i) {
-      databuff_printf(buf, buf_len, pos, "%ld,", conditions_.at(i));
+      databuff_printf(buf, buf_len, pos, "%" PRId64 ",", conditions_.at(i));
     }
-    databuff_printf(buf, buf_len, pos, "]\n\t CURSORS(%ld): \t\t[", cursors_.count());
+    databuff_printf(buf, buf_len, pos, "]\n\t CURSORS(%" PRId64 "): \t\t[", cursors_.count());
     for (int64_t i = 0; i < cursors_.count(); ++i) {
-      databuff_printf(buf, buf_len, pos, "%ld,", cursors_.at(i));
+      databuff_printf(buf, buf_len, pos, "%" PRId64 ",", cursors_.at(i));
     }
-    databuff_printf(buf, buf_len, pos, "]\n\t ROUTINES(%ld): \t\t[", routines_.count());
+    databuff_printf(buf, buf_len, pos, "]\n\t ROUTINES(%" PRId64 "): \t\t[", routines_.count());
     for (int64_t i = 0; i < routines_.count(); ++i) {
-      databuff_printf(buf, buf_len, pos, "%ld,", routines_.at(i));
+      databuff_printf(buf, buf_len, pos, "%" PRId64 ",", routines_.at(i));
     }
     databuff_printf(buf, buf_len, pos, "]\n");
     if (OB_NOT_NULL(pre_ns_)) {
@@ -2974,9 +2979,9 @@ const common::ObIArray<ObRawExpr*> *ObPLStmt::get_exprs() const
   return PL_BLOCK == type_ ? static_cast<const ObPLStmtBlock*>(this)->get_exprs() : NULL == get_block() ? NULL : get_block()->get_exprs();
 }
 
-const ObPLCondition *ObPLStmt::get_conditions() const
+const ObPLCondition *ObPLStmt::get_condition(int64_t i) const
 {
-  return NULL == get_condition_table() ? NULL : get_condition_table()->get_conditions();
+  return NULL == get_condition_table() ? NULL : get_condition_table()->get_condition(i);
 }
 
 const ObIArray<ObPLCursor *>* ObPLStmt::get_cursors() const

@@ -37,7 +37,8 @@ namespace rootserver {
 int ObDDLService::fork_single_table_in_trans_(const ObTableSchema &src_table_schema,
     const ObDatabaseSchema &src_db_schema, const ObDatabaseSchema &dst_db_schema,
     const ObString &dst_table_name, const int64_t fork_snapshot_version,
-    const uint64_t session_id, const ObString &ddl_stmt_str,
+    const int64_t fork_snapshot_schema_version, const uint64_t session_id,
+    const ObString &ddl_stmt_str,
     ObSchemaGetterGuard &schema_guard, ObDDLSQLTransaction &trans,
     ObIAllocator &allocator, ObDDLTaskRecord &task_record,
     common::hash::ObHashMap<uint64_t, uint64_t> *table_id_map,
@@ -149,7 +150,7 @@ int ObDDLService::fork_single_table_in_trans_(const ObTableSchema &src_table_sch
     ObCreateDDLTaskParam param(
         ObDDLType::DDL_FORK_TABLE, &src_table_schema,
         dst_table_schema, src_table_schema.get_table_id(),
-        dst_table_schema->get_schema_version(), 0 /* parallelism */,
+        fork_snapshot_schema_version, 0 /* parallelism */,
         &allocator, &fork_table_arg,
         0 /* parent task id*/);
     param.new_snapshot_version_ = fork_snapshot_version;
@@ -261,6 +262,7 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
     
     int64_t refreshed_schema_version = 0;
     int64_t fork_snapshot_version = 0;
+    int64_t fork_snapshot_schema_version = 0;
     ObDDLSQLTransaction trans(schema_service_);
     ObArenaAllocator allocator(lib::ObLabel("ForkTable"));
     bool is_db_in_recyclebin = false;
@@ -356,7 +358,7 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObForkTableUtil::obtain_snapshot(
                      trans, schema_guard, src_table_schemas,
-                     fork_snapshot_version))) {
+                     fork_snapshot_version, fork_snapshot_schema_version))) {
       } else if (fork_snapshot_version <= 0) {
         ret = OB_ERR_UNEXPECTED;
       } else {
@@ -368,7 +370,7 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
         // Use the unified helper function to fork the single table.
         if (OB_FAIL(fork_single_table_in_trans_(*src_table_schema, *src_db_schema, *dst_db_schema,
                 fork_table_arg.dst_table_name_, fork_snapshot_version,
-                fork_table_arg.session_id_, fork_table_arg.ddl_stmt_str_,
+                fork_snapshot_schema_version, fork_table_arg.session_id_, fork_table_arg.ddl_stmt_str_,
                 schema_guard, trans, allocator, task_record))) {
         }
       }

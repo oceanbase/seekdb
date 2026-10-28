@@ -395,7 +395,7 @@ int ObDDLErrorMessageTableOperator::build_ddl_error_message(
       }
     } else if (OB_ERR_DUPLICATED_UNIQUE_KEY == tmp_ret_code) {    //building a unique index violates the uniqueness constraint
       if (OB_FAIL(databuff_printf(error_message.dba_message_, OB_MAX_ERROR_MSG_LEN,
-          "Supported ddl error message type: create unique index, index_id = %ld", index_id))) {
+          "Supported ddl error message type: create unique index, index_id = %" PRId64 "", index_id))) {
       } else {
         if (OB_FAIL(databuff_printf(error_message.user_message_, OB_MAX_ERROR_MSG_LEN,
             str_user_error, message, index_name.length(), index_name.ptr()))) {

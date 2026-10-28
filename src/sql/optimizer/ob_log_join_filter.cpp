@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "sql/optimizer/ob_log_join_filter.h"
+#include <inttypes.h>
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -91,7 +92,7 @@ int ObLogJoinFilter::get_plan_item_info(PlanText &plan_text,
   if (OB_FAIL(ObLogicalOperator::get_plan_item_info(plan_text, plan_item))) {
   } else if (OB_INVALID_ID != get_filter_id()) {
     BEGIN_BUF_PRINT;
-    if (OB_FAIL(BUF_PRINTF(":RF%04ld", get_filter_id()))) {
+    if (OB_FAIL(BUF_PRINTF(":RF%04" PRId64 "", get_filter_id()))) {
     }
     END_BUF_PRINT(plan_item.object_alias_,
                   plan_item.object_alias_len_);

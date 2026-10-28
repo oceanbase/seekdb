@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "ob_io_struct.h"
+#include <inttypes.h>
 #include "share/ob_io_device_helper.h"
 #include "share/ob_force_print_log.h"
 #include "lib/objectpool/ob_concurrency_objpool.h"
@@ -822,6 +823,7 @@ int ObAsyncIOChannel::submit(ObIORequest &req)
     req.inc_ref(); // ref for file system
     if (OB_FAIL(device_handle_->io_submit(io_context_, req.control_block_))) {
       ATOMIC_DEC(&submit_count_);
+      ATOMIC_FAS(&device_channel_->used_io_depth_, get_io_depth(req.get_align_size()));
       req.dec_ref(); // ref for file system
     } else {
     }
@@ -881,11 +883,13 @@ void ObAsyncIOChannel::get_events()
         ATOMIC_FAS(&device_channel_->used_io_depth_, get_io_depth(io_size));
         const int system_errno = io_events_->get_ith_ret_code(i);
         const int complete_size = io_events_->get_ith_ret_bytes(i);
+        const int64_t remaining_size = io_size
+            - (req->io_result_ == nullptr ? 0 : req->io_result_->complete_size_);
         if (OB_LIKELY(0 == system_errno)) { // io succ
-          if (complete_size == io_size) { // full complete
+          if (complete_size == remaining_size) { // full complete, including earlier partial returns
             if (OB_FAIL(on_full_return(*req, io_size))) {
             }
-          } else if (complete_size >= 0 && complete_size < io_size) { // partial complete
+          } else if (complete_size >= 0 && complete_size < remaining_size) { // partial complete
             LOG_WARN("io request partial finished", K(*req), K(complete_size));
             int64_t aligned_size = 0;
             if (OB_ISNULL(req->fd_.device_handle_)) {
@@ -1131,6 +1135,7 @@ int ObSyncIOChannel::submit(ObIORequest &req)
     req.inc_ref(); // ref for file system
     ATOMIC_FAA(&used_io_depth_, get_io_depth(req.get_align_size()));
     if (OB_FAIL(ObSimpleThreadPool::push(&req))) {
+      ATOMIC_FAA(&used_io_depth_, -get_io_depth(req.get_align_size()));
       req.dec_ref(); // ref for file system
       if (OB_EAGAIN != ret) {
       } else {
@@ -1187,16 +1192,16 @@ int ObSyncIOChannel::do_sync_io(ObIORequest &req)
     ret = OB_ERR_SYS;
   } else if (OB_ISNULL(req.io_result_)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (FALSE_IT(io_offset = static_cast<int64_t>(req.io_result_->offset_))) {
+  } else if (FALSE_IT(io_offset = req.get_align_offset())) {
   } else if (FALSE_IT(req.io_result_->time_log_.submit_ts_ = ObTimeUtility::fast_current_time())) {
   } else if (req.get_flag().is_read()) {
     if (OB_FAIL(check_io_hang_errsim())) {
-    } else if (OB_FAIL(device_handle->pread(req.fd_, io_offset, req.io_result_->size_, req.calc_io_buf(), io_size))) {
+    } else if (OB_FAIL(device_handle->pread(req.fd_, io_offset, req.get_align_size(), req.calc_io_buf(), io_size))) {
     }
   } else if (req.get_flag().is_write()) {
     if (OB_FAIL(check_io_hang_errsim())) {
     } else if (OB_FAIL(device_handle->pwrite(
-        req.fd_, io_offset, req.io_result_->size_, req.calc_io_buf(), io_size))) {
+        req.fd_, io_offset, req.get_align_size(), req.calc_io_buf(), io_size))) {
     }
   } else {
     ret = OB_NOT_SUPPORTED;
@@ -1204,14 +1209,20 @@ int ObSyncIOChannel::do_sync_io(ObIORequest &req)
   if (OB_SUCC(ret)) {
     req.io_result_->time_log_.return_ts_ = ObTimeUtility::fast_current_time();
     req.io_result_->complete_size_ = io_size;
-    if (req.can_callback()) {
+    if (io_size != req.get_align_size()) {
+      ret = req.get_data_size() < req.io_result_->size_ ? OB_DATA_OUT_OF_RANGE
+          : (req.can_callback() ? OB_NOT_SUPPORTED : OB_SUCCESS);
+    }
+    if (req.is_canceled()) {
+      ret = OB_CANCELED;
+    }
+    if (OB_SUCC(ret) && req.can_callback()) {
       if (OB_FAIL(req.io_service_->enqueue_callback(req))) {
         req.io_result_->finish(ret, &req);
       }
     } else {
-      if (OB_FAIL(req.recycle_buffer())) {
-      }
-      req.io_result_->finish(ret, &req);
+      const int recycle_ret = req.recycle_buffer();
+      req.io_result_->finish(OB_SUCCESS == ret ? recycle_ret : ret, &req);
     }
   } else {
     req.io_result_->finish(ret, &req);
@@ -1273,7 +1284,7 @@ int ObDeviceChannel::init(ObIODevice *device_handle,
     max_io_depth_ = max_io_depth;
     allocator_ = &allocator;
     // one thread per channel
-    for (int64_t i = 0; OB_SUCC(ret) && i < async_channel_thread_count; ++i) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < async_channel_thread_count && device_handle_->supports_native_aio(); ++i) {
       ObAsyncIOChannel *ch = nullptr;
       void *buf = nullptr;
       if (OB_ISNULL(buf = allocator.alloc(sizeof(ObAsyncIOChannel)))) {
@@ -1329,17 +1340,20 @@ void ObDeviceChannel::destroy()
     ch->wait();
   }
   for (int64_t i = 0; i < async_channels_.count(); ++i) {
-    ObIOChannel *ch = async_channels_.at(i);
+    ObAsyncIOChannel *ch = static_cast<ObAsyncIOChannel *>(async_channels_.at(i));
     if (nullptr != allocator_ && nullptr != ch) {
-      ch->~ObIOChannel();
+      // Call the concrete destructor: an explicit ~ObIOChannel() only runs the
+      // base class and would skip the derived members (e.g. the sync channel's
+      // ObThreadCond, which owns an OS condition variable).
+      ch->~ObAsyncIOChannel();
       allocator_->free(ch);
     }
   }
   async_channels_.destroy();
   for (int64_t i = 0; i < sync_channels_.count(); ++i) {
-    ObIOChannel *ch = sync_channels_.at(i);
+    ObSyncIOChannel *ch = static_cast<ObSyncIOChannel *>(sync_channels_.at(i));
     if (nullptr != allocator_ && nullptr != ch) {
-      ch->~ObIOChannel();
+      ch->~ObSyncIOChannel();
       allocator_->free(ch);
     }
   }
@@ -1363,19 +1377,20 @@ int ObDeviceChannel::submit(ObIORequest &req)
   int ret = OB_SUCCESS;
   ObIOChannel *ch = nullptr;
   RequestHolder holder(&req);
-  const bool is_sync = req.io_result_ != nullptr && req.get_flag().is_sync();
+  const bool use_worker = (device_handle_ != nullptr && !device_handle_->supports_native_aio())
+      || (req.io_result_ != nullptr && req.get_flag().is_sync());
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
   } else {
-    if (is_sync) {
+    if (use_worker) {
       lock_for_sync_io_.lock();
     }
-    if (OB_FAIL(get_random_io_channel(is_sync ? sync_channels_ : async_channels_, ch))) {
+    if (OB_FAIL(get_random_io_channel(use_worker ? sync_channels_ : async_channels_, ch))) {
     } else if (OB_FAIL(ch->submit(req))) {
       if (OB_EAGAIN != ret) {
       }
     }
-    if (is_sync) {
+    if (use_worker) {
       lock_for_sync_io_.unlock();
     }
   }
@@ -1393,7 +1408,7 @@ void ObDeviceChannel::print_status()
     ObIOChannel *channel = async_channels_.at(i);
     if (OB_NOT_NULL(channel)) {
       int64_t cnt = channel->get_queue_count();
-      common::databuff_printf(buf, sizeof(buf), pos, " %ld", cnt);
+      common::databuff_printf(buf, sizeof(buf), pos, " %" PRId64 "", cnt);
       async_total += cnt;
     }
   }
@@ -1402,12 +1417,12 @@ void ObDeviceChannel::print_status()
     ObIOChannel *channel = sync_channels_.at(i);
     if (OB_NOT_NULL(channel)) {
       int64_t cnt = max(channel->get_queue_count(), 0);
-      common::databuff_printf(buf, sizeof(buf), pos, " %ld", cnt);
+      common::databuff_printf(buf, sizeof(buf), pos, " %" PRId64 "", cnt);
       sync_total += cnt;
     }
   }
   if (0 != pos) {
-    _LOG_INFO("[IO STATUS CHANNEL] device_id=%p, req_in_channel, async_total=%ld, sync_total=%ld%s", this, async_total, sync_total, buf);
+    _LOG_INFO("[IO STATUS CHANNEL] device_id=%p, req_in_channel, async_total=%" PRId64 ", sync_total=%" PRId64 "%s", this, async_total, sync_total, buf);
   }
 }
 
@@ -1602,7 +1617,7 @@ int64_t ObIOCallbackManager::to_string(char *buf, const int64_t len) const
   int ret = OB_SUCCESS;
   int64_t pos = 0;
   if (OB_FAIL(databuff_printf(buf, len, pos,
-                              "IO_CALLBACK: thread_count=%ld, queue_count=%ld",
+                              "IO_CALLBACK: thread_count=%" PRId64 ", queue_count=%" PRId64 "",
                               config_thread_count_, get_queue_num()))) {
     // do nothing
   }
@@ -2091,13 +2106,13 @@ int64_t ObIOTracer::to_string(char *buf, const int64_t len) const
     } else if (OB_FAIL(counter.bt_count_.foreach_refactored(store_fn))) {
     } else {
       lib::ob_sort(trace_array.begin(), trace_array.end(), sort_fn);
-      databuff_printf(buf, len, pos, "trace_request_count: %ld, distinct_backtrace_count: %ld; ", counter.req_count_, trace_array.count());
+      databuff_printf(buf, len, pos, "trace_request_count: %" PRId64 ", distinct_backtrace_count: %" PRId64 "; ", counter.req_count_, trace_array.count());
       const int64_t print_count = min(5, trace_array.count());
       for (int64_t i = 0; OB_SUCC(ret) && i < print_count; ++i) {
         const TraceItem &item = trace_array.at(i);
 	{
           ObCStringHelper helper;
-          databuff_printf(buf, len, pos, "top: %ld, count: %ld, ref_log: %s, backtrace: %s; ", i + 1, item.count_, helper.convert(item.trace_info_.ref_log_), item.trace_info_.bt_str_);
+          databuff_printf(buf, len, pos, "top: %" PRId64 ", count: %" PRId64 ", ref_log: %s, backtrace: %s; ", i + 1, item.count_, helper.convert(item.trace_info_.ref_log_), item.trace_info_.bt_str_);
         }
       }
     }

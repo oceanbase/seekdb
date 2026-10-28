@@ -15,6 +15,7 @@
  */
 
 #include "ob_malloc.h"
+#include <inttypes.h>
 #include <cstdlib>
 #include <cstring>
 #if defined(__linux__)
@@ -28,19 +29,6 @@
 #endif
 #ifdef __OB_MTRACE__
 #include <execinfo.h>
-#endif
-
-#if defined(ENABLE_SANITY) || (defined(OB_HAVE_BUNDLED_JEMALLOC) && defined(__APPLE__) && TARGET_OS_IPHONE)
-// The iOS jemalloc build has no background-thread support; enabling it leaves bootstrap incomplete.
-extern "C" {
-const char *je_malloc_conf =
-    "background_thread:false,dirty_decay_ms:1000,muzzy_decay_ms:0";
-}
-#elif defined(OB_HAVE_BUNDLED_JEMALLOC)
-extern "C" {
-const char *je_malloc_conf =
-    "background_thread:true,dirty_decay_ms:1000,muzzy_decay_ms:0";
-}
 #endif
 
 namespace oceanbase
@@ -112,17 +100,6 @@ bool promote_malloc_zone(malloc_zone_t *target)
 
 } // namespace
 
-bool restore_allocator_after_fork()
-{
-#if defined(OB_HAVE_BUNDLED_JEMALLOC) && !defined(OB_USE_ASAN)
-  // Forked children do not inherit background threads, so jemalloc resets the
-  // state to disabled; re-enable it after returning to normal child execution.
-  return jemalloc_enable_background_threads();
-#else
-  return true;
-#endif
-}
-
 #if defined(__APPLE__) && defined(OB_HAVE_BUNDLED_JEMALLOC) && !defined(OB_USE_ASAN)
 bool configure_darwin_malloc_zone()
 {
@@ -180,8 +157,8 @@ int oceanbase::common::ObMemBuf::ensure_space(const int64_t size, const lib::ObL
   int64_t buf_len = size > buf_size_ ? size : buf_size_;
 
   if (size <= 0 || (NULL != buf_ptr_ && buf_size_ <= 0)) {
-    _OB_LOG(WARN, "invalid param, size=%ld, buf_ptr_=%p, "
-              "buf_size_=%ld",
+    _OB_LOG(WARN, "invalid param, size=%" PRId64 ", buf_ptr_=%p, "
+              "buf_size_=%" PRId64 "",
               size, buf_ptr_, buf_size_);
     ret = OB_ERROR;
   } else if (NULL == buf_ptr_ || (NULL != buf_ptr_ && size > buf_size_)) {

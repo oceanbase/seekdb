@@ -1,8 +1,6 @@
 """Public headers for Rootserver."""
 
 ROOTSERVER_PUBLIC_HEADERS = [
-    "dbms_job/ob_dbms_job_master.h",
-    "dbms_job/ob_dbms_job_utils.h",
     "ddl_task/ob_column_redefinition_task.h",
     "ddl_task/ob_constraint_task.h",
     "ddl_task/ob_ddl_longops.h",

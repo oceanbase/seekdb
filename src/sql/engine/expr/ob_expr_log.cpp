@@ -18,6 +18,7 @@
 #include "sql/engine/expr/ob_expr_log.h"
 #include "sql/engine/expr/ob_expr_pow.h"
 #include "sql/session/ob_sql_session_info.h"
+#include "share/ob_math_compat.h"
 
 namespace oceanbase
 {
@@ -65,7 +66,7 @@ int calc_log_expr_double(const ObExpr &expr, ObEvalCtx &ctx,
     LOG_USER_WARN(OB_EER_INVALID_ARGUMENT_FOR_LOGARITHM);
     res_datum.set_null();
   } else if (OB_FAIL(ObExprPow::safe_set_double(res_datum,
-          std::log(x->get_double()) / std::log(base->get_double())))) {
+          math_compat::log(x->get_double()) / math_compat::log(base->get_double())))) {
     if (OB_OPERATE_OVERFLOW == ret) {
       ret = OB_SUCCESS;
       LOG_USER_WARN(OB_EER_INVALID_ARGUMENT_FOR_LOGARITHM);

@@ -16,6 +16,7 @@
 #define USING_LOG_PREFIX SQL_OPT
 
 #include "ob_log_expand.h"
+#include <inttypes.h>
 #include "sql/optimizer/ob_log_operator_factory.h"
 #include "sql/optimizer/ob_log_plan.h"
 #include "sql/optimizer/ob_opt_est_cost.h"
@@ -42,7 +43,7 @@ int ObLogExpand::get_plan_item_info(PlanText &plan_text, ObSqlPlanItem &plan_ite
     }
     BEGIN_BUF_PRINT;
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(BUF_PRINTF("repeat(%ld)[", hash_rollup_info_->expand_exprs_.count() + 1))) {
+    } else if (OB_FAIL(BUF_PRINTF("repeat(%" PRId64 ")[", hash_rollup_info_->expand_exprs_.count() + 1))) {
     } else {
       // output origin exprs
       OX(gen_duplicate_expr_text(plan_text, uniq_rollup_exprs));

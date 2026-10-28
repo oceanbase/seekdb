@@ -32,8 +32,6 @@ int64_t ObQueryIteratorFactory::table_scan_alloc_count_ = 0;
 int64_t ObQueryIteratorFactory::table_scan_release_count_ = 0;
 int64_t ObQueryIteratorFactory::insert_dup_alloc_count_ = 0;
 int64_t ObQueryIteratorFactory::insert_dup_release_count_ = 0;
-int64_t ObQueryIteratorFactory::col_map_alloc_count_ = 0;
-int64_t ObQueryIteratorFactory::col_map_release_count_ = 0;
 
 void ObQueryIteratorFactory::print_count()
 {
@@ -45,8 +43,7 @@ void ObQueryIteratorFactory::print_count()
         K_(multi_scan_merge_alloc_count), K_(multi_scan_merge_release_count),
         K_(multi_get_merge_alloc_count), K_(multi_get_merge_release_count),
         K_(table_scan_alloc_count), K_(table_scan_release_count),
-        K_(insert_dup_alloc_count), K_(insert_dup_release_count),
-        K_(col_map_alloc_count), K_(col_map_release_count));
+        K_(insert_dup_alloc_count), K_(insert_dup_release_count));
     ATOMIC_STORE(&last_stat_time, stat_time);
   }
 }

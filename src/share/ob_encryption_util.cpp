@@ -16,11 +16,10 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "share/ob_encryption_util.h"
-#include <openssl/err.h>
-#include <openssl/md4.h>
-#include <openssl/md5.h>
-#include <openssl/sha.h>
-#include "lib/atomic/atomic128.h"
+#include <cstddef>
+#include <limits>
+#include "lib/allocator/page_arena.h"
+#include "rust/crypto.h"
 
 namespace oceanbase
 {
@@ -28,119 +27,110 @@ using namespace common;
 namespace share
 {
 
-static const EVP_CIPHER *get_evp_cipher(const ObCipherOpMode mode)
+namespace
 {
-  switch (mode)
-  {
-    case ob_aes_128_ecb:    return EVP_aes_128_ecb();
-    case ob_aes_128_cbc:    return EVP_aes_128_cbc();
-    case ob_aes_128_cfb1:   return EVP_aes_128_cfb1();
-    case ob_aes_128_cfb8:   return EVP_aes_128_cfb8();
-    case ob_aes_128_cfb128: return EVP_aes_128_cfb128();
-    case ob_aes_128_ofb:    return EVP_aes_128_ofb();
-    case ob_aes_192_ecb:    return EVP_aes_192_ecb();
-    case ob_aes_192_cbc:    return EVP_aes_192_cbc();
-    case ob_aes_192_cfb1:   return EVP_aes_192_cfb1();
-    case ob_aes_192_cfb8:   return EVP_aes_192_cfb8();
-    case ob_aes_192_cfb128: return EVP_aes_192_cfb128();
-    case ob_aes_192_ofb:    return EVP_aes_192_ofb();
-    case ob_aes_256_ecb:    return EVP_aes_256_ecb();
-    case ob_aes_256_cbc:    return EVP_aes_256_cbc();
-    case ob_aes_256_cfb1:   return EVP_aes_256_cfb1();
-    case ob_aes_256_cfb8:   return EVP_aes_256_cfb8();
-    case ob_aes_256_cfb128: return EVP_aes_256_cfb128();
-    case ob_aes_256_ofb:    return EVP_aes_256_ofb();
-    case ob_aes_128_gcm:    return EVP_aes_128_gcm();
-    case ob_aes_192_gcm:    return EVP_aes_192_gcm();
-    case ob_aes_256_gcm:    return EVP_aes_256_gcm();
-#ifdef OB_USE_BABASSL
-    case ob_sm4_mode:       return EVP_sm4_ctr();
-    case ob_sm4_cbc_mode:   return EVP_sm4_cbc();
-    case ob_sm4_cbc:        return EVP_sm4_cbc();
-    case ob_sm4_ecb:        return EVP_sm4_ecb();
-    case ob_sm4_ofb:        return EVP_sm4_ofb();
-    case ob_sm4_cfb128:     return EVP_sm4_cfb128();
-    case ob_sm4_ctr:        return EVP_sm4_ctr();
-    case ob_sm4_gcm:        return EVP_sm4_gcm();
-#endif
-    default: return NULL;
-  }
+bool valid_buffer(const char *data, const int64_t size)
+{
+  return size >= 0 && static_cast<uint64_t>(size) <=
+      static_cast<uint64_t>(std::numeric_limits<std::ptrdiff_t>::max()) &&
+      (size == 0 || data != nullptr);
 }
+
+bool overlaps(const char *left, const int64_t left_size,
+              const char *right, const int64_t right_size)
+{
+  const uintptr_t left_addr = reinterpret_cast<uintptr_t>(left);
+  const uintptr_t right_addr = reinterpret_cast<uintptr_t>(right);
+  return left_size > 0 && right_size > 0 &&
+      (left_addr <= right_addr ? right_addr - left_addr < static_cast<uint64_t>(left_size)
+                               : left_addr - right_addr < static_cast<uint64_t>(right_size));
+}
+
+int borrow_input(const char *data, const int64_t size,
+                 char *output, const int64_t output_size, char *tag, const int64_t tag_size,
+                 ObIAllocator &allocator, rust::Slice<const uint8_t> &input)
+{
+  int ret = OB_SUCCESS;
+  if (overlaps(data, size, output, output_size) || overlaps(data, size, tag, tag_size)) {
+    // OpenSSL permits in-place buffers, but Rust slices must not alias mutable output.
+    char *copy = static_cast<char *>(allocator.alloc(size));
+    if (OB_ISNULL(copy)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      MEMCPY(copy, data, size);
+      input = rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(copy), size);
+    }
+  } else {
+    input = rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(data), size);
+  }
+  return ret;
+}
+
+int cipher_error(const crypto::OperationResult &result, const int backend_error)
+{
+  int ret = OB_SUCCESS;
+  switch (result.code) {
+    case crypto::Code::Ok:
+      break;
+    case crypto::Code::InvalidArgument:
+    case crypto::Code::Unsupported:
+      ret = OB_INVALID_ARGUMENT;
+      break;
+    case crypto::Code::Allocation:
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      break;
+    default:
+      ret = backend_error;
+      LOG_WARN("cipher operation failed", K(ret), K(result.backend_code));
+      break;
+  }
+  return ret;
+}
+} // namespace
 
 int ObBlockCipher::get_key_length(const ObCipherOpMode opmode)
 {
-  int length = 0;
-  const EVP_CIPHER *cipher = get_evp_cipher(opmode);
-  if (NULL != cipher) {
-    length = EVP_CIPHER_key_length(cipher);
-  }
-  return length;
+  const crypto::CipherInfo info = crypto::cipher_info(static_cast<uint32_t>(opmode));
+  return info.result.code == crypto::Code::Ok ? static_cast<int>(info.key_len) : 0;
 }
 
 bool ObBlockCipher::is_need_iv(const ObCipherOpMode opmode)
 {
-  bool need_iv = false;
-  const EVP_CIPHER *cipher = get_evp_cipher(opmode);
-  if (NULL != cipher) {
-    int default_iv_length = EVP_CIPHER_iv_length(cipher);
-    need_iv = default_iv_length == 0 ? false : true;
-  }
-  return need_iv;
+  return get_iv_length(opmode) != 0;
 }
 
 bool ObBlockCipher::is_need_aead(const ObCipherOpMode opmode)
 {
-  bool need_aead = false;
-  const EVP_CIPHER *cipher = get_evp_cipher(opmode);
-  if (NULL != cipher) {
-    need_aead = EVP_CIPHER_mode(cipher) == EVP_CIPH_GCM_MODE;
-  }
-  return need_aead;
+  const crypto::CipherInfo info = crypto::cipher_info(static_cast<uint32_t>(opmode));
+  return info.result.code == crypto::Code::Ok && info.aead;
 }
 
 bool ObBlockCipher::is_need_padding(const ObCipherOpMode opmode)
 {
-  bool need_padding = false;
-  const EVP_CIPHER *cipher = get_evp_cipher(opmode);
-  if (NULL != cipher) {
-    need_padding = EVP_CIPH_ECB_MODE == EVP_CIPHER_mode(cipher) ||
-                   EVP_CIPH_CBC_MODE == EVP_CIPHER_mode(cipher);
-  }
-  return need_padding;
+  const crypto::CipherInfo info = crypto::cipher_info(static_cast<uint32_t>(opmode));
+  return info.result.code == crypto::Code::Ok && info.padding;
 }
 
 int64_t ObBlockCipher::get_iv_length(const ObCipherOpMode opmode)
 {
-  int64_t iv_length = 0;
-  const EVP_CIPHER *cipher = get_evp_cipher(opmode);
-  if (NULL != cipher) {
-    iv_length = EVP_CIPHER_iv_length(cipher);
-  }
-  return iv_length;
+  const crypto::CipherInfo info = crypto::cipher_info(static_cast<uint32_t>(opmode));
+  return info.result.code == crypto::Code::Ok ? static_cast<int64_t>(info.iv_len) : 0;
 }
 
 int64_t ObBlockCipher::get_ciphertext_length(const ObCipherOpMode opmode, const int64_t data_len)
 {
-  return is_need_padding(opmode) ?
-         (data_len / OB_CIPHER_BLOCK_LENGTH + 1) * OB_CIPHER_BLOCK_LENGTH : data_len;
-}
-
-void ObBlockCipher::create_key(const unsigned char *key, int key_length, char *rkey,
-                               enum ObCipherOpMode opmode)
-{
-  const int key_size= get_key_length(opmode);
-  char *rkey_end = NULL;
-  char *ptr = NULL;                                   /* the actual start position of the key */
-  char *sptr = NULL;
-  char *key_end= ((char *)key) + key_length;
-  rkey_end= rkey + key_size;
-  memset(rkey, 0, key_size);          /* initialize key */
-  for (ptr= rkey, sptr= (char *)key; sptr < key_end; ptr++, sptr++)
-  {
-    if (ptr == rkey_end)
-      ptr= rkey;
-    *ptr^= *sptr;
+  int64_t size = data_len;
+  if (is_need_padding(opmode)) {
+    size = -1;
+    if (data_len >= 0 && static_cast<uint64_t>(data_len) <= std::numeric_limits<size_t>::max()) {
+      const crypto::OperationResult result =
+          crypto::ciphertext_size(static_cast<uint32_t>(opmode), static_cast<size_t>(data_len));
+      if (result.code == crypto::Code::Ok && result.size <= static_cast<uint64_t>(INT64_MAX)) {
+        size = static_cast<int64_t>(result.size);
+      }
+    }
   }
+  return size;
 }
 
 bool ObBlockCipher::is_valid_cipher_opmode(const ObCipherOpMode opmode)
@@ -156,59 +146,33 @@ int ObBlockCipher::encrypt(const char *key, const int64_t key_len,
                            enum ObCipherOpMode mode, char *buf, int64_t &out_len, char *tag)
 {
   int ret = OB_SUCCESS;
-  bool need_iv = is_need_iv(mode);
-  bool need_aead = is_need_aead(mode);
-  bool need_padding = is_need_padding(mode);
+  const crypto::CipherInfo info = crypto::cipher_info(static_cast<uint32_t>(mode));
+  const int64_t iv_size = info.iv_len == 0 ? 0 : iv_len;
+  const int64_t aad_size = info.aead ? aad_len : 0;
+  const int64_t tag_size = info.aead ? tag_len : 0;
   if (!is_valid_cipher_opmode(mode) ||
-      (OB_ISNULL(key) && key_len != 0) || key_len < 0 ||  // allow NULL key
-      (OB_ISNULL(data) && data_len != 0) ||   data_len < 0 || // allow NULL data
-      OB_ISNULL(buf) || buf_len < get_ciphertext_length(mode, data_len)) {
+      !valid_buffer(key, key_len) || !valid_buffer(data, data_len) ||
+      OB_ISNULL(buf) || !valid_buffer(buf, buf_len) ||
+      !valid_buffer(iv, iv_size) || !valid_buffer(aad, aad_size) ||
+      !valid_buffer(tag, tag_size) || overlaps(buf, buf_len, tag, tag_size)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (need_iv && ((iv_len != 0 && OB_ISNULL(iv)) ||
-                         (iv_len != 0 && iv_len != get_iv_length(mode)))) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (need_aead && ((aad_len != 0 && OB_ISNULL(aad)) ||
-                           (aad_len != 0 && aad_len != OB_DEFAULT_AEAD_AAD_LENGTH) ||
-                           tag_len != OB_DEFAULT_AEAD_TAG_LENGTH || OB_ISNULL(tag))){
-    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(cipher_error(info.result, OB_ERR_AES_ENCRYPT))) {
   } else {
-    int u_len=0, f_len=0;
-    unsigned char rkey[OB_MAX_CIPHER_KEY_LENGTH / 8];
-    unsigned char *iv_encrypt = (!need_iv || iv_len == 0) ? NULL : (unsigned char *)iv;
-    unsigned char *add_encrypt = (!need_aead || aad_len == 0) ? NULL : (unsigned char *)aad;
-    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
-    const EVP_CIPHER *cipher = get_evp_cipher(mode);
-    if (OB_ISNULL(ctx) ||OB_ISNULL(cipher)) {
-      ret = OB_INVALID_ARGUMENT;
-    } else if (FALSE_IT(create_key((const unsigned char *)key, (int)key_len, (char *)rkey, mode))) {
-    } else if (FALSE_IT(EVP_CIPHER_CTX_init(ctx))) {
-    } else if (!EVP_EncryptInit_ex(ctx, cipher, nullptr, rkey, (unsigned char*)iv_encrypt)) {
-      ret = OB_ERR_AES_ENCRYPT;
-      LOG_WARN("fail to init evp encryption cipher", K(ret));
-    } else if (need_padding && !EVP_CIPHER_CTX_set_padding(ctx, true)) {
-      ret = OB_ERR_AES_ENCRYPT;
-      LOG_WARN("fail to set padding in encrypt", K(ret));
-    } else if (need_aead && NULL != add_encrypt && !EVP_EncryptUpdate(ctx, NULL, &u_len, (unsigned char *)add_encrypt, (int)aad_len)) {
-      ret = OB_ERR_AES_ENCRYPT;
-      LOG_WARN("fail to set AAD in encrypt", K(ret));
-    } else if (!EVP_EncryptUpdate(ctx, (unsigned char *)buf, &u_len, (unsigned char *)data, (int)data_len)) {
-      ret = OB_ERR_AES_ENCRYPT;
-      LOG_WARN("fail to encrypt data in encrypt", K(ret));
-    } else if (!EVP_EncryptFinal(ctx, (unsigned char*)buf + u_len, &f_len)) {
-      ret = OB_ERR_AES_ENCRYPT;
-      LOG_WARN("fail to encrypt final frame data in encrypt", K(ret));
-    } else if (need_aead && !EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, (int)tag_len, (unsigned char*)tag)) {
-      ret = OB_ERR_AES_ENCRYPT;
-      LOG_WARN("fail to encrypt final frame data in encrypt", K(ret));
+    ObArenaAllocator allocator("CryptoInput");
+    rust::Slice<const uint8_t> key_input, iv_input, aad_input, data_input;
+    if (OB_FAIL(borrow_input(key, key_len, buf, buf_len, tag, tag_size, allocator, key_input))) {
+    } else if (OB_FAIL(borrow_input(iv, iv_size, buf, buf_len, tag, tag_size, allocator, iv_input))) {
+    } else if (OB_FAIL(borrow_input(aad, aad_size, buf, buf_len, tag, tag_size, allocator, aad_input))) {
+    } else if (OB_FAIL(borrow_input(data, data_len, buf, buf_len, tag, tag_size, allocator, data_input))) {
     } else {
-      out_len = u_len + f_len;
-    }
-    if (OB_UNLIKELY(OB_ERR_AES_ENCRYPT == ret)) {
-      common::ObString err_reason = common::ObString::make_string(ERR_reason_error_string(ERR_get_error()));
-      LOG_WARN("encrypt failed", K(err_reason));
-    }
-    if (OB_NOT_NULL(ctx)) {
-      EVP_CIPHER_CTX_free(ctx);
+      const crypto::OperationResult result = crypto::encrypt_into(static_cast<uint32_t>(mode),
+          key_input, iv_input, aad_input, data_input,
+          rust::Slice<uint8_t>(reinterpret_cast<uint8_t *>(buf), buf_len),
+          rust::Slice<uint8_t>(reinterpret_cast<uint8_t *>(tag), tag_size));
+      if (OB_FAIL(cipher_error(result, OB_ERR_AES_ENCRYPT))) {
+      } else {
+        out_len = static_cast<int64_t>(result.size);
+      }
     }
   }
   return ret;
@@ -221,99 +185,34 @@ int ObBlockCipher::decrypt(const char *key, const int64_t key_len,
                            enum ObCipherOpMode mode, char *buf, int64_t &out_len)
 {
   int ret = OB_SUCCESS;
-  bool need_iv = is_need_iv(mode);
-  bool need_aead = is_need_aead(mode);
-  bool need_padding = is_need_padding(mode);
+  const crypto::CipherInfo info = crypto::cipher_info(static_cast<uint32_t>(mode));
+  const int64_t iv_size = info.iv_len == 0 ? 0 : iv_len;
+  const int64_t aad_size = info.aead ? aad_len : 0;
+  const int64_t tag_size = info.aead ? tag_len : 0;
   if (!is_valid_cipher_opmode(mode) ||
-      (OB_ISNULL(key) && key_len != 0) || key_len < 0 ||
-      (OB_ISNULL(data) && data_len != 0) || data_len < 0 ||
-      OB_ISNULL(buf) || buf_len < data_len) {
+      !valid_buffer(key, key_len) || !valid_buffer(data, data_len) ||
+      OB_ISNULL(buf) || !valid_buffer(buf, buf_len) ||
+      !valid_buffer(iv, iv_size) || !valid_buffer(aad, aad_size) || !valid_buffer(tag, tag_size)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (need_iv && ((iv_len != 0 && OB_ISNULL(iv)) ||
-                         (iv_len != 0 && iv_len != get_iv_length(mode)))) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (need_aead && ((aad_len != 0 && OB_ISNULL(aad)) ||
-                           (aad_len != 0 && aad_len != OB_DEFAULT_AEAD_AAD_LENGTH) ||
-                           tag_len != OB_DEFAULT_AEAD_TAG_LENGTH || OB_ISNULL(tag))) {
-    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(cipher_error(info.result, OB_ERR_AES_DECRYPT))) {
   } else {
-    int u_len=0, f_len=0;
-    unsigned char rkey[OB_MAX_CIPHER_KEY_LENGTH / 8];
-    unsigned char *iv_decrypt = (!need_iv || iv_len == 0) ? NULL : (unsigned char *)iv;
-    unsigned char *add_decrypt = (!need_aead || aad_len == 0) ? NULL : (unsigned char *)aad;
-    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
-    const EVP_CIPHER *cipher = get_evp_cipher(mode);
-    if (OB_ISNULL(ctx) || OB_ISNULL(cipher)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("fail to to init cipher ctx in decrypt", K(ret), KP(ctx), KP(cipher));
-    } else if (FALSE_IT(create_key((const unsigned char *)key, (int)key_len, (char *)rkey, mode))) {
-    } else if (FALSE_IT(EVP_CIPHER_CTX_init(ctx))) {
-    } else if (!EVP_DecryptInit_ex(ctx, cipher, nullptr, rkey, (unsigned char*)iv_decrypt)) {
-      ret = OB_ERR_AES_DECRYPT;
-      LOG_WARN("fail to init evp ctx in decrypt", K(ret));
-    } else if (need_padding && !EVP_CIPHER_CTX_set_padding(ctx, true)) {
-      ret = OB_ERR_AES_DECRYPT;
-      LOG_WARN("fail to set padding in decrypt", K(ret));
-    } else if (need_aead && NULL != add_decrypt && !EVP_DecryptUpdate(ctx, NULL, &u_len, (const unsigned char *)add_decrypt, (int)aad_len)) {
-      ret = OB_ERR_AES_DECRYPT;
-      LOG_WARN("fail to set AAD in decrypt", K(ret));
-    } else if (!EVP_DecryptUpdate(ctx, (unsigned char *)buf, &u_len, (const unsigned char *)data, (int)data_len)) {
-      ret = OB_ERR_AES_DECRYPT;
-      LOG_WARN("fail to decrypt data in decrypt", K(ret));
-    } else if (need_aead && !EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, (int)tag_len, (unsigned char *)tag)) {
-      ret = OB_ERR_AES_DECRYPT;
-    } else if (!EVP_DecryptFinal(ctx, (unsigned char*)buf + u_len, &f_len)) {
-      ret = OB_ERR_AES_DECRYPT;
-      LOG_WARN("fail to decrypt final frame data in decrypt", K(ret), K(u_len), K(f_len));
+    ObArenaAllocator allocator("CryptoInput");
+    rust::Slice<const uint8_t> key_input, iv_input, aad_input, data_input, tag_input;
+    if (OB_FAIL(borrow_input(key, key_len, buf, buf_len, nullptr, 0, allocator, key_input))) {
+    } else if (OB_FAIL(borrow_input(iv, iv_size, buf, buf_len, nullptr, 0, allocator, iv_input))) {
+    } else if (OB_FAIL(borrow_input(aad, aad_size, buf, buf_len, nullptr, 0, allocator, aad_input))) {
+    } else if (OB_FAIL(borrow_input(data, data_len, buf, buf_len, nullptr, 0, allocator, data_input))) {
+    } else if (OB_FAIL(borrow_input(tag, tag_size, buf, buf_len, nullptr, 0, allocator, tag_input))) {
     } else {
-      out_len = u_len + f_len;
-    }
-    if (OB_UNLIKELY(OB_ERR_AES_DECRYPT == ret)) {
-      common::ObString err_reason = common::ObString::make_string(ERR_reason_error_string(ERR_get_error()));
-      LOG_WARN("decrypt failed", K(err_reason));
-    }
-    if (OB_NOT_NULL(ctx)) {
-      EVP_CIPHER_CTX_free(ctx);
+      const crypto::OperationResult result = crypto::decrypt_into(static_cast<uint32_t>(mode),
+          key_input, iv_input, aad_input, data_input, tag_input,
+          rust::Slice<uint8_t>(reinterpret_cast<uint8_t *>(buf), buf_len));
+      if (OB_FAIL(cipher_error(result, OB_ERR_AES_DECRYPT))) {
+      } else {
+        out_len = static_cast<int64_t>(result.size);
+      }
     }
   }
-  return ret;
-}
-
-static void* ob_malloc_openssl(size_t nbyte, const char *, int)
-{
-  ObMemAttr attr;
-  attr.ctx_id_ = ObCtxIds::GLIBC;
-  attr.label_ = ObModIds::OB_BUFFER;
-  lib::ObMallocHookAttrGuard guard(attr);
-  return malloc(nbyte);
-}
-
-static void* ob_realloc_openssl(void *ptr, size_t nbyte, const char *, int)
-{
-  ObMemAttr attr;
-  attr.ctx_id_ = ObCtxIds::GLIBC;
-  attr.label_ = ObModIds::OB_BUFFER;
-  lib::ObMallocHookAttrGuard guard(attr);
-  return realloc(ptr, nbyte);
-}
-
-static void ob_free_openssl(void *ptr, const char *, int)
-{
-  free(ptr);
-}
-
-int ObEncryptionUtil::init_ssl_malloc()
-{
-  int ret = OB_SUCCESS;
-#ifdef _WIN32
-  // CRYPTO_set_mem_functions fails if OpenSSL has already allocated memory.
-#else
-  int tmp_ret = CRYPTO_set_mem_functions(ob_malloc_openssl, ob_realloc_openssl, ob_free_openssl);
-  if (OB_UNLIKELY(tmp_ret != 1)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to set crypto mem functions", K(tmp_ret), K(ret));
-  }
-#endif
   return ret;
 }
 
@@ -356,31 +255,29 @@ int ObHashUtil::hash(const enum ObHashAlgorithm algo, const char *data, const in
 {
   int ret = OB_SUCCESS;
   int64_t expect_out_len = 0;
-  if (ObHashAlgorithm::OB_HASH_INVALID == algo || OB_ISNULL(data) || data_len < 0 ||
-      OB_ISNULL(buf)) {
+  if (ObHashAlgorithm::OB_HASH_INVALID == algo || OB_ISNULL(data) ||
+      !valid_buffer(data, data_len) || OB_ISNULL(buf) || !valid_buffer(buf, buf_len)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(get_hash_output_len(algo, expect_out_len))) {
   } else if (OB_UNLIKELY(buf_len < expect_out_len)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    unsigned int res_len = 0;
-    const EVP_MD *md = get_hash_evp_md(algo);
-    EVP_MD_CTX *mdctx = EVP_MD_CTX_create();
-    if (OB_ISNULL(mdctx) || OB_ISNULL(md)) {
-      ret = OB_ERR_AES_ENCRYPT;
-    } else if (!EVP_DigestInit_ex(mdctx, md, NULL)) {
-      ret = OB_ERR_AES_ENCRYPT;
-    } else if (!EVP_DigestUpdate(mdctx, (const unsigned char *)data, data_len)) {
-      ret = OB_ERR_AES_ENCRYPT;
-    } else if (!EVP_DigestFinal_ex(mdctx, (unsigned char *)buf, &res_len)) {
-      ret = OB_ERR_AES_ENCRYPT;
-    } else if (OB_UNLIKELY(expect_out_len != res_len)) {
-      ret = OB_ERR_UNEXPECTED;
+    ObArenaAllocator allocator("CryptoInput");
+    rust::Slice<const uint8_t> input;
+    if (OB_FAIL(borrow_input(data, data_len, buf, buf_len, nullptr, 0, allocator, input))) {
     } else {
-      out_len = res_len;
-    }
-    if (OB_NOT_NULL(mdctx)) {
-      EVP_MD_CTX_destroy(mdctx);
+      const crypto::OperationResult result = crypto::digest_into(static_cast<uint32_t>(algo), input,
+          rust::Slice<uint8_t>(reinterpret_cast<uint8_t *>(buf), buf_len));
+      if (result.code == crypto::Code::Allocation) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else if (result.code != crypto::Code::Ok) {
+        ret = OB_ERR_AES_ENCRYPT;
+        LOG_WARN("hash operation failed", K(ret), K(result.backend_code));
+      } else if (OB_UNLIKELY(result.size != static_cast<size_t>(expect_out_len))) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        out_len = static_cast<int64_t>(result.size);
+      }
     }
   }
   return ret;
@@ -389,34 +286,14 @@ int ObHashUtil::hash(const enum ObHashAlgorithm algo, const char *data, const in
 int ObHashUtil::get_hash_output_len(const ObHashAlgorithm algo, int64_t &output_len)
 {
   int ret = OB_SUCCESS;
-  switch(algo) {
-    case OB_HASH_MD4:
-      output_len = MD4_DIGEST_LENGTH;
-      break;
-    case OB_HASH_MD5:
-      output_len = MD5_DIGEST_LENGTH;
-      break;
-    case OB_HASH_SH1:
-      output_len = SHA_DIGEST_LENGTH;
-      break;
-    case OB_HASH_SH224:
-      output_len = SHA224_DIGEST_LENGTH;
-      break;
-    case OB_HASH_SH256:
-      output_len = SHA256_DIGEST_LENGTH;
-      break;
-    case OB_HASH_SH384:
-      output_len = SHA384_DIGEST_LENGTH;
-      break;
-    case OB_HASH_SH512:
-      output_len = SHA512_DIGEST_LENGTH;
-      break;
-    case OB_HASH_SM3:
-      output_len = OB_SM3_DIGEST_LENGTH;
-      break;
-    default:
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "cipher type passed");
+  const crypto::OperationResult result = crypto::digest_size(static_cast<uint32_t>(algo));
+  if (result.code == crypto::Code::Ok) {
+    output_len = static_cast<int64_t>(result.size);
+  } else if (result.code == crypto::Code::Allocation) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "cipher type passed");
   }
   return ret;
 }
@@ -424,21 +301,20 @@ int ObHashUtil::get_hash_output_len(const ObHashAlgorithm algo, int64_t &output_
 int ObHashUtil::get_sha_hash_algorightm(const int64_t bit_length, ObHashAlgorithm &algo)
 {
   int ret = OB_SUCCESS;
-  const int64_t BIT_PER_BYTE = 8;
   switch(bit_length) {
-    case SHA_DIGEST_LENGTH * BIT_PER_BYTE:
+    case 160:
       algo = OB_HASH_SH1;
       break;
-    case SHA224_DIGEST_LENGTH * BIT_PER_BYTE:
+    case 224:
       algo = OB_HASH_SH224;
       break;
-    case SHA256_DIGEST_LENGTH * BIT_PER_BYTE:
+    case 256:
       algo = OB_HASH_SH256;
       break;
-    case SHA384_DIGEST_LENGTH * BIT_PER_BYTE:
+    case 384:
       algo = OB_HASH_SH384;
       break;
-    case SHA512_DIGEST_LENGTH * BIT_PER_BYTE:
+    case 512:
       algo = OB_HASH_SH512;
       break;
     default:
@@ -446,21 +322,6 @@ int ObHashUtil::get_sha_hash_algorightm(const int64_t bit_length, ObHashAlgorith
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "sha hash output length");
   }
   return ret;
-}
-
-const EVP_MD* ObHashUtil::get_hash_evp_md(const ObHashAlgorithm algo)
-{
-  switch(algo) {
-    case OB_HASH_MD4: return EVP_md4();
-    case OB_HASH_MD5: return EVP_md5();
-    case OB_HASH_SH1: return EVP_sha1();
-    case OB_HASH_SH224: return EVP_sha224();
-    case OB_HASH_SH256: return EVP_sha256();
-    case OB_HASH_SH384: return EVP_sha384();
-    case OB_HASH_SH512: return EVP_sha512();
-    case OB_HASH_SM3: return EVP_sm3();
-    default: return NULL;
-  }
 }
 
 }//end share

@@ -17,32 +17,7 @@
 #ifndef OCEANBASE_OB_SERVER_UTILS_
 #define OCEANBASE_OB_SERVER_UTILS_
 
-#ifndef _WIN32
-#include <sys/statvfs.h>
-#else
-#include <windows.h>
 #include <stdint.h>
-struct statvfs {
-  unsigned long f_bsize;
-  uint64_t f_blocks;
-  uint64_t f_bfree;
-  uint64_t f_bavail;
-  unsigned long f_fsid;
-};
-static inline int statvfs(const char *path, struct statvfs *buf) {
-  ULARGE_INTEGER free_bytes_available, total_bytes, total_free_bytes;
-  if (!GetDiskFreeSpaceExA(path, &free_bytes_available, &total_bytes, &total_free_bytes)) {
-    return -1;
-  }
-  memset(buf, 0, sizeof(*buf));
-  buf->f_bsize = 4096;
-  buf->f_blocks = total_bytes.QuadPart / buf->f_bsize;
-  buf->f_bfree = total_free_bytes.QuadPart / buf->f_bsize;
-  buf->f_bavail = free_bytes_available.QuadPart / buf->f_bsize;
-  buf->f_fsid = 0;
-  return 0;
-}
-#endif
 #include "lib/allocator/ob_allocator.h"
 #include "lib/string/ob_string.h"
 
@@ -93,7 +68,8 @@ public:
       int64_t &cur_datafile_size,
       int64_t &actual_extend_size);
 private:
-  static int decide_disk_size(const struct statvfs& svfs,
+  static int decide_disk_size(const int64_t total_space,
+                              const int64_t available_space,
                               const int64_t suggested_disk_size,
                               const int64_t suggested_disk_percentage,
                               const int64_t default_disk_percentage,

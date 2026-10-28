@@ -1,0 +1,12 @@
+[package]
+name = "json"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+cxx = "=1.0.202"
+memchr = "=2.8.3"
+ryu = "=1.0.23"
+serde = "=1.0.229"
+serde_json = { version = "=1.0.151", features = ["unbounded_depth"] }

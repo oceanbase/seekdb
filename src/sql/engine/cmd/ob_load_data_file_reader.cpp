@@ -20,9 +20,11 @@
 #include "rpc/obmysql/ob_i_cs_mem_pool.h"
 #include "rpc/obmysql/packet/ompk_local_infile.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "lib/compress/zstd_1_3_8/ob_zstd_wrapper.h"
 #include "lib/compress/ob_compress_util.h"
+#include "rust/compression.h"
 #include "sql/engine/ob_exec_context.h"
+#include <algorithm>
+#include <limits>
 
 namespace oceanbase
 {
@@ -448,7 +450,9 @@ int ObDecompressor::create(ObCSVGeneralFormat::ObCSVCompression format,
     } break;
   }
 
-  if (OB_SUCC(ret) && OB_NOT_NULL(decompressor)) {
+  if (OB_SUCC(ret) && OB_ISNULL(decompressor)) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_SUCC(ret)) {
     if (OB_FAIL(decompressor->init())) {
       ObDecompressor::destroy(decompressor);
       decompressor = nullptr;
@@ -495,7 +499,8 @@ int ObDecompressFileReader::open(const ObFileReadParam &param, ObFileReader *sou
 {
   int ret = OB_SUCCESS;
 
-  if (param.compression_format_ == ObCSVGeneralFormat::ObCSVCompression::NONE) {
+  if (OB_ISNULL(source_reader)
+      || param.compression_format_ == ObCSVGeneralFormat::ObCSVCompression::NONE) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(ObDecompressor::create(param.compression_format_, allocator_, decompressor_))) {
   } else if (OB_ISNULL(compressed_data_ = (char *)allocator_.alloc(COMPRESSED_DATA_BUFFER_SIZE))) {
@@ -513,30 +518,40 @@ int ObDecompressFileReader::read(char *buf, int64_t capacity, int64_t &read_size
 
   read_size = 0;
 
-  if (OB_ISNULL(source_reader_)) {
+  if (OB_ISNULL(source_reader_) || OB_ISNULL(decompressor_)) {
     ret = OB_NOT_INIT;
   } else if (OB_ISNULL(buf) || capacity <= 0) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (consumed_data_size_ >= compress_data_size_) {
-    if (!source_reader_->eof()) {
-      ret = read_compressed_data();
-    } else {
-      eof_ = true;
-    }
   }
 
-  if (OB_SUCC(ret) && compress_data_size_ > consumed_data_size_) {
+  while (OB_SUCC(ret) && read_size == 0 && !eof_) {
+    const int64_t available = compress_data_size_ - consumed_data_size_;
+    const char *input = available > 0 ? compressed_data_ + consumed_data_size_ : nullptr;
     int64_t consumed_size = 0;
-    ret = decompressor_->decompress(compressed_data_ + consumed_data_size_,
-                                    compress_data_size_ - consumed_data_size_,
-                                    consumed_size,
-                                    buf,
-                                    capacity,
-                                    read_size);
-    if (OB_FAIL(ret)) {
+    if (OB_FAIL(decompressor_->decompress(input, available, consumed_size, buf, capacity, read_size))) {
+    } else if (consumed_size < 0 || consumed_size > available
+               || read_size < 0 || read_size > capacity) {
+      ret = OB_ERR_COMPRESS_DECOMPRESS_DATA;
+    } else if (read_size > std::numeric_limits<int64_t>::max() - uncompressed_size_) {
+      ret = OB_SIZE_OVERFLOW;
     } else {
       consumed_data_size_ += consumed_size;
-      uncompressed_size_  += read_size;
+      uncompressed_size_ += read_size;
+      if (read_size > 0 || consumed_size > 0) {
+      } else if (source_reader_->eof()) {
+        if (available != 0) {
+          ret = OB_ERR_COMPRESS_DECOMPRESS_DATA;
+        } else if (OB_FAIL(decompressor_->finish())) {
+        } else {
+          eof_ = true;
+        }
+      } else if (available == COMPRESSED_DATA_BUFFER_SIZE) {
+        ret = OB_ERR_COMPRESS_DECOMPRESS_DATA;
+      } else if (OB_FAIL(read_compressed_data())) {
+      } else if (compress_data_size_ == available && !source_reader_->eof()) {
+        // A source may temporarily return no bytes without reaching EOF.
+        break;
+      }
     }
   }
 
@@ -547,8 +562,11 @@ int ObDecompressFileReader::read_compressed_data()
 {
   int ret = OB_SUCCESS;
   char *read_buffer = compressed_data_;
-  if (OB_ISNULL(source_reader_)) {
+  if (OB_ISNULL(source_reader_) || OB_ISNULL(compressed_data_)) {
     ret = OB_NOT_INIT;
+  } else if (consumed_data_size_ < 0 || consumed_data_size_ > compress_data_size_
+             || compress_data_size_ > COMPRESSED_DATA_BUFFER_SIZE) {
+    ret = OB_ERR_UNEXPECTED;
   } else if (OB_UNLIKELY(consumed_data_size_ < compress_data_size_)) {
     // backup data
     const int64_t last_data_size = compress_data_size_ - consumed_data_size_;
@@ -565,8 +583,12 @@ int ObDecompressFileReader::read_compressed_data()
     // read data from source reader
     int64_t read_size = 0;
     int64_t capability = COMPRESSED_DATA_BUFFER_SIZE - compress_data_size_;
-    ret = source_reader_->read(read_buffer, capability, read_size);
-    if (OB_SUCC(ret)) {
+    if (capability <= 0) {
+      ret = OB_ERR_COMPRESS_DECOMPRESS_DATA;
+    } else if (OB_FAIL(source_reader_->read(read_buffer, capability, read_size))) {
+    } else if (read_size < 0 || read_size > capability) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
       compress_data_size_ += read_size;
     }
   }
@@ -589,35 +611,18 @@ ObZlibDecompressor::~ObZlibDecompressor()
 
 void ObZlibDecompressor::destroy()
 {
-  if (OB_NOT_NULL(zlib_stream_ptr_)) {
-    z_streamp zstream_ptr = static_cast<z_streamp>(zlib_stream_ptr_);
-    inflateEnd(zstream_ptr);
-    allocator_.free(zlib_stream_ptr_);
-    zlib_stream_ptr_ = nullptr;
-  }
+  decoder_.reset();
+  stream_finished_ = false;
 }
 
 int ObZlibDecompressor::init()
 {
   int ret = OB_SUCCESS;
-  if (OB_NOT_NULL(zlib_stream_ptr_)) {
+  if (decoder_.has_value()) {
     ret = OB_INIT_TWICE;
-  } else if (OB_ISNULL(zlib_stream_ptr_ = allocator_.alloc(sizeof(z_stream)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed: zlib stream object.", K(sizeof(z_stream)));
   } else {
-    z_streamp zstream_ptr = static_cast<z_streamp>(zlib_stream_ptr_);
-    zstream_ptr->zalloc   = ob_zlib_alloc;
-    zstream_ptr->zfree    = ob_zlib_free;
-    zstream_ptr->opaque   = static_cast<voidpf>(&allocator_);
-    zstream_ptr->avail_in = 0;
-    zstream_ptr->next_in  = Z_NULL;
-
-    int zlib_ret = inflateInit2(zstream_ptr, 32 + MAX_WBITS);
-    if (Z_OK != zlib_ret) {
-      ret = OB_ERROR;
-      LIB_LOG(WARN, "failed to inflateInit2", K(zlib_ret));
-    }
+    decoder_.emplace(compression::new_stream_decoder());
+    stream_finished_ = false;
   }
   return ret;
 }
@@ -626,50 +631,42 @@ int ObZlibDecompressor::decompress(const char *src, int64_t src_size, int64_t &c
                                    char *dest, int64_t dest_capacity, int64_t &decompressed_size)
 {
   int ret = OB_SUCCESS;
-  int zlib_ret = Z_OK;
-  z_streamp zstream_ptr = nullptr;
+  consumed_size = 0;
+  decompressed_size = 0;
 
-  if (OB_ISNULL(zlib_stream_ptr_)) {
+  if (!decoder_.has_value()) {
     ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(src) || src_size <= 0) {
+  } else if (src_size < 0 || (src_size > 0 && OB_ISNULL(src))
+             || static_cast<uint64_t>(src_size) > std::numeric_limits<ptrdiff_t>::max()) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(dest) || dest_capacity <= 0) {
+  } else if (OB_ISNULL(dest) || dest_capacity <= 0
+             || static_cast<uint64_t>(dest_capacity) > std::numeric_limits<ptrdiff_t>::max()) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (FALSE_IT(zstream_ptr = static_cast<z_streamp>(zlib_stream_ptr_))) {
-  } else if (zstream_need_reset_) {
-    if (Z_OK != (zlib_ret = inflateReset(zstream_ptr))) {
-      ret = OB_ERR_COMPRESS_DECOMPRESS_DATA;
-      LOG_WARN("failed to reset zlib stream", K(zlib_ret));
-    } else {
-      zstream_need_reset_ = false;
-    }
   }
 
   if (OB_SUCC(ret)) {
-    zstream_ptr->avail_in = src_size;
-    zstream_ptr->next_in  = (Bytef *)src;
-
-    int64_t last_avail_in  = zstream_ptr->avail_in;
-    int64_t last_total_out = zstream_ptr->total_out;
-    zstream_ptr->next_out  = reinterpret_cast<Bytef *>(dest);
-    zstream_ptr->avail_out = dest_capacity;
-
-    zlib_ret = inflate(zstream_ptr, Z_NO_FLUSH);
-    if (Z_OK == zlib_ret || Z_STREAM_END == zlib_ret) {
-
-      consumed_size     = last_avail_in - zstream_ptr->avail_in;
-      decompressed_size = zstream_ptr->total_out  - last_total_out;
-
-      if (Z_STREAM_END == zlib_ret) {
-        zstream_need_reset_ = true;
-      }
+    const auto result = compression::decoder_process(
+        *decoder_.value(),
+        rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(src_size > 0 ? src : ""), src_size),
+        rust::Slice<uint8_t>(reinterpret_cast<uint8_t *>(dest), dest_capacity));
+    if (compression::Code::Ok == result.code) {
+      consumed_size = result.consumed;
+      decompressed_size = result.produced;
+      stream_finished_ = result.stream_end;
     } else {
-      ret = OB_ERR_COMPRESS_DECOMPRESS_DATA;
-      LOG_WARN("failed to decompress", K(zlib_ret));
+      ret = compression::Code::OutOfMemory == result.code
+          ? OB_ALLOCATE_MEMORY_FAILED : OB_ERR_COMPRESS_DECOMPRESS_DATA;
+      LOG_WARN("failed to decompress");
     }
   }
 
   return ret;
+}
+
+int ObZlibDecompressor::finish()
+{
+  return !decoder_.has_value() ? OB_NOT_INIT
+      : stream_finished_ ? OB_SUCCESS : OB_ERR_COMPRESS_DECOMPRESS_DATA;
 }
 
 /**
@@ -687,32 +684,16 @@ ObZstdDecompressor::~ObZstdDecompressor()
 
 void ObZstdDecompressor::destroy()
 {
-  using ObZstdWrapper = oceanbase::common::zstd_1_3_8::ObZstdWrapper;
-
-  if (OB_NOT_NULL(zstd_stream_context_)) {
-    ObZstdWrapper::free_stream_dctx(zstd_stream_context_);
-    zstd_stream_context_ = nullptr;
-  }
+  decoder_.reset();
 }
 
 int ObZstdDecompressor::init()
 {
-  using OB_ZSTD_customMem = oceanbase::common::zstd_1_3_8::OB_ZSTD_customMem;
-  using ObZstdWrapper = oceanbase::common::zstd_1_3_8::ObZstdWrapper;
-
   int ret = OB_SUCCESS;
-
-  if (OB_NOT_NULL(zstd_stream_context_)) {
+  if (decoder_.has_value()) {
     ret = OB_INIT_TWICE;
   } else {
-    OB_ZSTD_customMem allocator;
-    allocator.customAlloc = ob_zstd_malloc;
-    allocator.customFree  = ob_zstd_free;
-    allocator.opaque      = &allocator_;
-
-    ret = ObZstdWrapper::create_stream_dctx(allocator, zstd_stream_context_);
-    if (OB_FAIL(ret)) {
-    }
+    decoder_.emplace(compression::new_zstd_decoder());
   }
 
   return ret;
@@ -721,25 +702,34 @@ int ObZstdDecompressor::init()
 int ObZstdDecompressor::decompress(const char *src, int64_t src_size, int64_t &consumed_size,
                                    char *dest, int64_t dest_capacity, int64_t &decompressed_size)
 {
-  using ObZstdWrapper = oceanbase::common::zstd_1_3_8::ObZstdWrapper;
-
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(zstd_stream_context_)) {
+  consumed_size = 0;
+  decompressed_size = 0;
+  if (!decoder_.has_value()) {
     ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(src) || src_size <= 0) {
+  } else if (src_size < 0 || (src_size > 0 && OB_ISNULL(src))
+             || static_cast<uint64_t>(src_size) > std::numeric_limits<ptrdiff_t>::max()) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(dest) || dest_capacity <= 0) {
+  } else if (OB_ISNULL(dest) || dest_capacity <= 0
+             || static_cast<uint64_t>(dest_capacity) > std::numeric_limits<ptrdiff_t>::max()) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    size_t tmp_consumed_size = 0;
-    size_t tmp_decompressed_size = 0;
-    ret = ObZstdWrapper::decompress_stream(zstd_stream_context_,
-                                           src, src_size, tmp_consumed_size,
-                                           dest, dest_capacity, tmp_decompressed_size);
-    consumed_size = static_cast<int64_t>(tmp_consumed_size);
-    decompressed_size = static_cast<int64_t>(tmp_decompressed_size);
+    const auto *input = reinterpret_cast<const uint8_t *>(src_size > 0 ? src : "");
+    const auto result = compression::zstd_decode(**decoder_,
+        rust::Slice<const uint8_t>(input, static_cast<size_t>(src_size)),
+        reinterpret_cast<uint8_t *>(dest), static_cast<size_t>(dest_capacity));
+    if (OB_SUCC(ret = common::compression_error_code(result.code))) {
+      consumed_size = static_cast<int64_t>(result.consumed);
+      decompressed_size = static_cast<int64_t>(result.produced);
+    }
   }
   return ret;
+}
+
+int ObZstdDecompressor::finish()
+{
+  return decoder_.has_value()
+      ? common::compression_error_code(compression::zstd_decoder_finish(**decoder_)) : OB_NOT_INIT;
 }
 
 } // namespace sql

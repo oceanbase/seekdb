@@ -142,21 +142,21 @@ int ObExprJsonType::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta, 
       case ObLongTextType: {
         common::ObString j_str = data.get_string(); // json text or json binary
         ObJsonInType j_in_type = ObJsonExprHelper::get_json_internal_type(type);
-        ObIJsonBase *j_base = NULL;
+        JsonMetadata metadata;
         if (OB_FAIL(ObJsonExprHelper::ensure_collation(type, cs_type))) {
         } else if (j_str.length() == 0) {
           ret = OB_ERR_INVALID_JSON_TEXT;
           LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT);
         } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, *allocator, data, meta, has_lob_header, j_str))) {
-        } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator, j_str, j_in_type,
-                                                            j_in_type, j_base, 0,
-                                                            ObJsonExprHelper::get_json_max_depth_config()))) {
+        } else if (OB_FAIL(ObJsonExprHelper::get_json_metadata(
+                       j_str, j_in_type, false,
+                       ObJsonExprHelper::get_json_max_depth_config(), metadata))) {
           if (ret == OB_ERR_INVALID_JSON_TEXT_IN_PARAM) {
             ret = OB_ERR_INVALID_JSON_TEXT;
             LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT);
           }
         } else {
-          ObJsonNodeType j_type = j_base->json_type();
+          ObJsonNodeType j_type = metadata.type_;
           if (j_type == ObJsonNodeType::J_MYSQL_DATE){
             j_type = ObJsonNodeType::J_DATE;
           } else if (j_type == ObJsonNodeType::J_MYSQL_DATETIME){
@@ -164,7 +164,7 @@ int ObExprJsonType::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta, 
           }
           type_idx = static_cast<uint32_t>(j_type);
           if (j_type == ObJsonNodeType::J_OPAQUE) {
-            type_idx = opaque_index(j_base->field_type());
+            type_idx = opaque_index(metadata.field_type_);
           }
         }
         break;

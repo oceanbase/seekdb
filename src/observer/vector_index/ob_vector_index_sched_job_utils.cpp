@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/vector_index/ob_vector_index_sched_job_utils.h"
+#include <inttypes.h>
 #include "observer/dbms_scheduler/ob_dbms_sched_job_utils.h"
 #include "share/schema/ob_schema_getter_guard.h"
 
@@ -36,7 +37,7 @@ int ObVectorIndexSchedJobUtils::add_scheduler_job(
     const int64_t repeat_interval_ts, const common::ObString &exec_env) {
   int ret = OB_SUCCESS;
   ObSqlString interval_str;
-  if (OB_FAIL(interval_str.append_fmt("FREQ=SECONDLY; INTERVAL=%ld", repeat_interval_ts / 1000000L))) {
+  if (OB_FAIL(interval_str.append_fmt("FREQ=SECONDLY; INTERVAL=%" PRId64 "", repeat_interval_ts / 1000000L))) {
   } else {
     int64_t start_date_us = start_date.is_null() ? ObTimeUtility::current_time() + repeat_interval_ts
                                                  : start_date.get_timestamp();
@@ -83,10 +84,10 @@ int ObVectorIndexSchedJobUtils::add_vector_index_refresh_job(
     ObSqlString job_action;
     ObSqlString refresh_job_name;
     if (OB_FAIL(job_action.assign_fmt(
-            "DBMS_VECTOR.refresh_index_inner(%lu, %lu)",
+            "DBMS_VECTOR.refresh_index_inner(%" PRIu64 ", %" PRIu64 ")",
             vidx_table_id,
             ObVectorIndexSchedJobUtils::DEFAULT_REFRESH_TRIGGER_THRESHOLD))) {
-    } else if (OB_FAIL(refresh_job_name.assign_fmt("%lu_refresh", vidx_table_id))) {
+    } else if (OB_FAIL(refresh_job_name.assign_fmt("%" PRIu64 "_refresh", vidx_table_id))) {
     } else if (OB_FAIL(ObVectorIndexSchedJobUtils::add_scheduler_job(
                    sql_client, job_id, refresh_job_name.string(),
                    job_action.string(), start_date,
@@ -106,7 +107,7 @@ int ObVectorIndexSchedJobUtils::remove_vector_index_refresh_job(
   LOG_INFO("################## [remove_vector_index_refresh_job]", K(vidx_table_id));
   int ret = OB_SUCCESS;
   ObSqlString refresh_job_name;
-  if (OB_FAIL(refresh_job_name.assign_fmt("%lu_refresh", vidx_table_id))) {
+  if (OB_FAIL(refresh_job_name.assign_fmt("%" PRIu64 "_refresh", vidx_table_id))) {
   } else if (OB_FAIL(ObDBMSSchedJobUtils::remove_dbms_sched_job(
         sql_client, refresh_job_name.string(), true))) {
   }
@@ -127,10 +128,10 @@ int ObVectorIndexSchedJobUtils::add_vector_index_rebuild_job(common::ObISQLClien
     ObSqlString job_action;
     ObSqlString rebuild_job_name;
     if (OB_FAIL(job_action.assign_fmt(
-            "DBMS_VECTOR.rebuild_index_inner(%lu, %lf)",
+            "DBMS_VECTOR.rebuild_index_inner(%" PRIu64 ", %lf)",
             vidx_table_id,
             ObVectorIndexSchedJobUtils::DEFAULT_REBUILD_TRIGGER_THRESHOLD))) {
-    } else if (OB_FAIL(rebuild_job_name.assign_fmt("%lu_rebuild", vidx_table_id))) {
+    } else if (OB_FAIL(rebuild_job_name.assign_fmt("%" PRIu64 "_rebuild", vidx_table_id))) {
     } else if (OB_FAIL(ObVectorIndexSchedJobUtils::add_scheduler_job(
                    sql_client, job_id, rebuild_job_name.string(),
                    job_action.string(), start_date,
@@ -150,7 +151,7 @@ int ObVectorIndexSchedJobUtils::remove_vector_index_rebuild_job(common::ObISQLCl
   LOG_INFO("################## [remove_vector_index_rebuild_job]", K(vidx_table_id));
   int ret = OB_SUCCESS;
   ObSqlString rebuild_job_name;
-  if (OB_FAIL(rebuild_job_name.assign_fmt("%lu_rebuild", vidx_table_id))) {
+  if (OB_FAIL(rebuild_job_name.assign_fmt("%" PRIu64 "_rebuild", vidx_table_id))) {
   } else if (OB_FAIL(ObDBMSSchedJobUtils::remove_dbms_sched_job(
         sql_client, rebuild_job_name.string(), true))) {
   }
@@ -166,7 +167,7 @@ int ObVectorIndexSchedJobUtils::get_vector_index_job_info(common::ObISQLClient &
   UNUSED(schema_guard);
   int ret = OB_SUCCESS;
   ObSqlString refresh_job_name;
-  if (OB_FAIL(refresh_job_name.assign_fmt("%lu_refresh", vidx_table_id))) {
+  if (OB_FAIL(refresh_job_name.assign_fmt("%" PRIu64 "_refresh", vidx_table_id))) {
   } else if (OB_FAIL(ObDBMSSchedJobUtils::get_dbms_sched_job_info(sql_client,
                                                                   refresh_job_name.string(), 
                                                                   allocator,

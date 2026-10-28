@@ -16,29 +16,12 @@
 
 #include "log_block_pool_interface.h"
 #include "log_io_utils.h"
+#include "lib/utility/ob_platform_io.h"
+#include <errno.h>
 #ifdef _WIN32
 #include <io.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <windows.h>
-#ifndef O_DIRECTORY
-#define O_DIRECTORY 0
-#endif
-static bool ob_resolve_path_at3(int dir_fd, const char *rel_path, char *out, size_t out_size) {
-  if (rel_path && (rel_path[0] == '/' || rel_path[0] == '\\' ||
-      (rel_path[0] != '\0' && rel_path[1] == ':'))) {
-    return false;
-  }
-  HANDLE h = (HANDLE)_get_osfhandle(dir_fd);
-  if (h == INVALID_HANDLE_VALUE) return false;
-  char dir_path[1024];
-  DWORD len = GetFinalPathNameByHandleA(h, dir_path, sizeof(dir_path), FILE_NAME_NORMALIZED);
-  if (len == 0 || len >= sizeof(dir_path)) return false;
-  const char *clean = dir_path;
-  if (len > 4 && strncmp(dir_path, "\\\\?\\", 4) == 0) clean = dir_path + 4;
-  int written = snprintf(out, out_size, "%s\\%s", clean, rel_path);
-  return written > 0 && (size_t)written < out_size;
-}
+#else
+#include <unistd.h>
 #endif
 
 namespace oceanbase
@@ -49,19 +32,12 @@ namespace palf
 int is_block_used_for_palf(const int fd, const char *path, bool &result)
 {
   int ret = OB_SUCCESS;
+  common::ObPlatformFileStat file_stat;
   result = false;
-  struct stat st;
-#ifdef _WIN32
-  char abs[1024];
-  const char *p = path;
-  if (ob_resolve_path_at3(fd, path, abs, sizeof(abs))) p = abs;
-  if (-1 == ::stat(p, &st)) {
-#else
-  if (-1 == ::fstatat(fd, path, &st, 0)) {
-#endif
+  if (-1 == common::ob_statat_utf8(fd, path, file_stat, true)) {
     ret = convert_sys_errno();
-    PALF_LOG(ERROR, "::fstat failed", K(ret), K(path), K(errno));
-  } else if (st.st_size == PALF_PHY_BLOCK_SIZE) {
+    PALF_LOG(ERROR, "ob_statat_utf8 failed", K(ret), K(path), K(errno));
+  } else if (file_stat.size == PALF_PHY_BLOCK_SIZE) {
     result = true;
   } else {
     result = false;
@@ -73,7 +49,6 @@ int remove_file_at(const char *dir, const char *path, ILogBlockPool *log_block_p
 {
   int ret = OB_SUCCESS;
   int fd = open_directory(dir);
-  bool result = false;
   if (-1 == fd) {
     ret = convert_sys_errno();
     PALF_LOG(ERROR, "open_directory failed", K(ret), K(dir));
@@ -83,59 +58,78 @@ int remove_file_at(const char *dir, const char *path, ILogBlockPool *log_block_p
   }
 
   if (-1 != fd) {
-#ifdef _WIN32
-    if (0 != _commit(fd)) {
-      HANDLE h = (HANDLE)_get_osfhandle(fd);
-      if (h != INVALID_HANDLE_VALUE) {
-        FlushFileBuffers(h);
-      }
-    }
-    _close(fd);
-#else
-    ::fsync(fd);
+    common::ob_fsync_fd(fd);
     ::close(fd);
-#endif
   }
   return ret;
 }
 
+namespace
+{
+
+int get_path_type_no_follow(const char *path, bool &is_dir)
+{
+  int ret = OB_SUCCESS;
+  common::ObPlatformFileStat file_stat;
+  is_dir = false;
+  if (0 != common::ob_stat_utf8(path, file_stat, false)) {
+    ret = convert_sys_errno();
+    PALF_LOG(WARN, "failed to stat path without following links", K(ret), K(path), K(errno));
+  } else if (common::ob_stat_is_link(file_stat.mode)) {
+    ret = OB_IO_ERROR;
+    PALF_LOG(WARN, "refuse to recursively remove a symbolic link or junction", K(ret), K(path));
+  } else {
+    is_dir = common::ob_stat_is_dir(file_stat.mode);
+  }
+  return ret;
+}
+
+} // namespace
+
 int remove_directory_rec(const char *path, ILogBlockPool *log_block_pool)
 {
   int ret = OB_SUCCESS;
-  DIR *dir = NULL;
-  struct dirent *entry = NULL;
-  if (NULL == (dir = opendir(path))) {
+  bool is_dir = false;
+  common::ObPlatformDir *dir = NULL;
+  if (OB_FAIL(get_path_type_no_follow(path, is_dir))) {
+  } else if (!is_dir) {
+    ret = OB_IO_ERROR;
+    PALF_LOG(WARN, "path to remove recursively is not a directory", K(ret), K(path));
+  } else if (NULL == (dir = common::ob_opendir_utf8(path))) {
     ret = convert_sys_errno();
-    PALF_LOG(WARN, "opendir failed", K(path));
+    PALF_LOG(WARN, "opendir failed", K(ret), K(path));
   } else {
-    char current_file_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-    while ((entry = readdir(dir)) != NULL && OB_SUCC(ret)) {
+    char entry_name[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
+    int read_ret = 0;
+    while (OB_SUCC(ret)
+           && 1 == (read_ret = common::ob_readdir_utf8(dir, entry_name, sizeof(entry_name)))) {
       bool is_dir = false;
-      bool exists = false;
-      MEMSET(current_file_path, '\0', OB_MAX_FILE_NAME_LENGTH);
-      if (0 == strcmp(entry->d_name, ".") || 0 == strcmp(entry->d_name, "..")) {
+      char current_file_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
+      if (0 == strcmp(entry_name, ".") || 0 == strcmp(entry_name, "..")) {
         // do nothing
-      } else if (OB_FAIL(check_log_directory_entry(path, entry->d_name, exists))) {
-      } else if (!exists) {
-      } else if (0 >= snprintf(current_file_path, OB_MAX_FILE_NAME_LENGTH, "%s/%s", path, entry->d_name)) {
+      } else if (0 >= snprintf(current_file_path, OB_MAX_FILE_NAME_LENGTH, "%s/%s", path, entry_name)) {
         ret = OB_ERR_UNEXPECTED;
-        PALF_LOG(WARN, "snprintf failed", K(ret), K(current_file_path), K(path), K(entry->d_name));
-      } else if (OB_FAIL(FileDirectoryUtils::is_directory(current_file_path, is_dir))) {
+        PALF_LOG(WARN, "snprintf failed", K(ret), K(current_file_path), K(path), K(entry_name));
+      } else if (OB_FAIL(get_path_type_no_follow(current_file_path, is_dir))) {
       } else if (true == is_dir && OB_FAIL(remove_directory_rec(current_file_path, log_block_pool))) {
-        PALF_LOG(WARN, "remove directory failed", K(ret), K(entry->d_name), K(path));
+        PALF_LOG(WARN, "remove directory failed", K(ret), K(entry_name), K(path));
         // delete normal file
-      } else if (false == is_dir && OB_FAIL(remove_file_at(path, entry->d_name, log_block_pool))) {
+      } else if (false == is_dir && OB_FAIL(remove_file_at(path, entry_name, log_block_pool))) {
         PALF_LOG(WARN, "remove_file_at failed", K(ret), K(current_file_path));
       } else {
         PALF_LOG(INFO, "remove directory or file success", K(path), K(current_file_path));
       }
+    }
+    if (OB_SUCC(ret) && 0 > read_ret) {
+      ret = convert_sys_errno();
+      PALF_LOG(WARN, "read dir failed", K(ret), K(errno), K(path));
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(FileDirectoryUtils::delete_directory(path))) {
     PALF_LOG(WARN, "delete_directory failed", K(ret), K(path));
   }
   if (NULL != dir) {
-    closedir(dir);
+    common::ob_closedir_utf8(dir);
   }
   return ret;
 }
@@ -143,32 +137,35 @@ int remove_directory_rec(const char *path, ILogBlockPool *log_block_pool)
 int remove_tmp_file_or_directory_at(const char *path, ILogBlockPool *log_block_pool)
 {
   int ret = OB_SUCCESS;
-  DIR *dir = NULL;
-  struct dirent *entry = NULL;
-  if (NULL == (dir = opendir(path))) {
+  bool is_dir = false;
+  common::ObPlatformDir *dir = NULL;
+  if (OB_FAIL(get_path_type_no_follow(path, is_dir))) {
+  } else if (!is_dir) {
+    ret = OB_IO_ERROR;
+    PALF_LOG(WARN, "path to clean is not a directory", K(ret), K(path));
+  } else if (NULL == (dir = common::ob_opendir_utf8(path))) {
     ret = OB_ERR_SYS;
-    PALF_LOG(WARN, "opendir failed", K(path));
+    PALF_LOG(WARN, "opendir failed", K(ret), K(path));
   } else {
     auto check_is_tmp_file_or_dir = [](const char* file_name) -> bool {
       return NULL != strstr(file_name, ".tmp");
     };
-    char current_file_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-    while ((entry = readdir(dir)) != NULL && OB_SUCC(ret)) {
+    char entry_name[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
+    int read_ret = 0;
+    while (OB_SUCC(ret)
+           && 1 == (read_ret = common::ob_readdir_utf8(dir, entry_name, sizeof(entry_name)))) {
       bool is_dir = false;
-      bool exists = false;
-      MEMSET(current_file_path, '\0', OB_MAX_FILE_NAME_LENGTH);
-      if (0 == strcmp(entry->d_name, ".") || 0 == strcmp(entry->d_name, "..")) {
+      char current_file_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
+      if (0 == strcmp(entry_name, ".") || 0 == strcmp(entry_name, "..")) {
         // do nothing
-      } else if (OB_FAIL(check_log_directory_entry(path, entry->d_name, exists))) {
-      } else if (!exists) {
-      } else if (0 >= snprintf(current_file_path, OB_MAX_FILE_NAME_LENGTH, "%s/%s", path, entry->d_name)) {
+      } else if (0 >= snprintf(current_file_path, OB_MAX_FILE_NAME_LENGTH, "%s/%s", path, entry_name)) {
         ret = OB_ERR_UNEXPECTED;
-        PALF_LOG(WARN, "snprintf failed", K(ret), K(current_file_path), K(path), K(entry->d_name));
-      } else if (OB_FAIL(FileDirectoryUtils::is_directory(current_file_path, is_dir))) {
+        PALF_LOG(WARN, "snprintf failed", K(ret), K(current_file_path), K(path), K(entry_name));
+      } else if (OB_FAIL(get_path_type_no_follow(current_file_path, is_dir))) {
       } else if (true == check_is_tmp_file_or_dir(current_file_path)) {
         if (true == is_dir && OB_FAIL(remove_directory_rec(current_file_path, log_block_pool))) {
-          PALF_LOG(WARN, "delete_directory_rec failed", K(ret), K(entry->d_name), K(path));
-        } else if (false == is_dir && OB_FAIL(remove_file_at(path, entry->d_name, log_block_pool))) {
+          PALF_LOG(WARN, "delete_directory_rec failed", K(ret), K(entry_name), K(path));
+        } else if (false == is_dir && OB_FAIL(remove_file_at(path, entry_name, log_block_pool))) {
           PALF_LOG(WARN, "delete_file failed", K(ret), K(current_file_path));
         } else {
         }
@@ -177,9 +174,13 @@ int remove_tmp_file_or_directory_at(const char *path, ILogBlockPool *log_block_p
       } else {
       }
     }
+    if (OB_SUCC(ret) && 0 > read_ret) {
+      ret = convert_sys_errno();
+      PALF_LOG(WARN, "read dir failed", K(ret), K(errno), K(path));
+    }
   }
   if (NULL != dir) {
-    closedir(dir);
+    common::ob_closedir_utf8(dir);
   }
   return ret;
 }

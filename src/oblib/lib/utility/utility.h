@@ -19,6 +19,7 @@
 
 #ifndef _WIN32
 #include <arpa/inet.h>
+#include <inttypes.h>
 #include <unistd.h>
 #else
 // Windows: use winsock2 instead of arpa/inet
@@ -46,6 +47,7 @@ inline int usleep(useconds_t usec) {
 #include "lib/container/ob_iarray.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/time/ob_clock_generator.h"
+#include "lib/thread_local/ob_tsi_utils.h"
 
 #define FALSE_IT(stmt) ({ (stmt); false; })
 #define OB_FALSE_IT(stmt) ({ (stmt); false; })
@@ -517,7 +519,7 @@ struct CountReporter
   ~CountReporter()
   {
     if (last_report_count_ > 0) {
-      _OB_LOG(INFO, "%s=%ld", id_, count_);
+      _OB_LOG(INFO, "%s=%" PRId64 "", id_, count_);
     }
   }
   bool has_reported() { return last_report_count_ > 0; }
@@ -528,7 +530,7 @@ struct CountReporter
     if (0 == (count % report_mod_)) {
       SeqLockGuard lock_guard(seq_lock_);
       int64_t cur_ts = ::oceanbase::common::ObTimeUtility::fast_current_time();
-      _OB_LOG_RET(ERROR, OB_ERROR, "%s=%ld:%ld:%ld\n", id_, count,
+      _OB_LOG_RET(ERROR, OB_ERROR, "%s=%" PRId64 ":%" PRId64 ":%" PRId64 "\n", id_, count,
                 1000000 * (count - last_report_count_) / (cur_ts - last_report_time_),
                 (total_cost_time - last_cost_time_)/report_mod_);
       last_report_count_ = count;

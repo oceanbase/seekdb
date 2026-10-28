@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "rust/config.h"
+#include <inttypes.h>
 #include "share/config/ob_config_helper.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_local_management_service.h"
@@ -948,7 +949,7 @@ int ObLocalManagementService::start_redef_table(const obcall::ObStartRedefTableA
   } else if (OB_FAIL(ObSysDDLSchedulerUtil::start_redef_table(arg, res))) {
   }
   char table_id_buffer[128];
-  snprintf(table_id_buffer, sizeof(table_id_buffer), "orig_table_id:%ld, target_table_id:%ld",
+  snprintf(table_id_buffer, sizeof(table_id_buffer), "orig_table_id:%" PRIu64 ", target_table_id:%" PRIu64,
             arg.orig_table_id_, arg.target_table_id_);
   MANAGEMENT_EVENT_ADD("ddl scheduler", "redef table",
                         "ret", ret,
@@ -1060,7 +1061,7 @@ int ObLocalManagementService::alter_table(const obcall::ObAlterTableArg &arg, ob
     }
   }
   char table_id_buffer[256];
-  snprintf(table_id_buffer, sizeof(table_id_buffer), "table_id:%ld, hidden_table_id:%ld",
+  snprintf(table_id_buffer, sizeof(table_id_buffer), "table_id:%" PRIu64 ", hidden_table_id:%" PRIu64,
             arg.table_id_, arg.hidden_table_id_);
   MANAGEMENT_EVENT_ADD("ddl scheduler", "alter table",
                         "ret", ret,
@@ -1089,7 +1090,7 @@ int ObLocalManagementService::exchange_partition(const obcall::ObExchangePartiti
     }
   }
   char table_id_buffer[256];
-  snprintf(table_id_buffer, sizeof(table_id_buffer), "table_id:%ld, exchange_table_id:%ld",
+  snprintf(table_id_buffer, sizeof(table_id_buffer), "table_id:%" PRIu64 ", exchange_table_id:%" PRIu64,
             arg.base_table_id_, arg.inc_table_id_);
   MANAGEMENT_EVENT_ADD("ddl scheduler", "alter table",
                         "ret", ret,
@@ -1129,7 +1130,7 @@ int ObLocalManagementService::create_index(const ObCreateIndexArg &arg, obcall::
     }
   }
   char table_id_buffer[256];
-  snprintf(table_id_buffer, sizeof(table_id_buffer), "data_table_id:%ld, index_table_id:%ld",
+  snprintf(table_id_buffer, sizeof(table_id_buffer), "data_table_id:%" PRIu64 ", index_table_id:%" PRIu64,
             arg.data_table_id_, arg.index_table_id_);
   MANAGEMENT_EVENT_ADD("ddl scheduler", "create index",
                         "ret", ret,
@@ -1161,7 +1162,7 @@ int ObLocalManagementService::parallel_create_index(const ObCreateIndexArg &arg,
   }
   int64_t cost = ObTimeUtility::current_time() - begin_time;
   char table_id_buffer[256];
-  snprintf(table_id_buffer, sizeof(table_id_buffer), "data_table_id:%ld, index_table_id:%ld",
+  snprintf(table_id_buffer, sizeof(table_id_buffer), "data_table_id:%" PRIu64 ", index_table_id:%" PRIu64,
             arg.data_table_id_, arg.index_table_id_);
   MANAGEMENT_EVENT_ADD("ddl scheduler", "parallel create index",
                         "ret", ret,
@@ -2785,7 +2786,6 @@ int ObLocalManagementService::set_config_after_bootstrap_()
 
   const char* configs[][2] = {
     {"enable_record_trace_log", "false"},
-    {"_enable_dbms_job_package", "false"},
     {"_bloom_filter_ratio", "3"},
     {"_enable_mysql_compatible_dates", "true"}
   };

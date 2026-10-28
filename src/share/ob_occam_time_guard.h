@@ -30,6 +30,7 @@
 #define OCEANBASE_LIB_TASK_OB_EASY_TIME_GUARD_H
 
 #include "lib/atomic/ob_atomic.h"
+#include <inttypes.h>
 #include "lib/oblog/ob_log_module.h"
 #include "lib/literals/ob_literals.h"
 #include "share/ob_define.h"
@@ -157,7 +158,7 @@ protected:
       common::databuff_printf(buf, buf_len, pos, "end");
     }
     if (ts < 1_ms) {
-      common::databuff_printf(buf, buf_len, pos, "=%ldus|", ts);
+      common::databuff_printf(buf, buf_len, pos, "=%" PRId64 "us|", ts);
     } else if (ts < 1_s) {
       common::databuff_printf(buf, buf_len, pos, "=%.2lfms|", double(ts) / 1_ms);
     } else {
@@ -172,7 +173,7 @@ protected:
   {
     common::databuff_printf(buf, buf_len, pos, "%s", lvalue);
     if (ts < 1_ms) {
-      common::databuff_printf(buf, buf_len, pos, "=%ldus|", ts);
+      common::databuff_printf(buf, buf_len, pos, "=%" PRId64 "us|", ts);
     } else if (ts < 1_s) {
       common::databuff_printf(buf, buf_len, pos, "=%.2lfms|", double(ts) / 1_ms);
     } else {
@@ -281,7 +282,7 @@ protected:
       common::databuff_printf(buf, buf_len, pos, "end");
     }
     if (ts < 1_ms) {
-      common::databuff_printf(buf, buf_len, pos, "=%ldus|", ts);
+      common::databuff_printf(buf, buf_len, pos, "=%" PRId64 "us|", ts);
     } else if (ts < 1_s) {
       common::databuff_printf(buf, buf_len, pos, "=%.2lfms|", double(ts) / 1_ms);
     } else {
@@ -296,7 +297,7 @@ protected:
   {
     common::databuff_printf(buf, buf_len, pos, "%s", lvalue);
     if (ts < 1_ms) {
-      common::databuff_printf(buf, buf_len, pos, "=%ldus|", ts);
+      common::databuff_printf(buf, buf_len, pos, "=%" PRId64 "us|", ts);
     } else if (ts < 1_s) {
       common::databuff_printf(buf, buf_len, pos, "=%.2lfms|", double(ts) / 1_ms);
     } else {

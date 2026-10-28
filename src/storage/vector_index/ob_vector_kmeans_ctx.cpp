@@ -1164,7 +1164,7 @@ int ObIvfPqBuildHelper::init_kmeans_ctx(const int64_t dim)
             || param_.m_ <= 0) {
     ret = OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "invalid argument", K(ret), K(dim), K(param_));
-  } else if (FALSE_IT(pqnlist = 1L << param_.nbits_)) {
+  } else if (FALSE_IT(pqnlist = 1ULL << param_.nbits_)) {
   } else if (OB_ISNULL(ivf_build_mem_ctx_)) {
     ret = OB_NOT_INIT;
     SHARE_LOG(WARN, "ivf_build_mem_ctx_ is null", K(ret));

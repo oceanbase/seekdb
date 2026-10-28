@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX STORAGE
 #include "storage/blocksstable/ob_column_checksum_struct.h"
+#include <inttypes.h>
 #include "lib/allocator/page_arena.h"
 namespace oceanbase
 {
@@ -179,9 +180,9 @@ int64_t ObColumnCkmStruct::to_string(char *buf, const int64_t buf_len) const
     }
     for (int i = 0; i < count_; ++i) {
       if (count_ - 1 != i) {
-        common::databuff_printf(buf, buf_len, pos, "%d:%ld,", i, column_checksums_[i]);
+        common::databuff_printf(buf, buf_len, pos, "%d:%" PRId64 ",", i, column_checksums_[i]);
       } else {
-        common::databuff_printf(buf, buf_len, pos, "%d:%ld", i, column_checksums_[i]);
+        common::databuff_printf(buf, buf_len, pos, "%d:%" PRId64 "", i, column_checksums_[i]);
       }
     }
     J_OBJ_END();

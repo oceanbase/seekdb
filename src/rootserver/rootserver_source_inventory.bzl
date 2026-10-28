@@ -11,8 +11,6 @@ ROOTSERVER_UNITY_GROUPS = [
             "src/rootserver/ob_load_inner_table_schema_executor.cpp",
             "src/rootserver/ob_ai_model_ddl_operator.cpp",
             "src/rootserver/fork_table/ob_fork_table_info_builder.cpp",
-            "src/rootserver/dbms_job/ob_dbms_job_executor.cpp",
-            "src/rootserver/dbms_job/ob_dbms_job_utils.cpp",
         ],
     ),
     struct(
@@ -155,7 +153,6 @@ ROOTSERVER_UNITY_GROUPS = [
             "src/rootserver/parallel_ddl/ob_create_table_like_helper.cpp",
             "src/rootserver/pl_ddl/ob_pl_ddl_service.cpp",
             "src/rootserver/truncate_info/ob_truncate_info_service.cpp",
-            "src/rootserver/dbms_job/ob_dbms_job_master.cpp",
         ],
     ),
 ]

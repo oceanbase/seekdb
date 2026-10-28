@@ -20,6 +20,7 @@
 #include "share/io/ob_io_manager.h"                           // ObIOManager
 #include "lib/string/ob_string.h"                             // ObString
 #include "share/ob_device_manager.h"                          // ObDeviceManager
+#include "lib/utility/ob_platform_io.h"                       // ob_ftruncate_fd
 
 namespace oceanbase
 {
@@ -33,7 +34,8 @@ int LogIODeviceWrapper::init(const char *clog_dir,
                              const int64_t disk_io_thread_count,
                              const int64_t max_io_depth,
                              ObIOManager *io_manager,
-                             ObDeviceManager *device_manager)
+                             ObDeviceManager *device_manager,
+                             const LocalIOConfig &io_config)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(clog_dir) || 0 >= disk_io_thread_count || 0 >= max_io_depth ||
@@ -51,7 +53,7 @@ int LogIODeviceWrapper::init(const char *clog_dir,
     } else if (OB_ISNULL(log_local_device_ = static_cast<ObLocalDevice *>(device_handle))) {
       ret = OB_ERR_UNEXPECTED;
       PALF_LOG(WARN, "unexpected situations!", K(ret));
-    } else if (OB_FAIL(log_local_device_->init(iod_opts))) {
+    } else if (OB_FAIL(log_local_device_->init(iod_opts, io_config))) {
     } else if (OB_FAIL(io_manager->add_device_channel(log_local_device_, disk_io_thread_count, disk_io_thread_count, max_io_depth))) {
     } else {
       device_manager_ = device_manager;
@@ -81,7 +83,7 @@ void LogIODeviceWrapper::destroy()
   }
 }
 
-share::ObLocalDevice *LogIODeviceWrapper::get_local_device()
+common::ObIODevice *LogIODeviceWrapper::get_local_device()
 {
   abort_unless(NULL != log_local_device_);
   return log_local_device_;
@@ -262,11 +264,7 @@ int LogIOAdapter::truncate(const ObIOFd &io_fd, const int64_t offset)
   if (!io_fd.is_valid() || 0 > offset) {
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argument", K(io_fd), K(offset));
-#ifdef _WIN32
-  } else if (0 != ob_ftruncate(io_fd.second_id_, offset)) {
-#else
-  } else if (0 != ftruncate(io_fd.second_id_, offset)) {
-#endif
+  } else if (0 != common::ob_ftruncate_fd(io_fd.second_id_, offset)) {
     ret = convert_sys_errno();
     PALF_LOG(WARN, "ftruncate failed", K(ret), K(errno), K(io_fd), K(offset));
   }

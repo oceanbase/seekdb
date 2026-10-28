@@ -13,9 +13,24 @@
 // limitations under the License.
 
 //! One static library (and one Rust runtime/allocator) for all seekdb components.
+pub use compression;
+pub use crypto;
+#[cfg(feature = "native-http")]
+pub use http_client;
 pub use config as parameter_config;
 pub use in_process;
 pub use local as local_storage;
 pub use logger::*;
+pub use mvt;
+pub use number_parser;
+pub use path_utils;
+pub use regex_engine;
+pub use json;
+pub use spatial_covering;
 pub use sql_nio as network;
+#[cfg(not(target_family = "wasm"))]
+pub use standby_rpc;
 pub use uuid_generator;
+pub use xml_parser;
+pub use math;
+pub use vector_kernels;

@@ -1,0 +1,35 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rust_crates//:crates.bzl", "aliases", "all_crate_deps", "crate_edition")
+load("//bazel:prost.bzl", "prost_generate")
+
+package(default_visibility = ["//rust:__subpackages__"])
+
+exports_files(["src/bridge.rs"], visibility = ["//rust:__pkg__"])
+
+prost_generate(
+    name = "protocol",
+    src = "//src/share:geo/ob_vector_tile.proto",
+    out = "generated/vector_tile.rs",
+    services = False,
+    raw_strings = [
+        ".vector_tile.Tile.Layer.name",
+        ".vector_tile.Tile.Layer.keys",
+        ".vector_tile.Tile.Value.string_value",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+rust_library(
+    name = "mvt",
+    crate_root = "src/lib.rs",
+    srcs = glob(["src/**/*.rs"]),
+    compile_data = ["generated/vector_tile.rs"],
+    rustc_env = {"MVT_PROTO_RS": "$(execpath generated/vector_tile.rs)"},
+    crate_features = ["default", "cxx-bridge"],
+    edition = crate_edition(),
+    version = "0.1.0",
+    deps = all_crate_deps(normal = True),
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    aliases = aliases(),
+    tags = ["no-remote"],
+)

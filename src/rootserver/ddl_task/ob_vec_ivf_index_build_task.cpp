@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "rootserver/ddl_task/ob_vec_ivf_index_build_task.h"
+#include <inttypes.h>
 #include "share/rc/ob_server_runtime.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "share/ob_ddl_common.h"
@@ -1306,7 +1307,7 @@ int ObVecIVFIndexBuildTask::collect_longops_stat(ObLongopsValue &value)
   int ret = OB_SUCCESS;
   int64_t pos = 0;
   const ObDDLTaskStatus status = static_cast<ObDDLTaskStatus>(task_status_);
-  databuff_printf(stat_info_.message_, MAX_LONG_OPS_MESSAGE_LENGTH, pos, "TASK_ID: %ld, ", task_id_);
+  databuff_printf(stat_info_.message_, MAX_LONG_OPS_MESSAGE_LENGTH, pos, "TASK_ID: %" PRId64 ", ", task_id_);
   switch(status) {
     case ObDDLTaskStatus::PREPARE: {
       if (OB_FAIL(databuff_printf(stat_info_.message_,

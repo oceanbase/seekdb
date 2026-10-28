@@ -44,7 +44,6 @@
 #include "storage/tablet/ob_tablet_memtable_mgr.h"
 #include "storage/tablet/ob_tablet.h"
 #include "storage/tablet/ob_full_tablet_creator.h"
-#include "lib/signal/ob_signal_utils.h"
 
 namespace oceanbase
 {

@@ -17,31 +17,26 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_ai_func_client.h"
 
-namespace oceanbase 
+namespace oceanbase
 {
-namespace common 
+namespace common
 {
 
-const int64_t ObAIFuncClient::CURL_MAX_TIMEOUT_SEC = INT_MAX/1000;
-ObAIFuncClient::ObAIFuncClient()
-    : allocator_(nullptr), url_(nullptr), header_list_(nullptr),
-      curlm_(nullptr), curl_(nullptr), curl_handles_(), response_buffers_() 
+const int64_t ObAIFuncClient::CURL_MAX_TIMEOUT_SEC = INT_MAX / 1000;
+
+ObAIFuncClient::ObAIFuncClient() : allocator_(nullptr)
 {
   is_finished_.store(false);
   abs_timeout_ts_ = 0;
-  max_retry_times_ = 3;  // default retry 3 times
-  timeout_sec_ = 60; // default timeout 1 minute
+  max_retry_times_ = 3;
+  timeout_sec_ = 60;
 }
 
-#ifdef __EMSCRIPTEN__
-// Browser callers supply vectors. A native libcurl client cannot use the
-// browser's HTTP transport; reject requests before accepting work or ownership.
 ObAIFuncClient::~ObAIFuncClient() = default;
 
+#ifdef __EMSCRIPTEN__
 void ObAIFuncClient::clean_up()
 {
-  curl_handles_.reset();
-  response_buffers_.reset();
   is_finished_.store(true);
 }
 
@@ -56,201 +51,169 @@ int ObAIFuncClient::init(common::ObIAllocator &, const ObString &, ObArray<ObStr
 }
 
 int ObAIFuncClient::send_post(common::ObIAllocator &, const ObString &,
-                            ObArray<ObString> &, ObJsonObject *, ObJsonObject *&)
+                              ObArray<ObString> &, ObIJsonBase *, ObIJsonBase *&)
 {
   return OB_NOT_SUPPORTED;
 }
 
 int ObAIFuncClient::send_post_batch(common::ObIAllocator &, const ObString &,
-                                  ObArray<ObString> &, ObArray<ObJsonObject *> &,
-                                  ObArray<ObJsonObject *> &)
+                                    ObArray<ObString> &, ObArray<ObIJsonBase *> &,
+                                    ObArray<ObIJsonBase *> &)
 {
   return OB_NOT_SUPPORTED;
 }
 
-int ObAIFuncClient::send_post_batch_no_wait(ObArray<ObJsonObject *> &)
+int ObAIFuncClient::send_post_batch_no_wait(ObArray<ObIJsonBase *> &)
 {
   return OB_NOT_SUPPORTED;
 }
 
 bool ObAIFuncClient::check_batch_finished()
 {
-  // No request can be accepted by this backend. Result retrieval reports why.
   return true;
 }
 
-int ObAIFuncClient::get_batch_result(ObArray<ObJsonObject *> &)
+int ObAIFuncClient::get_batch_result(ObArray<ObIJsonBase *> &)
 {
   return OB_NOT_SUPPORTED;
 }
 #else
-void ObAIFuncClient::reset() 
+namespace
 {
-  if (url_ != nullptr && allocator_ != nullptr) {
-    allocator_->free(url_);
-    url_ = nullptr;
-  } else if (url_!=nullptr && allocator_ == nullptr) {
-    int ret = OB_ERR_UNEXPECTED;
-    LOG_USER_ERROR(OB_ERR_UNEXPECTED, "can not free url_");
-  } 
-  allocator_ = nullptr;
-  if (OB_NOT_NULL(header_list_)) {
-    curl_slist_free_all(header_list_);
-    header_list_ = nullptr;
-  }
-  is_finished_.store(false);
-  clean_up();
+oceanbase::http::ClientConfig make_client_config(const int64_t timeout_sec)
+{
+  oceanbase::http::ClientConfig config;
+  config.timeout_ms = static_cast<uint64_t>(timeout_sec) * 1000;
+  config.connect_timeout_ms = 10000;
+  config.https_only = false;
+  config.follow_redirects = false;
+  config.max_redirects = 0;
+  config.verify_peer = true;
+  config.verify_host = true;
+  config.discard_body = false;
+  config.accept_gzip = false;
+  return config;
 }
 
-ObAIFuncClient::~ObAIFuncClient() 
+ObString response_body(const rust::Slice<const uint8_t> &body)
 {
-  if (OB_NOT_NULL(header_list_)) {
-    curl_slist_free_all(header_list_);
-    header_list_ = nullptr;
-  }
-  if (OB_NOT_NULL(curl_)) {
-    curl_easy_cleanup(curl_);
-    curl_ = nullptr;
-  }
-  if (url_ != nullptr && allocator_ != nullptr) {
-    allocator_->free(url_);
-    url_ = nullptr;
-  }
-  allocator_ = nullptr;
+  return ObString(body.size(), reinterpret_cast<const char *>(body.data()));
+}
+} // namespace
+
+void ObAIFuncClient::reset()
+{
   clean_up();
-  if (OB_NOT_NULL(curlm_)) {
-    curl_multi_cleanup(curlm_);
-    curlm_ = nullptr;
-  }
+  http_client_.reset();
+  allocator_ = nullptr;
 }
 
-int ObAIFuncClient::init(common::ObIAllocator &allocator, const common::ObString &url, ObArray<ObString> &headers) 
+int ObAIFuncClient::init(common::ObIAllocator &allocator, const common::ObString &url,
+                         ObArray<ObString> &headers)
 {
   int ret = OB_SUCCESS;
-  int64_t remain_timeout_us = THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_remain() : timeout_sec_ * 1000000;
+  const int64_t remain_timeout_us = THIS_WORKER.is_timeout_ts_valid()
+      ? THIS_WORKER.get_timeout_remain() : timeout_sec_ * 1000000;
   if (OB_ISNULL(url) || headers.empty()) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     allocator_ = &allocator;
-    ObString url_str;
-    if (OB_FAIL(ob_write_string(*allocator_, url, url_str, true))) {
-    } else {
-      url_ = url_str.ptr();
-    } 
-    timeout_sec_ = std::min(std::max(static_cast<int64_t>(1), remain_timeout_us / 1000000), static_cast<int64_t>(CURL_MAX_TIMEOUT_SEC));
+    timeout_sec_ = std::min(std::max(static_cast<int64_t>(1), remain_timeout_us / 1000000),
+                            static_cast<int64_t>(CURL_MAX_TIMEOUT_SEC));
     abs_timeout_ts_ = remain_timeout_us + ObTimeUtility::current_time();
-    if (OB_SUCC(ret)){
-      const uint32_t num_headers = headers.count();
-      for (uint32_t i = 0; OB_SUCC(ret) && i < num_headers; ++i) {
-        ObString header_c_str;
-        if (OB_FAIL(ob_write_string(*allocator_, headers.at(i), header_c_str, true))) {
-        } else if (OB_ISNULL(header_list_ = curl_slist_append(header_list_, header_c_str.ptr()))) {
-          ret = OB_ERR_UNEXPECTED;
-        } else {
-          LOG_DEBUG("ai_function request header appended", K(i));
-        }
+    http_client_.emplace(oceanbase::http::new_http_client(
+        rust::Str(url.ptr(), url.length()), make_client_config(timeout_sec_)));
+    for (uint32_t i = 0; OB_SUCC(ret) && i < headers.count(); ++i) {
+      const auto code = oceanbase::http::http_client_add_header(
+          *http_client_.value(), rust::Str(headers.at(i).ptr(), headers.at(i).length()));
+      if (oceanbase::http::Code::Ok != code) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        LOG_DEBUG("ai_function request header appended", K(i));
       }
     }
   }
   return ret;
 }
 
-int ObAIFuncClient::error_handle(CURLcode res)
+int ObAIFuncClient::error_handle(const oceanbase::http::Result &result)
 {
   int ret = OB_SUCCESS;
-  switch (res) {
-    case CURLE_URL_MALFORMAT:{
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("url malformat", K(res));
-      char http_code_str[1024] = "error url format";
-      FORWARD_USER_ERROR(ret, http_code_str);
-      break;
-    }
-    default:{
-      ret = OB_CURL_ERROR;
-      LOG_WARN("curl error, error code is ", K(res));
-      char http_code_str[1024] = "curl error, curl error code is ";
-      snprintf(http_code_str, sizeof(http_code_str), "curl error, curlerror code is %d", res);
-      FORWARD_USER_ERROR(ret, http_code_str);
-      break;
-    }
+  if (oceanbase::http::Code::UrlMalformed == result.code) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("url malformat", K(result.transport_code));
+    char message[] = "error url format";
+    FORWARD_USER_ERROR(ret, message);
+  } else {
+    ret = OB_CURL_ERROR;
+    LOG_WARN("curl error, error code is ", K(result.transport_code));
+    char message[1024];
+    snprintf(message, sizeof(message), "curl error, curlerror code is %d", result.transport_code);
+    FORWARD_USER_ERROR(ret, message);
   }
   return ret;
 }
 
-int ObAIFuncClient::send_post(ObJsonObject *data, ObJsonObject *&response) 
+int ObAIFuncClient::send_post(ObIJsonBase *data, ObIJsonBase *&response)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(data)) {
+  ObJsonBuffer json(allocator_);
+  if (OB_ISNULL(data) || !http_client_.has_value()) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(curl_)) {
-    if (OB_ISNULL(curl_ = curl_easy_init())) {
-      ret = OB_INIT_FAIL;
-    }
+  } else if (OB_FAIL(data->print(json, false))) {
   }
   if (OB_SUCC(ret)) {
-    CURLcode res;
-    ObIJsonBase *j_tree = NULL;
-    ObStringBuffer response_buf(allocator_);
-    int64_t http_code = 0;
-    if (OB_FAIL(init_easy_handle(curl_, data, response_buf))) {
-    } 
-    // retry if need
+    const ObString body = json.string();
+    std::optional<rust::Box<oceanbase::http::HttpReply>> reply;
+    std::optional<oceanbase::http::Result> last_result;
     for (int64_t i = 0; OB_SUCC(ret) && i <= max_retry_times_; ++i) {
-      http_code = 0;
-      if (CURLE_OK != (res = curl_easy_perform(curl_))) {
-        LOG_WARN("perform curl failed", K(res));
-      } else if (CURLE_OK != (res = curl_easy_getinfo(curl_, CURLINFO_RESPONSE_CODE, &http_code))) {
-        LOG_WARN("curl get response code failed", K(res));
-      } 
+      reply.emplace(oceanbase::http::http_post(
+          *http_client_.value(), rust::Slice<const uint8_t>(
+              reinterpret_cast<const uint8_t *>(body.ptr()), body.length())));
+      last_result = oceanbase::http::http_reply_result(*reply.value());
       if (is_timeout()) {
         ret = OB_TIMEOUT;
-      } else if (res != CURLE_OK) {
-        // retry
-      } else if (!is_retryable_status_code(http_code)) {
-        break;
-      } else {
-        LOG_WARN("retryable http status code", K(http_code), K(i));
-        int64_t delay_ms = 1000 * (1 << i) + rand() % 1000;
+      } else if (oceanbase::http::Code::Ok != last_result->code) {
+        continue;
+      } else if (is_retryable_status_code(last_result->http_status)) {
+        LOG_WARN("retryable http status code", K(last_result->http_status), K(i));
+        const int64_t delay_ms = 1000 * (1 << i) + rand() % 1000;
         ob_usleep(delay_ms * 1000);
-        response_buf.reset();
+      } else {
+        break;
       }
     }
-    if (OB_SUCC(ret)) {
-      if (res != CURLE_OK && OB_FAIL(error_handle(res))) {
-      } else if ((http_code / 100) != 2) { // http status code 2xx means success
-        ret = OB_CURL_ERROR;
-        char http_code_str[1024];
-        // An endpoint may return internal data or credentials in an error body.
-        snprintf(http_code_str, sizeof(http_code_str), "http status code: %ld", http_code);
-        FORWARD_USER_ERROR(ret, http_code_str);
+    if (OB_FAIL(ret)) {
+    } else if (oceanbase::http::Code::Ok != last_result->code) {
+      ret = error_handle(last_result.value());
+    } else if (last_result->http_status / 100 != 2) {
+      ret = OB_CURL_ERROR;
+      char message[1024];
+      snprintf(message, sizeof(message), "http status code: %u", last_result->http_status);
+      FORWARD_USER_ERROR(ret, message);
+    } else {
+      ObIJsonBase *tree = nullptr;
+      const auto body_bytes = oceanbase::http::http_reply_body(*reply.value());
+      const ObString response_string = response_body(body_bytes);
+      if (OB_FAIL(ObJsonBaseFactory::get_json_base(
+              allocator_, response_string, ObJsonInType::JSON_TEXT, tree))) {
+        ret = OB_ERR_INVALID_JSON_TEXT;
+      } else {
+        response = static_cast<ObIJsonBase *>(tree);
       }
-    }
-
-    if (OB_SUCC(ret)) {
-        if (OB_FAIL(ObJsonBaseFactory::get_json_base(
-              allocator_, response_buf.string(), ObJsonInType::JSON_TREE,
-              ObJsonInType::JSON_TREE, j_tree))) {
-          ret = OB_ERR_INVALID_JSON_TEXT;
-        } else {
-          response = static_cast<ObJsonObject *>(j_tree);
-        }
     }
   }
   return ret;
 }
 
-int ObAIFuncClient::send_post(common::ObIAllocator &allocator,
-                              const common::ObString &url, 
-                              ObArray<ObString> &headers,
-                              ObJsonObject *data, 
-                              ObJsonObject *&response) 
+int ObAIFuncClient::send_post(common::ObIAllocator &allocator, const common::ObString &url,
+                              ObArray<ObString> &headers, ObIJsonBase *data,
+                              ObIJsonBase *&response)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(data)) {
     ret = OB_INVALID_ARGUMENT;
-  }
-  if (OB_SUCC(ret)) {
+  } else {
     reset();
     if (OB_FAIL(init(allocator, url, headers))) {
     } else if (OB_FAIL(send_post(data, response))) {
@@ -259,57 +222,59 @@ int ObAIFuncClient::send_post(common::ObIAllocator &allocator,
   return ret;
 }
 
-int ObAIFuncClient::send_post_batch(ObArray<ObJsonObject *> &data_array, ObArray<ObJsonObject *> &responses) 
+int ObAIFuncClient::add_http_request(ObIJsonBase *data)
 {
   int ret = OB_SUCCESS;
-  if (data_array.empty() || OB_ISNULL(url_) || OB_ISNULL(header_list_)) {
+  ObJsonBuffer json(allocator_);
+  if (OB_ISNULL(data) || !http_batch_.has_value()) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(curlm_)) {
-    if (OB_ISNULL(curlm_ = curl_multi_init())) {
-      ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(data->print(json, false))) {
+  } else {
+    const ObString body = json.string();
+    const auto result = oceanbase::http::http_batch_add(
+        *http_batch_.value(), rust::Slice<const uint8_t>(
+            reinterpret_cast<const uint8_t *>(body.ptr()), body.length()));
+    if (oceanbase::http::Code::Ok != result.code) {
+      ret = OB_CURL_ERROR;
+      LOG_WARN("failed to add HTTP request", K(result.transport_code));
     }
-  } 
-  if (OB_SUCC(ret)) {
-    const int64_t num_data = data_array.count();
-    for (int64_t i = 0; OB_SUCC(ret) && i < num_data; ++i) {
-      ObJsonObject *data = data_array.at(i);
-      CURL *curl_handle = curl_easy_init();
-      ObStringBuffer* response_buf = OB_NEWx(ObStringBuffer, allocator_, allocator_);
-      if (OB_FAIL(init_easy_handle(curl_handle, data, *response_buf))) {
-      } else if (OB_FAIL(curl_handles_.push_back(curl_handle))) {
-      } else if (OB_FAIL(response_buffers_.push_back(response_buf))) {
-      } else {
-        CURLMcode mc = curl_multi_add_handle(curlm_, curl_handle);
-        if (mc != CURLM_OK) {
+  }
+  return ret;
+}
+
+int ObAIFuncClient::send_post_batch(ObArray<ObIJsonBase *> &data_array,
+                                    ObArray<ObIJsonBase *> &responses)
+{
+  int ret = OB_SUCCESS;
+  if (data_array.empty() || !http_client_.has_value()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    clean_up();
+    http_batch_.emplace(oceanbase::http::new_http_batch(*http_client_.value()));
+    for (int64_t i = 0; OB_SUCC(ret) && i < data_array.count(); ++i) {
+      if (OB_FAIL(add_http_request(data_array.at(i)))) {
+      }
+    }
+    if (OB_SUCC(ret)) {
+      auto progress = oceanbase::http::http_batch_perform(*http_batch_.value());
+      if (oceanbase::http::Code::Ok != progress.code) {
+        ret = OB_CURL_ERROR;
+      }
+      while (OB_SUCC(ret) && progress.running > 0) {
+        const auto wait_result = oceanbase::http::http_batch_wait(*http_batch_.value(), 1000);
+        if (oceanbase::http::Code::Ok != wait_result.code) {
+          ret = OB_CURL_ERROR;
+          break;
+        }
+        progress = oceanbase::http::http_batch_perform(*http_batch_.value());
+        if (oceanbase::http::Code::Ok != progress.code) {
           ret = OB_CURL_ERROR;
         }
       }
+      is_finished_.store(OB_SUCC(ret));
     }
     if (OB_SUCC(ret)) {
-      int running_handles = 0;
-      CURLMcode mc = curl_multi_perform(curlm_, &running_handles);
-      if (mc != CURLM_OK) {
-        ret = OB_CURL_ERROR;
-      } else {
-        while (running_handles > 0 && OB_SUCC(ret)) {
-          int numfds = 0;
-          mc = curl_multi_wait(curlm_, nullptr, 0, 1000, &numfds);
-          if (mc != CURLM_OK) {
-            ret = OB_CURL_ERROR;
-            break;
-          }
-          mc = curl_multi_perform(curlm_, &running_handles);
-          if (mc != CURLM_OK) {
-            ret = OB_CURL_ERROR;
-            break;
-          }
-        }
-        is_finished_.store(true);
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(get_batch_result(responses))) {
-      }
+      ret = get_batch_result(responses);
     }
     clean_up();
   }
@@ -317,220 +282,115 @@ int ObAIFuncClient::send_post_batch(ObArray<ObJsonObject *> &data_array, ObArray
 }
 
 int ObAIFuncClient::send_post_batch(common::ObIAllocator &allocator,
-                                    const common::ObString &url, 
-                                    ObArray<ObString> &headers,
-                                    ObArray<ObJsonObject *> &data_array,
-                                    ObArray<ObJsonObject *> &responses) 
+                                    const common::ObString &url, ObArray<ObString> &headers,
+                                    ObArray<ObIJsonBase *> &data_array,
+                                    ObArray<ObIJsonBase *> &responses)
 {
   int ret = OB_SUCCESS;
   if (data_array.empty()) {
     ret = OB_INVALID_ARGUMENT;
-  }
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(init(allocator, url, headers))) {
-    }
-    // retry if need
+  } else if (OB_FAIL(init(allocator, url, headers))) {
+  } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < max_retry_times_; ++i) {
       ret = send_post_batch(data_array, responses);
       if (is_timeout()) {
         ret = OB_TIMEOUT;
-      } else if (OB_CURL_ERROR == ret) {
+      } else if (OB_CURL_ERROR == ret && i + 1 < max_retry_times_) {
         ret = OB_SUCCESS;
-        int64_t delay_ms = 1000 * (1 << i) + rand() % 1000;
+        const int64_t delay_ms = 1000 * (1 << i) + rand() % 1000;
         ob_usleep(delay_ms * 1000);
       } else if (OB_SUCC(ret)) {
         break;
       }
-    } 
+    }
   }
   return ret;
 }
 
-int ObAIFuncClient::send_post_batch_no_wait(ObArray<ObJsonObject *> &data_array) 
+int ObAIFuncClient::send_post_batch_no_wait(ObArray<ObIJsonBase *> &data_array)
 {
   int ret = OB_SUCCESS;
-  if (data_array.empty() || OB_ISNULL(url_) || OB_ISNULL(header_list_)) {
+  if (data_array.empty() || !http_client_.has_value()) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(curlm_)) {
-    if (OB_ISNULL(curlm_ = curl_multi_init())) {
-      ret = OB_INVALID_ARGUMENT;
-    }
-  } 
-  if (OB_SUCC(ret)) {
-    const int64_t num_data = data_array.count();
-    for (int64_t i = 0; OB_SUCC(ret) && i < num_data; ++i) {
-      ObJsonObject *data_item = data_array.at(i);
-      CURL *curl_handle = curl_easy_init();
-      ObStringBuffer* response_buf = OB_NEWx(ObStringBuffer, allocator_, allocator_);
-      if (OB_ISNULL(data_item)) {
-        ret = OB_INVALID_ARGUMENT;
-      } else if (OB_ISNULL(curl_handle)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (OB_FAIL(init_easy_handle(curl_handle, data_item, *response_buf))) {
-      } else if (OB_FAIL(curl_handles_.push_back(curl_handle))) {
-      } else if (OB_FAIL(response_buffers_.push_back(response_buf))) {
-      } else {
-        CURLMcode mc = curl_multi_add_handle(curlm_, curl_handle);
-        if (mc != CURLM_OK) {
-          ret = OB_CURL_ERROR;
-        }
+  } else {
+    clean_up();
+    http_batch_.emplace(oceanbase::http::new_http_batch(*http_client_.value()));
+    for (int64_t i = 0; OB_SUCC(ret) && i < data_array.count(); ++i) {
+      if (OB_FAIL(add_http_request(data_array.at(i)))) {
       }
     }
-    int running_handles = 0;
-    CURLMcode mc = curl_multi_perform(curlm_, &running_handles);
-    if (mc != CURLM_OK) {
-      ret = OB_CURL_ERROR;
+    if (OB_SUCC(ret)) {
+      const auto progress = oceanbase::http::http_batch_perform(*http_batch_.value());
+      if (oceanbase::http::Code::Ok != progress.code) {
+        ret = OB_CURL_ERROR;
+      } else {
+        is_finished_.store(progress.running == 0);
+      }
     }
   }
   return ret;
 }
 
-bool ObAIFuncClient::check_batch_finished() 
+bool ObAIFuncClient::check_batch_finished()
 {
-  int running_handles = 0;
-  CURLMcode mc = curl_multi_perform(curlm_, &running_handles);
-  if (running_handles == 0) {
-    is_finished_.store(true);
+  int ret = OB_SUCCESS;
+  if (!is_finished_.load() && http_batch_.has_value()) {
+    const auto progress = oceanbase::http::http_batch_perform(*http_batch_.value());
+    if (oceanbase::http::Code::Ok != progress.code) {
+      ret = OB_CURL_ERROR;
+      LOG_WARN("failed to drive HTTP batch", K(progress.transport_code));
+      is_finished_.store(true);
+    } else {
+      is_finished_.store(progress.running == 0);
+    }
   }
   return is_finished_.load();
 }
 
-int ObAIFuncClient::get_batch_result(ObArray<ObJsonObject *> &responses) 
+int ObAIFuncClient::get_batch_result(ObArray<ObIJsonBase *> &responses)
 {
   int ret = OB_SUCCESS;
-  if (is_finished_.load()) {
-    CURLMsg *msg;
-    int msgs_in_queue;
-    while ((msg = curl_multi_info_read(curlm_, &msgs_in_queue))) {
-      if (msg->msg == CURLMSG_DONE) {
-        CURL *easy_handle = msg->easy_handle;
-        CURLcode res = msg->data.result;
-        if (res == CURLE_OK) {
-          long response_code;
-          curl_easy_getinfo(easy_handle, CURLINFO_RESPONSE_CODE, &response_code);
-          if (response_code != 200) {
-            ret = OB_CURL_ERROR;
-          }
-        }
+  if (!is_finished_.load() || !http_batch_.has_value()) {
+    ret = OB_NOT_SUPPORTED;
+  } else {
+    const size_t count = oceanbase::http::http_batch_size(*http_batch_.value());
+    for (size_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+      const auto result = oceanbase::http::http_batch_result(*http_batch_.value(), i);
+      if (oceanbase::http::Code::Ok != result.code || result.http_status != 200) {
+        ret = OB_CURL_ERROR;
       }
     }
-  }
-  if (OB_SUCC(ret)) {
-    ObIJsonBase *j_tree = NULL;
-    for (int64_t i = 0; OB_SUCC(ret) && i < response_buffers_.count(); ++i) {
-      ObStringBuffer *response_buf = response_buffers_.at(i);
-      ObString response_str;
-      response_str.reset();
-      if (OB_ISNULL(response_buf)) {
-        ret = OB_INVALID_ARGUMENT;
-      } else if (OB_FAIL(ob_write_string(*allocator_, response_buf->string(), response_str))) {
-      } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(
-              allocator_, response_str, ObJsonInType::JSON_TREE,
-              ObJsonInType::JSON_TREE, j_tree))) {
+    for (size_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+      ObIJsonBase *tree = nullptr;
+      const auto body = oceanbase::http::http_batch_body(*http_batch_.value(), i);
+      const ObString response_string = response_body(body);
+      if (OB_FAIL(ObJsonBaseFactory::get_json_base(
+              allocator_, response_string, ObJsonInType::JSON_TEXT, tree))) {
         ret = OB_ERR_INVALID_JSON_TEXT;
-      } else if (OB_FAIL(responses.push_back(static_cast<ObJsonObject *>(j_tree)))) {
+      } else if (OB_FAIL(responses.push_back(static_cast<ObIJsonBase *>(tree)))) {
       }
     }
   }
   return ret;
 }
 
-int ObAIFuncClient::init_easy_handle(CURL *curl, ObJsonObject *body, ObStringBuffer &response_buf) 
+void ObAIFuncClient::clean_up()
 {
-  int ret = OB_SUCCESS;
-  ObJsonBuffer j_buf(allocator_);
-  if (OB_FAIL(body->print(j_buf, false))) {
-  } else if (OB_ISNULL(curl)) {
-    ret = OB_INVALID_ARGUMENT;
-  }
-  ObString body_str = j_buf.string();
-  CURLcode res;
-  const int64_t no_delay = 1;
-  const int64_t no_signal = 1;
-  if (OB_SUCC(ret)) {
-    if (CURLE_OK != (res = curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "http,https"))) {
-      LOG_WARN("set allowed protocols failed", K(res));
-    } else if (CURLE_OK != (res = curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "http,https"))) {
-      LOG_WARN("set allowed redirect protocols failed", K(res));
-    } else if (CURLE_OK != (res = curl_easy_setopt(curl, CURLOPT_URL, url_))) {
-      LOG_WARN("set url failed", K(res), K(url_));
-    } else if (CURLE_OK !=(res = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, ObAIFuncClient::write_callback))) {
-      LOG_WARN("set write function failed", K(res));
-    } else if (CURLE_OK !=(res = curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_buf))) {
-    } else if (CURLE_OK !=(res = curl_easy_setopt(curl, CURLOPT_NOSIGNAL, no_signal))) {
-      LOG_WARN("set no signal failed", K(res), K(no_signal));
-    } else if (CURLE_OK !=(res = curl_easy_setopt(curl, CURLOPT_TCP_NODELAY, no_delay))) {
-      LOG_WARN("set no delay failed", K(res), K(no_delay));
-    } else if (CURLE_OK !=(res = curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 10000))) {
-      LOG_WARN("set connection timeout ms failed", K(res));
-    } else if (CURLE_OK != (res = curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeout_sec_))) {
-      LOG_WARN("set timeout failed", K(res), K(timeout_sec_));
-    } else if (CURLE_OK !=(res = curl_easy_setopt(curl, CURLOPT_HTTPHEADER, header_list_))) {
-      LOG_WARN("set headers failed", K(res));
-    } else if (CURLE_OK !=(res = curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body_str.ptr()))) {
-      LOG_WARN("set post failed", K(res), K(body_str.length()));
-    } else if (CURLE_OK != (res = curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE,body_str.length()))) {
-      LOG_WARN("set post failed", K(res), K(body_str.length()));
-    } else if (CURLE_OK != (res = curl_easy_setopt(curl, CURLOPT_POST, 1))) {
-      LOG_WARN("set post method failed", K(res));
-    }
-    if (CURLE_OK != res) {
-      ret = OB_CURL_ERROR;
-    }
-  }
-  return ret;
-}
-
-void ObAIFuncClient::clean_up() 
-{
-  for (int64_t i = 0; i < curl_handles_.count(); ++i) {
-    CURL *curl_handle = curl_handles_.at(i);
-    if (curl_handle != nullptr) {
-      curl_multi_remove_handle(curlm_, curl_handle);
-      curl_easy_cleanup(curl_handle);
-      curl_handles_.at(i) = nullptr;
-    }
-  }
-  curl_handles_.reset();
-  for (int64_t i = 0; i < response_buffers_.count(); ++i) {
-    ObStringBuffer *response_buf = response_buffers_.at(i);
-    if (response_buf != nullptr) {
-      OB_DELETEx(ObStringBuffer, allocator_, response_buf);
-      response_buffers_.at(i) = nullptr;
-    }
-  }
-  response_buffers_.reset();
+  http_batch_.reset();
   is_finished_.store(false);
 }
-
-size_t ObAIFuncClient::write_callback(void *contents, size_t size, size_t nmemb, void *userp) 
-{
-  int ret = OB_SUCCESS;
-  size_t total_size = size * nmemb;
-  if (OB_ISNULL(contents)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (total_size > 0) {
-    ObStringBuffer &result = *static_cast<ObStringBuffer *>(userp);
-    result.reserve(total_size);
-    if (OB_FAIL(result.append(static_cast<const char *>(contents), total_size, 0))) {
-    } else {
-      LOG_DEBUG("ai_function response received", K(total_size));
-    }
-  }
-  return OB_SUCC(ret) ? total_size : 0;
-}
+#endif
 
 bool ObAIFuncClient::is_retryable_status_code(int64_t http_code)
 {
-  return (http_code == 429 || http_code == 500 ||
-         http_code == 502 || http_code == 503 || http_code == 504);
+  return http_code == 429 || http_code == 500 || http_code == 502 ||
+         http_code == 503 || http_code == 504;
 }
 
 bool ObAIFuncClient::is_timeout()
 {
   return ObTimeUtility::current_time() > abs_timeout_ts_;
 }
-#endif
 
 } // namespace common
 } // namespace oceanbase

@@ -27,6 +27,7 @@
 #include "sql/engine/expr/ob_expr_plsql_variable.h"
 #include "sql/engine/expr/ob_expr_uuid.h"
 #include "lib/locale/ob_locale_type.h"
+#include "lib/utility/ob_platform_io.h"
 #include <inttypes.h>
 
 #include <string>
@@ -1521,7 +1522,7 @@ int ObSysVarOnCheckFuncs::check_and_convert_charset(ObExecContext &ctx,
         const static int64_t val_buf_len = 1024;
         char val_buf[val_buf_len];
         int64_t pos = 0;
-        if (OB_SUCCESS != (p_ret = databuff_printf(val_buf, val_buf_len, pos, "%ld", int64_val))) {
+        if (OB_SUCCESS != (p_ret = databuff_printf(val_buf, val_buf_len, pos, "%" PRId64 "", int64_val))) {
         } else {
           ObString cs_name_str(val_buf);
           LOG_USER_ERROR(OB_ERR_UNKNOWN_CHARSET, cs_name_str.length(), cs_name_str.ptr());
@@ -1612,7 +1613,7 @@ int ObSysVarOnCheckFuncs::check_and_convert_collation_not_null(ObExecContext &ct
         const static int64_t val_buf_len = 1024;
         char val_buf[val_buf_len];
         int64_t pos = 0;
-        if (OB_SUCCESS != (p_ret = databuff_printf(val_buf, val_buf_len, pos, "%ld", int64_val))) {
+        if (OB_SUCCESS != (p_ret = databuff_printf(val_buf, val_buf_len, pos, "%" PRId64 "", int64_val))) {
         } else {
           ObString coll_name_str(val_buf);
           LOG_USER_ERROR(OB_ERR_UNKNOWN_COLLATION, coll_name_str.length(), coll_name_str.ptr());
@@ -1683,7 +1684,7 @@ int ObSysVarOnCheckFuncs::check_default_value_for_utf8mb4(ObExecContext &ctx,
         const static int64_t val_buf_len = 1024;
         char val_buf[val_buf_len];
         int64_t pos = 0;
-        if (OB_SUCCESS != (p_ret = databuff_printf(val_buf, val_buf_len, pos, "%ld", int64_val))) {
+        if (OB_SUCCESS != (p_ret = databuff_printf(val_buf, val_buf_len, pos, "%" PRId64 "", int64_val))) {
         } else {
           ObString coll_name_str(val_buf);
           LOG_USER_ERROR(OB_ERR_UNKNOWN_COLLATION, coll_name_str.length(), coll_name_str.ptr());
@@ -1827,7 +1828,7 @@ int ObSysVarOnCheckFuncs::check_default_lob_inrow_threshold(sql::ObExecContext &
     char error_msg[ERROR_MSG_LENGTH] = "";
     int64_t pos = 0;
     if (OB_SUCCESS != (tmp_ret = databuff_printf(error_msg, ERROR_MSG_LENGTH,
-        pos, "lob inrow threshold, should be [%ld, %ld]", OB_MIN_LOB_INROW_THRESHOLD, OB_MAX_LOB_INROW_THRESHOLD))) {
+        pos, "lob inrow threshold, should be [%" PRId64 ", %" PRId64 "]", OB_MIN_LOB_INROW_THRESHOLD, OB_MAX_LOB_INROW_THRESHOLD))) {
     } else {
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, error_msg);
     }
@@ -2178,26 +2179,6 @@ int ObSysVarOnUpdateFuncs::start_trans_by_set_trans_char_(
   return ret;
 }
 
-int ObSysVarOnUpdateFuncs::update_sql_mode(ObExecContext &ctx,
-                                           const ObSetVar &set_var,
-                                           const ObBasicSysVar &sys_var,
-                                           const common::ObObj &val)
-{
-  UNUSED(ctx);
-  UNUSED(sys_var);
-  UNUSED(val);
-  int ret = OB_SUCCESS;
-  if (set_var.set_scope_== ObSetVar::SET_SCOPE_GLOBAL) {
-    //nothing to do
-  } else {
-    //Handle MODE_NO_BACKSLASH_ESCAPES
-    //Whether to treat backslashes as escape characters. Stored in a system variable,
-    //Temporarily not supported.
-  }
-  return ret;
-}
-
-
 int ObSysVarToObjFuncs::to_obj_charset(ObIAllocator &allocator,
                                        const ObBasicSessionInfo &session,
                                        const ObBasicSysVar &sys_var,
@@ -2499,7 +2480,7 @@ int ObPreProcessSysVars::init_config_sys_vars()
   if (OB_SUCC(ret)) {
     pos = 0;
     char cur_work_path[MAX_PATH_SIZE];
-    if (OB_ISNULL(getcwd(cur_work_path, MAX_PATH_SIZE))) {
+    if (0 != ob_getcwd_utf8(cur_work_path, MAX_PATH_SIZE)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(databuff_printf(ObSpecialSysVarValues::server_pid_file_str_,
                                 MAX_PATH_SIZE,
@@ -2517,7 +2498,7 @@ int ObPreProcessSysVars::init_config_sys_vars()
     if (OB_FAIL(databuff_printf(ObSpecialSysVarValues::server_port_int_str_,
                                 ObSpecialSysVarValues::SERVER_PORT_INT_STR_MAX_LEN,
                                 pos,
-                                "%ld",
+                                "%" PRId64 "",
                                 mysql_port))) {
     }
   }
@@ -2526,7 +2507,7 @@ int ObPreProcessSysVars::init_config_sys_vars()
   if (OB_SUCC(ret)) {
     pos = 0;
     char cur_work_path[MAX_PATH_SIZE];
-    if (OB_ISNULL(getcwd(cur_work_path, MAX_PATH_SIZE))) {
+    if (0 != ob_getcwd_utf8(cur_work_path, MAX_PATH_SIZE)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(databuff_printf(ObSpecialSysVarValues::server_socket_file_str_,
                                 MAX_PATH_SIZE,

@@ -18,6 +18,7 @@
 #define OCEANBASE_SQL_OB_TREE_BASE
 
 #include "lib/utility/ob_mod_define.h"
+#include <inttypes.h>
 #include "lib/allocator/page_arena.h"
 #include "lib/container/ob_array.h"
 #include "lib/container/ob_vector.h"
@@ -232,7 +233,7 @@ public:
 
     int64_t to_string(char *buf, const int64_t buf_len) const { 
       int64_t pos = 0;
-      databuff_printf(buf, buf_len, pos, "cur_pos = %ld, total_=%ld", cur_pos_, total_);
+      databuff_printf(buf, buf_len, pos, "cur_pos = %" PRId64 ", total_=%" PRId64 "", cur_pos_, total_);
       return pos;  
     }
   private:

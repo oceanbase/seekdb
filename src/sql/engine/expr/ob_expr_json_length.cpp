@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_json_length.h"
 #include "ob_expr_json_func_helper.h"
+#include "ob_expr_json_native_path.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -59,12 +60,13 @@ int ObExprJsonLength::calc_result_typeN(ObExprResType& type,
 int ObExprJsonLength::calc(ObEvalCtx &ctx, const ObDatum &data1, ObDatumMeta meta1, bool has_lob_header1,
                            const ObDatum *data2, ObDatumMeta meta2, bool has_lob_header2,
                            MultimodeAlloctor *allocator, ObDatum &res,
-                           ObJsonPathCache* path_cache)
+                           JsonPathCache* path_cache)
 {
   INIT_SUCC(ret);
   bool is_null = false;
   uint32_t res_len = 0;
-  ObIJsonBase *j_base = NULL;
+  ObString j_doc;
+  ObJsonInType j_in_type = ObJsonInType::JSON_TEXT;
   ObObjType type1 = meta1.type_;
   ObCollationType cs_type1 = meta1.cs_type_;
   // handle data1(json text)
@@ -75,41 +77,42 @@ int ObExprJsonLength::calc(ObEvalCtx &ctx, const ObDatum &data1, ObDatumMeta met
     LOG_WARN("input type error", K(type1));
   } else if (OB_FAIL(ObJsonExprHelper::ensure_collation(type1, cs_type1))) {
   } else {
-    ObString j_doc = data1.get_string();
-    ObJsonInType j_in_type = ObJsonExprHelper::get_json_internal_type(type1);
-    if (j_doc.length() == 0) {
-      ret = OB_ERR_INVALID_JSON_TEXT;
-      LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT);
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
-                   ctx.exec_ctx_, *allocator, data1, meta1, has_lob_header1, j_doc))) {
-    } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator, j_doc, j_in_type,
-                                                        j_in_type, j_base, 0,
-                                                        ObJsonExprHelper::get_json_max_depth_config()))) {
+    j_doc = data1.get_string();
+    j_in_type = ObJsonExprHelper::get_json_internal_type(type1);
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+            ctx.exec_ctx_, *allocator, data1, meta1, has_lob_header1, j_doc))) {
     }
   }
 
   // handle data2(path text)
   if (OB_SUCC(ret) && OB_LIKELY(!is_null)) {
-    if (OB_ISNULL(data2)) { // have no path
-      res_len = j_base->member_count();
+    if (OB_ISNULL(data2)) {
+      JsonMetadata metadata;
+      if (OB_FAIL(ObJsonExprHelper::get_json_metadata(
+              j_doc, j_in_type, false, ObJsonExprHelper::get_json_max_depth_config(), metadata))) {
+      } else {
+        res_len = metadata.length_;
+      }
     } else { // handle json path
       ObObjType type2 = meta2.type_;
       if (type2 == ObNullType) { // null should display "NULL"
         is_null = true;
       } else { // ObLongTextType
-        ObJsonSeekResult hit;
         ObString j_path_text = data2->get_string();
-        ObJsonPath *j_path = NULL;
+        const common::json::Path *j_path = NULL;
+        JsonPathMatches matches;
         if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, *allocator, *data2, meta2, has_lob_header2, j_path_text))) {
-        } else if (OB_FAIL(ObJsonExprHelper::find_and_add_cache(path_cache, j_path, j_path_text, 1, true))) {
+        } else if (OB_FAIL(find_and_add_native_path_cache(path_cache, j_path, j_path_text, 1, true))) {
           LOG_USER_ERROR(OB_ERR_INVALID_JSON_PATH);
-        } else if (OB_FAIL(j_base->seek(*j_path, j_path->path_node_cnt(), true, false, hit))) {
-        } else if (hit.size() == 0) { // not found node by path, display "NULL"
+        } else if (OB_FAIL(query_native_json_path(
+                       j_doc, j_in_type, *j_path, true, false,
+                       ObJsonExprHelper::get_json_max_depth_config(), matches))) {
+        } else if (matches.count_ == 0) {
           is_null = true;
-        } else if (hit.size() > 1) {
-          res_len = hit.size();
+        } else if (matches.count_ > 1) {
+          res_len = matches.count_;
         } else {
-          res_len = hit[0]->member_count();
+          res_len = matches.single_length_;
         }
       }
     }
@@ -152,8 +155,8 @@ int ObExprJsonLength::eval_json_length(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   }
 
   if (OB_SUCC(ret)) {
-    ObJsonPathCache ctx_cache(&tmp_allocator);
-    ObJsonPathCache* path_cache = ObJsonExprHelper::get_path_cache_ctx(expr.expr_ctx_id_, &ctx.exec_ctx_);
+    JsonPathCache ctx_cache;
+    JsonPathCache* path_cache = get_native_path_cache_ctx(expr.expr_ctx_id_, &ctx.exec_ctx_);
     path_cache = ((path_cache != NULL) ? path_cache : &ctx_cache);
 
     if (OB_FAIL(calc(ctx, *datum0, arg0->datum_meta_, arg0->obj_meta_.has_lob_header(),

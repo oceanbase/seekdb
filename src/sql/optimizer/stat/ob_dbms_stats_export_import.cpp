@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
+#include <inttypes.h>
 #include "sql/optimizer/stat/ob_dbms_stats_export_import.h"
 #include "query/engine/expr/ob_expr_lob_utils.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
@@ -98,7 +99,7 @@ int append_stat_table_name(const ObString &database, const ObString &table, ObSq
                           null r1,null r2, null r3, null ch1, null cl1, null bl1, \
                           macro_blk_cnt ob_spec1, micro_blk_cnt ob_spec2, null ob_spec3\
                           from %s stat\
-                          where TABLE_ID = %lu"
+                          where TABLE_ID = %" PRIu64 ""
 
 #define FETCH_COLUMN_STAT "select null statid, 'C' type, '8' version, case stat.histogram_type \
                            when 1 then 4096 + 4 when 3 then 8192 + 4 when 4 then 4 else 0 end flags,\
@@ -113,7 +114,7 @@ int append_stat_table_name(const ObString &database, const ObString &table, ObSq
                            %s stat left join %s hist on \
                            stat.TABLE_ID = hist.TABLE_ID and\
                            hist.PARTITION_ID = stat.PARTITION_ID and stat.COLUMN_ID=hist.COLUMN_ID\
-                           where stat.TABLE_ID = %lu "
+                           where stat.TABLE_ID = %" PRIu64 " "
 
 #define FETCH_STAT_FROM_STAT_TABLE "select statid, type, version, %s,\
                                     c1, c2, c3, c4, c5, c6,n1, n2, n3, n4, n5, n6, n7, n8, n9, n10,\
@@ -297,7 +298,7 @@ int ObDbmsStatsExportImport::export_column_stats(ObExecContext &ctx, const ObTab
     }
   }
   if (OB_SUCC(ret) && param.column_params_.count() == 1) {//specify column name
-    if (OB_FAIL(where_str.append_fmt(" and stat.COLUMN_ID = %lu",
+    if (OB_FAIL(where_str.append_fmt(" and stat.COLUMN_ID = %" PRIu64 "",
                                      param.column_params_.at(0).column_id_))) {
     } else if (OB_FAIL(delete_where_str.append(" and c4 = "))) {
     } else if (OB_FAIL(sql_append_hex_escape_str(param.column_params_.at(0).column_name_, delete_where_str))) {
@@ -738,7 +739,7 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
             ObNumStackOnceAlloc tmp_alloc;
             if (stat_type == COLUMN_STAT) {
               if (result_objs.at(i).is_null()) {
-                compress_type = ObOptStatCompressType::ZSTD_1_3_8_COMPRESS;
+                compress_type = ObOptStatCompressType::ZSTD_COMPRESS;
               } else if (OB_FAIL(get_nmb_val(result_objs.at(i), tmp_alloc, num_val))) {
               } else if (OB_FAIL(num_val.extract_valid_int64_with_trunc(compress_type))) {
               }
@@ -1161,7 +1162,7 @@ int ObDbmsStatsExportImport::gen_part_and_subpart_sel_str(const ObTableStatParam
   } else if (OB_FAIL(part_str.append("CASE stat.PARTITION_ID"))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < param.part_infos_.count(); ++i) {
-      if (OB_FAIL(part_str.append_fmt(" WHEN %ld THEN ", param.part_infos_.at(i).part_id_))) {
+      if (OB_FAIL(part_str.append_fmt(" WHEN %" PRId64 " THEN ", param.part_infos_.at(i).part_id_))) {
       } else if (OB_FAIL(sql_append_hex_escape_str(param.part_infos_.at(i).part_name_, part_str))) {
       } else {/*do nothing*/}
     }
@@ -1172,7 +1173,7 @@ int ObDbmsStatsExportImport::gen_part_and_subpart_sel_str(const ObTableStatParam
       } else if (OB_FAIL(subpart_str.append("CASE stat.PARTITION_ID"))) {
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < param.subpart_infos_.count(); ++i) {
-          if (OB_FAIL(subpart_str.append_fmt(" WHEN %ld THEN ", param.subpart_infos_.at(i).part_id_))) {
+          if (OB_FAIL(subpart_str.append_fmt(" WHEN %" PRId64 " THEN ", param.subpart_infos_.at(i).part_id_))) {
           } else if (OB_FAIL(sql_append_hex_escape_str(param.subpart_infos_.at(i).part_name_, subpart_str))) {
           } else {
             ObString part_name;
@@ -1188,7 +1189,7 @@ int ObDbmsStatsExportImport::gen_part_and_subpart_sel_str(const ObTableStatParam
             }
             if (OB_SUCC(ret) && !find_it) {
               ret = OB_ERR_UNEXPECTED;
-            } else if (OB_FAIL(part_str.append_fmt(" WHEN %ld THEN ", param.subpart_infos_.at(i).part_id_))) {
+            } else if (OB_FAIL(part_str.append_fmt(" WHEN %" PRId64 " THEN ", param.subpart_infos_.at(i).part_id_))) {
             } else if (OB_FAIL(sql_append_hex_escape_str(part_name, part_str))) {
             } else {/*do nothing*/}
           }
@@ -1219,7 +1220,7 @@ int ObDbmsStatsExportImport::gen_col_sel_str(const ObTableStatParam &param,
   } else if (OB_FAIL(col_str.append("CASE stat.COLUMN_ID"))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < param.column_params_.count(); ++i) {
-      if (OB_FAIL(col_str.append_fmt(" WHEN %lu THEN ", param.column_params_.at(i).column_id_))) {
+      if (OB_FAIL(col_str.append_fmt(" WHEN %" PRIu64 " THEN ", param.column_params_.at(i).column_id_))) {
       } else if (OB_FAIL(sql_append_hex_escape_str(param.column_params_.at(i).column_name_, col_str))) {
       } else {/*do nothing*/}
     }

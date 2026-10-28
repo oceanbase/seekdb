@@ -25,6 +25,7 @@ namespace oceanbase
 namespace share
 {
 class ObLocalDevice;
+struct LocalIOConfig;
 class ObILocalDeviceSpaceProvider;
 
 class ObGetFileIdRangeFunctor : public common::ObBaseDirEntryOperator
@@ -38,7 +39,7 @@ public:
   }
   virtual ~ObGetFileIdRangeFunctor() = default;
 
-  virtual int func(const dirent *entry) override;
+  virtual int func(const common::ObPlatformDirEntry &entry) override;
   uint32_t get_min_file_id() const { return min_file_id_; }
   uint32_t get_max_file_id() const { return max_file_id_; }
 private:
@@ -58,7 +59,7 @@ public:
   }
   virtual ~ObGetFileSizeFunctor() = default;
 
-  virtual int func(const dirent *entry) override;
+  virtual int func(const common::ObPlatformDirEntry &entry) override;
   int64_t get_total_size() const { return total_size_; }
 private:
   const char* dir_;
@@ -73,7 +74,7 @@ public:
   ObScanDirOp(const char *dir = nullptr)
    : dir_(dir) {}
   virtual ~ObScanDirOp() = default;
-  virtual int func(const dirent *entry) override;
+  virtual int func(const common::ObPlatformDirEntry &entry) override;
   int set_dir(const char *dir);
   const char *get_dir() const { return dir_; }
   TO_STRING_KV(K_(dir));
@@ -94,7 +95,8 @@ public:
       const int64_t block_size,
       const int64_t data_disk_percentage,
       const int64_t data_disk_size,
-      const ObILocalDeviceSpaceProvider &space_provider);
+      const ObILocalDeviceSpaceProvider &space_provider,
+      const LocalIOConfig &io_config);
   void destroy();
 
   ObIODevice &get_local_device();
@@ -161,7 +163,8 @@ public:
   static int rmdir(const char *pathname);
   static int unlink(const char *pathname);
   static int rename(const char *oldpath, const char *newpath);
-  static int scan_dir(const char *dir_name, int (*func)(const dirent *entry));
+  static int scan_dir(const char *dir_name,
+                      int (*func)(const common::ObPlatformDirEntry &entry));
   static int scan_dir(const char *dir_name, common::ObBaseDirEntryOperator &op);
   static int scan_dir_rec(const char *dir_name, ObScanDirOp &reg_op, ObScanDirOp &dir_op);
   static int fsync(const common::ObIOFd &fd);
@@ -229,6 +232,7 @@ public:
                              const int64_t file_size,
                              const int64_t disk_percentage,
                              const int64_t reserved_size,
+                             const LocalIOConfig &io_config,
                              BlockFileAttr &block_file_attr);
 };
 

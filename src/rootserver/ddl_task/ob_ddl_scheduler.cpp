@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_ddl_scheduler.h"
+#include <inttypes.h>
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "rootserver/ddl_task/ob_drop_fts_index_task.h"
 #include "rootserver/ddl_task/ob_drop_vec_index_task.h"
@@ -2255,7 +2256,7 @@ int ObDDLScheduler::create_fork_table_task(
     common::ObISQLClient &proxy,
     const share::schema::ObTableSchema *src_table_schema,
     const share::schema::ObTableSchema *dst_table_schema,
-    const int64_t schema_version,
+    const int64_t source_schema_version,
     const int64_t snapshot_version,
     const int64_t parent_task_id,
     const obcall::ObForkTableArg *fork_table_arg,
@@ -2271,7 +2272,7 @@ int ObDDLScheduler::create_fork_table_task(
                || OB_ISNULL(src_table_schema)
                || OB_ISNULL(dst_table_schema)
                || OB_ISNULL(GCTX.sql_proxy_)
-               || schema_version <= 0
+               || source_schema_version <= 0
                || snapshot_version <= 0) {
       ret = OB_INVALID_ARGUMENT;
     } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, task_id))) {
@@ -2279,7 +2280,7 @@ int ObDDLScheduler::create_fork_table_task(
                                             share::DDL_FORK_TABLE,
                                             src_table_schema,
                                             dst_table_schema,
-                                            schema_version,
+                                            source_schema_version,
                                             snapshot_version,
                                             *fork_table_arg,
                                             parent_task_id))) {
@@ -2373,7 +2374,7 @@ int ObDDLScheduler::recover_task()
 void ObDDLScheduler::add_event_info(const ObDDLTaskRecord &ddl_record, const ObString &ddl_event_stmt)
 {
   char object_id_buffer[256];
-  snprintf(object_id_buffer, sizeof(object_id_buffer), "%ld %ld", ddl_record.object_id_, ddl_record.target_object_id_);
+  snprintf(object_id_buffer, sizeof(object_id_buffer), "%" PRIu64 " %" PRIu64, ddl_record.object_id_, ddl_record.target_object_id_);
   MANAGEMENT_EVENT_ADD("ddl scheduler", ddl_event_stmt.ptr(),
     "ret", ddl_record.ret_code_,
     "trace_id", ddl_record.trace_id_,

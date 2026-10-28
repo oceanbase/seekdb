@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "standby/restore/ob_restore_helper_ctx.h"
-#include "standby/ob_standby_grpc.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/ob_define.h"
 #include "lib/utility/ob_macro_utils.h"
@@ -30,8 +29,6 @@ namespace restore
 {
 ObRestoreHelperLSViewCtx::ObRestoreHelperLSViewCtx()
   : ls_meta_fetched_(false),
-    grpc_client_(NULL),
-    ls_view_context_(NULL),
     ls_view_reader_()
 {
 }
@@ -56,20 +53,10 @@ void ObRestoreHelperLSViewCtx::reset()
   ls_meta_fetched_ = false;
   int ret = OB_SUCCESS;
   if (ls_view_reader_) {
-    if (OB_NOT_NULL(ls_view_context_)) {
-      ls_view_context_->TryCancel();
-    }
-    if (OB_FAIL(ObRestoreHelperCtxUtil::close_reader(ls_view_reader_, grpc_client_))) {
+    ls_view_reader_->cancel();
+    if (OB_FAIL(ObRestoreHelperCtxUtil::close_reader(ls_view_reader_))) {
       LOG_ERROR("stream finished with error", K(ret));
     }
-  }
-  if (OB_NOT_NULL(ls_view_context_)) {
-    ls_view_context_->~ClientContext();
-    ls_view_context_ = NULL;
-  }
-  if (OB_NOT_NULL(grpc_client_)) {
-    grpc_client_->~ObStandbyGrpcClient();
-    grpc_client_ = NULL;
   }
 }
 
@@ -79,9 +66,7 @@ void ObRestoreHelperLSViewCtx::destroy()
 }
 
 ObRestoreHelperTabletInfoCtx::ObRestoreHelperTabletInfoCtx()
-  : grpc_client_(NULL),
-    tablet_info_context_(NULL),
-    tablet_info_reader_()
+  : tablet_info_reader_()
 {
 }
 
@@ -97,29 +82,17 @@ ObRestoreHelperCtxType ObRestoreHelperTabletInfoCtx::get_type() const
 
 bool ObRestoreHelperTabletInfoCtx::is_valid() const
 {
-  return OB_NOT_NULL(grpc_client_)
-           && OB_NOT_NULL(tablet_info_context_)
-           && tablet_info_reader_;
+  return tablet_info_reader_ != nullptr;
 }
 
 void ObRestoreHelperTabletInfoCtx::reset()
 {
   int ret = OB_SUCCESS;
   if (tablet_info_reader_) {
-    if (OB_NOT_NULL(tablet_info_context_)) {
-      tablet_info_context_->TryCancel();
-    }
-    if (OB_FAIL(ObRestoreHelperCtxUtil::close_reader(tablet_info_reader_, grpc_client_))) {
+    tablet_info_reader_->cancel();
+    if (OB_FAIL(ObRestoreHelperCtxUtil::close_reader(tablet_info_reader_))) {
       LOG_ERROR("stream finished with error", K(ret));
     }
-  }
-  if (OB_NOT_NULL(tablet_info_context_)) {
-    tablet_info_context_->~ClientContext();
-    tablet_info_context_ = NULL;
-  }
-  if (OB_NOT_NULL(grpc_client_)) {
-    grpc_client_->~ObStandbyGrpcClient();
-    grpc_client_ = NULL;
   }
 }
 
@@ -129,9 +102,7 @@ void ObRestoreHelperTabletInfoCtx::destroy()
 }
 
 ObRestoreHelperSSTableInfoCtx::ObRestoreHelperSSTableInfoCtx()
-  : grpc_client_(NULL),
-    sstable_info_context_(NULL),
-    sstable_info_reader_(),
+  : sstable_info_reader_(),
     pending_sstable_count_(0),
     cur_tablet_id_()
 {
@@ -150,8 +121,6 @@ ObRestoreHelperCtxType ObRestoreHelperSSTableInfoCtx::get_type() const
 bool ObRestoreHelperSSTableInfoCtx::is_valid() const
 {
   return ObRestoreHelperCtxType::RESTORE_HELPER_CTX_SSTABLE_INFO == get_type()
-         && OB_NOT_NULL(grpc_client_)
-         && OB_NOT_NULL(sstable_info_context_)
          && sstable_info_reader_;
 }
 
@@ -161,20 +130,10 @@ void ObRestoreHelperSSTableInfoCtx::reset()
   cur_tablet_id_.reset();
   int ret = OB_SUCCESS;
   if (sstable_info_reader_) {
-    if (OB_NOT_NULL(sstable_info_context_)) {
-      sstable_info_context_->TryCancel();
-    }
-    if (OB_FAIL(ObRestoreHelperCtxUtil::close_reader(sstable_info_reader_, grpc_client_))) {
+    sstable_info_reader_->cancel();
+    if (OB_FAIL(ObRestoreHelperCtxUtil::close_reader(sstable_info_reader_))) {
       LOG_ERROR("stream finished with error", K(ret));
     }
-  }
-  if (OB_NOT_NULL(sstable_info_context_)) {
-    sstable_info_context_->~ClientContext();
-    sstable_info_context_ = NULL;
-  }
-  if (OB_NOT_NULL(grpc_client_)) {
-    grpc_client_->~ObStandbyGrpcClient();
-    grpc_client_ = NULL;
   }
 }
 
@@ -184,9 +143,7 @@ void ObRestoreHelperSSTableInfoCtx::destroy()
 }
 
 ObRestoreHelperSSTableMacroRangeCtx::ObRestoreHelperSSTableMacroRangeCtx()
-  : grpc_client_(NULL),
-    macro_info_context_(NULL),
-    macro_info_reader_()
+  : macro_info_reader_()
 {
 }
 
@@ -202,29 +159,17 @@ ObRestoreHelperCtxType ObRestoreHelperSSTableMacroRangeCtx::get_type() const
 
 bool ObRestoreHelperSSTableMacroRangeCtx::is_valid() const
 {
-  return OB_NOT_NULL(grpc_client_)
-          && OB_NOT_NULL(macro_info_context_)
-          && macro_info_reader_;
+  return macro_info_reader_ != nullptr;
 }
 
 void ObRestoreHelperSSTableMacroRangeCtx::reset()
 {
   int ret = OB_SUCCESS;
   if (macro_info_reader_) {
-    if (OB_NOT_NULL(macro_info_context_)) {
-      macro_info_context_->TryCancel();
-    }
-    if (OB_FAIL(ObRestoreHelperCtxUtil::close_reader(macro_info_reader_, grpc_client_))) {
+    macro_info_reader_->cancel();
+    if (OB_FAIL(ObRestoreHelperCtxUtil::close_reader(macro_info_reader_))) {
       LOG_ERROR("stream finished with error", K(ret));
     }
-  }
-  if (OB_NOT_NULL(macro_info_context_)) {
-    macro_info_context_->~ClientContext();
-    macro_info_context_ = NULL;
-  }
-  if (OB_NOT_NULL(grpc_client_)) {
-    grpc_client_->~ObStandbyGrpcClient();
-    grpc_client_ = NULL;
   }
 }
 
@@ -235,8 +180,6 @@ void ObRestoreHelperSSTableMacroRangeCtx::destroy()
 
 ObRestoreHelperMacroBlockCtx::ObRestoreHelperMacroBlockCtx()
   : ObIRestoreHelperCtx(),
-    grpc_client_(NULL),
-    macro_block_context_(NULL),
     macro_block_reader_(),
     data_version_(0),
     copy_table_key_(),
@@ -256,29 +199,17 @@ ObRestoreHelperCtxType ObRestoreHelperMacroBlockCtx::get_type() const
 
 bool ObRestoreHelperMacroBlockCtx::is_valid() const
 {
-  return OB_NOT_NULL(grpc_client_)
-            && OB_NOT_NULL(macro_block_context_)
-            && macro_block_reader_;
+  return macro_block_reader_ != nullptr;
 }
 
 void ObRestoreHelperMacroBlockCtx::reset()
 {
   int ret = OB_SUCCESS;
   if (macro_block_reader_) {
-    if (OB_NOT_NULL(macro_block_context_)) {
-      macro_block_context_->TryCancel();
-    }
-    if (OB_FAIL(ObRestoreHelperCtxUtil::close_reader(macro_block_reader_, grpc_client_))) {
+    macro_block_reader_->cancel();
+    if (OB_FAIL(ObRestoreHelperCtxUtil::close_reader(macro_block_reader_))) {
       LOG_ERROR("stream finished with error", K(ret));
     }
-  }
-  if (OB_NOT_NULL(macro_block_context_)) {
-    macro_block_context_->~ClientContext();
-    macro_block_context_ = NULL;
-  }
-  if (OB_NOT_NULL(grpc_client_)) {
-    grpc_client_->~ObStandbyGrpcClient();
-    grpc_client_ = NULL;
   }
   data_buffer_.reset();
 }

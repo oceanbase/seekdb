@@ -26,8 +26,7 @@ namespace sql
 {
 
 ObChunkBlockCompressor::ObChunkBlockCompressor()
-  : compressor_type_(NONE_COMPRESSOR),
-    compressor_(NULL)
+  : compressor_type_(NONE_COMPRESSOR)
 {
 }
 
@@ -39,9 +38,6 @@ ObChunkBlockCompressor::~ObChunkBlockCompressor()
 void ObChunkBlockCompressor::reset()
 {
   compressor_type_ = NONE_COMPRESSOR;
-  if (compressor_ != nullptr) {
-    compressor_ = nullptr;
-  }
 }
 
 int ObChunkBlockCompressor::init(const ObCompressorType comptype)
@@ -50,7 +46,8 @@ int ObChunkBlockCompressor::init(const ObCompressorType comptype)
   reset();
 
   if (comptype == NONE_COMPRESSOR) {
-  } else if (OB_FAIL(ObCompressorPool::get_instance().get_compressor(comptype, compressor_))) {
+  } else if (comptype <= INVALID_COMPRESSOR || comptype >= MAX_COMPRESSOR) {
+    ret = OB_NOT_SUPPORTED;
   } else {
     compressor_type_ = comptype;
   }
@@ -60,15 +57,16 @@ int ObChunkBlockCompressor::init(const ObCompressorType comptype)
 int ObChunkBlockCompressor::calc_need_size(int64_t in_size, int64_t &need_size)
 {
   int ret = OB_SUCCESS;
-  int64_t max_overflow_size = 0;
   need_size = 0;
   if (compressor_type_ == NONE_COMPRESSOR) {
     need_size = in_size;
-  } else if (OB_ISNULL(compressor_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(compressor_->get_max_overflow_size(in_size, max_overflow_size))) {
   } else {
-    need_size = max_overflow_size + in_size;
+    const auto bound = compression::compress_bound(
+        static_cast<uint8_t>(compressor_type_), in_size);
+    if (OB_FAIL(compression_error_code(bound.code))) {
+    } else {
+      need_size = static_cast<int64_t>(bound.size);
+    }
   }
 
   return ret;
@@ -81,11 +79,13 @@ int ObChunkBlockCompressor::compress(const char *in, const int64_t in_size, cons
   if (compressor_type_ == NONE_COMPRESSOR) {
     MEMCPY(out, in, in_size);
     out_size = in_size;
-  } else if (OB_ISNULL(compressor_)) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
-    int64_t comp_size = 0;
-    if (OB_FAIL(compressor_->compress(in, in_size, out, max_comp_size, comp_size))) {
+    const auto result = compression::compress(
+        static_cast<uint8_t>(compressor_type_),
+        reinterpret_cast<const uint8_t *>(in), in_size,
+        reinterpret_cast<uint8_t *>(out), max_comp_size);
+    const int64_t comp_size = static_cast<int64_t>(result.size);
+    if (OB_FAIL(compression_error_code(result.code))) {
     } else if (comp_size >= in_size) {
       MEMCPY(out, in, in_size);
       out_size = in_size;
@@ -105,11 +105,17 @@ int ObChunkBlockCompressor::decompress(const char *in, const int64_t in_size,
   if ((compressor_type_ == NONE_COMPRESSOR) || in_size == uncomp_size) {
     MEMCPY(out, in, in_size);
     out_size = in_size;
-  } else if (OB_ISNULL(compressor_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(compressor_->decompress(in, in_size, out, uncomp_size,
-                                             decomp_size))) {
   } else {
+    const auto result = compression::decompress(
+        static_cast<uint8_t>(compressor_type_),
+        reinterpret_cast<const uint8_t *>(in), in_size,
+        reinterpret_cast<uint8_t *>(out), uncomp_size);
+    if (OB_FAIL(compression_error_code(result.code))) {
+    } else {
+      decomp_size = static_cast<int64_t>(result.size);
+    }
+  }
+  if (OB_SUCC(ret) && !((compressor_type_ == NONE_COMPRESSOR) || in_size == uncomp_size)) {
     out_size = decomp_size;
   }
   return ret;

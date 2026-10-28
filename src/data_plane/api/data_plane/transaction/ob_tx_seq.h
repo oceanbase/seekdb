@@ -18,6 +18,7 @@
 #define OCEANBASE_DATA_PLANE_API_TRANSACTION_OB_TX_SEQ_H_
 
 #include "lib/hash_func/murmur_hash.h"
+#include <inttypes.h>
 #include "lib/ob_define.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"
@@ -160,7 +161,7 @@ inline int64_t ObTxSEQ::to_string(char *buf, const int64_t buf_len) const
     J_KV("branch", get_branch(), "seq", get_seq());
     J_OBJ_END();
   } else {
-    BUF_PRINTF("%lu", raw_val_);
+    BUF_PRINTF("%" PRIu64 "", raw_val_);
   }
   return pos;
 }
