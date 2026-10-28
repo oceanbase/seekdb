@@ -15,13 +15,9 @@
  */
 
 #include "alloc_func.h"
-#include "lib/alloc/ob_malloc_allocator.h"
-#include "lib/utility/ob_tracepoint.h"
-
 #include <atomic>
 
 using namespace oceanbase;
-using namespace oceanbase::common;
 using namespace oceanbase::lib;
 
 namespace oceanbase
@@ -42,110 +38,6 @@ void set_memory_budget(int64_t bytes)
 int64_t get_memory_budget()
 {
   return g_memory_budget.load(std::memory_order_acquire);
-}
-
-int64_t get_allocator_memory_hold()
-{
-  int64_t bytes = 0;
-  ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
-  if (!OB_ISNULL(allocator)) {
-    bytes = allocator->get_total_hold();
-  }
-  return bytes;
-}
-
-int64_t get_allocator_memory_hold(const uint64_t ctx_id)
-{
-  int64_t bytes = 0;
-  ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
-  if (!OB_ISNULL(allocator)) {
-    bytes = allocator->get_ctx_hold(ctx_id);
-  }
-  return bytes;
-}
-
-int64_t get_allocator_cache_hold()
-{
-  int64_t bytes = 0;
-  ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
-  if (!OB_ISNULL(allocator)) {
-    bytes = allocator->get_allocator_cache_hold();
-  }
-  return bytes;
-}
-
-void get_label_memory(
-  ObLabel &label,
-  common::ObLabelItem &item)
-{
-  ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
-  if (!OB_ISNULL(allocator)) {
-    allocator->get_label_usage(label, item);
-  }
-}
-
-void ob_set_reserved_memory(const int64_t bytes)
-{
-  ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
-  if (!OB_ISNULL(allocator)) {
-    allocator->set_reserved(bytes);
-  }
-}
-
-int64_t ob_get_reserved_memory()
-{
-  int64_t bytes = 0;
-  ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
-  if (!OB_ISNULL(allocator)) {
-    bytes = allocator->get_reserved();
-  }
-  return bytes;
-}
-
-int set_ctx_limit(uint64_t ctx_id, const int64_t limit)
-{
-  int ret = OB_SUCCESS;
-  ObMallocAllocator *alloc = ObMallocAllocator::get_instance();
-  if (!OB_ISNULL(alloc)) {
-    auto ctx_allocator = alloc->get_ctx_allocator(ctx_id);
-    if (OB_NOT_NULL(ctx_allocator)) {
-      if (OB_FAIL(ctx_allocator->set_limit(limit))) {
-      }
-    } else {
-      ret = OB_INVALID_ARGUMENT;
-    }
-  } else {
-    ret = OB_NOT_INIT;
-  }
-  return ret;
-}
-
-bool errsim_alloc(const ObMemAttr &attr)
-{
-  int en4_val = (int)EventTable::EN_4;
-  bool bret = OB_SUCCESS != en4_val;
-  if (bret) {
-    AllocFailedCtx &afc = g_alloc_failed_ctx();
-    afc.reason_ = AllocFailedReason::ERRSIM_INJECTION;
-  }
-  return bret;
-}
-
-int set_req_chunkmgr_parallel(uint64_t ctx_id, int32_t parallel)
-{
-  int ret = OB_SUCCESS;
-  ObMallocAllocator *ma = ObMallocAllocator::get_instance();
-  if (!OB_ISNULL(ma)) {
-    ObCtxAllocatorGuard ctx_allocator = ma->get_ctx_allocator(ctx_id);
-    if (OB_NOT_NULL(ctx_allocator)) {
-      ctx_allocator->set_req_chunkmgr_parallel(parallel);
-    } else {
-      ret = OB_INVALID_ARGUMENT;
-    }
-  } else {
-    ret = OB_NOT_INIT;
-  }
-  return ret;
 }
 
 } // end of namespace lib

@@ -20,7 +20,6 @@
 #include "observer/ob_server_options.h"
 #include "common/ob_timeout_ctx.h"
 #include "lib/oblog/ob_warning_buffer.h"
-#include "lib/resource/achunk_mgr.h"
 #include "lib/worker.h"
 #include "rpc/obmysql/ob_sql_nio_server.h"
 #include <atomic>
@@ -126,8 +125,6 @@ int main(int argc, char **argv)
 #else
   if (persistent) return 1;
 #endif
-  lib::AChunkMgr::instance().set_limit(static_cast<int64_t>(budget[1]) * 1024 * 1024);
-  lib::AChunkMgr::instance().set_hard_limit(static_cast<int64_t>(budget[1]) * 1024 * 1024);
   // Storage is mounted at /storage. On OPFS that is the origin's root, so the
   // engine keeps its files in the seekdb directory (OPFS_DIRECTORY in
   // runtime-host.mjs), the only one that clearing persistent storage removes.
@@ -142,7 +139,7 @@ int main(int argc, char **argv)
     "memstore_memory_limit", "vector_memory_limit", "cpu_count", "datafile_size", "log_disk_size"};
   char values[8][16];
   for (int i = 0; i < 8; ++i) {
-    if (i == 1) continue; // Allocator limit is applied above, not a server option.
+    if (i == 1) continue; // The system allocator has no separate allocator limit.
     std::snprintf(values[i], sizeof(values[i]), i == 5 ? "%u" : "%uM", budget[i]);
     if (options.parameters_.push_back({ObString::make_string(names[i]), ObString::make_string(values[i])}) != OB_SUCCESS) return 1;
   }

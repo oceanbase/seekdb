@@ -21,7 +21,7 @@
 #include "parser/ob_pl_parser.h"
 #include "sql/ob_spi.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
-#include "sql/parser/ob_item_type.h"
+#include "query/parser/ob_item_type.h"
 
 #ifndef LOG_IN_CHECK_MODE
 #define LOG_IN_CHECK_MODE(fmt, args...) \

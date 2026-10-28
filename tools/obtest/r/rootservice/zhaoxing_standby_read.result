@@ -1,5 +1,5 @@
 ob1=OBI(cluster=1:1, proxy_num=0);
-ob1.z1.obs0.set extra_config = "cpu_count=16,memory_budget='20G',stack_size='1536K',cache_wash_threshold='1G',_ob_minor_merge_schedule_interval='3s'";
+ob1.z1.obs0.set extra_config = "cpu_count=16,memory_budget='20G',stack_size='1536K',_ob_minor_merge_schedule_interval='3s'";
 ob1.reboot;
 ob1.mysql alter resource unit sys_unit_config memory_size='2G';
 use oceanbase;

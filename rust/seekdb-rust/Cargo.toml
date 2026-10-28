@@ -17,3 +17,4 @@ logger = { path = "../logger" }
 config = { path = "../config" }
 local = { path = "../local" }
 in-process = { path = "../in-process" }
+uuid-generator = { path = "../uuid-generator" }

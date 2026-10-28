@@ -29,8 +29,6 @@ int ObKVMemBlockList::init()
   if (inited_) {
     ret = OB_INIT_TWICE;
     COMMON_LOG(WARN, "init twice", K(ret));
-  } else if (OB_FAIL(ObResourceMgr::get_instance().get_handle(
-      resource_mgr_))) {
   } else {
     head_.reset();
     head_.prev_ = &head_;

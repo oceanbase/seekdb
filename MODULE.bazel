@@ -74,7 +74,7 @@ cargo_sources_repository = use_repo_rule("//bazel:cargo_toolchain.bzl", "cargo_s
 _CARGO_MANIFESTS = [
     "//rust:Cargo.toml", "//rust:config/Cargo.toml", "//rust:kv/Cargo.toml",
     "//rust:local/Cargo.toml", "//rust:sql-nio/Cargo.toml", "//rust:logger/Cargo.toml",
-    "//rust:in-process/Cargo.toml", "//rust:seekdb-rust/Cargo.toml", "//deps/external:Cargo.toml",
+    "//rust:uuid-generator/Cargo.toml", "//rust:in-process/Cargo.toml", "//rust:seekdb-rust/Cargo.toml", "//deps/external:Cargo.toml",
 ]
 _CARGO_LOCKS = ["//rust:Cargo.lock", "//deps/external:Cargo.lock"]
 cargo_sources_repository(name = "cargo_native_sources", kind = "native", manifests = _CARGO_MANIFESTS, locks = _CARGO_LOCKS)

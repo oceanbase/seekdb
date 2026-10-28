@@ -220,6 +220,7 @@ _SQL_RUNTIME_WITHOUT_PASS_UNITY_GROUPS = singleton_unity_groups(
 )
 
 _SQL_RUNTIME_IMPLEMENTATION_DEPS = [
+    "//rust:uuid_generator_headers",
     "//rust:config_headers",
     ":_textual_sql_map_inputs",
     ":sql_runtime_interface",

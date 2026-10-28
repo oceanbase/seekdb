@@ -44,7 +44,6 @@ _OBSERVER_NATIVE_DEPS = [
     "//src/data_plane:virtual_tx_data",
     "//src/logservice:logservice",
     "//src/share:log_protocol",
-    "//src/objit:objit_api_interface",
     "//src/pl:pl_interface",
     "//src/pl:pl_internal_headers",
     "//src/pl:_generated_pl_parser_headers",
@@ -401,7 +400,8 @@ _TAIL_LINK_DEPS = select({
 _ORDERED_LINK_FILES = [
     "//rust:archive",
 ] + select({
-    "//bazel:sanity_enabled": ["//deps/external:jemalloc_archive"],
+    "@platforms//os:linux": ["//deps/external:jemalloc_archive"],
+    "@platforms//os:macos": ["//deps/external:jemalloc_archive"],
     "//conditions:default": [],
 }) + select({
     "@platforms//os:windows": [],

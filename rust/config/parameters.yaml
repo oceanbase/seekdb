@@ -303,22 +303,6 @@
   edit_level: DYNAMIC_EFFECTIVE
   description: "specifies whether use async log for observer.log, elec.log and rs.log"
 
-- name: cache_wash_threshold
-  type: CAP
-  default: "64M"
-  range: "[0B,]"
-  section: OBSERVER
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "size of remaining memory at which cache eviction will be triggered. Range: [0,+∞)"
-
-- name: memory_chunk_cache_size
-  type: CAP
-  default: "0M"
-  range: "[0M,]"
-  section: OBSERVER
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "the maximum size of memory cached by memory chunk cache. Range: [0M,], 0 stands for adaptive"
-
 - name: enable_sql_operator_dump
   type: BOOL
   default: "True"
@@ -371,22 +355,6 @@
   section: OBSERVER
   edit_level: DYNAMIC_EFFECTIVE
   description: "True means that the split + batch optimization for inserting multiple rows of the insert values ​​statement can be done"
-
-- name: _min_malloc_sample_interval
-  type: INT
-  default: "16"
-  range: "[1, 10000]"
-  section: OBSERVER
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "the min malloc times between two samples, which is not more than _max_malloc_sample_interval. 10000 means not to sample any malloc, Range: [1, 10000]"
-
-- name: _max_malloc_sample_interval
-  type: INT
-  default: "256"
-  range: "[1, 10000]"
-  section: OBSERVER
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "the max malloc times between two samples, which is not less than _min_malloc_sample_interval. 1 means to sample all malloc, Range: [1, 10000]"
 
 - name: _enable_values_table_folding
   type: BOOL
@@ -497,14 +465,6 @@
   section: RUNTIME
   edit_level: DYNAMIC_EFFECTIVE
   description: "the row number processed by vectorized sql engine within one batch. Range: [0, 65535]"
-
-- name: _ctx_memory_limit
-  type: STR_WITH_CHECKER
-  default: ""
-  section: RUNTIME
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "specifies server runtime context memory limits."
-  checker: "common::ObCtxMemoryLimitChecker"
 
 - name: _enable_convert_real_to_decimal
   type: BOOL
@@ -1953,13 +1913,6 @@
   section: OBSERVER
   edit_level: DYNAMIC_EFFECTIVE
   description: "Specifies the I/O isolation mode for Commit Log (clog). Values: 1 - Non-isolation mode (disable I/O isolation), 2 - Full isolation mode (enable I/O isolation). Example: 1=Off, 2=On"
-
-- name: _enable_memleak_light_backtrace
-  type: BOOL
-  default: "True"
-  section: OBSERVER
-  edit_level: DYNAMIC_EFFECTIVE
-  description: "specifies whether allow memleak to get the backtrace of malloc by light_backtrace"
 
 - name: _enable_dbms_job_package
   type: BOOL

@@ -18,3 +18,4 @@ pub use in_process;
 pub use local as local_storage;
 pub use logger::*;
 pub use sql_nio as network;
+pub use uuid_generator;
