@@ -327,6 +327,7 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"having", HAVING},
   {"read_csv", READ_CSV},
   {"read_json", READ_JSON},
+  {"read_ndjson", READ_JSON},
   {"read_parquet", READ_PARQUET},
   {"hash", HASH},
   {"heap", HEAP},
