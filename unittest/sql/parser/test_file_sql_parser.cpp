@@ -32,7 +32,6 @@ namespace
 class ParserTest : public ::testing::Test
 {
 protected:
-  void SetUp() override { allocator_.init(); }
   void TearDown() override { allocator_.reset(); }
 
   // Returns the statement root, or nullptr when the statement does not parse.
