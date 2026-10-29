@@ -381,23 +381,44 @@ int ObFTRangeDict::match_with_hit(const ObString &single_word,
 int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict *&dict) const
 {
   int ret = OB_SUCCESS;
-  bool found = false;
-  for (int i = 0; OB_SUCC(ret) && !found && i < range_dicts_.size(); ++i) {
-    if (ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                          range_dicts_[i].start_.get_word(),
-                          single_word)
-            <= 0
-        && ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                             range_dicts_[i].end_.get_word(),
-                             single_word)
-               >= 0) {
-      dict = range_dicts_[i].dict_;
-      found = true;
+  const int64_t range_cnt = range_dicts_.size();
+  if (is_range_sorted_ && range_cnt > 0) {
+    // The ranges are ordered and disjoint, so the candidate is the last range
+    // whose start word is not greater than the searched word. Binary search
+    // replaces the linear scan over all the ranges, which was called once per
+    // character of every tokenized document.
+    int64_t lo = 0;
+    int64_t hi = range_cnt - 1;
+    int64_t hit_idx = -1;
+    while (lo <= hi) {
+      const int64_t mid = lo + (hi - lo) / 2;
+      if (compare_utf8mb4_bin(range_dicts_[mid].start_.get_word(), single_word) <= 0) {
+        hit_idx = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
     }
-  }
-  if (!found) {
-    // not found, dis match
-    ret = OB_ENTRY_NOT_EXIST;
+    if (hit_idx >= 0
+        && compare_utf8mb4_bin(range_dicts_[hit_idx].end_.get_word(), single_word) >= 0) {
+      dict = range_dicts_[hit_idx].dict_;
+    } else {
+      // not found, dis match
+      ret = OB_ENTRY_NOT_EXIST;
+    }
+  } else {
+    bool found = false;
+    for (int64_t i = 0; OB_SUCC(ret) && !found && i < range_cnt; ++i) {
+      if (compare_utf8mb4_bin(range_dicts_[i].start_.get_word(), single_word) <= 0
+          && compare_utf8mb4_bin(range_dicts_[i].end_.get_word(), single_word) >= 0) {
+        dict = range_dicts_[i].dict_;
+        found = true;
+      }
+    }
+    if (!found) {
+      // not found, dis match
+      ret = OB_ENTRY_NOT_EXIST;
+    }
   }
   return ret;
 }
@@ -419,6 +440,21 @@ int ObFTRangeDict::build_dict_from_cache(const ObFTCacheRangeContainer &range_co
       range.end_ = dat->end_word_;
       range.dict_ = dict;
       if (OB_FAIL(range_dicts_.push_back(range))) {
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    // Check that the ranges are ordered and disjoint, only then the binary
+    // search of find_first_char_range() can be used.
+    is_range_sorted_ = true;
+    for (int64_t i = 1; OB_SUCC(ret) && i < range_dicts_.size(); ++i) {
+      const ObString &prev_start = range_dicts_[i - 1].start_.get_word();
+      const ObString &prev_end = range_dicts_[i - 1].end_.get_word();
+      const ObString &cur_start = range_dicts_[i].start_.get_word();
+      if (compare_utf8mb4_bin(prev_start, cur_start) > 0
+          || compare_utf8mb4_bin(prev_end, cur_start) >= 0) {
+        is_range_sorted_ = false;
+        break;
       }
     }
   }

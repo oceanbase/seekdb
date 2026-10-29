@@ -35,6 +35,7 @@ public:
 public:
   explicit ObBEngFTParser(common::ObIAllocator &allocator)
     : allocator_(allocator),
+      token_allocator_(nullptr),
       analysis_ctx_(),
       english_analyzer_(),
       doc_(),
@@ -58,6 +59,11 @@ private:
       share::ObITokenStream *&token_stream);
 private:
   common::ObIAllocator &allocator_;
+  // The token copies are handed to the caller and are referenced by the
+  // posting lists of the current document, so they are allocated from the
+  // caller's allocator (the same lifetime the upstream implementation used)
+  // instead of the parser arena, which is recycled between documents.
+  common::ObIAllocator *token_allocator_;
   share::ObTextAnalysisCtx analysis_ctx_;
   share::ObEnglishTextAnalyzer english_analyzer_;
   common::ObDatum doc_;

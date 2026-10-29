@@ -1,0 +1,56 @@
+drop database if exists fts_filter_score;
+create database fts_filter_score;
+use fts_filter_score;
+create table t_match_filter (
+id int primary key,
+body varchar(512),
+fulltext index ft_body(body) with parser beng
+);
+insert into t_match_filter values
+(1, 'database performance audit'),
+(2, 'database reliability'),
+(3, 'full text search tokenizer'),
+(4, 'audit logging and performance'),
+(5, 'unrelated content');
+select count(*) as direct_filter from t_match_filter where match(body) against('database');
+direct_filter
+2
+select count(*) as explicit_boolean from t_match_filter where match(body) against('performance') > 0;
+explicit_boolean
+2
+select count(*) as multi_token from t_match_filter where match(body) against('database performance');
+multi_token
+3
+select count(*) as no_hit from t_match_filter where match(body) against('missing');
+no_hit
+0
+select count(*) as empty_query from t_match_filter where match(body) against('');
+empty_query
+0
+select id, round(match(body) against('database'), 6) as score
+from t_match_filter where match(body) against('database') order by id;
+id	score
+1	0.471490
+2	0.500161
+select id, round(match(body) against('database performance'), 6) as score
+from t_match_filter where match(body) against('database performance') order by score desc, id;
+id	score
+1	0.942980
+2	0.500161
+4	0.445927
+select round(max(match(body) against('database')), 6) as max_score
+from t_match_filter where match(body) against('database');
+max_score
+0.500161
+select count(*) as boolean_mode from t_match_filter where match(body) against('+database -reliability' in boolean mode);
+boolean_mode
+1
+select id from t_match_filter where match(body) against('database') order by id limit 1;
+id
+1
+select count(*) as limit_filter from (
+select id from t_match_filter where match(body) against('database performance') limit 3
+) tmp;
+limit_filter
+3
+drop database fts_filter_score;

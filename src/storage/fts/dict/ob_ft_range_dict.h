@@ -38,7 +38,7 @@ public:
   ObFTRangeDict(ObIAllocator &alloc,
                 ObFTCacheRangeContainer *range_container,
                 const ObFTDictDesc &desc)
-      : is_inited_(false), desc_(desc), range_alloc_(lib::ObMemAttr("Range Dict")),
+      : is_inited_(false), is_range_sorted_(false), desc_(desc), range_alloc_(lib::ObMemAttr("Range Dict")),
         range_dicts_(&range_alloc_), range_container_(range_container)
   {
   }
@@ -99,9 +99,25 @@ private:
 
   int find_first_char_range(const ObString &single_word, ObIFTDict *&dict) const;
 
+  // The range boundaries are compared with the utf8mb4_bin collation, whose
+  // strnncoll() is ob_strnncoll_mb_bin(): it compares the raw bytes with
+  // memcmp() and falls back to the length difference. Comparing the bytes
+  // inline gives the same result without the generic charset dispatch, which
+  // dominates the per-character lookup of the IK tokenizer.
+  static inline int compare_utf8mb4_bin(const ObString &left, const ObString &right)
+  {
+    const int64_t min_len = left.length() < right.length() ? left.length() : right.length();
+    int cmp = 0;
+    if (min_len > 0) {
+      cmp = memcmp(left.ptr(), right.ptr(), min_len);
+    }
+    return (0 != cmp) ? cmp : static_cast<int>(left.length() - right.length());
+  }
+
 private:
   static constexpr int DEFAULT_KEY_PER_RANGE = 50000; // by estimated
   bool is_inited_;
+  bool is_range_sorted_; // the ranges are ordered and disjoint, binary search applies
   ObFTDictDesc desc_;
   ObArenaAllocator range_alloc_;
   ObVector<ObFTRange, ObArenaAllocator> range_dicts_;

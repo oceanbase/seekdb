@@ -364,6 +364,11 @@ inline int ObFTCharUtil::check_cn_number(ObCollationType coll_type,
                                          bool &is_cn_number)
 {
   int ret = OB_SUCCESS;
+  // CJK numerals live in multibyte blocks only; ASCII bytes are never CN numbers
+  if (1 == char_len && static_cast<unsigned char>(input[0]) < 0x80) {
+    is_cn_number = false;
+    return OB_SUCCESS;
+  }
   ObCharsetType cs_type = ObCharset::charset_type_by_coll(coll_type);
 
   switch (cs_type) {
@@ -384,6 +389,11 @@ inline int ObFTCharUtil::check_num_connector(ObCollationType coll_type,
                                              bool &is_connector)
 {
   int ret = OB_SUCCESS;
+  // ASCII connectors per check_num_connector's unicode table; skip charset dispatch
+  if (1 == char_len && static_cast<unsigned char>(input[0]) < 0x80) {
+    is_connector = (',' == input[0] || '.' == input[0]);
+    return OB_SUCCESS;
+  }
   ObCharsetType cs_type = ObCharset::charset_type_by_coll(coll_type);
 
   switch (cs_type) {
@@ -404,6 +414,26 @@ inline int ObFTCharUtil::check_letter_connector(ObCollationType coll_type,
                                                 bool &is_connector)
 {
   int ret = OB_SUCCESS;
+  // ASCII connectors per check_letter_connector's unicode table; skip charset dispatch
+  if (1 == char_len && static_cast<unsigned char>(input[0]) < 0x80) {
+    switch (input[0]) {
+    case '#':
+    case '&':
+    case '+':
+    case '-':
+    case '.':
+    case '@':
+    case '_': {
+      is_connector = true;
+      break;
+    }
+    default: {
+      is_connector = false;
+      break;
+    }
+    }
+    return OB_SUCCESS;
+  }
   ObCharsetType cs_type = ObCharset::charset_type_by_coll(coll_type);
 
   switch (cs_type) {
@@ -476,6 +506,20 @@ inline int ObFTCharUtil::classify_first_char(ObCollationType coll_type,
                                              CharType &type)
 {
   int ret = OB_SUCCESS;
+  // ASCII bytes are single characters in every supported charset and decode
+  // to themselves; their classification below matches the generic unicode
+  // block checks without the per-character charset dispatch.
+  if (1 == char_len && static_cast<unsigned char>(input[0]) < 0x80) {
+    const unsigned char c = static_cast<unsigned char>(input[0]);
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
+      type = CharType::ENGLISH_LETTER;
+    } else if (c >= '0' && c <= '9') {
+      type = CharType::ARABIC_LETTER;
+    } else {
+      type = CharType::USELESS;
+    }
+    return OB_SUCCESS;
+  }
   ObCharsetType cs_type = ObCharset::charset_type_by_coll(coll_type);
 
   switch (cs_type) {
