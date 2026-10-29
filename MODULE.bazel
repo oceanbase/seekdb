@@ -48,6 +48,13 @@ crate.annotation(
     build_script_env = {"NUM_JOBS": "4"},
 )
 crate.annotation(
+    crate = "fancy-regex",
+    version = "0.20.0",
+    repositories = ["rust_crates"],
+    patches = ["//bazel:fancy-regex-icu-octal.diff"],
+    patch_args = ["-p1"],
+)
+crate.annotation(
     crate = "spdlog-rs",
     version = "0.5.3",
     repositories = ["rust_crates"],
