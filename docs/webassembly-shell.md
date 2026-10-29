@@ -115,10 +115,11 @@ checks for an existing OPFS database and reopens it, or starts in Memory when
 none exists. OPFS requires both OPFS and Web Locks support in the browser.
 
 Use the storage selector to choose **Temporary (Memory)** or **Persistent
-(OPFS)**. After confirmation, switching discards a temporary database right away
-but waits for a persistent one to close normally, then reloads the page with the
-selected mode. Switching to Memory keeps the stored OPFS database, and switching
-back reopens it. Terminal output,
+(OPFS)**. After confirmation, switching terminates the current database without
+waiting for native graceful shutdown, as reloading or closing the tab does, and
+reloads the page with the selected mode. Switching to Memory keeps the stored
+OPFS database; switching back reopens it and recovers committed data from the
+redo log. Terminal output,
 command history, and in-memory data are cleared by the reload. SQL input stays
 disabled until the new instance is ready.
 
@@ -267,6 +268,10 @@ entries of the origin alone. No database server, TCP connection, or SQL API
 service is required.
 
 `Database.close()` waits for native shutdown and keeps OPFS data.
+`Database.terminate()` rejects pending requests and asks the browser to terminate
+the runtime Worker and its nested pthread Workers without native shutdown. It
+keeps OPFS files; the next open recovers committed data from the redo log, as
+after a page reload. Switching storage modes uses it.
 `Database.discard()` rejects pending requests and asks the browser to terminate
 the runtime Worker and its nested pthread Workers. For OPFS, it holds the Web Lock while a separate
 cleanup Worker waits for file handles to be released and removes the stored

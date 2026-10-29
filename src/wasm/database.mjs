@@ -273,4 +273,9 @@ export class Database {
     if (!this.#disposalPending && !this.#cleared) this.#disposal = undefined;
     return this.#dispose();
   }
+
+  terminate() {
+    this.#fail(new Error('Database was terminated'));
+    return this.#dispose();
+  }
 }

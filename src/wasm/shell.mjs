@@ -737,7 +737,7 @@ async function switchStorage(nextStorage) {
   database = undefined;
   session = undefined;
   try {
-    await (persistentStorage() ? previousDatabase?.close() : previousDatabase?.discard());
+    await previousDatabase?.terminate();
     const url = new URL(location.href);
     url.searchParams.set('storage', nextStorage);
     trackEvent('shell_storage_mode_change', {from: storage, to: nextStorage});
