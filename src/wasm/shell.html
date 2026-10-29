@@ -31,7 +31,8 @@ limitations under the License.
   <link rel="modulepreload" href="./database-worker.mjs">
   <link rel="modulepreload" href="./worker-server.mjs">
   <link rel="modulepreload" href="./seekdb_wasm_database.mjs">
-  <link rel="preload" href="./seekdb_wasm_database.wasm" as="fetch" crossorigin>
+  <!-- shell.mjs starts the WASM fetch and streaming compilation early.
+       A separate fetch preload can download the same WASM twice in Safari. -->
   <link rel="stylesheet" href="./shell.css">
   <script type="module" src="./shell.mjs"></script>
 </head>
