@@ -1,0 +1,94 @@
+# AI_EMBED: real cross-row requests, row mapping, filtering and batch failures.
+connection default;
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py start
+--disable_query_log
+--disable_result_log
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('embed_batch_ep');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('embed_batch');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('embed_batch', '{"type":"dense_embedding","model_name":"regression-embed"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('embed_batch_ep', '{"ai_model_name":"embed_batch","url":"http://127.0.0.1:18082/openai/shuffle","access_key":"test","provider":"openai"}');
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('embed_batch_alt_ep');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('embed_batch_alt');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('embed_batch_alt', '{"type":"dense_embedding","model_name":"regression-alt"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('embed_batch_alt_ep', '{"ai_model_name":"embed_batch_alt","url":"http://127.0.0.1:18082/openai/shuffle","access_key":"test","provider":"openai"}');
+drop table if exists embed_batch_rows;
+create table embed_batch_rows(id int primary key, content text, d int);
+insert into embed_batch_rows values (1,repeat('x',1),3),(2,repeat('x',2),2),(3,repeat('x',3),3),(4,repeat('x',4),2),(5,null,3),(6,repeat('x',6),2),(7,repeat('x',7),3),(8,repeat('x',8),2),(9,repeat('x',9),3),(10,repeat('x',10),2),(11,repeat('x',11),3),(12,repeat('x',12),2),(13,repeat('x',13),3),(14,repeat('x',14),2),(15,repeat('x',15),3),(16,repeat('x',16),2),(17,null,3),(18,repeat('x',18),2),(19,repeat('x',19),3),(20,repeat('x',20),2),(21,repeat('x',21),3),(22,repeat('x',22),2),(23,repeat('x',23),3),(24,repeat('x',24),2),(25,repeat('x',25),3),(26,repeat('x',26),2),(27,repeat('x',27),3),(28,repeat('x',28),2),(29,repeat('x',29),3),(30,repeat('x',30),2),(31,repeat('x',31),3),(32,repeat('x',32),2),(33,repeat('x',33),3),(34,repeat('x',34),2),(35,repeat('x',35),3),(36,repeat('x',36),2),(37,repeat('x',37),3),(38,repeat('x',38),2),(39,repeat('x',39),3),(40,repeat('x',40),2),(41,repeat('x',41),3),(42,repeat('x',42),2),(43,repeat('x',43),3),(44,repeat('x',44),2),(45,repeat('x',45),3);
+--enable_result_log
+--enable_query_log
+select /*+ OPT_PARAM('rowsets_max_rows',64) */ id, json_extract(ai_embed('embed_batch',content,d),'$[0]') as original_row
+  from embed_batch_rows order by id;
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py assert-batch 43
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py assert-requests 4
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py clear
+select /*+ OPT_PARAM('rowsets_max_rows',16) */ id, json_length(ai_embed('embed_batch',content,d)) as requested_dimension
+  from embed_batch_rows order by id;
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py assert-batch 43
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py assert-requests 6
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py clear
+select id, json_extract(ai_embed('embed_batch',content,2),'$[0]') as filtered_row
+  from embed_batch_rows where id in (1,3,7) order by id;
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py assert-batch 3 1,3,7
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py clear
+select id, json_extract(ai_embed('embed_batch',content,2),'$[0]') as limited_row
+  from embed_batch_rows order by id limit 3 offset 1;
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py assert-batch 3 2,3,4
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py clear
+select id, json_extract(ai_embed('embed_batch',content,2),'$[0]') as sorted_limited_row
+  from embed_batch_rows order by d,id desc limit 3;
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py assert-batch 3 44,42,40
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py clear
+select id, ai_embed('embed_batch',content,d) as null_result
+  from embed_batch_rows where content is null order by id;
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py assert-empty
+select id, json_extract(case when mod(id,2)=0 then ai_embed('embed_batch',content,2) else null end,'$[0]') as conditional_row
+  from embed_batch_rows where id<=8 order by id;
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py assert-batch 4 2,4,6,8
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py clear
+select id, json_extract(ai_embed(case when mod(id,2)=0 then 'embed_batch_alt' else 'embed_batch' end,content,2),'$[0]') as grouped_model_row
+  from embed_batch_rows where id<=4 order by id;
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py assert-batch 4 1,2,3,4
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py assert-models
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py clear
+select /*+ OPT_PARAM('rowsets_max_rows',0) */ id, json_extract(ai_embed('embed_batch',content,2),'$[0]') as scalar_row
+  from embed_batch_rows where id in (1,3,7) order by id;
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py assert-scalar 3
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py clear
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_batch_ep', '{"url":"http://127.0.0.1:18082/dashscope/shuffle","provider":"aliyun-dashscope"}');
+--enable_query_log
+select id, json_extract(ai_embed('embed_batch',content,2),'$[0]') as dashscope_row
+  from embed_batch_rows order by id;
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py assert-batch 43
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py clear
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_batch_ep', '{"url":"http://127.0.0.1:18082/openai/shuffle","provider":"openai"}');
+--enable_query_log
+--error 1210
+select ai_embed('embed_batch',content,case when id=2 then 0 else 2 end)
+  from embed_batch_rows where id <= 3 order by id;
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py assert-empty
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_batch_ep', '{"url":"http://127.0.0.1:18082/openai/fail-late"}');
+--enable_query_log
+--error 4070
+select /*+ OPT_PARAM('rowsets_max_rows',64) */ id, json_length(ai_embed('embed_batch',content,2)) as late_failure
+  from embed_batch_rows order by id;
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_batch_ep', '{"url":"http://127.0.0.1:18082/openai/shuffle"}');
+--enable_query_log
+select id, json_extract(ai_embed('embed_batch',content,2),'$[0]') as recovered_row
+  from embed_batch_rows where id in (1,3,7) order by id;
+select count(*) as ordinary_sql from embed_batch_rows;
+--disable_query_log
+drop table embed_batch_rows;
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('embed_batch_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('embed_batch');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('embed_batch_alt_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('embed_batch_alt');
+--enable_query_log
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py stop

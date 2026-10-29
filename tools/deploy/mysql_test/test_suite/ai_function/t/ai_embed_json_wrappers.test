@@ -1,0 +1,15 @@
+# Regression coverage for vectorized JSON document evaluation used by AI_EMBED.
+connection default;
+create table embed_json_rows(id int primary key, doc longtext, path varchar(32));
+insert into embed_json_rows values(1,'[10,20]','$[0]'),(2,null,'$[0]'),(3,'{"x":[1,2]}','$.x'),(4,'[]',null);
+select id,json_length(doc),json_extract(doc,'$[0]') from embed_json_rows order by id;
+select id,json_extract(doc,path) from embed_json_rows order by id;
+select id,json_length(doc,path) from embed_json_rows where path is not null order by id;
+select id,json_extract(doc,null) from embed_json_rows order by id;
+select id,json_length(doc) from embed_json_rows where id=1;
+select id,json_extract(doc,'$[0]') from embed_json_rows order by id desc limit 2;
+--error 3140
+select json_length('not json');
+--error 3143
+select json_extract('[1]','bad path');
+drop table embed_json_rows;

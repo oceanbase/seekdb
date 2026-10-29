@@ -45,7 +45,7 @@ def serve():
                 attempt = attempts[self.path]
                 with EVENTS.open('a') as stream:
                     stream.write(json.dumps({'path': self.path, 'texts': texts,
-                                             'dimension': dimension}) + '\n')
+                                             'dimension': dimension, 'model': body['model']}) + '\n')
             data = [{'text_index' if dashscope else 'index': i,
                      'embedding': [float(len(text.encode('utf-8')))]
                                   + [j + 0.25 for j in range(1, dimension)]}
@@ -82,7 +82,7 @@ def serve():
                 status, response = 400, {'error': 'injected failure'}
             elif mode == 'retry' and attempt == 1:
                 status, response = 503, {'error': 'retry once'}
-            elif mode == 'fail-late' and any(text == 'row-40' for text in texts):
+            elif mode == 'fail-late' and any(text == 'x' * 40 for text in texts):
                 response = {'data': []}
             raw = b'{"data": [' if mode == 'malformed' else json.dumps(response).encode()
             self.send_response(status)
@@ -129,6 +129,17 @@ def main():
         EVENTS.write_text('')
     elif command == 'assert-empty':
         assert not events(), events()
+    elif command == 'assert-scalar':
+        rows = events()
+        assert len(rows) == int(sys.argv[2]) and all(len(r['texts']) == 1 for r in rows), rows
+    elif command == 'assert-models':
+        rows = events()
+        assert {r['model'] for r in rows} == {'regression-embed', 'regression-alt'}, rows
+        for row in rows:
+            assert all((len(t) % 2 == 0) == (row['model'] == 'regression-alt')
+                       for t in row['texts']), row
+    elif command == 'assert-requests':
+        assert len(events()) == int(sys.argv[2]), events()
     elif command == 'assert-batch':
         # Check work at the HTTP boundary, independently of SQL output checks.
         rows = events()
@@ -140,7 +151,7 @@ def main():
         if expected > 1:
             assert any(len(row['texts']) > 1 for row in rows), rows
         if len(sys.argv) > 3:
-            assert sorted(texts) == sorted('row-' + str(i) for i in
+            assert sorted(texts) == sorted('x' * i for i in
                                            map(int, sys.argv[3].split(','))), texts
 
 
