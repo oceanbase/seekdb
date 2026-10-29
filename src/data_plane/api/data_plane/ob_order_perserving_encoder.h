@@ -115,6 +115,19 @@ public:
                                 int64_t &to_len);
 
   static int encode_tails(unsigned char *to, int64_t max_buf_len, int64_t &to_len, bool is_mem, common::ObCollationType cs,  bool with_empty_str);
+  inline static bool can_encode_varlen_collation(common::ObCollationType cs)
+  {
+    return cs == CS_TYPE_COLLATION_FREE || cs == CS_TYPE_BINARY || cs == CS_TYPE_UTF8MB4_BIN
+        || cs == CS_TYPE_GBK_BIN || cs == CS_TYPE_GB18030_BIN || cs == CS_TYPE_UTF8MB4_GENERAL_CI
+        || cs == CS_TYPE_GBK_CHINESE_CI || cs == CS_TYPE_GB18030_CHINESE_CI
+        || ObCharset::is_gb18030_2022(cs);
+  }
+
+  inline static bool can_encode_varlen_sortkey(common::ObObjType type, common::ObCollationType cs)
+  {
+    return type == ObVarcharType && can_encode_varlen_collation(cs);
+  }
+
   inline static bool can_encode_sortkey(common::ObObjType type, common::ObCollationType cs)
   {
     return (type == ObTinyIntType || type == ObSmallIntType || type == ObDateType

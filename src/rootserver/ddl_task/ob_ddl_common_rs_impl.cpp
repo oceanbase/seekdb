@@ -40,6 +40,7 @@
 #include "sql/engine/px/ob_px_dtl_msg.h"
 #include "query/vector/ob_vector_index_util.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
+#include "data_plane/api/data_plane/ob_order_perserving_encoder.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "storage/tablet/ob_tablet_binding_helper.h"
 #include "rootserver/ddl_task/ob_ddl_task.h"
@@ -56,6 +57,24 @@ namespace oceanbase
 {
 namespace rootserver
 {
+
+static bool can_encode_fts_build_sortkey(const ObTableSchema &dest_table_schema)
+{
+  bool can_encode = dest_table_schema.is_fts_index_aux() || dest_table_schema.is_fts_doc_word_aux();
+  const ObRowkeyInfo &rowkey_info = dest_table_schema.get_rowkey_info();
+  for (int64_t i = 0; can_encode && i < rowkey_info.get_size(); ++i) {
+    const ObRowkeyColumn *rowkey_column = rowkey_info.get_column(i);
+    const int64_t column_id = OB_ISNULL(rowkey_column) ? OB_INVALID_ID :
+        (common::is_shadow_column(rowkey_column->column_id_)
+         ? rowkey_column->column_id_ - OB_MIN_SHADOW_COLUMN_ID : rowkey_column->column_id_);
+    const ObColumnSchemaV2 *column_schema = dest_table_schema.get_column_schema(column_id);
+    can_encode = OB_NOT_NULL(column_schema) &&
+        (ObOrderPerservingEncoder::can_encode_sortkey(column_schema->get_data_type(), column_schema->get_collation_type()) ||
+         ObOrderPerservingEncoder::can_encode_varlen_sortkey(column_schema->get_data_type(), column_schema->get_collation_type()));
+  }
+  return can_encode;
+}
+
 
 int ObDDLTaskUtil::hold_snapshot(
     common::ObMySQLTransaction &trans,
@@ -529,13 +548,15 @@ int ObDDLTaskUtil::generate_build_replica_sql(const int64_t data_table_id,
           }
         }
         const char *io_read_hint = " ";
+        const bool use_encoded_sortkey = can_encode_fts_build_sortkey(*dest_table_schema);
+        const char *newsort_value = use_encoded_sortkey ? "true" : "false";
         if (dest_table_schema->is_vec_vid_rowkey_type()) {
           src_table_schema_version_hint_sql_string.reset();
         }
         if (OB_FAIL(ret)) {
         } else {
-          if (OB_FAIL(sql_string.assign_fmt("INSERT /*+ enable_parallel_dml parallel(%ld) opt_param('ddl_execution_id', %ld) opt_param('ddl_task_id', %ld) opt_param('enable_newsort', 'false') %.*s use_px */INTO `%.*s`.`%.*s` %.*s(%.*s) SELECT /*+ index(`%.*s` primary) %.*s */ %.*s from `%.*s`.`%.*s` %.*s as of snapshot %ld %.*s",
-              real_parallelism, execution_id, task_id,
+          if (OB_FAIL(sql_string.assign_fmt("INSERT /*+ enable_parallel_dml parallel(%ld) opt_param('ddl_execution_id', %ld) opt_param('ddl_task_id', %ld) opt_param('enable_newsort', '%s') %.*s use_px */INTO `%.*s`.`%.*s` %.*s(%.*s) SELECT /*+ index(`%.*s` primary) %.*s */ %.*s from `%.*s`.`%.*s` %.*s as of snapshot %ld %.*s",
+              real_parallelism, execution_id, task_id, newsort_value,
               static_cast<int>(strlen(io_read_hint)), io_read_hint,
               static_cast<int>(new_dest_database_name.length()), new_dest_database_name.ptr(), static_cast<int>(new_dest_table_name.length()), new_dest_table_name.ptr(),
               static_cast<int>(partition_names.length()), partition_names.ptr(),

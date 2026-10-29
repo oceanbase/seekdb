@@ -45,7 +45,28 @@ int ObIKFTParser::init(const ObFTParserParam &param)
   int ret = OB_SUCCESS;
 
   if (IS_INIT) {
-    ret = OB_INIT_TWICE;
+    // Reuse path: dicts and segmenters are immutable once built, only the
+    // per-document context has to be rebuilt. The context lives in a scratch
+    // arena that is reset here, so the memory of the previous document is
+    // reused instead of being appended to the parser arena for ever.
+    ObCollationType coll_type = ObCollationType::CS_TYPE_INVALID;
+    if (OB_ISNULL(param.cs_) || OB_ISNULL(param.cs_->name)) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (CS_TYPE_INVALID == (coll_type = ObCharset::collation_type(param.cs_->name))) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      coll_type_ = coll_type;
+      if (OB_NOT_NULL(ctx_)) {
+        ctx_->~TokenizeContext();
+        ctx_ = nullptr;
+      }
+      // reuse() keeps the scratch pages and only rewinds the allocation
+      // pointer, so the next document reuses the same memory.
+      scratch_alloc_.reuse();
+      if (OB_FAIL(init_ctx(param))) {
+        reset();
+      }
+    }
   } else {
     coll_type_ = ObCollationType::CS_TYPE_INVALID;
     if (OB_ISNULL(param.cs_) || OB_ISNULL(param.cs_->name)) {
@@ -135,10 +156,8 @@ int ObIKFTParser::process_one_char(TokenizeContext &ctx,
 {
   int ret = OB_SUCCESS;
   // proces by char with all segmenters
-  for (ObList<ObIIKProcessor *, ObIAllocator>::iterator iter = segmenters_.begin();
-       OB_SUCC(ret) && iter != segmenters_.end();
-       iter++) {
-    if (OB_FAIL((*iter)->process(ctx))) {
+  for (int64_t i = 0; OB_SUCC(ret) && i < segmenters_.count(); ++i) {
+    if (OB_FAIL(segmenters_.at(i)->process(ctx))) {
     }
   }
   return ret;
@@ -190,22 +209,137 @@ int ObIKFTParser::process_next_batch()
   return ret;
 }
 
+namespace
+{
+// Tokenizing runs once per document on the index-build path and once per
+// tokenize() call, so the parser (dictionaries, segmenters, context buffers)
+// is kept thread-locally and only the per-document context is rebuilt.
+// Parsers live in a small per-thread pool: a borrower marks its entry lent
+// and the reuse iterator returns it on destruction, so nested segment()
+// calls keep reusing instead of falling back. The pool is never recycled
+// wholesale because dictionary containers live in the same arena.
+constexpr int64_t IK_POOL_DEPTH = 2;
+struct IkPoolEntry
+{
+  ObIKFTParser *parser_;
+  bool lent_;
+};
+thread_local ObArenaAllocator *tls_ik_allocator = nullptr;
+thread_local IkPoolEntry tls_ik_pool[IK_POOL_DEPTH] = {};
+
+bool ik_pool_all_idle()
+{
+  for (int64_t i = 0; i < IK_POOL_DEPTH; ++i) {
+    if (tls_ik_pool[i].lent_) {
+      return false;
+    }
+  }
+  return true;
+}
+
+ObIKFTParser *acquire_ik_parser(ObFTDictHub *hub)
+{
+  ObIKFTParser *parser = nullptr;
+  for (int64_t i = 0; OB_ISNULL(parser) && i < IK_POOL_DEPTH; ++i) {
+    if (!tls_ik_pool[i].lent_) {
+      parser = tls_ik_pool[i].parser_;
+      if (OB_ISNULL(parser)) {
+        if (OB_ISNULL(tls_ik_allocator)) {
+          tls_ik_allocator = new (std::nothrow) ObArenaAllocator(ObMemAttr("IKFTParseRuse"));
+        }
+        if (OB_NOT_NULL(tls_ik_allocator)) {
+          parser = new (std::nothrow) ObIKFTParser(*tls_ik_allocator, hub);
+          tls_ik_pool[i].parser_ = parser;
+        }
+      }
+      if (OB_NOT_NULL(parser)) {
+        tls_ik_pool[i].lent_ = true;
+      }
+    }
+  }
+  return parser;
+}
+
+void release_ik_parser(ObIKFTParser *parser)
+{
+  if (OB_NOT_NULL(parser)) {
+    for (int64_t i = 0; i < IK_POOL_DEPTH; ++i) {
+      if (parser == tls_ik_pool[i].parser_ && tls_ik_pool[i].lent_) {
+        tls_ik_pool[i].lent_ = false;
+        break;
+      }
+    }
+  }
+}
+
+class ObIKReuseTokenIter final : public ObITokenIterator
+{
+public:
+  explicit ObIKReuseTokenIter(ObIKFTParser &parser) : parser_(parser) {}
+  virtual ~ObIKReuseTokenIter() override { release_ik_parser(&parser_); }
+  virtual int get_next_token(const char *&word,
+                             int64_t &word_len,
+                             int64_t &char_cnt,
+                             int64_t &word_freq) override
+  {
+    return parser_.get_next_token(word, word_len, char_cnt, word_freq);
+  }
+  VIRTUAL_TO_STRING_KV("iter", "ObIKReuseTokenIter");
+
+private:
+  ObIKFTParser &parser_;
+};
+
+} // end anonymous namespace
+
 int ObIKFTParserDesc::segment(ObFTParserParam *param, ObITokenIterator *&iter) const
 {
   int ret = OB_SUCCESS;
   ObIKFTParser *parser = nullptr;
+  ObIKReuseTokenIter *fast_iter = nullptr;
   ObFTDictHub *hub = nullptr;
+  bool input_ok = true;
   if (OB_ISNULL(param) || OB_UNLIKELY(!param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+    input_ok = false;
   } else if (OB_FAIL(ObFTParseData::instance().get_dict_hub(hub))) {
-  } else if (OB_ISNULL(parser = OB_NEWx(ObIKFTParser, param->allocator_, *(param->allocator_), hub))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(parser->init(*param))) {
-  } else {
-    iter = parser;
+    input_ok = false;
+  } else if (OB_NOT_NULL(parser = acquire_ik_parser(hub))) {
+    if (OB_FAIL(parser->init(*param))) {
+      // broken parser: drop it and fall through to the per-call parser
+      parser->~ObIKFTParser();
+      delete parser;
+      // recycle the dropped parser's dict memory only when no borrower is live
+      if (ik_pool_all_idle()) {
+        tls_ik_allocator->reset();
+      }
+      for (int64_t i = 0; i < IK_POOL_DEPTH; ++i) {
+        if (parser == tls_ik_pool[i].parser_) {
+          tls_ik_pool[i].parser_ = nullptr;
+          tls_ik_pool[i].lent_ = false;
+        }
+      }
+    } else if (OB_ISNULL(fast_iter = OB_NEWx(ObIKReuseTokenIter, param->allocator_, *parser))) {
+      // healthy parser, keep it pooled; just serve this call from a per-call parser
+      release_ik_parser(parser);
+    } else {
+      iter = fast_iter;
+      return ret;
+    }
+    // fast path unavailable this call: retry through the per-call parser
+    parser = nullptr;
+    ret = OB_SUCCESS;
   }
 
-  if (OB_FAIL(ret)) {
+  if (input_ok) {
+    parser = nullptr;
+    if (OB_ISNULL(parser = OB_NEWx(ObIKFTParser, param->allocator_, *(param->allocator_), hub))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_FAIL(parser->init(*param))) {
+    } else {
+      iter = parser;
+      return ret;
+    }
     OB_DELETEx(ObIKFTParser, param->allocator_, parser);
   }
 
@@ -292,9 +426,9 @@ int ObIKFTParser::init_ctx(const ObFTParserParam &param)
   if (coll_type_ == common::CS_TYPE_INVALID) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_ISNULL(ctx_ = OB_NEWx(TokenizeContext,
-                                      &allocator_,
+                                      &scratch_alloc_,
                                       coll_type_,
-                                      allocator_,
+                                      scratch_alloc_,
                                       param.fulltext_,
                                       param.ft_length_,
                                       param.ik_param_.mode_ == ObFTIKParam::Mode::SMART))) {
@@ -302,7 +436,7 @@ int ObIKFTParser::init_ctx(const ObFTParserParam &param)
   } else if (OB_FAIL(ctx_->init())) {
   }
   if (OB_FAIL(ret)) {
-    OB_DELETEx(TokenizeContext, &allocator_, ctx_);
+    OB_DELETEx(TokenizeContext, &scratch_alloc_, ctx_);
   }
   return ret;
 }
@@ -349,10 +483,12 @@ int ObIKFTParser::init_segmenter(const ObFTParserParam &param)
 
 void ObIKFTParser::reset()
 {
-  if (!OB_ISNULL(ctx_)) {
+  if (OB_NOT_NULL(ctx_)) {
     ctx_->~TokenizeContext();
-    allocator_.free(ctx_);
+    ctx_ = nullptr;
   }
+  scratch_alloc_.reset();
+
 
   for (ObIIKProcessor *segmenter : segmenters_) {
     if (!OB_ISNULL(segmenter)) {
@@ -360,7 +496,7 @@ void ObIKFTParser::reset()
       allocator_.free(segmenter);
     }
   }
-  segmenters_.clear();
+  segmenters_.reset();
 
   cache_main_.reset();
   cache_quan_.reset();
