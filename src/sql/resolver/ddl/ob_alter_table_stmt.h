@@ -19,6 +19,7 @@
 
 
 #include "sql/resolver/ddl/ob_table_stmt.h"
+#include "share/ai_column/ob_ai_column_struct.h"
 #include "sql/resolver/ddl/ob_ddl_stmt.h"
 #include "sql/resolver/ob_stmt_resolver.h"
 #include "common/sql_mode/ob_sql_mode.h"
@@ -36,6 +37,11 @@ public:
   ObAlterTableStmt();
   virtual ~ObAlterTableStmt();
   int add_column(const share::schema::AlterColumnSchema &column_schema);
+  common::ObSArray<share::ObAiColumnMeta> &get_ai_column_metas() { return ai_column_metas_; }
+  void set_ai_retry(const common::ObString &col_name, ParseNode *where_node);
+  bool has_ai_retry() const { return has_ai_retry_; }
+  const common::ObString &get_ai_retry_column_name() const { return ai_retry_column_name_; }
+  ParseNode *get_ai_retry_where_node() { return ai_retry_where_node_; }
   int add_index_arg(obcall::ObIndexArg *index_arg);
   int check_drop_fk_arg_exist(obcall::ObDropForeignKeyArg *drop_fk_arg, bool &has_same_fk_arg);
   obcall::ObAlterTableArg& get_alter_table_arg(){ return alter_table_arg_; }
@@ -114,6 +120,12 @@ private:
   obcall::ObAlterTriggerArg tg_arg_;
   uint64_t alter_table_action_count_;
   obcall::ObExchangePartitionArg exchange_partition_arg_;
+  common::ObSArray<share::ObAiColumnMeta> ai_column_metas_;
+  // ALTER TABLE ... RETRY AI COLUMN <col> [WHERE ...]: kept as raw parse tree,
+  // the where may reference the status pseudo column which is not resolvable.
+  bool has_ai_retry_;
+  common::ObString ai_retry_column_name_;
+  ParseNode *ai_retry_where_node_;
 };
 
 inline int ObAlterTableStmt::set_tz_info_wrap(const common::ObTimeZoneInfoWrap &tz_info_wrap)

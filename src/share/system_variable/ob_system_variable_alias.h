@@ -739,6 +739,8 @@ namespace share
   static const char* const OB_SV_HNSW_EXTRA_INFO_MAX_SIZE = "ob_hnsw_extra_info_max_size";
   static const char* const OB_SV__PUSH_JOIN_PREDICATE = "_push_join_predicate";
   static const char* const OB_SV_SPARSE_DROP_RATIO_SEARCH = "ob_sparse_drop_ratio_search";
+  static const char* const OB_SV_ENABLE_FILE_SQL = "enable_file_sql";
+  static const char* const OB_SV_AI_COLUMN_STRICT_READ = "ai_column_strict_read";
 
 }
 }

@@ -155,7 +155,11 @@ int ObAIFuncClient::send_post(ObJsonObject *data, ObJsonObject *&response)
       if (is_timeout()) {
         ret = OB_TIMEOUT;
       } else if (res != CURLE_OK) {
-        // retry
+        // transport-level failure (endpoint restarting, stale keep-alive
+        // connection): the request never reached the endpoint, so back off
+        // briefly and re-attempt without consuming the caller's retry budget
+        response_buf.reset();
+        ob_usleep(100L * 1000L * (i + 1));
       } else if (!is_retryable_status_code(http_code)) {
         break;
       } else {

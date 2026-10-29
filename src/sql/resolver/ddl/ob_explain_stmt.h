@@ -44,6 +44,8 @@ public:
   ObExplainStmt();
   virtual ~ObExplainStmt();
   void set_explain_format(ExplainType format) { format_ = format; }
+  void set_is_file_describe(bool v) { is_file_describe_ = v; }
+  bool is_file_describe() const { return is_file_describe_; }
   ExplainType get_explain_type() const { return format_; }
   void set_display_opt(const ObExplainDisplayOpt &opt) { display_opt_ = opt; }
   const ObExplainDisplayOpt &get_display_opt() const { return display_opt_; }
@@ -61,6 +63,7 @@ public:
   DECLARE_VIRTUAL_TO_STRING;
 private:
   //bool  verbose_;
+  bool is_file_describe_;
   ExplainType format_;
   ObExplainDisplayOpt display_opt_;
   ObDMLStmt *explain_query_stmt_;

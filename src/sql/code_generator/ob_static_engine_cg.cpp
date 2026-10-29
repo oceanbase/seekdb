@@ -1696,10 +1696,15 @@ int ObStaticEngineCG::generate_spec(ObLogValuesTableAccess &op,
     spec.access_type_ = table_def->access_type_;
     spec.start_param_idx_ = table_def->start_param_idx_;
     spec.end_param_idx_ = table_def->end_param_idx_;
+    spec.file_format_ = table_def->file_format_;
+    spec.file_header_ = table_def->file_header_;
     ObIAllocator &allocator = phy_plan_->get_allocator();
-    if (OB_FAIL(spec.column_exprs_.prepare_allocate(op.get_column_exprs().count()))) {
+    if (OB_FAIL(ob_write_string(allocator, table_def->file_path_, spec.file_path_))) {
+    } else if (OB_FAIL(spec.column_exprs_.prepare_allocate(op.get_column_exprs().count()))) {
     } else if (OB_FAIL(spec.value_exprs_.prepare_allocate(table_def->access_exprs_.count()))) {
     } else if (OB_FAIL(spec.obj_params_.prepare_allocate(table_def->access_objs_.count()))) {
+    } else if (OB_FAIL(spec.file_column_names_.prepare_allocate(table_def->file_column_names_.count()))) {
+    } else if (OB_FAIL(spec.file_column_pruning_.prepare_allocate(op.get_column_exprs().count()))) {
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < op.get_column_exprs().count(); i++) {
         ObColumnRefRawExpr *col_expr = op.get_column_exprs().at(i);
@@ -1712,6 +1717,11 @@ int ObStaticEngineCG::generate_spec(ObLogValuesTableAccess &op,
           ret = OB_ERR_UNEXPECTED;
         } else {
           spec.column_exprs_.at(i) = expr;
+          bool needed = false;
+          for (int64_t j = 0; !needed && j < op.get_output_exprs().count(); ++j) {
+            needed = (col_expr == op.get_output_exprs().at(j));
+          }
+          spec.file_column_pruning_.at(i) = needed ? 1 : 0;
         }
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < table_def->access_exprs_.count(); i++) {
@@ -1731,6 +1741,11 @@ int ObStaticEngineCG::generate_spec(ObLogValuesTableAccess &op,
         if (OB_FAIL(ob_write_obj(allocator,
                                  table_def->access_objs_.at(i),
                                  spec.obj_params_.at(i)))) {
+        }
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && i < table_def->file_column_names_.count(); ++i) {
+        if (OB_FAIL(ob_write_string(allocator, table_def->file_column_names_.at(i),
+                                    spec.file_column_names_.at(i)))) {
         }
       }
       if (OB_FAIL(ret)) {
@@ -5460,6 +5475,7 @@ int ObStaticEngineCG::generate_spec(ObLogSelectInto &op, ObSelectIntoSpec &spec,
   } else if (OB_FAIL(spec.external_properties_.store_str(op.get_external_properties()))) {
   } else if (OB_FAIL(spec.user_vars_.init(op.get_user_vars().count()))) {
   } else if (OB_FAIL(spec.select_exprs_.init(op.get_select_exprs().count()))) {
+  } else if (OB_FAIL(spec.column_names_.init(op.get_select_exprs().count()))) {
   } else {
     ObString var;
     for (int64_t i = 0; OB_SUCC(ret) && i < op.get_user_vars().count(); ++i) {
@@ -5468,6 +5484,10 @@ int ObStaticEngineCG::generate_spec(ObLogSelectInto &op, ObSelectIntoSpec &spec,
       } else if (OB_FAIL(spec.user_vars_.push_back(var))) {
       }
     }
+    // select list column names, used by the COPY TO / INTO OUTFILE header line
+    const ObDMLStmt *into_stmt = op.get_stmt();
+    const ObSelectStmt *select_stmt = (OB_NOT_NULL(into_stmt) && into_stmt->is_select_stmt())
+                                      ? static_cast<const ObSelectStmt *>(into_stmt) : NULL;
     for (int64_t i = 0; OB_SUCC(ret) && i < op.get_select_exprs().count(); ++i) {
       ObExpr *rt_expr = nullptr;
       const ObRawExpr* select_expr = op.get_select_exprs().at(i);
@@ -5475,6 +5495,14 @@ int ObStaticEngineCG::generate_spec(ObLogSelectInto &op, ObSelectIntoSpec &spec,
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(generate_rt_expr(*select_expr, rt_expr))) {
       } else if (OB_FAIL(spec.select_exprs_.push_back(rt_expr))) {
+      } else {
+        ObString name;
+        const ColumnItem *col_item = (OB_NOT_NULL(select_stmt))
+                                     ? select_stmt->get_column_item(i) : NULL;
+        if (OB_NOT_NULL(col_item) && col_item->column_name_.length() > 0
+            && OB_FAIL(ob_write_string(alloc, col_item->column_name_, name))) {
+        } else if (OB_FAIL(spec.column_names_.push_back(name))) {
+        }
       }
     }
     if (OB_SUCC(ret)) {

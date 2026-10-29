@@ -10975,5 +10975,35 @@
     "info_cn": "",
     "background_cn": "",
     "ref_url": ""
+  },
+  "enable_file_sql": {
+    "id": 10754,
+    "name": "enable_file_sql",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "bool",
+    "info": "enable file as a database table functions: read_csv/read_json/read_ndjson/read_parquet/glob and COPY TO.",
+    "flags": "GLOBAL | SESSION",
+    "min_val": "0",
+    "max_val": "1",
+    "publish_version": "4",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "ai_column_strict_read": {
+    "id": 10755,
+    "name": "ai_column_strict_read",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "bool",
+    "info": "when enabled, statements referencing an AI column that is not fully ready fail with ER_AI_COLUMN_NOT_READY.",
+    "flags": "GLOBAL | SESSION",
+    "min_val": "0",
+    "max_val": "1",
+    "publish_version": "4",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
   }
 }

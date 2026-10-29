@@ -1,6 +1,8 @@
 """Private header ownership for the Observer composition root."""
 
 OBSERVER_PRIVATE_HEADERS = [
+    "ai_column/ob_ai_column_util.h",
+    "ai_column/ob_ai_column_worker.h",
     "ai_service/ob_ai_service_executor.h",
     "ai_service/ob_ai_service_proxy.h",
     "change_stream/ob_change_stream_dispatcher.h",
