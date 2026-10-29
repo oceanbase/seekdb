@@ -115,9 +115,10 @@ checks for an existing OPFS database and reopens it, or starts in Memory when
 none exists. OPFS requires both OPFS and Web Locks support in the browser.
 
 Use the storage selector to choose **Temporary (Memory)** or **Persistent
-(OPFS)**. After confirmation, switching waits for the current database to close
-normally and reloads the page with the selected mode. Switching to Memory keeps
-the stored OPFS database, and switching back reopens it. Terminal output,
+(OPFS)**. After confirmation, switching discards a temporary database right away
+but waits for a persistent one to close normally, then reloads the page with the
+selected mode. Switching to Memory keeps the stored OPFS database, and switching
+back reopens it. Terminal output,
 command history, and in-memory data are cleared by the reload. SQL input stays
 disabled until the new instance is ready.
 
