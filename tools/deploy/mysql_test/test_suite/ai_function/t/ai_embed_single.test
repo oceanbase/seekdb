@@ -1,0 +1,169 @@
+# AI_EMBED: scalar semantics, long text, indexed protocols and invalid responses.
+connection default;
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py start
+--disable_query_log
+--disable_result_log
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('embed_reg_ep');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('embed_reg');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('embed_reg', '{"type":"dense_embedding","model_name":"regression-embed"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('embed_reg_ep', '{"ai_model_name":"embed_reg","url":"http://127.0.0.1:18082/openai/normal","access_key":"test","provider":"openai"}');
+--enable_result_log
+--enable_query_log
+select json_length(ai_embed('embed_reg', 'hello')) as default_dimension;
+select json_length(ai_embed('embed_reg', 'hello', 5)) as explicit_dimension;
+select json_length(ai_embed('embed_reg', 'hello', 4096)) as long_result_dimension;
+select json_valid(ai_embed('embed_reg', '中文🙂')) as valid_json;
+select ai_embed('embed_reg', null) is null as null_propagates;
+create table embed_reg_text(id int primary key, content longtext);
+insert into embed_reg_text values(1,repeat('长',100000)),(2,null),(3,'abc');
+select id, json_extract(ai_embed('embed_reg',content,2),'$[0]') as byte_length from embed_reg_text order by id;
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py clear
+--error 1210
+select ai_embed('embed_reg','hello',0);
+--error 1210
+select ai_embed('embed_reg','hello',-1);
+--error 1210
+select ai_embed('embed_reg','hello',2.5);
+--error 1210
+select ai_embed('embed_reg','hello',null);
+--error 1210
+select ai_embed('embed_reg','');
+select ai_embed('embed_reg',null) is null as no_null_request;
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py assert-empty
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_reg_ep', '{"url":"http://127.0.0.1:18082/openai/shuffle","provider":"openai"}');
+--enable_query_log
+select json_extract(ai_embed('embed_reg','openai',2),'$[0]') as openai_value;
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_reg_ep', '{"url":"http://127.0.0.1:18082/openai/duplicate"}');
+--enable_query_log
+--error 4070
+select ai_embed('embed_reg','bad response',2);
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_reg_ep', '{"url":"http://127.0.0.1:18082/openai/missing"}');
+--enable_query_log
+--error 4070
+select ai_embed('embed_reg','bad response',2);
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_reg_ep', '{"url":"http://127.0.0.1:18082/openai/out-of-range"}');
+--enable_query_log
+--error 4070
+select ai_embed('embed_reg','bad response',2);
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_reg_ep', '{"url":"http://127.0.0.1:18082/openai/no-index"}');
+--enable_query_log
+--error 4070
+select ai_embed('embed_reg','bad response',2);
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_reg_ep', '{"url":"http://127.0.0.1:18082/openai/string-index"}');
+--enable_query_log
+--error 4070
+select ai_embed('embed_reg','bad response',2);
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_reg_ep', '{"url":"http://127.0.0.1:18082/openai/bad-element"}');
+--enable_query_log
+--error 4070
+select ai_embed('embed_reg','bad response',2);
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_reg_ep', '{"url":"http://127.0.0.1:18082/openai/null-element"}');
+--enable_query_log
+--error 4070
+select ai_embed('embed_reg','bad response',2);
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_reg_ep', '{"url":"http://127.0.0.1:18082/openai/overflow-element"}');
+--enable_query_log
+--error 4070
+select ai_embed('embed_reg','bad response',2);
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_reg_ep', '{"url":"http://127.0.0.1:18082/openai/wrong-dimension"}');
+--enable_query_log
+--error 4070
+select ai_embed('embed_reg','bad response',2);
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_reg_ep', '{"url":"http://127.0.0.1:18082/openai/object-vector"}');
+--enable_query_log
+--error 4070
+select ai_embed('embed_reg','bad response',2);
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_reg_ep', '{"url":"http://127.0.0.1:18082/dashscope/shuffle","provider":"aliyun-dashscope"}');
+--enable_query_log
+select json_extract(ai_embed('embed_reg','dashscope',2),'$[0]') as dashscope_value;
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_reg_ep', '{"url":"http://127.0.0.1:18082/dashscope/duplicate"}');
+--enable_query_log
+--error 4070
+select ai_embed('embed_reg','bad response',2);
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_reg_ep', '{"url":"http://127.0.0.1:18082/dashscope/missing"}');
+--enable_query_log
+--error 4070
+select ai_embed('embed_reg','bad response',2);
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_reg_ep', '{"url":"http://127.0.0.1:18082/dashscope/out-of-range"}');
+--enable_query_log
+--error 4070
+select ai_embed('embed_reg','bad response',2);
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_reg_ep', '{"url":"http://127.0.0.1:18082/dashscope/no-index"}');
+--enable_query_log
+--error 4070
+select ai_embed('embed_reg','bad response',2);
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_reg_ep', '{"url":"http://127.0.0.1:18082/dashscope/string-index"}');
+--enable_query_log
+--error 4070
+select ai_embed('embed_reg','bad response',2);
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_reg_ep', '{"url":"http://127.0.0.1:18082/dashscope/bad-element"}');
+--enable_query_log
+--error 4070
+select ai_embed('embed_reg','bad response',2);
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_reg_ep', '{"url":"http://127.0.0.1:18082/dashscope/null-element"}');
+--enable_query_log
+--error 4070
+select ai_embed('embed_reg','bad response',2);
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_reg_ep', '{"url":"http://127.0.0.1:18082/dashscope/overflow-element"}');
+--enable_query_log
+--error 4070
+select ai_embed('embed_reg','bad response',2);
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_reg_ep', '{"url":"http://127.0.0.1:18082/dashscope/wrong-dimension"}');
+--enable_query_log
+--error 4070
+select ai_embed('embed_reg','bad response',2);
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_reg_ep', '{"url":"http://127.0.0.1:18082/dashscope/object-vector"}');
+--enable_query_log
+--error 4070
+select ai_embed('embed_reg','bad response',2);
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_reg_ep', '{"url":"http://127.0.0.1:18082/openai/bad-root","provider":"openai"}');
+--enable_query_log
+--error 4070
+select ai_embed('embed_reg','bad response',2);
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_reg_ep', '{"url":"http://127.0.0.1:18082/openai/bad-data","provider":"openai"}');
+--enable_query_log
+--error 4070
+select ai_embed('embed_reg','bad response',2);
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_reg_ep', '{"url":"http://127.0.0.1:18082/openai/malformed","provider":"openai"}');
+--enable_query_log
+--error 3140
+select ai_embed('embed_reg','bad response',2);
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_reg_ep', '{"url":"http://127.0.0.1:18082/openai/retry","provider":"openai"}');
+set ob_query_timeout=60000000;
+--enable_query_log
+select json_length(ai_embed('embed_reg','retry',2)) as retry_dimension;
+select 1+1 as sql_still_works;
+drop table embed_reg_text;
+--disable_query_log
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('embed_reg_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('embed_reg');
+--enable_query_log
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py stop

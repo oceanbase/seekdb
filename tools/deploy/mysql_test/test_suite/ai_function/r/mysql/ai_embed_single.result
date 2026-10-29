@@ -1,0 +1,94 @@
+select json_length(ai_embed('embed_reg', 'hello')) as default_dimension;
+default_dimension
+3
+select json_length(ai_embed('embed_reg', 'hello', 5)) as explicit_dimension;
+explicit_dimension
+5
+select json_length(ai_embed('embed_reg', 'hello', 4096)) as long_result_dimension;
+long_result_dimension
+4096
+select json_valid(ai_embed('embed_reg', '中文🙂')) as valid_json;
+valid_json
+1
+select ai_embed('embed_reg', null) is null as null_propagates;
+null_propagates
+1
+create table embed_reg_text(id int primary key, content longtext);
+insert into embed_reg_text values(1,repeat('长',100000)),(2,null),(3,'abc');
+select id, json_extract(ai_embed('embed_reg',content,2),'$[0]') as byte_length from embed_reg_text order by id;
+id	byte_length
+1	300000.0
+2	NULL
+3	3.0
+select ai_embed('embed_reg','hello',0);
+ERROR HY000: Incorrect arguments to ai_embed, dimension parameter must be a positive integer
+select ai_embed('embed_reg','hello',-1);
+ERROR HY000: Incorrect arguments to ai_embed, dimension parameter must be a positive integer
+select ai_embed('embed_reg','hello',2.5);
+ERROR HY000: Incorrect arguments to ai_embed, dimension parameter must be an integer, not a decimal or float
+select ai_embed('embed_reg','hello',null);
+ERROR HY000: Incorrect arguments to ai_embed, dimension parameter must be an integer, not a decimal or float
+select ai_embed('embed_reg','');
+ERROR HY000: Incorrect arguments to ai_embed, model id or input is empty
+select ai_embed('embed_reg',null) is null as no_null_request;
+no_null_request
+1
+select json_extract(ai_embed('embed_reg','openai',2),'$[0]') as openai_value;
+openai_value
+6.0
+select ai_embed('embed_reg','bad response',2);
+ERROR HY000: ai_embed: invalid embedding response (index, count, dimension or numeric element)
+select ai_embed('embed_reg','bad response',2);
+ERROR HY000: ai_embed: invalid embedding response (index, count, dimension or numeric element)
+select ai_embed('embed_reg','bad response',2);
+ERROR HY000: ai_embed: invalid embedding response (index, count, dimension or numeric element)
+select ai_embed('embed_reg','bad response',2);
+ERROR HY000: ai_embed: invalid embedding response (index, count, dimension or numeric element)
+select ai_embed('embed_reg','bad response',2);
+ERROR HY000: ai_embed: invalid embedding response (index, count, dimension or numeric element)
+select ai_embed('embed_reg','bad response',2);
+ERROR HY000: ai_embed: invalid embedding response (index, count, dimension or numeric element)
+select ai_embed('embed_reg','bad response',2);
+ERROR HY000: ai_embed: invalid embedding response (index, count, dimension or numeric element)
+select ai_embed('embed_reg','bad response',2);
+ERROR HY000: ai_embed: invalid embedding response (index, count, dimension or numeric element)
+select ai_embed('embed_reg','bad response',2);
+ERROR HY000: ai_embed: invalid embedding response (index, count, dimension or numeric element)
+select ai_embed('embed_reg','bad response',2);
+ERROR HY000: ai_embed: invalid embedding response (index, count, dimension or numeric element)
+select json_extract(ai_embed('embed_reg','dashscope',2),'$[0]') as dashscope_value;
+dashscope_value
+9.0
+select ai_embed('embed_reg','bad response',2);
+ERROR HY000: ai_embed: invalid embedding response (index, count, dimension or numeric element)
+select ai_embed('embed_reg','bad response',2);
+ERROR HY000: ai_embed: invalid embedding response (index, count, dimension or numeric element)
+select ai_embed('embed_reg','bad response',2);
+ERROR HY000: ai_embed: invalid embedding response (index, count, dimension or numeric element)
+select ai_embed('embed_reg','bad response',2);
+ERROR HY000: ai_embed: invalid embedding response (index, count, dimension or numeric element)
+select ai_embed('embed_reg','bad response',2);
+ERROR HY000: ai_embed: invalid embedding response (index, count, dimension or numeric element)
+select ai_embed('embed_reg','bad response',2);
+ERROR HY000: ai_embed: invalid embedding response (index, count, dimension or numeric element)
+select ai_embed('embed_reg','bad response',2);
+ERROR HY000: ai_embed: invalid embedding response (index, count, dimension or numeric element)
+select ai_embed('embed_reg','bad response',2);
+ERROR HY000: ai_embed: invalid embedding response (index, count, dimension or numeric element)
+select ai_embed('embed_reg','bad response',2);
+ERROR HY000: ai_embed: invalid embedding response (index, count, dimension or numeric element)
+select ai_embed('embed_reg','bad response',2);
+ERROR HY000: ai_embed: invalid embedding response (index, count, dimension or numeric element)
+select ai_embed('embed_reg','bad response',2);
+ERROR HY000: ai_embed: invalid embedding response (index, count, dimension or numeric element)
+select ai_embed('embed_reg','bad response',2);
+ERROR HY000: ai_embed: invalid embedding response (index, count, dimension or numeric element)
+select ai_embed('embed_reg','bad response',2);
+ERROR 22032: Invalid JSON text.
+select json_length(ai_embed('embed_reg','retry',2)) as retry_dimension;
+retry_dimension
+2
+select 1+1 as sql_still_works;
+sql_still_works
+2
+drop table embed_reg_text;
