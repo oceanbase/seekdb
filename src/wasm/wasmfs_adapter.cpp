@@ -58,6 +58,18 @@ const char *text(intptr_t path)
   return reinterpret_cast<const char *>(path);
 }
 
+bool optional_read(const char *path, int flags)
+{
+  if (path == nullptr || (flags & O_ACCMODE) != O_RDONLY || (flags & O_CREAT) != 0) return false;
+  // These system files need not exist in a browser. A missing move journal
+  // likewise means there is no interrupted directory move to recover.
+  return std::strcmp(path, "/etc/localtime") == 0
+      || std::strncmp(path, "/usr/share/zoneinfo/", sizeof("/usr/share/zoneinfo/") - 1) == 0
+      || std::strcmp(path, "/etc/os-release") == 0
+      || std::strcmp(path, "/proc/cpuinfo") == 0
+      || std::strcmp(path, MOVE_JOURNAL) == 0;
+}
+
 bool wal_index_file(const char *path)
 {
   const size_t length = std::strlen(path);
@@ -148,7 +160,7 @@ int finish_recorded_move()
     ret = -ENOTDIR;
   }
   if (ret == 0 && unlink(MOVE_JOURNAL) != 0) ret = -errno;
-  std::fprintf(stderr, "seekdb-runtime: finished recorded directory move %s -> %s: %d\n", from.c_str(), to.c_str(), ret);
+  std::fprintf(ret == 0 ? stdout : stderr, "seekdb-runtime: finished recorded directory move %s -> %s: %d\n", from.c_str(), to.c_str(), ret);
   return ret;
 }
 }
@@ -175,7 +187,7 @@ bool seekdb_mount_storage(bool persistent)
   // The OPFS backend always exposes the origin's root directory, which other
   // code on the page may use too; the engine stays inside /storage/seekdb.
   const int ret = wasmfs_create_directory("/storage", 0777, backend);
-  std::fprintf(stderr, "seekdb-runtime: OPFS mounted at /storage, status %d\n", ret);
+  std::fprintf(ret == 0 ? stdout : stderr, "seekdb-runtime: OPFS mounted at /storage, status %d\n", ret);
   if (ret != 0) return false;
   return finish_recorded_move() == 0;
 }
@@ -233,11 +245,13 @@ int __wrap___syscall_openat(int dirfd, intptr_t path, int flags, ...)
 #endif
   static std::atomic<bool> stripped{false};
   if ((flags & unsupported) != 0 && !stripped.exchange(true)) {
-    std::fprintf(stderr, "seekdb-runtime: WasmFS open flags 0x%x stripped to 0x%x for %s\n",
+    std::fprintf(stdout, "seekdb-runtime: WasmFS open flags 0x%x stripped to 0x%x for %s\n",
                  flags, flags & ~unsupported, text(path));
   }
   const int ret = __real___syscall_openat(dirfd, path, flags & ~unsupported, mode);
-  if (ret < 0) report("openat", ret, text(path), dirfd);
+  if (ret < 0 && !(ret == -ENOENT && optional_read(text(path), flags))) {
+    report("openat", ret, text(path), dirfd);
+  }
   return ret;
 }
 
@@ -313,7 +327,7 @@ int __wrap___syscall_renameat(int olddirfd, intptr_t oldpath, int newdirfd, intp
       if (recorded) {
         ret = move_directory_tree(text(oldpath), text(newpath));
         if (ret == 0) unlink(MOVE_JOURNAL);
-        std::fprintf(stderr, "seekdb-runtime: emulated directory move %s -> %s: %d\n", text(oldpath), text(newpath), ret);
+        std::fprintf(ret == 0 ? stdout : stderr, "seekdb-runtime: emulated directory move %s -> %s: %d\n", text(oldpath), text(newpath), ret);
       }
     }
   }

@@ -197,6 +197,6 @@ int main(int argc, char **argv)
   // on the OPFS backend that trips an assertion and keeps the files locked.
   for (int fd = 3; fd < 65536; ++fd) close(fd);
   state.store(ret == OB_SUCCESS ? CLOSED : FAILED, std::memory_order_release);
-  std::fprintf(stderr, "seekdb-runtime: destroyed, status %d\n", ret);
+  std::fprintf(ret == OB_SUCCESS ? stdout : stderr, "seekdb-runtime: destroyed, status %d\n", ret);
   return ret == OB_SUCCESS ? 0 : 1;
 }
