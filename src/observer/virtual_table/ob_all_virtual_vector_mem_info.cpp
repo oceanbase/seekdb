@@ -16,7 +16,6 @@
 
 #include "ob_all_virtual_vector_mem_info.h"
 #include "share/rc/ob_server_runtime.h"
-#include "lib/alloc/memory_dump.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "observer/vector_index/ob_plugin_vector_index_utils.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
@@ -42,18 +41,6 @@ void ObAllVirtualVectorMemInfo::reset()
   ObVirtualTableScannerIterator::reset();
 }
 
-int64_t ObAllVirtualVectorMemInfo::fill_glibc_used_info()
-{
-  int64_t used_size = 0;
-  for (it_ = malloc_sample_map_.begin(); it_ != malloc_sample_map_.end(); ++it_) {
-    if (0 == STRNCMP("VIndex", it_->first.label_, strlen("VIndex")) &&
-        0 == STRNCMP("GLIBC", get_global_ctx_info().get_ctx_name(it_->first.ctx_id_), strlen("GLIBC"))) {
-      used_size += it_->second.alloc_bytes_;
-    }
-  }
-  return used_size;
-}
-
 int ObAllVirtualVectorMemInfo::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
@@ -66,8 +53,6 @@ int ObAllVirtualVectorMemInfo::inner_get_next_row(ObNewRow *&row)
     if (NULL == (cells = cur_row_.cells_)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
-    } else if (OB_FAIL(malloc_sample_map_.create(1000, "MallocInfoMap", "MallocInfoMap"))) {
-    } else if (OB_FAIL(ObMemoryDump::get_instance().load_malloc_sample_map(malloc_sample_map_))) {
     } else {
       {
         int64_t manage_used = 0;
@@ -81,7 +66,6 @@ int ObAllVirtualVectorMemInfo::inner_get_next_row(ObNewRow *&row)
           int64_t rb_used = shared_mem_mgr->vector_allocator().get_rb_mem_used();
           int64_t vector_used = shared_mem_mgr->vector_allocator().used();
           int64_t pos = 0;
-          int64_t glibc_used = fill_glibc_used_info();
           MEMSET(vector_used_str_, 0, sizeof(vector_used_str_));
           complete_tablet_ids_.reset();
           partial_tablet_ids_.reset();
@@ -98,9 +82,6 @@ int ObAllVirtualVectorMemInfo::inner_get_next_row(ObNewRow *&row)
           for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
             uint64_t col_id = output_column_ids_.at(i);
             switch (col_id) {
-              case RAW_MALLOC_SIZE:
-                cells[i].set_int(glibc_used);
-                break;
               case INDEX_METADATA_SIZE:
                 cells[i].set_int(manage_used);
                 break;

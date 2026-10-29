@@ -405,7 +405,7 @@ int ObExprOutputPack::process_oneline(const ObExpr &expr, ObEvalCtx &ctx, ObSQLS
               ? obmysql::MYSQL_PROTOCOL_TYPE::BINARY : obmysql::MYSQL_PROTOCOL_TYPE::TEXT;
   const int64_t cell_count = expr.arg_cnt_ - 1;
   ObSEArray<obmysql::ObMySQLCellValue, 16> values;
-  ObSEArray<NioMysqlCellView, 16> views;
+  ObSEArray<oceanbase::nio::NioMysqlCellView, 16> views;
   expr.cur_str_resvered_buf(ctx, buffer, len);
   if (OB_ISNULL(buffer) || len <= 0 || cell_count <= 0) {
     ret = OB_ERR_UNEXPECTED;
@@ -415,32 +415,32 @@ int ObExprOutputPack::process_oneline(const ObExpr &expr, ObEvalCtx &ctx, ObSQLS
                                       schema_guard, encode_type, values))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < values.count(); ++i) {
-      NioMysqlCellView view = {};
+      oceanbase::nio::NioMysqlCellView view = {};
       if (OB_FAIL(query::build_nio_mysql_cell_view(values.at(i), view))) {
       } else if (OB_FAIL(views.push_back(view))) {
       }
     }
     if (OB_SUCC(ret)) {
-      NioMysqlRowView row_view = {};
+      oceanbase::nio::NioMysqlRowView row_view = {};
       row_view.cells = &views.at(0);
       row_view.cell_count = views.count();
       if (OB_FAIL(query::get_nio_mysql_row_protocol(encode_type,
                                                     row_view.protocol))) {
       } else {
         int frame_ret =
-            nio_encode_mysql_packed_row_blob(buffer, len, &row_view, &blob_len);
-        if (NIO_FRAME_NEED_MORE == frame_ret) {
+            oceanbase::nio::encode_mysql_packed_row_blob(buffer, len, &row_view, &blob_len);
+        if (static_cast<int32_t>(oceanbase::nio::FrameStatus::NeedMore) == frame_ret) {
           if (blob_len <= 0 || blob_len >= MAX_PACK_LEN) {
             ret = OB_SIZE_OVERFLOW;
           } else if (OB_ISNULL(buffer = expr.get_str_res_mem(ctx, blob_len))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
           } else {
             len = blob_len;
-            frame_ret = nio_encode_mysql_packed_row_blob(buffer, len, &row_view,
+            frame_ret = oceanbase::nio::encode_mysql_packed_row_blob(buffer, len, &row_view,
                                                          &blob_len);
           }
         }
-        if (OB_SUCC(ret) && NIO_FRAME_OK != frame_ret) {
+        if (OB_SUCC(ret) && static_cast<int32_t>(oceanbase::nio::FrameStatus::Ok) != frame_ret) {
           ret = OB_ERR_UNEXPECTED;
         }
       }

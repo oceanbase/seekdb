@@ -177,8 +177,8 @@ typedef unsigned long ulong;
 #define OB_CS_REPLACEMENT_CHARACTER 0xFFFD
 
 /* Internal error numbers (for assembler functions) */
-#define OB_ERRNO_EDOM		33
-#define OB_ERRNO_ERANGE		34
+#define OB_ERRNO_EDOM		EDOM
+#define OB_ERRNO_ERANGE		ERANGE
 
 /* Some typedef to make it easy for C++ to make function pointers */
 typedef int (*ob_charset_conv_mb_wc)(const struct ObCharsetInfo *,
@@ -340,8 +340,8 @@ typedef struct ObCollationHandler
 
   /* Hash calculation */
   // calculates hash value taking into account the collation rules, e.g. case-insensitivity
-  void (*hash_sort)(const struct ObCharsetInfo *cs, const unsigned char *key, size_t len, ulong *nr1,
-                    ulong *nr2, const bool calc_end_space, hash_algo hash_algo);
+  void (*hash_sort)(const struct ObCharsetInfo *cs, const unsigned char *key, size_t len, uint64_t *nr1,
+                    uint64_t *nr2, const bool calc_end_space, hash_algo hash_algo);
   bool (*propagate)(const struct ObCharsetInfo *cs, const unsigned char *str,
                        size_t len);
 } ObCollationHandler;
@@ -561,7 +561,7 @@ unsigned int ob_mbcharlen_ptr(const struct ObCharsetInfo *cs, const char *s, con
 
 void ob_hash_sort_simple(const ObCharsetInfo *cs,
 				const unsigned char *key, size_t len,
-                ulong *nr1, ulong *nr2,
+                uint64_t *nr1, uint64_t *nr2,
         const bool calc_end_space, hash_algo hash_algo);
 
 int ob_strcasecmp_mb(const ObCharsetInfo *cs, const char *s, const char *t);
@@ -617,7 +617,7 @@ int ob_wildcmp_mb_bin(const ObCharsetInfo *cs,
                       int escape, int w_one, int w_many);
 
 void ob_hash_sort_mb_bin(const ObCharsetInfo *cs __attribute__((unused)),
-                         const unsigned char *key, size_t len, ulong *nr1, ulong *nr2,
+                         const unsigned char *key, size_t len, uint64_t *nr1, uint64_t *nr2,
                          const bool calc_end_space, hash_algo hash_algo);
 
 uint32 ob_convert(char *to, uint32 to_length, const ObCharsetInfo *to_cs,

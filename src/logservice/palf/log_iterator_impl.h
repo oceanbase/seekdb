@@ -29,7 +29,6 @@
 #include "log_reader_utils.h"               // ReadBuf
 #include "log_entry.h"                      // LogEntry
 #include "log_group_entry.h"                // LogGroupEntry
-#include "log_meta_entry.h"                 // LogMetaEntry
 #include "log_iterator_storage.h"           // LogIteratorStorage
 #include "log_checksum.h"                   // LogChecksum
 
@@ -44,8 +43,7 @@ enum class LogEntryType
   GROUP_ENTRY_HEADER = 0,
   LOG_ENTRY_HEADER = 1,
   LOG_INFO_BLOCK_HEADER = 2,
-  LOG_META_ENTRY_HEADER = 3,
-  LOG_TYPE_MAX = 4
+  LOG_TYPE_MAX = 3
 };
 // =========== LogEntryType end =============
 
@@ -196,21 +194,6 @@ private:
   //      -- iterator start lsn is not the header of LogGroupEntry.
   int parse_one_entry_(const SCN &replayable_point_scn,
                        IterateEndInfo &info);
-
-  int parse_meta_entry_()
-  {
-    int ret = OB_SUCCESS;
-    const bool matched_type = std::is_same<LogMetaEntry, ENTRY>::value;
-    int64_t pos = curr_read_pos_;
-    if (true == matched_type) {
-      if (OB_FAIL(curr_entry_.deserialize(buf_, curr_read_buf_end_pos_, pos))) {
-      }
-    } else {
-      ret = OB_INVALID_DATA;
-      PALF_LOG(ERROR, "parse LogMetaEntry failed, unexpected error", K(ret), KPC(this));
-    }
-    return ret;
-  }
 
   int parse_log_entry_(const SCN &replayable_point_scn,
                        IterateEndInfo &info)
@@ -752,11 +735,6 @@ int LogIteratorImpl<ENTRY>::parse_one_entry_(const SCN &replayable_point_scn,
             ret = parse_log_entry_(replayable_point_scn, info);
             break;
           }
-        case LogEntryType::LOG_META_ENTRY_HEADER:
-          {
-            ret = parse_meta_entry_();
-            break;
-          }
         default:
           ret = OB_ERR_UNEXPECTED;
           break;
@@ -849,8 +827,6 @@ int LogIteratorImpl<ENTRY>::get_log_entry_type_(LogEntryType &log_entry_type)
     log_entry_type = LogEntryType::GROUP_ENTRY_HEADER;
   } else if (LogEntryHeader::MAGIC == magic_number) {
     log_entry_type = LogEntryType::LOG_ENTRY_HEADER;
-  } else if (LogMetaEntryHeader::MAGIC == magic_number) {
-    log_entry_type = LogEntryType::LOG_META_ENTRY_HEADER;
   } else if (LogBlockHeader::MAGIC == magic_number) {
     log_entry_type = LogEntryType::LOG_INFO_BLOCK_HEADER;
   } else if (is_log_entry_iterator && curr_entry_is_padding_

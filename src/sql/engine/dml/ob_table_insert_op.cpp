@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "sql/engine/dml/ob_table_insert_op.h"
 #include "sql/engine/dml/ob_dml_service.h"
 
@@ -147,36 +147,36 @@ OB_INLINE int ObTableInsertOp::open_table_for_each()
       const ObInsCtDef &primary_ins_ctdef = *ctdefs.at(0);
       ObInsRtDef &primary_ins_rtdef = rtdefs.at(0);
       if (OB_SUCC(ret)) {
-        // This table is being accessed by DML operator, mark its table location as writing.
+        // This table is being accessed by DML operator, mark its table access as writing.
         // For single value insert, nested SQL may modify its insert table, so
-        // clear the writing flag in table location before the trigger execution.
+        // clear the writing flag in table access before the trigger execution.
         //see it:
-        primary_ins_rtdef.das_rtdef_.table_loc_->is_writing_ = !(primary_ins_ctdef.is_single_value_);
+        primary_ins_rtdef.das_rtdef_.table_access_->is_writing_ = !(primary_ins_ctdef.is_single_value_);
       }
     }
   }
   return ret;
 }
 
-int ObTableInsertOp::calc_tablet_loc(const ObInsCtDef &ins_ctdef,
+int ObTableInsertOp::resolve_tablet_access(const ObInsCtDef &ins_ctdef,
                                      ObInsRtDef &ins_rtdef,
-                                     ObDASTabletLoc *&tablet_loc)
+                                     DASRuntimeTabletAccess *&tablet_access)
 {
   int ret = OB_SUCCESS;
   if (MY_SPEC.use_dist_das_) {
     ObExpr *calc_part_id_expr = ins_ctdef.multi_ctdef_->calc_part_id_expr_;
     ObObjectID partition_id = OB_INVALID_ID;
     ObTabletID tablet_id;
-    ObDASTableLoc &table_loc = *ins_rtdef.das_rtdef_.table_loc_;
+    DASRuntimeTableAccess &table_access = *ins_rtdef.das_rtdef_.table_access_;
     if (OB_FAIL(ObExprCalcPartitionBase::calc_part_and_tablet_id(calc_part_id_expr, eval_ctx_, partition_id, tablet_id))) {
     } else if (!ins_ctdef.multi_ctdef_->hint_part_ids_.empty()
         && !has_exist_in_array(ins_ctdef.multi_ctdef_->hint_part_ids_, partition_id)) {
       ret = OB_PARTITION_NOT_MATCH;
-    } else if (OB_FAIL(DAS_CTX(ctx_).extended_tablet_loc(table_loc, tablet_id, tablet_loc))) {
+    } else if (OB_FAIL(DAS_CTX(ctx_).ensure_tablet_access(table_access, tablet_id, tablet_access))) {
     }
   } else {
     //direct write insert row to storage
-    tablet_loc = MY_INPUT.get_tablet_loc();
+    tablet_access = MY_INPUT.get_tablet_access();
   }
   return ret;
 }
@@ -214,18 +214,18 @@ OB_INLINE int ObTableInsertOp::insert_row_to_das()
       // insert each table with fetched row
       const ObInsCtDef &ins_ctdef = *(ctdefs.at(j));
       ObInsRtDef &ins_rtdef = rtdefs.at(j);
-      ObDASTabletLoc *tablet_loc = nullptr;
+      DASRuntimeTabletAccess *tablet_access = nullptr;
       ObDMLModifyRowNode modify_row(this, &ins_ctdef, &ins_rtdef, ObDmlEventType::DE_INSERTING);
       ++ins_rtdef.cur_row_num_;
       if (OB_FAIL(ObDMLService::init_heap_table_pk_for_ins(ins_ctdef, eval_ctx_))) {
       } else if (OB_FAIL(ObDMLService::process_insert_row(ins_ctdef, ins_rtdef, *this, is_skipped))) {
       } else if (OB_UNLIKELY(is_skipped)) {
         break;
-      } else if (OB_FAIL(calc_tablet_loc(ins_ctdef, ins_rtdef, tablet_loc))) {
+      } else if (OB_FAIL(resolve_tablet_access(ins_ctdef, ins_rtdef, tablet_access))) {
       } else if (OB_FAIL(ObDMLService::set_heap_table_hidden_pk(ins_ctdef,
-                                                                tablet_loc->tablet_id_,
+                                                                tablet_access->tablet_id_,
                                                                 eval_ctx_))) {
-      } else if (OB_FAIL(ObDMLService::insert_row(ins_ctdef, ins_rtdef, tablet_loc, dml_rtctx_, modify_row.new_row_))) {
+      } else if (OB_FAIL(ObDMLService::insert_row(ins_ctdef, ins_rtdef, tablet_access, dml_rtctx_, modify_row.new_row_))) {
       } else if (need_after_row_process(ins_ctdef) && OB_FAIL(dml_modify_rows_.push_back(modify_row))) {
       }
       if (OB_FAIL(ret)) {
@@ -339,7 +339,7 @@ int ObTableInsertOp::inner_open()
   int ret = OB_SUCCESS;
   NG_TRACE(insert_open);
   //execute insert with das
-  //calc partition by table location info
+  //calc partition by table access info
   if (OB_FAIL(ObTableModifyOp::inner_open())) {
   } else if (OB_UNLIKELY(MY_SPEC.ins_ctdefs_.empty())) {
     ret = OB_ERR_UNEXPECTED;
@@ -379,8 +379,8 @@ OB_INLINE int ObTableInsertOp::close_table_for_each()
     for (int64_t i = 0; OB_SUCC(ret) && i < ins_rtdefs_.count(); ++i) {
       if (!ins_rtdefs_.at(i).empty()) {
         ObInsRtDef &primary_ins_rtdef = ins_rtdefs_.at(i).at(0);
-        if (OB_NOT_NULL(primary_ins_rtdef.das_rtdef_.table_loc_)) {
-          primary_ins_rtdef.das_rtdef_.table_loc_->is_writing_ = false;
+        if (OB_NOT_NULL(primary_ins_rtdef.das_rtdef_.table_access_)) {
+          primary_ins_rtdef.das_rtdef_.table_access_->is_writing_ = false;
         }
       }
     }

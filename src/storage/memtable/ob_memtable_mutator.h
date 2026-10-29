@@ -62,7 +62,7 @@ public:
   int set_flags(const uint8_t row_flag);
   uint8_t get_flags() const { return flags_; }
   int check_data_integrity(const char *buf, const int64_t data_len);
-  int64_t get_total_size() const { return meta_size_ + data_size_; }
+  int64_t get_total_size() const { return static_cast<int64_t>(meta_size_) + data_size_; }
   int64_t get_meta_size() const { return meta_size_; }
   int64_t get_data_size() const { return data_size_; }
 

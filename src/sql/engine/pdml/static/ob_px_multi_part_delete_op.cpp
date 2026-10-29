@@ -141,11 +141,11 @@ int ObPxMultiPartDeleteOp::read_row(ObExecContext &ctx,
       row = &child_->get_spec().output_;
       if (NO_PARTITION_ID_FLAG == part_id_idx) {
         // If row does not contain the cell corresponding to partition id expr, default partition id is 0
-        ObDASTableLoc *table_loc = del_rtdef_.das_rtdef_.table_loc_;
-        if (OB_ISNULL(table_loc) || table_loc->get_tablet_locs().size() != 1) {
+        DASRuntimeTableAccess *table_access = del_rtdef_.das_rtdef_.table_access_;
+        if (OB_ISNULL(table_access) || table_access->get_tablet_accesses().size() != 1) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          tablet_id = table_loc->get_first_tablet_loc()->tablet_id_;
+          tablet_id = table_access->get_first_tablet_access()->tablet_id_;
         }
       } else if (child_->get_spec().output_.count() > part_id_idx) {
         ObExpr *expr = child_->get_spec().output_.at(part_id_idx);
@@ -162,7 +162,7 @@ int ObPxMultiPartDeleteOp::read_row(ObExecContext &ctx,
 
 
 int ObPxMultiPartDeleteOp::write_rows(ObExecContext &ctx,
-                                      const ObDASTabletLoc *tablet_loc,
+                                      const DASRuntimeTabletAccess *tablet_access,
                                       ObPDMLOpRowIterator &dml_row_iter)
 {
   int ret = OB_SUCCESS;
@@ -180,7 +180,7 @@ int ObPxMultiPartDeleteOp::write_rows(ObExecContext &ctx,
         } else {
           iter_end_ = true;
         }
-      } else if (OB_FAIL(ObDMLService::delete_row(MY_SPEC.del_ctdef_, del_rtdef_, tablet_loc, dml_rtctx_, stored_row))) {
+      } else if (OB_FAIL(ObDMLService::delete_row(MY_SPEC.del_ctdef_, del_rtdef_, tablet_access, dml_rtctx_, stored_row))) {
       } else if (OB_FAIL(discharge_das_write_buffer())) {
       } else {
         op_monitor_info_.otherstat_3_value_++;

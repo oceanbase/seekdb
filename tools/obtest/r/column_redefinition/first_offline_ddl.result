@@ -5,7 +5,6 @@ ob1=OBI(cluster=1, proxy_num=0);
 test case for bootstrap begin
 ob1.reboot;
 ob1.mysql alter system set enable_rebalance='false';
-ob1.mysql alter system set syslog_io_bandwidth_limit = '4G';
 test case for bootstrap finish
 ===============================================================
 ==================     create tenant   ========================

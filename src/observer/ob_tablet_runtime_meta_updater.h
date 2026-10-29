@@ -104,7 +104,7 @@ public:
 
   TO_STRING_KV(K_(tablet_id), K_(need_diagnose), K_(add_timestamp), K_(start_timestamp));
 private:
-  const int64_t TABLET_CHECK_INTERVAL = 2 * 3600 * 1000L * 1000L; //2 hour
+  const int64_t TABLET_CHECK_INTERVAL = 2LL * 3600 * 1000 * 1000; //2 hour
   bool need_diagnose_; // task for compaction need diagnose
   common::ObTabletID tablet_id_;
   int64_t add_timestamp_;

@@ -16,13 +16,13 @@
 
 #define USING_LOG_PREFIX STORAGE_BLKMGR
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "storage/blocksstable/ob_shared_macro_block_manager.h"
 #include "share/rc/ob_server_runtime.h"
 
 #include "storage/tablet/ob_mds_schema_helper.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "storage/meta_store/ob_server_storage_meta_service.h"
+#include "storage/meta_store/storage_meta_service.h"
 #include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
 
 namespace oceanbase
@@ -793,7 +793,7 @@ int ObSharedMacroBlockMgr::read_sstable_block(
 void ObSharedMacroBlockMgr::ObBlockDefragmentationTask::runTimerTask()
 {
   int ret = OB_SUCCESS;
-  if (SERVER_STORAGE_META_SERVICE.is_started() && OB_FAIL(shared_mgr_.defragment())) {
+  if (STORAGE_META_SERVICE.is_started() && OB_FAIL(shared_mgr_.defragment())) {
   }
 }
 

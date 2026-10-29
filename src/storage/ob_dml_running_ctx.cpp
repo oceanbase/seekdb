@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "storage/ob_dml_running_ctx.h"
 #include "storage/ob_table_dml_param.h"
 #include "storage/tablet/ob_tablet.h"

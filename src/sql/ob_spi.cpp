@@ -100,8 +100,7 @@ int ObSPIService::PLPrepareResult::init(
   param.set_mem_attr(ObModIds::OB_PL_TEMP,
                     ObCtxIds::DEFAULT_CTX_ID)
     .set_properties(lib::USE_TL_PAGE_OPTIONAL)
-    .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE)
-    .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
+    .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE);
   if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
   } else {
     result_set_ = new (buf_) ObResultSet(
@@ -120,8 +119,7 @@ int ObSPIResultSet::init(
   param.set_mem_attr(ObModIds::OB_RESULT_SET,
                     ObCtxIds::DEFAULT_CTX_ID)
     .set_properties(lib::USE_TL_PAGE_OPTIONAL)
-    .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE)
-    .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
+    .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE);
   if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
   } else {
     plan_cache_access_service_ = &plan_cache_access_service;
@@ -1503,14 +1501,14 @@ ObPLSPITraceIdGuard::ObPLSPITraceIdGuard(const ObString &sql,
 
     if (reused_trace_id != nullptr && reused_trace_id->is_valid()) {
       // do not log when fetching from cursor
-      ObCurTraceId::get_trace_id()->set(*reused_trace_id);
+      ObCurTraceId::set(*reused_trace_id);
     } else {
       ObCurTraceId::TraceId new_trace_id;
       new_trace_id.init(origin_trace_id_.get_addr());
 
       // log with PL trace_id
 
-      ObCurTraceId::get_trace_id()->set(new_trace_id);
+      ObCurTraceId::set(new_trace_id);
     }
   }
 }
@@ -1522,7 +1520,7 @@ ObPLSPITraceIdGuard::~ObPLSPITraceIdGuard()
   if (OB_NOT_NULL(ObCurTraceId::get_trace_id())) {
     curr_trace_id.set(*ObCurTraceId::get_trace_id());
     session_.set_last_trace_id(ObCurTraceId::get_trace_id());
-    ObCurTraceId::get_trace_id()->set(origin_trace_id_);
+    ObCurTraceId::set(origin_trace_id_);
 
     if (OB_FAIL(ret) && ret != OB_READ_NOTHING) {
       LOG_WARN("sql execution finished, trace id restored",
@@ -4621,7 +4619,7 @@ int ObSPIService::inner_fetch_with_retry(ObPLExecCtx *ctx,
         if (can_retry) {
           retry_guard.test();
         }
-      // NOTE: cursor fetch failed can not retry, we only use this to refresh location cache.
+      // NOTE: cursor fetch failed can not retry, we only use this to record access errors.
       // actully, this function only called by cursor, so `for_cursor` just in case.
       } while (RETRY_TYPE_NONE != retry_ctrl.get_retry_type() && !for_cursor);
       session->get_retry_info_for_update().clear();

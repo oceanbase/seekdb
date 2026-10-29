@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX PL
 
 #include "ob_dbms_vector_mysql.h"
+#include "lib/utility/utility.h"
 #include "src/pl/ob_pl.h"
 #include "sql/engine/cmd/ob_vector_refresh_index_executor.h"
 
@@ -296,8 +297,10 @@ int ObDBMSVectorMySql::index_vector_memory_estimate(ObPLExecCtx &ctx, ParamStore
       SMART_VAR(ObMySQLProxy::MySQLResult, res) {
         ObSqlString query_string;
         sqlclient::ObMySQLResult *result = NULL;
-        if (OB_FAIL(query_string.assign_fmt("SELECT cast(sum(table_rows) as unsigned) as sum, max(table_rows) as max from information_schema.PARTITIONS WHERE table_schema='%.*s' and table_name='%.*s'",
-                database_name.length(), database_name.ptr(), table_name.length(), table_name.ptr()))) {
+        if (OB_FAIL(query_string.assign("SELECT cast(sum(table_rows) as unsigned) as sum, max(table_rows) as max from information_schema.PARTITIONS WHERE table_schema="))) {
+        } else if (OB_FAIL(sql_append_hex_escape_str(database_name, query_string))) {
+        } else if (OB_FAIL(query_string.append(" and table_name="))) {
+        } else if (OB_FAIL(sql_append_hex_escape_str(table_name, query_string))) {
         } else if (OB_FAIL(GCTX.sql_proxy_->read(res, query_string.ptr()))) {
         } else if (OB_ISNULL(result = res.get_result())) {
           ret = OB_ERR_UNEXPECTED;

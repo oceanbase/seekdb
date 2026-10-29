@@ -1,4 +1,4 @@
-CREATE OR REPLACE PACKAGE dbms_scheduler
+CREATE OR REPLACE PACKAGE dbms_scheduler AUTHID CURRENT_USER
 
   PROCEDURE enable ( job_name  VARCHAR(65535));
 

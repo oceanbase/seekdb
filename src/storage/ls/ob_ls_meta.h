@@ -26,7 +26,6 @@
 #include "share/ls/ob_ls_restore_status.h"
 #include "share/ls/ob_restore_status.h"
 #include "storage/tx/ob_id_service.h"
-#include "storage/ls/ob_ls_saved_info.h"
 #include "share/scn.h"
 
 namespace oceanbase
@@ -50,27 +49,20 @@ public:
   ObLSMeta &operator=(const ObLSMeta &other);
   share::SCN get_clog_checkpoint_scn() const;
   palf::LSN get_clog_base_lsn() const;
-  int set_clog_checkpoint(const int64_t ls_epoch,
-                          const palf::LSN &clog_checkpoint_lsn,
+  int set_clog_checkpoint(const palf::LSN &clog_checkpoint_lsn,
                           const share::SCN &clog_checkpoint_scn,
-                          const bool write_slog);
-  int set_restore_status(const int64_t ls_epoch, const ObRestoreStatus &restore_status);
+                          const bool persist_change);
+  int set_restore_status(const ObRestoreStatus &restore_status);
   int get_restore_status(ObRestoreStatus &restore_status) const;
-  int update_ls_replayable_point(const int64_t ls_epoch, const share::SCN &replayable_point);
-  int get_ls_replayable_point(share::SCN &replayable_point);
 
   share::SCN get_tablet_change_checkpoint_scn() const;
-  int set_tablet_change_checkpoint_scn(const int64_t ls_epoch, const share::SCN &tablet_change_checkpoint_scn);
-  int update_id_meta(const int64_t ls_epoch,
-                     const int64_t service_type,
+  int set_tablet_change_checkpoint_scn(const share::SCN &tablet_change_checkpoint_scn);
+  int update_id_meta(const int64_t service_type,
                      const int64_t limited_id,
                      const share::SCN &latest_scn,
-                     const bool write_slog);
+                     const bool persist_change);
   int get_all_id_meta(transaction::ObAllIDMeta &all_id_meta) const;
-  int get_saved_info(ObLSSavedInfo &saved_info);
-  int update_for_physical_restore(const int64_t ls_epoch, const ObLSMeta &source_meta);
-  int build_saved_info(const int64_t ls_epoch);
-  int clear_saved_info(const int64_t ls_epoch);
+  int update_for_physical_restore(const ObLSMeta &source_meta);
   int check_ls_need_online(bool &need_online) const;
   int init(
       const ObRestoreStatus &restore_status,
@@ -115,19 +107,17 @@ public:
   };
   TO_STRING_KV(K_(ls_persistent_state),
                K_(clog_checkpoint_scn), K_(clog_base_lsn),
-               K_(restore_status), K_(replayable_point), K_(tablet_change_checkpoint_scn),
+               K_(restore_status), K_(tablet_change_checkpoint_scn),
                K_(all_id_meta));
 private:
   int check_can_update_();
 public:
   mutable common::ObLatch rw_lock_;     // only for atomic read/write in memory.
-  mutable common::ObLatch update_lock_; // only one process can update ls meta. both for write slog and memory
+  mutable common::ObLatch update_lock_; // only one process can update ls meta. both persistence and memory
   
 private:
   ObLSPersistentState ls_persistent_state_;
-  typedef common::ObFunction<int(const int64_t, const ObLSMeta &)> WriteSlog;
-  // for test
-  static WriteSlog write_slog_;
+  static int persist(const ObLSMeta &meta);
 
   // clog_checkpoint_scn_, meaning:
   // 1. dump points of all modules have exceeded clog_checkpoint_scn_
@@ -139,11 +129,9 @@ private:
   // 3. clog starts to replay log entries from clog_base_lsn_ on crash recovery
   palf::LSN clog_base_lsn_;
   ObRestoreStatus restore_status_;
-  share::SCN replayable_point_;
   //TODO(yaoying.yyy):modify this
   share::SCN tablet_change_checkpoint_scn_;
   transaction::ObAllIDMeta all_id_meta_;
-  ObLSSavedInfo saved_info_;
 };
 
 }  // namespace storage

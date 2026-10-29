@@ -17,6 +17,8 @@
 #ifndef OB_WIDE_INTEGER_STR_FUNCS_H_
 #define OB_WIDE_INTEGER_STR_FUNCS_H_
 
+#include <inttypes.h>
+
 namespace oceanbase
 {
 namespace common
@@ -156,9 +158,9 @@ int to_string(const ObWideInteger<Bits, Signed> &self, char *buf, const int64_t 
       }
       for (int i = digit_sz - 1; OB_SUCC(ret) && i >= 0; i--) {
         if (i == digit_sz - 1) {
-          ret = databuff_printf(buf, buf_len, pos, "%lu", digits[i]);
+          ret = databuff_printf(buf, buf_len, pos, "%" PRIu64, digits[i]);
         } else {
-          ret = databuff_printf(buf, buf_len, pos, "%.019lu", digits[i]);
+          ret = databuff_printf(buf, buf_len, pos, "%.019" PRIu64, digits[i]);
         }
       }
     }

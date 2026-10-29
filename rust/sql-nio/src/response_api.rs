@@ -431,8 +431,7 @@ pub(crate) unsafe fn append_single_field_metadata(
 /// non-empty nested byte view must remain readable and immutable until return.
 /// Both output pointers must be writable, mutually non-overlapping, and must
 /// not overlap any input descriptor or byte view.
-#[no_mangle]
-pub unsafe extern "C" fn nio_response_append_resultset_metadata(
+pub unsafe fn nio_response_append_resultset_metadata(
     connection_handle: *mut NioConnectionHandle,
     generation: u64,
     include_result_header: c_int,
@@ -574,8 +573,7 @@ pub unsafe extern "C" fn nio_response_append_resultset_metadata(
 /// `connection_handle` is null or a live handle from
 /// `nio_connection_handle_acquire` with no concurrent release; `framed_len` is
 /// null or valid for one `i64` write.
-#[no_mangle]
-pub unsafe extern "C" fn nio_response_append_result_header(
+pub unsafe fn nio_response_append_result_header(
     connection_handle: *mut NioConnectionHandle,
     generation: u64,
     field_count: u64,
@@ -597,8 +595,7 @@ pub unsafe extern "C" fn nio_response_append_result_header(
 /// `connection_handle` is null or a live handle from
 /// `nio_connection_handle_acquire` with no concurrent release; `framed_len` is
 /// null or valid for one `i64` write.
-#[no_mangle]
-pub unsafe extern "C" fn nio_response_append_eof(
+pub unsafe fn nio_response_append_eof(
     connection_handle: *mut NioConnectionHandle,
     generation: u64,
     field_count: u8,
@@ -614,8 +611,7 @@ pub unsafe extern "C" fn nio_response_append_eof(
 /// `connection_handle` is null or a live handle from
 /// `nio_connection_handle_acquire` with no concurrent release; `framed_len` is
 /// null or valid for one `i64` write.
-#[no_mangle]
-pub unsafe extern "C" fn nio_response_append_prepare_ok(
+pub unsafe fn nio_response_append_prepare_ok(
     connection_handle: *mut NioConnectionHandle,
     generation: u64,
     statement_id: u32,
@@ -634,8 +630,7 @@ pub unsafe extern "C" fn nio_response_append_prepare_ok(
 /// `nio_connection_handle_acquire` with no concurrent release; `framed_len` is
 /// null or valid for one `i64` write; `sql_state` and `message` have
 /// `sql_state_len` / `message_len` readable bytes for the duration of the call.
-#[no_mangle]
-pub unsafe extern "C" fn nio_response_append_error(
+pub unsafe fn nio_response_append_error(
     connection_handle: *mut NioConnectionHandle,
     generation: u64,
     error_code: u16,
@@ -674,8 +669,7 @@ pub unsafe extern "C" fn nio_response_append_error(
 /// null or valid for one `i64` write; `plugin_name` and `scramble` have
 /// `plugin_name_len` / `scramble_len` readable bytes for the duration of the
 /// call.
-#[no_mangle]
-pub unsafe extern "C" fn nio_response_append_auth_switch(
+pub unsafe fn nio_response_append_auth_switch(
     connection_handle: *mut NioConnectionHandle,
     generation: u64,
     plugin_name: *const c_char,
@@ -711,8 +705,7 @@ pub unsafe extern "C" fn nio_response_append_auth_switch(
 /// `nio_connection_handle_acquire` with no concurrent release; `framed_len` is
 /// null or valid for one `i64` write; `filename` has `filename_len` readable
 /// bytes for the duration of the call.
-#[no_mangle]
-pub unsafe extern "C" fn nio_response_append_local_infile(
+pub unsafe fn nio_response_append_local_infile(
     connection_handle: *mut NioConnectionHandle,
     generation: u64,
     filename: *const c_char,
@@ -736,8 +729,7 @@ pub unsafe extern "C" fn nio_response_append_local_infile(
 /// `nio_connection_handle_acquire` with no concurrent release; `framed_len` is
 /// null or valid for one `i64` write; `value` has `value_len` readable bytes
 /// for the duration of the call.
-#[no_mangle]
-pub unsafe extern "C" fn nio_response_append_string(
+pub unsafe fn nio_response_append_string(
     connection_handle: *mut NioConnectionHandle,
     generation: u64,
     value: *const c_char,
@@ -762,8 +754,7 @@ pub unsafe extern "C" fn nio_response_append_string(
 /// null or valid for one `i64` write; `ok_view` is null or points to a valid
 /// view whose byte views and kv arrays stay readable for the duration of the
 /// call.
-#[no_mangle]
-pub unsafe extern "C" fn nio_response_append_ok(
+pub unsafe fn nio_response_append_ok(
     connection_handle: *mut NioConnectionHandle,
     generation: u64,
     ok_view: *const NioMysqlOkView,
@@ -784,8 +775,7 @@ pub unsafe extern "C" fn nio_response_append_ok(
 /// `nio_connection_handle_acquire` with no concurrent release; `framed_len` is
 /// null or valid for one `i64` write; `field_view` is null or points to a
 /// valid view whose byte views stay readable for the duration of the call.
-#[no_mangle]
-pub unsafe extern "C" fn nio_response_append_field(
+pub unsafe fn nio_response_append_field(
     connection_handle: *mut NioConnectionHandle,
     generation: u64,
     field_view: *const NioMysqlFieldView,
@@ -809,8 +799,7 @@ pub unsafe extern "C" fn nio_response_append_field(
 /// null or valid for one `i64` write; `row_view` is null or points to a valid
 /// view whose `cells` array (`cell_count` entries) and cell byte views stay
 /// readable for the duration of the call.
-#[no_mangle]
-pub unsafe extern "C" fn nio_response_append_row(
+pub unsafe fn nio_response_append_row(
     connection_handle: *mut NioConnectionHandle,
     generation: u64,
     row_view: *const NioMysqlRowView,
@@ -832,8 +821,7 @@ pub unsafe extern "C" fn nio_response_append_row(
 /// null or valid for one `i64` write; `blob` has `blob_len` readable bytes for
 /// the duration of the call (a blob produced by
 /// `nio_encode_mysql_packed_row_blob`).
-#[no_mangle]
-pub unsafe extern "C" fn nio_response_append_packed_row_blob(
+pub unsafe fn nio_response_append_packed_row_blob(
     connection_handle: *mut NioConnectionHandle,
     generation: u64,
     blob: *const c_char,
@@ -941,8 +929,7 @@ pub(crate) fn drain_blocking_response(conn: &Arc<Conn>, generation: u64) -> c_in
 /// # Safety
 /// `connection_handle` is null or is a live acquired handle and must not be
 /// released until this call returns.
-#[no_mangle]
-pub unsafe extern "C" fn nio_response_flush(
+pub unsafe fn nio_response_flush(
     connection_handle: *mut NioConnectionHandle,
     generation: u64,
     is_final: c_int,

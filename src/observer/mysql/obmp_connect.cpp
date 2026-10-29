@@ -109,7 +109,7 @@ int ObMPConnect::deserialize()
       LOG_DEBUG("database name", K(hsr_.get_database()));
     }
     // get_user_tenant() is an earlier consumer of the same Rust login view and
-    // ObMPConnect is the final one, but neither releases it: nio_commit_request
+    // ObMPConnect is the final one, but neither releases it: oceanbase::nio::commit_request
     // frees unclaimed login metadata when the request completes, making commit
     // the single owner instead of a comment-enforced "last consumer releases"
     // protocol spread across three files.
@@ -746,15 +746,22 @@ int ObMPConnect::set_client_version(ObSMConnection &conn)
     char buff[OB_MAX_VERSION_LENGTH];
     memset(buff, 0, OB_MAX_VERSION_LENGTH);
     int64_t cur_item = 0;
-    for (int64_t i = 0; cur_item != VERSION_ITEM && i < length; ++i) {
+    for (int64_t i = 0; OB_SUCC(ret) && cur_item != VERSION_ITEM && i < length; ++i) {
       if (client_version_str[i] == '.') {
         ++cur_item;
       }
       if (cur_item != VERSION_ITEM) {
-        buff[i] = client_version_str[i];
+        // Keep the parsed prefix terminated even when the peer sends an
+        // oversized component. A suffix after the third dot is still ignored.
+        if (i >= OB_MAX_VERSION_LENGTH - 1) {
+          ret = OB_INVALID_ARGUMENT;
+        } else {
+          buff[i] = client_version_str[i];
+        }
       }
     }
-    if (OB_FAIL(ObVersionParser::get_version(buff, conn.client_version_))) {
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(ObVersionParser::get_version(buff, conn.client_version_))) {
     } else {/*do nothing*/}
   }
   return ret;

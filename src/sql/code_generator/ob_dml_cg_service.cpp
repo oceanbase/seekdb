@@ -1716,7 +1716,7 @@ int ObDmlCgService::generate_das_dml_ctdef(ObLogDelUpd &op,
                                            ObDASDMLBaseCtDef &das_dml_ctdef)
 {
   int ret = OB_SUCCESS;
-  das_dml_ctdef.table_id_ = index_dml_info.loc_table_id_;
+  das_dml_ctdef.table_id_ = index_dml_info.target_table_ref_id_;
   das_dml_ctdef.index_tid_ = index_tid;
   das_dml_ctdef.is_ignore_ = op.is_ignore();
   das_dml_ctdef.is_batch_stmt_ = op.get_plan()->get_optimizer_context().is_batched_multi_stmt();
@@ -1951,7 +1951,7 @@ int ObDmlCgService::generate_das_lock_ctdef(ObLogicalOperator &op,
   int ret = OB_SUCCESS;
   ObArray<ObRawExpr*> empty_new_row;
   ObArray<uint64_t> dml_column_ids;
-  das_lock_ctdef.table_id_ = index_dml_info.loc_table_id_;
+  das_lock_ctdef.table_id_ = index_dml_info.target_table_ref_id_;
   das_lock_ctdef.index_tid_ = index_dml_info.ref_table_id_;
   ObSQLSessionInfo *session = nullptr;
   int64_t binlog_row_image = ObBinlogRowImage::FULL;
@@ -2540,9 +2540,9 @@ int ObDmlCgService::generate_multi_lock_ctdef(const IndexDMLInfo &index_dml_info
   int ret = OB_SUCCESS;
   if (OB_ISNULL(index_dml_info.old_part_id_expr_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(generate_table_loc_meta(index_dml_info, multi_lock_ctdef.loc_meta_))) {
+  } else if (OB_FAIL(generate_table_access_meta(index_dml_info, multi_lock_ctdef.access_meta_))) {
   } else if (OB_FAIL(cg_.generate_calc_part_id_expr(*index_dml_info.old_part_id_expr_,
-                                                    &multi_lock_ctdef.loc_meta_,
+                                                    &multi_lock_ctdef.access_meta_,
                                                     multi_lock_ctdef.calc_part_id_expr_))) {
   }
   return ret;
@@ -2552,9 +2552,9 @@ int ObDmlCgService::generate_multi_ins_ctdef(const IndexDMLInfo &index_dml_info,
                                              ObMultiInsCtDef &multi_ins_ctdef)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(generate_table_loc_meta(index_dml_info, multi_ins_ctdef.loc_meta_))) {
+  if (OB_FAIL(generate_table_access_meta(index_dml_info, multi_ins_ctdef.access_meta_))) {
   } else if (OB_FAIL(cg_.generate_calc_part_id_expr(*index_dml_info.new_part_id_expr_,
-                                                    &multi_ins_ctdef.loc_meta_,
+                                                    &multi_ins_ctdef.access_meta_,
                                                     multi_ins_ctdef.calc_part_id_expr_))) {
   } else if (!index_dml_info.part_ids_.empty() && index_dml_info.is_primary_index_) {
     if (OB_FAIL(multi_ins_ctdef.hint_part_ids_.assign(index_dml_info.part_ids_))) {
@@ -2568,9 +2568,9 @@ int ObDmlCgService::generate_multi_del_ctdef(const IndexDMLInfo &index_dml_info,
                                              ObMultiDelCtDef &multi_del_ctdef)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(generate_table_loc_meta(index_dml_info, multi_del_ctdef.loc_meta_))) {
+  if (OB_FAIL(generate_table_access_meta(index_dml_info, multi_del_ctdef.access_meta_))) {
   } else if (OB_FAIL(cg_.generate_calc_part_id_expr(*index_dml_info.old_part_id_expr_,
-                                                    &multi_del_ctdef.loc_meta_,
+                                                    &multi_del_ctdef.access_meta_,
                                                     multi_del_ctdef.calc_part_id_expr_))) {
   }
   return ret;
@@ -2584,12 +2584,12 @@ int ObDmlCgService::generate_multi_upd_ctdef(const ObLogDelUpd &op,
   if (OB_ISNULL(index_dml_info.old_part_id_expr_) ||
       OB_ISNULL(index_dml_info.new_part_id_expr_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(generate_table_loc_meta(index_dml_info, multi_upd_ctdef.loc_meta_))) {
+  } else if (OB_FAIL(generate_table_access_meta(index_dml_info, multi_upd_ctdef.access_meta_))) {
   } else if (OB_FAIL(cg_.generate_calc_part_id_expr(*index_dml_info.old_part_id_expr_,
-                                                    &multi_upd_ctdef.loc_meta_,
+                                                    &multi_upd_ctdef.access_meta_,
                                                     multi_upd_ctdef.calc_part_id_old_))) {
   } else if (OB_FAIL(cg_.generate_calc_part_id_expr(*index_dml_info.new_part_id_expr_,
-                                                    &multi_upd_ctdef.loc_meta_,
+                                                    &multi_upd_ctdef.access_meta_,
                                                     multi_upd_ctdef.calc_part_id_new_))) {
   } else {
     multi_upd_ctdef.is_enable_row_movement_ = true;
@@ -2606,36 +2606,36 @@ int ObDmlCgService::generate_multi_upd_ctdef(const ObLogDelUpd &op,
   return ret;
 }
 
-int ObDmlCgService::generate_table_loc_meta(const IndexDMLInfo &index_dml_info,
-                                            ObDASTableLocMeta &loc_meta)
+int ObDmlCgService::generate_table_access_meta(const IndexDMLInfo &index_dml_info,
+                                            DASTableAccessMeta &access_meta)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(cg_.opt_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    loc_meta.table_loc_id_ = index_dml_info.loc_table_id_;
-    loc_meta.ref_table_id_ = index_dml_info.ref_table_id_;
+    access_meta.table_ref_id_ = index_dml_info.target_table_ref_id_;
+    access_meta.ref_table_id_ = index_dml_info.ref_table_id_;
     // Related local index tablet_id pruning can only be used in a local plan (all operators
     //use the same das context),
     //because the distributed plan will pass tablet_id through exchange operator,
     //but the related tablet_id map can not be passed by exchange operator,
     //unused related pruning in distributed plan's dml operator,
     //we will build the related tablet_id map when dml operator be opened in distributed plan
-    loc_meta.unuse_related_pruning_ = (OB_PHY_PLAN_DISTRIBUTED == cg_.opt_ctx_->get_phy_plan_type()
+    access_meta.unuse_related_pruning_ = (OB_PHY_PLAN_DISTRIBUTED == cg_.opt_ctx_->get_phy_plan_type()
                                        && !cg_.opt_ctx_->get_root_stmt()->is_insert_stmt());
   }
   if (OB_SUCC(ret) && index_dml_info.is_primary_index_) {
-    TableLocRelInfo *rel_info = nullptr;
-    rel_info = cg_.opt_ctx_->get_loc_rel_info_by_id(index_dml_info.loc_table_id_,
+    RelatedTableAccessInfo *rel_info = nullptr;
+    rel_info = cg_.opt_ctx_->get_access_relation_by_id(index_dml_info.target_table_ref_id_,
                                                     index_dml_info.ref_table_id_);
     if (nullptr == rel_info || rel_info->related_ids_.count() <= 1) {
       //the first table id is the source table, <=1 mean no dependency table
     } else {
-      loc_meta.related_table_ids_.set_capacity(rel_info->related_ids_.count() - 1);
+      access_meta.related_table_ids_.set_capacity(rel_info->related_ids_.count() - 1);
       for (int64_t i = 0; OB_SUCC(ret) && i < rel_info->related_ids_.count(); ++i) {
-        if (rel_info->related_ids_.at(i) == loc_meta.ref_table_id_) {
+        if (rel_info->related_ids_.at(i) == access_meta.ref_table_id_) {
           //filter itself, do nothing
-        } else if (OB_FAIL(loc_meta.related_table_ids_.push_back(rel_info->related_ids_.at(i)))) {
+        } else if (OB_FAIL(access_meta.related_table_ids_.push_back(rel_info->related_ids_.at(i)))) {
         }
       }
     }
@@ -2819,7 +2819,7 @@ int ObDmlCgService::generate_fk_check_ctdef(const ObLogDelUpd &op,
   } else if (OB_INVALID_ID == index_tid) {
     ret = OB_ERR_CANNOT_ADD_FOREIGN;
   } else if (OB_FAIL(generate_fk_scan_ctdef(schema_guard, index_tid, fk_ctdef.das_scan_ctdef_))) {
-  } else if (OB_FAIL(generate_fk_table_loc_info(index_tid, fk_ctdef.loc_meta_, fk_ctdef.tablet_id_, fk_ctdef.is_part_table_))) {
+  } else if (OB_FAIL(generate_fk_access_meta(index_tid, fk_ctdef.access_meta_, fk_ctdef.tablet_id_, fk_ctdef.is_part_table_))) {
   } else {
     
     const ObTableSchema *table_schema = nullptr;
@@ -2875,8 +2875,8 @@ int ObDmlCgService::generate_rowkey_idx_for_foreign_key(const ObIArray<uint64_t>
   return ret;
 }
 
-int ObDmlCgService::generate_fk_table_loc_info(uint64_t index_table_id,
-                                               ObDASTableLocMeta &loc_meta,
+int ObDmlCgService::generate_fk_access_meta(uint64_t index_table_id,
+                                               DASTableAccessMeta &access_meta,
                                                ObTabletID &tablet_id,
                                                bool &is_part_table)
 {
@@ -2888,8 +2888,8 @@ int ObDmlCgService::generate_fk_table_loc_info(uint64_t index_table_id,
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(schema_guard->get_table_schema( index_table_id, table_schema))) {
   } else {
-    loc_meta.table_loc_id_ = index_table_id;
-    loc_meta.ref_table_id_ = index_table_id;
+    access_meta.table_ref_id_ = index_table_id;
+    access_meta.ref_table_id_ = index_table_id;
     if (PARTITION_LEVEL_ZERO == table_schema->get_part_level()) {
       tablet_id = table_schema->get_tablet_id();
     } else {
@@ -3194,7 +3194,7 @@ int ObDmlCgService::generate_rowkey_domain_ctdef(
   const ObTableSchema *rowkey_domain_schema = nullptr;
   ObDASScanCtDef *scan_ctdef = nullptr;
   ObSqlSchemaGuard *schema_guard = cg_.opt_ctx_->get_sql_schema_guard();
-  ObDASTableLocMeta *loc_meta = nullptr;
+  DASTableAccessMeta *access_meta = nullptr;
 
   if (OB_ISNULL(schema_guard) || OB_INVALID_ID == rowkey_domain_tid) {
     ret = OB_ERR_UNEXPECTED;
@@ -3212,20 +3212,20 @@ int ObDmlCgService::generate_rowkey_domain_ctdef(
                                                         index_dml_info.column_exprs_,
                                                         *rowkey_domain_schema,
                                                         scan_ctdef))) {
-  } else if (OB_ISNULL(loc_meta = OB_NEWx(ObDASTableLocMeta, &cg_.phy_plan_->get_allocator(), cg_.phy_plan_->get_allocator()))) {
+  } else if (OB_ISNULL(access_meta = OB_NEWx(DASTableAccessMeta, &cg_.phy_plan_->get_allocator(), cg_.phy_plan_->get_allocator()))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     scan_ctdef->ref_table_id_ = rowkey_domain_tid;
-    loc_meta->table_loc_id_ = index_dml_info.loc_table_id_;
-    loc_meta->ref_table_id_ = rowkey_domain_tid;
-    loc_meta->unuse_related_pruning_ = (OB_PHY_PLAN_DISTRIBUTED == cg_.opt_ctx_->get_phy_plan_type()
+    access_meta->table_ref_id_ = index_dml_info.target_table_ref_id_;
+    access_meta->ref_table_id_ = rowkey_domain_tid;
+    access_meta->unuse_related_pruning_ = (OB_PHY_PLAN_DISTRIBUTED == cg_.opt_ctx_->get_phy_plan_type()
                                        && !cg_.opt_ctx_->get_root_stmt()->is_insert_stmt());
     share::ObDasSemanticIndexInfo &semantic_index_info = scan_ctdef->semantic_index_info_;
     scan_ctdef->table_param_.get_enable_lob_locator_v2() = true;
     scan_ctdef->schema_version_ = rowkey_domain_schema->get_schema_version();
     ObSEArray<ObExpr *, 1> domain_id_expr;
     ObSEArray<uint64_t, 1> domain_id_col_ids;
-    if (OB_FAIL(attach_spec.attach_loc_metas_.push_back(loc_meta))) {
+    if (OB_FAIL(attach_spec.attach_access_metas_.push_back(access_meta))) {
     } else if (OB_FAIL(scan_ctdef->table_param_.convert(*rowkey_domain_schema, scan_ctdef->access_column_ids_,
             scan_ctdef->pd_expr_spec_.pd_storage_flag_))) {
     } else if (OB_FAIL(cg_.tsc_cg_service_.generate_das_result_output(scan_ctdef->access_column_ids_,

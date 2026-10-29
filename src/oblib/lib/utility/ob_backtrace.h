@@ -38,7 +38,7 @@ extern bool g_enable_backtrace;
 const int64_t LBT_BUFFER_LENGTH = 1024;
 int light_backtrace(void **buffer, int size);
 int light_backtrace(void **buffer, int size, int64_t rbp);
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__EMSCRIPTEN__)
 int _ob_backtrace(void** buffer, int size);
 #define ob_backtrace(buffer, size)                                \
   ({                                                              \

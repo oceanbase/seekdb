@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_dbms_sched_table_operator.h"
 #include "ob_dbms_sched_job_utils.h"
 #include "query/scheduler/ob_scheduler_job.h"

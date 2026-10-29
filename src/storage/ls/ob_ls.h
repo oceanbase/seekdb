@@ -205,8 +205,6 @@ public:
   int set_ls_meta(const ObLSMeta &ls_meta);
   int update_meta_for_physical_restore(const ObLSMeta &source_meta);
 
-  int64_t get_ls_epoch() const { return ls_epoch_; }
-  int set_ls_epoch(const int64_t ls_epoch);
   int finish_storage_meta_replay();
 
   // get tablet while replaying clog
@@ -271,55 +269,35 @@ public:
   int update_id_meta(const int64_t service_type,
                      const int64_t limited_id,
                      const share::SCN &latest_scn,
-                     const bool write_slog)
+                     const bool persist_change)
   {
-    return ls_meta_.update_id_meta(ls_epoch_, service_type, limited_id, latest_scn, write_slog);
+    return ls_meta_.update_id_meta(service_type, limited_id, latest_scn, persist_change);
   }
   // protect in ls lock
   int set_clog_checkpoint(const palf::LSN &clog_checkpoint_lsn,
                           const share::SCN &clog_checkpoint_scn,
-                          const bool write_slog)
+                          const bool persist_change)
   {
-    return ls_meta_.set_clog_checkpoint(ls_epoch_, clog_checkpoint_lsn, clog_checkpoint_scn, write_slog);
+    return ls_meta_.set_clog_checkpoint(clog_checkpoint_lsn, clog_checkpoint_scn, persist_change);
   }
   CONST_DELEGATE_WITH_RET(ls_meta_, get_clog_checkpoint_scn, share::SCN);
   DELEGATE_WITH_RET(ls_meta_, get_clog_base_lsn, palf::LSN);
-  DELEGATE_WITH_RET(ls_meta_, get_saved_info, int);
-  int build_saved_info()
-  {
-    return ls_meta_.build_saved_info(ls_epoch_);
-  }
-  int clear_saved_info()
-  {
-    return ls_meta_.clear_saved_info(ls_epoch_);
-  }
   CONST_DELEGATE_WITH_RET(ls_meta_, get_tablet_change_checkpoint_scn, share::SCN);
   DELEGATE_WITH_RET(ls_meta_, set_tablet_change_checkpoint_scn, int);
   int set_tablet_change_checkpoint_scn(const share::SCN &tablet_change_checkpoint_scn)
   {
-    return ls_meta_.set_tablet_change_checkpoint_scn(ls_epoch_, tablet_change_checkpoint_scn);
+    return ls_meta_.set_tablet_change_checkpoint_scn(tablet_change_checkpoint_scn);
   }
   int set_restore_status(const ObRestoreStatus &restore_status);
   // get restore status
   // @param [out] restore status.
   // int get_restore_status(share::ObRestoreStatus &status);
   DELEGATE_WITH_RET(ls_meta_, get_restore_status, int);
-  // @param [in] replayable point.
-  int update_ls_replayable_point(const share::SCN &replayable_point)
-  {
-    return ls_meta_.update_ls_replayable_point(ls_epoch_, replayable_point);
-  }
-  // update replayable point
-  // get replayable point
-  // @param [in] replayable point
-  // int get_ls_replayable_point(int64_t &replayable_point);
-  DELEGATE_WITH_RET(ls_meta_, get_ls_replayable_point, int);
   // ObLSTabletService interface:
   // update tablet by checkpoint
   // @param [in] key, key of tablet that will be updated
   // @param [in] new_addr, new addr of the tablet
   // @param [out] new_handle, new tablet handle
-  DELEGATE_WITH_RET(ls_tablet_svr_, update_tablet_checkpoint, int);
   // get a tablet handle
   // @param [in] tablet_id, the tablet needed
   // @param [out] handle, store the tablet and inc ref.
@@ -339,12 +317,7 @@ public:
   DELEGATE_WITH_RET(ls_tablet_svr_, build_tablet_iter, int);
   // update medium compaction info for tablet
   DELEGATE_WITH_RET(ls_tablet_svr_, update_medium_compaction_info, int);
-  // remove tablets
-  // @param [in] tbalet_ids ObIArray<ObTabletId>
-  // @param [out] null
-  // int remote_tablets(
-  //     const common::ObIArray<common::ObTabletID> &tablet_id_array);
-  DELEGATE_WITH_RET(ls_tablet_svr_, remove_tablets, int);
+  DELEGATE_WITH_RET(ls_tablet_svr_, remove_tablet, int);
   // create_ls_inner_tablet
   // @param [in] tablet_id
   // @param [in] frozen_timestamp
@@ -707,7 +680,6 @@ private:
   uint64_t switch_epoch_;// started from 0, odd means online, even means offline
   bool is_local_append_mode_;
   ObLSMeta ls_meta_;
-  int64_t ls_epoch_;
   ObLSLock lock_;
   // this is used for the meta lock, and will be removed later
   RWLock meta_rwlock_;

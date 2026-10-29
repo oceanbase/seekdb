@@ -902,10 +902,6 @@ public:
                                           const ObSetVar &set_var,
                                           const ObBasicSysVar &sys_var,
                                           const common::ObObj &val);
-  static int update_sql_mode(sql::ObExecContext &ctx,
-                             const ObSetVar &set_var,
-                             const ObBasicSysVar &sys_var,
-                             const common::ObObj &val);
 private:
   // start trans helper use by set transaction charactors
   static int start_trans_by_set_trans_char_(

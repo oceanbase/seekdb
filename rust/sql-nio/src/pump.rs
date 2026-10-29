@@ -18,7 +18,7 @@ use crate::capability::session_client_capabilities;
 
 pub(crate) fn deliver_to_cpp(
     handler: Handler,
-    sess: *mut c_void,
+    sess: *mut ObSqlSockSession,
     body: *mut c_char,
     body_len: usize,
     wire_bytes: u64,
@@ -171,7 +171,17 @@ pub(crate) fn send_greeting(conn: &Arc<Conn>, greeting: &NioGreetingInfo) -> boo
         match g.sock.write(&out[pos..]) {
             Ok(0) => return false,
             Ok(k) => pos += k,
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                // Admission registers writable interest for this pending tail.
+                // Waiting here would prevent the reactor from serving other
+                // clients or processing shutdown on a bounded transport.
+                if g.outbuf.try_reserve(out.len() - pos).is_err() {
+                    return false;
+                }
+                g.outbuf.extend_from_slice(&out[pos..]);
+                g.want_write = true;
+                break;
+            }
             Err(ref e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
             Err(_) => return false,
         }
@@ -236,9 +246,8 @@ pub(crate) fn auth_switch_pump(conn: &Arc<Conn>, handler: Handler, expected_seq:
 
 /// # Safety
 /// `out` points to writable storage for one `NioLoginView`.
-#[no_mangle]
-pub unsafe extern "C" fn nio_get_login_view(
-    sess: *mut c_void,
+pub unsafe fn nio_get_login_view(
+    sess: *mut ObSqlSockSession,
     generation: u64,
     out: *mut NioLoginView,
 ) -> c_int {
@@ -287,9 +296,8 @@ pub unsafe extern "C" fn nio_get_login_view(
 /// `out` points to writable storage for one `NioTlsSessionInfo`. The
 /// certificate pointer in the result is borrowed from the connection and is
 /// valid only until the active request is committed or aborted.
-#[no_mangle]
-pub unsafe extern "C" fn nio_get_tls_session_info(
-    sess: *mut c_void,
+pub unsafe fn nio_get_tls_session_info(
+    sess: *mut ObSqlSockSession,
     generation: u64,
     out: *mut NioTlsSessionInfo,
 ) -> c_int {
@@ -423,7 +431,14 @@ pub(crate) fn connect_pump(conn: &Arc<Conn>, handler: Handler) -> bool {
     conn.transport_caps
         .store(parsed_login.transport_caps, Ordering::Release);
     conn.mu.lock().unwrap().login = Some(parsed_login);
-    deliver_decoded_packet(conn, handler, packet, NIO_PACKET_LOGIN, None, current_peer_eof)
+    deliver_decoded_packet(
+        conn,
+        handler,
+        packet,
+        NIO_PACKET_LOGIN,
+        None,
+        current_peer_eof,
+    )
 }
 
 pub(crate) fn refuse_login(conn: &Arc<Conn>, msg: &[u8]) -> bool {
@@ -483,7 +498,7 @@ pub(crate) fn decode_pump(conn: &Arc<Conn>, handler: Handler) -> bool {
     )
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, feature = "native-network"))]
 fn read_raw_fd(inbuf: &mut Vec<u8>, fd: c_int, read_len: usize) -> std::io::Result<usize> {
     if inbuf.spare_capacity_mut().is_empty() {
         inbuf
@@ -492,7 +507,7 @@ fn read_raw_fd(inbuf: &mut Vec<u8>, fd: c_int, read_len: usize) -> std::io::Resu
     }
     let old_len = inbuf.len();
     let writable_len = read_len.min(inbuf.spare_capacity_mut().len());
-    let dst = inbuf.spare_capacity_mut().as_mut_ptr().cast::<c_void>();
+    let dst = inbuf.spare_capacity_mut().as_mut_ptr().cast::<std::ffi::c_void>();
     let n = unsafe { libc::read(fd, dst, writable_len) };
     if n < 0 {
         Err(std::io::Error::last_os_error())
@@ -504,13 +519,13 @@ fn read_raw_fd(inbuf: &mut Vec<u8>, fd: c_int, read_len: usize) -> std::io::Resu
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, feature = "native-network"))]
 pub(crate) fn read_raw_input(g: &mut ConnInner, read_len: usize) -> std::io::Result<usize> {
     let fd = raw_fd(&g.sock);
     read_raw_fd(&mut g.inbuf, fd, read_len)
 }
 
-#[cfg(not(unix))]
+#[cfg(any(not(unix), feature = "memory-transport"))]
 pub(crate) fn read_raw_input(g: &mut ConnInner, read_len: usize) -> std::io::Result<usize> {
     let mut tmp = [0u8; 16 * 1024];
     let n = g.sock.read(&mut tmp[..read_len])?;

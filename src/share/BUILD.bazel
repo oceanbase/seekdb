@@ -1,46 +1,46 @@
 load(
     "//bazel:defs.bzl",
-    "seekdb_generated_unity_cc_library",
-    "seekdb_semantic_unity_cc_library",
-    "seekdb_test_interface",
-    cc_library = "seekdb_cc_library",
+    "unity_cc_library",
+    "grouped_unity_cc_library",
+    "cc_library",
 )
 load(
-    ":share_build_defs.bzl",
+    ":share_source_inventory.bzl",
     "SHARE_DATUM_STANDALONE_SOURCES",
-    "SHARE_IMPLEMENTATION_HEADERS",
     "SHARE_STANDALONE_SOURCES",
     "SHARE_UNITY_GROUPS",
+)
+load(
+    ":inner_table_schema.bzl",
     "inner_table_schema_cpp_outputs",
     "inner_table_schema_source_replacements",
-    "share_remaining_unity_groups",
-    "share_select_unity_groups",
-    "share_select_unity_sources",
-    "share_singleton_unity_groups",
-    "share_unity_group_sources",
-    "share_validate_source_inventory",
+)
+load(
+    ":share_module_sources.bzl",
+    "remaining_unity_groups",
+    "select_unity_sources",
+    "unity_group_sources",
+)
+load(
+    "//bazel:module_sources.bzl",
+    "select_unity_groups",
+    "singleton_unity_groups",
 )
 load(
     ":share_api_targets.bzl",
     "declare_share_semantic_header_targets",
-    "validate_share_semantic_header_ownership",
 )
-load(":share_runtime_group_oblib_deps.bzl", "share_runtime_group_oblib_deps")
 
-share_validate_source_inventory(
-    SHARE_UNITY_GROUPS,
-    SHARE_STANDALONE_SOURCES + SHARE_DATUM_STANDALONE_SOURCES,
-)
 
 declare_share_semantic_header_targets()
 
-_VECTOR_UNITY_GROUP = share_select_unity_sources(
+_VECTOR_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "vector",
     ["src/share/vector/ob_vector_index_mode.cpp"],
 )
 
-seekdb_generated_unity_cc_library(
+unity_cc_library(
     name = "vector",
     unity_members = ["vector/ob_vector_index_mode.cpp"],
     public_hdrs = [
@@ -56,6 +56,9 @@ seekdb_generated_unity_cc_library(
     visibility = [
         "//src:__subpackages__",
         "//unittest:__subpackages__",
+    ],
+    implementation_deps = [
+        "//src/oblib:oblib_base",
     ],
 )
 
@@ -104,7 +107,7 @@ cc_library(
     ],
     deps = [
         ":error_codes",
-        "//src/oblib:oblib_core_utilities",
+        "//src/oblib:oblib_base",
         "//src/oblib:oblib_foundation",
     ],
     features = ["layering_check"],
@@ -136,15 +139,14 @@ cc_library(
     visibility = ["//src:__subpackages__"],
 )
 
-_EST_ROW_COUNT_RECORD_UNITY_GROUP = share_select_unity_sources(
+_EST_ROW_COUNT_RECORD_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "est_row_count_record",
     ["src/share/ob_est_row_count_record.cpp"],
 )
 
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "est_row_count_record",
-    owner_package = "src/share",
     unity_groups = [_EST_ROW_COUNT_RECORD_UNITY_GROUP],
     public_hdrs = ["ob_est_row_count_record.h"],
     deps = [
@@ -156,16 +158,18 @@ seekdb_semantic_unity_cc_library(
         "//src:__subpackages__",
         "//unittest:__subpackages__",
     ],
+    implementation_deps = [
+        "//src/oblib:oblib_common",
+    ],
 )
 
-_TRANSACTION_ID_UNITY_GROUP = share_select_unity_groups(
+_TRANSACTION_ID_UNITY_GROUP = select_unity_groups(
     SHARE_UNITY_GROUPS,
     ["ob_share_transaction_id_0"],
 )
 
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "transaction_id",
-    owner_package = "src/share",
     unity_groups = _TRANSACTION_ID_UNITY_GROUP,
     public_hdrs = ["transaction/ob_tx_id.h"],
     deps = ["//src/oblib:oblib_foundation"],
@@ -174,6 +178,9 @@ seekdb_semantic_unity_cc_library(
     visibility = [
         "//src:__subpackages__",
         "//unittest:__subpackages__",
+    ],
+    implementation_deps = [
+        "//src/oblib:oblib_base",
     ],
 )
 
@@ -188,14 +195,13 @@ cc_library(
     ],
 )
 
-_LOG_PROTOCOL_UNITY_GROUP = share_select_unity_groups(
+_LOG_PROTOCOL_UNITY_GROUP = select_unity_groups(
     SHARE_UNITY_GROUPS,
     ["ob_share_log_protocol_0"],
 )
 
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "log_protocol",
-    owner_package = "src/share",
     unity_groups = _LOG_PROTOCOL_UNITY_GROUP,
     public_hdrs = [
         "log/ob_log_base_header.h",
@@ -217,17 +223,19 @@ seekdb_semantic_unity_cc_library(
         "//src:__subpackages__",
         "//unittest:__subpackages__",
     ],
+    implementation_deps = [
+        "//src/oblib:oblib_base",
+    ],
 )
 
-_TIME_WHEEL_UNITY_GROUP = share_select_unity_sources(
+_TIME_WHEEL_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "time_wheel",
     ["src/share/ob_time_wheel.cpp"],
 )
 
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "time_wheel",
-    owner_package = "src/share",
     unity_groups = [_TIME_WHEEL_UNITY_GROUP],
     public_hdrs = ["ob_time_wheel.h"],
     deps = [
@@ -238,17 +246,22 @@ seekdb_semantic_unity_cc_library(
     features = ["layering_check"],
     tags = ["manual"],
     visibility = ["//src:__subpackages__"],
+    implementation_deps = [
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_common",
+        "//src/oblib:oblib_compression",
+        "//src/oblib:oblib_concurrency_primitives",
+    ],
 )
 
-_TABLET_REPLICA_TYPES_UNITY_GROUP = share_select_unity_sources(
+_TABLET_REPLICA_TYPES_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "tablet_replica_types",
     ["src/share/compaction/ob_tablet_check_info.cpp"],
 )
 
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "tablet_replica_types",
-    owner_package = "src/share",
     unity_groups = [_TABLET_REPLICA_TYPES_UNITY_GROUP],
     public_hdrs = [
         "compaction/ob_ckm_error_tablet_info.h",
@@ -262,6 +275,10 @@ seekdb_semantic_unity_cc_library(
     features = ["layering_check"],
     tags = ["manual"],
     visibility = ["//src:__subpackages__"],
+    implementation_deps = [
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_common",
+    ],
 )
 
 cc_library(
@@ -289,15 +306,14 @@ cc_library(
     visibility = ["//src:__subpackages__"],
 )
 
-_ID_GENERATOR_UNITY_GROUP = share_select_unity_sources(
+_ID_GENERATOR_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "id_generator",
     ["src/share/ob_id_generator.cpp"],
 )
 
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "id_generator",
-    owner_package = "src/share",
     unity_groups = [_ID_GENERATOR_UNITY_GROUP],
     public_hdrs = ["ob_id_generator.h"],
     deps = [
@@ -309,6 +325,11 @@ seekdb_semantic_unity_cc_library(
     visibility = [
         "//src:__subpackages__",
         "//unittest:__subpackages__",
+    ],
+    implementation_deps = [
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_common",
+        "//src/oblib:oblib_compression",
     ],
 )
 
@@ -367,6 +388,19 @@ cc_library(
 )
 
 cc_library(
+    name = "local_io_config",
+    srcs = ["local_io_config.cpp"],
+    hdrs = ["local_io_config.h"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "startup_result",
+    hdrs = ["startup_result.h"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
     name = "io_device_interface",
     hdrs = ["ob_io_device_helper.h"],
     deps = [
@@ -379,8 +413,7 @@ cc_library(
 
 cc_library(
     name = "errsim_interface",
-    hdrs = [
-    ],
+    hdrs = [],
     deps = ["//src/oblib:oblib_foundation"],
     features = ["layering_check"],
     tags = ["manual"],
@@ -389,8 +422,7 @@ cc_library(
 
 cc_library(
     name = "unit_config_interface",
-    hdrs = [
-    ],
+    hdrs = [],
     deps = ["//src/oblib:oblib_foundation"],
     features = ["layering_check"],
     tags = ["manual"],
@@ -406,7 +438,7 @@ cc_library(
     visibility = ["//src:__subpackages__"],
 )
 
-_IO_UNITY_GROUP = share_select_unity_sources(
+_IO_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "io",
     [
@@ -418,9 +450,8 @@ _IO_UNITY_GROUP = share_select_unity_sources(
     ],
 )
 
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "io",
-    owner_package = "src/share",
     unity_groups = [_IO_UNITY_GROUP],
     public_hdrs = [
         "io/io_schedule/ob_io_schedule_v2.h",
@@ -433,7 +464,7 @@ seekdb_semantic_unity_cc_library(
         ":core_types",
         ":io_bench_controller_interface",
         "//src/oblib:oblib_foundation",
-        "//src/oblib:oblib_restore_advanced",
+        "//src/oblib:oblib_restore",
     ],
     implementation_deps = [
         ":config_parser_interface",
@@ -444,7 +475,11 @@ seekdb_semantic_unity_cc_library(
         ":task_control",
         ":tenant_runtime",
         ":unit_config_interface",
-        "@seekdb_3rd_headers//:libaio_headers",
+        "//bazel/third_party:libaio_headers",
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_collections_primitives",
+        "//src/oblib:oblib_common",
+        "//src/oblib:oblib_compression",
     ],
     features = ["layering_check"],
     tags = ["manual"],
@@ -461,7 +496,7 @@ cc_library(
     ],
     deps = [
         "//src/oblib:oblib_foundation",
-        "@seekdb_3rd_headers//:openssl_headers",
+        "//bazel/third_party:openssl_headers",
     ],
     features = ["layering_check"],
     tags = ["manual"],
@@ -470,8 +505,7 @@ cc_library(
 
 cc_library(
     name = "resource_limit_interface",
-    hdrs = [
-    ],
+    hdrs = [],
     deps = [
         ":error_codes",
         "//src/oblib:oblib_foundation",
@@ -496,7 +530,7 @@ cc_library(
     visibility = ["//src:__subpackages__"],
 )
 
-_CONFIG_UNITY_GROUP = share_select_unity_sources(
+_CONFIG_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "config",
     [
@@ -507,9 +541,8 @@ _CONFIG_UNITY_GROUP = share_select_unity_sources(
     ],
 )
 
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "config",
-    owner_package = "src/share",
     unity_groups = [_CONFIG_UNITY_GROUP],
     public_hdrs = [
         "config/ob_config_manager.h",
@@ -526,20 +559,24 @@ seekdb_semantic_unity_cc_library(
         ":tenant_runtime",
         "//src/oblib:oblib_compression",
         "//src/oblib:oblib_foundation",
-        "//src/oblib:oblib_mysql_client_domain",
+        "//src/oblib:oblib_common",
         "//rust:config_headers",
     ],
     implementation_deps = [
-        "//rust:local",
         ":cluster_version_interface",
         ":error_codes",
         ":io",
+        ":local_storage_interface",
         ":resource_limit_interface",
         ":sql_persistence_support",
         ":task_control",
         ":ttl_schedule_interface",
         ":unit_config_interface",
-        "//src/oblib:oblib_db_values_runtime",
+        "//src/oblib:oblib_common",
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_collections_primitives",
+        "//src/oblib:oblib_concurrency_primitives",
+        "//src/oblib:oblib_diagnostics_primitives",
     ],
     features = ["layering_check"],
     tags = ["manual"],
@@ -549,15 +586,14 @@ seekdb_semantic_unity_cc_library(
     ],
 )
 
-_LS_RESTORE_STATUS_UNITY_GROUP = share_select_unity_sources(
+_LS_RESTORE_STATUS_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "ls_restore_status",
     ["src/share/ls/ob_ls_restore_status.cpp"],
 )
 
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "ls_restore_status",
-    owner_package = "src/share",
     unity_groups = [_LS_RESTORE_STATUS_UNITY_GROUP],
     public_hdrs = [
         "ls/ob_ls_restore_status.h",
@@ -570,37 +606,12 @@ seekdb_semantic_unity_cc_library(
         "//src:__subpackages__",
         "//unittest:__subpackages__",
     ],
-)
-
-_LOCATION_UNITY_GROUP = share_select_unity_sources(
-    SHARE_UNITY_GROUPS,
-    "location",
-    [
-        "src/share/location_cache/ob_location_struct.cpp",
+    implementation_deps = [
+        "//src/oblib:oblib_base",
     ],
 )
 
-seekdb_semantic_unity_cc_library(
-    name = "location",
-    owner_package = "src/share",
-    unity_groups = [_LOCATION_UNITY_GROUP],
-    public_hdrs = ["location_cache/ob_location_struct.h"],
-    deps = [
-        ":cache",
-        ":core_types",
-        ":ls_restore_status",
-        "//src/oblib:oblib_foundation",
-    ],
-    implementation_deps = [":task_control"],
-    features = ["layering_check"],
-    tags = ["manual"],
-    visibility = [
-        "//src:__subpackages__",
-        "//unittest:__subpackages__",
-    ],
-)
-
-_RESOURCE_LIMIT_CALCULATOR_UNITY_GROUP = share_select_unity_sources(
+_RESOURCE_LIMIT_CALCULATOR_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "resource_limit_calculator",
     [
@@ -609,9 +620,8 @@ _RESOURCE_LIMIT_CALCULATOR_UNITY_GROUP = share_select_unity_sources(
     ],
 )
 
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "resource_limit_calculator",
-    owner_package = "src/share",
     unity_groups = [_RESOURCE_LIMIT_CALCULATOR_UNITY_GROUP],
     public_hdrs = [
         "resource_limit_calculator/ob_resource_commmon.h",
@@ -624,6 +634,9 @@ seekdb_semantic_unity_cc_library(
     visibility = [
         "//src:__subpackages__",
         "//unittest:__subpackages__",
+    ],
+    implementation_deps = [
+        "//src/oblib:oblib_base",
     ],
 )
 
@@ -649,15 +662,14 @@ cc_library(
     visibility = ["//src/share:__pkg__"],
 )
 
-_SCHEMA_FOUNDATION_TYPES_UNITY_GROUP = share_select_unity_sources(
+_SCHEMA_FOUNDATION_TYPES_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "schema_foundation_types",
     ["src/share/ob_priv_common.cpp"],
 )
 
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "schema_foundation_types",
-    owner_package = "src/share",
     unity_groups = [_SCHEMA_FOUNDATION_TYPES_UNITY_GROUP],
     public_hdrs = [
         "ob_priv_common.h",
@@ -675,6 +687,11 @@ seekdb_semantic_unity_cc_library(
     visibility = [
         "//src:__subpackages__",
         "//unittest:__subpackages__",
+    ],
+    implementation_deps = [
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_common",
+        "//src/oblib:oblib_compression",
     ],
 )
 
@@ -717,19 +734,22 @@ cc_library(
     visibility = ["//src/share:__pkg__"],
 )
 
-_SCHEMA_LIST_ROW_VALUES_UNITY_GROUP = share_select_unity_sources(
+_SCHEMA_LIST_ROW_VALUES_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "schema_list_row_values",
     ["src/share/schema/ob_list_row_values.cpp"],
 )
 
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "schema_list_row_values",
-    owner_package = "src/share",
     unity_groups = [_SCHEMA_LIST_ROW_VALUES_UNITY_GROUP],
     implementation_deps = [
         ":schema_model_interface",
         "//src/oblib:oblib_foundation",
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_common",
+        "//src/oblib:oblib_compression",
+        "//src/oblib:oblib_concurrency_primitives",
     ],
     features = ["layering_check"],
     tags = ["manual"],
@@ -748,15 +768,14 @@ cc_library(
     visibility = ["//src/share:__pkg__"],
 )
 
-_SCHEMA_PARTITION_ITERATION_UNITY_GROUP = share_select_unity_sources(
+_SCHEMA_PARTITION_ITERATION_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "schema_partition_iteration",
     ["src/share/schema/ob_partition_schema_iter.cpp"],
 )
 
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "schema_partition_iteration",
-    owner_package = "src/share",
     unity_groups = [_SCHEMA_PARTITION_ITERATION_UNITY_GROUP],
     public_hdrs = ["schema/ob_partition_schema_iter.h"],
     deps = [
@@ -768,6 +787,12 @@ seekdb_semantic_unity_cc_library(
     visibility = [
         "//src:__subpackages__",
         "//unittest:__subpackages__",
+    ],
+    implementation_deps = [
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_common",
+        "//src/oblib:oblib_compression",
+        "//src/oblib:oblib_concurrency_primitives",
     ],
 )
 
@@ -814,7 +839,7 @@ cc_library(
     ],
 )
 
-_SYSTEM_VARIABLE_METADATA_UNITY_GROUP = share_select_unity_sources(
+_SYSTEM_VARIABLE_METADATA_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "system_variable_metadata",
     [
@@ -823,9 +848,8 @@ _SYSTEM_VARIABLE_METADATA_UNITY_GROUP = share_select_unity_sources(
     ],
 )
 
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "system_variable_metadata",
-    owner_package = "src/share",
     unity_groups = [_SYSTEM_VARIABLE_METADATA_UNITY_GROUP],
     public_hdrs = [
         "system_variable/ob_sys_var_class_type.h",
@@ -839,6 +863,8 @@ seekdb_semantic_unity_cc_library(
     implementation_deps = [
         ":error_codes",
         ":object_cast",
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_common",
     ],
     features = ["layering_check"],
     tags = ["manual"],
@@ -869,13 +895,13 @@ cc_library(
     ],
 )
 
-_TABLET_AUTOINCREMENT_TYPES_UNITY_GROUP = share_select_unity_sources(
+_TABLET_AUTOINCREMENT_TYPES_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "tablet_autoincrement_types",
     ["src/share/ob_tablet_autoincrement_param.cpp"],
 )
 
-seekdb_generated_unity_cc_library(
+unity_cc_library(
     name = "tablet_autoincrement_types",
     unity_members = ["ob_tablet_autoincrement_param.cpp"],
     public_hdrs = ["ob_tablet_autoincrement_param.h"],
@@ -885,20 +911,25 @@ seekdb_generated_unity_cc_library(
     features = ["layering_check"],
     tags = ["manual"],
     visibility = ["//src:__subpackages__"],
+    implementation_deps = [
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_collections_primitives",
+        "//src/oblib:oblib_common",
+    ],
 )
 
 cc_library(
     name = "cluster_version_interface",
     hdrs = ["ob_version_parser.h"],
     deps = [
-        "//src/oblib:oblib_db_values_runtime",
+        "//src/oblib:oblib_common",
     ],
     features = ["layering_check"],
     tags = ["manual"],
     visibility = ["//src:__subpackages__"],
 )
 
-_TENANT_RUNTIME_RC_UNITY_GROUP = share_select_unity_sources(
+_TENANT_RUNTIME_RC_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "tenant_runtime_rc",
     [
@@ -908,9 +939,8 @@ _TENANT_RUNTIME_RC_UNITY_GROUP = share_select_unity_sources(
 )
 
 # Single-server execution context and typed runtime service slots.
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "tenant_runtime",
-    owner_package = "src/share",
     unity_groups = [_TENANT_RUNTIME_RC_UNITY_GROUP],
     public_hdrs = [
         "ob_server_role.h",
@@ -925,6 +955,9 @@ seekdb_semantic_unity_cc_library(
     visibility = [
         "//src:__subpackages__",
         "//unittest:__subpackages__",
+    ],
+    implementation_deps = [
+        "//src/oblib:oblib_base",
     ],
 )
 
@@ -947,19 +980,10 @@ cc_library(
     ],
 )
 
-_TASK_CONTROL_UNITY_GROUP = share_select_unity_sources(
-    SHARE_UNITY_GROUPS,
-    "task_control",
-    ["src/share/ob_task_define.cpp"],
-)
-
-seekdb_semantic_unity_cc_library(
+cc_library(
     name = "task_control",
-    owner_package = "src/share",
-    unity_groups = [_TASK_CONTROL_UNITY_GROUP],
-    public_hdrs = [
+    hdrs = [
         "ob_force_print_log.h",
-        "ob_task_define.h",
     ],
     deps = ["//src/oblib:oblib_foundation"],
     features = ["layering_check"],
@@ -968,25 +992,30 @@ seekdb_semantic_unity_cc_library(
         "//src:__subpackages__",
         "//unittest:__subpackages__",
     ],
+    implementation_deps = [
+        "//src/oblib:oblib_base",
+    ],
 )
 
-_ROARING_BITMAP_UNITY_GROUP = share_select_unity_sources(
+_ROARING_BITMAP_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "roaring_bitmap",
     ["src/share/roaringbitmap/ob_rb_memory_mgr.cpp"],
 )
 
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "roaringbitmap",
-    owner_package = "src/share",
     unity_groups = [_ROARING_BITMAP_UNITY_GROUP],
     public_hdrs = ["roaringbitmap/ob_rb_memory_mgr.h"],
     deps = [
         ":task_control",
         "//src/oblib:oblib_foundation",
-        "@seekdb_3rd_headers//:roaring_headers",
+        "//bazel/third_party:roaring_headers",
     ],
-    implementation_deps = [":tenant_runtime"],
+    implementation_deps = [
+        ":tenant_runtime",
+        "//src/oblib:oblib_base",
+    ],
     features = ["layering_check"],
     tags = ["manual"],
     visibility = [
@@ -995,7 +1024,7 @@ seekdb_semantic_unity_cc_library(
     ],
 )
 
-_CACHE_UNITY_GROUP = share_select_unity_sources(
+_CACHE_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "cache",
     [
@@ -1010,9 +1039,8 @@ _CACHE_UNITY_GROUP = share_select_unity_sources(
     ],
 )
 
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "cache",
-    owner_package = "src/share",
     unity_groups = [_CACHE_UNITY_GROUP],
     public_hdrs = [
         "cache/ob_cache_name_define.h",
@@ -1034,12 +1062,16 @@ seekdb_semantic_unity_cc_library(
         ":core_types",
         ":delegate_interface",
         "//src/oblib/easy:easy",
-        "//src/oblib:oblib_db_meta_runtime",
+        "//src/oblib:oblib_db_meta",
         "//src/oblib:oblib_foundation",
     ],
     implementation_deps = [
         ":debug_sync_interface",
         ":task_control",
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_common",
+        "//src/oblib:oblib_compression",
+        "//src/oblib:oblib_concurrency_primitives",
     ],
     features = ["layering_check"],
     tags = ["manual"],
@@ -1102,9 +1134,9 @@ cc_library(
         ":geo_types",
         ":tenant_runtime",
         "//src/oblib:oblib_foundation",
-        "@seekdb_3rd_headers//:absl_headers",
-        "@seekdb_3rd_headers//:boost_headers",
-        "@seekdb_3rd_headers//:s2_headers",
+        "//bazel/third_party:absl_headers",
+        "//bazel/third_party:boost_headers",
+        "//bazel/third_party:s2_headers",
     ],
     features = ["layering_check"],
     tags = ["manual"],
@@ -1114,7 +1146,7 @@ cc_library(
     ],
 )
 
-_JSON_ACCESS_UNITY_GROUP = share_select_unity_sources(
+_JSON_ACCESS_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "json_access",
     [
@@ -1123,9 +1155,8 @@ _JSON_ACCESS_UNITY_GROUP = share_select_unity_sources(
     ],
 )
 
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "json_access",
-    owner_package = "src/share",
     unity_groups = [_JSON_ACCESS_UNITY_GROUP],
     public_hdrs = [
         "json/ob_json_helper.h",
@@ -1135,6 +1166,8 @@ seekdb_semantic_unity_cc_library(
     implementation_deps = [
         ":cluster_version_interface",
         ":tenant_runtime",
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_common",
     ],
     features = ["layering_check"],
     tags = ["manual"],
@@ -1144,7 +1177,7 @@ seekdb_semantic_unity_cc_library(
     ],
 )
 
-_OBJECT_CAST_UNITY_GROUP = share_select_unity_sources(
+_OBJECT_CAST_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "object_cast",
     [
@@ -1169,9 +1202,8 @@ cc_library(
     ],
 )
 
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "object_cast",
-    owner_package = "src/share",
     unity_groups = [_OBJECT_CAST_UNITY_GROUP],
     public_hdrs = [
         "object/ob_array_cast.h",
@@ -1193,7 +1225,9 @@ seekdb_semantic_unity_cc_library(
         ":lob_runtime",
         ":roaringbitmap",
         ":srs_provider_interface",
-        "@seekdb_3rd_headers//:fast_float_headers",
+        "//bazel/third_party:fast_float_headers",
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_common",
     ],
     features = ["layering_check"],
     tags = ["manual"],
@@ -1203,7 +1237,7 @@ seekdb_semantic_unity_cc_library(
     ],
 )
 
-_TEXT_ANALYSIS_UNITY_GROUP = share_select_unity_sources(
+_TEXT_ANALYSIS_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "text_analysis",
     [
@@ -1212,9 +1246,8 @@ _TEXT_ANALYSIS_UNITY_GROUP = share_select_unity_sources(
     ],
 )
 
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "text_analysis",
-    owner_package = "src/share",
     unity_groups = [_TEXT_ANALYSIS_UNITY_GROUP],
     public_hdrs = [
         "text_analysis/ob_text_analyzer.h",
@@ -1223,7 +1256,11 @@ seekdb_semantic_unity_cc_library(
     deps = [
         "//src/oblib:oblib_foundation",
     ],
-    implementation_deps = [":tenant_runtime"],
+    implementation_deps = [
+        ":tenant_runtime",
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_common",
+    ],
     features = ["layering_check"],
     tags = ["manual"],
     visibility = [
@@ -1232,21 +1269,24 @@ seekdb_semantic_unity_cc_library(
     ],
 )
 
-_SEMISTRUCT_UNITY_GROUP = share_select_unity_sources(
+_SEMISTRUCT_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "semistruct",
     ["src/share/semistruct/ob_sub_column_path.cpp"],
 )
 
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "semistruct",
-    owner_package = "src/share",
     unity_groups = [_SEMISTRUCT_UNITY_GROUP],
     public_hdrs = ["semistruct/ob_sub_column_path.h"],
     deps = [
         "//src/oblib:oblib_foundation",
     ],
-    implementation_deps = [":tenant_runtime"],
+    implementation_deps = [
+        ":tenant_runtime",
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_common",
+    ],
     features = ["layering_check"],
     tags = ["manual"],
     visibility = [
@@ -1288,15 +1328,14 @@ cc_library(
     visibility = ["//src:__subpackages__"],
 )
 
-_LOB_RUNTIME_UNITY_GROUP = share_select_unity_sources(
+_LOB_RUNTIME_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "lob_runtime",
     ["src/share/ob_lob_access_utils.cpp"],
 )
 
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "lob_runtime",
-    owner_package = "src/share",
     unity_groups = [_LOB_RUNTIME_UNITY_GROUP],
     public_hdrs = [
         "ob_lob_access_utils.h",
@@ -1316,13 +1355,15 @@ seekdb_semantic_unity_cc_library(
         ":lob_read_context",
         ":lob_read_service",
         ":tenant_runtime",
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_common",
     ],
     features = ["layering_check"],
     tags = ["manual"],
     visibility = ["//src:__subpackages__"],
 )
 
-_DATUM_CMP_UNITY_GROUP = share_select_unity_sources(
+_DATUM_CMP_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "datum_cmp",
     ["src/share/datum/ob_datum_cmp_func_def.cpp"],
@@ -1334,12 +1375,9 @@ _DATUM_DEPS = [
     "//src/oblib:oblib_foundation",
 ]
 
-# Restore the former ob_share_extra -> ob_base_without_pass boundary without
-# broadening it to datum's regular comparison-definition source.
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "_datum_without_pass",
-    owner_package = "src/share",
-    unity_groups = share_singleton_unity_groups(
+    unity_groups = singleton_unity_groups(
         SHARE_DATUM_STANDALONE_SOURCES,
         "datum_without_pass",
     ),
@@ -1347,15 +1385,17 @@ seekdb_semantic_unity_cc_library(
     implementation_deps = [
         ":_share_implementation_headers",
         ":lob_runtime",
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_common",
+        "//src/oblib:oblib_foundation",
     ],
     sanity_instrumentation = False,
     features = ["layering_check"],
     tags = ["manual"],
 )
 
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "datum",
-    owner_package = "src/share",
     unity_groups = [_DATUM_CMP_UNITY_GROUP],
     public_hdrs = [
         "datum/ob_datum_cmp_func_def.h",
@@ -1373,6 +1413,9 @@ seekdb_semantic_unity_cc_library(
     implementation_deps = [
         ":_datum_without_pass",
         ":lob_runtime",
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_common",
+        "//src/oblib:oblib_foundation",
     ],
     features = ["layering_check"],
     tags = ["manual"],
@@ -1430,9 +1473,17 @@ _EXPECTED_GENERATED_OUTPUTS = sorted(
     ],
 )
 _EXPECTED_GENERATED_OUTPUT_ARGS = " ".join([
-    "--expected-output '" + output + "'"
+    '--expected-output "' + output + '"'
     for output in _EXPECTED_GENERATED_OUTPUTS
 ])
+
+_INNER_TABLE_COMMAND = (
+    '"$(location @host_tools//:python)" -B $(location inner_table/generate_inner_table_schema.py)' +
+    ' --def-file $(location inner_table/ob_inner_table_schema_def.py)' +
+    ' --share-output-dir $(RULEDIR)/' + _INNER_TABLE_GENERATED_DIR +
+    ' --observer-output-dir $(RULEDIR)/' + _OBSERVER_GENERATED_DIR +
+    ' ' + _EXPECTED_GENERATED_OUTPUT_ARGS + ' --quiet'
+)
 
 genrule(
     name = "_generate_inner_table_schema",
@@ -1447,19 +1498,9 @@ genrule(
         _INNER_TABLE_SCHEMA_DATA_OUTS +
         _LOCAL_VIRTUAL_TABLE_OUTS
     ),
-    cmd = """
-      PYTHONDONTWRITEBYTECODE=1 python3 \
-        $(location inner_table/generate_inner_table_schema.py) \
-        --def-file $(location inner_table/ob_inner_table_schema_def.py) \
-        --share-output-dir $(RULEDIR)/%s \
-        --observer-output-dir $(RULEDIR)/%s \
-        %s \
-        --quiet
-    """ % (
-        _INNER_TABLE_GENERATED_DIR,
-        _OBSERVER_GENERATED_DIR,
-        _EXPECTED_GENERATED_OUTPUT_ARGS,
-    ),
+    tools = ["@host_tools//:python"],
+    cmd = _INNER_TABLE_COMMAND,
+    cmd_bat = "call " + _INNER_TABLE_COMMAND,
 )
 
 cc_library(
@@ -1522,7 +1563,7 @@ filegroup(
     visibility = ["//src/observer:__subpackages__"],
 )
 
-_SHARE_NATIVE_UNITY_SOURCES = share_unity_group_sources(
+_SHARE_NATIVE_UNITY_SOURCES = unity_group_sources(
     [
         _VECTOR_UNITY_GROUP,
         _EST_ROW_COUNT_RECORD_UNITY_GROUP,
@@ -1537,14 +1578,12 @@ _SHARE_NATIVE_UNITY_SOURCES = share_unity_group_sources(
     _IO_UNITY_GROUP,
     _CONFIG_UNITY_GROUP,
     _LS_RESTORE_STATUS_UNITY_GROUP,
-    _LOCATION_UNITY_GROUP,
     _RESOURCE_LIMIT_CALCULATOR_UNITY_GROUP,
     _SCHEMA_FOUNDATION_TYPES_UNITY_GROUP,
     _SCHEMA_LIST_ROW_VALUES_UNITY_GROUP,
     _SCHEMA_PARTITION_ITERATION_UNITY_GROUP,
     _SYSTEM_VARIABLE_METADATA_UNITY_GROUP,
     _TENANT_RUNTIME_RC_UNITY_GROUP,
-    _TASK_CONTROL_UNITY_GROUP,
     _ROARING_BITMAP_UNITY_GROUP,
     _CACHE_UNITY_GROUP,
     _JSON_ACCESS_UNITY_GROUP,
@@ -1556,10 +1595,14 @@ _SHARE_NATIVE_UNITY_SOURCES = share_unity_group_sources(
     ],
 )
 
-_SHARE_RUNTIME_DEPS = [
-    ":local_table_schema",
+_SHARE_RUNTIME_GENERATED_DEPS = [
     ":_generated_inner_table_headers",
     ":_generated_inner_table_short_headers",
+    ":local_table_schema",
+]
+
+_SHARE_RUNTIME_DEPS = _SHARE_RUNTIME_GENERATED_DEPS + [
+    ":local_io_config",
     ":cache",
     ":config",
     ":config_parser_interface",
@@ -1583,7 +1626,6 @@ _SHARE_RUNTIME_DEPS = [
     ":lob_read_service",
     ":lob_runtime",
     ":lob_read_context",
-    ":location",
     ":ls_restore_status",
     ":object_cast",
     ":pl_integer_type",
@@ -1600,7 +1642,7 @@ _SHARE_RUNTIME_DEPS = [
     ":schema_partition_model",
     ":schema_storage_cache_policy_persistence_interface",
     ":scn_interface",
-    ":seekdb_runtime_foundation",
+    ":runtime_foundation",
     ":semistruct",
     ":sequence_option",
     ":local_storage_interface",
@@ -1627,24 +1669,24 @@ _SHARE_RUNTIME_DEPS = [
     ":log_protocol",
     ":statement_type",
     ":transaction_id",
-    "@seekdb_3rd_headers//:absl_headers",
-    "@seekdb_3rd_headers//:boost_headers",
-    "@seekdb_3rd_headers//:curl_headers",
-    "@seekdb_3rd_headers//:fast_float_headers",
-    "@seekdb_3rd_headers//:libaio_headers",
-    "@seekdb_3rd_headers//:mariadb_headers",
-    "@seekdb_3rd_headers//:openssl_headers",
-    "@seekdb_3rd_headers//:protobuf_c_headers",
-    "@seekdb_3rd_headers//:rapidjson_headers",
-    "@seekdb_3rd_headers//:roaring_headers",
-    "@seekdb_3rd_headers//:s2_headers",
-    "@seekdb_3rd_headers//:zlib_headers",
+    "//bazel/third_party:absl_headers",
+    "//bazel/third_party:boost_headers",
+    "//bazel/third_party:curl_headers",
+    "//bazel/third_party:fast_float_headers",
+    "//bazel/third_party:libaio_headers",
+    "//bazel/third_party:mariadb_headers",
+    "//bazel/third_party:openssl_headers",
+    "//bazel/third_party:protobuf_c_headers",
+    "//bazel/third_party:rapidjson_headers",
+    "//bazel/third_party:roaring_headers",
+    "//bazel/third_party:s2_headers",
+    "//bazel/third_party:zlib_headers",
 ]
 
 _SHARE_RUNTIME_SEMANTIC_DEPS = [
     dep
     for dep in _SHARE_RUNTIME_DEPS
-    if dep.startswith(":") and not dep.startswith(":_generated_")
+    if dep.startswith(":") and dep not in _SHARE_RUNTIME_GENERATED_DEPS
 ]
 
 _SHARE_RUNTIME_OBLIB_DEPS = [
@@ -1667,7 +1709,11 @@ _SHARE_RUNTIME_COMPILE_DEPS = [
 # consumer dependency closure.
 cc_library(
     name = "_share_implementation_headers",
-    hdrs = SHARE_IMPLEMENTATION_HEADERS,
+    hdrs = glob(
+        ["**/*.h", "**/*.ipp", "**/*.def"],
+        allow_empty = True,
+        exclude = ["ob_tenant_role_transition_service.h"],
+    ),
     deps = _SHARE_RUNTIME_COMPILE_DEPS,
     implementation_deps = _SHARE_RUNTIME_OBLIB_DEPS,
     features = ["layering_check"],
@@ -1702,7 +1748,7 @@ _SHARE_UNIT_TEST_DEPS = [
     ":schema_publish_signal",
     ":schema_registry",
     ":scn_interface",
-    ":seekdb_runtime_foundation",
+    ":runtime_foundation",
     ":sql_persistence_support",
     ":tenant_runtime",
     ":text_analysis",
@@ -1734,49 +1780,45 @@ cc_library(
     visibility = ["//unittest/share:__pkg__"],
 )
 
-seekdb_test_interface(
-    name = "share_unit_test_interface",
-    deps = _SHARE_UNIT_TEST_DEPS + _SHARE_RUNTIME_OBLIB_DEPS + [
-        ":share_test_support",
-        "@seekdb_3rd_headers//:roaring_headers",
-    ],
-    visibility = ["//unittest/share:__pkg__"],
-)
 
-_SHARE_RUNTIME_UNITY_GROUPS = share_remaining_unity_groups(
+_SHARE_RUNTIME_UNITY_GROUPS = remaining_unity_groups(
     SHARE_UNITY_GROUPS,
     _SHARE_NATIVE_UNITY_SOURCES,
-) + share_singleton_unity_groups(
+) + singleton_unity_groups(
     SHARE_STANDALONE_SOURCES,
     "share_runtime_standalone",
 )
 
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "share_runtime",
-    owner_package = "src/share",
     unity_groups = _SHARE_RUNTIME_UNITY_GROUPS,
     source_replacements = inner_table_schema_source_replacements(
         SHARE_UNITY_GROUPS,
     ),
-    group_implementation_deps = share_runtime_group_oblib_deps(
-        _SHARE_RUNTIME_UNITY_GROUPS,
-        {
-            "ob_share_redolog_0": [":config"],
-        },
-    ),
+    split_unity_groups = True,
     implementation_deps = [
         ":_share_implementation_headers",
         "//rust:config_headers",
-    ] + _SHARE_RUNTIME_COMPILE_DEPS,
+    ] + _SHARE_RUNTIME_COMPILE_DEPS + [
+        "//src/oblib:common_sql_mode",
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_collections_primitives",
+        "//src/oblib:oblib_common",
+        "//src/oblib:oblib_compression",
+        "//src/oblib:oblib_concurrency_primitives",
+        "//src/oblib:oblib_diagnostics_primitives",
+        "//src/oblib:oblib_foundation",
+        "//src/oblib:oblib_io_primitives",
+        "//src/oblib:oblib_restore",
+    ],
     features = ["layering_check"],
     tags = ["manual"],
     visibility = ["//src/share:__pkg__"],
 )
 
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "share_runtime_c",
-    owner_package = "src/share",
-    unity_groups = share_select_unity_groups(
+    unity_groups = select_unity_groups(
         SHARE_UNITY_GROUPS,
         ["ob_share_geo_1"],
         language = "c",
@@ -1784,7 +1826,7 @@ seekdb_semantic_unity_cc_library(
     language = "c",
     implementation_deps = [
         ":geo_serialization",
-        "@seekdb_3rd_headers//:protobuf_c_headers",
+        "//bazel/third_party:protobuf_c_headers",
     ],
     tags = ["manual"],
     visibility = ["//src/share:__pkg__"],
@@ -1799,15 +1841,3 @@ cc_library(
     tags = ["manual"],
     visibility = ["//src/observer:__pkg__"],
 )
-
-filegroup(
-    name = "share_static_build",
-    srcs = [
-        ":share_runtime",
-        ":share_runtime_c",
-    ],
-    tags = ["manual"],
-    visibility = ["//src/observer:__pkg__"],
-)
-
-validate_share_semantic_header_ownership()

@@ -217,7 +217,6 @@ void ObThWorker::worker(int64_t &tid, int64_t &req_recv_timestamp, int32_t &work
   static constexpr int64_t POLL_INTERVAL = 100 * 1000L;
   // Avoid adding and deleting entities from the root node for every request, the parameters are meaningless
   CREATE_WITH_TEMP_ENTITY(RESOURCE_OWNER, OB_SERVER_RUNTIME_ID) {
-    auto *pm = common::ObPageManager::thread_local_instance();
     snprintf(module_name_, MAX_MODULE_NAME_LEN, "ReqWorker");
     int64_t idle_since = 0;
     while (!has_set_stop()) {
@@ -225,22 +224,13 @@ void ObThWorker::worker(int64_t &tid, int64_t &req_recv_timestamp, int32_t &work
       if (OB_NOT_NULL(runtime_)) {
         tid = runtime_->id();
       }
-      if (OB_NOT_NULL(pm)) {
-        if (pm->get_used() != 0) {
-          LOG_ERROR("page manager's used should be 0, unexpected!!!", KP(pm));
-        } else {
-          // Ignore the above warning
-          ret = pm->set_ctx(ObCtxIds::DEFAULT_CTX_ID);
-        }
-      }
       CLEAR_INTERRUPTABLE();
       set_th_worker_thread_name();
       lib::ContextTLOptGuard guard(true);
       lib::ContextParam param;
       param.set_mem_attr(ObModIds::OB_SQL_EXECUTOR, ObCtxIds::DEFAULT_CTX_ID)
         .set_page_size(OB_MALLOC_REQ_NORMAL_BLOCK_SIZE)
-        .set_properties(lib::USE_TL_PAGE_OPTIONAL)
-        .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
+        .set_properties(lib::USE_TL_PAGE_OPTIONAL);
       CREATE_WITH_TEMP_CONTEXT(param) {
         MEM_TRACKER_GUARD(CURRENT_CONTEXT);
         const uint64_t owner_id = runtime_->id();

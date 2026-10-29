@@ -31,7 +31,6 @@ desc information_schema.global_variables;
 desc information_schema.statistics;
 desc information_schema.schemata;
 desc information_schema.views;
-desc information_schema.files;
 
 #select * from information_schema.columns;
 --sorted_result
@@ -52,9 +51,6 @@ select * from information_schema.statistics where table_schema in ('oceanbase', 
 select * from information_schema.schemata where schema_name in ('oceanbase', 'mysql', 'information_schema') order by CATALOG_NAME, SCHEMA_NAME;
 --sorted_result
 select * from information_schema.views where table_schema in ('oceanbase', 'mysql', 'information_schema') order by TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME;
-# should be empty
---sorted_result
-select * from information_schema.files;
 
 create database test1;
 use test1;

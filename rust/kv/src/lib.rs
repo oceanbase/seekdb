@@ -16,7 +16,8 @@
 //! read/modify/write; readers pin immutable roots and do not hold its lock.
 //!
 //! Commits write only modified tree paths and overflow pages, sync them, then
-//! publish one of two checksummed root pages and sync again. No WAL, SLOG,
+//! publish one of two checksummed root pages and sync again. Concurrent commits
+//! share root publication; callers wait for durability before returning. No WAL, SLOG,
 //! database dependency, full key index, or background thread is required.
 //! The module owns `data`, `lock`, and a rebuildable `allocation.tmp` in its
 //! directory. Opening scans the two recovery trees to rebuild allocation
@@ -39,7 +40,7 @@ use std::io;
 use std::ops::Bound;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 
 use file::{read_exact_at, write_all_at, Allocation, FileLock, LIVE};
 use page::{decode_overflow, encode_overflow, encode_root, Child, Entry, Node, Root, Value};
@@ -148,7 +149,8 @@ impl Range {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CommitInfo {
     pub generation: u64,
-    /// Actual data-file page writes during this transaction, including root.
+    /// Data-file page writes by this transaction. A shared root write is
+    /// counted only for the caller that performs the group publication.
     pub pages_written: u64,
     pub bytes_written: u64,
 }
@@ -161,6 +163,7 @@ pub struct Store {
 struct Shared {
     data: File,
     writer: Mutex<Writer>,
+    committed: Condvar,
     visible: Mutex<Visible>,
     poisoned: AtomicBool,
     options: Options,
@@ -168,12 +171,34 @@ struct Shared {
     _lock: FileLock,
 }
 
+// Bound unacknowledged work while a caller performs I/O without the writer lock.
+const MAX_PENDING_COMMITS: u64 = 64;
+
 struct Writer {
+    // Includes staged transactions. Only `roots` and `visible` are durable.
+    head: Root,
+    flushing: bool,
     roots: [Option<Root>; 2],
     slot: usize,
     allocation: Allocation,
     writes: u64,
     oldest_seen: u64,
+}
+
+// A panicking publisher must wake all waiters and reject dependent writes.
+struct Flush<'a> {
+    shared: &'a Shared,
+    finished: bool,
+}
+
+impl Drop for Flush<'_> {
+    fn drop(&mut self) {
+        if !self.finished {
+            // Pair the notification with the mutex used by condition waiters.
+            let _writer = self.shared.writer.lock();
+            self.shared.poison();
+        }
+    }
 }
 
 struct Visible {
@@ -196,12 +221,15 @@ impl Store {
             shared: Arc::new(Shared {
                 data: files.data,
                 writer: Mutex::new(Writer {
+                    head: root,
+                    flushing: false,
                     roots: files.roots,
                     slot: files.slot,
                     allocation: files.allocation,
                     writes: 0,
                     oldest_seen: 0,
                 }),
+                committed: Condvar::new(),
                 visible: Mutex::new(Visible {
                     root,
                     pins: BTreeMap::new(),
@@ -250,11 +278,24 @@ impl Store {
         self.snapshot()?.get(key)
     }
 
-    /// Holds the writer mutex until commit, rollback, or drop. Do not reenter
+    /// Serializes read/modify/write. Commit releases the writer while waiting
+    /// for durability; later writers may build on its staged root. Do not reenter
     /// this method from a transaction. Existing snapshots remain readable.
     pub fn begin(&self) -> Result<Transaction<'_>> {
         let mut writer = self.shared.writer.lock().map_err(|_| Error::Poisoned)?;
-        self.shared.check()?;
+        loop {
+            self.shared.check()?;
+            if writer.head.generation - writer.roots[writer.slot].unwrap().generation
+                < MAX_PENDING_COMMITS
+            {
+                break;
+            }
+            writer = self
+                .shared
+                .committed
+                .wait(writer)
+                .map_err(|_| Error::Poisoned)?;
+        }
         let visible = self.shared.visible.lock().map_err(|_| Error::Poisoned)?;
         let mut oldest = writer
             .roots
@@ -271,7 +312,7 @@ impl Store {
             writer.allocation.revisit();
             writer.oldest_seen = oldest;
         }
-        let root = writer.roots[writer.slot].unwrap();
+        let root = writer.head;
         let initial_writes = writer.writes;
         Ok(Transaction {
             shared: &self.shared,
@@ -296,6 +337,78 @@ impl Shared {
         } else {
             Ok(())
         }
+    }
+
+    fn poison(&self) {
+        self.poisoned.store(true, Ordering::Release);
+        self.committed.notify_all();
+    }
+
+    fn wait_durable(&self, generation: u64) -> Result<u64> {
+        let mut writer = self.writer.lock().map_err(|_| Error::Poisoned)?;
+        loop {
+            self.check()?;
+            if writer.roots[writer.slot].unwrap().generation >= generation {
+                return Ok(0);
+            }
+            if writer.flushing {
+                writer = self.committed.wait(writer).map_err(|_| Error::Poisoned)?;
+                continue;
+            }
+            let root = writer.head;
+            let slot = 1 - writer.slot;
+            writer.flushing = true;
+            let mut flush = Flush {
+                shared: self,
+                finished: false,
+            };
+            drop(writer);
+            // New transactions build on head while this immutable root syncs.
+            // Their retire generations are newer than both durable roots, so
+            // they cannot reuse pages referenced by this publication.
+            let result = self.publish(root, slot);
+            flush.finished = true;
+            writer = self.writer.lock().map_err(|_| Error::Poisoned)?;
+            writer.flushing = false;
+            if let Err(error) = result {
+                self.poison();
+                return Err(error);
+            }
+            self.check()?;
+            writer.roots[slot] = Some(root);
+            writer.slot = slot;
+            match self.visible.lock() {
+                Ok(mut visible) => visible.root = root,
+                Err(_) => {
+                    self.poison();
+                    return Err(Error::Poisoned);
+                }
+            }
+            self.committed.notify_all();
+            return Ok(1);
+        }
+    }
+
+    fn publish(&self, root: Root, slot: usize) -> Result<()> {
+        #[cfg(test)]
+        tests::at("before-data-sync")?;
+        self.data.sync_all()?;
+        #[cfg(test)]
+        tests::at("after-data-sync")?;
+        let buffer = encode_root(root);
+        #[cfg(test)]
+        if tests::is_crash_stage("during-root-write") {
+            write_all_at(&self.data, &buffer[..24], slot as u64 * PAGE_SIZE as u64)?;
+            self.data.sync_all()?;
+            tests::at("during-root-write")?;
+        }
+        write_all_at(&self.data, &buffer, slot as u64 * PAGE_SIZE as u64)?;
+        #[cfg(test)]
+        tests::at("after-root-write")?;
+        self.data.sync_all()?;
+        #[cfg(test)]
+        tests::at("after-root-sync")?;
+        Ok(())
     }
 
     fn read_page(&self, id: u64, pages: u64) -> Result<[u8; PAGE_SIZE]> {
@@ -371,14 +484,20 @@ impl Snapshot {
 
 impl Drop for Snapshot {
     fn drop(&mut self) {
-        if let Ok(mut visible) = self.shared.visible.lock() {
-            let count = visible.pins.get_mut(&self.root.generation).unwrap();
-            *count -= 1;
-            if *count == 0 {
-                visible.pins.remove(&self.root.generation);
+        match self.shared.visible.lock() {
+            Ok(mut visible) => {
+                let count = visible.pins.get_mut(&self.root.generation).unwrap();
+                *count -= 1;
+                if *count == 0 {
+                    visible.pins.remove(&self.root.generation);
+                }
             }
-        } else {
-            self.shared.poisoned.store(true, Ordering::Release);
+            Err(error) => {
+                // Release visible before acquiring writer, preserving lock order.
+                drop(error);
+                let _writer = self.shared.writer.lock();
+                self.shared.poison();
+            }
         }
     }
 }
@@ -433,7 +552,7 @@ impl Transaction<'_> {
         if let Err(error) = &result {
             self.failed = true;
             if matches!(error, Error::Io(_) | Error::Corrupt(_)) {
-                self.shared.poisoned.store(true, Ordering::Release);
+                self.shared.poison();
             }
         }
         result
@@ -621,69 +740,44 @@ impl Transaction<'_> {
         shared.walk_value(value, self.writer.allocation.pages, |id, _| self.retire(id))
     }
 
-    /// On error after publication starts, durability is uncertain. All store
-    /// operations then reject access until its handles are dropped and reopened.
+    /// Returns only after this transaction and its predecessors are durable.
+    /// On publication failure, durability is uncertain and the store requires
+    /// reopening. A failed group must not release potentially published pages.
     pub fn commit(mut self) -> Result<CommitInfo> {
         self.check()?;
-        if !self.dirty {
-            self.completed = true;
-            return Ok(self.info(self.generation));
-        }
-        let generation = self
-            .generation
-            .checked_add(1)
-            .filter(|generation| *generation < LIVE)
-            .ok_or(Error::Corrupt("generation exhausted"))?;
-        let root = Root {
-            generation,
-            page: self.root,
-            pages: self.writer.allocation.pages,
+        let generation = if self.dirty {
+            self.generation
+                .checked_add(1)
+                .filter(|generation| *generation < LIVE)
+                .ok_or(Error::Corrupt("generation exhausted"))?
+        } else {
+            self.generation
         };
-        // Drop must never free pages that an ambiguously successful commit
-        // could reference, even when fsync reports a failure.
+        if self.dirty {
+            // Retiring before publication is safe: allocation remains pinned by
+            // both durable roots (and readers), which precede this generation.
+            self.completed = true;
+            for &page in &self.retired {
+                if let Err(error) = self.writer.allocation.retire(page, generation) {
+                    self.shared.poison();
+                    return Err(error);
+                }
+            }
+            self.writer.head = Root {
+                generation,
+                page: self.root,
+                pages: self.writer.allocation.pages,
+            };
+        }
         self.completed = true;
-        let result = self.publish(root);
-        if result.is_err() {
-            self.shared.poisoned.store(true, Ordering::Release);
-        }
-        result.map(|()| self.info(generation))
-    }
-
-    fn publish(&mut self, root: Root) -> Result<()> {
-        #[cfg(test)]
-        tests::at("before-data-sync")?;
-        self.shared.data.sync_all()?;
-        #[cfg(test)]
-        tests::at("after-data-sync")?;
-        let slot = 1 - self.writer.slot;
-        let buffer = encode_root(root);
-        #[cfg(test)]
-        if tests::is_crash_stage("during-root-write") {
-            write_all_at(
-                &self.shared.data,
-                &buffer[..24],
-                slot as u64 * PAGE_SIZE as u64,
-            )?;
-            self.shared.data.sync_all()?;
-            tests::at("during-root-write")?;
-        }
-        self.write_page(slot as u64, &buffer)?;
-        #[cfg(test)]
-        tests::at("after-root-write")?;
-        self.shared.data.sync_all()?;
-        #[cfg(test)]
-        tests::at("after-root-sync")?;
-        self.writer.roots[slot] = Some(root);
-        self.writer.slot = slot;
-        self.shared
-            .visible
-            .lock()
-            .map_err(|_| Error::Poisoned)?
-            .root = root;
-        for &page in &self.retired {
-            self.writer.allocation.retire(page, root.generation)?;
-        }
-        Ok(())
+        let mut info = self.info(generation);
+        let shared = self.shared;
+        drop(self);
+        // Read-only transactions can depend on a staged predecessor too.
+        let root_writes = shared.wait_durable(generation)?;
+        info.pages_written += root_writes;
+        info.bytes_written += root_writes * PAGE_SIZE as u64;
+        Ok(info)
     }
 
     fn info(&self, generation: u64) -> CommitInfo {
@@ -702,10 +796,13 @@ impl Transaction<'_> {
 
 impl Drop for Transaction<'_> {
     fn drop(&mut self) {
+        if std::thread::panicking() {
+            self.shared.poison();
+        }
         if !self.completed {
             for &page in &self.allocated {
                 if self.writer.allocation.retire(page, 0).is_err() {
-                    self.shared.poisoned.store(true, Ordering::Release);
+                    self.shared.poison();
                     break;
                 }
             }

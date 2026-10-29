@@ -18,7 +18,6 @@
 %option noyyalloc noyyrealloc noyyfree
 %option reentrant bison-bridge bison-locations
 %option prefix="obsql_fts_yy"
-%option header-file="ftsblex_lex.h"
 %top{
 #include "ftsparser_tab.h" // 包含 Yacc 生成的头文件
 #include "fts_base.h"

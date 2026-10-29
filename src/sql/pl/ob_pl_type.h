@@ -19,7 +19,7 @@
 
 #include "share/ob_define.h"
 #include "share/schema/ob_pl_integer_type.h"
-#include "sql/parser/ob_item_type.h"
+#include "query/parser/ob_item_type.h"
 #include "rpc/obmysql/ob_mysql_util.h"
 #include "common/object/ob_object.h"
 #include "lib/container/ob_fast_array.h"

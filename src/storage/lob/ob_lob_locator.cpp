@@ -247,7 +247,6 @@ int ObLobLocatorHelper::fuse_mem_lob_header(ObObj &def_obj, uint64_t col_id, boo
       // mysql inrow lobs & systable lobs do not have extern fields
       bool has_extern = false;
       ObMemLobExternFlags extern_flags(has_extern);
-      extern_flags.has_retry_info_ = 0; // default obj should only be inrow, no need retry info
       ObLobCommon lob_common;
 
       int64_t read_snapshot_size = 0;
@@ -337,6 +336,7 @@ int ObLobLocatorHelper::build_lob_locatorv2(ObLobLocatorV2 &locator,
     // User table outrow LOBs need extern metadata.
     bool has_extern = (!is_simple) && (!is_dst_inrow);
     ObMemLobExternFlags extern_flags(has_extern);
+    extern_flags.read_latest_ = has_extern && scan_flag_.read_latest_;
 
     bool padding_char_size = false;
     if (!lob_common->in_row_ && is_dst_inrow &&
@@ -411,10 +411,6 @@ int ObLobLocatorHelper::build_lob_locatorv2(ObLobLocatorV2 &locator,
         if (OB_FAIL(locator.set_payload_data(payload))) {
         }
       } else if (has_extern) {
-        ObMemLobRetryInfo retry_info;
-        retry_info.is_select_leader_ = !scan_flag_.is_select_follower_;
-        retry_info.read_latest_ = scan_flag_.read_latest_;
-        retry_info.timeout_ = access_ctx.timeout_;
         // if scan with index, get data tablet id
         common::ObTabletID target_tablet_id(tablet_id_);
         if (is_access_index_) {
@@ -432,8 +428,6 @@ int ObLobLocatorHelper::build_lob_locatorv2(ObLobLocatorV2 &locator,
           STORAGE_LOG(WARN, "Lob: set table info failed", K(ret), K(table_id_), K(column_id));
         } else if (extern_flags.has_location_info_ && OB_FAIL(locator.set_location_info(location_info))) {
           STORAGE_LOG(WARN, "Lob: set location info failed", K(ret), K(location_info));
-        } else if (extern_flags.has_retry_info_ && OB_FAIL(locator.set_retry_info(retry_info))) {
-          STORAGE_LOG(WARN, "Lob: set location info failed", K(ret), K(retry_info));
         }
 
         if (OB_SUCC(ret) && extern_flags.has_read_snapshot_) {

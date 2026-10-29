@@ -17,12 +17,12 @@
 #ifndef _OB_OPTIMIZER_CONTEXT_H
 #define _OB_OPTIMIZER_CONTEXT_H 1
 #include "share/rc/ob_server_runtime.h"
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "sql/optimizer/ob_table_location.h"
+#include "sql/optimizer/table_access_plan.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/optimizer/ob_fd_item.h"
 #include "sql/optimizer/ob_sharding_info.h"
@@ -61,32 +61,21 @@ enum class ObEnableOptRowGoal {
 };
 
 typedef common::ObArray<common::ObString, common::ObIAllocator &> ObPlanNotes;
-//table location local index id related info
-//tablet_loc_id and ref_table_id_ are used to uniquely determine
-//the location identifier of the main table involved in the plan,
-//and are also the key information for building association relationships.
-//related_ids_ are used to record the related table_id,
-//at(0) is source_table_id, and the rest are related_table_id associated with source_table_id,
-//for example:
-//for the scenario where the local index returns to the table,
-//the source_table_id is the selected local index table_id,
-//and the related_table_id is the main table table_id.
-//Because the initiator of the partition is the local index,
-//the tablet_id of the main table is obtained synchronously according to the tablet_id of the local index.
-//for the DML operator, source_table_id is the main table table_id,
-//and related_table_id is the local index table_id that needs to be maintained synchronously
-struct TableLocRelInfo
+// Associates one SQL table reference and source table with related base/local-index
+// tables. Partition calculation derives their tablet IDs together: an index lookup
+// starts from the index, while DML starts from the base table.
+struct RelatedTableAccessInfo
 {
-  TableLocRelInfo()
-    : table_loc_id_(common::OB_INVALID_ID),
+  RelatedTableAccessInfo()
+    : table_ref_id_(common::OB_INVALID_ID),
       ref_table_id_(common::OB_INVALID_ID),
       related_ids_(),
       table_part_infos_()
   { }
-  int assign(const TableLocRelInfo &other)
+  int assign(const RelatedTableAccessInfo &other)
   {
     int ret = common::OB_SUCCESS;
-    table_loc_id_ = other.table_loc_id_;
+    table_ref_id_ = other.table_ref_id_;
     ref_table_id_ = other.ref_table_id_;
     ret = related_ids_.assign(other.related_ids_);
     if (OB_SUCC(ret)) {
@@ -94,10 +83,10 @@ struct TableLocRelInfo
     }
     return ret;
   }
-  TO_STRING_KV(K_(table_loc_id),
+  TO_STRING_KV(K_(table_ref_id),
                K_(ref_table_id),
                K_(related_ids));
-  common::ObTableID table_loc_id_;
+  common::ObTableID table_ref_id_;
   common::ObTableID ref_table_id_; //the data table object id
   common::ObArray<common::ObTableID, common::ModulePageAllocator, true> related_ids_;
   common::ObArray<ObTablePartitionInfo*, common::ModulePageAllocator, true> table_part_infos_;
@@ -226,7 +215,7 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
     sql_schema_guard_(sql_schema_guard),
     opt_stat_manager_(opt_stat_manager),
     allocator_(allocator),
-    table_location_list_(), // declared as auto free
+    table_access_plan_list_(), // declared as auto free
     server_(addr),
     params_(params),
     global_hint_(global_hint),
@@ -256,10 +245,10 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
     temp_table_infos_(),
     exchange_allocated_(false),
     phy_plan_type_(ObPhyPlanType::OB_PHY_PLAN_UNINITIALIZED),
-    location_type_(ObPhyPlanType::OB_PHY_PLAN_UNINITIALIZED),
-    local_sharding_(ObTableLocationType::OB_TBL_LOCATION_LOCAL),
-    distributed_sharding_(ObTableLocationType::OB_TBL_LOCATION_DISTRIBUTED),
-    match_all_sharding_(ObTableLocationType::OB_TBL_LOCATION_ALL),
+    access_shape_(ObPhyPlanType::OB_PHY_PLAN_UNINITIALIZED),
+    local_sharding_(TableAccessShape::TABLE_ACCESS_SINGLE_TABLET),
+    distributed_sharding_(TableAccessShape::TABLE_ACCESS_MULTI_TABLET),
+    match_all_sharding_(TableAccessShape::TABLE_ACCESS_ANY),
     is_packed_(false),
     is_ps_protocol_(is_ps_protocol),
     expected_worker_count_(0),
@@ -315,16 +304,16 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
   inline ObSqlSchemaGuard *get_sql_schema_guard() const
   { return sql_schema_guard_; }
   inline common::ObIAllocator &get_allocator() { return allocator_; }
-  int get_table_location(const uint64_t table_id, const ObTableLocation *&table_location) const
+  int get_table_access_plan(const uint64_t table_id, const TableAccessPlan *&table_access_plan) const
   {
     // for test
     UNUSED(table_id);
-    table_location = NULL;
-    int64_t N = table_location_list_.count();
+    table_access_plan = NULL;
+    int64_t N = table_access_plan_list_.count();
     bool found = false;
     for (int64_t i = 0; !found && i < N; i++) {
-      if (table_location_list_.at(i).get_table_id() == table_id) {
-        table_location = &(table_location_list_.at(i));
+      if (table_access_plan_list_.at(i).get_table_id() == table_id) {
+        table_access_plan = &(table_access_plan_list_.at(i));
         found = true;
       }
     }
@@ -334,18 +323,18 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
   common::ObAddr &get_local_server_addr() { return server_; }
   void set_local_server_addr(const char *ip, const int32_t port) { server_.set_ip_addr(ip, port); }
   common::ObIArray<ObTablePartitionInfo *> & get_table_partition_info() { return table_partition_infos_; }
-  ObTablePartitionInfo *get_table_part_info_by_id(uint64_t table_loc_id, uint64_t ref_table_id)
+  ObTablePartitionInfo *get_table_part_info_by_id(uint64_t table_ref_id, uint64_t ref_table_id)
   {
     ObTablePartitionInfo *table_part = nullptr;
     for (int64_t i = 0; OB_ISNULL(table_part) && i < table_partition_infos_.count(); ++i) {
-      const ObDASTableLocMeta &loc_meta = table_partition_infos_.at(i)->get_table_location().get_loc_meta();
-      if (table_loc_id == loc_meta.table_loc_id_ && ref_table_id == loc_meta.ref_table_id_) {
+      const DASTableAccessMeta &access_meta = table_partition_infos_.at(i)->get_table_access_plan().get_access_meta();
+      if (table_ref_id == access_meta.table_ref_id_ && ref_table_id == access_meta.ref_table_id_) {
         table_part = table_partition_infos_.at(i);
       }
     }
     return table_part;
   }
-  common::ObIArray<ObTableLocation> &get_table_location_list() { return table_location_list_; }
+  common::ObIArray<TableAccessPlan> &get_table_access_plan_list() { return table_access_plan_list_; }
   inline const ParamStore *get_params()
   {
     return params_;
@@ -567,16 +556,16 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
   {
     return phy_plan_type_;
   }
-  inline void set_location_type(ObPhyPlanType location_type)
+  inline void set_access_shape(ObPhyPlanType access_shape)
   {
-    location_type_ = location_type;
+    access_shape_ = access_shape;
   }
-  inline ObPhyPlanType get_location_type() const
+  inline ObPhyPlanType get_access_shape() const
   {
-    return location_type_;
+    return access_shape_;
   }
   inline void set_plan_type(ObPhyPlanType phy_plan_type,
-                            ObPhyPlanType location_type,
+                            ObPhyPlanType access_shape,
                             bool exchange_allocated)
   {
     exchange_allocated_ = exchange_allocated;
@@ -585,10 +574,10 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
     } else {
       phy_plan_type_ = ObPhyPlanType::OB_PHY_PLAN_LOCAL;
     }
-    if (location_type == ObPhyPlanType::OB_PHY_PLAN_UNCERTAIN) {
-      location_type_ = ObPhyPlanType::OB_PHY_PLAN_UNCERTAIN;
+    if (access_shape == ObPhyPlanType::OB_PHY_PLAN_UNCERTAIN) {
+      access_shape_ = ObPhyPlanType::OB_PHY_PLAN_UNCERTAIN;
     } else {
-      location_type_ = phy_plan_type_;
+      access_shape_ = phy_plan_type_;
     }
   }
   ObIArray<ColumnUsageArg> &get_column_usage_infos() { return column_usage_infos_; }
@@ -663,14 +652,14 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
   inline uint64_t get_aggregation_optimization_settings() const
   { return aggregation_optimization_settings_; }
   inline bool force_push_down() const { return FORCE_GPD & aggregation_optimization_settings_; }
-  common::ObIArray<TableLocRelInfo> &get_loc_rel_infos() { return loc_rel_infos_; }
-  TableLocRelInfo *get_loc_rel_info_by_id(uint64_t table_loc_id, uint64_t ref_table_id)
+  common::ObIArray<RelatedTableAccessInfo> &get_access_relations() { return access_relations_; }
+  RelatedTableAccessInfo *get_access_relation_by_id(uint64_t table_ref_id, uint64_t ref_table_id)
   {
-    TableLocRelInfo *rel_info = nullptr;
-    for (int64_t i = 0; OB_ISNULL(rel_info) && i < loc_rel_infos_.count(); ++i) {
-      if (loc_rel_infos_.at(i).table_loc_id_ == table_loc_id
-          && loc_rel_infos_.at(i).ref_table_id_ == ref_table_id) {
-        rel_info = &(loc_rel_infos_.at(i));
+    RelatedTableAccessInfo *rel_info = nullptr;
+    for (int64_t i = 0; OB_ISNULL(rel_info) && i < access_relations_.count(); ++i) {
+      if (access_relations_.at(i).table_ref_id_ == table_ref_id
+          && access_relations_.at(i).ref_table_id_ == ref_table_id) {
+        rel_info = &(access_relations_.at(i));
       }
     }
     return rel_info;
@@ -731,7 +720,7 @@ private:
   ObSqlSchemaGuard *sql_schema_guard_;
   common::ObOptStatManager *opt_stat_manager_;
   common::ObIAllocator &allocator_;
-  common::ObArray<ObTableLocation, common::ModulePageAllocator, true> table_location_list_;
+  common::ObArray<TableAccessPlan, common::ModulePageAllocator, true> table_access_plan_list_;
   common::ObSEArray<ObTablePartitionInfo *, 1, common::ModulePageAllocator, true> table_partition_infos_;
   common::ObAddr server_;
   const ParamStore *params_;
@@ -782,7 +771,7 @@ private:
   common::ObSEArray<ObSqlTempTableInfo*, 1, common::ModulePageAllocator, true> temp_table_infos_;
   bool exchange_allocated_;
   ObPhyPlanType phy_plan_type_;
-  ObPhyPlanType location_type_;
+  ObPhyPlanType access_shape_;
   ObShardingInfo local_sharding_;
   ObShardingInfo distributed_sharding_;
   ObShardingInfo match_all_sharding_;
@@ -796,8 +785,8 @@ private:
   uint64_t aggregation_optimization_settings_; // for adaptive groupby/distinct
   ObQueryCtx *query_ctx_;
   //to record the related info about data table and local index id,
-  //because the locations of data table and local index table are always bound together
-  common::ObSEArray<TableLocRelInfo, 1, common::ModulePageAllocator, true> loc_rel_infos_;
+  //because the accesses of data table and local index table are always bound together
+  common::ObSEArray<RelatedTableAccessInfo, 1, common::ModulePageAllocator, true> access_relations_;
   common::ObArray<DeducedExprInfo, common::ModulePageAllocator, true> deduced_exprs_info_;
   union {
     //contain_nested_sql_: whether contain trigger, foreign key, PL UDF

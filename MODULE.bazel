@@ -2,34 +2,57 @@ module(
     name = "seekdb",
     version = "0.0.0",
     bazel_compatibility = [
-        ">=8.2.1",
-        "<=8.2.1",
+        ">=9.3.0",
+        "<=9.3.0",
     ],
 )
 
-bazel_dep(name = "rules_cc", version = "0.2.22")
+bazel_dep(name = "rules_cc", version = "0.2.25")
+# Use public-mirror releases for the rules_cc toolchain dependencies too.
+bazel_dep(name = "apple_support", version = "2.8.4")
 bazel_dep(name = "platforms", version = "1.0.0")
 
-seekdb_third_party_headers_repository = use_repo_rule(
-    "//bazel:third_party_headers_repo.bzl",
-    "seekdb_third_party_headers_repository",
+host_tools_repository = use_repo_rule("//bazel:parser.bzl", "host_tools_repository")
+host_tools_repository(name = "host_tools")
+
+third_party_headers_repository = use_repo_rule(
+    "//bazel/third_party:repositories.bzl",
+    "third_party_headers_repository",
 )
 
-seekdb_third_party_headers_repository(name = "seekdb_3rd_headers")
+third_party_headers_repository(name = "third_party_native")
+third_party_headers_repository(name = "third_party_android", platform = "android")
+third_party_headers_repository(name = "third_party_ios", platform = "iphoneos")
+third_party_headers_repository(name = "third_party_ios_simulator", platform = "iphonesimulator")
+third_party_headers_repository(name = "third_party_wasm", platform = "wasm")
 
-seekdb_cc_toolchain_repository = use_repo_rule(
-    "//bazel/toolchains/cc:seekdb_cc_toolchain_repo.bzl",
-    "seekdb_cc_toolchain_repository",
+linux_cc_toolchain_repository = use_repo_rule(
+    "//bazel/toolchains/cc:linux_cc_toolchain_repo.bzl",
+    "linux_cc_toolchain_repository",
 )
 
-seekdb_cc_toolchain_repository(name = "seekdb_cc_toolchain")
+linux_cc_toolchain_repository(name = "linux_cc_toolchain")
 
-register_toolchains("@seekdb_cc_toolchain//:local_compile_toolchain")
+register_toolchains("@linux_cc_toolchain//:all")
+
+android_cc_toolchain_repository = use_repo_rule(
+    "//bazel/toolchains/cc:android_cc_toolchain_repo.bzl",
+    "android_cc_toolchain_repository",
+)
+android_cc_toolchain_repository(name = "android_ndk")
+register_toolchains("@android_ndk//:all")
+
+emscripten_cc_toolchain_repository = use_repo_rule(
+    "//bazel/toolchains/cc:emscripten_cc_toolchain_repo.bzl",
+    "emscripten_cc_toolchain_repository",
+)
+emscripten_cc_toolchain_repository(name = "emscripten")
+register_toolchains("@emscripten//:all")
 
 # Keep the repository-owned Clang toolchain as the reproducible Linux build
-# toolchain.  On platforms it does not target (currently macOS), let rules_cc
-# configure the native host compiler and SDK instead of pretending that the
-# Linux/glibc toolchain is portable.
+# toolchain. rules_cc configures other native hosts; apple_support registers
+# the macOS compiler and SDK toolchain. The Linux/glibc toolchain is not portable
+# to those hosts.
 cc_configure = use_extension(
     "@rules_cc//cc:extensions.bzl",
     "cc_configure_extension",
@@ -43,7 +66,53 @@ use_repo(
 
 register_toolchains("@local_config_cc_toolchains//:all")
 
-# Read the same C++ export declarations used by CMake; no Cargo execution is
-# needed during repository discovery or Bazel analysis.
-cargo_exports_repository = use_repo_rule("//bazel:cargo.bzl", "cargo_exports_repository")
-cargo_exports_repository(name = "cargo_exports", manifest = "//rust:exports.json")
+local_cargo_repository = use_repo_rule("//bazel:cargo_toolchain.bzl", "local_cargo_repository")
+local_cargo_repository(name = "cargo")
+register_toolchains("@cargo//:all")
+
+cargo_sources_repository = use_repo_rule("//bazel:cargo_toolchain.bzl", "cargo_sources_repository")
+_CARGO_MANIFESTS = [
+    "//rust:Cargo.toml", "//rust:config/Cargo.toml", "//rust:kv/Cargo.toml",
+    "//rust:local/Cargo.toml", "//rust:sql-nio/Cargo.toml", "//rust:logger/Cargo.toml",
+    "//rust:uuid-generator/Cargo.toml", "//rust:in-process/Cargo.toml", "//rust:seekdb-rust/Cargo.toml",
+    "//rust:regex-engine/Cargo.toml", "//deps/external:Cargo.toml",
+]
+_CARGO_LOCKS = ["//rust:Cargo.lock", "//deps/external:Cargo.lock"]
+cargo_sources_repository(name = "cargo_native_sources", kind = "native", manifests = _CARGO_MANIFESTS, locks = _CARGO_LOCKS)
+cargo_sources_repository(name = "cargo_wasm_sources", kind = "wasm", manifests = _CARGO_MANIFESTS, locks = _CARGO_LOCKS)
+
+sdk_sources = use_extension("//bazel/sdk_sources:repositories.bzl", "sdk_sources")
+
+use_repo(
+    sdk_sources,
+    "sdk_abseil",
+    "sdk_s2_ios",
+    "sdk_s2_wasm",
+    "sdk_roaring",
+    "sdk_vsag_ios",
+    "sdk_vsag_wasm",
+    "sdk_cpuinfo",
+    "sdk_fmt",
+    "sdk_spdlog",
+    "sdk_nlohmann_json",
+    "sdk_robin_map",
+    "sdk_thread_pool",
+    "sdk_clapack",
+    "sdk_openblas",
+    "sdk_antlr4",
+    "sdk_lapack",
+    "sdk_openmp",
+    "sdk_boost",
+)
+
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+http_archive(
+    name = "pyyaml",
+    urls = ["https://github.com/yaml/pyyaml/archive/refs/tags/6.0.2.tar.gz"],
+    sha256 = "9377c381ac3fccad8df73d96b5139ef8b1a2c57a0d913e95ab0a2275d66b5caa",
+    strip_prefix = "pyyaml-6.0.2",
+    build_file_content = '''package(default_visibility = ["//visibility:public"])
+exports_files(["lib/yaml/__init__.py"])
+filegroup(name = "files", srcs = glob(["lib/yaml/*.py"]))
+''',
+)

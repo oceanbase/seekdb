@@ -212,21 +212,21 @@ int ObIDService::handle_replay_result(const int64_t last_id, const int64_t limit
   return ret;
 }
 
-int ObIDService::update_id_meta(const bool write_slog)
+int ObIDService::update_id_meta(const bool persist_change)
 {
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(check_and_fill_ls())) {
-  } else if (write_slog) {
+  } else if (persist_change) {
     ret = ls_->update_id_meta(service_type_,
                               ATOMIC_LOAD(&limited_id_),
                               latest_log_ts_.atomic_load(),
-                              true /* write slog */);
+                              true /*persist_change*/);
   } else {
     ret = ls_->update_id_meta(service_type_,
                               ATOMIC_LOAD(&limited_id_),
                               latest_log_ts_.atomic_load(),
-                              false /* not write slog */);
+                              false /*persist_change*/);
   }
 
   if (OB_FAIL(ret)) {

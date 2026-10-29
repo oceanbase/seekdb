@@ -20,10 +20,17 @@
 #define _GNU_SOURCE 1
 
 
+#if defined(__EMSCRIPTEN__)
+#define SIZEOF_SIZE_T __SIZEOF_SIZE_T__
+#define SIZEOF_CHARP  __SIZEOF_POINTER__
+#define SIZEOF_VOIDP  __SIZEOF_POINTER__
+#define SIZEOF_LONG   __SIZEOF_LONG__
+#else
 #define SIZEOF_SIZE_T 8
 #define SIZEOF_CHARP  8
 #define SIZEOF_VOIDP  8
 #define SIZEOF_LONG   8
+#endif
 
 #define SIZEOF_CHAR 1
 #define HAS_CHAR 1
@@ -43,7 +50,7 @@
 #define HAS_SIZE_T 1
 #define SIZEOF_UINT 4
 #define HAS_UINT 1
-#define SIZEOF_ULONG 8
+#define SIZEOF_ULONG SIZEOF_LONG
 #define HAS_ULONG 1
 #define HAS_U_INT32_T 1
 #define SIZEOF_U_INT32_T 4

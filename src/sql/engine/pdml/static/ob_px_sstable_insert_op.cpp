@@ -64,11 +64,11 @@ int ObPxMultiPartSSTableInsertOp::get_tablet_info_from_row(
   // 1. get tablet_id
   const int64_t part_id_idx = get_spec().row_desc_.get_part_id_index();
   if (NO_PARTITION_ID_FLAG == part_id_idx) {
-    ObDASTableLoc *table_loc = ins_rtdef_.das_rtdef_.table_loc_;
-    if (OB_ISNULL(table_loc) || table_loc->get_tablet_locs().size() != 1) {
+    DASRuntimeTableAccess *table_access = ins_rtdef_.das_rtdef_.table_access_;
+    if (OB_ISNULL(table_access) || table_access->get_tablet_accesses().size() != 1) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      tablet_id = table_loc->get_first_tablet_loc()->tablet_id_;
+      tablet_id = table_access->get_first_tablet_access()->tablet_id_;
     }
   } else if (part_id_idx < 0) {
     ret = OB_ERR_UNEXPECTED;
@@ -283,11 +283,11 @@ int ObPxMultiPartSSTableInsertOp::locate_exprs()
   const ObExprPtrIArray &child_output_exprs = child_->get_spec().output_;
   const int64_t part_id_idx = get_spec().row_desc_.get_part_id_index();
   if (NO_PARTITION_ID_FLAG == part_id_idx) {
-    ObDASTableLoc *table_loc = ins_rtdef_.das_rtdef_.table_loc_;
-    if (OB_ISNULL(table_loc) || table_loc->get_tablet_locs().size() != 1) {
+    DASRuntimeTableAccess *table_access = ins_rtdef_.das_rtdef_.table_access_;
+    if (OB_ISNULL(table_access) || table_access->get_tablet_accesses().size() != 1) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      non_partitioned_tablet_id_ = table_loc->get_first_tablet_loc()->tablet_id_;
+      non_partitioned_tablet_id_ = table_access->get_first_tablet_access()->tablet_id_;
     }
   } else if (part_id_idx < 0 || part_id_idx >= child_output_exprs.count()) {
     ret = OB_ERR_UNEXPECTED;

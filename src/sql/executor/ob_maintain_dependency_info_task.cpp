@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_EXE
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "sql/executor/ob_maintain_dependency_info_task.h"
 #include "query/command/ob_root_service_serialization.h"
 #include "query/command/ob_root_command_service.h"

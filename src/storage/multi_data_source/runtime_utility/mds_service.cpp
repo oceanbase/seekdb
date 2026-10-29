@@ -415,8 +415,7 @@ int ObVectorAllocator::init()
   param.set_mem_attr("VectorIndex", ObCtxIds::VECTOR_CTX_ID)
     .set_properties(lib::ADD_CHILD_THREAD_SAFE | lib::ALLOC_THREAD_SAFE | lib::RETURN_MALLOC_DEFAULT)
     .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE)
-    .set_label("VectorIndex")
-    .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
+    .set_label("VectorIndex");
   MDS_TG(10_ms);
   if (IS_INIT){
     ret = OB_INIT_TWICE;

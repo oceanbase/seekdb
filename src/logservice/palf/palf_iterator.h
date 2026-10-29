@@ -291,10 +291,8 @@ private:
 
 typedef PalfIterator<LogEntry> MemPalfBufferIterator;
 typedef PalfIterator<LogGroupEntry> MemPalfGroupBufferIterator;
-typedef PalfIterator<LogMetaEntry> MemPalfMetaBufferIterator;
 typedef PalfIterator<LogEntry> PalfBufferIterator;
 typedef PalfIterator<LogGroupEntry> PalfGroupBufferIterator;
-typedef PalfIterator<LogMetaEntry> PalfMetaBufferIterator;
 }
 }
 #endif

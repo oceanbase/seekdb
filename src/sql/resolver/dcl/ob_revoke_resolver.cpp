@@ -75,7 +75,7 @@ int ObRevokeResolver::resolve_revoke_role_inner(
       if (OB_USER_NOT_EXIST == ret || OB_ISNULL(role_info)) {
         ret = OB_ERR_UNKNOWN_AUTHID;
         ignore_error = ignore_unknown_role;
-        LOG_USER(ignore_unknown_role ? ObLogger::USER_WARN : ObLogger::USER_ERROR,
+        LOG_USER(ignore_unknown_role ? USER_WARN : USER_ERROR,
                   OB_ERR_UNKNOWN_AUTHID,
                   role_name.length(), role_name.ptr(),
                   host_name.length(), host_name.ptr());
@@ -122,7 +122,7 @@ int ObRevokeResolver::resolve_revoke_role_inner(
       if (OB_USER_NOT_EXIST == ret) {
         ret = OB_ERR_UNKNOWN_AUTHID;
         ignore_error = ignore_unknown_user;
-        LOG_USER(ignore_unknown_user ? ObLogger::USER_WARN : ObLogger::USER_ERROR,
+        LOG_USER(ignore_unknown_user ? USER_WARN : USER_ERROR,
                   OB_ERR_UNKNOWN_AUTHID,
                   user_name.length(), user_name.ptr(),
                   host_name.length(), host_name.ptr());
@@ -341,7 +341,7 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
                                                          host_name, user_id))) {
                   if (OB_USER_NOT_EXIST == ret) {
                      ignore_error = ignore_user_not_exist;
-                     LOG_USER(ignore_user_not_exist ? ObLogger::USER_WARN : ObLogger::USER_ERROR,
+                     LOG_USER(ignore_user_not_exist ? USER_WARN : USER_ERROR,
                               OB_ERR_UNKNOWN_AUTHID,
                               user_name.length(), user_name.ptr(),
                               host_name.length(), host_name.ptr());

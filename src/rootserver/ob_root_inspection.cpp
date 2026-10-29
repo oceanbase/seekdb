@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_root_inspection.h"
 #include "rootserver/ob_local_management_service.h"
 #include "share/ob_global_stat_proxy.h"//ObGlobalStatProxy

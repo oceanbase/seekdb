@@ -29,7 +29,7 @@ An explicit non-zero value must be at least 1 GiB. The main derived defaults are
 
 TxShare accounts for Memstore, TxData, and MDS memory. Its limit is `11/16 of memory_budget` when the budget is at most 6.4 GiB, and `13/16 of memory_budget` otherwise. Vector memory is excluded from both TxShare accounting and throttling; its allocation checks use the current `vector_memory_limit` independently, including after configuration reload. These independent limits do not constitute a process-wide memory cap.
 
-`memory_limit` is retained only as a deprecated compatibility parameter. Its configured value is accepted and persisted, but current memory sizing and control ignore it. Use `memory_budget` for new configurations. There is no `memory_reserved` configuration parameter.
+There is no `memory_reserved` configuration parameter.
 
 # Common Interfaces and Methods of OceanBase seekdb Memory Management
 seekdb provides different memory allocators for different scenarios. In addition, in order to improve program execution efficiency, there are some conventional implementations, such as reset/reuse, etc.

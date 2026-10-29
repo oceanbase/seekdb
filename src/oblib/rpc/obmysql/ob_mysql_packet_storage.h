@@ -22,7 +22,7 @@
 #include <stdint.h>
 
 #include "lib/ob_errno.h"
-#include "nio.h"
+#include "rust/sql_nio.h"
 #include "rpc/obmysql/ob_i_cs_mem_pool.h"
 #include "rpc/obmysql/ob_mysql_packet.h"
 
@@ -49,53 +49,53 @@ inline bool is_valid_mysql_raw_packet_mode(ObMySQLRawPacketMode mode)
          || ObMySQLRawPacketMode::LOCAL_INFILE_DATA == mode;
 }
 
-static_assert(NIO_MYSQL_COMMAND_LAYOUT_BYTES ==
+static_assert(static_cast<uint32_t>(oceanbase::nio::CommandLayout::Bytes) ==
                   static_cast<uint32_t>(ObMySQLCommandLayout::BYTES),
               "mysql command bytes layout mismatch");
-static_assert(NIO_MYSQL_COMMAND_LAYOUT_FIELD_LIST ==
+static_assert(static_cast<uint32_t>(oceanbase::nio::CommandLayout::FieldList) ==
                   static_cast<uint32_t>(ObMySQLCommandLayout::FIELD_LIST),
               "mysql command field-list layout mismatch");
-static_assert(NIO_MYSQL_COMMAND_LAYOUT_U32 ==
+static_assert(static_cast<uint32_t>(oceanbase::nio::CommandLayout::U32) ==
                   static_cast<uint32_t>(ObMySQLCommandLayout::U32),
               "mysql command u32 layout mismatch");
-static_assert(NIO_MYSQL_COMMAND_LAYOUT_U16 ==
+static_assert(static_cast<uint32_t>(oceanbase::nio::CommandLayout::U16) ==
                   static_cast<uint32_t>(ObMySQLCommandLayout::U16),
               "mysql command u16 layout mismatch");
-static_assert(NIO_MYSQL_COMMAND_LAYOUT_FETCH ==
+static_assert(static_cast<uint32_t>(oceanbase::nio::CommandLayout::Fetch) ==
                   static_cast<uint32_t>(ObMySQLCommandLayout::FETCH),
               "mysql command fetch layout mismatch");
-static_assert(NIO_MYSQL_COMMAND_LAYOUT_LONG_DATA ==
+static_assert(static_cast<uint32_t>(oceanbase::nio::CommandLayout::LongData) ==
                   static_cast<uint32_t>(ObMySQLCommandLayout::LONG_DATA),
               "mysql command long-data layout mismatch");
-static_assert(NIO_MYSQL_COMMAND_LAYOUT_CHANGE_USER ==
+static_assert(static_cast<uint32_t>(oceanbase::nio::CommandLayout::ChangeUser) ==
                   static_cast<uint32_t>(ObMySQLCommandLayout::CHANGE_USER),
               "mysql command change-user layout mismatch");
-static_assert(NIO_MYSQL_COMMAND_LAYOUT_EXECUTE ==
+static_assert(static_cast<uint32_t>(oceanbase::nio::CommandLayout::Execute) ==
                   static_cast<uint32_t>(ObMySQLCommandLayout::EXECUTE),
               "mysql command execute layout mismatch");
-static_assert(NIO_MYSQL_COMMAND_LAYOUT_EMPTY ==
+static_assert(static_cast<uint32_t>(oceanbase::nio::CommandLayout::Empty) ==
                   static_cast<uint32_t>(ObMySQLCommandLayout::EMPTY),
               "mysql command empty layout mismatch");
-static_assert(NIO_MYSQL_COMMAND_LAYOUT_U8 ==
+static_assert(static_cast<uint32_t>(oceanbase::nio::CommandLayout::U8) ==
                   static_cast<uint32_t>(ObMySQLCommandLayout::U8),
               "mysql command u8 layout mismatch");
-static_assert(sizeof(NioMysqlCommandField) == sizeof(ObMySQLCommandField),
+static_assert(sizeof(oceanbase::nio::NioMysqlCommandField) == sizeof(ObMySQLCommandField),
               "mysql command field ABI mismatch");
 
 inline bool is_valid_mysql_command_layout(uint32_t layout) {
-  return NIO_MYSQL_COMMAND_LAYOUT_BYTES == layout ||
-         NIO_MYSQL_COMMAND_LAYOUT_FIELD_LIST == layout ||
-         NIO_MYSQL_COMMAND_LAYOUT_U32 == layout ||
-         NIO_MYSQL_COMMAND_LAYOUT_U16 == layout ||
-         NIO_MYSQL_COMMAND_LAYOUT_FETCH == layout ||
-         NIO_MYSQL_COMMAND_LAYOUT_LONG_DATA == layout ||
-         NIO_MYSQL_COMMAND_LAYOUT_CHANGE_USER == layout ||
-         NIO_MYSQL_COMMAND_LAYOUT_EXECUTE == layout ||
-         NIO_MYSQL_COMMAND_LAYOUT_EMPTY == layout ||
-         NIO_MYSQL_COMMAND_LAYOUT_U8 == layout;
+  return static_cast<uint32_t>(oceanbase::nio::CommandLayout::Bytes) == layout ||
+         static_cast<uint32_t>(oceanbase::nio::CommandLayout::FieldList) == layout ||
+         static_cast<uint32_t>(oceanbase::nio::CommandLayout::U32) == layout ||
+         static_cast<uint32_t>(oceanbase::nio::CommandLayout::U16) == layout ||
+         static_cast<uint32_t>(oceanbase::nio::CommandLayout::Fetch) == layout ||
+         static_cast<uint32_t>(oceanbase::nio::CommandLayout::LongData) == layout ||
+         static_cast<uint32_t>(oceanbase::nio::CommandLayout::ChangeUser) == layout ||
+         static_cast<uint32_t>(oceanbase::nio::CommandLayout::Execute) == layout ||
+         static_cast<uint32_t>(oceanbase::nio::CommandLayout::Empty) == layout ||
+         static_cast<uint32_t>(oceanbase::nio::CommandLayout::U8) == layout;
 }
 
-inline bool is_valid_mysql_command_field(const NioMysqlCommandField &field,
+inline bool is_valid_mysql_command_field(const oceanbase::nio::NioMysqlCommandField &field,
                                          int64_t body_len) {
   return field.off >= 0 && field.len >= 0 &&
          static_cast<int64_t>(field.off) <= body_len &&
@@ -110,7 +110,7 @@ inline bool is_valid_mysql_command_field(const NioMysqlCommandField &field,
 // hot path. What C++ still checks is exactly what memory safety needs: the
 // command range, a known layout enum value, and that all four field ranges
 // lie inside the delivered body.
-inline bool is_valid_mysql_command_view(const NioMysqlCommandView &view,
+inline bool is_valid_mysql_command_view(const oceanbase::nio::NioMysqlCommandView &view,
                                         int64_t body_len) {
   const bool is_internal_command =
       view.command >= INTERNAL_MYSQL_CMD_START &&
@@ -127,7 +127,7 @@ inline bool is_valid_mysql_command_view(const NioMysqlCommandView &view,
 }
 
 inline ObMySQLCommandView
-copy_mysql_command_view(const NioMysqlCommandView &view) {
+copy_mysql_command_view(const oceanbase::nio::NioMysqlCommandView &view) {
   ObMySQLCommandView copied = {};
   copied.layout_ = static_cast<ObMySQLCommandLayout>(view.layout);
   copied.scalar0_ = view.scalar0;
@@ -143,7 +143,7 @@ copy_mysql_command_view(const NioMysqlCommandView &view) {
 inline void init_mysql_raw_packet(ObMySQLRawPacket &packet, char *payload,
                                   uint32_t body_len, uint64_t wire_bytes,
                                   ObMySQLRawPacketMode mode,
-                                  const NioMysqlCommandView *command_view) {
+                                  const oceanbase::nio::NioMysqlCommandView *command_view) {
   packet.set_wire_bytes(wire_bytes);
   switch (mode) {
     case ObMySQLRawPacketMode::LOGIN:
@@ -179,7 +179,7 @@ inline void init_mysql_raw_packet(ObMySQLRawPacket &packet, char *payload,
 inline int
 build_mysql_raw_packet_view(ObICSMemPool &pool, char *body, int64_t body_len,
                             uint64_t wire_bytes, ObMySQLRawPacketMode mode,
-                            const NioMysqlCommandView *command_view,
+                            const oceanbase::nio::NioMysqlCommandView *command_view,
                             ObMySQLRawPacket *&packet) {
   int ret = common::OB_SUCCESS;
   packet = NULL;

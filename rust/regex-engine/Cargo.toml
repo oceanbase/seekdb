@@ -1,0 +1,9 @@
+[package]
+name = "regex-engine"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+cxx = "=1.0.202"
+fancy-regex = "=0.20.0"

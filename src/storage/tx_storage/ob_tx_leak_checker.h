@@ -15,7 +15,7 @@
  */
 #ifndef OCEANBASE_STORAGE_OB_TX_LEAK_CHECKER_H_
 #define OCEANBASE_STORAGE_OB_TX_LEAK_CHECKER_H_
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "share/leak_checker/ob_leak_checker.h"
 #include "share/rc/ob_server_runtime.h"
 #include "common/ob_tablet_id.h"

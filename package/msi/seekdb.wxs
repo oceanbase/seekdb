@@ -1,0 +1,25 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Name="seekdb" Manufacturer="OceanBase Inc." Version="$(var.Version)"
+           UpgradeCode="A1B2C3D4-E5F6-4A5B-8C9D-0E1F2A3B4C5D" Scope="perMachine">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of seekdb is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <Property Id="ARPURLINFOABOUT" Value="https://www.oceanbase.ai" />
+    <Property Id="INSTALL_ROOT" Secure="yes" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.License)" />
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALL_ROOT" />
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALL_ROOT" Name="seekdb" />
+    </StandardDirectory>
+    <Feature Id="Server" Title="seekdb" Level="1">
+      <ComponentGroupRef Id="Payload" />
+      <ComponentRef Id="SeekDBPathEnv" />
+    </Feature>
+    <?if $(var.Configurator) = 1 ?>
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Run seekdb Configurator" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+    <CustomActionRef Id="LaunchApplication" />
+    <CustomActionRef Id="RunConfiguratorRemove" />
+    <?endif?>
+  </Package>
+</Wix>

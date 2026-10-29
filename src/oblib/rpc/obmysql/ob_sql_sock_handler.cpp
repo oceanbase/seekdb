@@ -20,7 +20,7 @@
 #include "rpc/frame/ob_req_deliver.h"
 #include "rpc/obmysql/ob_mysql_packet.h"   // ObMySQLRawPacket (login + command bodies)
 #include "rpc/obmysql/ob_mysql_packet_storage.h"
-#include "nio.h"
+#include "rust/sql_nio.h"
 
 namespace oceanbase
 {
@@ -92,7 +92,7 @@ int ObSqlSockHandler::build_sql_req(ObSqlSockSession& sess,
 
 int ObSqlSockHandler::on_readable(void *udata, char *body, int64_t body_len,
                                   uint64_t wire_bytes, int packet_kind,
-                                  const NioMysqlCommandView *command_view,
+                                  const oceanbase::nio::NioMysqlCommandView *command_view,
                                   uint64_t generation) {
   // Rust supplies an explicit wire packet kind. C++ only builds the legacy
   // ObMySQLRawPacket view and verifies that ObMP's execution phase agrees.
@@ -106,19 +106,19 @@ int ObSqlSockHandler::on_readable(void *udata, char *body, int64_t body_len,
     ret = OB_INVALID_ARGUMENT;
   } else {
     switch (packet_kind) {
-      case NIO_PACKET_LOGIN:
+      case static_cast<int32_t>(oceanbase::nio::PacketKind::Login):
         mode = ObMySQLRawPacketMode::LOGIN;
         phase_matches =
             NULL == command_view && rpc::ConnectionPhaseEnum::CPE_CONNECTED ==
                                         sess->conn_.connection_phase_;
         break;
-      case NIO_PACKET_COMMAND:
+      case static_cast<int32_t>(oceanbase::nio::PacketKind::Command):
         mode = ObMySQLRawPacketMode::COMMAND;
         phase_matches =
             NULL != command_view && rpc::ConnectionPhaseEnum::CPE_AUTHED ==
                                         sess->conn_.connection_phase_;
         break;
-      case NIO_PACKET_AUTH_SWITCH_RESPONSE:
+      case static_cast<int32_t>(oceanbase::nio::PacketKind::AuthSwitchResponse):
         mode = ObMySQLRawPacketMode::AUTH_SWITCH_RESPONSE;
         phase_matches =
             NULL == command_view && rpc::ConnectionPhaseEnum::CPE_AUTH_SWITCH ==

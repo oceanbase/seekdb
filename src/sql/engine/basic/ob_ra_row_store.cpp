@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_ra_row_store.h"
 #include "data_plane/tmp_file/ob_tmp_file.h"
 
@@ -924,27 +924,8 @@ bool ObRARowStore::need_dump()
     }
   } else if (!config::enable_sql_operator_dump()) {
     // no dump
-  } else {
-    const int64_t mem_ctx_pct_trigger = 80;
-    lib::ObMallocAllocator *instance = lib::ObMallocAllocator::get_instance();
-    lib::ObCtxAllocatorGuard allocator = NULL;
-    if (NULL == instance) {
-      ret = common::OB_ERR_SYS;
-      LOG_ERROR("NULL allocator", K(ret));
-    } else if (OB_ISNULL(allocator = instance->get_ctx_allocator(
-        ctx_id_))) {
-      // no context allocator, do nothing
-    } else {
-      const int64_t limit = allocator->get_limit();
-      const int64_t hold = allocator->get_hold();
-      int64_t mod_hold = 0;
-      if (limit / 100 * mem_ctx_pct_trigger <= hold) {
-        dump = true;
-      }
-      if (dump) {
-      }
-    }
   }
+  UNUSED(ret);
   return dump;
 }
 

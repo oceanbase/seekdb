@@ -17,6 +17,8 @@
 
 #define USING_LOG_PREFIX SQL
 
+#include <cinttypes>
+
 #include "data_plane/transaction/ob_i_transaction_service.h"
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "sql/session/ob_inner_sql_connection.h"
@@ -1091,7 +1093,7 @@ int ObSqlPlan::get_plan_table_formatter(ObIArray<ObSqlPlanItem*> &sql_plan_infos
     //EST ROWS
     if (OB_SUCC(ret)) {
       if (plan_item->cardinality_ >= 0) {
-        snprintf(buffer, sizeof(buffer), "%ld", plan_item->cardinality_);
+        snprintf(buffer, sizeof(buffer), "%" PRId64, plan_item->cardinality_);
       } else {
         snprintf(buffer, sizeof(buffer), "%s", "more than 1.0e19");
       }
@@ -1103,7 +1105,7 @@ int ObSqlPlan::get_plan_table_formatter(ObIArray<ObSqlPlanItem*> &sql_plan_infos
     //EST COST
     if (OB_SUCC(ret)) {
       if (plan_item->cost_ >= 0) {
-        snprintf(buffer, sizeof(buffer), "%ld", plan_item->cost_);
+        snprintf(buffer, sizeof(buffer), "%" PRId64, plan_item->cost_);
       } else {
         snprintf(buffer, sizeof(buffer), "%s", "more than 1.0e19");
       }
@@ -1158,7 +1160,7 @@ int ObSqlPlan::get_real_plan_table_formatter(ObIArray<ObSqlPlanItem*> &sql_plan_
     //EST ROWS
     if (OB_SUCC(ret)) {
       if (plan_item->cardinality_ >= 0) {
-        snprintf(buffer, sizeof(buffer), "%ld", plan_item->cardinality_);
+        snprintf(buffer, sizeof(buffer), "%" PRId64, plan_item->cardinality_);
       } else {
         snprintf(buffer, sizeof(buffer), "%s", "more than 1.0e19");
       }
@@ -1170,7 +1172,7 @@ int ObSqlPlan::get_real_plan_table_formatter(ObIArray<ObSqlPlanItem*> &sql_plan_
     //EST COST
     if (OB_SUCC(ret)) {
       if (plan_item->cost_ >= 0) {
-        snprintf(buffer, sizeof(buffer), "%ld", plan_item->cost_);
+        snprintf(buffer, sizeof(buffer), "%" PRId64, plan_item->cost_);
       } else {
         snprintf(buffer, sizeof(buffer), "%s", "more than 1.0e19");
       }
@@ -1181,7 +1183,7 @@ int ObSqlPlan::get_real_plan_table_formatter(ObIArray<ObSqlPlanItem*> &sql_plan_
     }
     //REAL ROWS
     if (OB_SUCC(ret)) {
-      snprintf(buffer, sizeof(buffer), "%ld", plan_item->real_cardinality_);
+      snprintf(buffer, sizeof(buffer), "%" PRId64, plan_item->real_cardinality_);
       length = (int32_t) strlen(buffer);
       if (length > format_helper.column_len_.at(RealRows)) {
         format_helper.column_len_.at(RealRows) = length;
@@ -1189,7 +1191,7 @@ int ObSqlPlan::get_real_plan_table_formatter(ObIArray<ObSqlPlanItem*> &sql_plan_
     }
     //REAL COST
     if (OB_SUCC(ret)) {
-      snprintf(buffer, sizeof(buffer), "%ld", plan_item->real_cost_);
+      snprintf(buffer, sizeof(buffer), "%" PRId64, plan_item->real_cost_);
       length = (int32_t) strlen(buffer);
       if (length > format_helper.column_len_.at(RealCost)) {
         format_helper.column_len_.at(RealCost) = length;
@@ -1197,7 +1199,7 @@ int ObSqlPlan::get_real_plan_table_formatter(ObIArray<ObSqlPlanItem*> &sql_plan_
     }
     //IO TIME
     if (OB_SUCC(ret)) {
-      snprintf(buffer, sizeof(buffer), "%ld", plan_item->io_cost_);
+      snprintf(buffer, sizeof(buffer), "%" PRId64, plan_item->io_cost_);
       length = (int32_t) strlen(buffer);
       if (length > format_helper.column_len_.at(IoTime)) {
         format_helper.column_len_.at(IoTime) = length;
@@ -1205,7 +1207,7 @@ int ObSqlPlan::get_real_plan_table_formatter(ObIArray<ObSqlPlanItem*> &sql_plan_
     }
     //CPU TIME
     if (OB_SUCC(ret)) {
-      snprintf(buffer, sizeof(buffer), "%ld", plan_item->cpu_cost_);
+      snprintf(buffer, sizeof(buffer), "%" PRId64, plan_item->cpu_cost_);
       length = (int32_t) strlen(buffer);
       if (length > format_helper.column_len_.at(CpuTime)) {
         format_helper.column_len_.at(CpuTime) = length;

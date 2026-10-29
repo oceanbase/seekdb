@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "observer/virtual_table/ob_all_virtual_server.h"
 #include "share/rc/ob_server_runtime.h"
 
@@ -181,7 +181,7 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
           cur_row_.cells_[i].set_int(addr_.get_port());
           break;
         case SQL_PORT:
-          cur_row_.cells_[i].set_int(obmysql::get_sql_nio_bound_tcp_port());
+          cur_row_.cells_[i].set_int(obmysql::get_sql_nio_advertised_tcp_port());
           break;
         case RPC_PORT:
           cur_row_.cells_[i].set_int(config::rpc_port());

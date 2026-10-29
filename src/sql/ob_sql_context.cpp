@@ -28,13 +28,13 @@ using namespace share::schema;
 namespace sql
 {
 
-bool LocationConstraint::operator==(const LocationConstraint &other) const {
-  return key_ == other.key_ && phy_loc_type_ == other.phy_loc_type_ && constraint_flags_ == other.constraint_flags_ ;
+bool TableAccessConstraint::operator==(const TableAccessConstraint &other) const {
+  return key_ == other.key_ && access_shape_ == other.access_shape_ && constraint_flags_ == other.constraint_flags_ ;
 }
 
 
 
-int ObLocationConstraintContext::calc_constraints_inclusion(const ObPwjConstraint *left,
+int TableAccessConstraintContext::calc_constraints_inclusion(const ObPwjConstraint *left,
                                                             const ObPwjConstraint *right,
                                                             InclusionType &inclusion_result)
 {
@@ -433,16 +433,16 @@ int ObSqlCtx::set_related_user_var_names(const ObIArray<ObString> &user_var_name
   return ret;
 }
 
-int ObSqlCtx::set_location_constraints(const ObLocationConstraintContext &location_constraint,
+int ObSqlCtx::set_access_constraints(const TableAccessConstraintContext &access_constraint,
                                        ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
   base_constraints_.reset();
   strict_constraints_.reset();
   non_strict_constraints_.reset();
-  const ObIArray<LocationConstraint> &base_constraints = location_constraint.base_table_constraints_;
-  const ObIArray<ObPwjConstraint *> &strict_constraints = location_constraint.strict_constraints_;
-  const ObIArray<ObPwjConstraint *> &non_strict_constraints = location_constraint.non_strict_constraints_;
+  const ObIArray<TableAccessConstraint> &base_constraints = access_constraint.base_table_constraints_;
+  const ObIArray<ObPwjConstraint *> &strict_constraints = access_constraint.strict_constraints_;
+  const ObIArray<ObPwjConstraint *> &non_strict_constraints = access_constraint.non_strict_constraints_;
   if (base_constraints.count() > 0) {
     base_constraints_.set_allocator(&allocator);
     if (OB_FAIL(base_constraints_.init(base_constraints.count()))) {

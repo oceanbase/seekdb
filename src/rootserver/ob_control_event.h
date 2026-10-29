@@ -26,7 +26,7 @@
       const int64_t MAX_VALUE_LENGTH = 512; \
       char VALUE[MAX_VALUE_LENGTH]; \
       int64_t pos = 0; \
-      ::oceanbase::common::ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();\
+      const ::oceanbase::common::ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();\
       ::oceanbase::common::databuff_print_kv(VALUE, MAX_VALUE_LENGTH, pos, ##args, KPC(trace_id)); \
       MANAGEMENT_EVENT_ADD("control_event", event, "event_type", #level, "ret", error_code, NULL, "", NULL, "", NULL, "", "message", "", ObHexEscapeSqlStr(VALUE)); \
     } while (0)

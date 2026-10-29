@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX PL
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_pl_resolver.h"
 #include "share/rc/ob_server_runtime.h"
 #include "pl/ob_pl_router.h"

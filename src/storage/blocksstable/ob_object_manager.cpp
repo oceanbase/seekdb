@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "share/ob_io_device_helper.h"
 #include "ob_object_manager.h"
 #include "storage/meta_store/ob_local_storage_meta_service.h"
 
@@ -47,7 +48,7 @@ int64_t ObStorageObjectOpt::to_string(char *buf, const int64_t buf_len) const
 
 //================================ ObObjectManager =====================================//
 
-ObObjectManager &ObObjectManager::ObObjectManager::get_instance()
+ObObjectManager &ObObjectManager::get_instance()
 {
   static ObObjectManager instance_;
   return instance_;
@@ -56,9 +57,6 @@ ObObjectManager &ObObjectManager::ObObjectManager::get_instance()
 ObObjectManager::ObObjectManager()
   : is_inited_(false),
     macro_object_size_(0),
-    lock_(),
-    super_block_(),
-    super_block_buf_holder_(),
     resize_file_lock_()
 {
 }
@@ -69,12 +67,7 @@ ObObjectManager::~ObObjectManager()
 
 int ObObjectManager::init(const int64_t macro_object_size)
 {
-  int ret = OB_SUCCESS;
-
-  if (OB_FAIL(super_block_buf_holder_.init(ObServerSuperBlockHeader::OB_MAX_SUPER_BLOCK_SIZE))) {
-  } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.init(&LOCAL_DEVICE_INSTANCE, macro_object_size))) {
-  }
-
+  int ret = OB_SERVER_BLOCK_MGR.init(&LOCAL_DEVICE_INSTANCE, macro_object_size);
   if (OB_SUCC(ret)) {
     macro_object_size_ = macro_object_size;
     is_inited_ = true;
@@ -91,10 +84,7 @@ int ObObjectManager::start(const int64_t reserved_size)
   } else if (OB_UNLIKELY(reserved_size < 0)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    bool need_format = false;
-    if (OB_FAIL(OB_SERVER_BLOCK_MGR.start(reserved_size, need_format))) {
-    } else if (OB_FAIL(read_or_format_super_block_(need_format))) {
-    }
+    ret = OB_SERVER_BLOCK_MGR.start(reserved_size);
   }
   return ret;
 }
@@ -111,7 +101,6 @@ void ObObjectManager::wait()
 
 void ObObjectManager::destroy()
 {
-  super_block_buf_holder_.reset();
   OB_SERVER_BLOCK_MGR.destroy();
 }
 
@@ -205,21 +194,11 @@ int ObObjectManager::resize_local_device(
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else {
-    SpinWLockGuard guard(lock_);
-    const int64_t current_size = get_total_macro_block_count() * get_macro_block_size();
+    const int64_t current_size = OB_SERVER_BLOCK_MGR.get_total_block_size();
     if (expected_current_size != current_size) {
       ret = OB_EAGAIN;
-    }
-    HEAP_VAR(ObServerSuperBlock, tmp_super_block) {
-      tmp_super_block = super_block_;
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.resize_file(
-          new_device_size, new_device_disk_percentage, reserved_size, tmp_super_block))) {
-      } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.write_super_block(tmp_super_block, super_block_buf_holder_))) {
-      } else {
-        super_block_ = tmp_super_block;
-        FLOG_INFO("succeed to resize local device", K_(super_block));
-      }
+    } else {
+      ret = OB_SERVER_BLOCK_MGR.resize_file(new_device_size, new_device_disk_percentage, reserved_size);
     }
   }
   return ret;
@@ -234,66 +213,10 @@ int ObObjectManager::check_disk_space_available()
   return ret;
 }
 
-int ObObjectManager::update_super_block(const common::ObLogCursor &replay_start_point,
-                                        const blocksstable::MacroBlockId &runtime_meta_entry)
+int64_t ObObjectManager::get_total_macro_block_count() const
 {
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else {
-    SpinWLockGuard guard(lock_);
-    HEAP_VAR(ObServerSuperBlock, tmp_super_block) {
-      tmp_super_block = super_block_;
-      tmp_super_block.body_.modify_timestamp_ = ObTimeUtility::current_time();
-      tmp_super_block.body_.replay_start_point_ = replay_start_point;
-      tmp_super_block.body_.runtime_meta_entry_ = runtime_meta_entry;
-      if (OB_FAIL(tmp_super_block.construct_header())) {
-      } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.write_super_block(tmp_super_block, super_block_buf_holder_))) {
-      } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.fsync_block())) {
-      } else {
-        super_block_ = tmp_super_block;
-      }
-    }
-  }
-  return ret;
+  return macro_object_size_ > 0 ? OB_SERVER_BLOCK_MGR.get_total_block_size() / macro_object_size_ : 0;
 }
-
-int ObObjectManager::get_object_size(
-    const MacroBlockId &object_id,
-    const int64_t ls_epoch,
-    int64_t &object_size) const
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(!object_id.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    object_size = get_macro_object_size();
-  }
-  return ret;
-}
-
-int  ObObjectManager::read_or_format_super_block_(const bool need_format)
-{
-  int ret = OB_SUCCESS;
-  SpinWLockGuard guard(lock_);
-  // read super block
-  if (!need_format) {
-    if (OB_FAIL(OB_SERVER_BLOCK_MGR.read_super_block(super_block_, super_block_buf_holder_))) {
-    } else {
-      LOG_INFO("succeed to read super block", K_(super_block));
-    }
-  } else {
-    if (OB_FAIL(super_block_.format_startup_super_block(
-        macro_object_size_, OB_SERVER_BLOCK_MGR.get_total_block_size()))) {
-    } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.write_super_block(super_block_, super_block_buf_holder_))) {
-    }
-  }
-  return ret;
-}
-
-
 
 int64_t ObObjectManager::get_max_macro_block_count(int64_t reserved_size) const
 {

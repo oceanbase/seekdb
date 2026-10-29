@@ -36,22 +36,22 @@ namespace obmysql
 {
 
 // ---- Event shims: the Rust reactor calls these by name, handler first ----
-extern "C" int ob_sql_sock_handler_on_connect(void* handler, void* sess, int fd,
+int ob_sql_sock_handler_on_connect(ObSqlSockHandler* handler, ObSqlSockSession* sess, int fd,
                                               int is_unix,
-                                              NioGreetingInfo* greeting) {
+                                              oceanbase::nio::NioGreetingInfo* greeting) {
   int ret =
-      static_cast<ObSqlSockHandler*>(handler)->on_connect(sess, fd, is_unix != 0);
+      handler->on_connect(sess, fd, is_unix != 0);
   if (0 == ret && NULL != greeting) {
     // Greeting inputs travel forward through the shim (this replaced the
     // out-of-header reverse-FFI symbol sm_conn_greeting_info at ABI 22). The
     // session's sessid + scramble exist as soon as on_connect constructed it.
-    observer::ObSMConnection &conn = static_cast<ObSqlSockSession*>(sess)->conn_;
+    observer::ObSMConnection &conn = sess->conn_;
     greeting->sessid = conn.sessid_;
-    MEMCPY(greeting->scramble, conn.scramble_buf_, sizeof(greeting->scramble));
+    MEMCPY(greeting->scramble.data(), conn.scramble_buf_, sizeof(greeting->scramble));
     // The short MySQL version (was DEFAULT_MYSQL_VERSION_CSTR in the deleted
     // ompk_handshake.h), not the long @@version_comment string.
     static const char VERSION[] = "5.7.25";
-    MEMCPY(greeting->version, VERSION, sizeof(VERSION) - 1);
+    MEMCPY(greeting->version.data(), VERSION, sizeof(VERSION) - 1);
     greeting->version_len = sizeof(VERSION) - 1;
     ObServerStatusFlags status_flags;
     status_flags.status_flags_.OB_SERVER_STATUS_AUTOCOMMIT =
@@ -60,33 +60,33 @@ extern "C" int ob_sql_sock_handler_on_connect(void* handler, void* sess, int fd,
   }
   return ret;
 }
-extern "C" int ob_sql_sock_handler_on_readable(
-    void *handler, void *sess, char *body, int64_t body_len,
+int ob_sql_sock_handler_on_readable(
+    ObSqlSockHandler *handler, ObSqlSockSession *sess, char *body, int64_t body_len,
     uint64_t wire_bytes, int packet_kind,
-    const NioMysqlCommandView *command_view, uint64_t generation) {
-  return static_cast<ObSqlSockHandler *>(handler)->on_readable(
+    const oceanbase::nio::NioMysqlCommandView *command_view, uint64_t generation) {
+  return handler->on_readable(
       sess, body, body_len, wire_bytes, packet_kind, command_view, generation);
 }
-extern "C" void ob_sql_sock_handler_on_disconnect(void* handler, void* sess) {
+void ob_sql_sock_handler_on_disconnect(ObSqlSockHandler* handler, ObSqlSockSession* sess) {
   UNUSED(handler);
-  static_cast<ObSqlSockSession*>(sess)->on_disconnect();
+  sess->on_disconnect();
 }
-extern "C" void ob_sql_sock_handler_on_close(void* handler, void* sess, int err) {
-  static_cast<ObSqlSockHandler*>(handler)->on_close(sess, err);
+void ob_sql_sock_handler_on_close(ObSqlSockHandler* handler, ObSqlSockSession* sess, int err) {
+  handler->on_close(sess, err);
 }
 
 static uint8_t nio_tls_min_version(const char *value)
 {
   const ObString version(NULL == value ? "none" : value);
-  uint8_t result = NIO_TLS_MIN_NONE;
+  uint8_t result = static_cast<uint8_t>(oceanbase::nio::TlsVersion::None);
   if (0 == version.case_compare("TLSV1")) {
-    result = NIO_TLS_MIN_TLSV1;
+    result = static_cast<uint8_t>(oceanbase::nio::TlsVersion::Tlsv1);
   } else if (0 == version.case_compare("TLSV1.1")) {
-    result = NIO_TLS_MIN_TLSV1_1;
+    result = static_cast<uint8_t>(oceanbase::nio::TlsVersion::Tlsv11);
   } else if (0 == version.case_compare("TLSV1.2")) {
-    result = NIO_TLS_MIN_TLSV1_2;
+    result = static_cast<uint8_t>(oceanbase::nio::TlsVersion::Tlsv12);
   } else if (0 == version.case_compare("TLSV1.3")) {
-    result = NIO_TLS_MIN_TLSV1_3;
+    result = static_cast<uint8_t>(oceanbase::nio::TlsVersion::Tlsv13);
   }
   return result;
 }
@@ -126,26 +126,26 @@ int ObSqlNioServer::start(int port, rpc::frame::ObReqDeliver* deliver,
     // TLS is startup-only, like the thread count (set_thread_count already
     // returns OB_NOT_SUPPORTED): toggling ssl_client_authentication at
     // runtime requires an observer restart to take effect.
-    NioTlsConfig tls_cfg = {};
+    oceanbase::nio::NioTlsConfig tls_cfg = {};
     tls_cfg.ca_file = OB_SSL_CA_FILE;
     tls_cfg.cert_file = OB_SSL_CERT_FILE;
     tls_cfg.key_file = OB_SSL_KEY_FILE;
     tls_cfg.min_tls_version = nio_tls_min_version(min_tls_version);
-    const NioTlsConfig *tls = use_tls ? &tls_cfg : NULL;
-    int32_t start_err = NIO_START_OK;
-    reactor_ = nio_start(addr, &io_handler_,
+    const oceanbase::nio::NioTlsConfig *tls = use_tls ? &tls_cfg : NULL;
+    int32_t start_err = static_cast<int32_t>(oceanbase::nio::StartStatus::Ok);
+    reactor_ = oceanbase::nio::start(addr, &io_handler_,
                          sizeof(ObSqlSockSession), thread_count,
-                         tls, use_tls ? sizeof(tls_cfg) : 0, &start_err,
+                         tls, &start_err,
                          disable_tcp ? 1 : 0);
     if (NULL == reactor_) {
       ret = OB_ERR_UNEXPECTED;
       // start_err distinguishes the failure cause; ETLS means the wallet
       // cert/key/ca failed to load — startup fails rather than serving
       // cleartext on a port configured for TLS.
-      LOG_ERROR("nio_start failed", K(ret), K(port), K(start_err),
+      LOG_ERROR("oceanbase::nio::start failed", K(ret), K(port), K(start_err),
                K(disable_tcp), K(use_tls));
     } else {
-      const uint32_t bound_tcp_port = nio_get_bound_tcp_port(reactor_);
+      const uint32_t bound_tcp_port = oceanbase::nio::get_bound_tcp_port(reactor_);
       n_thread_ = (n_thread <= 0 ? 1 : n_thread);
       LOG_INFO("seekdb_nio (rust) started", K(port), K(bound_tcp_port),
                K(n_thread));
@@ -178,7 +178,7 @@ void ObSqlNioServer::stop()
 {
   lib::ObMutexGuard guard(reactor_lock_);
   if (NULL != reactor_) {
-    nio_stop(reactor_);
+    oceanbase::nio::stop(reactor_);
   }
 }
 
@@ -187,16 +187,26 @@ void ObSqlNioServer::wait()
   // The Rust io thread is joined in destroy(); nothing to wait on here.
 }
 
+#ifdef __EMSCRIPTEN__
+nio::MemoryClient *ObSqlNioServer::connect_memory(size_t capacity)
+{
+  // nio::memory_connect requires the reactor to stay live throughout admission.
+  // destroy detaches it under this same mutex before joining Rust workers.
+  lib::ObMutexGuard guard(reactor_lock_);
+  return reactor_ == nullptr ? nullptr : nio::memory_connect(reactor_, capacity);
+}
+#endif
+
 void ObSqlNioServer::destroy()
 {
-  NioReactor *reactor = NULL;
+  oceanbase::nio::NioReactor *reactor = NULL;
   {
     lib::ObMutexGuard guard(reactor_lock_);
     reactor = reactor_;
     reactor_ = NULL;
   }
   if (NULL != reactor) {
-    nio_wait_destroy(reactor);
+    oceanbase::nio::wait_destroy(reactor);
   }
 }
 
@@ -204,7 +214,7 @@ void ObSqlNioServer::update_tcp_keepalive_params(int keepalive_enabled, uint32_t
 {
   lib::ObMutexGuard guard(reactor_lock_);
   if (NULL != reactor_) {
-    const int rc = nio_update_tcp_keepalive_params(
+    const int rc = oceanbase::nio::update_tcp_keepalive_params(
         reactor_, keepalive_enabled, tcp_keepidle, tcp_keepintvl, tcp_keepcnt);
     if (0 != rc) {
       LOG_WARN_RET(OB_ERR_UNEXPECTED,
@@ -222,6 +232,17 @@ int64_t get_sql_nio_bound_tcp_port()
   return nullptr == global_sql_nio_server
              ? 0
              : global_sql_nio_server->get_bound_tcp_port();
+}
+
+int64_t get_sql_nio_advertised_tcp_port()
+{
+#ifdef __EMSCRIPTEN__
+  return nullptr == global_sql_nio_server
+             ? 0
+             : global_sql_nio_server->get_advertised_tcp_port();
+#else
+  return get_sql_nio_bound_tcp_port();
+#endif
 }
 }; // end namespace obmysql
 }; // end namespace oceanbase

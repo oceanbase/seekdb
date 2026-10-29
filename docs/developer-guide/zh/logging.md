@@ -26,8 +26,6 @@ seekdb 的系统日志存储在工作目录下的log目录下面。
 | 配置项 | 默认值 | 说明 |
 | --- | --- | --- |
 | `syslog_level` | 构建默认值 | 最低启用级别：DEBUG、TRACE、WDIAG、EDIAG、INFO、WARN 或 ERROR |
-| `syslog_io_bandwidth_limit` | `5MB` | syslog I/O 带宽限制 |
-| `diag_syslog_per_error_limit` | `200` | 每个错误码每秒允许的 DIAG 日志数 |
 | `max_syslog_file_count` | `2` | 每种日志文件的最大保留数量；`0` 表示不按数量删除 |
 | `enable_async_syslog` | `True` | 是否启用异步日志 |
 | `syslog_disk_size` | `0M` | syslog 文件的磁盘空间预算；`0M` 表示不设置该限制 |
@@ -285,39 +283,6 @@ seekdb 的日志时间是当前本地时间的微秒数。
 
 - 线程号：系统调用 `__NR_gettid` 返回的信息（系统调用比较低效，这个值会缓存下来）；
 - 线程名称：线程名称字段包含线程池类型，也可能包含线程池中的编号。seekdb 通过 `set_thread_name` 函数设置线程名称，该名称也会显示在 `top` 命令中。
-
-### 日志限速
-
-seekdb 支持两种日志限速：一个普通系统日志磁盘IO带宽限制，一个是WARN系统日志限制。
-
-
-**系统日志带宽限速**
-
-seekdb 会按照磁盘带宽来限制日志输出。日志带宽限速不会针对不同的日志级别限速。如果日志限速，可能会打印限速日志，关键字 `REACH SYSLOG RATE LIMIT `。
-
-限速日志示例：
-
-```txt
-[2023-12-26 09:46:04.621435] INFO  [SHARE.LOCATION] fetch_vtable_location_ (ob_vtable_location_service.cpp:281) [35675][VTblLocAsyncUp0][T0][YB427F000001-00060D52A9614571-0-0] [lt=0]  REACH SYSLOG RATE LIMIT [bandwidth]
-```
-
-可以通过配置项 `syslog_io_bandwidth_limit` 来调整限速。
-
-限速的代码细节请参考 `check_tl_log_limiter` 函数。
-
-**WDIAG 日志限速**
-seekdb 对WARN级别的日志做了限流，每个错误码每秒钟默认限制输出200条日志。超过限制会输出限流日志，关键字 `Throttled WDIAG logs in last second`。可以通过配置项 `diag_syslog_per_error_limit` 来调整限流阈值。
-
-限流日志示例：
-
-```txt
-[2023-12-25 18:01:15.527519] WDIAG [SHARE] refresh (ob_task_define.cpp:402) [35585][LogLimiterRefre][T0][Y0-0000000000000000-0-0] [lt=8][errcode=0] Throttled WDIAG logs in last second(details {error code, dropped logs, earliest tid}=[{errcode:-4006, dropped:31438, tid:35585}])
-```
-
-限流实现参考 `ObSyslogSimpleRateLimiter` 和 `ObSyslogSampleRateLimiter`，后者实现了 `do_acquire`。
-
-
-
 
 ## 一些其它细节
 

@@ -19,6 +19,7 @@
 #include "observer/ob_server_runtime_access.h"
 #include "share/ob_time_utility2.h"
 #include "sql/session/ob_sql_session_mgr.h"
+#include "rpc/obmysql/ob_sql_sock_session.h"
 
 namespace oceanbase
 {
@@ -31,6 +32,7 @@ const char *const ObInfoSchemaSessionStatusTable::variables_name[] =
 {
   "Threads_connected",
   "Uptime",
+  "Compression",
   NULL,
 };
 
@@ -77,6 +79,14 @@ int ObInfoSchemaSessionStatusTable::fetch_all_session_status(
           int64_t uptime = ObTimeUtility2::extract_second(ObTimeUtility::current_time())
               - ObTimeUtility2::extract_second(global_ctx_->start_time_);
           obj.set_int(uptime);
+          break;
+        }
+      case COMPRESSION: {
+          const obmysql::ObSqlSockSession *sock_session = cur_session_->get_sock_desc().sock_desc_;
+          const bool compressed = NULL != sock_session &&
+              common::OB_MYSQL_COMPRESS_CS_TYPE == sock_session->conn_.get_cs_protocol_type();
+          obj.set_varchar(compressed ? "ON" : "OFF");
+          obj.set_collation_type(ObCharset::get_system_collation());
           break;
         }
       default: {

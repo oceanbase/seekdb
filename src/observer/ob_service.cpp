@@ -18,14 +18,13 @@
 
 
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/time/ob_time_utility.h"
 #include "ob_service.h"
 #include "storage/ob_storage_rpc_arg.h"
 #include "share/rc/ob_server_runtime.h"
 #include "share/ob_telemetry.h"
-#include "lib/alloc/memory_dump.h"
 
 #include "share/ob_version.h"
 
@@ -45,9 +44,8 @@
 #include "storage/compaction/ob_tablet_scheduler.h"
 #include "share/ob_global_merge_table_operator.h"
 #include "share/ob_merge_info.h"
-#include "common/ob_data_version_mgr.h"
 #include "share/ob_column_checksum_error_operator.h"
-#include "storage/meta_store/ob_server_storage_meta_service.h"
+#include "storage/meta_store/storage_meta_service.h"
 #include "share/ob_server_struct.h"    // GCTX
 #include "storage/tx_storage/ob_ls_service.h"  // ObLSService
 #include "storage/ls/ob_ls.h"
@@ -143,7 +141,7 @@ int TelemetryTask::report()
 {
   const char *env_reporter = std::getenv("REPORTER");
   const char *reporter = env_reporter ? env_reporter : (GCTX.is_embedded_mode() ? "embed" : "server");
-  return share::report_telemetry(reporter, "bootstraped");
+  return share::report_telemetry(store_, reporter, "bootstraped");
 }
 
 //////////////////////////////////////
@@ -151,14 +149,15 @@ int TelemetryTask::report()
 // here gctx may hasn't been initialized already
 ObService::ObService(
     const ObGlobalContext &gctx,
-    query::ObIChangeStreamService &change_stream_service)
+    query::ObIChangeStreamService &change_stream_service,
+    share::LocalStore &store)
     : inited_(false),
     stopped_(false),
     schema_updater_(),
     gctx_(gctx),
     change_stream_service_(change_stream_service),
     schema_release_task_(),
-    telemetry_task_()
+    telemetry_task_(store)
 {
 }
 
@@ -726,7 +725,7 @@ int ObService::get_server_resource_info(share::ObServerResourceInfo &resource_in
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::omt::ObServerRuntimeController>()->get_server_allocated_resource(svr_res_assigned))) {
   } else if (OB_FAIL(log_block_mgr->get_disk_usage(clog_in_use_size_byte))) {
   } else if (FALSE_IT(clog_total_size_byte = log_block_mgr->get_log_disk_size())) {
-  } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.get_reserved_size(reserved_size))) {
+  } else if (OB_FAIL(STORAGE_META_SERVICE.get_reserved_size(reserved_size))) {
   } else {
     // cpu
     resource_info.cpu_ = get_cpu_count();
@@ -818,20 +817,9 @@ int ObService::check_server_empty(bool &is_empty)
   is_empty = true;
   if (!inited_) {
     ret = OB_NOT_INIT;
-  } else {
-    if (is_empty) {
-      if (!OBSERVER.is_log_dir_empty()) {
-        FLOG_WARN("[CHECK_SERVER_EMPTY] log dir is not empty");
-        is_empty = false;
-      }
-    }
-    if (is_empty) {
-      if (DATA_VERSION_MGR.get_file_exists_when_loading()) {
-        // ignore ret
-        FLOG_WARN("[CHECK_SERVER_EMPTY] data_version file exists");
-        is_empty = false;
-      }
-    }
+  } else if (!OBSERVER.is_log_dir_empty()) {
+    FLOG_WARN("[CHECK_SERVER_EMPTY] log dir is not empty");
+    is_empty = false;
   }
   return ret;
 }
@@ -910,11 +898,6 @@ int ObService::get_wrs_info(const obcall::ObGetWRSArg &arg,
   UNUSEDx(arg, result);
   int ret = OB_NOT_SUPPORTED;
   return ret;
-}
-
-int ObService::refresh_memory_stat()
-{
-  return ObMemoryDump::get_instance().generate_mod_stat_task();
 }
 
 int ObService::build_ddl_local(const ObDDLLocalBuildArg &arg,

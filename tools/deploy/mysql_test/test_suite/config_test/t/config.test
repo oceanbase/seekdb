@@ -6,7 +6,7 @@ connection conn0;
 
 # 执行脚本读取json文件中的配置信息，生成inc文件
 # inc文件是是.sh生成的中间文件，每次运行的时自动清理上一次结果
-# 还原默认配置和obd部署的默认配置，文件inc路径：./mysql_test/include/config_default.inc
+# 还原默认配置和测试环境的默认配置，文件inc路径：./mysql_test/include/config_default.inc
 
 # 1. 针对系统租户，读取config后，生成中间文件inc执行，最后还原默认配置
 --exec sh ./mysql_test/script/config_test_1.sh

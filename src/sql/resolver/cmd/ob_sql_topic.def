@@ -1768,7 +1768,6 @@ DEFINE_SQL_TOPIC(
 "\n"
 "本地维护：\n"
 "  ALTER SYSTEM CANCEL TASK 'task_id';\n"
-"  ALTER SYSTEM REFRESH MEMORY STAT;\n"
 "  ALTER SYSTEM REFRESH IO CALIBRATION;\n"
 "\n"
 "配置项：\n"
@@ -2138,7 +2137,6 @@ DEFINE_SQL_TOPIC(
 "least('2014-05-15','2014-06-01'): 2014-05-15 \n"
 "1 row in set (0.00 sec) ",
 "www.taobao.com")
-
 
 
 

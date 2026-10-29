@@ -16,7 +16,7 @@
 
 #ifndef OCEANBASE_OBMYSQL_OB_SQL_SOCK_HANDLER_H_
 #define OCEANBASE_OBMYSQL_OB_SQL_SOCK_HANDLER_H_
-#include "nio.h"
+#include "rust/sql_nio.h"
 #include "rpc/obmysql/ob_i_sm_conn_callback.h"
 #include "rpc/obmysql/ob_sql_sock_session.h"
 
@@ -38,7 +38,7 @@ public:
   ~ObSqlSockHandler() = default;
   int init(rpc::frame::ObReqDeliver* deliver);
   int on_readable(void *sess, char *body, int64_t body_len, uint64_t wire_bytes,
-                  int packet_kind, const NioMysqlCommandView *command_view,
+                  int packet_kind, const oceanbase::nio::NioMysqlCommandView *command_view,
                   uint64_t generation);
   void on_close(void* sess, int err);
   int on_connect(void* sess, int fd, bool is_unix_socket);

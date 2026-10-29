@@ -17,7 +17,7 @@
 #ifndef OB_DTL_CHANNEL_MEM_MANAGER_H
 #define OB_DTL_CHANNEL_MEM_MANAGER_H
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "lib/queue/ob_lighty_queue.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/allocator/ob_fifo_allocator.h"

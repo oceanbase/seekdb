@@ -15,6 +15,8 @@
  */
 
 #include "lib/oblog/ob_warning_buffer.h"
+#include "lib/utility/ob_printf.h"
+#include <cstdarg>
 
 namespace oceanbase
 {
@@ -58,6 +60,40 @@ ObWarningBuffer::WarningItem &ObWarningBuffer::WarningItem::operator= (const War
     STRCPY(sql_state_, other.sql_state_);
   }
   return *this;
+}
+
+void log_user_message(UserMsgLevel level, int errcode, const char *fmt, ...)
+{
+  char buf[ObWarningBuffer::WarningItem::STR_LEN] = {};
+  va_list args;
+  va_start(args, fmt);
+  const int64_t len = ob_vsnprintf(buf, sizeof(buf), fmt, args);
+  va_end(args);
+  insert_warning_buffer(level, errcode, buf, len);
+}
+
+void insert_warning_buffer(UserMsgLevel level, int errcode, const char *data, int64_t len)
+{
+  if (ObWarningBuffer::is_warn_log_on() && len > 0) {
+    ObWarningBuffer *buffer = ob_get_tsi_warning_buffer();
+    if (buffer != nullptr) {
+      if (level == USER_ERROR) {
+        buffer->set_error(data, errcode);
+      } else if (level == USER_WARN) {
+        buffer->append_warning(data, errcode);
+      } else if (level == USER_NOTE) {
+        buffer->append_note(data, errcode);
+      }
+    }
+  }
+}
+
+void log_user_error_line_column(UserMsgLevel level, int line, int column)
+{
+  if (ObWarningBuffer::is_warn_log_on() && level == USER_ERROR) {
+    ObWarningBuffer *buffer = ob_get_tsi_warning_buffer();
+    if (buffer != nullptr) buffer->set_error_line_column(line, column);
+  }
 }
 
 }

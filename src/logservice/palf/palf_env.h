@@ -48,6 +48,7 @@ public:
   // store a NULL pointer ) in "palf_env", and return errno on fail.
   // caller should used destroy_palf_env to delete "palf_env" when it is no longer used.
   static int create_palf_env(const PalfOptions &options,
+                             share::LocalStore &store,
                              const char *base_dir,
                              const common::ObAddr &self,
                              common::ObILogAllocator *alloc_mgr,

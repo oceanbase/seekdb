@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_table_update_op.h"
 #include "sql/engine/dml/ob_dml_service.h"
 
@@ -222,8 +222,8 @@ OB_INLINE int ObTableUpdateOp::open_table_for_each()
     if (OB_SUCC(ret) && !rtdefs.empty()) {
       ObUpdRtDef &primary_upd_rtdef = rtdefs.at(0);
       if (OB_SUCC(ret)) {
-        //this table is being accessed by dml operator, mark its table location as writing
-        primary_upd_rtdef.dupd_rtdef_.table_loc_->is_writing_ = true;
+        //this table is being accessed by dml operator, mark its table access as writing
+        primary_upd_rtdef.dupd_rtdef_.table_access_->is_writing_ = true;
       }
     }
   }
@@ -238,8 +238,8 @@ OB_INLINE int ObTableUpdateOp::close_table_for_each()
       if (!upd_rtdefs_.at(i).empty()) {
         const ObUpdCtDef &primary_upd_ctdef = *MY_SPEC.upd_ctdefs_.at(i).at(0);
         ObUpdRtDef &primary_upd_rtdef = upd_rtdefs_.at(i).at(0);
-        if (OB_NOT_NULL(primary_upd_rtdef.dupd_rtdef_.table_loc_)) {
-          primary_upd_rtdef.dupd_rtdef_.table_loc_->is_writing_ = false;
+        if (OB_NOT_NULL(primary_upd_rtdef.dupd_rtdef_.table_access_)) {
+          primary_upd_rtdef.dupd_rtdef_.table_access_->is_writing_ = false;
         }
         if (!primary_upd_rtdef.has_table_cycle_ && primary_upd_ctdef.need_check_table_cycle_ && OB_FAIL(ObDMLService::delete_table_id_from_parent_table_set(dml_rtctx_, primary_upd_ctdef))) {
         }
@@ -272,10 +272,10 @@ OB_INLINE int ObTableUpdateOp::calc_multi_tablet_id(const ObUpdCtDef &upd_ctdef,
   return ret;
 }
 
-OB_INLINE int ObTableUpdateOp::calc_tablet_loc(const ObUpdCtDef &upd_ctdef,
+OB_INLINE int ObTableUpdateOp::resolve_tablet_access(const ObUpdCtDef &upd_ctdef,
                                                ObUpdRtDef &upd_rtdef,
-                                               ObDASTabletLoc *&old_tablet_loc,
-                                               ObDASTabletLoc *&new_tablet_loc)
+                                               DASRuntimeTabletAccess *&old_tablet_access,
+                                               DASRuntimeTabletAccess *&new_tablet_access)
 {
   int ret = OB_SUCCESS;
   if (MY_SPEC.use_dist_das_) {
@@ -291,20 +291,20 @@ OB_INLINE int ObTableUpdateOp::calc_tablet_loc(const ObUpdCtDef &upd_ctdef,
       }
     }
     if (OB_SUCC(ret)) {
-      ObDASTableLoc &table_loc = *upd_rtdef.dupd_rtdef_.table_loc_;
+      DASRuntimeTableAccess &table_access = *upd_rtdef.dupd_rtdef_.table_access_;
       if (old_tablet_id == new_tablet_id) {
-        if (OB_FAIL(DAS_CTX(ctx_).extended_tablet_loc(table_loc, old_tablet_id, old_tablet_loc))) {
+        if (OB_FAIL(DAS_CTX(ctx_).ensure_tablet_access(table_access, old_tablet_id, old_tablet_access))) {
         } else {
-          new_tablet_loc = old_tablet_loc;
+          new_tablet_access = old_tablet_access;
         }
-      } else if (OB_FAIL(DAS_CTX(ctx_).extended_tablet_loc(table_loc, old_tablet_id, old_tablet_loc))) {
-      } else if (OB_FAIL(DAS_CTX(ctx_).extended_tablet_loc(table_loc, new_tablet_id, new_tablet_loc))) {
+      } else if (OB_FAIL(DAS_CTX(ctx_).ensure_tablet_access(table_access, old_tablet_id, old_tablet_access))) {
+      } else if (OB_FAIL(DAS_CTX(ctx_).ensure_tablet_access(table_access, new_tablet_id, new_tablet_access))) {
       }
     }
   } else {
     //direct write delete row to storage
-    old_tablet_loc = MY_INPUT.get_tablet_loc();
-    new_tablet_loc = old_tablet_loc;
+    old_tablet_access = MY_INPUT.get_tablet_access();
+    new_tablet_access = old_tablet_access;
   }
   return ret;
 }
@@ -319,8 +319,8 @@ OB_INLINE int ObTableUpdateOp::update_row_to_das()
       //update each table with fetched row
       const ObUpdCtDef &upd_ctdef = *ctdefs.at(j);
       ObUpdRtDef &upd_rtdef = rtdefs.at(j);
-      ObDASTabletLoc *old_tablet_loc = nullptr;
-      ObDASTabletLoc *new_tablet_loc = nullptr;
+      DASRuntimeTabletAccess *old_tablet_access = nullptr;
+      DASRuntimeTabletAccess *new_tablet_access = nullptr;
       ObDMLModifyRowNode modify_row(this, &upd_ctdef, &upd_rtdef, ObDmlEventType::DE_UPDATING);
       bool is_skipped = false;
       ++upd_rtdef.cur_row_num_;
@@ -329,8 +329,8 @@ OB_INLINE int ObTableUpdateOp::update_row_to_das()
         //this row has been skipped, so can not write to DAS buffer(include its global index)
         //so need to break this loop
         break;
-      } else if (OB_FAIL(calc_tablet_loc(upd_ctdef, upd_rtdef, old_tablet_loc, new_tablet_loc))) {
-      } else if (OB_FAIL(ObDMLService::update_row(upd_ctdef, upd_rtdef, old_tablet_loc, new_tablet_loc, dml_rtctx_,
+      } else if (OB_FAIL(resolve_tablet_access(upd_ctdef, upd_rtdef, old_tablet_access, new_tablet_access))) {
+      } else if (OB_FAIL(ObDMLService::update_row(upd_ctdef, upd_rtdef, old_tablet_access, new_tablet_access, dml_rtctx_,
                                                  modify_row.old_row_, modify_row.new_row_, modify_row.full_row_))) {
       } else if (need_after_row_process(upd_ctdef) && OB_FAIL(dml_modify_rows_.push_back(modify_row))) {
       } else {

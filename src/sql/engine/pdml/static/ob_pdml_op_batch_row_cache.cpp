@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_pdml_op_batch_row_cache.h"
 #include "sql/engine/px/ob_px_util.h"
 

@@ -45,7 +45,7 @@ OB_DEF_SERIALIZE(ObPxCoordSpec)
               px_expected_worker_count_,
               qc_id_,
               batch_op_info_,
-              table_locations_);
+              table_access_plans_);
   ExprFixedArray sort_exprs;
   ObSortCollations sort_collations;
   ObSortFuncs sort_cmp_funs;
@@ -64,12 +64,12 @@ OB_DEF_DESERIALIZE(ObPxCoordSpec)
   int64_t count = 0;
   OB_UNIS_DECODE(count);
   if (OB_SUCC(ret) && count > 0) {
-    if (OB_ISNULL(table_locations_.get_allocator())) {
+    if (OB_ISNULL(table_access_plans_.get_allocator())) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(table_locations_.prepare_allocate(count, *table_locations_.get_allocator()))) {
+    } else if (OB_FAIL(table_access_plans_.prepare_allocate(count, *table_access_plans_.get_allocator()))) {
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < count; i ++) {
-        OB_UNIS_DECODE(table_locations_.at(i));
+        OB_UNIS_DECODE(table_access_plans_.at(i));
       }
     }
   }
@@ -90,7 +90,7 @@ OB_DEF_SERIALIZE_SIZE(ObPxCoordSpec)
               px_expected_worker_count_,
               qc_id_,
               batch_op_info_,
-              table_locations_);
+              table_access_plans_);
   ExprFixedArray sort_exprs;
   ObSortCollations sort_collations;
   ObSortFuncs sort_cmp_funs;
@@ -310,7 +310,7 @@ int ObPxCoordOp::post_init_op_ctx()
     int64_t plan_dop = GET_PHY_PLAN_CTX(ctx_)->get_phy_plan()->get_px_dop();
     int64_t adaptive_dop = get_adaptive_px_dop(plan_dop);
     use_serial_scheduler_ = ((1 == plan_dop && 1 == adaptive_dop) ? true : false);
-    set_pruning_table_locations(&(static_cast<const ObPxCoordSpec&>(get_spec()).table_locations_));
+    set_pruning_access_plans(&(static_cast<const ObPxCoordSpec&>(get_spec()).table_access_plans_));
   }
 
   return ret;

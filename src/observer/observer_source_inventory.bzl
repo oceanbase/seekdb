@@ -1,5 +1,3 @@
-"""Generated source inventory for the native Observer composition root."""
-
 OBSERVER_UNITY_GROUPS = [
     struct(
         name = "ob_server_ai_service_0",
@@ -10,8 +8,6 @@ OBSERVER_UNITY_GROUPS = [
             "src/observer/ob_system_package_load_service.cpp",
             "src/observer/ob_tablet_runtime_meta_updater.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_server_change_stream_0",
@@ -24,14 +20,11 @@ OBSERVER_UNITY_GROUPS = [
             "src/observer/change_stream/ob_change_stream_mgr.cpp",
             "src/observer/change_stream/ob_cs_plugin_async_index.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_server_common_0",
         language = "c++",
         srcs = [
-            "src/observer/ob_dump_task_generator.cpp",
             "src/observer/ob_inner_sql_connection.cpp",
             "src/observer/ob_inner_connection_lock_util.cpp",
             "src/observer/ob_inner_sql_read_context.cpp",
@@ -49,8 +42,6 @@ OBSERVER_UNITY_GROUPS = [
             "src/observer/ob_ex_rpc.cpp",
             "src/observer/ob_uniq_task_queue.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_server_common_mixed_0",
@@ -58,8 +49,6 @@ OBSERVER_UNITY_GROUPS = [
         srcs = [
             "src/observer/virtual_table/ob_all_virtual_session_info.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_server_dbms_job_0",
@@ -71,8 +60,6 @@ OBSERVER_UNITY_GROUPS = [
             "src/observer/dbms_scheduler/ob_dbms_sched_table_operator.cpp",
             "src/observer/dbms_scheduler/ob_dbms_sched_service.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_server_mysql_0",
@@ -106,8 +93,6 @@ OBSERVER_UNITY_GROUPS = [
             "src/observer/mysql/obmp_stmt_reset.cpp",
             "src/observer/mysql/obmp_stmt_send_long_data.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_server_mysql_1",
@@ -119,8 +104,6 @@ OBSERVER_UNITY_GROUPS = [
             "src/observer/mysql/obsm_row.cpp",
             "src/observer/mysql/obmp_set_option.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_server_net_0",
@@ -128,8 +111,6 @@ OBSERVER_UNITY_GROUPS = [
         srcs = [
             "src/observer/virtual_table/ob_all_virtual_schema_slot.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_server_omt_0",
@@ -143,8 +124,6 @@ OBSERVER_UNITY_GROUPS = [
             "src/observer/omt/ob_server_runtime_controller.cpp",
             "src/observer/omt/ob_srs_service.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_server_scheduler_0",
@@ -152,8 +131,6 @@ OBSERVER_UNITY_GROUPS = [
         srcs = [
             "src/observer/virtual_table/ob_all_virtual_transaction_freeze_checkpoint.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_server_schema_0",
@@ -164,8 +141,6 @@ OBSERVER_UNITY_GROUPS = [
             "src/observer/ob_system_package_load_task.cpp",
             "src/observer/scheduler/ob_ddl_count_guard.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_server_vector_index_0",
@@ -190,14 +165,11 @@ OBSERVER_UNITY_GROUPS = [
             "src/observer/vector_index/ob_vector_index_util.cpp",
             "src/observer/vector_index/ob_vector_refresh_transaction.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_server_virtual_table_0",
         language = "c++",
         srcs = [
-            "src/observer/virtual_table/ob_all_concurrency_object_pool.cpp",
             "src/observer/virtual_table/ob_all_data_type_class_table.cpp",
             "src/observer/virtual_table/ob_all_data_type_table.cpp",
             "src/observer/virtual_table/ob_all_disk_stat.cpp",
@@ -214,9 +186,7 @@ OBSERVER_UNITY_GROUPS = [
             "src/observer/virtual_table/ob_all_virtual_dtl_channel.cpp",
             "src/observer/virtual_table/ob_all_virtual_dtl_memory.cpp",
             "src/observer/virtual_table/ob_all_virtual_engine_table.cpp",
-            "src/observer/virtual_table/ob_all_virtual_files_table.cpp",
             "src/observer/virtual_table/ob_all_virtual_id_service.cpp",
-            "src/observer/virtual_table/ob_all_virtual_io_stat.cpp",
             "src/observer/virtual_table/ob_all_virtual_kvcache_store_memblock.cpp",
             "src/observer/virtual_table/ob_all_virtual_load_data_stat.cpp",
             "src/observer/virtual_table/ob_all_virtual_lock_wait_stat.cpp",
@@ -225,8 +195,6 @@ OBSERVER_UNITY_GROUPS = [
             "src/observer/virtual_table/ob_all_virtual_timestamp_service.cpp",
             "src/observer/virtual_table/ob_all_virtual_tracepoint_info.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_server_virtual_table_1",
@@ -237,10 +205,7 @@ OBSERVER_UNITY_GROUPS = [
             "src/observer/virtual_table/ob_all_virtual_macro_block_marker_status.cpp",
             "src/observer/virtual_table/ob_all_virtual_tablet_buffer_info.cpp",
             "src/observer/virtual_table/ob_all_virtual_mds_node_stat.cpp",
-            "src/observer/virtual_table/ob_all_virtual_malloc_sample_info.cpp",
             "src/observer/virtual_table/ob_all_virtual_mds_event_history.cpp",
-            "src/observer/virtual_table/ob_all_virtual_memory_context_stat.cpp",
-            "src/observer/virtual_table/ob_all_virtual_memory_info.cpp",
             "src/observer/virtual_table/ob_all_virtual_memstore_info.cpp",
             "src/observer/virtual_table/ob_all_virtual_minor_freeze_info.cpp",
             "src/observer/virtual_table/ob_all_virtual_obj_lock.cpp",
@@ -254,15 +219,11 @@ OBSERVER_UNITY_GROUPS = [
             "src/observer/virtual_table/ob_all_virtual_px_worker_stat.cpp",
             "src/observer/virtual_table/ob_all_virtual_px_p2p_datahub.cpp",
             "src/observer/virtual_table/ob_all_virtual_dtl_interm_result_monitor.cpp",
-            "src/observer/virtual_table/ob_all_virtual_raid_stat.cpp",
             "src/observer/virtual_table/ob_all_virtual_server_compaction_progress.cpp",
             "src/observer/virtual_table/ob_all_virtual_tablet_stat.cpp",
-            "src/observer/virtual_table/ob_all_virtual_server_object_pool.cpp",
             "src/observer/virtual_table/ob_all_virtual_server_schema_info.cpp",
             "src/observer/virtual_table/ob_all_virtual_schema_memory.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_server_virtual_table_2",
@@ -294,8 +255,6 @@ OBSERVER_UNITY_GROUPS = [
             "src/observer/virtual_table/ob_all_virtual_replay_stat.cpp",
             "src/observer/virtual_table/ob_virtual_warning.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_server_virtual_table_3",
@@ -327,8 +286,6 @@ OBSERVER_UNITY_GROUPS = [
             "src/observer/virtual_table/ob_show_create_procedure.cpp",
             "src/observer/virtual_table/ob_show_create_table.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_server_virtual_table_4",
@@ -350,7 +307,6 @@ OBSERVER_UNITY_GROUPS = [
             "src/observer/virtual_table/ob_virtual_table_scanner_iterator.cpp",
             "src/observer/virtual_table/ob_all_virtual_dml_stats.cpp",
             "src/observer/virtual_table/ob_virtual_show_trace.cpp",
-            "src/observer/virtual_table/ob_all_virtual_ctx_memory_info.cpp",
             "src/observer/virtual_table/ob_all_virtual_memstore_allocator_info.cpp",
             "src/observer/virtual_table/ob_all_virtual_resource_limit.cpp",
             "src/observer/virtual_table/ob_all_virtual_scheduler_running_job.cpp",
@@ -359,8 +315,6 @@ OBSERVER_UNITY_GROUPS = [
             "src/observer/virtual_table/ob_virtual_charset.cpp",
             "src/observer/virtual_table/ob_virtual_outline.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_server_virtual_table_5",
@@ -388,32 +342,19 @@ OBSERVER_UNITY_GROUPS = [
             "src/observer/virtual_table/ob_virtual_collation.cpp",
             "src/observer/virtual_table/ob_virtual_privilege.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
 ]
 
 OBSERVER_MAIN_SOURCES = [
-    struct(path = "src/observer/main.cpp", language = "c++", kind = "source"),
-    struct(path = "src/observer/ob_command_line_parser.cpp", language = "c++", kind = "source"),
+    "src/observer/main.cpp",
+    "src/observer/ob_command_line_parser.cpp",
 ]
 
 OBSERVER_RETRIEVAL_COMPOSITION_SOURCES = [
-    struct(path = "src/observer/composition/retrieval/ob_das_legacy_tr_merge_iter.cpp", language = "c++", kind = "source"),
+    "src/observer/composition/retrieval/ob_das_legacy_tr_merge_iter.cpp",
 ]
 
 OBSERVER_STANDALONE_SOURCES = [
-    struct(path = "src/observer/ob_server.cpp", language = "c++", kind = "source"),
-    struct(path = "src/observer/ob_service.cpp", language = "c++", kind = "source"),
-]
-
-OBSERVER_IGNORED_SOURCES = [
-    "ios/driver/seekdb_lifecycle.cpp",
-    "ios/seekdb_ios.cpp",
-    "report/ob_tablet_meta_checker.cpp",
-    "vector_index/ob_vector_index_async_task_scheduler.cpp",
-    "virtual_table/ob_all_virtual_all_tables.cpp",
-    "virtual_table/ob_all_virtual_concurrent_limit_sql.cpp",
-    "virtual_table/ob_all_virtual_outline.cpp",
-    "ob_win_service.cpp",
+    "src/observer/ob_server.cpp",
+    "src/observer/ob_service.cpp",
 ]

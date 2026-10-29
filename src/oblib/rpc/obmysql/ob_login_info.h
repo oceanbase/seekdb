@@ -21,7 +21,7 @@
 #include "lib/string/ob_string.h"
 #include "lib/container/ob_se_array.h"
 #include "rpc/obmysql/ob_mysql_packet.h"   // ObMySQLCapabilityFlags, ObStringKV
-#include "nio.h"
+#include "rust/sql_nio.h"
 
 namespace oceanbase
 {
@@ -43,11 +43,11 @@ public:
   int load(void *sess, const uint64_t generation, const char *body,
            const int64_t body_len) {
     int ret = OB_SUCCESS;
-    NioLoginView view = {};
+    oceanbase::nio::NioLoginView view = {};
     if (NULL == sess || NULL == body || body_len < 0) {
       ret = OB_INVALID_ARGUMENT;
     } else if (0 == generation ||
-               0 != nio_get_login_view(sess, generation, &view)) {
+               0 != oceanbase::nio::get_login_view(static_cast<ObSqlSockSession *>(sess), generation, &view)) {
       ret = OB_NOT_SUPPORTED; // Rust refused the login (short / pre-4.1)
     } else {
       capability_.capability_ = view.capabilities;
@@ -62,7 +62,7 @@ public:
         ret = OB_INVALID_DATA;
       }
       for (int i = 0; OB_SUCC(ret) && i < view.attr_count; ++i) {
-        const NioLoginAttr &attr = view.attrs[i];
+        const oceanbase::nio::NioLoginAttr &attr = view.attrs[i];
         if (!valid_range(attr.key_off, attr.key_len, body_len) ||
             !valid_range(attr.value_off, attr.value_len, body_len)) {
           ret = OB_INVALID_DATA;
@@ -96,7 +96,7 @@ private:
            static_cast<int64_t>(len) <= body_len - static_cast<int64_t>(off);
   }
 
-  int map_field(const NioLoginField &field, const char *body, const int64_t body_len,
+  int map_field(const oceanbase::nio::NioLoginField &field, const char *body, const int64_t body_len,
                 common::ObString &out)
   {
     int ret = OB_SUCCESS;

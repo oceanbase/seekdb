@@ -28,16 +28,13 @@ namespace oceanbase
 namespace palf
 {
 class PalfHandleImpl;
-class LogMeta;
 class IPalfEnvImpl;
 class LogIOTaskCbThreadPool;
 
 enum class LogIOTaskType
 {
   FLUSH_LOG_TYPE = 1,
-  FLUSH_META_TYPE = 2,
   TRUNCATE_PREFIX_TYPE = 3,
-  PURGE_THROTTLING_TYPE = 6,
 };
 
 OB_INLINE const char *log_io_task_type_str(const LogIOTaskType type)
@@ -46,9 +43,7 @@ OB_INLINE const char *log_io_task_type_str(const LogIOTaskType type)
   const char *str = nullptr;
   switch (type) {
     IO_TASK_TYPE_NAME(FLUSH_LOG_TYPE);
-    IO_TASK_TYPE_NAME(FLUSH_META_TYPE);
     IO_TASK_TYPE_NAME(TRUNCATE_PREFIX_TYPE);
-    IO_TASK_TYPE_NAME(PURGE_THROTTLING_TYPE);
     default: str = "UNKNOWN_TYPE";
   }
   return str;
@@ -73,15 +68,11 @@ public:
   int64_t get_init_task_ts();
   void free_this(IPalfEnvImpl *palf_env_impl);
   int64_t get_io_size();
-  int64_t get_submit_seq() const {return submit_seq_;}
-  void set_submit_seq(const int64_t submit_seq) {submit_seq_ = submit_seq;}
-  bool need_purge_throttling();
   int64_t get_palf_epoch() const { return palf_epoch_; }
 	VIRTUAL_TO_STRING_KV("BaseClass", "LogIOTask",
 			"palf_epoch", palf_epoch_,
 			"create_task_ts", init_task_ts_,
-			"push_cb_into_cb_pool_ts", push_cb_into_cb_pool_ts_,
-      K(submit_seq_));
+			"push_cb_into_cb_pool_ts", push_cb_into_cb_pool_ts_);
 
 protected:
   virtual int do_task_(LogIOTaskCbThreadPool *cb_thread_pool, IPalfHandleImplGuard &guard) = 0;
@@ -89,15 +80,12 @@ protected:
   virtual LogIOTaskType get_io_task_type_() const = 0;
   virtual void free_this_(IPalfEnvImpl *palf_env_impl) = 0;
   virtual int64_t get_io_size_() const = 0;
-  virtual bool need_purge_throttling_() const = 0;
 	int push_task_into_cb_thread_pool_(LogIOTaskCbThreadPool *cb_thread_pool, LogIOTask *io_task);
 
 protected:
   int64_t palf_epoch_;
 	int64_t init_task_ts_;
 	int64_t push_cb_into_cb_pool_ts_;
-  //used for writing throttling
-  int64_t submit_seq_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(LogIOTask);
@@ -121,38 +109,10 @@ private:
   LogIOTaskType get_io_task_type_() const override final { return LogIOTaskType::FLUSH_LOG_TYPE; }
   void free_this_(IPalfEnvImpl *palf_env_impl) override final;
   int64_t get_io_size_() const override final;
-  bool need_purge_throttling_() const override final {return false;}
 
 private:
   FlushLogCbCtx flush_log_cb_ctx_;
   LogWriteBuf write_buf_;
-  bool is_inited_;
-};
-
-class LogIOFlushMetaTask : public LogIOTask {
-public:
-  explicit LogIOFlushMetaTask(const int64_t palf_epoch);
-  ~LogIOFlushMetaTask() override;
-
-public:
-  int init(const FlushMetaCbCtx &flush_cb_ctx,
-           const char *buf,
-           const int64_t buf_len);
-  void destroy();
-  INHERIT_TO_STRING_KV("LogIOTask", LogIOTask, K_(flush_meta_cb_ctx));
-
-private:
-  int do_task_(LogIOTaskCbThreadPool *cb_thread_pool, IPalfHandleImplGuard &guard) override final;
-  int after_consume_(IPalfHandleImplGuard &guard) override final;
-  LogIOTaskType get_io_task_type_() const override final { return LogIOTaskType::FLUSH_META_TYPE; }
-  void free_this_(IPalfEnvImpl *palf_env_impl) override final;
-  int64_t get_io_size_() const override final {return buf_len_;}
-  bool need_purge_throttling_() const override final {return true;}
-
-private:
-  FlushMetaCbCtx flush_meta_cb_ctx_;
-  const char *buf_;
-  int64_t buf_len_;
   bool is_inited_;
 };
 
@@ -171,7 +131,6 @@ private:
   LogIOTaskType get_io_task_type_() const override final { return LogIOTaskType::TRUNCATE_PREFIX_TYPE; }
   void free_this_(IPalfEnvImpl *palf_env_impl) override final;
   int64_t get_io_size_() const override final {return 0;}
-  bool need_purge_throttling_() const override final {return false;}
 private:
   TruncatePrefixBlocksCbCtx truncate_prefix_blocks_ctx_;
   bool is_inited_;
@@ -209,26 +168,6 @@ private:
   bool is_inited_;
 };
 
-class LogIOPurgeThrottlingTask : public LogIOTask {
-public:
-  explicit LogIOPurgeThrottlingTask(const int64_t palf_epoch);
-  ~LogIOPurgeThrottlingTask();
-  void reset();
-public:
-  int init(const PurgeThrottlingCbCtx &purge_ctx);
-  void destroy();
-  INHERIT_TO_STRING_KV("LogIOTask", LogIOTask, K_(purge_ctx), K_(is_inited));
-private:
-  int do_task_(LogIOTaskCbThreadPool *cb_thread_pool, IPalfHandleImplGuard &guard) override final;
-  int after_consume_(IPalfHandleImplGuard &guard) override final;
-  LogIOTaskType get_io_task_type_() const override final { return LogIOTaskType::PURGE_THROTTLING_TYPE; }
-  void free_this_(IPalfEnvImpl *palf_env_impl) override final;
-  int64_t get_io_size_() const override final {return 0;}
-  bool need_purge_throttling_() const override final {return true;}
-private:
-  PurgeThrottlingCbCtx purge_ctx_;
-  bool is_inited_;
-};
 } // end namespace palf
 } // end namespace oceanbase
 

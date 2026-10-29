@@ -39,6 +39,7 @@ PalfEnv::~PalfEnv()
 
 int PalfEnv::create_palf_env(
     const PalfOptions &options,
+    share::LocalStore &store,
     const char *base_dir,
     const common::ObAddr &self,
     common::ObILogAllocator *log_alloc_mgr,
@@ -53,7 +54,7 @@ int PalfEnv::create_palf_env(
   if (NULL == palf_env) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(FileDirectoryUtils::delete_tmp_file_or_directory_at(base_dir))) {
-  } else if (OB_FAIL(palf_env->palf_env_impl_.init(options, base_dir, self,
+  } else if (OB_FAIL(palf_env->palf_env_impl_.init(options, store, base_dir, self,
                                                    log_alloc_mgr, log_block_pool, monitor, 
                                                    log_local_device, io_manager))) {
   } else {

@@ -1,15 +1,11 @@
 load(
     "//bazel:defs.bzl",
-    "seekdb_generated_unity_cc_library",
-    "seekdb_test_interface",
-    cc_library = "seekdb_cc_library",
+    "unity_cc_library",
+    "cc_library",
 )
 load(
     ":data_plane_build_defs.bzl",
     "DATA_PLANE_API_INTERFACE_HEADERS",
-    "DATA_PLANE_PARALLEL_RANGE_TASK_PLANNER_SOURCES",
-    "DATA_PLANE_TABLET_SCAN_SOURCES",
-    "DATA_PLANE_TABLET_SCAN_INTERFACE_HEADERS",
 )
 
 cc_library(
@@ -24,7 +20,7 @@ cc_library(
 # consumers see only the semantic tablet_scan_interface target below.
 cc_library(
     name = "_tablet_scan_headers",
-    hdrs = DATA_PLANE_TABLET_SCAN_INTERFACE_HEADERS,
+    hdrs = ["api/data_plane/access/ob_tablet_scan.h"],
     deps = [
         "//src/oblib:common_sql_mode",
         "//src/oblib:oblib_foundation",
@@ -38,19 +34,23 @@ cc_library(
     visibility = ["//visibility:private"],
 )
 
-seekdb_generated_unity_cc_library(
+unity_cc_library(
     name = "tablet_scan_interface",
-    unity_members = DATA_PLANE_TABLET_SCAN_SOURCES,
+    unity_members = ["ob_tablet_scan.cpp"],
     deps = [":_tablet_scan_headers"],
     features = ["layering_check"],
     tags = ["manual"],
     visibility = ["//src:__subpackages__"],
+    implementation_deps = [
+        "//src/oblib:common_sql_mode",
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_common",
+        "//src/oblib:oblib_compression",
+        "//src/oblib:oblib_concurrency_primitives",
+        "//src/oblib:oblib_foundation",
+    ],
 )
 
-# Coarse native seam for the complete Data Plane API.  The mechanical header
-# clusters remain an implementation detail of this package while downstream
-# modules depend on one semantic interface target.  Later interface narrowing
-# can split this target without reopening Storage implementation visibility.
 cc_library(
     name = "data_plane_api_interface",
     hdrs = DATA_PLANE_API_INTERFACE_HEADERS,
@@ -68,18 +68,13 @@ cc_library(
         "//src/share:sql_persistence_support",
         "//src/share:tenant_runtime",
         "//src/share:transaction_id",
-        "@seekdb_3rd_headers//:openssl_headers",
+        "//bazel/third_party:openssl_headers",
     ],
     includes = ["api"],
     tags = ["manual"],
     visibility = ["//src:__subpackages__"],
 )
 
-seekdb_test_interface(
-    name = "data_plane_unit_test_interface",
-    deps = [":data_plane_api_interface"],
-    visibility = ["//unittest/data_plane:__pkg__"],
-)
 
 cc_library(
     name = "optimizer_storage_service",
@@ -364,7 +359,7 @@ cc_library(
 
 cc_library(
     name = "parallel_range_task_planner",
-    srcs = DATA_PLANE_PARALLEL_RANGE_TASK_PLANNER_SOURCES,
+    srcs = ["ob_parallel_range_task_planner.cpp"],
     hdrs = ["api/data_plane/access/ob_parallel_range_task_planner.h"],
     implementation_deps = ["//src/oblib:oblib_foundation"],
     includes = ["api"],

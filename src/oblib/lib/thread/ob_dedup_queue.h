@@ -16,6 +16,7 @@
 
 #ifndef OCEANBASE_COMMON_DEDUP_QUEUE_
 #define OCEANBASE_COMMON_DEDUP_QUEUE_
+#include <inttypes.h>
 #include "lib/allocator/ob_concurrent_fifo_allocator.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/hash/ob_hashmap.h"
@@ -262,9 +263,16 @@ private:
     int64_t to_string(char *buffer, const int64_t length) const
     {
       int64_t pos = 0;
+#ifdef _WIN32
+      const uintptr_t pthread_id = reinterpret_cast<uintptr_t>(pthread_id_.p);
+#else
+      const uintptr_t pthread_id = (uintptr_t)pthread_id_;
+#endif
       databuff_printf(buffer, length, pos,
-                      "stat=%d task_type=%d running_task=%p busy_start_time=%ld pthread_id=%ld tid=%ld",
-                      stat_, task_type_, running_task_, busy_start_time_, pthread_id_, tid_);
+                      "stat=%d task_type=%d running_task=%p busy_start_time=%" PRId64
+                      " pthread_id=%" PRIuPTR " tid=%" PRId64,
+                      stat_, task_type_, running_task_, busy_start_time_,
+                      pthread_id, tid_);
       return pos;
     };
   };

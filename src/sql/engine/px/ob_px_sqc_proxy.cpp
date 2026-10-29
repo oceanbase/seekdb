@@ -329,7 +329,7 @@ int ObPxSQCProxy::report(int end_ret) const
     if (OB_SUCCESS == finish_msg.das_retry_rc_) {
       //Even if the PX task is successfully retried by DAS,
       //it is necessary to collect the retry error code of each task and provide feedback to the QC node of PX,
-      //so that the QC node can refresh the location cache in a timely manner,
+      //so that the QC node can refresh the access cache in a timely manner,
       //avoiding the next execution from being sent to the same erroneous node.
       finish_msg.das_retry_rc_ = task.get_das_retry_rc();
     }

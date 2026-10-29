@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 
+#include <inttypes.h>
 #include "share/tablet/ob_tablet_mapping_operator.h"
 #include "common/mysqlclient/ob_isql_client.h"
 #include "common/mysqlclient/ob_mysql_result.h"
@@ -36,7 +37,7 @@ namespace share
         ret = OB_INVALID_ARGUMENT; \
         LOG_WARN("invalid argument", KR(ret), K(range_size)); \
       } else if (OB_FAIL(sql.append_fmt( \
-          "SELECT * FROM %s WHERE tablet_id > %lu ORDER BY tablet_id LIMIT %ld", \
+          "SELECT * FROM %s WHERE tablet_id > %" PRIu64 " ORDER BY tablet_id LIMIT %" PRId64, \
           OB_ALL_TABLET_TO_TABLE_TNAME, \
           start_tablet_id.id(), \
           range_size))) { \
@@ -79,7 +80,7 @@ namespace share
               ret = OB_INVALID_ARGUMENT; \
               LOG_WARN("invalid tablet_id with runtime", KR(ret), K(tablet_id)); \
             } else if (OB_FAIL(tablet_list.append_fmt( \
-                "%s%lu", \
+                "%s%" PRIu64, \
                 start_idx == idx ? "" : ",", \
                 tablet_id.id()))) { \
               LOG_WARN("fail to assign sql", KR(ret), K(tablet_id)); \
@@ -280,7 +281,7 @@ int ObTabletMappingTableOperator::inner_batch_remove_by_sql_(
       const ObTabletID &tablet_id = tablet_ids.at(idx);
       if (OB_UNLIKELY(!tablet_id.is_valid())) {
         ret = OB_INVALID_ARGUMENT;
-      } else if (OB_FAIL(sql.append_fmt("%s %lu", start_idx == idx ? "" : ",", tablet_id.id()))) {
+      } else if (OB_FAIL(sql.append_fmt("%s %" PRIu64, start_idx == idx ? "" : ",", tablet_id.id()))) {
       }
     }
     if (FAILEDx(sql.append_fmt(")"))) {

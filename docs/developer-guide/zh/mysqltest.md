@@ -1,91 +1,64 @@
-# 使用 obd.sh 运行 mysqltest
+# 运行 mysqltest
 
-要使用 obd.sh 运行 mysqltest 测试，需要通过 obd.sh 部署 OceanBase seekdb 数据库。本文从编译源代码开始，使用示例介绍如何使用 obd.sh 部署 seekdb 数据库并运行 mysqltest 测试。
+`tools/deploy/mysqltest.py` 直接启动 seekdb 并执行 SQL 回归测试。本地开发与 CI 使用同一个 runner。脚本在 Linux 和 macOS 上管理独立的临时实例。
 
-## 背景
+## 准备二进制
 
-仓库将所需的 OBD 命令封装在 `tools/deploy/obd.sh` 中。本文使用该脚本部署 seekdb，并调用 `obd test mysqltest` 运行测试。
+按照[编译运行](build-and-run.md)准备依赖并编译 seekdb：
 
-## 相关概念
+```bash
+./build.py init
+./build.py build seekdb
+```
 
-mysqltest 是seekdb数据库中的一种准入测试，简单来说，它以编写的 case 文件为输入，将数据库的输出与预期输出进行比较。seekdb数据库中 mysqltest 测试的 case 都位于 `tools/deploy/mysql_test` 目录下。
+默认使用 `build/bin/src/observer/seekdb`、`deps/3rd/u01/obclient/bin/obclient` 和 `deps/3rd/u01/obclient/bin/mysqltest`。使用其他构建或客户端安装时，可以通过 `--seekdb`、`--obclient` 和 `--mysqltest` 覆盖这些路径。
 
-`case` 是 mysqltest 的最小执行单元，一个 `case` 至少包含一个 test 文件和一个 result 文件。对 case 进行分类形成 `suite`，`suite` 是 case 的集合。
+## 选择并运行用例
 
-## 执行步骤
+在仓库根目录执行命令。先列出用例，不启动实例：
 
-### 步骤 1: 编译源代码
+```bash
+python3 tools/deploy/mysqltest.py list --suite expr
+```
 
-查看[编译运行](./build-and-run.md)文档，编译源代码。
+使用完整的 `suite.case` 名称运行单个用例：
 
-### 步骤 2: 运行 mysqltest 测试
+```bash
+python3 tools/deploy/mysqltest.py run \
+  --base-dir "$PWD/build/mysqltest-instance" \
+  --work-dir "$PWD/build/mysqltest-results" \
+  --port 2881 --test-set expr.expr_ceil
+```
 
-可以全部运行测试，也可以指定测试的 `case` 或 `suite`。执行 `obd.sh` 时使用的参数含义见下文“附录”。
+请选择空闲的本地端口。`--base-dir` 必须是专用的临时目录：runner 会在运行前和结束后销毁受管理的实例，并拒绝接管它不管理的非空目录。需要保留数据的实例请使用[编译运行](build-and-run.md)中的 `sdb.py`。
 
-* 全部测试，即运行 `mysql_test/test_suite` 目录下的所有 suite，请参考以下命令。
+把 `--test-set expr.expr_ceil` 换成 `--suite expr` 即可运行整个 suite；省略这两个选项则运行全部启用的用例。两个选项都支持逗号分隔及重复传入，同时指定时在选定 suite 内选择 case。名称无歧义时也可使用不带 suite 的 case 名称，suite 内的用例推荐使用 `suite.case`。顶层用例（例如 `minitest`）直接使用名称。
 
-  ```shell
-  [admin@obtest ~]$ cd seekdb/tools/deploy
-  [admin@obtest deploy]$ ./obd.sh mysqltest -n test --all
-  ```
+默认跳过 `tools/deploy/mysqltest_config.yaml` 排除列表中的用例。复现被禁用的用例时加上 `--include-excluded`。名称不存在或有歧义时，脚本会在启动或删除实例前报错。
 
-* 指定 case 测试，例如指定 `mysql_test/test_suite/alter/t/alter_log_archive_option.test`。请参考以下命令。
+## 录制预期结果
 
-  ```shell
-  [admin@obtest ~]$ cd seekdb/tools/deploy
-  [admin@obtest deploy]$ ./obd.sh mysqltest -n test --test-dir ./mysql_test/test_suite/alter/t --result-dir ./mysql_test/test_suite/alter/r --test-set alter_log_archive_option
-  ```
+新增 `.test` 文件后，可以录制对应的 `.result` 文件：
 
-* 指定一个 suite 测试，例如在 `mysql_test/test_suite` 目录下指定一个 suite 进行测试，请参考以下命令。
+```bash
+python3 tools/deploy/mysqltest.py run \
+  --base-dir "$PWD/build/mysqltest-instance" \
+  --work-dir "$PWD/build/mysqltest-results" \
+  --port 2881 --test-set expr.expr_ceil --record
+```
 
-  ```shell
-  [admin@obtest ~]$ cd seekdb/tools/deploy
-  [admin@obtest deploy]$ ./obd.sh mysqltest -n test --suite acs
-  ```
+`--record` 要求显式选择 case 或 suite，并写入源码目录中的预期结果文件；此模式允许结果文件尚不存在。检查生成的 diff 后，去掉 `--record` 再运行一次，验证预期结果。
 
-## 附录
+## 输出与 CI 分片
 
-在执行 mysqltest 测试时，可以根据实际情况配置一些参数。参数说明如下表：
+runner 会初始化测试数据库和用户，再调用 mysqltest 二进制。用例失败或基础设施步骤失败时，返回非零退出码。结果写入 `--work-dir/seekdb_result.json`，客户端日志和失败诊断保存在同一个工作目录中。实例数据在运行结束后删除。
 
-| 参数名称 | 是否必须 | 类型 | 默认值 | 说明 |
-|--------|---------|----------|-------|------|
-| -n     | Y  | 字符串 | null | 集群名称 |
-| --user | N  | 字符串 | admin | 执行测试的用户名，一般不需要修改。 |
-| --password | N | 字符串 | admin | 密码 |
-| --database | N  | 字符串 | test | database |
-| --mysqltest-bin | N  | 字符串 | /u01/obclient/bin/mysqltest | mysqltest 二进制文件路径 |
-| --obclient-bin | N  | 字符串 | obclient | obclient 二进制文件路径 |
-| --test-dir | N  | 字符串 | ./mysql_test/t | test-file 的目录。如果找不到 test-file，将尝试在 OBD 内置中查找。 |
-| --test-file-suffix | N  | 字符串 | .test | mysqltest 所需的 test-file 的后缀。 |
-| --result-dir | N  | 字符串 | ./mysql_test/r | result-file 的目录。如果找不到 result-file，将尝试在 OBD 内置中查找。 |
-| --result-file-suffix | N  | 字符串 | .result | result-file 文件的后缀。 |
-| --record | N  | bool | false | 仅记录执行结果，不执行测试。 |
-| --record-dir | N  | 字符串 | ./record | 执行结果记录的目录。 |
-| --record-file-suffix | N  | 字符串 | .record | 执行结果记录的文件后缀。 |
-| --tmp-dir | N  | 字符串 | ./tmp | mysqltest 的 tmpdir 选项。 |
-| --var-dir | N  | 字符串 | ./var | mysqltest 的 logdir 选项。 |
-| --test-set | N  | 字符串 | no | 测试用例数组。使用逗号（`,`）分隔多个用例。 |
-| --exclude | N  | 字符串 | no | 需要排除的测试用例数组。使用逗号（`,`）分隔多个用例。 |
-| --test-pattern | N  | 字符串 | no | 测试文件匹配的正则表达式。所有匹配表达式的用例将覆盖 test-set 选项。 |
-| --suite | N  | 字符串 | no | suite 数组。一个 suite 包含多个测试，可以用逗号（`,`）分隔。 |
-| --suite-dir | N  | 字符串 | ./mysql_test/test_suite | suite 目录。如果找不到 suite 目录，将尝试在 OBD 内置中查找。 |
-| --all | N  | bool | false | 执行所有 --suite-dir 下的 case。suite 目录所在的目录下的所有 case。 |
-| --need-init | N  | bool | false | 执行初始化SQL文件。新集群可能需要在执行 mysqltest 之前执行一些初始化文件，例如创建用于 case 的账户和租户。 |
-| --init-sql-dir | N  | 字符串 | ./ | 初始化SQL文件所在的目录。当找不到 sql 文件时，将尝试在 OBD 内置中查找。 |
-| --init-sql-files | N  | 字符串 | Default is empty | 初始化SQL文件数组，当需要初始化时执行。使用逗号（`,`）分隔。如果未填写，如果需要初始化，OBD 将根据集群配置执行内置初始化。 |
-| --auto-retry | N  | bool | false | 测试失败时，自动重新部署集群并重试。 |
-| --psmall | N  | bool | false | 以psmall模式执行case。 |
-| --slices | N  | int | null | 测试用例拆分为多少组。 |
-| --slice-idx | N  | int | null | 指定当前组 ID。 |
-| --slb-host | N  | 字符串 | null | 指定软负载均衡中心。 |
-| --exec-id | N  | 字符串 | null | 指定执行 ID。 |
-| --case-filter | N  | 字符串 | ./mysql_test/filter.py | filter.py 文件维护需要过滤的 case。 |
-| --reboot-timeout | N  | int | 0 | 重启超时时间。 |
-| --reboot-retries | N  | int | 5 | 失败重启的重试次数。 |
-| --collect-all | N  | bool | false | 是否收集组件日志。 |
-| --log-dir | N  | 字符串 | 日志默认在tmp_dir下 | mysqltest 的日志存储路径。 |
-| --log-pattern | N  | 字符串 | *.log | 收集与正则表达式匹配的日志文件名称，命中的文件将被收集。 |
-| --case-timeout | N  | int | 3600 | 单个测试用例的超时时间。 |
-| --disable-reboot | N  | bool | false | 测试执行期间不再重启。 |
-| --collect-components | N  | 字符串 | null | 收集哪些组件的日志。多个组件用逗号（`,`）分隔。 |
-| --init-only | N  | bool | false | 仅指定初始化SQL文件。 |
+| 选项 | 含义 |
+| --- | --- |
+| `--suite`、`--test-set` | 选择 suite 或 case；省略时运行全部启用的用例。 |
+| `--record` | 为显式选择的用例写入预期结果。 |
+| `--include-excluded` | 包含共享配置中禁用的用例。 |
+| `--parameter key=value` | 每次启动或重试时传入服务端参数，可重复指定。 |
+| `--slice-index`、`--slice-count` | CI 分片的零起始索引和总数，默认分别为 `0` 和 `1`。 |
+
+CI 继续使用 `.github/script/seekdb/mysqltest_slice.sh` 调用同一个 runner。合并分片结果所需的参数见 `python3 tools/deploy/mysqltest.py merge --help`。

@@ -1,0 +1,118 @@
+load("//bazel:defs.bzl", "final_link", "cc_library")
+load("//bazel:compile_config.bzl", "VERSION", "RELEASE_LOCAL_DEFINES")
+
+package(default_visibility = ["//visibility:private"])
+
+cc_library(
+    name = "database_entry",
+    srcs = [
+        "database_runtime.cpp",
+        "futex_wait_adapter.cpp",
+        "wasmfs_adapter.cpp",
+        "wasmfs_fd_adapter.cpp",
+        "chunked_memory_backend.cpp",
+    ],
+    local_defines = RELEASE_LOCAL_DEFINES + ["SEEKDB_WASMFS=1"],
+    deps = [
+        "//src/observer:observer_internal_interface",
+        "//src/oblib:oblib_foundation",
+        "//src/oblib:oblib_common",
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_mysql_protocol",
+        "//src/oblib:oblib_rpc",
+        "@emscripten//:wasmfs_headers",
+    ],
+    target_compatible_with = ["@platforms//os:emscripten"],
+)
+
+_WRAPPED_CALLS = [
+    "__syscall_openat",
+    "__syscall_newfstatat",
+    "__syscall_stat64",
+    "__syscall_lstat64",
+    "__syscall_fstat64",
+    "__syscall_mkdirat",
+    "__syscall_fcntl64",
+    "__syscall_renameat",
+    "__syscall_ftruncate64",
+    "__syscall_truncate64",
+    "__syscall_fallocate",
+    "__syscall_getcwd",
+    "__syscall_getdents64",
+    "__syscall_unlinkat",
+    "__syscall_rmdir",
+    "__syscall_statfs64",
+    "__syscall_fstatfs64",
+    "__syscall_fdatasync",
+    "__syscall_faccessat",
+    "__syscall_chdir",
+    "__syscall_ioctl",
+    "__syscall_utimensat",
+    "__wasi_fd_pread",
+    "__wasi_fd_pwrite",
+    "__wasi_fd_sync",
+    "__wasi_fd_seek",
+    "__wasi_fd_close",
+    "__syscall_dup3",
+    "emscripten_futex_wait",
+]
+
+final_link(
+    name = "database_link",
+    direct_object_deps = [":database_entry"],
+    group_deps = ["//src/observer:observer_embedded_runtime"],
+    sdk_deps = ["//bazel/sdk_sources:source_sdk", "//bazel/third_party:base_libraries"],
+    ordered_link_files = [
+        "//rust:archive",
+    ],
+    linkopts = [
+        "-Oz",
+        "--emit-symbol-map",
+        "-pthread",
+        "-msimd128",
+        "-sUSE_ZLIB=1",
+        "-sPROXY_TO_PTHREAD=1",
+        "-sMODULARIZE=1",
+        "-sEXPORT_ES6=1",
+        "-sENVIRONMENT=web,worker,node",
+        "-sPTHREAD_POOL_SIZE=64",
+        "-sPTHREAD_POOL_SIZE_STRICT=2",
+        "-sDEFAULT_PTHREAD_STACK_SIZE=1048576",
+        "-sINITIAL_MEMORY=536870912",
+        "-sALLOW_MEMORY_GROWTH=1",
+        "-sMAXIMUM_MEMORY=2147483648",
+        "-sSTACK_SIZE=2097152",
+        "-sASSERTIONS=2",
+        "-sEXIT_RUNTIME=1",
+        "-Wl,--error-limit=0",
+        "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free']",
+        "-sEXPORTED_RUNTIME_METHODS=['HEAPU8','getValue']",
+        "-sWASMFS",
+    ] + ["-Wl,--wrap=" + call for call in _WRAPPED_CALLS],
+    out = "dist/seekdb_wasm_database.mjs",
+    side_outputs = ["dist/seekdb_wasm_database.wasm", "dist/seekdb_wasm_database.mjs.symbols"],
+    target_compatible_with = ["@platforms//os:emscripten"],
+    visibility = ["//visibility:public"],
+)
+
+_ASSETS = glob(["*.mjs", "*.html", "*.css"])
+genrule(
+    name = "database_assets",
+    srcs = _ASSETS,
+    outs = ["dist/" + name for name in _ASSETS],
+    cmd = "mkdir -p $(RULEDIR)/dist && cp $(SRCS) $(RULEDIR)/dist/",
+)
+
+genrule(
+    name = "engine_version",
+    srcs = ["engine-version.mjs.in"],
+    outs = ["dist/engine-version.mjs"],
+    cmd = "sed 's/@engine_version@/%s/g' $< > $@" % VERSION,
+)
+
+filegroup(
+    name = "database",
+    srcs = [":database_link", ":database_assets", ":engine_version"],
+    target_compatible_with = ["@platforms//os:emscripten"],
+    visibility = ["//visibility:public"],
+)

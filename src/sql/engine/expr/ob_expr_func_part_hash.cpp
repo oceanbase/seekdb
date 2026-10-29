@@ -159,7 +159,7 @@ int ObExprFuncPartHash::calc_value(
   int ret = OB_SUCCESS;
   //DO not change this function's result.
   //This will influence data.
-  //If you need to do, remember ObTableLocation has the same code!!!
+  //If you need to do, remember TableAccessPlan has the same code!!!
   // mysql mode only allows one parameter, syntax already restricts
   if (OB_ISNULL(objs_stack) || 1 != param_num) {
     ret = OB_ERR_UNEXPECTED;

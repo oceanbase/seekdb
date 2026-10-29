@@ -3,7 +3,6 @@ ob1.reboot;
 ob1.mysql alter system set enable_rebalance = 'false';
 ob1.mysql alter system set balancer_idle_time='10s';
 ob1.mysql alter system set debug_sync_timeout = '100000s';
-ob1.mysql alter system set syslog_io_bandwidth_limit = '100G';
 ob1.mysql alter system set _enable_adaptive_compaction = False;
 ob1.mysql alter system set minor_compact_trigger = 10;
 create table t1 (c1 int, c2 int, c3 int, c4 int, c5 int, c6 int, c7 int, c8 int, c9 int, c10 int, c11 int, c12 int, c13 int, c14 int, c15 int);

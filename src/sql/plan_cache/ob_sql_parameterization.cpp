@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_PC
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_sql_parameterization.h"
 #include "lib/json/ob_json_print_utils.h"
 #include "sql/resolver/ob_resolver_utils.h"

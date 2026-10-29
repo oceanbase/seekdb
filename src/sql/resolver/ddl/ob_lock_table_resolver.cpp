@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_RESV
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_lock_table_resolver.h"
 
 namespace oceanbase

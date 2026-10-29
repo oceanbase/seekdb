@@ -1,0 +1,48 @@
+# Statistics export/import preserve quoted object names and restore changed statistics.
+connection default;
+--enable_query_log
+--enable_result_log
+--disable_warnings
+DROP DATABASE IF EXISTS stats_sql_names;
+--enable_warnings
+CREATE DATABASE stats_sql_names;
+CREATE TABLE stats_sql_names.src (`c'one` INT)
+  PARTITION BY RANGE (`c'one`) (PARTITION `p'one` VALUES LESS THAN (10), PARTITION pmax VALUES LESS THAN MAXVALUE);
+INSERT INTO stats_sql_names.src VALUES (1), (2), (20);
+SELECT `c'one` FROM stats_sql_names.src PARTITION (`p'one`) ORDER BY `c'one`;
+CALL DBMS_STATS.GATHER_TABLE_STATS('stats_sql_names', 'src', estimate_percent=>100, method_opt=>'FOR ALL COLUMNS SIZE 1', granularity=>'ALL');
+CALL DBMS_STATS.CREATE_STAT_TABLE('stats_sql_names', 'stat`quote''x');
+CALL DBMS_STATS.EXPORT_TABLE_STATS('stats_sql_names', 'src', NULL, 'stat`quote''x', statown=>'stats_sql_names');
+SELECT C1 AS source_table, C2 AS partition_name, N1 AS exported_rows FROM stats_sql_names.`stat``quote'x` WHERE TYPE = 'T' ORDER BY C2;
+SELECT C2 AS partition_name, C4 AS column_name, N1 AS exported_ndv FROM stats_sql_names.`stat``quote'x` WHERE TYPE = 'C' ORDER BY C2;
+# Change table and partition row counts, and remove global/partition column statistics.
+CALL DBMS_STATS.SET_TABLE_STATS('stats_sql_names', 'src', numrows=>9999);
+CALL DBMS_STATS.SET_TABLE_STATS('stats_sql_names', 'src', 'p''one', numrows=>8888);
+CALL DBMS_STATS.DELETE_COLUMN_STATS('stats_sql_names', 'src', 'c''one');
+SELECT PARTITION_NAME, NUM_ROWS FROM oceanbase.DBA_TAB_STATISTICS WHERE OWNER = 'stats_sql_names' AND TABLE_NAME = 'src' ORDER BY PARTITION_NAME;
+SELECT COLUMN_NAME, NUM_DISTINCT FROM oceanbase.DBA_TAB_COL_STATISTICS WHERE OWNER = 'stats_sql_names' AND TABLE_NAME = 'src' AND COLUMN_NAME = 'c''one';
+SELECT PARTITION_NAME, COLUMN_NAME, NUM_DISTINCT FROM oceanbase.DBA_PART_COL_STATISTICS WHERE OWNER = 'stats_sql_names' AND TABLE_NAME = 'src' AND COLUMN_NAME = 'c''one' ORDER BY PARTITION_NAME;
+CALL DBMS_STATS.IMPORT_TABLE_STATS('stats_sql_names', 'src', NULL, 'stat`quote''x', statown=>'stats_sql_names');
+SELECT PARTITION_NAME, NUM_ROWS FROM oceanbase.DBA_TAB_STATISTICS WHERE OWNER = 'stats_sql_names' AND TABLE_NAME = 'src' ORDER BY PARTITION_NAME;
+SELECT COLUMN_NAME, NUM_DISTINCT FROM oceanbase.DBA_TAB_COL_STATISTICS WHERE OWNER = 'stats_sql_names' AND TABLE_NAME = 'src' AND COLUMN_NAME = 'c''one';
+SELECT PARTITION_NAME, COLUMN_NAME, NUM_DISTINCT FROM oceanbase.DBA_PART_COL_STATISTICS WHERE OWNER = 'stats_sql_names' AND TABLE_NAME = 'src' AND COLUMN_NAME = 'c''one' ORDER BY PARTITION_NAME;
+# A quoted partition import must restore that partition's table and column statistics.
+CALL DBMS_STATS.EXPORT_TABLE_STATS('stats_sql_names', 'src', 'p''one', 'stat`quote''x', statown=>'stats_sql_names');
+CALL DBMS_STATS.SET_TABLE_STATS('stats_sql_names', 'src', 'p''one', numrows=>7777);
+CALL DBMS_STATS.DELETE_COLUMN_STATS('stats_sql_names', 'src', 'c''one', 'p''one');
+SELECT PARTITION_NAME, NUM_ROWS FROM oceanbase.DBA_TAB_STATISTICS WHERE OWNER = 'stats_sql_names' AND TABLE_NAME = 'src' ORDER BY PARTITION_NAME;
+SELECT PARTITION_NAME, COLUMN_NAME, NUM_DISTINCT FROM oceanbase.DBA_PART_COL_STATISTICS WHERE OWNER = 'stats_sql_names' AND TABLE_NAME = 'src' AND COLUMN_NAME = 'c''one' ORDER BY PARTITION_NAME;
+CALL DBMS_STATS.IMPORT_TABLE_STATS('stats_sql_names', 'src', 'p''one', 'stat`quote''x', statown=>'stats_sql_names');
+SELECT PARTITION_NAME, NUM_ROWS FROM oceanbase.DBA_TAB_STATISTICS WHERE OWNER = 'stats_sql_names' AND TABLE_NAME = 'src' ORDER BY PARTITION_NAME;
+SELECT PARTITION_NAME, COLUMN_NAME, NUM_DISTINCT FROM oceanbase.DBA_PART_COL_STATISTICS WHERE OWNER = 'stats_sql_names' AND TABLE_NAME = 'src' AND COLUMN_NAME = 'c''one' ORDER BY PARTITION_NAME;
+# The separate column import must restore the quoted column in the quoted partition.
+CALL DBMS_STATS.EXPORT_COLUMN_STATS('stats_sql_names', 'src', 'c''one', 'p''one', 'stat`quote''x', statown=>'stats_sql_names');
+SELECT C2 AS partition_name, C4 AS column_name, N1 AS exported_ndv FROM stats_sql_names.`stat``quote'x` WHERE TYPE = 'C' AND C2 = 'p''one' AND C4 = 'c''one';
+CALL DBMS_STATS.DELETE_COLUMN_STATS('stats_sql_names', 'src', 'c''one', 'p''one');
+SELECT PARTITION_NAME, COLUMN_NAME, NUM_DISTINCT FROM oceanbase.DBA_PART_COL_STATISTICS WHERE OWNER = 'stats_sql_names' AND TABLE_NAME = 'src' AND COLUMN_NAME = 'c''one' ORDER BY PARTITION_NAME;
+CALL DBMS_STATS.IMPORT_COLUMN_STATS('stats_sql_names', 'src', 'c''one', 'p''one', 'stat`quote''x', statown=>'stats_sql_names');
+SELECT COLUMN_NAME, NUM_DISTINCT FROM oceanbase.DBA_TAB_COL_STATISTICS WHERE OWNER = 'stats_sql_names' AND TABLE_NAME = 'src' AND COLUMN_NAME = 'c''one';
+SELECT PARTITION_NAME, COLUMN_NAME, NUM_DISTINCT FROM oceanbase.DBA_PART_COL_STATISTICS WHERE OWNER = 'stats_sql_names' AND TABLE_NAME = 'src' AND COLUMN_NAME = 'c''one' ORDER BY PARTITION_NAME;
+CALL DBMS_STATS.DROP_STAT_TABLE('stats_sql_names', 'stat`quote''x');
+SELECT COUNT(*) AS remaining_stat_tables FROM information_schema.tables WHERE table_schema = 'stats_sql_names' AND table_name = 'stat`quote''x';
+DROP DATABASE stats_sql_names;

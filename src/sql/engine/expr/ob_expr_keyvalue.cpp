@@ -18,7 +18,7 @@
 
 #include "sql/engine/expr/ob_expr_keyvalue.h"
 #include "lib/oblog/ob_log.h"
-#include "sql/parser/ob_item_type.h"
+#include "query/parser/ob_item_type.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 

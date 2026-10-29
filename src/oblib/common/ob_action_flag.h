@@ -101,7 +101,6 @@ public:
   /// end extention field add when ms 0.3
   static const int64_t NEWRANGE_PARAM_FIELD     = 87;
   static const int64_t FORMED_ROW_KEY_FIELD     = 88;
-  static const int64_t TABLET_LOCATION_FIELD    = 89;
   // add for SQL
   static const int64_t SQL_DATA_VERSION        = 90;
   static const int64_t DML_TYPE_FIELD          = 91;

@@ -196,7 +196,7 @@ void coredump_cb(volatile int sig, volatile int sig_code, void* volatile sig_add
                "ThreadId=%ld,", fatal_error_thread_id);
     }
     ssize_t print_len = lnprintf(print_buf, sizeof(print_buf),
-                                 "%s IP=%lx, RBP=%lx, sig=%d, sig_code=%d, sig_addr=%p, RLIMIT_CORE=%s, "COMMON_FMT", ",
+                                 "%s IP=%lx, RBP=%lx, sig=%d, sig_code=%d, sig_addr=%p, RLIMIT_CORE=%s, " COMMON_FMT ", ",
                                   crash_info, ip, bp, sig, sig_code, sig_addr, rlimit_core,
                                   ts, GETTID(), tname, trace_id_buf, bt);
     ObSqlInfo sql_info = ObSqlInfoGuard::get_tl_sql_info();

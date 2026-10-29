@@ -56,7 +56,7 @@ MySQL 互換 · 組み込み / サーバー両対応 · ベクトル + 全文ハ
 
 [English](README.md) | [中文版](README_CN.md) | **日本語**
 
-[30 秒で試す](#30-秒で試す) · [クイックスタート](#クイックスタート) · [なぜ seekdb か](#なぜ-ai-エージェントに-seekdb-なのか) · [エコシステム](#エコシステムと統合) · [開発](#開発)
+[30 秒で試す](#30-秒で試す) · [クイックスタート](#クイックスタート) · [組み込み SDK](#embedded-sdks) · [なぜ seekdb か](#なぜ-ai-エージェントに-seekdb-なのか) · [エコシステム](#エコシステムと統合) · [開発](#開発)
 
 <sub>seekdb が役立つと思ったら、<a href="https://github.com/oceanbase/seekdb/stargazers">star</a> をお願いします — より多くの人にプロジェクトを届けられます。</sub>
 
@@ -88,7 +88,7 @@ pip install -U pyseekdb   # pyseekdb は seekdb の Python SDK です
 
 > 📋 [demo.py ソースを見る →](images/demo.py)
 
-サーバー不要、スキーマ定義不要、エンベディング設定不要。組み込みモードならプロセス内でそのまま動作し、たった 1 行でサーバーモードや OceanBase 分散モードに切り替えられます。[その他の例 →](#その他の例)
+この Python デモでは、サーバーの手動デプロイ、スキーマ定義、エンベディング設定は不要です。[Python、JavaScript、Go でローカルデータベースを実行 →](#embedded-sdks)
 
 ---
 
@@ -153,9 +153,191 @@ ORDER BY dist APPROXIMATE LIMIT 10;
 
 ## 🎬 クイックスタート
 
-### インストール
+<a id="embedded-sdks"></a>
 
-プラットフォームを選択：
+### 組み込みでの利用
+
+データベースサービスを手動でデプロイせずに、Python、Node.js、Go からローカルの seekdb を利用できます。データは指定したローカルディレクトリに保存され、再度開いても引き続き利用できます。
+
+<details open>
+<summary><b>🐍 Python</b></summary>
+
+[pylibseekdb](https://pypi.org/project/pylibseekdb/) でローカルの seekdb を起動し、PyMySQL で SQL を実行します。Python 3.11 以降が必要です。
+
+```bash
+python3 -m pip install -U pylibseekdb pymysql
+```
+
+以下の例を `example.py` として保存します。`connection_options()` で接続引数を取得し、PyMySQL に渡します。コンテキストマネージャーにより、カーソルと SQL 接続を閉じてからランタイムハンドルを解放します：
+
+```python
+from contextlib import closing
+
+import pylibseekdb
+import pymysql
+
+with closing(pylibseekdb.open("./seekdb.db")) as db:
+    options = db.connection_options()
+    with pymysql.connect(
+        database="test",
+        autocommit=True,
+        cursorclass=pymysql.cursors.DictCursor,
+        **options,
+    ) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1 AS value")
+            print(cursor.fetchall())
+```
+
+実行すると `[{'value': 1}]` が出力されます：
+
+```bash
+python3 example.py
+```
+
+[詳しい使い方](https://github.com/oceanbase/seekdb-bindings/blob/main/python/README.md) · [対応プラットフォームと環境要件](https://pypi.org/project/pylibseekdb/#requirements)
+
+テキストのエンベディングやハイブリッド検索を備えた高水準の Collection API が必要な場合は、[pyseekdb](https://github.com/oceanbase/pyseekdb) を参照してください。
+
+</details>
+
+<details open>
+<summary><b>🟨 JavaScript / TypeScript (Node.js)</b></summary>
+
+[@oceanbase/seekdb-node](https://www.npmjs.com/package/@oceanbase/seekdb-node) でローカルの seekdb を起動し、`mysql2` で SQL を実行します。Node.js 22 以降が必要で、JavaScript と TypeScript の両方に対応しています。
+
+```bash
+npm install @oceanbase/seekdb-node mysql2
+```
+
+対応するネイティブランタイムが自動インストールされるよう、npm の optional dependencies を有効にしてください。このバインディングは独立したローカル seekdb プロセスを管理します。ランタイムハンドルを解放する前に SQL 接続を閉じてください。
+
+以下の例を `example.mjs` として保存します（ES modules を使用し、TypeScript の型宣言も付属しています）：
+
+```javascript
+import { seekdb } from "@oceanbase/seekdb-node";
+import mysql from "mysql2/promise";
+
+const db = await seekdb.open("./seekdb.db");
+let connection;
+try {
+  const endpoint = db.connectionOptions();
+  const location = endpoint.transport === "tcp"
+    ? { host: endpoint.host, port: endpoint.port }
+    : { socketPath: endpoint.transport === "unix_socket"
+        ? endpoint.unixSocket : endpoint.namedPipe };
+  connection = await mysql.createConnection({
+    ...location,
+    user: endpoint.user,
+    password: "",
+    database: "test",
+  });
+  const [rows] = await connection.query("SELECT 1 AS value");
+  console.log(rows);
+} finally {
+  try {
+    if (connection) await connection.end();
+  } finally {
+    db.close();
+  }
+}
+```
+
+実行すると `[ { value: 1 } ]` が出力されます：
+
+```bash
+node example.mjs
+```
+
+[詳しい使い方と対応プラットフォーム](https://www.npmjs.com/package/@oceanbase/seekdb-node)
+
+高水準の JavaScript Collection API が必要な場合は、[seekdb-js](https://github.com/oceanbase/seekdb-js) を参照してください。
+
+</details>
+
+<details open>
+<summary><b>🐹 Go</b></summary>
+
+[seekdb-go](https://github.com/oceanbase/seekdb-go) でローカルの seekdb を起動し、`go-sql-driver/mysql` で SQL を実行します。この例には Go 1.24 以降、`CGO_ENABLED=1`、C コンパイラーが必要です。
+
+```bash
+mkdir seekdb-go-example
+cd seekdb-go-example
+go mod init example.com/seekdb-demo
+```
+
+以下の例を `main.go` として保存します。`ConnectionOptions` が返す接続先を使用し、ランタイムハンドルを解放する前に SQL 接続を閉じます：
+
+```go
+package main
+
+import (
+	"database/sql"
+	"fmt"
+	"log"
+	"net"
+
+	"github.com/go-sql-driver/mysql"
+	seekdb "github.com/oceanbase/seekdb-go"
+)
+
+func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
+	db, err := seekdb.Open("./seekdb.db")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	endpoint, err := db.ConnectionOptions()
+	if err != nil {
+		return err
+	}
+	cfg := mysql.NewConfig()
+	cfg.User, cfg.DBName = endpoint.User, "test"
+	switch endpoint.Transport {
+	case "unix_socket":
+		cfg.Net, cfg.Addr = "unix", endpoint.UnixSocket
+	case "tcp":
+		cfg.Net, cfg.Addr = "tcp", net.JoinHostPort(endpoint.Host, fmt.Sprint(endpoint.Port))
+	default:
+		return fmt.Errorf("unsupported transport %q", endpoint.Transport)
+	}
+	connection, err := sql.Open("mysql", cfg.FormatDSN())
+	if err != nil {
+		return err
+	}
+	defer connection.Close()
+
+	var value int
+	if err := connection.QueryRow("SELECT 1 AS value").Scan(&value); err != nil {
+		return err
+	}
+	fmt.Println(value)
+	return nil
+}
+```
+
+実行時に Go が依存関係を解決し、現在のプラットフォーム用のネイティブバンドルを取得します。結果は `1` です：
+
+```bash
+go run -mod=mod .
+```
+
+seekdb-go に対する通常の `go get` や `go mod tidy` は、全対応プラットフォームのバンドルも取得することがあります。
+
+[詳しい使い方](https://github.com/oceanbase/seekdb-go#install) · [対応プラットフォームと環境要件](https://github.com/oceanbase/seekdb-go/blob/main/docs/support.md)
+
+</details>
+
+これらの例はデータを `./seekdb.db` に保存し、繰り返し実行できます。このパスはデータベースディレクトリです。新しいディレクトリの初期化には、次回以降の起動より時間がかかることがあります。
+
+### サーバーのデプロイ
 
 <details open>
 <summary><b>☁️ クラウド（インストール不要）</b></summary>
@@ -167,15 +349,6 @@ curl -X POST https://d0.seekdb.ai/api/v1/instances
 ```
 
 7 日間無料。[詳細はこちら →](https://d0.seekdb.ai)
-
-</details>
-
-<details open>
-<summary><b>🐍 Python（AI/ML におすすめ）</b></summary>
-
-```bash
-pip install -U pyseekdb
-```
 
 </details>
 
@@ -214,9 +387,9 @@ DEB/RPM オフラインインストールと設定の詳細は[デプロイメ�
 
 ### 📝 その他の例
 
-完全な Python SDK ガイド — 接続モード、エンベディング関数、メタデータフィルター — は [pyseekdb ユーザーガイド](https://github.com/oceanbase/pyseekdb)を参照してください。
+まずは上の実行可能な [Python、JavaScript、Go の例](#embedded-sdks)を試してください。以下のアプリケーションパターンは、既存のエージェント実装を前提としています。
 
-<details open>
+<details>
 <summary><b>🤖 エージェントメモリパターン（継続的書込 + 即時検索）</b></summary>
 
 エージェントの典型的なループ：観察を書き込み、ミリ秒後に関連コンテキストを検索、これを繰り返します。seekdb の非同期インデックスパイプラインが、持続的な並行負荷の下でも読み書き双方の高速性を維持します。
@@ -369,9 +542,10 @@ seekdb のハイブリッド検索 + マルチモデルエンジンは、従来�
 # リポジトリをクローン
 git clone https://github.com/oceanbase/seekdb.git
 cd seekdb
-./build.sh release --init --make
+./build.py init
+./build.py build seekdb
 mkdir -p ~/seekdb/bin
-cp build_release/src/observer/seekdb ~/seekdb/bin
+cp build/bin/src/observer/seekdb ~/seekdb/bin
 cd ~/seekdb
 ./bin/seekdb
 ```

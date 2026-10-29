@@ -37,8 +37,13 @@ namespace common
 // used for the version. We will use the top-but-one 15 and sign extend when
 // generating the pointer was required by the standard.
 
+#if defined(__wasm__)
+#define QUEUE_LD64(dst,src) \
+  (dst).data_ = __atomic_load_n(&(src).data_, __ATOMIC_ACQUIRE)
+#else
 #define QUEUE_LD64(dst,src) \
   *(reinterpret_cast<volatile uint64_t *>(&((dst).data_))) = *(reinterpret_cast<volatile uint64_t *>(&((src).data_)))
+#endif
 
 #define QUEUE_LD(dst,src) QUEUE_LD64(dst,src)
 
@@ -76,12 +81,41 @@ union ObHeadNode
 #define FREELIST_VERSION(x) ((static_cast<intptr_t>((x).data_)) >> 48)
 #define SET_FREELIST_POINTER_VERSION(x,p,v) \
   (x).data_ = (((reinterpret_cast<intptr_t>(p))&0x0000FFFFFFFFFFFFULL) | (((v)&0xFFFFULL) << 48))
+#elif defined(__wasm32__)
+// Linear-memory pointers use all 32 low bits, with no sign extension. Keep
+// the ABA version in the upper 32 bits of the same i64 atomic value.
+#define FREELIST_POINTER(x) \
+  reinterpret_cast<void *>(static_cast<uintptr_t>(static_cast<uint64_t>((x).data_) & UINT64_C(0xffffffff)))
+#define FREELIST_VERSION(x) (static_cast<uint64_t>((x).data_) >> 32)
+#define SET_FREELIST_POINTER_VERSION(x,p,v) \
+  (x).data_ = static_cast<int64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(p)) | \
+    ((static_cast<uint64_t>(v) & UINT64_C(0xffffffff)) << 32))
 #else
 #error "unsupported processor"
 #endif
 
 #define ATOMICLIST_EMPTY(x) (NULL == (TO_PTR(FREELIST_POINTER((x.head_)))))
 #define ADDRESS_OF_NEXT(x, offset) (reinterpret_cast<void **>(reinterpret_cast<char *>(x) + offset))
+
+// Popped nodes may be immediately reused while another pop retries its CAS.
+// Keep link accesses atomic on shared Wasm memory as well as the head word.
+inline void *atomic_list_load_next(void **next)
+{
+#if defined(__wasm__)
+  return __atomic_load_n(next, __ATOMIC_ACQUIRE);
+#else
+  return *next;
+#endif
+}
+
+inline void atomic_list_store_next(void **next, void *value)
+{
+#if defined(__wasm__)
+  __atomic_store_n(next, value, __ATOMIC_RELEASE);
+#else
+  *next = value;
+#endif
+}
 
 struct ObAtomicList
 {
@@ -97,8 +131,17 @@ struct ObAtomicList
   void *pop();
   void *popall();
 
-  void *head() { return TO_PTR(FREELIST_POINTER(head_)); }
-  void *next(void *item) { return TO_PTR(*ADDRESS_OF_NEXT(item, offset_)); }
+  void *head()
+  {
+#if defined(__wasm__)
+    ObHeadNode head;
+    QUEUE_LD(head, head_);
+    return TO_PTR(FREELIST_POINTER(head));
+#else
+    return TO_PTR(FREELIST_POINTER(head_));
+#endif
+  }
+  void *next(void *item) { return TO_PTR(atomic_list_load_next(ADDRESS_OF_NEXT(item, offset_))); }
   bool empty() { return (NULL == head()); }
 
   // WARNING: only if only one thread is doing pops it is possible to have a
@@ -126,7 +169,7 @@ inline int ObAtomicList::init(const char *name, const int64_t offset_to_next)
 typedef volatile void *volatile_void_p;
 inline void *ObAtomicList::push(void *item)
 {
-  volatile_void_p *adr_of_next = (volatile_void_p *)(ADDRESS_OF_NEXT(item, offset_));
+  void **adr_of_next = ADDRESS_OF_NEXT(item, offset_);
   ObHeadNode head;
   ObHeadNode item_pair;
   bool result = false;
@@ -135,7 +178,7 @@ inline void *ObAtomicList::push(void *item)
   do {
     QUEUE_LD(head, head_);
     h = FREELIST_POINTER(head);
-    *adr_of_next = h;
+    atomic_list_store_next(adr_of_next, const_cast<void *>(h));
 
     if (TO_PTR(h) == item) {
       OB_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "atomic list push: trying to free item twice");
@@ -154,7 +197,7 @@ inline void *ObAtomicList::push(void *item)
 
 inline void *ObAtomicList::batch_push(void *head_item, void *tail_item)
 {
-  volatile_void_p *adr_of_next = (volatile_void_p *)(ADDRESS_OF_NEXT(tail_item, offset_));
+  void **adr_of_next = ADDRESS_OF_NEXT(tail_item, offset_);
   ObHeadNode head;
   ObHeadNode item_pair;
   bool result = false;
@@ -163,7 +206,7 @@ inline void *ObAtomicList::batch_push(void *head_item, void *tail_item)
   do {
     QUEUE_LD(head, head_);
     h = FREELIST_POINTER(head);
-    *adr_of_next = h;
+    atomic_list_store_next(adr_of_next, const_cast<void *>(h));
 
     if (TO_PTR(h) == tail_item) {
       OB_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "atomic list push: trying to free item twice");
@@ -193,7 +236,7 @@ inline void *ObAtomicList::pop()
     if (OB_ISNULL(TO_PTR(FREELIST_POINTER(item)))) {
       finish = true;
     } else {
-      SET_FREELIST_POINTER_VERSION(next, *ADDRESS_OF_NEXT(TO_PTR(FREELIST_POINTER(item)), offset_),
+      SET_FREELIST_POINTER_VERSION(next, atomic_list_load_next(ADDRESS_OF_NEXT(TO_PTR(FREELIST_POINTER(item)), offset_)),
                                    FREELIST_VERSION(item) + 1);
       result = ATOMIC_BCAS(&head_.data_, item.data_, next.data_);
 
@@ -210,7 +253,7 @@ inline void *ObAtomicList::pop()
 
   if (result) {
     ret = TO_PTR(FREELIST_POINTER(item));
-    *ADDRESS_OF_NEXT(ret, offset_) = NULL;
+    atomic_list_store_next(ADDRESS_OF_NEXT(ret, offset_), NULL);
   }
 
   return ret;
@@ -240,8 +283,8 @@ inline void *ObAtomicList::popall()
     void *next = NULL;
     // fixup forward pointers
     while (NULL != element) {
-      next = TO_PTR(*ADDRESS_OF_NEXT(element, offset_));
-      *ADDRESS_OF_NEXT(element, offset_) = next;
+      next = TO_PTR(atomic_list_load_next(ADDRESS_OF_NEXT(element, offset_)));
+      atomic_list_store_next(ADDRESS_OF_NEXT(element, offset_), next);
       element = next;
     }
   }
@@ -256,7 +299,7 @@ inline void *ObAtomicList::remove(void *item)
   ObHeadNode head;
   void *prev = NULL;
   void **addr_next = ADDRESS_OF_NEXT(item, offset_);
-  void *item_next = *addr_next;
+  void *item_next = atomic_list_load_next(addr_next);
   bool result = false;
   bool finish = false;
   void *ret = NULL;
@@ -269,7 +312,7 @@ inline void *ObAtomicList::remove(void *item)
     result = ATOMIC_BCAS(&head_.data_, head.data_, next.data_);
 
     if (result) {
-      *addr_next = NULL;
+      atomic_list_store_next(addr_next, NULL);
       ret = item;
       finish = true;
     }
@@ -283,10 +326,10 @@ inline void *ObAtomicList::remove(void *item)
     prev = TO_PTR(FREELIST_POINTER(head));
     while (NULL != prev && !finish) {
       prev_adr_of_next = ADDRESS_OF_NEXT(prev, offset_);
-      prev = TO_PTR(*prev_adr_of_next);
+      prev = TO_PTR(atomic_list_load_next(prev_adr_of_next));
       if (prev == item) {
-        *prev_adr_of_next = item_next;
-        *addr_next = NULL;
+        atomic_list_store_next(prev_adr_of_next, item_next);
+        atomic_list_store_next(addr_next, NULL);
         ret = item;
         finish = true;
       }

@@ -199,7 +199,7 @@ def _module_dependency_aspect_impl(target, ctx):
     ):
         fail("\n".join([
             "first-party cc_library must be static-only: %s" % target.label,
-            "  load //bazel:defs.bzl%seekdb_cc_library",
+            "  load //bazel:defs.bzl%cc_library",
             "  shared-library products must use an explicit cc_shared_library",
         ]))
 

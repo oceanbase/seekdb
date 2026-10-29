@@ -241,16 +241,16 @@ int HazptrHolder::assign(const HazptrHolder& other)
   } else if (!protect_success) {
     reset();
     if (other.is_shared_) {
+      new (&shared_hazptr_) SharedHazptr(other.shared_hazptr_);
       is_shared_ = true;
-      shared_hazptr_ = other.shared_hazptr_;
     } else if (OB_FAIL(SharedHazptr::make(*other.hazptr_, this->shared_hazptr_))) {
       reset();
       COMMON_LOG(WARN, "failed to make new shared hazptr");
     } else {
       is_shared_ = true;
       HazptrHolder& nc_other = const_cast<HazptrHolder&>(other);
+      new (&nc_other.shared_hazptr_) SharedHazptr(this->shared_hazptr_);
       nc_other.is_shared_ = true;
-      nc_other.shared_hazptr_ = this->shared_hazptr_;
     }
   }
   return ret;

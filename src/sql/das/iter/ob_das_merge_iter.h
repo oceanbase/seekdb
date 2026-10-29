@@ -112,7 +112,6 @@ class ObDASMergeIter : public ObDASIter
 public:
   ObDASMergeIter()
     : ObDASIter(ObDASIterType::DAS_ITER_MERGE),
-      wild_datum_info_(),
       merge_type_(SEQUENTIAL_MERGE),
       eval_infos_(nullptr),
       need_update_partition_id_(false),
@@ -142,16 +141,14 @@ public:
   MergeType get_merge_type() const { return merge_type_; }
   int64_t get_current_seq_task_idx() const { return seq_task_idx_; }
   bool is_sequential_output() const { return get_next_rows_ == &ObDASMergeIter::get_next_seq_rows; }
-  void set_global_lookup_iter(ObDASMergeIter *global_lookup_iter);
   INHERIT_TO_STRING_KV("ObDASIter", ObDASIter, K_(merge_type), K_(ref_table_id));
 
   /********* DAS REF BEGIN *********/
   common::ObIAllocator *get_das_alloc();
-  int create_das_task(const ObDASTabletLoc *tablet_loc, ObDASScanOp *&scan_op, bool &reuse_op);
+  int create_das_task(const DASRuntimeTabletAccess *tablet_access, ObDASScanOp *&scan_op, bool &reuse_op);
   bool has_task() const;
   int32_t get_das_task_cnt() const;
   DASTaskIter begin_task_iter();
-  bool is_all_local_task() const;
   int rescan_das_task(ObDASScanOp *scan_op);
   virtual int get_diagnosis_info(common::ObRowDiagnosisInfo *diagnosis_info) override {
     int ret = OB_SUCCESS;
@@ -169,8 +166,6 @@ protected:
   virtual int inner_get_next_rows(int64_t &count, int64_t capacity) override;
 
   void reset_datum_ptr(ObDASScanOp *scan_op, int64_t &capacity);
-  void reset_wild_datum_ptr();
-  void update_wild_datum_ptr(int64_t rows_count);
   void clear_evaluated_flag();
   int update_output_tablet_id(ObIDASTaskOp *output_das_task);
 private:
@@ -183,23 +178,8 @@ private:
 
 private:
 
-  struct WildDatumPtrInfo
-  {
-    WildDatumPtrInfo()
-      : exprs_(nullptr),
-        max_output_rows_(0),
-        global_lookup_iter_(nullptr)
-    { }
-    const ObExprPtrIArray *exprs_;
-    int64_t max_output_rows_;
-    // A global index scan and its copied lookup task may share expressions and
-    // therefore observe the same changed datum pointers.
-    // so need to associate the result iterator of scan and lookup
-    // resetting the index scan result datum ptr will also reset the lookup result datum ptr
-    ObDASMergeIter *global_lookup_iter_;
-  };
 
-  WildDatumPtrInfo wild_datum_info_;
+
   MergeType merge_type_;
   ObFixedArray<ObEvalInfo*, ObIAllocator> *eval_infos_;
   bool need_update_partition_id_;

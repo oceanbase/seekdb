@@ -21,7 +21,7 @@
 #include "rpc/obmysql/ob_mysql_packet.h"
 #include "rpc/obmysql/ob_mysql_packet_storage.h"
 #include "rpc/obmysql/ob_sql_sock_session.h"
-#include "nio.h"
+#include "rust/sql_nio.h"
 
 // The storage module supplies the strong implementation when linked.
 void OB_WEAK_SYMBOL request_finish_callback()
@@ -39,7 +39,7 @@ ObSqlRequestOperator::get_sql_session(ObRequest *req) {
   return &sess->conn_;
 }
 
-NioConnectionHandle *
+oceanbase::nio::NioConnectionHandle *
 ObSqlRequestOperator::get_nio_connection_handle(const ObRequest *req) {
   obmysql::ObSqlSockSession *sess = static_cast<obmysql::ObSqlSockSession *>(
       req->get_server_handle_context());
@@ -55,8 +55,8 @@ int ObSqlRequestOperator::get_sql_tls_info(const ObRequest *req,
   } else {
     obmysql::ObSqlSockSession *sess =
         static_cast<obmysql::ObSqlSockSession *>(req->get_server_handle_context());
-    NioTlsSessionInfo ffi_info = {};
-    if (0 != nio_get_tls_session_info(
+    oceanbase::nio::NioTlsSessionInfo ffi_info = {};
+    if (0 != oceanbase::nio::get_tls_session_info(
                   sess, req->get_nio_request_generation(), &ffi_info)) {
       ret = OB_ERR_UNEXPECTED;
       RPC_LOG(WARN, "get Rust SQL-NIO TLS session info failed", K(ret));
@@ -134,7 +134,7 @@ static int materialize_read_packet(obmysql::ObSqlSockSession *sess,
     } else if (OB_FAIL(obmysql::build_mysql_raw_packet_view(
                    mem_pool, body, body_len, 0, mode, NULL, raw))) {
       RPC_LOG(WARN, "build mid-request mysql packet fail", K(ret), K(body_len));
-      const int release_ret = nio_release_read_packet(sess, generation, rust_packet_lease);
+      const int release_ret = oceanbase::nio::release_read_packet(sess, generation, rust_packet_lease);
       if (0 != release_ret) {
         RPC_LOG(WARN, "release mid-request mysql packet after build failure",
                 K(release_ret), K(rust_packet_lease));
@@ -159,7 +159,7 @@ int ObSqlRequestOperator::wait_packet(ObRequest *req,
   char *body = NULL;
   int64_t body_len = 0;
   uint64_t rust_packet_lease = 0;
-  const int rc = nio_wait_one_packet(sess, generation, timeout_us, &body,
+  const int rc = oceanbase::nio::wait_one_packet(sess, generation, timeout_us, &body,
                                      &body_len, &rust_packet_lease);
   return materialize_read_packet(sess, mem_pool, generation, rc, body,
                                  body_len, rust_packet_lease, pkt,
@@ -175,7 +175,7 @@ int ObSqlRequestOperator::release_read_packet(ObRequest *req,
       static_cast<obmysql::ObSqlSockSession *>(req->get_server_handle_context());
   if (0 == packet_lease) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (0 != nio_release_read_packet(sess, generation, packet_lease)) {
+  } else if (0 != oceanbase::nio::release_read_packet(sess, generation, packet_lease)) {
     ret = OB_STATE_NOT_MATCH;
   }
   return ret;
@@ -194,7 +194,7 @@ void ObSqlRequestOperator::disconnect_by_sql_sock_desc(ObSqlSockDesc &desc)
 void ObSqlRequestOperator::interrupt_read_by_sql_sock_desc(ObSqlSockDesc &desc)
 {
   if (NULL != desc.sock_desc_) {
-    (void)nio_interrupt_read(desc.sock_desc_, 0);
+    (void)oceanbase::nio::interrupt_read(desc.sock_desc_, 0);
   }
 }
 
