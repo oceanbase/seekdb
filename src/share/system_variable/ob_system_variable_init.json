@@ -10983,7 +10983,7 @@
     "base_value": "0",
     "data_type": "bool",
     "info": "whether local files can be queried as tables and written by COPY",
-    "flags": "GLOBAL | SESSION | QUERY_SENSITIVE | NEED_SERIALIZE",
+    "flags": "GLOBAL | SESSION | QUERY_SENSITIVE | NEED_SERIALIZE | INFLUENCE_PLAN",
     "publish_version": "",
     "info_cn": "",
     "background_cn": "",

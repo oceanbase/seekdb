@@ -3779,6 +3779,11 @@ int ObDMLResolver::resolve_file_table_arg_value(const ParseNode &node, ObString 
     }
   } else if (T_VARCHAR == node.type_ || T_CHAR == node.type_) {
     text.assign_ptr(node.str_value_, static_cast<int32_t>(node.str_len_));
+  } else if (T_BOOL == node.type_) {
+    // A boolean literal is written as true/false; keep that spelling so the
+    // option checks below see the same text regardless of parameterization.
+    text = 0 == node.value_ ? ObString::make_string("false")
+                            : ObString::make_string("true");
   } else {
     ObRawExpr *expr = NULL;
     if (OB_FAIL(ObResolverUtils::resolve_const_expr(params_, node, expr, NULL))) {

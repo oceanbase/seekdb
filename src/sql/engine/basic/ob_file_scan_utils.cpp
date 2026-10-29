@@ -320,19 +320,31 @@ int check_path_contained(common::ObIAllocator &allocator,
     ret = OB_FILE_NOT_EXIST;
     LOG_WARN("file does not exist or cannot be resolved", K(ret), K(path), K(errno));
   } else if (!secure_file_priv.empty() && 0 != secure_file_priv.case_compare("/")) {
+    // The variable arrives as an ObString that is not null terminated, so it is
+    // copied first; realpath() reads until a NUL and would otherwise resolve
+    // whatever follows in the session buffer.
+    char priv_copy[PATH_MAX];
     char priv_buf[PATH_MAX];
-    if (OB_ISNULL(realpath(secure_file_priv.ptr(), priv_buf))) {
+    const int64_t priv_len_in = static_cast<int64_t>(secure_file_priv.length());
+    if (priv_len_in <= 0 || priv_len_in >= static_cast<int64_t>(sizeof(priv_copy))) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("secure_file_priv does not exist", K(ret), K(secure_file_priv));
+      LOG_WARN("secure_file_priv length is invalid", K(ret), K(priv_len_in));
     } else {
-      const int64_t priv_len = static_cast<int64_t>(strlen(priv_buf));
-      const bool contained = priv_len == 1 ? priv_buf[0] == '/' :
-          0 == strncmp(resolved_buf, priv_buf, priv_len) &&
-          (resolved_buf[priv_len] == '/' || resolved_buf[priv_len] == '\0');
-      if (!contained) {
+      MEMCPY(priv_copy, secure_file_priv.ptr(), priv_len_in);
+      priv_copy[priv_len_in] = '\0';
+      if (OB_ISNULL(realpath(priv_copy, priv_buf))) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "file path is outside secure_file_priv");
-        LOG_WARN("path escapes secure_file_priv", K(ret), K(path), K(secure_file_priv));
+        LOG_WARN("secure_file_priv does not exist", K(ret), K(secure_file_priv));
+      } else {
+        const int64_t priv_len = static_cast<int64_t>(strlen(priv_buf));
+        const bool contained = priv_len == 1 ? priv_buf[0] == '/' :
+            0 == strncmp(resolved_buf, priv_buf, priv_len) &&
+            (resolved_buf[priv_len] == '/' || resolved_buf[priv_len] == '\0');
+        if (!contained) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "file path is outside secure_file_priv");
+          LOG_WARN("path escapes secure_file_priv", K(ret), K(path), K(secure_file_priv));
+        }
       }
     }
   }

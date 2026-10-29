@@ -47,12 +47,24 @@ int copy_cell(common::ObIAllocator &allocator,
   return ret;
 }
 
+// A file table is materialized into a VALUES table while the statement is
+// resolved, so the whole result has to fit in the statement allocator. The cap
+// turns a would-be out-of-memory kill into a diagnosable error.
+static const int64_t FILE_TABLE_MAX_ROWS = 2000000;
+
 int append_row(common::ObIAllocator &allocator,
                const common::ObIArray<common::ObString> &fields,
                const common::ObIArray<bool> &is_null,
                ObFileTableRows &rows)
 {
   int ret = OB_SUCCESS;
+  const int64_t row_width = fields.count() > 0 ? fields.count() : 1;
+  if (OB_UNLIKELY(rows.cells_.count() / row_width >= FILE_TABLE_MAX_ROWS)) {
+    ret = OB_SIZE_OVERFLOW;
+    LOG_USER_ERROR(OB_SIZE_OVERFLOW);
+    LOG_WARN("file table exceeds the row limit", K(ret), K(rows.cells_.count()),
+             K(fields.count()), K(FILE_TABLE_MAX_ROWS));
+  }
   for (int64_t i = 0; OB_SUCC(ret) && i < fields.count(); ++i) {
     common::ObString cell;
     if (OB_FAIL(copy_cell(allocator, fields.at(i), cell))) {
