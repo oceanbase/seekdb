@@ -4763,16 +4763,16 @@ int ObAggregateProcessor::sub_calc(
       break;
     }
     case ObUIntTC: {
-      // If out of range, get ULONG_MAX from result_datum add to left_value.
-      //    Then left_value will turn to left_value + ULONG_MAX - right.
+      // If out of range, get UINT64_MAX from result_datum add to left_value.
+      //    Then left_value will turn to left_value + UINT64_MAX - right.
       // If not out of range, use left_value sub right_value, not change result_datum.
       uint64_t left_uint = aggr_cell.get_tiny_num_uint();
       uint64_t right_uint = iter_value.get_uint();
       uint64_t dif_uint = left_uint - right_uint;
       if (ObExprMinus::is_uint_uint_out_of_range(left_uint, right_uint, dif_uint)) {
+        const uint64_t uint_max = UINT64_MAX;
         if (ob_is_decimal_int(aggr_info.expr_->datum_meta_.type_)) {
           const int64_t precision = aggr_info.expr_->datum_meta_.precision_;
-          const uint64_t uint_max = (uint64_t)ULONG_MAX;
           ret = calc_overflow_res_to_decimal_int<uint64_t, false>(result_datum, aggr_cell,
                                                                   precision, uint_max);
         } else { // number
@@ -4791,12 +4791,12 @@ int ObAggregateProcessor::sub_calc(
             result_nmb.assign(cnum.desc_.desc_, cnum.digits_ + 0);
           }
           if (OB_FAIL(ret)) {
-          } else if (OB_FAIL(uint_max_nmb.from((uint64_t)ULONG_MAX, uint_allocator))) {
+          } else if (OB_FAIL(uint_max_nmb.from(uint_max, uint_allocator))) {
           } else if (OB_FAIL(result_nmb.sub_v3(uint_max_nmb, result_nmb, allocator, strict_mode))) {
           } else if (OB_FAIL(clone_number_cell(result_nmb, aggr_cell))) {
           }
         }
-        aggr_cell.set_tiny_num_uint((uint64_t)ULONG_MAX - right_uint + left_uint);
+        aggr_cell.set_tiny_num_uint(uint_max - right_uint + left_uint);
       } else {
         aggr_cell.set_tiny_num_uint(dif_uint);
       }
