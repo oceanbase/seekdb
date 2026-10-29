@@ -2241,6 +2241,16 @@ int ObLogPlan::allocate_function_table_path(FunctionTablePath *func_table_path,
     op->set_table_id(func_table_path->table_id_);
     op->add_values_expr(func_table_path->value_expr_);
     op->set_table_name(table_item->get_table_name());
+    if (table_item->is_file_table()) {
+      // the file table function scans a local file, pass the information to the executor
+      op->set_file_path(table_item->file_path_);
+      op->set_file_format(table_item->file_format_);
+      op->set_file_has_header(table_item->file_has_header_);
+      op->set_file_sample_size(table_item->file_sample_size_);
+      op->set_file_delimiter(static_cast<int32_t>(table_item->file_delimiter_));
+      op->set_file_describe(table_item->file_describe_);
+      op->set_file_null_string(table_item->file_null_string_);
+    }
     if (OB_FAIL(append(op->get_filter_exprs(), func_table_path->filter_))) {
     } else if (OB_FAIL(op->compute_property(func_table_path))) {
     } else if (OB_FAIL(op->pick_out_startup_filters())) {
@@ -6830,6 +6840,9 @@ int ObLogPlan::allocate_select_into_as_top(ObLogicalOperator *&old_top)
       select_into->set_escaped_cht(into_item->escaped_cht_);
       select_into->set_cs_type(into_item->cs_type_);
       select_into->set_external_properties(into_item->external_properties_);
+      select_into->set_write_header(into_item->write_header_);
+      select_into->set_null_str(into_item->null_str_);
+      select_into->set_column_names(into_item->column_names_);
       select_into->set_child(ObLogicalOperator::first_child, old_top);
       // compute property
       if (OB_FAIL(select_into->compute_property())) {

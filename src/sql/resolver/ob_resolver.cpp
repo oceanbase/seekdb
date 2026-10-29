@@ -146,7 +146,7 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
 
 #define REGISTER_SELECT_STMT_RESOLVER(name)                                   \
   do {                                                                        \
-    ret = select_stmt_resolver_func<Ob##name##Resolver>(params_, parse_tree, stmt); \
+    ret = select_stmt_resolver_func<Ob##name##Resolver>(params_, *real_parse_tree, stmt); \
   } while (0)
   ACTIVE_SESSION_FLAG_SETTER_GUARD(in_resolve);
   int ret = OB_SUCCESS;
@@ -163,10 +163,21 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
     real_parse_tree = &parse_tree;
   }
 
+  // DESCRIBE on a file table is rewritten into a plain select statement which
+  // returns the column metadata of the file table
+  if (OB_SUCC(ret) && T_EXPLAIN == parse_tree.type_ && 1 == parse_tree.value_
+      && OB_NOTNULL(params_.allocator_)) {
+    ParseNode *describe_stmt_tree = NULL;
+    ret = ObExplainResolver::build_file_table_describe_stmt(parse_tree, *params_.allocator_,
+                                                            describe_stmt_tree);
+    if (OB_SUCC(ret) && OB_NOT_NULL(describe_stmt_tree)) {
+      real_parse_tree = describe_stmt_tree;
+    }
+  }
   if (OB_SUCC(ret)) {
-    params_.resolver_scope_stmt_type_ = parse_tree.type_;
+    params_.resolver_scope_stmt_type_ = real_parse_tree->type_;
     params_.session_info_->set_stmt_type(
-      ObResolverUtils::get_stmt_type_by_item_type(parse_tree.type_));
+      ObResolverUtils::get_stmt_type_by_item_type(real_parse_tree->type_));
     ObExecContext *exec_ctx = params_.session_info_->get_cur_exec_ctx();
     if (exec_ctx != nullptr && exec_ctx->get_sql_ctx() != nullptr) {
       //save the current stmt type on my context,

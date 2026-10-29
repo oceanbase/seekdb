@@ -27,16 +27,32 @@ namespace sql
 {
 
 class ObExpr;
+class ObFileSourceCtx;
+namespace file_source
+{
+class FileSourceReader;
+struct FileRow;
+}
 class ObFunctionTableSpec : public ObOpSpec
 {
 OB_UNIS_VERSION_V(1);
 public:
   ObFunctionTableSpec(common::ObIAllocator &alloc, const ObPhyOperatorType type)
-    : ObOpSpec(alloc, type), value_expr_(nullptr), column_exprs_(alloc), has_correlated_expr_(false)
+    : ObOpSpec(alloc, type), value_expr_(nullptr), column_exprs_(alloc), has_correlated_expr_(false),
+      file_path_(), file_format_(0), file_has_header_(-1), file_sample_size_(-1),
+      file_delimiter_(0), file_describe_(false)
   {}
   ObExpr *value_expr_;
   common::ObFixedArray<ObExpr*, common::ObIAllocator> column_exprs_;
   bool has_correlated_expr_;
+  // the file table function scans a local file
+  common::ObString file_path_;
+  int32_t file_format_;
+  int32_t file_has_header_;
+  int64_t file_sample_size_;
+  int32_t file_delimiter_;
+  bool file_describe_;
+  common::ObString file_null_string_;
 };
 
 class ObFunctionTableOp : public ObOperator
@@ -48,7 +64,8 @@ public:
     already_calc_(false),
     row_count_(0),
     col_count_(0),
-    value_table_(NULL) 
+    value_table_(NULL),
+    file_ctx_(NULL)
   {}
 
   virtual int inner_open() override;
@@ -60,6 +77,12 @@ public:
 private:
   int inner_get_next_row_udf();
   int inner_get_next_row_sys_func();
+  int inner_get_next_row_file();
+  int open_file_source();
+  int build_describe_rows();
+  int produce_describe_row();
+  int produce_file_row(const file_source::FileRow &row);
+  int set_file_datum(ObExpr *expr, ObDatum &datum, const char *value, int32_t len);
   int get_current_result(common::ObObj &result);
   int64_t node_idx_;
   bool already_calc_;
@@ -68,6 +91,7 @@ private:
   common::ObObj value_;
   pl::ObPLCollection *value_table_;
   int (ObFunctionTableOp::*next_row_func_)();
+  ObFileSourceCtx *file_ctx_;
 };
 
 } // end namespace sql

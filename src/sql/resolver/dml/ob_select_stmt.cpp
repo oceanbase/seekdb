@@ -63,6 +63,15 @@ int ObSelectIntoItem::deep_copy(ObIAllocator &allocator,
   buffer_size_ = other.buffer_size_;
   user_vars_.assign(other.user_vars_);
   if (OB_FAIL(ob_write_string(allocator, other.external_properties_, external_properties_))) {
+  } else if (OB_FAIL(ob_write_string(allocator, other.null_str_, null_str_))) {
+  } else {
+    write_header_ = other.write_header_;
+    for (int64_t i = 0; OB_SUCC(ret) && i < other.column_names_.count(); ++i) {
+      common::ObString column_name;
+      if (OB_FAIL(ob_write_string(allocator, other.column_names_.at(i), column_name))) {
+      } else if (OB_FAIL(column_names_.push_back(column_name))) {
+      }
+    }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < other.pl_vars_.count(); ++i) {
     ObRawExpr* pl_var;

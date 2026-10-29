@@ -171,6 +171,9 @@ protected:
   int resolve_into_file_node(const ParseNode *node, ObSelectIntoItem &into_item);
   int resolve_into_outfile_without_format(const ParseNode *node, ObSelectIntoItem &into_item);
   int resolve_into_outfile_with_format(const ParseNode *node, ObSelectIntoItem &into_item);
+  int resolve_outfile_format(const ParseNode *format_node, ObSelectIntoItem &into_item);
+  int resolve_copy_format(const ParseNode *format_node, ObSelectIntoItem &into_item);
+  static bool has_copy_option(const ParseNode *format_node);
   // resolve_star related functions
   int resolve_star_for_table_groups();
   int find_joined_table_group_for_table(const uint64_t table_id, int64_t &jt_idx);

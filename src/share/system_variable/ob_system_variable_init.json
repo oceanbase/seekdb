@@ -1,4 +1,5 @@
 {
+  
   "auto_increment_increment": {
     "id": 0,
     "name": "auto_increment_increment",
@@ -10973,6 +10974,19 @@
     "max_val": "100",
     "publish_version": "1.0.0.0",
     "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
+  "enable_file_sql": {
+    "id": 10754,
+    "name": "enable_file_sql",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "bool",
+    "info": "enable file table functions, such as read_csv, read_json, read_parquet and glob",
+    "flags": "SESSION",
+    "publish_version": "1.0.0.0",
+    "info_cn": "允许使用 read_csv、read_json、read_parquet、glob 等文件表函数",
     "background_cn": "",
     "ref_url": ""
   }

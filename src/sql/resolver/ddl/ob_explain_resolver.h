@@ -45,6 +45,18 @@ namespace sql
       UNUSED(order_item);
       return common::OB_SUCCESS;
     }
+    /**
+     * @brief Rewrite a DESCRIBE statement which queries a file table into a plain
+     *        select statement which returns the column metadata of the file table.
+     * @param[in] parse_tree  the parse tree of the describe statement
+     * @param[in] allocator   the allocator used to build the new parse nodes
+     * @param[out] describe_stmt_tree  the rewritten select parse tree, NULL if the
+     *             statement does not describe a file table
+     * @return OB_SUCCESS on success
+     */
+    static int build_file_table_describe_stmt(const ParseNode &parse_tree,
+                                                common::ObIAllocator &allocator,
+                                                ParseNode *&describe_stmt_tree);
   };
 
 }

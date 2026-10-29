@@ -156,6 +156,11 @@ struct TableItem
     table_type_ = MAX_TABLE_TYPE;
     values_table_def_ = NULL;
     sample_info_ = nullptr;
+    file_format_ = 0;
+    file_has_header_ = 1;
+    file_sample_size_ = -1;
+    file_delimiter_ = ',';
+    file_describe_ = false;
   }
 
   virtual TO_STRING_KV(N_TID, table_id_,
@@ -222,6 +227,8 @@ struct TableItem
   bool is_has_sample_info() const { return sample_info_ != nullptr; }
   bool is_joined_table() const { return JOINED_TABLE == type_; }
   bool is_function_table() const { return FUNCTION_TABLE == type_; }
+  // file table function, e.g. read_csv()/read_json()/read_parquet()/glob()
+  bool is_file_table() const { return FUNCTION_TABLE == type_ && !file_path_.empty(); }
   bool is_json_table() const { return JSON_TABLE == type_; }  // json_table_def_->table_type_ == MulModeTableType::OB_ORA_JSON_TABLE_TYPE
   bool is_values_table() const { return VALUES_TABLE == type_; }//used to mark values statement: values row(1,2), row(3,4);
 
@@ -305,6 +312,14 @@ struct TableItem
   ObValuesTableDef *values_table_def_;
   // sample scan infos
   SampleInfo *sample_info_;
+  // file table function infos, e.g. read_csv()/read_json()/read_parquet()/glob()
+  common::ObString file_path_;
+  common::ObString file_null_string_;
+  int32_t file_format_;
+  int32_t file_has_header_;
+  int64_t file_sample_size_;
+  char file_delimiter_;
+  bool file_describe_;
 };
 
 struct ColumnItem

@@ -128,6 +128,9 @@ struct ObSelectIntoItem
         max_file_size_(DEFAULT_MAX_FILE_SIZE),
         escaped_cht_(),
         buffer_size_(DEFAULT_BUFFER_SIZE),
+        write_header_(false),
+        null_str_(),
+        column_names_(),
         external_properties_()
   {
     field_str_.set_varchar(DEFAULT_FIELD_TERM_STR);
@@ -155,7 +158,13 @@ struct ObSelectIntoItem
     cs_type_ = other.cs_type_;
     buffer_size_ = other.buffer_size_;
     external_properties_ = other.external_properties_;
-    return user_vars_.assign(other.user_vars_);
+    write_header_ = other.write_header_;
+    null_str_ = other.null_str_;
+    int ret = user_vars_.assign(other.user_vars_);
+    if (OB_SUCC(ret)) {
+      ret = column_names_.assign(other.column_names_);
+    }
+    return ret;
   }
   int deep_copy(ObIAllocator &allocator,
                 ObIRawExprCopier &copier,
@@ -171,6 +180,7 @@ struct ObSelectIntoItem
                K_(escaped_cht),
                K_(cs_type),
                K_(buffer_size),
+               K_(write_header),
                K_(external_properties));
   ObItemType into_type_;
   common::ObObj outfile_name_;
@@ -186,6 +196,12 @@ struct ObSelectIntoItem
   common::ObCollationType cs_type_;
   int64_t buffer_size_;
   common::ObString external_properties_;
+  // whether the first line of the exported file holds the column names
+  bool write_header_;
+  // the text which represents a null value in the exported file
+  common::ObString null_str_;
+  // the column names of the exported query result
+  common::ObSEArray<common::ObString, 16> column_names_;
 
   static const char* const DEFAULT_FIELD_TERM_STR;
   static const char* const DEFAULT_LINE_TERM_STR;

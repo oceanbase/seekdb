@@ -38,6 +38,26 @@ using namespace share::schema;
 namespace sql
 {
 
+static bool is_same_copy_option(const common::ObString &option_name, const char *target)
+{
+  bool is_same = true;
+  if (OB_ISNULL(option_name.ptr())
+      || option_name.length() != static_cast<int32_t>(strlen(target))) {
+    is_same = false;
+  } else {
+    for (int32_t i = 0; is_same && i < option_name.length(); ++i) {
+      char c = option_name.ptr()[i];
+      if (c >= 'A' && c <= 'Z') {
+        c = static_cast<char>(c - 'A' + 'a');
+      }
+      if (c != target[i]) {
+        is_same = false;
+      }
+    }
+  }
+  return is_same;
+}
+
 ObSelectResolver::ObSelectResolver(ObResolverParams &params)
   : ObDMLResolver(params),
     current_recursive_cte_table_item_(NULL),
@@ -2989,51 +3009,17 @@ int ObSelectResolver::resolve_into_file_node(const ParseNode *list_node, ObSelec
 int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node, ObSelectIntoItem &into_item)
 {
   int ret = OB_SUCCESS;
-  bool has_format_type = false;
-  bool has_cs_type = false;
-  ObExternalFileFormat external_format;
   ParseNode* format_node = NULL;
-  ParseNode* option_node = NULL;
   if (node->num_child_ != 3) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(resolve_into_const_node(node->children_[0], into_item.outfile_name_))) {
   }
   if (OB_SUCC(ret) && NULL != (format_node = node->children_[1])) { // format
-    for (int i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
-      if (OB_ISNULL(option_node = format_node->children_[i])) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (T_EXTERNAL_FILE_FORMAT_TYPE == option_node->type_
-                 || T_CHARSET == option_node->type_) {
-        if (OB_FAIL(ObResolverUtils::resolve_file_format(option_node, external_format, params_))) {
-        }
-        has_format_type |= (T_EXTERNAL_FILE_FORMAT_TYPE == option_node->type_);
-        has_cs_type |= (T_CHARSET == option_node->type_);
+    if (has_copy_option(format_node)) {
+      // the options of the COPY statement
+      if (OB_FAIL(resolve_copy_format(format_node, into_item))) {
       }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (!has_format_type) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "format without type");
-    } else if (ObExternalFileFormat::CSV_FORMAT != external_format.format_type_) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "this format type");
-    } else {
-      ObCollationType file_cs_type = has_cs_type
-                                     ? ObCharset::get_default_collation(external_format.csv_format_.cs_type_)
-                                     : ObCharset::get_system_collation();
-      if (OB_FAIL(external_format.csv_format_.init_format(ObDataInFileStruct(), 0, file_cs_type))) {
-      }
-    }
-    for (int i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
-      if (OB_ISNULL(option_node = format_node->children_[i])) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (T_EXTERNAL_FILE_FORMAT_TYPE == option_node->type_
-                 || T_CHARSET == option_node->type_) {
-      } else if (OB_FAIL(ObResolverUtils::resolve_file_format(option_node, external_format, params_))) {
-      }
-    }
-    if (OB_SUCC(ret)
-        && OB_FAIL(external_format.to_string_with_alloc(into_item.external_properties_, *allocator_, true))) {
+    } else if (OB_FAIL(resolve_outfile_format(format_node, into_item))) {
     }
   }
   // file: single, max_file_size, buffer_size
@@ -3044,6 +3030,156 @@ int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node, Ob
   return ret;
 }
 
+int ObSelectResolver::resolve_outfile_format(const ParseNode *format_node,
+                                                ObSelectIntoItem &into_item)
+{
+  int ret = OB_SUCCESS;
+  bool has_format_type = false;
+  bool has_cs_type = false;
+  ObExternalFileFormat external_format;
+  ParseNode* option_node = NULL;
+  for (int i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
+    if (OB_ISNULL(option_node = format_node->children_[i])) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (T_EXTERNAL_FILE_FORMAT_TYPE == option_node->type_
+               || T_CHARSET == option_node->type_) {
+      if (OB_FAIL(ObResolverUtils::resolve_file_format(option_node, external_format, params_))) {
+      }
+      has_format_type |= (T_EXTERNAL_FILE_FORMAT_TYPE == option_node->type_);
+      has_cs_type |= (T_CHARSET == option_node->type_);
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (!has_format_type) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "format without type");
+  } else if (ObExternalFileFormat::CSV_FORMAT != external_format.format_type_) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "this format type");
+  } else {
+    ObCollationType file_cs_type = has_cs_type
+                                   ? ObCharset::get_default_collation(external_format.csv_format_.cs_type_)
+                                   : ObCharset::get_system_collation();
+    if (OB_FAIL(external_format.csv_format_.init_format(ObDataInFileStruct(), 0, file_cs_type))) {
+    }
+  }
+  for (int i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
+    if (OB_ISNULL(option_node = format_node->children_[i])) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (T_EXTERNAL_FILE_FORMAT_TYPE == option_node->type_
+               || T_CHARSET == option_node->type_) {
+    } else if (OB_FAIL(ObResolverUtils::resolve_file_format(option_node, external_format, params_))) {
+    }
+  }
+  if (OB_SUCC(ret)
+      && OB_FAIL(external_format.to_string_with_alloc(into_item.external_properties_, *allocator_, true))) {
+  }
+  return ret;
+}
+
+bool ObSelectResolver::has_copy_option(const ParseNode *format_node)
+{
+  bool has_copy_option = false;
+  if (OB_NOTNULL(format_node)) {
+    for (int i = 0; i < format_node->num_child_; ++i) {
+      ParseNode *option_node = format_node->children_[i];
+      if (OB_NOTNULL(option_node) && T_COPY_OPTION == option_node->type_) {
+        has_copy_option = true;
+        break;
+      }
+    }
+  }
+  return has_copy_option;
+}
+
+int ObSelectResolver::resolve_copy_format(const ParseNode *format_node,
+                                          ObSelectIntoItem &into_item)
+{
+  int ret = OB_SUCCESS;
+  bool has_format = false;
+  bool write_header = false;
+  ObString format_name;
+  ObString null_str;
+  for (int i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
+    ParseNode *option_node = format_node->children_[i];
+    if (OB_ISNULL(option_node) || T_COPY_OPTION != option_node->type_
+        || option_node->num_child_ < 1 || OB_ISNULL(option_node->children_[0])) {
+      ret = OB_ERR_PARSER_SYNTAX;
+      LOG_USER_ERROR(OB_ERR_PARSER_SYNTAX, "invalid copy option");
+      break;
+    }
+    ObString option_name = option_node->children_[0]->str_value_;
+    bool has_value = false;
+    ObString option_value;
+    if (option_node->num_child_ > 1 && OB_NOTNULL(option_node->children_[1])) {
+      option_value = option_node->children_[1]->str_value_;
+      has_value = true;
+    }
+    if (is_same_copy_option(option_name, "format")) {
+      if (!has_value) {
+        // the value of the format option may be a bare identifier, e.g. 'format csv'
+        if (i + 1 < format_node->num_child_) {
+          ParseNode *value_node = format_node->children_[i + 1];
+          if (OB_NOTNULL(value_node) && T_COPY_OPTION == value_node->type_
+              && value_node->num_child_ == 1 && OB_NOTNULL(value_node->children_[0])) {
+            ObString value_name = value_node->children_[0]->str_value_;
+            if (is_same_copy_option(value_name, "csv")
+                || is_same_copy_option(value_name, "json")
+                || is_same_copy_option(value_name, "parquet")) {
+              option_value = value_name;
+              has_value = true;
+              // the bare identifier has been consumed as the value of the format option
+              ++i;
+            }
+          }
+        }
+        if (!has_value) {
+          ret = OB_ERR_PARSER_SYNTAX;
+          LOG_USER_ERROR(OB_ERR_PARSER_SYNTAX, "copy option format needs a value");
+          break;
+        }
+      }
+      has_format = true;
+      format_name = option_value;
+    } else if (is_same_copy_option(option_name, "header")) {
+      write_header = true;
+    } else if (is_same_copy_option(option_name, "nullstr")
+               || is_same_copy_option(option_name, "null_string")) {
+      if (!has_value) {
+        ret = OB_ERR_PARSER_SYNTAX;
+        LOG_USER_ERROR(OB_ERR_PARSER_SYNTAX, "copy option nullstr needs a value");
+        break;
+      }
+      null_str = option_value;
+    } else {
+      ret = OB_ERR_PARSER_SYNTAX;
+      LOG_USER_ERROR(OB_ERR_PARSER_SYNTAX, "unsupported copy option");
+    }
+  }
+  if (OB_SUCC(ret) && has_format && !is_same_copy_option(format_name, "csv")) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "this format type");
+  }
+  if (OB_SUCC(ret)) {
+    // the exported file is a plain csv file: the fields are separated by ',', the
+    // lines are terminated by '\n' and neither the enclose char nor the escape
+    // char is used, so the values are printed as they are.
+    into_item.field_str_.set_varchar(",");
+    into_item.field_str_.set_collation_type(ObCharset::get_system_collation());
+    into_item.line_str_.set_varchar("\n");
+    into_item.line_str_.set_collation_type(ObCharset::get_system_collation());
+    into_item.closed_cht_.set_char_value(NULL, 0);
+    into_item.escaped_cht_.set_char_value(NULL, 0);
+    into_item.is_optional_ = false;
+  }
+  if (OB_SUCC(ret)) {
+    into_item.write_header_ = write_header;
+    if (!null_str.empty()
+        && OB_FAIL(ob_write_string(*allocator_, null_str, into_item.null_str_))) {
+    }
+  }
+  return ret;
+}
 int ObSelectResolver::resolve_into_outfile_without_format(const ParseNode *node,
                                                           ObSelectIntoItem &into_item)
 {
@@ -3128,6 +3264,26 @@ int ObSelectResolver::resolve_into_clause(const ParseNode *node)
         }
       } else {
         //do nothing
+      }
+      if (OB_SUCC(ret) && T_INTO_OUTFILE == into_item->into_type_) {
+        // remember the output column names, they are used as the header of the exported file
+        ObIArray<SelectItem> &select_items = select_stmt->get_select_items();
+        for (int64_t i = 0; OB_SUCC(ret) && i < select_items.count(); ++i) {
+          SelectItem &select_item = select_items.at(i);
+          if (select_item.is_hidden_rowid_) {
+            continue;
+          }
+          ObString column_name = select_item.alias_name_.empty()
+                                ? select_item.expr_name_
+                                : select_item.alias_name_;
+          if (column_name.empty()) {
+            continue;
+          }
+          ObString column_name_copy;
+          if (OB_FAIL(ob_write_string(*allocator_, column_name, column_name_copy))) {
+          } else if (OB_FAIL(into_item->column_names_.push_back(column_name_copy))) {
+          }
+        }
       }
       if (OB_SUCC(ret)) {
         select_stmt->set_select_into(into_item);

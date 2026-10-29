@@ -5459,6 +5459,7 @@ int ObStaticEngineCG::generate_spec(ObLogSelectInto &op, ObSelectIntoSpec &spec,
   } else if (OB_FAIL(deep_copy_obj(alloc, op.get_escaped_cht(), spec.escaped_cht_))) {
   } else if (OB_FAIL(spec.external_properties_.store_str(op.get_external_properties()))) {
   } else if (OB_FAIL(spec.user_vars_.init(op.get_user_vars().count()))) {
+  } else if (OB_FAIL(spec.column_names_.init(op.get_column_names().count()))) {
   } else if (OB_FAIL(spec.select_exprs_.init(op.get_select_exprs().count()))) {
   } else {
     ObString var;
@@ -5466,6 +5467,12 @@ int ObStaticEngineCG::generate_spec(ObLogSelectInto &op, ObSelectIntoSpec &spec,
       var.reset();
       if (OB_FAIL(ob_write_string(alloc, op.get_user_vars().at(i), var))) {
       } else if (OB_FAIL(spec.user_vars_.push_back(var))) {
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < op.get_column_names().count(); ++i) {
+      ObString column_name;
+      if (OB_FAIL(ob_write_string(alloc, op.get_column_names().at(i), column_name))) {
+      } else if (OB_FAIL(spec.column_names_.push_back(column_name))) {
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < op.get_select_exprs().count(); ++i) {
@@ -5486,6 +5493,10 @@ int ObStaticEngineCG::generate_spec(ObLogSelectInto &op, ObSelectIntoSpec &spec,
       spec.cs_type_ = op.get_cs_type();
       spec.parallel_ = op.get_parallel();
       spec.is_overwrite_ = op.get_is_overwrite();
+      spec.write_header_ = op.get_write_header();
+      if (OB_FAIL(ob_write_string(alloc, op.get_null_str(), spec.null_str_))) {
+        ret = OB_ERR_UNEXPECTED;
+      }
       spec.plan_->need_drive_dml_query_ = true;
     }
   }
@@ -5511,6 +5522,18 @@ int ObStaticEngineCG::generate_spec(ObLogFunctionTable &op, ObFunctionTableSpec 
   } else {
     spec.has_correlated_expr_ = value_raw_expr->has_flag(CNT_DYNAMIC_PARAM);
     spec.value_expr_ = value_expr;
+    if (op.is_file_table()) {
+      // the file table function scans a local file
+      if (OB_FAIL(ob_write_string(alloc, op.get_file_path(), spec.file_path_))) {
+      } else if (OB_FAIL(ob_write_string(alloc, op.get_file_null_string(), spec.file_null_string_))) {
+      } else {
+        spec.file_format_ = op.get_file_format();
+        spec.file_has_header_ = op.get_file_has_header();
+        spec.file_sample_size_ = op.get_file_sample_size();
+        spec.file_delimiter_ = op.get_file_delimiter();
+        spec.file_describe_ = op.get_file_describe();
+      }
+    }
     for (int64_t i = 0; OB_SUCC(ret) && i < op.get_output_exprs().count(); ++i) {
       if (OB_FAIL(mark_expr_self_produced(op.get_output_exprs().at(i)))) {
       }
