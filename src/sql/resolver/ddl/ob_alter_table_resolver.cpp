@@ -715,6 +715,9 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
           // suppored in mysql
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "Add/modify foreign key together with other DDLs");
+        } else if (alter_table_stmt->has_ai_retry()) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "combining AI COLUMN RETRY with another ALTER action");
         }
       }
     }
@@ -817,6 +820,25 @@ int ObAlterTableResolver::resolve_column_options(const ParseNode &node,
             has_add_column = true;
             if (OB_FAIL(resolve_add_column(*column_node->children_[0], add_column_names_set))) {
             } else if (OB_FAIL(resolve_lob_storage_parameters(column_node->children_[1]))) {
+            }
+            break;
+          }
+        case T_AI_RETRY_COLUMN: {
+            // ALTER TABLE ... RETRY AI COLUMN <col> [WHERE ...]
+            if (OB_UNLIKELY(1 != node.num_child_)) {
+              ret = OB_NOT_SUPPORTED;
+              LOG_USER_ERROR(OB_NOT_SUPPORTED, "combining AI COLUMN RETRY with another ALTER action");
+            } else if (OB_ISNULL(column_node->children_) || 2 != column_node->num_child_
+                       || OB_ISNULL(column_node->children_[0])
+                       || column_node->children_[0]->num_child_ < 3
+                       || OB_ISNULL(column_node->children_[0]->children_[2])
+                       || OB_ISNULL(column_node->children_[0]->children_[2]->str_value_)) {
+              ret = OB_ERR_UNEXPECTED;
+              SQL_RESV_LOG(WARN, "invalid ai retry parse tree", K(ret));
+            } else {
+              ParseNode *col_ref = column_node->children_[0];
+              ObString col_name(col_ref->children_[2]->str_len_, col_ref->children_[2]->str_value_);
+              get_alter_table_stmt()->set_ai_retry(col_name, column_node->children_[1]);
             }
             break;
           }

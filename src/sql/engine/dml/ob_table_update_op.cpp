@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "config_bridge.h"
+#include "observer/ai_column/ob_ai_column_util.h"
 #include "ob_table_update_op.h"
 #include "sql/engine/dml/ob_dml_service.h"
 
@@ -332,6 +333,7 @@ OB_INLINE int ObTableUpdateOp::update_row_to_das()
       } else if (OB_FAIL(calc_tablet_loc(upd_ctdef, upd_rtdef, old_tablet_loc, new_tablet_loc))) {
       } else if (OB_FAIL(ObDMLService::update_row(upd_ctdef, upd_rtdef, old_tablet_loc, new_tablet_loc, dml_rtctx_,
                                                  modify_row.old_row_, modify_row.new_row_, modify_row.full_row_))) {
+      } else if (0 == j && OB_FAIL(share::ObAiColumnUtil::after_update_row(*this, upd_ctdef, upd_rtdef, modify_row, new_tablet_loc))) {
       } else if (need_after_row_process(upd_ctdef) && OB_FAIL(dml_modify_rows_.push_back(modify_row))) {
       } else {
         ++upd_rtdef.found_rows_;

@@ -3023,6 +3023,9 @@ int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node, Ob
                                      : ObCharset::get_system_collation();
       if (OB_FAIL(external_format.csv_format_.init_format(ObDataInFileStruct(), 0, file_cs_type))) {
       }
+      if (OB_SUCC(ret) && 1 == node->value_) { // COPY TO: CSV export defaults to comma
+        external_format.csv_format_.field_term_str_ = ObString(",");
+      }
     }
     for (int i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
       if (OB_ISNULL(option_node = format_node->children_[i])) {

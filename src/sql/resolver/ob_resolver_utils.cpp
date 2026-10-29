@@ -6636,6 +6636,18 @@ int ObResolverUtils::resolve_file_format(const ParseNode *node,
         format.csv_format_.ignore_last_empty_col_ = node->children_[0]->value_;
         break;
       }
+      case T_COPY_FILE_OPTION: {
+        // COPY TO options: value_ 1 = header, 2 = nullstr
+        if (1 == node->value_) {
+          format.csv_format_.export_header_ = (0 != node->children_[0]->value_);
+        } else if (2 == node->value_) {
+          format.csv_format_.null_str_.assign_ptr(node->children_[0]->str_value_,
+                                                  static_cast<int32_t>(node->children_[0]->str_len_));
+        } else {
+          ret = OB_INVALID_ARGUMENT;
+        }
+        break;
+      }
       default: {
         ret = OB_INVALID_ARGUMENT;
       }

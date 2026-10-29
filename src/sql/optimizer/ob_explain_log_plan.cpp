@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "sql/optimizer/ob_explain_log_plan.h"
+#include "sql/resolver/dml/ob_dml_stmt.h"
 #include "sql/optimizer/ob_log_values.h"
 #include "sql/code_generator/ob_code_generator.h"
 
@@ -46,6 +47,96 @@ int ObExplainLogPlan::generate_normal_raw_plan()
     const ObExplainStmt *explain_stmt = static_cast<const ObExplainStmt*>(get_stmt());
     if (OB_ISNULL(child_stmt = explain_stmt->get_explain_query_stmt())) {
       ret = OB_ERR_UNEXPECTED;
+    } else if (explain_stmt->is_file_describe()) {
+      // DuckDB-style DESCRIBE for file table functions: emit one 6-column row
+      // per column of the file table instead of the plan text.
+      ObLogValues *desc_values = NULL;
+      ObSEArray<ObRawExpr *, 6> desc_exprs;
+      const ObCharsetInfo *cs = NULL;
+      ObCollationType cs_type = CS_TYPE_UTF8MB4_GENERAL_CI;
+      if (OB_NOT_NULL(optimizer_context_.get_session_info())) {
+        cs_type = optimizer_context_.get_session_info()->get_local_collation_connection();
+        cs = ObCharset::get_charset(cs_type);
+      }
+      if (OB_FAIL(allocate_values_as_top(top))) {
+      } else if (OB_ISNULL(top) || OB_UNLIKELY(LOG_VALUES != top->get_type())) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_ISNULL(desc_values = static_cast<ObLogValues*>(top))) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        // six output exprs: column_name, column_type, null, key, default, extra
+        for (int64_t c = 0; OB_SUCC(ret) && c < 6; ++c) {
+          ObConstRawExpr *output = NULL;
+          if (OB_FAIL(optimizer_context_.get_expr_factory().create_raw_expr(T_VARCHAR, output))) {
+          } else if (OB_ISNULL(output)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else {
+            ObObj v;
+            v.set_varchar(ObString(""));
+            v.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
+            output->set_value(v);
+            if (OB_FAIL(output->formalize(optimizer_context_.get_session_info()))) {
+            } else if (OB_FAIL(desc_values->get_output_exprs().push_back(output))) {
+            } else if (OB_FAIL(optimizer_context_.get_all_exprs().append(output))) {
+            }
+          }
+        }
+      }
+      const char *type_names[] = {"BOOLEAN", "BIGINT", "DOUBLE",
+                                  "VARCHAR", "DATE", "DATETIME"};
+      auto type_to_name = [&](ObObjType t) -> const char * {
+        switch (t) {
+          case ObTinyIntType: return type_names[0];
+          case ObIntType: return type_names[1];
+          case ObDoubleType: return type_names[2];
+          case ObDateType: return type_names[4];
+          case ObDateTimeType: return type_names[5];
+          default: return type_names[3];
+        }
+      };
+      for (int64_t i = 0; OB_SUCC(ret) && i < child_stmt->get_column_size(); ++i) {
+        const ColumnItem *col = child_stmt->get_column_item(i);
+        if (OB_ISNULL(col) || OB_ISNULL(col->expr_)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          ObObjType t = col->expr_->get_result_type().get_type();
+          bool not_null = col->expr_->get_result_flag() & NOT_NULL_FLAG;
+          char name_buf[OB_MAX_COLUMN_NAME_LENGTH];
+          char type_buf[64];
+          if (OB_FAIL(databuff_printf(name_buf, sizeof(name_buf), "%.*s",
+                                      col->column_name_.length(), col->column_name_.ptr()))) {
+          } else if (OB_FAIL(databuff_printf(type_buf, sizeof(type_buf), "%s", type_to_name(t)))) {
+          } else {
+            const char *cells[6] = {
+                name_buf, type_buf, not_null ? "NO" : "YES", "NULL", "NULL", "NULL"};
+            ObNewRow row;
+            ObObj cells_obj[6];
+            for (int64_t c = 0; OB_SUCC(ret) && c < 6; ++c) {
+              cells_obj[c].set_varchar(ObString(cells[c]));
+              cells_obj[c].set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
+            }
+            row.cells_ = cells_obj;
+            row.count_ = 6;
+            if (OB_FAIL(desc_values->add_row(row))) {
+            }
+          }
+        }
+      }
+      if (OB_SUCC(ret)) {
+        desc_values->set_branch_id(0);
+        desc_values->set_id(0);
+        desc_values->set_op_id(0);
+        set_max_op_id(1);
+        set_plan_root(desc_values);
+        desc_values->mark_is_plan_root();
+        optimizer_context_.set_packed(false);
+        // keep all_exprs: the 6 output const exprs above are the source for
+        // physical expr generation in ObCodeGenerator::generate_exprs
+        optimizer_context_.set_plan_type(ObPhyPlanType::OB_PHY_PLAN_LOCAL,
+                                         ObPhyPlanType::OB_PHY_PLAN_LOCAL,
+                                         false);
+      }
+      return ret;
     } else if (OB_ISNULL(child_plan = optimizer_context_.get_log_plan_factory().
                          create(optimizer_context_, *child_stmt))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;

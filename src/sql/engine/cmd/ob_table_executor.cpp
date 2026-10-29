@@ -42,6 +42,8 @@
 
 #include "sql/printer/ob_select_stmt_printer.h"
 #include "share/ob_structured_event_logger.h"
+#include "observer/ai_column/ob_ai_column_util.h"
+#include "share/schema/ob_schema_service.h"
 namespace oceanbase
 {
 using namespace common;
@@ -470,8 +472,20 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
       ret = OB_NOT_INIT;
     } else if (OB_FAIL(ObPartitionExecutorUtils::calc_values_exprs(ctx, stmt))) {
     } else if (OB_FAIL(set_index_arg_list(ctx, stmt))) {
+    } else if (OB_FAIL(ret)) {
+      // do nothing
     } else if (OB_ISNULL(select_stmt)) { // Processing for normal table creation
       bool &is_parallel_create = create_table_arg.is_parallel_;
+      if (stmt.get_ai_column_metas().count() > 0) {
+        // AI columns: append the 3 hidden columns to the schema before the DDL runs
+        obcall::ObCreateTableArg &mutable_arg = const_cast<obcall::ObCreateTableArg &>(create_table_arg);
+        for (int64_t i = 0; OB_SUCC(ret) && i < stmt.get_ai_column_metas().count(); ++i) {
+          if (OB_FAIL(ObAiColumnUtil::append_hidden_columns_for_create(mutable_arg.schema_,
+                                                                       stmt.get_ai_column_metas().at(i)))) {
+            SQL_ENG_LOG(WARN, "fail to append ai hidden columns", K(ret), K(i));
+          }
+        }
+      }
       if (OB_FAIL(ctx.get_sql_ctx()->schema_guard_->reset())){
       } else if (table_schema.is_view_table()) {
         is_parallel_create = false;
@@ -490,6 +504,47 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
       }
     } else {
       if (OB_FAIL(execute_ctas(ctx, stmt))){
+      }
+    }
+    if (OB_SUCC(ret) && stmt.get_ai_column_metas().count() > 0) {
+      // persist __all_ai_column rows after the table is created; resolve the
+      // real table/column ids from the refreshed schema (res.table_id_ is not
+      // always filled by the parallel create path)
+      uint64_t real_table_id = res.table_id_;
+      share::schema::ObSchemaGetterGuard guard;
+      const share::schema::ObTableSchema *created_schema = nullptr;
+      int refresh_ret = ObMultiVersionSchemaService::get_instance().refresh_and_add_schema();
+      if (OB_SUCCESS != refresh_ret) {
+      }
+      if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(guard))) {
+      } else if (OB_INVALID_ID != real_table_id
+                 && OB_SUCCESS == guard.get_table_schema(real_table_id, created_schema)
+                 && OB_NOT_NULL(created_schema)) {
+        // resolved by id straight from the DDL result; nothing else to do
+      } else {
+        created_schema = nullptr;
+        if (OB_FAIL(guard.get_table_schema(create_table_arg.db_name_.empty()
+                            ? my_session->get_database_name()
+                            : create_table_arg.db_name_,
+                            create_table_arg.schema_.get_table_name(),
+                            false /*is_index*/, created_schema))
+                   || OB_ISNULL(created_schema)) {
+          ret = OB_SUCCESS;
+        }
+      }
+      if (OB_SUCC(ret) && OB_NOT_NULL(created_schema)) {
+        real_table_id = created_schema->get_table_id();
+        for (int64_t i = 0; OB_SUCC(ret) && i < stmt.get_ai_column_metas().count(); ++i) {
+          if (OB_FAIL(ObAiColumnUtil::fill_meta_ids_from_schema(*created_schema,
+                                                                stmt.get_ai_column_metas().at(i)))) {
+            SQL_ENG_LOG(WARN, "fail to fill ai meta ids", K(ret), K(i));
+          }
+        }
+      }
+      if (OB_SUCC(ret)) {
+        if (OB_FAIL(ObAiColumnUtil::insert_metas(stmt.get_ai_column_metas(), real_table_id))) {
+          SQL_ENG_LOG(WARN, "fail to insert ai column metas", K(ret), K(real_table_id));
+        }
       }
     }
     SERVER_EVENT_ADD("ddl", "create table execute finish",
@@ -762,6 +817,22 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
   OV (OB_NOT_NULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx)), OB_NOT_INIT);
   if (OB_FAIL(ret)) {
     // do nothing
+  } else if (stmt.has_ai_retry()) {
+    // AI COLUMN RETRY: data-only operation, no schema change.
+    // arg.table_id_ is -1 on this path (as with plain ALTER); the real id
+    // rides in alter_table_schema_
+    uint64_t table_id = alter_table_arg.table_id_;
+    if (OB_INVALID_ID == table_id) {
+      table_id = alter_table_arg.alter_table_schema_.get_table_id();
+    }
+    if (OB_INVALID_ID == table_id) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(ObAiColumnUtil::exec_ai_retry(table_id,
+                                                     stmt.get_ai_retry_column_name(),
+                                                     stmt.get_ai_retry_where_node()))) {
+      SQL_ENG_LOG(WARN, "ai column retry failed", K(ret), K(table_id),
+                  K(stmt.get_ai_retry_column_name()));
+    }
   } else if (stmt.is_alter_triggers()) {
     if (stmt.get_tg_arg().trigger_infos_.count() > 0) {
       stmt.get_tg_arg().ddl_stmt_str_ = first_stmt;
@@ -810,6 +881,16 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
               || (alter_table_arg.foreign_key_arg_list_.at(0).is_modify_validate_flag_
                   && alter_table_arg.foreign_key_arg_list_.at(0).validate_flag_)) {
             need_modify_fk_validate = true;
+          }
+        }
+        if (OB_SUCC(ret) && stmt.get_ai_column_metas().count() > 0) {
+          // AI columns: append the 3 hidden columns as extra add-column actions
+          for (int64_t i = 0; OB_SUCC(ret) && i < stmt.get_ai_column_metas().count(); ++i) {
+            if (OB_FAIL(ObAiColumnUtil::append_hidden_columns_for_alter(
+                    const_cast<share::schema::AlterTableSchema &>(alter_table_arg.alter_table_schema_),
+                    stmt.get_ai_column_metas().at(i)))) {
+              SQL_ENG_LOG(WARN, "fail to append ai hidden columns", K(ret), K(i));
+            }
           }
         }
         if (OB_SUCC(ret)) {
@@ -864,6 +945,33 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
         } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(
             res.task_id_, res.ddl_need_retry_at_executor_, my_session,
             *ctx.get_query_runtime_environment(), ctx.local_command_service(), is_support_cancel))) {
+        }
+      }
+    }
+    if (OB_SUCC(ret) && stmt.get_ai_column_metas().count() > 0) {
+      // persist __all_ai_column rows; resolve the assigned hidden column ids first
+      if (OB_FAIL(refresh_schema_for_table())) {
+      } else {
+        share::schema::ObSchemaGetterGuard guard;
+        const share::schema::ObTableSchema *table_schema = nullptr;
+        uint64_t ai_tid = alter_table_arg.table_id_;
+        if (OB_INVALID_ID == ai_tid) {
+          ai_tid = alter_table_arg.alter_table_schema_.get_table_id();
+        }
+        if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(guard))) {
+        } else if (OB_FAIL(guard.get_table_schema(ai_tid, table_schema))
+                   || OB_ISNULL(table_schema)) {
+          ret = (OB_SUCCESS == ret) ? OB_TABLE_NOT_EXIST : ret;
+        } else {
+          for (int64_t i = 0; OB_SUCC(ret) && i < stmt.get_ai_column_metas().count(); ++i) {
+            if (OB_FAIL(ObAiColumnUtil::fill_meta_ids_from_schema(*table_schema,
+                                                                  stmt.get_ai_column_metas().at(i)))) {
+            }
+          }
+          if (OB_SUCC(ret)) {
+            if (OB_FAIL(ObAiColumnUtil::insert_metas(stmt.get_ai_column_metas(), ai_tid))) {
+            }
+          }
         }
       }
     }

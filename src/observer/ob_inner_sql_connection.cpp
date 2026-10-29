@@ -749,8 +749,11 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_UNLIKELY(retry_info.is_inited())) {
     if (is_inner_session()) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("retry info is inited", K(ret), K(retry_info), K(executor));
+      // a previous execution on this pooled inner connection could leave the
+      // retry info initialized (timer threads without a full statement
+      // context are prone to this); reset it instead of poisoning the
+      // connection for every later statement
+      retry_info.reset();
     }
   } else if (OB_FAIL(retry_info.init())) {
   }
