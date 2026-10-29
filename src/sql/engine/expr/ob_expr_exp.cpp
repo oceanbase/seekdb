@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_exp.h"
+#include "sql/engine/expr/exp_compat.h"
 
 namespace oceanbase
 {
@@ -49,7 +50,7 @@ int calc_exp_expr_double(const ObExpr &expr, ObEvalCtx &ctx,
     res_datum.set_null();
   } else {
     double value = arg->get_double();
-    value = std::exp(value);
+    value = math_compat::exp(value);
     if (isinf(value) || isnan(value)) {
       ret = OB_OPERATE_OVERFLOW;
     } else {

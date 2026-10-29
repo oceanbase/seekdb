@@ -1591,6 +1591,7 @@ SQL_STANDALONE_SOURCES = [
 ]
 
 SQL_EXTRA_SOURCES = [
+    "src/sql/engine/expr/exp_compat.cpp",
     "src/sql/engine/expr/ob_datum_cast.cpp",
     "src/sql/engine/expr/ob_obj_cast_runtime.cpp",
     "src/sql/engine/expr/ob_expr_cmp_func.cpp",
