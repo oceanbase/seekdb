@@ -1669,7 +1669,15 @@ int ObExprInOrNotIn::build_hash_set(
           in_ctx->set_hash_funcs_ptr_for_set(in_ctx->hash_func_buff_);
           in_ctx->set_cmp_funcs_ptr_for_set(in_ctx->cmp_functions_);
         }
-        if (OB_SUCC(ret) && OB_FAIL(in_ctx->add_to_static_engine_hashset(tmp_row))) {
+        if (OB_SUCC(ret))
+        {
+          bool is_exist = false;
+          if (OB_FAIL(in_ctx->exist_in_static_engine_hashset(tmp_row, is_exist)))
+          {
+          }
+          else if (!is_exist && OB_FAIL(in_ctx->add_to_static_engine_hashset(tmp_row)))
+          {
+          }
         }
       }
     }
