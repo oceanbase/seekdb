@@ -1406,7 +1406,7 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(ObAiService::server_module_init(mods_ai_service_))) { SERVER_LOG(WARN, "mods_ai_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObChangeStreamMgr::server_module_init(
       mods_change_stream_mgr_,
-      *mods_log_storage_adapter_,
+      *mods_log_service_->get_palf_env(),
       schema_publish_signal_,
       share::server_runtime()))) {
     SERVER_LOG(WARN, "mods_change_stream_mgr_ fail", KR(ret));
