@@ -22,7 +22,6 @@ limitations under the License.
   <meta name="description" content="Run real seekdb SQL and vector search in your browser with WebAssembly.">
   <title>seekdb shell · WebAssembly</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="./shell.css">
   <link rel="modulepreload" href="./database.mjs">
   <link rel="modulepreload" href="./runtime-host.mjs">
   <link rel="modulepreload" href="./mysql-wire.mjs">
@@ -33,6 +32,7 @@ limitations under the License.
   <link rel="modulepreload" href="./worker-server.mjs">
   <link rel="modulepreload" href="./seekdb_wasm_database.mjs">
   <link rel="preload" href="./seekdb_wasm_database.wasm" as="fetch" crossorigin>
+  <link rel="stylesheet" href="./shell.css">
   <script type="module" src="./shell.mjs"></script>
 </head>
 <body>
@@ -56,19 +56,43 @@ limitations under the License.
             <button type="button" data-example="fork" disabled>Fork Table</button>
           </div>
         </details>
-        <details id="instance-menu" class="menu">
-          <summary title="Clear existing data and start a new instance">New Instance</summary>
-          <div class="menu-items" role="group" aria-label="New instance storage">
-            <button id="memory-button" type="button" title="Discard the current database and start an empty instance in memory">Memory</button>
-            <button id="opfs-button" type="button" title="Discard the current database, clear stored data and start an empty OPFS instance">OPFS</button>
-          </div>
-        </details>
+        <label class="storage-control" for="storage-mode">
+          <span class="sr-only">Storage mode</span>
+          <select id="storage-mode" aria-label="Storage mode" title="Choose persistent or temporary browser storage" disabled>
+            <option value="memory">Temporary (Memory)</option>
+            <option value="opfs">Persistent (OPFS)</option>
+          </select>
+        </label>
+        <button id="reset-button" type="button" title="Discard the temporary database and start a new in-memory instance">New Memory Instance</button>
         <button id="clear-button" title="Clear output (Ctrl+L)">Clear</button>
       </div>
     </div>
-    <div class="runtime-status sr-only" role="status" aria-live="polite"><span id="status-text">Loading WebAssembly and starting seekdb…</span></div>
+    <div id="runtime-status" class="runtime-status" data-state="loading" data-stage="engine" role="status" aria-live="polite" aria-atomic="true">
+      <div class="runtime-copy">
+        <strong id="status-stage">Loading engine</strong>
+        <span id="status-text">Checking WebAssembly support…</span>
+      </div>
+      <ol class="startup-steps" aria-label="Startup progress">
+        <li data-startup-step="engine" data-state="active"><span aria-hidden="true">1</span>Load engine</li>
+        <li data-startup-step="session"><span aria-hidden="true">2</span>Open SQL session</li>
+        <li data-startup-step="ready"><span aria-hidden="true">3</span>Ready</li>
+      </ol>
+    </div>
+    <aside class="session-notice" role="note">
+      <strong id="storage-notice-title">Temporary memory session.</strong>
+      <span id="storage-notice-text">Refresh or tab close clears this temporary database; your saved OPFS database is not affected.</span>
+    </aside>
     <div id="terminal-scroll" class="terminal-scroll" tabindex="-1" aria-label="Terminal">
-      <section id="transcript" class="transcript" aria-label="SQL output"></section>
+      <section id="transcript" class="transcript" aria-label="SQL output">
+        <article class="welcome-panel">
+          <strong>Run your first query</strong>
+          <span>Choose an example or enter SQL below. Everything executes locally in the Web Worker.</span>
+          <div class="welcome-actions" aria-label="Quick start examples">
+            <button type="button" data-example="hybrid" disabled>Run Hybrid Search</button>
+            <button type="button" data-example="fork" disabled>Run Fork Table</button>
+          </div>
+        </article>
+      </section>
     <form id="query-form" class="composer">
       <label for="sql" class="prompt" id="prompt">seekdb&gt;</label>
       <textarea id="sql" rows="1" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="SQL statement" placeholder="loading…" disabled></textarea>

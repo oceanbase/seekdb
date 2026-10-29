@@ -52,6 +52,7 @@ body {
   flex-direction: column;
 }
 button,
+select,
 textarea {
   font: inherit;
 }
@@ -77,7 +78,27 @@ button:active:not(:disabled) {
 button:disabled {
   opacity: 0.45;
 }
+select {
+  min-height: 30px;
+  border: 1px solid var(--control-line);
+  border-radius: 0;
+  padding: 4px 8px;
+  background: var(--surface);
+  color: inherit;
+  font-size: 12px;
+  line-height: 20px;
+}
+select:not(:disabled) {
+  cursor: pointer;
+}
+select:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+select:disabled {
+  opacity: 0.45;
+}
 button:focus-visible,
+select:focus-visible,
 a:focus-visible,
 .result-table:focus-visible {
   outline: 2px solid var(--accent);
@@ -180,6 +201,9 @@ code {
 .toolbar-actions {
   gap: 4px;
 }
+.storage-control {
+  display: inline-flex;
+}
 .status-dot[data-state="loading"],
 .status-dot[data-state="running"] {
   animation: pulse 1.2s ease-in-out infinite;
@@ -236,6 +260,101 @@ code {
   text-align: left;
   padding: 8px 10px 8px 26px;
 }
+.runtime-status {
+  min-height: 62px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 9px 20px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(90deg, rgb(46 147 255 / 9%), rgb(127 99 255 / 5%));
+}
+.runtime-copy {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+.runtime-copy strong {
+  color: var(--text);
+  font: 700 12px/18px var(--sans);
+}
+.runtime-copy span {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.startup-steps {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 11px;
+}
+.startup-steps li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.startup-steps li + li::before {
+  content: "";
+  width: 18px;
+  height: 1px;
+  margin-left: -18px;
+  background: var(--control-line);
+  transform: translateX(-6px);
+}
+.startup-steps li > span {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--control-line);
+  color: var(--muted);
+}
+.startup-steps li[data-state="active"] {
+  color: var(--accent);
+}
+.startup-steps li[data-state="active"] > span {
+  border-color: var(--accent);
+  color: var(--text);
+  box-shadow: 0 0 10px rgb(46 147 255 / 30%);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.startup-steps li[data-state="complete"] {
+  color: var(--output);
+}
+.startup-steps li[data-state="complete"] > span {
+  border-color: var(--accent-blue);
+  background: rgb(46 147 255 / 16%);
+  color: var(--text);
+}
+.runtime-status[data-state="error"] {
+  background: rgb(255 138 154 / 7%);
+}
+.runtime-status[data-state="error"] .runtime-copy strong {
+  color: var(--error);
+}
+.session-notice {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+}
+.session-notice strong {
+  flex: none;
+  color: var(--warning);
+}
 .terminal-scroll {
   flex: 1;
   min-height: 0;
@@ -247,6 +366,29 @@ code {
 }
 .transcript {
   min-width: 0;
+}
+.welcome-panel {
+  display: grid;
+  gap: 5px;
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  background: rgb(162 193 255 / 3%);
+  color: var(--muted);
+}
+.welcome-panel > strong {
+  color: var(--text);
+  font: 700 13px/20px var(--sans);
+}
+.welcome-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 5px;
+}
+.welcome-actions button:first-child {
+  border-color: var(--accent-blue);
+  background: rgb(46 147 255 / 10%);
 }
 .entry {
   margin: 0 0 12px;
@@ -365,13 +507,16 @@ textarea::placeholder {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .status-dot {
+  .status-dot,
+  .startup-steps li[data-state="active"] > span {
     animation: none !important;
   }
 }
 @media (max-width: 880px) {
   .masthead,
   .toolbar,
+  .runtime-status,
+  .session-notice,
   .terminal-scroll,
   .terminal-footer {
     padding-inline: 16px;
@@ -395,6 +540,24 @@ textarea::placeholder {
   .toolbar-actions {
     margin-left: auto;
     flex-wrap: wrap;
+  }
+  .runtime-status {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .startup-steps {
+    width: 100%;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .startup-steps li + li::before {
+    display: none;
+  }
+  .session-notice {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0;
   }
   .storage-badge {
     display: none;

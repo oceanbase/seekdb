@@ -21,7 +21,8 @@ python3 tools/wasm/serve-shell.py \
 Open [the shell](http://127.0.0.1:8767/shell.html).
 The first load downloads the engine and initializes a database in the browser.
 The version badge shows the build version before the engine starts.
-Examples run only when selected from the **Examples** menu.
+The startup panel shows engine loading, SQL-session setup, and readiness.
+Examples run only when selected from the **Examples** menu or the welcome panel.
 Keep the server running; press Ctrl+C in its terminal to stop it.
 
 The launcher copies `seekdb_wasm_database.mjs`, `seekdb_wasm_database.wasm`, and
@@ -37,7 +38,7 @@ do not start with this shell.
 ## Use the shell
 
 The database starts automatically. Once it is ready, choose **Hybrid Search** or
-**Fork Table** from **Examples** to run its SQL immediately, or enter SQL in
+**Fork Table** from **Examples** or the welcome panel to run its SQL immediately, or enter SQL in
 the prompt. Hybrid Search combines full-text matching, a category filter, and
 vector distance. Fork Table creates a copy and shows that changes to either table
 do not affect the other. Each example recreates its own demo tables in `playground`
@@ -74,7 +75,8 @@ discard the input.
 
 Set a custom delimiter on its own line with an empty input buffer. It must be
 nonempty and contain no whitespace or backslashes. The delimiter is removed
-before SQL reaches the engine. New Instance restores the default `;` delimiter.
+before SQL reaches the engine. Resetting the database or switching storage mode
+restores the default `;` delimiter.
 
 Interactive statements run in order and continue after SQL errors. Examples
 stop at the first error. Results display up to 500 rows and 100 columns as ASCII
@@ -106,31 +108,40 @@ whether its data survives depends on the storage mode below.
 The shell opens the `test` database by default, creating it if it is missing.
 
 The shell remembers the last successfully opened storage mode for this origin.
-Reloading or reopening the page restores that mode. OPFS reopens its existing
-database; Memory starts empty. If no mode has been saved, the shell checks for
-an existing OPFS database and reopens it, or starts in Memory when none exists.
-OPFS can be selected when the browser supports both OPFS and Web Locks.
-Choose **Memory** or **OPFS** from **New Instance** to clear terminal output,
-terminate the current engine's Worker, discard its data, and start an empty
-database in that mode. This action does not wait for native graceful shutdown.
-SQL input stays disabled until the new instance is ready.
-Selecting the current mode also creates a new instance. Creating an OPFS instance
-clears any previously stored database; leaving a running OPFS instance for Memory
-also clears its stored data. If clearing fails, startup stops and shows the error.
+Reloading or reopening the page restores that mode. A URL with
+`?storage=memory` or `?storage=opfs` overrides the saved choice. OPFS reopens its
+existing database; Memory starts empty. If no mode has been saved, the shell
+checks for an existing OPFS database and reopens it, or starts in Memory when
+none exists. OPFS requires both OPFS and Web Locks support in the browser.
+
+Use the storage selector to choose **Temporary (Memory)** or **Persistent
+(OPFS)**. After confirmation, switching waits for the current database to close
+normally and reloads the page with the selected mode. Switching to Memory keeps
+the stored OPFS database, and switching back reopens it. Terminal output,
+command history, and in-memory data are cleared by the reload. SQL input stays
+disabled until the new instance is ready.
+
+**New Memory Instance** discards the current temporary database and starts an
+empty one. In OPFS mode, **Reset Local Database** deletes only the engine's
+`seekdb` directory and starts an empty persistent database; unrelated files in
+the origin's private storage are preserved. Both actions require confirmation.
+Resetting terminates the old Worker without waiting for native graceful shutdown.
+If cleanup fails, startup stops and shows the error.
 
 | Item | Effect |
 | --- | --- |
 | Memory | The data directory lives in Wasm memory; it is gone when the database is closed or the page is reloaded |
-| OPFS | The data directory lives in the origin private file system (OPFS); committed data survives reloads and browser restarts until New Instance clears it |
+| OPFS | The data directory lives in the origin private file system (OPFS); committed data survives reloads and browser restarts until Reset Local Database clears it |
 
 The badge next to the database name shows `memory://` or `opfs://`.
-Reloading never clears OPFS files. **New Instance** explicitly starts empty.
+Reloading and switching storage modes never clear OPFS files. Only
+**Reset Local Database** explicitly clears the stored database.
 Storage preferences and OPFS files belong to the page's origin, including its
 protocol, hostname, and port. Another origin has separate data.
-One tab at a time may open the stored database: a second tab is told so and can
-switch to memory, and a page outside this shell that still holds the files is
-reported as locking them, to be closed before reloading the page. Browsers
-without OPFS or Web Locks can use Memory only.
+One tab at a time may open the stored database. A second tab shows the conflict
+and disables **Reset Local Database** so it cannot delete a database in use;
+it can still switch to Memory. Close the other OPFS tab before reloading to
+reconnect. Browsers without OPFS or Web Locks can use Memory only.
 
 ## Build from source
 
@@ -236,10 +247,11 @@ The shell uses this option while the Worker drains undisplayed rows.
 
 The shell supplies both `moduleURL` and `wasmURL` to `Database.open()`. This keeps
 one compiled `WebAssembly.Module` in the page, keyed by both URLs, for later
-instances. New Instance still creates fresh memory, Workers, and an engine after
-discarding the previous one and clearing its data. Reloading the page clears this
-in-page reference; release HTTP caching applies independently. API callers that
-omit `wasmURL` retain the generated loader's default behavior.
+instances. The reset button creates fresh memory, Workers, and an engine after
+discarding the previous instance and clearing its data. Switching storage modes
+waits for native shutdown and reloads the page, which clears this in-page
+reference; release HTTP caching applies independently. API callers that omit
+`wasmURL` retain the generated loader's default behavior.
 
 The engine runs on Emscripten WasmFS. `Database.open({storage: 'memory'})`, the
 JavaScript API default, keeps the data directory in the WasmFS memory backend, so it is gone
@@ -257,13 +269,19 @@ service is required.
 `Database.discard()` rejects pending requests and asks the browser to terminate
 the runtime Worker and its nested pthread Workers. For OPFS, it holds the Web Lock while a separate
 cleanup Worker waits for file handles to be released and removes the stored
-files. New Instance uses this destructive operation because its data is being
+files. The reset button uses this destructive operation because its data is being
 discarded. Cleanup errors prevent a replacement instance from starting and can
-be retried through New Instance. A successful discard is not a native graceful
+be retried through the reset button. A successful discard is not a native graceful
 shutdown or an `onExit(0)` acknowledgement, and the browser does not provide a
 Worker termination completion event. The cleanup Worker's 15-second limit
 applies to retries for locked files, not to browser suspension or the total
 duration of storage operations.
+
+The UI emits `seekdb-shell:engine-ready` and
+`seekdb-shell:first-query-success` browser events with duration, engine version,
+and storage-mode metadata, without SQL text. An embedding page may provide
+`gtag` or `_hmt` analytics hooks. The standalone shell does not load an external
+analytics script.
 
 The Wasm build splits positive and `INFINITY` Emscripten futex waits into waits
 of at most one second, calling an empty JavaScript import after each timeout. Safari 27.0

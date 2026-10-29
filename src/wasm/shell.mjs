@@ -18,21 +18,39 @@ import {EXAMPLES} from './shell-examples.mjs';
 import {TableFormatter, VerticalFormatter} from './shell-format.mjs';
 import {ENGINE_VERSION} from './engine-version.mjs';
 
+const engineURL = name => new URL(`./${name}`, import.meta.url);
+const MODULE_URL = engineURL('seekdb_wasm_database.mjs');
+const WASM_URL = engineURL('seekdb_wasm_database.wasm');
+const engineCompilation = globalThis.crossOriginIsolated ? compileEngine() : undefined;
+engineCompilation?.catch(() => {});
+
+async function compileEngine() {
+  const response = await fetch(WASM_URL);
+  if (!response.ok) throw new Error(`Could not load WebAssembly: HTTP ${response.status}`);
+  const streaming = typeof WebAssembly.compileStreaming === 'function'
+    && response.headers.get('Content-Type')?.split(';', 1)[0].trim() === 'application/wasm';
+  return streaming ? WebAssembly.compileStreaming(response) : WebAssembly.compile(await response.arrayBuffer());
+}
+
 const MAX_RESULT_CHARACTERS = 100000;
 const MAX_TRANSCRIPT_CHARACTERS = 1000000;
 const STORAGE_KEY = 'seekdb-shell-storage-mode';
-const MODULE_URL = new URL('./seekdb_wasm_database.mjs', import.meta.url);
-const WASM_URL = new URL('./seekdb_wasm_database.wasm', import.meta.url);
-const engineCompilation = globalThis.crossOriginIsolated ? compileEngine() : undefined;
-engineCompilation?.catch(() => {});
 const QUERY_PREVIEW = {maxRows: 500, maxColumns: 100, maxCells: 20000, maxCellBytes: 480, maxBytes: 400000};
+const STARTUP_STAGES = ['engine', 'session', 'ready'];
+const ANALYTICS_CAMPAIGN = 'web_shell_launch';
+const ATTRIBUTION_PARAMETERS = ['utm_source', 'utm_medium', 'utm_campaign'];
+const locationParameters = new URLSearchParams(location.search);
+const launchAttribution = Object.fromEntries(ATTRIBUTION_PARAMETERS.flatMap(name => {
+  const value = locationParameters.get(name)?.trim().slice(0, 100);
+  return value ? [[name, value]] : [];
+}));
 const element = id => document.getElementById(id);
 const input = element('sql');
 const transcript = element('transcript');
 const outputLengths = new WeakMap();
 let transcriptCharacters = 0;
 const terminalScroll = element('terminal-scroll');
-const exampleButtons = element('example-menu').querySelectorAll('button');
+const exampleButtons = document.querySelectorAll('[data-example]');
 const menus = document.querySelectorAll('.menu');
 const versionLabel = element('version-label');
 versionLabel.textContent = ENGINE_VERSION;
@@ -40,6 +58,7 @@ const decoder = new TextDecoder();
 const history = new CommandHistory();
 const decode = value => value === null ? null : decoder.decode(value);
 let database;
+let Database;
 let session;
 let SqlError;
 let state = 'loading';
@@ -50,10 +69,9 @@ let operationStarted;
 let activityTimer;
 let followOutput = true;
 let activeEntry;
-const persistentSupported = typeof navigator.storage?.getDirectory === 'function' && typeof navigator.locks?.request === 'function';
+// Reset Local Database removes only the engine's seekdb directory in OPFS.
+// Resolve explicit URLs, saved choices and legacy OPFS data before opening.
 let storage = 'memory';
-let pendingStorage;
-let persistentClearPending = false;
 let inputBuffer = '';
 let inputEntry;
 let delimiter = ';';
@@ -64,6 +82,10 @@ let cancellation;
 let cancelRequested = false;
 let cancelPending = false;
 let terminalPointerActive = false;
+let databaseOpened = false;
+let readyTracked = false;
+let firstQuerySucceeded = false;
+let resetBlocked = false;
 
 function node(tag, className, text) {
   const result = document.createElement(tag);
@@ -83,14 +105,76 @@ function elapsed(start) {
   return `${((performance.now() - start) / 1000).toFixed(3)} s`;
 }
 
+function setStartupStage(stage, title, {complete = false} = {}) {
+  const status = element('runtime-status');
+  status.dataset.stage = stage;
+  element('status-stage').textContent = title;
+  const current = STARTUP_STAGES.indexOf(stage);
+  for (const step of status.querySelectorAll('[data-startup-step]')) {
+    const index = STARTUP_STAGES.indexOf(step.dataset.startupStep);
+    if (current < 0 || index > current) delete step.dataset.state;
+    else step.dataset.state = index < current || complete ? 'complete' : 'active';
+  }
+}
+
+function trackEvent(eventName, parameters = {}) {
+  const payload = {campaign: ANALYTICS_CAMPAIGN, ...launchAttribution, ...parameters};
+  const customName = eventName.replace(/^shell_/u, '').replaceAll('_', '-');
+  window.dispatchEvent(new CustomEvent(`seekdb-shell:${customName}`, {detail: payload}));
+  try {
+    if (typeof window.gtag === 'function') window.gtag('event', eventName, payload);
+    else {
+      window.dataLayer ??= [];
+      window.dataLayer.push(['event', eventName, payload]);
+    }
+    window._hmt?.push(['_trackEvent', 'seekdb_shell', eventName, String(parameters.source ?? '')]);
+  } catch (error) {
+    console.warn('Could not publish analytics event', error);
+  }
+}
+
+function trackFirstQuerySuccess(source, started) {
+  if (firstQuerySucceeded) return;
+  firstQuerySucceeded = true;
+  trackEvent('shell_first_query_success', {
+    source,
+    duration_ms: Math.round(performance.now() - started),
+    engine_version: versionLabel.textContent || ENGINE_VERSION,
+    storage,
+  });
+}
+
+function persistentStorage() {
+  return storage === 'opfs';
+}
+
+function resetActionLabel() {
+  return persistentStorage() ? 'Reset Local Database' : 'New Memory Instance';
+}
+
+function readyStorageMessage() {
+  return persistentStorage()
+    ? 'Ready · root · database saved in this browser'
+    : 'Ready · root · temporary in-memory database';
+}
+
 function setState(next, message) {
   state = next;
   const starting = ['loading', 'closing'].includes(next);
+  element('runtime-status').dataset.state = next;
+  if (next === 'running') element('status-stage').textContent = 'Running query';
+  else if (next === 'closing') element('status-stage').textContent = 'Resetting session';
+  else if (next === 'ready') element('status-stage').textContent = 'Ready';
+  else if (next === 'error') element('status-stage').textContent = 'Startup failed';
   element('status-dot').dataset.state = starting ? 'loading' : next;
   element('status-text').textContent = message;
   input.disabled = !['ready', 'running'].includes(next);
   input.readOnly = next === 'running';
-  input.placeholder = starting ? 'loading…' : next === 'closed' || next === 'error' ? 'Choose New Instance to start a database' : '';
+  input.placeholder = starting
+    ? 'loading…'
+    : next === 'closed' || next === 'error'
+      ? resetBlocked ? 'Close the other tab or window, then refresh' : `Use ${resetActionLabel()} to start over`
+      : '';
   for (const button of exampleButtons) button.disabled = next !== 'ready';
   element('database-name').textContent = database && !starting ? `seekdb [${currentDatabase ?? '(none)'}]` : 'seekdb';
   updatePrompt();
@@ -213,7 +297,7 @@ function updateContext(sql, event) {
   updatePrompt();
 }
 
-async function executeStatement(sql, signal, {entry = commandOutput(sql), vertical = false} = {}) {
+async function executeStatement(sql, signal, {entry = commandOutput(sql), vertical = false, source = 'editor'} = {}) {
   activeEntry = entry;
   activeQuery = {connectionId};
   const started = performance.now();
@@ -290,6 +374,7 @@ async function executeStatement(sql, signal, {entry = commandOutput(sql), vertic
         summary.append(node('span', '', `${count}${warnings}`), node('span', 'timing', `(${elapsed(started).replace(' s', ' sec')})`));
         entry.append(summary);
         updateOutput(entry);
+        trackFirstQuerySuccess(source, started);
         body = undefined;
         scrollOutput();
       }
@@ -339,7 +424,7 @@ async function reconnectSession() {
   await updateVersion();
 }
 
-async function submit(sql = input.value) {
+async function submit(sql = input.value, {source = 'editor'} = {}) {
   if (state !== 'ready' || !sql.trim()) return;
   const command = sql.trim().replace(/;$/, '').toLowerCase();
   if (command === '\\clear') { clearOutput(); setInput(''); return; }
@@ -363,7 +448,7 @@ async function submit(sql = input.value) {
       signal.throwIfAborted();
       const next = takeStatement(remaining, sqlOptions);
       if (!next) break;
-      await executeStatement(next.statement, signal);
+      await executeStatement(next.statement, signal, {source});
       statements++;
       remaining = next.rest;
     }
@@ -378,7 +463,7 @@ async function submit(sql = input.value) {
         await database?.close().catch(() => {});
         database = undefined;
         session = undefined;
-        notice(`The database stopped: ${reconnectError.message}\nChoose New Instance to start again.`, true);
+        notice(`The database stopped: ${reconnectError.message}\nUse ${resetActionLabel()} to start again.`, true);
       }
     }
   } finally {
@@ -462,7 +547,7 @@ async function submitLine() {
         await database?.close().catch(() => {});
         database = undefined;
         session = undefined;
-        notice(`The database stopped: ${reconnectError.message}\nChoose New Instance to start again.`, true);
+        notice(`The database stopped: ${reconnectError.message}\nUse ${resetActionLabel()} to start again.`, true);
       }
     }
   } finally {
@@ -471,7 +556,7 @@ async function submitLine() {
     if (cancelRequested) resetInputBuffer();
     controller = undefined;
     acceptingInput = false;
-    setState(database ? 'ready' : 'error', database ? 'Ready · root · SQL runs locally in a Web Worker' : 'Database unavailable');
+    setState(database ? 'ready' : 'error', database ? readyStorageMessage() : 'Database unavailable');
     input.focus();
   }
 }
@@ -511,34 +596,72 @@ async function updateVersion() {
   }
 }
 
-async function compileEngine() {
-  const response = await fetch(WASM_URL);
-  if (!response.ok) throw new Error(`Could not load WebAssembly: HTTP ${response.status}`);
-  const streaming = typeof WebAssembly.compileStreaming === 'function'
-    && response.headers.get('Content-Type')?.split(';', 1)[0].trim() === 'application/wasm';
-  return streaming ? WebAssembly.compileStreaming(response) : WebAssembly.compile(await response.arrayBuffer());
+async function initialStorage() {
+  const requested = locationParameters.get('storage');
+  if (requested === 'memory' || requested === 'opfs') return requested;
+  let saved;
+  try { saved = localStorage.getItem(STORAGE_KEY); } catch {}
+  if (saved === 'memory' || saved === 'opfs') return saved;
+  if (typeof navigator.storage?.getDirectory !== 'function') return 'memory';
+  try {
+    // Preserve databases created before the shell remembered a storage choice.
+    const root = await navigator.storage.getDirectory();
+    const data = await root.getDirectoryHandle('seekdb');
+    const store = await data.getDirectoryHandle('store');
+    const local = await store.getDirectoryHandle('local');
+    await local.getFileHandle('data');
+    return 'opfs';
+  } catch (error) {
+    if (error.name === 'NotFoundError') return 'memory';
+    throw error;
+  }
 }
 
 async function openDatabase() {
   const started = performance.now();
-  setState('loading', 'Loading WebAssembly and starting seekdb. The first start can take a few seconds…');
+  const firstStart = !databaseOpened;
+  resetBlocked = false;
+  setStartupStage('engine', 'Loading engine');
+  setState('loading', firstStart
+    ? 'Loading, compiling, and starting the seekdb WebAssembly engine (~57 MB uncompressed)…'
+    : persistentStorage()
+      ? 'Starting the browser-persistent seekdb database…'
+      : 'Starting a fresh in-memory seekdb database…');
   try {
     if (!globalThis.isSecureContext || !globalThis.crossOriginIsolated || typeof SharedArrayBuffer === 'undefined') {
       throw new Error('WebAssembly threads require a secure context with cross-origin isolation. Use tools/wasm/serve-shell.py on localhost, or serve over HTTPS with COOP: same-origin and COEP: require-corp.');
     }
+    if (firstStart) {
+      storage = await initialStorage();
+      updateStorage();
+    }
     const module = await import('./database.mjs');
+    Database = module.Database;
     SqlError = module.SqlError;
-    database = await module.Database.open({moduleURL: MODULE_URL, wasmURL: WASM_URL, storage, compiledModule: engineCompilation});
+    database = await Database.open({moduleURL: MODULE_URL, wasmURL: WASM_URL, storage, compiledModule: engineCompilation});
     const connectStarted = performance.now();
-    setState('loading', 'Connecting to seekdb…');
+    setStartupStage('session', 'Opening SQL session');
+    setState('loading', persistentStorage()
+      ? 'Opening the database stored in this browser and starting a local SQL session…'
+      : 'Creating a temporary in-memory database and starting a local SQL session…');
     currentDatabase = 'test';
     session = await connectDefaultSession();
     const versionStarted = performance.now();
     await updateVersion();
     const versionFinished = performance.now();
     sqlOptions = {};
+    databaseOpened = true;
     try { localStorage.setItem(STORAGE_KEY, storage); } catch {}
-    setState('ready', storage === 'opfs' ? 'Ready · root · data is kept in this browser' : 'Ready · root · SQL runs locally in a Web Worker');
+    setStartupStage('ready', 'Ready', {complete: true});
+    setState('ready', readyStorageMessage());
+    if (!readyTracked) {
+      readyTracked = true;
+      trackEvent('shell_engine_ready', {
+        startup_ms: Math.round(performance.now() - started),
+        engine_version: versionLabel.textContent || ENGINE_VERSION,
+        storage,
+      });
+    }
     input.focus();
     performance.measure('seekdb-shell-startup', {
       start: started,
@@ -552,10 +675,14 @@ async function openDatabase() {
     await database?.close().catch(() => {});
     database = undefined;
     session = undefined;
-    const hint = storage !== 'opfs' ? 'Check that the compiled .mjs and .wasm files are available, then choose New Instance.'
-      : /another tab/.test(error.message) ? 'Close it there first and reload this page, or choose Memory from New Instance.'
-      : /locked/.test(error.message) ? 'Another page may still be using the stored database. Close it there, then reload this page.'
-      : 'Reload to reopen the stored database. Choose New Instance only to clear its data and start over.';
+    const lockConflict = error.message === 'The persistent database is already open in another tab or window';
+    resetBlocked = lockConflict;
+    setStartupStage('error', 'Startup failed');
+    const hint = lockConflict
+      ? 'Close the other seekdb Shell tab or window, then refresh this page. Your stored database has not been changed.'
+      : persistentStorage()
+        ? 'Check that the compiled .mjs and .wasm files are available, then refresh. You can choose Temporary (Memory) to continue without changing stored data. Only use Reset Local Database to recover corrupted browser storage; it deletes stored data.'
+        : 'Check that the compiled .mjs and .wasm files are available, then refresh or use New Memory Instance.';
     notice(`Could not start seekdb: ${error.message}\n${hint}`, true);
     setState('error', 'Startup failed');
     return false;
@@ -563,71 +690,96 @@ async function openDatabase() {
 }
 
 function updateStorage() {
-  const persistent = (pendingStorage ?? storage) === 'opfs';
   const busy = ['loading', 'running', 'closing'].includes(state);
+  const persistent = persistentStorage();
+  const storageMode = element('storage-mode');
+  const resetButton = element('reset-button');
+  storageMode.value = storage;
+  storageMode.disabled = busy;
   element('storage-badge').textContent = persistent ? 'opfs://' : 'memory://';
-  element('memory-button').disabled = busy;
-  element('opfs-button').disabled = busy || !persistentSupported;
-}
-
-async function initialStorage() {
-  let saved;
-  try { saved = localStorage.getItem(STORAGE_KEY); } catch {}
-  if (saved === 'opfs' && !persistentSupported) throw new Error('Reopening OPFS requires OPFS and Web Locks support in this browser.');
-  if (saved === 'memory' || saved === 'opfs') return saved;
-  if (!persistentSupported) return 'memory';
-  try {
-    const root = await navigator.storage.getDirectory();
-    // OPFS_DIRECTORY in runtime-host.mjs; the shell loads that module only when it starts the engine.
-    const data = await root.getDirectoryHandle('seekdb');
-    const store = await data.getDirectoryHandle('store');
-    // The server's local store (ObServer::init_config) keeps its committed pages here.
-    const local = await store.getDirectoryHandle('local');
-    await local.getFileHandle('data');
-    return 'opfs';
-  } catch (error) {
-    if (error.name === 'NotFoundError') return 'memory';
-    throw error;
-  }
+  element('storage-badge').title = persistent
+    ? 'Origin Private File System; database data survives refresh in this browser'
+    : 'Temporary browser memory; refreshing or closing this tab clears all database data';
+  element('storage-notice-title').textContent = persistent ? 'Saved in this browser.' : 'Temporary memory session.';
+  element('storage-notice-text').textContent = persistent
+    ? 'Database data survives refresh. Output and command history do not; Reset Local Database deletes the stored database.'
+    : 'Refresh or tab close clears this temporary database; your saved OPFS database is not affected. Switching resets output and command history.';
+  resetButton.textContent = resetActionLabel();
+  resetButton.disabled = busy || (persistent && resetBlocked);
+  resetButton.title = persistent && resetBlocked
+    ? 'Close the other seekdb Shell tab or window, then refresh this page'
+    : persistent
+      ? 'Delete the database stored in this browser and start over'
+      : 'Discard the temporary database and start a new in-memory instance';
 }
 
 function closeMenus() {
   for (const menu of menus) menu.open = false;
 }
 
-async function createInstance(mode) {
+async function switchStorage(nextStorage) {
+  const storageMode = element('storage-mode');
+  if (!['opfs', 'memory'].includes(nextStorage) || nextStorage === storage) return;
+  if (['loading', 'running', 'closing'].includes(state)) {
+    storageMode.value = storage;
+    return;
+  }
+  const confirmed = window.confirm(persistentStorage()
+    ? 'Switch to Temporary (Memory)?\n\nYour persistent database will be kept and will be available when you switch back. Data created in memory is cleared by a refresh or when this tab closes.'
+    : 'Switch to Persistent (OPFS)?\n\nThe current in-memory database will be discarded. Your previously stored persistent database, if any, will be opened.');
+  if (!confirmed) {
+    storageMode.value = storage;
+    return;
+  }
+  closeMenus();
+  setState('closing', 'Switching storage mode…');
+  const previousDatabase = database;
+  database = undefined;
+  session = undefined;
+  try {
+    await previousDatabase?.close();
+    const url = new URL(location.href);
+    url.searchParams.set('storage', nextStorage);
+    trackEvent('shell_storage_mode_change', {from: storage, to: nextStorage});
+    location.replace(url.href);
+  } catch (error) {
+    storageMode.value = storage;
+    notice(`Could not switch storage mode: ${error.message}`, true);
+    setState('error', 'Could not switch storage mode · refresh to reconnect');
+  }
+}
+
+async function resetDatabase() {
+  if (persistentStorage() && resetBlocked) return;
+  const persistent = persistentStorage();
+  const confirmed = window.confirm(persistent
+    ? `Reset the local seekdb database?\n\nThis permanently deletes the database in this site's seekdb storage directory (${location.origin}). Other site files are kept.`
+    : 'Start a new in-memory database?\n\nThis permanently deletes the current temporary database.');
+  if (!confirmed) return;
   closeMenus();
   if (['loading', 'running', 'closing'].includes(state)) return;
-  pendingStorage = mode;
   resetInputBuffer();
   delimiter = ';';
-  persistentClearPending ||= Boolean(database && storage === 'opfs');
   replaceOutput();
   followOutput = true;
   setInput('');
   try {
-    let clearedPersistent = false;
     if (database) {
       setState('closing', 'Discarding the previous database…');
       session = undefined;
       await database.discard();
       database = undefined;
-      clearedPersistent = storage === 'opfs';
-      if (clearedPersistent) persistentClearPending = false;
-    }
-    setState('loading', 'Clearing data and creating a new instance…');
-    if ((mode === 'opfs' || persistentClearPending) && !clearedPersistent) {
-      const {Database} = await import('./database.mjs');
+    } else if (Database && persistent) {
+      setState('closing', 'Clearing the stored database…');
       await Database.clearPersistentStorage();
-      persistentClearPending = false;
     }
-    storage = mode;
+    setStartupStage('engine', 'Loading engine');
+    setState('loading', persistent ? 'Creating a new persistent database…' : 'Creating a new in-memory database…');
     await openDatabase();
   } catch (error) {
-    notice(`Could not clear the stored database: ${error.message}\nClose any other page using this database, then try New Instance again.`, true);
-    setState('error', 'Could not create a new instance');
+    notice(`Could not start a new database: ${error.message}\nTry ${resetActionLabel()} again.`, true);
+    setState('error', 'Could not start a new database');
   } finally {
-    pendingStorage = undefined;
     updateStorage();
   }
 }
@@ -690,22 +842,20 @@ element('query-form').addEventListener('submit', event => { event.preventDefault
 for (const button of exampleButtons) {
   button.addEventListener('click', () => {
     closeMenus();
-    void submit(EXAMPLES[button.dataset.example]);
+    void submit(EXAMPLES[button.dataset.example], {source: `example_${button.dataset.example}`});
   });
 }
 element('clear-button').addEventListener('click', clearOutput);
-element('memory-button').addEventListener('click', () => void createInstance('memory'));
-element('opfs-button').addEventListener('click', () => void createInstance('opfs'));
+element('storage-mode').addEventListener('change', event => { void switchStorage(event.target.value); });
+element('reset-button').addEventListener('click', () => void resetDatabase());
 document.addEventListener('click', event => {
   for (const menu of menus) if (!menu.contains(event.target)) menu.open = false;
 });
 window.addEventListener('pagehide', () => { void database?.close().catch(() => {}); });
+window.addEventListener('pageshow', event => {
+  // pagehide closes the native runtime. A page restored from the back-forward
+  // cache must reload so its JavaScript state reconnects to the OPFS database.
+  if (event.persisted) location.reload();
+});
 
-setState('loading', 'Checking for a stored database…');
-try {
-  storage = await initialStorage();
-  await openDatabase();
-} catch (error) {
-  notice(`Could not inspect stored data: ${error.message}\nReload to retry, or choose Memory from New Instance.`, true);
-  setState('error', 'Could not inspect stored data');
-}
+await openDatabase();
