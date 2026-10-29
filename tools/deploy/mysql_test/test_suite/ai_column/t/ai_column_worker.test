@@ -1,0 +1,205 @@
+# AI worker request, typed prompt, grouped visibility, retry, and stale-result coverage.
+
+connection default;
+--exec python3 mysql_test/test_suite/ai_column/include/ai_column_mock.py start 19122
+--disable_warnings
+drop database if exists ai_column_p0_worker;
+--enable_warnings
+create database ai_column_p0_worker;
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('p0_worker_complete_ep');
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('p0_worker_fail_ep');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('p0_worker_complete');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('p0_worker_fail');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('p0_worker_complete',
+  '{"type":"completion","model_name":"mock-complete"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('p0_worker_fail',
+  '{"type":"completion","model_name":"mock-fail"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('p0_worker_complete_ep',
+  '{"ai_model_name":"p0_worker_complete","url":"http://127.0.0.1:19122/v1/chat/completions","access_key":"p0-worker-key","provider":"openai","request_model_name":"mock-complete"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('p0_worker_fail_ep',
+  '{"ai_model_name":"p0_worker_fail","url":"http://127.0.0.1:19122/v1/always-fail/completions","access_key":"p0-worker-key","provider":"openai","request_model_name":"mock-fail"}');
+
+drop table if exists ai_column_p0_worker.docs;
+create table ai_column_p0_worker.docs(
+  id bigint primary key,
+  content varchar(200),
+  tags json AI COLUMN (
+    AI_COMPLETE('p0_worker_complete', concat('Classify: ', content))
+  ) WITH (sync_mode='async', max_retries=2),
+  score bigint AI COLUMN (
+    AI_COMPLETE('p0_worker_complete', concat('Score: ', content))
+  ) WITH (sync_mode='async', max_retries=2)
+);
+
+start transaction;
+insert into ai_column_p0_worker.docs(id, content) values(1, 'typed-prompts');
+select tags is null and score is null as group_starts_hidden
+from ai_column_p0_worker.docs where id = 1;
+select count(*) = 2 and count(distinct task.request_id) = 1
+       as one_request_group_for_two_columns
+from oceanbase.__all_ai_column_task task
+join oceanbase.__all_table t on t.table_id = task.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_worker' and t.table_name = 'docs';
+commit;
+
+let $retry = 150;
+let $visible = 0;
+let $partial = 0;
+while ($retry)
+{
+  let $visible = `select ifnull((tags is not null) + (score is not null), 0)
+                  from ai_column_p0_worker.docs where id = 1`;
+  if ($visible == 1)
+  {
+    let $partial = 1;
+    let $retry = 0;
+  }
+  if ($visible == 2)
+  {
+    let $retry = 0;
+  }
+  if ($visible == 0)
+  {
+    --real_sleep 0.1
+    dec $retry;
+  }
+}
+eval select $partial = 0 as no_partial_visibility;
+select tags is not null and score = 7 as grouped_results_visible
+from ai_column_p0_worker.docs where id = 1;
+select count(*) = 0 as grouped_tasks_removed
+from oceanbase.__all_ai_column_task task
+join oceanbase.__all_table t on t.table_id = task.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_worker' and t.table_name = 'docs';
+--exec python3 mysql_test/test_suite/ai_column/include/ai_column_mock.py assert 19122 typed-prompts
+
+drop table if exists ai_column_p0_worker.retry_docs;
+create table ai_column_p0_worker.retry_docs(
+  id bigint primary key,
+  content varchar(200),
+  result varchar(400) AI COLUMN (
+    AI_COMPLETE('p0_worker_complete', content)
+  ) WITH (sync_mode='async', max_retries=2)
+);
+insert into ai_column_p0_worker.retry_docs(id, content) values(2, 'retry-once');
+let $retry = 100;
+let $saw_retry = 0;
+while ($retry)
+{
+  let $saw_retry = `select count(*) > 0
+      from oceanbase.__all_ai_column_task task
+      join oceanbase.__all_table t on t.table_id = task.table_id
+      join oceanbase.__all_database d on d.database_id = t.database_id
+      where d.database_name = 'ai_column_p0_worker'
+        and t.table_name = 'retry_docs'
+        and task.state = 3 and task.retry_count = 1`;
+  if ($saw_retry == 1)
+  {
+    let $retry = 0;
+  }
+  if ($saw_retry == 0)
+  {
+    --real_sleep 0.1
+    dec $retry;
+  }
+}
+eval select $saw_retry = 1 as retry_state_committed;
+let $retry = 100;
+let $done = 0;
+while ($retry)
+{
+  let $done = `select ifnull(result = 'mock:retry-once', 0)
+               from ai_column_p0_worker.retry_docs where id = 2`;
+  if ($done == 1)
+  {
+    let $retry = 0;
+  }
+  if ($done == 0)
+  {
+    --real_sleep 0.1
+    dec $retry;
+  }
+}
+eval select $done = 1 as retry_eventually_completes;
+select count(*) = 0 as retry_task_removed
+from oceanbase.__all_ai_column_task task
+join oceanbase.__all_table t on t.table_id = task.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_worker' and t.table_name = 'retry_docs';
+--exec python3 mysql_test/test_suite/ai_column/include/ai_column_mock.py assert 19122 retry-once
+
+drop table if exists ai_column_p0_worker.fail_docs;
+create table ai_column_p0_worker.fail_docs(
+  id bigint primary key,
+  content varchar(200),
+  result varchar(400) AI COLUMN (
+    AI_COMPLETE('p0_worker_fail', content)
+  ) WITH (sync_mode='async', max_retries=0)
+);
+insert into ai_column_p0_worker.fail_docs(id, content) values(3, 'terminal-failure');
+let $retry = 100;
+let $tasks = 1;
+while ($retry)
+{
+  let $tasks = `select count(*)
+      from oceanbase.__all_ai_column_task task
+      join oceanbase.__all_table t on t.table_id = task.table_id
+      join oceanbase.__all_database d on d.database_id = t.database_id
+      where d.database_name = 'ai_column_p0_worker'
+        and t.table_name = 'fail_docs'`;
+  if ($tasks == 0)
+  {
+    let $retry = 0;
+  }
+  if ($tasks != 0)
+  {
+    --real_sleep 0.1
+    dec $retry;
+  }
+}
+select result is null as terminal_failure_keeps_null
+from ai_column_p0_worker.fail_docs where id = 3;
+eval select $tasks = 0 as terminal_failure_removes_task;
+
+--exec python3 mysql_test/test_suite/ai_column/include/ai_column_mock.py reset 19122
+insert into ai_column_p0_worker.docs(id, content) values(4, 'slow-old');
+--real_sleep 0.3
+update ai_column_p0_worker.docs set content = 'fast-new' where id = 4;
+let $retry = 150;
+let $done = 0;
+while ($retry)
+{
+  let $done = `select ifnull(tags is not null and score is not null, 0)
+                from ai_column_p0_worker.docs where id = 4`;
+  if ($done == 1)
+  {
+    let $retry = 0;
+  }
+  if ($done == 0)
+  {
+    --real_sleep 0.1
+    dec $retry;
+  }
+}
+eval select $done = 1 as latest_request_wins;
+--real_sleep 2
+select json_unquote(json_extract(tags, '$.input')) = 'Classify: fast-new'
+       and score = 7 as late_old_result_cannot_overwrite
+from ai_column_p0_worker.docs where id = 4;
+--exec python3 mysql_test/test_suite/ai_column/include/ai_column_mock.py assert 19122 stale-guard
+
+drop table ai_column_p0_worker.fail_docs;
+drop table ai_column_p0_worker.retry_docs;
+drop table ai_column_p0_worker.docs;
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('p0_worker_fail_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('p0_worker_complete_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('p0_worker_fail');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('p0_worker_complete');
+drop database ai_column_p0_worker;
+--exec python3 mysql_test/test_suite/ai_column/include/ai_column_mock.py stop 19122

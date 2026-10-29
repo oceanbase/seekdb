@@ -1,0 +1,132 @@
+drop database if exists ai_column_p0_vector;
+create database ai_column_p0_vector;
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('p0_vector_embed_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('p0_vector_embed');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('p0_vector_embed',
+'{"type":"dense_embedding","model_name":"mock-embed"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('p0_vector_embed_ep',
+'{"ai_model_name":"p0_vector_embed","url":"http://127.0.0.1:19123/v1/embeddings","access_key":"p0-vector-key","provider":"openai","request_model_name":"mock-embed"}');
+drop table if exists ai_column_p0_vector.docs;
+Warnings:
+Note	1051	Unknown table 'ai_column_p0_vector.docs'
+create table ai_column_p0_vector.docs(
+id bigint primary key,
+content varchar(200),
+emb vector(4) AI COLUMN (
+AI_EMBED('p0_vector_embed', content)
+) WITH (sync_mode='async', max_retries=2)
+);
+insert into ai_column_p0_vector.docs(id, content)
+values (1, 'vec-zero'), (2, 'vec-ten'), (3, 'vec-twenty');
+select 1 = 1 as initial_embeddings_ready;
+initial_embeddings_ready
+1
+select id, emb from ai_column_p0_vector.docs order by id;
+id	emb
+1	[0,0,0,0]
+2	[10,0,0,0]
+3	[20,0,0,0]
+create vector index idx_p0_ai_emb on ai_column_p0_vector.docs(emb)
+with(distance=l2, type=hnsw, lib=vsag, m=10,
+ef_construction=12, ef_search=40);
+select id, l2_distance(emb, [0,0,0,0]) as distance
+from ai_column_p0_vector.docs
+order by distance approximate limit 3;
+id	distance
+1	0
+2	10
+3	20
+start transaction;
+update ai_column_p0_vector.docs set content = 'vec-zero' where id = 2;
+select content = 'vec-zero' and emb is null as vector_hidden_during_regeneration
+from ai_column_p0_vector.docs where id = 2;
+vector_hidden_during_regeneration
+1
+select count(*) = 1 as vector_update_task_created
+from oceanbase.__all_ai_column_task task
+join oceanbase.__all_table t on t.table_id = task.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_vector' and t.table_name = 'docs'
+  and task.rowkey_predicate = '`id` = 2';
+vector_update_task_created
+1
+select count(*) = 2 and sum(id = 2) = 0 as old_vector_removed_from_ann
+from (
+select id from ai_column_p0_vector.docs
+order by l2_distance(emb, [0,0,0,0]) approximate limit 3
+) ann;
+old_vector_removed_from_ann
+1
+commit;
+select 1 = 1 as regenerated_vector_ready;
+regenerated_vector_ready
+1
+select count(*) = 0 as vector_task_removed
+from oceanbase.__all_ai_column_task task
+join oceanbase.__all_table t on t.table_id = task.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_vector' and t.table_name = 'docs';
+vector_task_removed
+1
+explain select id from ai_column_p0_vector.docs
+order by l2_distance(emb, [0,0,0,0]) approximate limit 3;
+Query Plan
+================================================================
+|ID|OPERATOR         |NAME               |EST.ROWS|EST.TIME(us)|
+----------------------------------------------------------------
+|0 |VECTOR INDEX SCAN|docs(idx_p0_ai_emb)|4       |15          |
+================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([docs.id]), filter(nil), rowset=16
+      access([docs.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, 
+      range_key([docs.__vid_0], [docs.__type_0_0]), range(MIN,MIN ; MAX,MAX)always true
+select count(*) = 2 and sum(id = 1) = 1 and sum(id = 2) = 1
+as regenerated_vector_visible_to_ann
+from (
+select id from ai_column_p0_vector.docs
+order by l2_distance(emb, [0,0,0,0]) approximate limit 2
+) ann;
+regenerated_vector_visible_to_ann
+1
+mock_embedding=ok
+start transaction;
+update ai_column_p0_vector.docs set content = 'vec-ten' where id = 3;
+select content = 'vec-ten' and emb is null as vector_transaction_sees_invalidation
+from ai_column_p0_vector.docs where id = 3;
+vector_transaction_sees_invalidation
+1
+select count(*) = 1 as vector_transaction_sees_task
+from oceanbase.__all_ai_column_task task
+join oceanbase.__all_table t on t.table_id = task.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_vector' and t.table_name = 'docs'
+  and task.rowkey_predicate = '`id` = 3';
+vector_transaction_sees_task
+1
+rollback;
+select content = 'vec-twenty' and emb = [20,0,0,0]
+as vector_rollback_restores_row
+from ai_column_p0_vector.docs where id = 3;
+vector_rollback_restores_row
+1
+select count(*) = 0 as vector_rollback_removes_task
+from oceanbase.__all_ai_column_task task
+join oceanbase.__all_table t on t.table_id = task.table_id
+join oceanbase.__all_database d on d.database_id = t.database_id
+where d.database_name = 'ai_column_p0_vector' and t.table_name = 'docs';
+vector_rollback_removes_task
+1
+mock_no_requests=ok
+select count(*) = 1 and sum(id = 3) = 1 as rollback_vector_still_visible_to_ann
+from (
+select id from ai_column_p0_vector.docs
+order by l2_distance(emb, [20,0,0,0]) approximate limit 1
+) ann;
+rollback_vector_still_visible_to_ann
+1
+drop table ai_column_p0_vector.docs;
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('p0_vector_embed_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('p0_vector_embed');
+drop database ai_column_p0_vector;

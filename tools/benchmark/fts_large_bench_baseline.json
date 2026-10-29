@@ -1,0 +1,66 @@
+{
+  "name": "fts_large_bench_ci_baseline",
+  "description": "Baseline averaged from five VLDB CI fts_large_bench.sh runs on 2026-07-07.",
+  "source_run_count": 5,
+  "benchmark_config": {
+    "rows": 20000,
+    "batch": 500,
+    "rounds": 3000,
+    "query_rounds": 200,
+    "samples": 3,
+    "warmup": 30,
+    "skip_load": 0
+  },
+  "score_rule": {
+    "formula": "score = clamp(mean_category_improvement, 0, 0.5) / 0.5 * 100",
+    "max_score": 100,
+    "full_score_improvement": 0.5,
+    "lower_is_better": true,
+    "category_weighting": "Each category is averaged first, then build/tokenize/query are averaged with equal weight."
+  },
+  "score_categories": {
+    "build": [
+      "build_ik_all_sec",
+      "build_ik_content_sec",
+      "build_beng_en_sec"
+    ],
+    "tokenize": [
+      "tokenize_ik_avg_ms",
+      "tokenize_beng_avg_ms"
+    ],
+    "query": [
+      "query_cn_avg_ms",
+      "query_beng_avg_ms",
+      "query_mixed_avg_ms",
+      "query_limit_avg_ms"
+    ]
+  },
+  "baseline_metrics": {
+    "select1_avg_ms": 0.21032,
+    "select1_stdev_ms": 0.00752,
+    "raw_load_sec": 1.6126,
+    "raw_load_rows_per_sec": 12485.94,
+    "build_ik_all_sec": 35.2836,
+    "build_ik_content_sec": 28.3764,
+    "build_beng_en_sec": 14.7578,
+    "build_total_sec": 78.434,
+    "tokenize_ik_avg_ms": 0.76478,
+    "tokenize_ik_median_ms": 0.76296,
+    "tokenize_ik_stdev_ms": 0.01496,
+    "tokenize_beng_avg_ms": 0.42262,
+    "tokenize_beng_median_ms": 0.4201,
+    "tokenize_beng_stdev_ms": 0.00676,
+    "query_cn_hits": 8001,
+    "query_cn_avg_ms": 16.66282,
+    "query_cn_stdev_ms": 0.02162,
+    "query_beng_hits": 11000,
+    "query_beng_avg_ms": 24.30424,
+    "query_beng_stdev_ms": 0.04874,
+    "query_mixed_hits": 7332,
+    "query_mixed_avg_ms": 17.55928,
+    "query_mixed_stdev_ms": 0.0386,
+    "query_limit_hits": 20,
+    "query_limit_avg_ms": 16.23338,
+    "query_limit_stdev_ms": 0.04536
+  }
+}
