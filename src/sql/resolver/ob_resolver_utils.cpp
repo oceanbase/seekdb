@@ -5242,7 +5242,7 @@ int ObResolverUtils::set_parallel_info(sql::ObSQLSessionInfo &session_info,
   if (udf_raw_expr.is_parallel_enable()) {
     //do nothing
   } else {
-    
+
     bool enable_parallel = true;
     if (udf_raw_expr.get_pkg_id() != OB_INVALID_ID) {
       OZ (schema_guard.get_routine_info_in_package( udf_raw_expr.get_pkg_id(), udf_raw_expr.get_udf_id(), routine_info));
@@ -6063,8 +6063,8 @@ int ObResolverUtils::check_secure_path(const common::ObString &secure_file_priv,
     MEMCPY(buf, secure_file_priv.ptr(), secure_file_priv.length());
 
     struct stat path_stat;
-    stat(buf, &path_stat);
-    if (0 == S_ISDIR(path_stat.st_mode)) {
+    MEMSET(&path_stat, 0, sizeof(path_stat));
+    if (0 != stat(buf, &path_stat) || 0 == S_ISDIR(path_stat.st_mode)) {
       ret = OB_ERR_NO_PRIVILEGE;
     } else {
       MEMSET(buf, 0, sizeof(buf));
@@ -6079,47 +6079,132 @@ int ObResolverUtils::check_secure_path(const common::ObString &secure_file_priv,
         // pass
       } else {
         ObString secure_file_priv_tmp(real_secure_file);
+#ifdef _WIN32
+        while (secure_file_priv_tmp.length() > 3 &&
+               ('\\' == secure_file_priv_tmp.ptr()[secure_file_priv_tmp.length() - 1] ||
+                '/' == secure_file_priv_tmp.ptr()[secure_file_priv_tmp.length() - 1])) {
+          secure_file_priv_tmp.assign_ptr(secure_file_priv_tmp.ptr(),
+                                          secure_file_priv_tmp.length() - 1);
+        }
+#else
+        while (secure_file_priv_tmp.length() > 1 &&
+               '/' == secure_file_priv_tmp.ptr()[secure_file_priv_tmp.length() - 1]) {
+          secure_file_priv_tmp.assign_ptr(secure_file_priv_tmp.ptr(),
+                                          secure_file_priv_tmp.length() - 1);
+        }
+#endif
+        ObString comparable_full_path = full_path;
+#ifdef _WIN32
+        // Normalize the target path with the same Windows routine used for
+        // secure_file_priv, otherwise forward-slash SQL paths or mixed
+        // separators fail the prefix comparison even when the file is inside
+        // the configured directory.
+        char full_path_buf[DEFAULT_BUF_LENGTH] = { 0 };
+        ObCStringHelper full_helper;
+        char *real_full_path = ::_fullpath(
+            full_path_buf, full_helper.convert(full_path), sizeof(full_path_buf));
+        if (NULL == real_full_path) {
+          ret = OB_ERR_NO_PRIVILEGE;
+        } else {
+          comparable_full_path.assign_ptr(real_full_path,
+              static_cast<ObString::obstr_size_t>(strlen(real_full_path)));
+        }
+#else
+        char full_path_buf[DEFAULT_BUF_LENGTH] = { 0 };
+        ObCStringHelper full_helper;
+        const char *converted_full_path = full_helper.convert(full_path);
+        if (NULL == converted_full_path || STRLEN(converted_full_path) >= sizeof(full_path_buf)) {
+          ret = OB_ERR_NO_PRIVILEGE;
+        } else if (NULL != ::realpath(converted_full_path, full_path_buf)) {
+          comparable_full_path.assign_ptr(full_path_buf, strlen(full_path_buf));
+        } else {
+          // COPY targets and glob patterns need not exist yet. Canonicalize the
+          // parent directory and append the final component lexically so that
+          // ".." cannot escape secure_file_priv while wildcards still work.
+          const char *last_slash = strrchr(converted_full_path, '/');
+          char parent_buf[DEFAULT_BUF_LENGTH] = { 0 };
+          char resolved_parent[DEFAULT_BUF_LENGTH] = { 0 };
+          const char *base_name = converted_full_path;
+          if (NULL == last_slash) {
+            MEMCPY(parent_buf, ".", 1);
+          } else {
+            const int64_t parent_len = last_slash - converted_full_path;
+            base_name = last_slash + 1;
+            if (0 == parent_len) {
+              MEMCPY(parent_buf, "/", 1);
+            } else if (parent_len >= static_cast<int64_t>(sizeof(parent_buf))) {
+              ret = OB_ERR_NO_PRIVILEGE;
+            } else {
+              MEMCPY(parent_buf, converted_full_path, parent_len);
+            }
+          }
+          if (OB_SUCC(ret) && NULL == ::realpath(parent_buf, resolved_parent)) {
+            ret = OB_ERR_NO_PRIVILEGE;
+          } else if (OB_SUCC(ret)) {
+            const int64_t resolved_len = static_cast<int64_t>(strlen(resolved_parent));
+            const int64_t base_len = static_cast<int64_t>(strlen(base_name));
+            const bool need_slash = resolved_len > 0 && resolved_parent[resolved_len - 1] != '/';
+            if (resolved_len + (need_slash ? 1 : 0) + base_len >=
+                static_cast<int64_t>(sizeof(full_path_buf))) {
+              ret = OB_ERR_NO_PRIVILEGE;
+            } else {
+              MEMCPY(full_path_buf, resolved_parent, resolved_len);
+              int64_t out = resolved_len;
+              if (need_slash) {
+                full_path_buf[out++] = '/';
+              }
+              MEMCPY(full_path_buf + out, base_name, base_len);
+              full_path_buf[out + base_len] = '\0';
+              comparable_full_path.assign_ptr(full_path_buf, out + base_len);
+            }
+          }
+        }
+#endif
+        const int64_t full_path_len = comparable_full_path.length();
         const int64_t pos = secure_file_priv_tmp.length();
 #ifdef _WIN32
-        // Windows: _fullpath() normalizes to drive-rooted paths using '\' as
-        // the separator (e.g. "C:\", "C:\obdata"). The filesystem is also
+        // Windows: _fullpath() normalizes to drive-rooted paths using '\\' as
+        // the separator (e.g. "C:\\", "C:\\obdata"). The filesystem is also
         // case-insensitive by default, so use a case-insensitive prefix match
-        // and accept either '\' or '/' as the boundary separator.
+        // and accept either '\\' or '/' as the boundary separator.
         const bool is_fs_root =
             (secure_file_priv_tmp.length() == 3
              && secure_file_priv_tmp.ptr()[1] == ':'
              && (secure_file_priv_tmp.ptr()[2] == '\\'
                  || secure_file_priv_tmp.ptr()[2] == '/'));
-        const bool prefix_ok = full_path.prefix_match_ci(secure_file_priv_tmp);
+        const bool prefix_ok = comparable_full_path.prefix_match_ci(secure_file_priv_tmp);
         const bool boundary_ok =
-            (full_path.length() > secure_file_priv_tmp.length()
-             && (full_path[pos] == '\\' || full_path[pos] == '/'));
+            (full_path_len > secure_file_priv_tmp.length()
+             && (comparable_full_path.ptr()[pos] == '\\'
+                 || comparable_full_path.ptr()[pos] == '/'));
 #else
         const bool is_fs_root = (secure_file_priv_tmp == "/");
-        const bool prefix_ok = full_path.prefix_match(secure_file_priv_tmp);
+        const bool prefix_ok = comparable_full_path.prefix_match(secure_file_priv_tmp);
         const bool boundary_ok =
-            (full_path.length() > secure_file_priv_tmp.length()
-             && full_path[pos] == '/');
+            (full_path_len > secure_file_priv_tmp.length()
+             && comparable_full_path.ptr()[pos] == '/');
 #endif
-        if (full_path.length() < secure_file_priv_tmp.length()) {
+        if (OB_FAIL(ret)) {
+        } else if (full_path_len < secure_file_priv_tmp.length()) {
           ret = OB_ERR_NO_PRIVILEGE;
         } else if (!prefix_ok) {
           ret = OB_ERR_NO_PRIVILEGE;
-        } else if (full_path.length() > secure_file_priv_tmp.length()
+        } else if (full_path_len > secure_file_priv_tmp.length()
                    && !is_fs_root && !boundary_ok) {
           ret = OB_ERR_NO_PRIVILEGE;
         }
       }
     }
   }
+
   if (OB_ERR_NO_PRIVILEGE == ret) {
     char buf[DEFAULT_BUF_LENGTH] = { 0 };
     const int list_size = ARRAYSIZEOF(server_secure_path_allowlist);
     for (int i = 0; OB_ERR_NO_PRIVILEGE == ret && i < list_size; i++) {
       const char * const secure_file_path = server_secure_path_allowlist[i];
       struct stat path_stat;
-      stat(secure_file_path, &path_stat);
-      if (0 == S_ISDIR(path_stat.st_mode)) {
+      MEMSET(&path_stat, 0, sizeof(path_stat));
+      if (0 != stat(secure_file_path, &path_stat) || 0 == S_ISDIR(path_stat.st_mode)) {
         // continue
       } else {
         MEMSET(buf, 0, sizeof(buf));
@@ -6472,7 +6557,7 @@ int ObResolverUtils::resolve_file_format(const ParseNode *node,
                                          ObResolverParams &params)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(node) || node->num_child_ != 1 || OB_ISNULL(node->children_[0]) ||
+  if (OB_ISNULL(node) || node->num_child_ < 1 || OB_ISNULL(node->children_[0]) ||
       OB_ISNULL(params.session_info_) || OB_ISNULL(params.expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
@@ -6634,6 +6719,31 @@ int ObResolverUtils::resolve_file_format(const ParseNode *node,
       }
       case T_IGNORE_LAST_EMPTY_COLUMN: {
         format.csv_format_.ignore_last_empty_col_ = node->children_[0]->value_;
+        break;
+      }
+      case T_COPY_HEADER: {
+        // COPY (...) TO 'p' (header)
+        ObString opt_name(node->children_[0]->str_len_, node->children_[0]->str_value_);
+        if (!opt_name.case_compare_equal(ObString::make_string("header"))) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "unknown copy option");
+        } else {
+          format.csv_format_.with_header_ = true;
+        }
+        break;
+      }
+      case T_COPY_NULLSTR: {
+        // COPY (...) TO 'p' (nullstr 'X')
+        ObString opt_name(node->children_[0]->str_len_, node->children_[0]->str_value_);
+        if (!opt_name.case_compare_equal(ObString::make_string("nullstr"))) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "unknown copy option");
+        } else if (OB_ISNULL(node->children_[1])) {
+          ret = OB_INVALID_ARGUMENT;
+        } else {
+          format.csv_format_.null_string_.assign_ptr(node->children_[1]->str_value_,
+                                                    static_cast<int32_t>(node->children_[1]->str_len_));
+        }
         break;
       }
       default: {

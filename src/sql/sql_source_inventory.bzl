@@ -1510,6 +1510,7 @@ SQL_UNITY_GROUPS = [
             "src/sql/resolver/dml/ob_update_stmt.cpp",
             "src/sql/resolver/dml/ob_view_table_resolver.cpp",
             "src/sql/resolver/dml/ob_inlist_resolver.cpp",
+            "src/sql/resolver/dml/ob_file_sql_reader.cpp",
         ],
         generated_srcs = [],
         external_srcs = [],

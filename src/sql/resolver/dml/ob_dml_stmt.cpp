@@ -4497,6 +4497,18 @@ int ObValuesTableDef::deep_copy(const ObValuesTableDef &other,
       } else if (OB_FAIL(column_types_.push_back(tmp_type))) {
       }
     }
+    for (int64_t i = 0; OB_SUCC(ret) && i < other.column_names_.count(); ++i) {
+      if (OB_FAIL(column_names_.push_back(other.column_names_.at(i)))) {
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < other.column_nullables_.count(); ++i) {
+      if (OB_FAIL(column_nullables_.push_back(other.column_nullables_.at(i)))) {
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < other.column_nullables_.count(); ++i) {
+      if (OB_FAIL(column_nullables_.push_back(other.column_nullables_.at(i)))) {
+      }
+    }
   }
   return ret;
 }

@@ -5460,6 +5460,7 @@ int ObStaticEngineCG::generate_spec(ObLogSelectInto &op, ObSelectIntoSpec &spec,
   } else if (OB_FAIL(spec.external_properties_.store_str(op.get_external_properties()))) {
   } else if (OB_FAIL(spec.user_vars_.init(op.get_user_vars().count()))) {
   } else if (OB_FAIL(spec.select_exprs_.init(op.get_select_exprs().count()))) {
+  } else if (OB_FAIL(spec.header_names_.init(op.get_header_names().count()))) {
   } else {
     ObString var;
     for (int64_t i = 0; OB_SUCC(ret) && i < op.get_user_vars().count(); ++i) {
@@ -5475,6 +5476,14 @@ int ObStaticEngineCG::generate_spec(ObLogSelectInto &op, ObSelectIntoSpec &spec,
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(generate_rt_expr(*select_expr, rt_expr))) {
       } else if (OB_FAIL(spec.select_exprs_.push_back(rt_expr))) {
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < op.get_header_names().count(); ++i) {
+      ObString name;
+      if (OB_FAIL(ob_write_string(alloc, op.get_header_names().at(i), name))) {
+        LOG_WARN("failed to copy header name", K(ret));
+      } else if (OB_FAIL(spec.header_names_.push_back(name))) {
+        LOG_WARN("failed to push header name", K(ret));
       }
     }
     if (OB_SUCC(ret)) {

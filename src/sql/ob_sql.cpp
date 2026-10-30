@@ -25,6 +25,7 @@
 #include "sql/plan_cache/ob_pcv_set.h"
 #include "sql/ob_sql_init.h"
 #include "sql/resolver/ob_resolver.h"
+#include "sql/resolver/dml/ob_select_stmt.h"
 #include "sql/resolver/cmd/ob_variable_set_stmt.h"
 #include "sql/resolver/cmd/ob_call_procedure_stmt.h"
 #include "sql/resolver/cmd/ob_anonymous_block_stmt.h"
@@ -2487,7 +2488,24 @@ int ObSql::generate_stmt_with_reconstruct_sql(ObDMLStmt* &stmt,
   ObObjPrintParams print_param;
   ObSQLSessionInfo *session = sql_ctx.session_info_;
   ObPhysicalPlanCtx *phy_plan_ctx = NULL;
-  if (OB_ISNULL(session) || OB_ISNULL(pc_ctx) ||
+  bool skip_reconstruct = false;
+  if (!OB_ISNULL(stmt) && stmt->is_select_stmt()) {
+    ObSelectStmt *select_stmt = static_cast<ObSelectStmt *>(stmt);
+    const ObIArray<TableItem *> &table_items = select_stmt->get_table_items();
+    for (int64_t i = 0; !skip_reconstruct && i < table_items.count(); ++i) {
+      const TableItem *table_item = table_items.at(i);
+      if (NULL != table_item && table_item->is_values_table()
+          && NULL != table_item->values_table_def_
+          && table_item->values_table_def_->column_names_.count() > 0) {
+        // statement derived from a file sql table function: rows are already
+        // materialized as literal values, sql reconstruction is not applicable
+        skip_reconstruct = true;
+      }
+    }
+  }
+  if (skip_reconstruct) {
+    // do nothing: file sql statement needs no sql reconstruction
+  } else if (OB_ISNULL(session) || OB_ISNULL(pc_ctx) ||
       OB_ISNULL(stmt) || (OB_ISNULL(stmt->get_query_ctx())) ||
       OB_ISNULL(phy_plan_ctx=pc_ctx->exec_ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
