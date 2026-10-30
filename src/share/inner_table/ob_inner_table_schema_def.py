@@ -2468,6 +2468,72 @@ all_objauth_mysql_def = dict(
 def_table_schema(**all_objauth_mysql_def)
 def_table_schema(**gen_history_table_def(1134, all_objauth_mysql_def))
 
+# One row per AI column. The three hidden physical columns of the table are
+# named here so the worker can address them without re-deriving the mapping.
+all_ai_column_def = dict(
+    owner = 'shenyunlong.syl',
+    table_name = '__all_ai_column',
+    table_id = '1139',
+    table_type = 'SYSTEM_TABLE',
+    gm_columns = ['gmt_create', 'gmt_modified'],
+    rowkey_columns = [
+      ('table_id', 'int'),
+      ('column_id', 'int')
+    ],
+
+    is_cluster_private = False,
+    meta_record_in_sys = False,
+    normal_columns = [
+        ('column_name', 'varchar:128', 'false'),
+        ('database_id', 'int', 'false'),
+        ('normalized_expr', 'longtext', 'true'),
+        ('prompt_type', 'int', 'false'),
+        ('target_type', 'int', 'false'),
+        ('target_length', 'int', 'true'),
+        ('target_precision', 'int', 'true'),
+        ('target_scale', 'int', 'true'),
+        ('model_endpoint', 'varchar:128', 'true'),
+        ('sync_mode', 'varchar:16', 'true'),
+        ('max_retries', 'int', 'true'),
+        ('state_column_id', 'int', 'true'),
+        ('request_column_id', 'int', 'true'),
+        ('result_spec_column_id', 'int', 'true')
+    ]
+)
+def_table_schema(**all_ai_column_def)
+def_table_schema(**gen_history_table_def(1140, all_ai_column_def))
+
+# One row per pending AI computation. Tasks are written in the same
+# transaction as the DML that invalidated the column.
+all_ai_column_task_def = dict(
+    owner = 'shenyunlong.syl',
+    table_name = '__all_ai_column_task',
+    table_id = '1141',
+    table_type = 'SYSTEM_TABLE',
+    gm_columns = ['gmt_create', 'gmt_modified'],
+    rowkey_columns = [
+      ('task_id', 'int')
+    ],
+
+    is_cluster_private = False,
+    meta_record_in_sys = False,
+    normal_columns = [
+        ('table_id', 'int', 'false'),
+        ('column_id', 'int', 'false'),
+        ('request_id', 'int', 'false'),
+        ('rowkey_predicate', 'varchar:1024', 'true'),
+        ('state', 'int', 'false'),
+        ('retry_count', 'int', 'true'),
+        ('eligible_ts', 'timestamp:6', 'true'),
+        ('request_version', 'int', 'true'),
+        ('result', 'longtext', 'true')
+    ]
+)
+def_table_schema(**all_ai_column_task_def)
+def_table_schema(**gen_history_table_def(1142, all_ai_column_task_def))
+
+
+
 
 # Reserved position (placeholder before this line)
 # Placeholder suggestion for this section: Use actual table names for placeholders
