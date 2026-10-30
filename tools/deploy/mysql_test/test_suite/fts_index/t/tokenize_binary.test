@@ -1,0 +1,11 @@
+# owner: 1114687744
+# owner group: storage
+# description: binary case folding preserves initialized token bytes
+
+# Binary case folding is a no-op, while UTF8MB4 still folds uppercase input.
+# Compare token sets so hash-map iteration order does not affect the result.
+SELECT JSON_CONTAINS(tokenize(_binary'OCEANBASE STORAGE', 'space'), '["OCEANBASE", "STORAGE"]') AS preserves_binary_words;
+SELECT JSON_LENGTH(tokenize(_binary'OCEANBASE STORAGE', 'space')) AS binary_word_count;
+SELECT JSON_CONTAINS(tokenize(_binary'OCEANBASE', 'ngram'), '["OC", "CE", "EA", "AN", "NB", "BA", "AS", "SE"]') AS preserves_binary_ngrams;
+SELECT JSON_CONTAINS(tokenize('OCEANBASE STORAGE', 'space'), '["oceanbase", "storage"]') AS folds_utf8_words;
+SELECT JSON_LENGTH(tokenize(_binary'', 'space')) AS empty_binary_word_count;

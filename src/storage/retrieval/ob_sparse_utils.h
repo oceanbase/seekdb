@@ -48,6 +48,7 @@ struct ObSRDaaTInnerProductRelevanceCollector : ObSRDaaTRelevanceCollector
   virtual ~ObSRDaaTInnerProductRelevanceCollector() {};
 
   int init(int64_t should_match = 0);
+  int64_t minimum_should_match() const { return should_match_; }
   virtual void reset() override;
   virtual void reuse() override;
   virtual int collect_one_dim(const int64_t dim_idx, const double) override;

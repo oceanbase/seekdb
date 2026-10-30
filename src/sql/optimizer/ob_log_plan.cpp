@@ -12039,6 +12039,14 @@ int ObLogPlan::prepare_text_retrieval_scan(const ObIArray<ObRawExpr *> &scan_mat
     ObTextRetrievalInfo &tr_info = table_scan->get_text_retrieval_info();
     tr_info.match_expr_ = match_against;
     tr_info.pushdown_match_filter_ = match_pred;
+    bool score_free = false;
+    if (OB_FAIL(check_match_score_free(table_scan, match_against, match_pred, score_free))) {
+    } else if (score_free) {
+      // The match predicate only selects documents that contain at least one query token,
+      // nothing reads the relevance score, so skip BM25 and its corpus statistics.
+      tr_info.need_calc_relevance_ = false;
+      tr_info.pushdown_match_filter_ = nullptr;
+    }
     // The mapping table is absent when the data-table rowkey is used as the document ID.
     table_scan->set_doc_id_index_table_id(tr_info.doc_id_idx_tid_);
     if (table_scan->is_vec_adaptive_scan() || table_scan->is_vec_idx_scan_post_filter()) {
@@ -12053,6 +12061,68 @@ int ObLogPlan::prepare_text_retrieval_scan(const ObIArray<ObRawExpr *> &scan_mat
     ObRawExpr *curr_filter = all_match_filters.at(i);
     if (curr_filter != match_pred) {
       if (OB_FAIL(scan_filters.push_back(curr_filter))) {
+      }
+    }
+  }
+  return ret;
+}
+
+int ObLogPlan::check_match_score_free(const ObLogTableScan *table_scan,
+                                      const ObMatchFunRawExpr *match_against,
+                                      const ObRawExpr *match_pred,
+                                      bool &score_free)
+{
+  int ret = OB_SUCCESS;
+  const ObDMLStmt *stmt = get_stmt();
+  score_free = false;
+  if (OB_ISNULL(table_scan) || OB_ISNULL(match_against) || OB_ISNULL(match_pred) || OB_ISNULL(stmt)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!stmt->is_select_stmt()
+             || NATURAL_LANGUAGE_MODE != match_against->get_mode_flag()
+             || match_against->is_es_match()
+             || match_against->get_columns_boosts().count() > 0
+             || table_scan->has_func_lookup()
+             || table_scan->is_vec_idx_scan()
+             || table_scan->use_index_merge()
+             || !stmt->get_order_items().empty()
+             || stmt->has_vec_approx()
+             || nullptr != stmt->get_first_vector_expr()) {
+    // keep scoring
+  } else if (T_OP_BOOL != match_pred->get_expr_type()
+             || 1 != match_pred->get_param_count()
+             || match_pred->get_param_expr(0) != match_against) {
+    // thresholds like MATCH(...) > 0.5 observe the score
+  } else {
+    // The match predicate must be a top-level WHERE condition, and the match expr
+    // must not be referenced from any other part of the statement (select list,
+    // order by, group by, having, other conditions, ...). Order/limit pushed down
+    // into the scan are recorded on tr_info later and handled by the caller via
+    // need_sort(); they always reference the match expr through stmt order items.
+    bool in_where = false;
+    const ObIArray<ObRawExpr *> &conds = stmt->get_condition_exprs();
+    for (int64_t i = 0; i < conds.count(); ++i) {
+      if (conds.at(i) == match_pred) {
+        in_where = true;
+      }
+    }
+    ObSEArray<ObRawExpr *, 16> relation_exprs;
+    bool referenced = false;
+    if (!in_where) {
+    } else if (OB_FAIL(stmt->get_relation_exprs(relation_exprs))) {
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && !referenced && i < relation_exprs.count(); ++i) {
+        const ObRawExpr *expr = relation_exprs.at(i);
+        if (OB_ISNULL(expr)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (expr == match_pred) {
+          // the predicate itself
+        } else if (expr == match_against
+                   || ObOptimizerUtil::is_sub_expr(match_against, expr)) {
+          referenced = true;
+        }
+      }
+      if (OB_SUCC(ret) && in_where && !referenced) {
+        score_free = true;
       }
     }
   }

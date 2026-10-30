@@ -1428,6 +1428,13 @@ public:
                                   const ObIArray<ObRawExpr *> &all_match_filters,
                                   ObIArray<ObRawExpr *> &scan_filters,
                                   ObLogicalOperator *scan);
+  // A natural-language MATCH predicate whose relevance score is never observed is
+  // equivalent to the union of its tokens' posting lists (BM25 is positive for every
+  // document containing a query token), so its score does not need to be computed.
+  int check_match_score_free(const ObLogTableScan *table_scan,
+                             const ObMatchFunRawExpr *match_against,
+                             const ObRawExpr *match_pred,
+                             bool &score_free);
   int prepare_text_retrieval_lookup(const ObIArray<ObRawExpr *> &lookup_match_exprs,
                                     const ObIArray<uint64_t> &lookup_index_ids,
                                     ObLogicalOperator *scan);

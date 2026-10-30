@@ -3681,7 +3681,19 @@ int ObStaticEngineCG::generate_normal_tsc(ObLogTableScan &op, ObTableScanSpec &s
       } else if (ddl_table_schema->is_fts_index_aux() || ddl_table_schema->is_fts_doc_word_aux()) {
         spec.is_fts_ddl_ = true;
         spec.is_fts_index_aux_ = ddl_table_schema->is_fts_index_aux();
-        spec.max_batch_size_ = 0; // TODO: @jinzhu, remove me later after support post-building fts index vectorization.
+        const schema::ObTableSchema *source_schema = nullptr;
+        OZ(schema_guard->get_table_schema(op.get_ref_table_id(), source_schema));
+        CK(OB_NOT_NULL(source_schema));
+        // Rebuilding an index on a hidden redefinition table retains the scalar
+        // scan contract used by its parent DDL task.
+        bool batch_outputs = OB_SUCC(ret) && !source_schema->is_user_hidden_table()
+                             && 4 == op.get_output_exprs().count();
+        for (int64_t i = 0; batch_outputs && i < op.get_output_exprs().count(); ++i) {
+          batch_outputs = op.get_output_exprs().at(i)->is_vectorize_result();
+        }
+        if (!batch_outputs) {
+          spec.max_batch_size_ = 0;
+        }
         if (OB_UNLIKELY(ddl_table_schema->get_parser_name_str().empty())) {
           ret = OB_ERR_UNEXPECTED;
         } else {

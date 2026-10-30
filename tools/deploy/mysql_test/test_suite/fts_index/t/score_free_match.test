@@ -1,0 +1,115 @@
+# owner: 1114687744
+# owner group: storage
+# description: natural language MATCH with and without relevance scoring
+# tags: fts
+#
+# A natural language MATCH that is only a bare filter selects the documents that
+# contain at least one query token, so plans that drop BM25 scoring must return
+# exactly the same rows as the plans that keep it. Every score-free shape below
+# is therefore compared by result set only: such a plan prints calc_relevance=false
+# and no pushdown_match_filter, which cannot be part of a reference output that is
+# recorded on a binary still computing the score.
+#
+# Shapes that still read the score are spelled out with explain and must not be
+# rewritten into the score-free path: boolean mode, threshold predicates, a
+# projected score, an ORDER BY (including the ORDER BY id LIMIT form, where the
+# top-N sort pushes a filter back into the scan) and a plain select, whose
+# relevance ordering needs the score.
+
+--disable_warnings
+drop database if exists fts_score_free_match;
+create database fts_score_free_match;
+use fts_score_free_match;
+--enable_warnings
+
+create table t_ik(
+  id int primary key,
+  title varchar(100),
+  body varchar(200),
+  category varchar(10),
+  fulltext index ft_ik(title, body) with parser ik);
+
+create table t_def(
+  id int primary key,
+  body varchar(200),
+  category varchar(10),
+  fulltext index ft_def(body));
+
+insert into t_ik values
+  (1, 'oceanbase storage engine', 'storage engine keeps rows on disk', 'a'),
+  (2, 'query optimizer notes', 'the optimizer chooses a plan for each query', 'b'),
+  (3, 'fulltext index basics', 'a fulltext index speeds up the text query', 'a'),
+  (4, 'relevance scoring', 'bm25 relevance scoring ranks the matching rows', 'c'),
+  (5, 'vector search intro', 'vector search returns the nearest neighbours', 'd'),
+  (6, 'storage benchmark report', 'a storage benchmark measures disk throughput', 'b'),
+  (7, 'query rewrite tips', 'query rewrite changes the plan of a query', 'c'),
+  (8, 'index merge notes', 'an index merge combines two index scans', 'd'),
+  (9, 'disk space report', 'disk space usage of the storage layer', 'a'),
+  (10, 'text analysis basics', 'text analysis splits a document into tokens', 'b');
+
+insert into t_def values
+  (1, 'storage engine keeps rows on disk', 'a'),
+  (2, 'the optimizer chooses a plan for each query', 'b'),
+  (3, 'a fulltext index speeds up the text query', 'a'),
+  (4, 'bm25 relevance scoring ranks the matching rows', 'c'),
+  (5, 'vector search returns the nearest neighbours', 'd'),
+  (6, 'a storage benchmark measures disk throughput', 'b'),
+  (7, 'query rewrite changes the plan of a query', 'c'),
+  (8, 'an index merge combines two index scans', 'd'),
+  (9, 'disk space usage of the storage layer', 'a'),
+  (10, 'text analysis splits a document into tokens', 'b');
+
+--result_format 4
+
+# natural language MATCH as a bare filter: the row set is all that is read
+select count(*) from t_ik where match(title, body) against('storage');
+select count(1) from t_ik where match(title, body) against('storage');
+select sum(id) from t_ik where match(title, body) against('storage');
+select min(id) as lo, max(id) as hi from t_ik where match(title, body) against('storage');
+
+# a pushed-down filter makes the scan read columns from the main table
+select count(*) from t_ik where match(title, body) against('storage') and category = 'a';
+--sorted_result
+select category, count(*) from t_ik where match(title, body) against('storage') group by category;
+
+# no document matches, so the score-free path still has to return an empty set
+select count(*) from t_ik where match(title, body) against('zebra');
+select count(*) from t_ik where match(title, body) against('');
+
+# default parser (space) keeps the same contract
+select count(*) from t_def where match(body) against('storage');
+select sum(id) from t_def where match(body) against('storage');
+
+# a plain select reads the score: the result is ordered by relevance
+explain select id from t_ik where match(title, body) against('storage');
+--sorted_result
+select id from t_ik where match(title, body) against('storage');
+--sorted_result
+select id from t_def where match(body) against('storage');
+--sorted_result
+select id from t_ik where match(title, body) against('storage') limit 3;
+
+# ORDER BY id LIMIT pushes a top-n sort above the scan, which keeps scoring
+explain select id from t_ik where match(title, body) against('query') order by id limit 5;
+select id from t_ik where match(title, body) against('query') order by id limit 5;
+select id from t_ik where match(title, body) against('query') order by id limit 2 offset 1;
+
+# boolean mode always keeps scoring
+explain select count(*) from t_ik where match(title, body) against('storage' in boolean mode);
+select count(*) from t_ik where match(title, body) against('storage' in boolean mode);
+--sorted_result
+select id from t_ik where match(title, body) against('storage query' in boolean mode);
+
+# threshold predicates observe the score
+explain select id from t_ik where match(title, body) against('storage') > 0.5 order by id;
+select id from t_ik where match(title, body) against('storage') > 0.5 order by id;
+select id from t_ik where match(title, body) against('storage') >= 0.5 order by id;
+select id from t_ik where match(title, body) against('storage') < 0.5 order by id;
+select id from t_ik where match(title, body) against('storage') = 0.5 order by id;
+select count(*) from t_ik where match(title, body) against('storage') > 0.5;
+
+# projecting the score keeps scoring
+explain select id, match(title, body) against('storage') as score from t_ik
+  where match(title, body) against('storage') order by score desc, id;
+select id, match(title, body) against('storage') as score from t_ik
+  where match(title, body) against('storage') order by score desc, id;

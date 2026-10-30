@@ -1,0 +1,15 @@
+SELECT JSON_CONTAINS(tokenize(_binary'OCEANBASE STORAGE', 'space'), '["OCEANBASE", "STORAGE"]') AS preserves_binary_words;
+preserves_binary_words
+1
+SELECT JSON_LENGTH(tokenize(_binary'OCEANBASE STORAGE', 'space')) AS binary_word_count;
+binary_word_count
+2
+SELECT JSON_CONTAINS(tokenize(_binary'OCEANBASE', 'ngram'), '["OC", "CE", "EA", "AN", "NB", "BA", "AS", "SE"]') AS preserves_binary_ngrams;
+preserves_binary_ngrams
+1
+SELECT JSON_CONTAINS(tokenize('OCEANBASE STORAGE', 'space'), '["oceanbase", "storage"]') AS folds_utf8_words;
+folds_utf8_words
+1
+SELECT JSON_LENGTH(tokenize(_binary'', 'space')) AS empty_binary_word_count;
+empty_binary_word_count
+0

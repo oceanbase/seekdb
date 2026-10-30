@@ -1,0 +1,26 @@
+drop database if exists fts_score_free_scalar;
+create database fts_score_free_scalar;
+use fts_score_free_scalar;
+create table docs(id int primary key, body varchar(100), fulltext index ft(body));
+insert into docs values (1, 'alpha beta'), (2, 'alpha'), (3, 'beta');
+select /*+ opt_param('rowsets_max_rows', 0) */ count(*) from docs where match(body) against('alpha');
+count(*)
+2
+select /*+ opt_param('rowsets_max_rows', 0) */ sum(id) from docs where match(body) against('alpha');
+sum(id)
+3
+select /*+ opt_param('rowsets_max_rows', 0) */ count(*) from docs where match(body) against('missing');
+count(*)
+0
+select /*+ opt_param('rowsets_max_rows', 0) */ count(*) from docs where match(body) against('');
+count(*)
+0
+select /*+ opt_param('rowsets_max_rows', 0) */ count(match(body) against('alpha')) from docs where match(body) against('alpha');
+count(match(body) against('alpha'))
+2
+select /*+ opt_param('rowsets_max_rows', 1) */ count(*) from docs where match(body) against('alpha');
+count(*)
+2
+select /*+ opt_param('rowsets_max_rows', 16) */ sum(id) from docs where match(body) against('alpha');
+sum(id)
+3

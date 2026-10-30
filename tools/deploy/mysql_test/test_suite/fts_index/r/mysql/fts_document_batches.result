@@ -1,0 +1,72 @@
+drop database if exists fts_document_batches;
+create database fts_document_batches;
+use fts_document_batches;
+create table docs(id int primary key, body text);
+insert into docs values (1,null),(2,''),(3,'the a and'),(4,'alpha alpha beta'),
+(5,'word0000 word0001 word0002 word0003 word0004 word0005 word0006 word0007 word0008 word0009 word0010 word0011 word0012 word0013 word0014 word0015 word0016 word0017 word0018 word0019 word0020 word0021 word0022 word0023 word0024 word0025 word0026 word0027 word0028 word0029 word0030 word0031 word0032 word0033 word0034 word0035 word0036 word0037 word0038 word0039 word0040 word0041 word0042 word0043 word0044 word0045 word0046 word0047 word0048 word0049 word0050 word0051 word0052 word0053 word0054 word0055 word0056 word0057 word0058 word0059 word0060 word0061 word0062 word0063 word0064 word0065 word0066 word0067 word0068 word0069 word0070 word0071 word0072 word0073 word0074 word0075 word0076 word0077 word0078 word0079 word0080 word0081 word0082 word0083 word0084 word0085 word0086 word0087 word0088 word0089 word0090 word0091 word0092 word0093 word0094 word0095 word0096 word0097 word0098 word0099 word0100 word0101 word0102 word0103 word0104 word0105 word0106 word0107 word0108 word0109 word0110 word0111 word0112 word0113 word0114 word0115 word0116 word0117 word0118 word0119 word0120 word0121 word0122 word0123 word0124 word0125 word0126 word0127 word0128 word0129 word0130 word0131 word0132 word0133 word0134 word0135 word0136 word0137 word0138 word0139 word0140 word0141 word0142 word0143 word0144 word0145 word0146 word0147 word0148 word0149 word0150 word0151 word0152 word0153 word0154 word0155 word0156 word0157 word0158 word0159 word0160 word0161 word0162 word0163 word0164 word0165 word0166 word0167 word0168 word0169 word0170 word0171 word0172 word0173 word0174 word0175 word0176 word0177 word0178 word0179 word0180 word0181 word0182 word0183 word0184 word0185 word0186 word0187 word0188 word0189 word0190 word0191 word0192 word0193 word0194 word0195 word0196 word0197 word0198 word0199 word0200 word0201 word0202 word0203 word0204 word0205 word0206 word0207 word0208 word0209 word0210 word0211 word0212 word0213 word0214 word0215 word0216 word0217 word0218 word0219 word0220 word0221 word0222 word0223 word0224 word0225 word0226 word0227 word0228 word0229 word0230 word0231 word0232 word0233 word0234 word0235 word0236 word0237 word0238 word0239 word0240 word0241 word0242 word0243 word0244 word0245 word0246 word0247 word0248 word0249 word0250 word0251 word0252 word0253 word0254 word0255 word0256 word0257 word0258 word0259 word0260 word0261 word0262 word0263 word0264 word0265 word0266 word0267 word0268 word0269 word0270 word0271 word0272 word0273 word0274 word0275 word0276 word0277 word0278 word0279 word0280 word0281 word0282 word0283 word0284 word0285 word0286 word0287 word0288 word0289 word0290 word0291 word0292 word0293 word0294 word0295 word0296 word0297 word0298 word0299 word0300 word0301 word0302 word0303 word0304 word0305 word0306 word0307 word0308 word0309 word0310 word0311 word0312 word0313 word0314 word0315 word0316 word0317 word0318 word0319 word0320 word0321 word0322 word0323 word0324 word0325 word0326 word0327 word0328 word0329 word0330 word0331 word0332 word0333 word0334 word0335 word0336 word0337 word0338 word0339 word0340 word0341 word0342 word0343 word0344 word0345 word0346 word0347 word0348 word0349 word0350 word0351 word0352 word0353 word0354 word0355 word0356 word0357 word0358 word0359 word0360 word0361 word0362 word0363 word0364 word0365 word0366 word0367 word0368 word0369 word0370 word0371 word0372 word0373 word0374 word0375 word0376 word0377 word0378 word0379 word0380 word0381 word0382 word0383 word0384 word0385 word0386 word0387 word0388 word0389 word0390 word0391 word0392 word0393 word0394 word0395 word0396 word0397 word0398 word0399 word0400 word0401 word0402 word0403 word0404 word0405 word0406 word0407 word0408 word0409 word0410 word0411 word0412 word0413 word0414 word0415 word0416 word0417 word0418 word0419 word0420 word0421 word0422 word0423 word0424 word0425 word0426 word0427 word0428 word0429 word0430 word0431 word0432 word0433 word0434 word0435 word0436 word0437 word0438 word0439 word0440 word0441 word0442 word0443 word0444 word0445 word0446 word0447 word0448 word0449 word0450 word0451 word0452 word0453 word0454 word0455 word0456 word0457 word0458 word0459 word0460 word0461 word0462 word0463 word0464 word0465 word0466 word0467 word0468 word0469 word0470 word0471 word0472 word0473 word0474 word0475 word0476 word0477 word0478 word0479 word0480 word0481 word0482 word0483 word0484 word0485 word0486 word0487 word0488 word0489 word0490 word0491 word0492 word0493 word0494 word0495 word0496 word0497 word0498 word0499 word0500 word0501 word0502 word0503 word0504 word0505 word0506 word0507 word0508 word0509 word0510 word0511 word0512 word0513 word0514 word0515 word0516 word0517 word0518 word0519 word0520 word0521 word0522 word0523 word0524 word0525 word0526 word0527 word0528 word0529 word0530 word0531 word0532 word0533 word0534 word0535 word0536 word0537 word0538 word0539 word0540 word0541 word0542 word0543 word0544 word0545 word0546 word0547 word0548 word0549 word0550 word0551 word0552 word0553 word0554 word0555 word0556 word0557 word0558 word0559 word0560 word0561 word0562 word0563 word0564 word0565 word0566 word0567 word0568 word0569 word0570 word0571 word0572 word0573 word0574 word0575 word0576 word0577 word0578 word0579 word0580 word0581 word0582 word0583 word0584 word0585 word0586 word0587 word0588 word0589 word0590 word0591 word0592 word0593 word0594 word0595 word0596 word0597 word0598 word0599 alpha'),(6,'alpha gamma');
+create fulltext index ft on docs(body) with parser space;
+select count(*) from docs where match(body) against('word0000');
+count(*)
+1
+select count(*) from docs where match(body) against('word0599');
+count(*)
+1
+select count(*) from docs where match(body) against('alpha');
+count(*)
+3
+select sum(id) from docs where match(body) against('alpha');
+sum(id)
+15
+select count(*) from docs where match(body) against('missing');
+count(*)
+0
+select id,round(match(body) against('alpha'),6) score from docs where match(body) against('alpha') order by id;
+id	score
+4	0.472775
+5	0.082749
+6	0.417365
+update docs set body='omega' where id=5;
+select count(*) from docs where match(body) against('word0599');
+count(*)
+0
+select count(*) from docs where match(body) against('alpha');
+count(*)
+2
+drop index ft on docs;
+create fulltext index ft on docs(body) with parser beng;
+select count(*) from docs where match(body) against('alpha');
+count(*)
+2
+select count(*) from docs where match(body) against('omega');
+count(*)
+1
+create table part_docs(id int primary key, body text)
+partition by range(id)(partition p0 values less than(5),partition p1 values less than maxvalue);
+insert into part_docs select * from docs;
+set session _force_parallel_ddl_dop=6;
+create fulltext index ft on part_docs(body) with parser ik;
+select count(*) from part_docs where match(body) against('alpha');
+count(*)
+2
+select sum(id) from part_docs where match(body) against('alpha');
+sum(id)
+10
+select count(*) from part_docs where match(body) against('omega');
+count(*)
+1
+set session _force_parallel_ddl_dop=1;
+create table rebuilt(c1 int, c2 int, c3 int, body text, fulltext index ft(body));
+insert into rebuilt values (1,1,1,'alpha deleted'),(1,1,2,'beta retained');
+delete from rebuilt where c3=1;
+alter table rebuilt add column a1 int auto_increment;
+insert into rebuilt(c1,c2,c3,body) values (1,1,101,'gamma inserted');
+select count(*) from rebuilt where match(body) against('retained');
+count(*)
+1
+select count(*) from rebuilt where match(body) against('deleted');
+count(*)
+0
+select count(*) from rebuilt where match(body) against('inserted');
+count(*)
+1
+drop table rebuilt;

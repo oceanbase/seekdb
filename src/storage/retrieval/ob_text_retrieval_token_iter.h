@@ -133,6 +133,16 @@ public:
   virtual int get_curr_score(double &score) const override;
   virtual int get_curr_id(const ObDatum *&id_datum) const override;
 public:
+  // Advance only within the owned doc-id buffer; loading another batch still
+  // goes through get_next_row() so every storage and EOF check is preserved.
+  bool advance_cached_id(const ObDatum *&id)
+  {
+    const bool available = cur_idx_ >= 0 && cur_idx_ + 1 < count_;
+    if (available) {
+      id = &doc_id_[++cur_idx_].get_datum();
+    }
+    return available;
+  }
   int get_token_doc_cnt(int64_t &token_doc_cnt) const { return token_iter_->get_token_doc_cnt(token_doc_cnt); }
   virtual int get_dim_max_score(double &score) override {
     int ret = OB_SUCCESS;

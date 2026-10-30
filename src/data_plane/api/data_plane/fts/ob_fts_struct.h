@@ -51,7 +51,15 @@ private:
   ObObjMeta meta_;
 };
 
-typedef common::hash::ObHashMap<ObFTWord, int64_t> ObFTWordMap;
+// Each caller owns this map and its node allocator for one segmentation call;
+// neither the buckets nor the allocator need synchronization between workers.
+typedef common::hash::HashMapTypes<ObFTWord, int64_t>::AllocType WordMapNode;
+typedef common::hash::SimpleAllocer<WordMapNode,
+    common::hash::NodeNumTraits<WordMapNode>::NODE_NUM,
+    common::hash::NoPthreadDefendMode> WordMapAllocator;
+typedef common::hash::ObHashMap<ObFTWord, int64_t, common::hash::NoPthreadDefendMode,
+    common::hash::hash_func<ObFTWord>, common::hash::equal_to<ObFTWord>,
+    WordMapAllocator> ObFTWordMap;
 
 class ObAddWordFlag final
 {

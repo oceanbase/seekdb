@@ -179,7 +179,7 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
     }
     if (OB_SUCC(ret)) {
       if (stmt->get_match_exprs().count() > 0 &&
-          OB_FAIL(preserve_order_for_fulltext_search(stmt, is_happened))) {
+          OB_FAIL(preserve_order_for_fulltext_search(parent_stmts, stmt, is_happened))) {
       } else {
         trans_happened |= is_happened;
       }
@@ -3790,7 +3790,8 @@ int ObTransformPreProcess::do_flatten_conditions(ObDMLStmt *stmt, ObIArray<ObRaw
 
 // full-text index queries on a single base table are processed with order preservation. 
 // (Order is not preserved in multi-table join scenarios.)
-int ObTransformPreProcess::preserve_order_for_fulltext_search(ObDMLStmt *stmt, bool& trans_happened)
+int ObTransformPreProcess::preserve_order_for_fulltext_search(
+    const ObIArray<ObParentDMLStmt> &parent_stmts, ObDMLStmt *stmt, bool& trans_happened)
 {
   int ret = OB_SUCCESS;
   trans_happened = false;
@@ -3936,13 +3937,77 @@ int ObTransformPreProcess::preserve_order_for_fulltext_search(ObDMLStmt *stmt, b
       }
     }
   }
-  if (OB_SUCC(ret) && nullptr != match_expr && !static_cast<ObMatchFunRawExpr*>(match_expr)->is_es_match()) {
+  bool count_only = false;
+  if (OB_FAIL(ret)) {
+  } else if (nullptr == match_expr || static_cast<ObMatchFunRawExpr*>(match_expr)->is_es_match()) {
+  } else if (OB_FAIL(prune_counted_fulltext_output(parent_stmts, stmt, count_only))) {
+  } else if (count_only) {
+    trans_happened = true;
+  } else {
     OrderItem item(match_expr, default_desc_direction());
     if (OB_FAIL(stmt->add_order_item(item))) {
     } else {
       trans_happened = true;
     }
   } 
+  return ret;
+}
+
+// COUNT(*) over a limited view observes only its cardinality. Prune the unused
+// view output as well as its implicit relevance order, so no main-table lookup
+// remains to consume the entire posting list before the limit can stop it.
+int ObTransformPreProcess::prune_counted_fulltext_output(
+    const ObIArray<ObParentDMLStmt> &parent_stmts, ObDMLStmt *stmt, bool &pruned)
+{
+  int ret = OB_SUCCESS;
+  pruned = false;
+  if (OB_ISNULL(stmt) || !stmt->is_select_stmt() || parent_stmts.empty()) {
+  } else {
+    ObDMLStmt *parent_stmt = parent_stmts.at(parent_stmts.count() - 1).stmt_;
+    ObSelectStmt *child = static_cast<ObSelectStmt *>(stmt);
+    if (OB_ISNULL(parent_stmt) || !parent_stmt->is_select_stmt()
+        || !child->has_limit() || nullptr != child->get_offset_expr()
+        || nullptr != child->get_limit_percent_expr() || child->is_fetch_with_ties()
+        || child->has_for_update() || 1 != child->get_select_item_size()
+        || 1 != child->get_match_exprs().count()) {
+    } else {
+      ObSelectStmt *parent = static_cast<ObSelectStmt *>(parent_stmt);
+      TableItem *view = nullptr;
+      ObRawExpr *output = child->get_select_item(0).expr_;
+      ObMatchFunRawExpr *match = child->get_match_exprs().at(0);
+      bool has_assignment = false;
+      if (parent->is_set_stmt() || parent->has_for_update() || 1 != parent->get_table_size()
+          || 1 != parent->get_from_item_size()
+          || OB_ISNULL(view = parent->get_table_item(0))
+          || !view->is_generated_table() || view->ref_query_ != child
+          || 1 != parent->get_select_item_size() || 1 != parent->get_aggr_item_size()
+          || 0 != parent->get_condition_size() || 0 != parent->get_group_expr_size()
+          || 0 != parent->get_rollup_expr_size() || parent->has_having()
+          || parent->has_order_by() || parent->has_distinct() || parent->has_window_function()
+          || parent->has_window_function_filter() || parent->has_limit()
+          || OB_ISNULL(output) || (!output->is_column_ref_expr() && !output->is_const_expr())
+          || OB_ISNULL(match) || NATURAL_LANGUAGE_MODE != match->get_mode_flag()
+          || match->is_es_match() || !match->get_columns_boosts().empty()) {
+      } else {
+        ObRawExpr *parent_output = parent->get_select_item(0).expr_;
+        if (OB_ISNULL(parent_output) || T_FUN_COUNT != parent_output->get_expr_type()) {
+        } else {
+          ObAggFunRawExpr *count = static_cast<ObAggFunRawExpr *>(parent_output);
+          if (count->is_param_distinct() || 0 != count->get_real_param_count()) {
+          } else if (OB_FAIL(ObTransformUtils::check_has_assignment(*child, has_assignment))) {
+          } else if (!has_assignment) {
+            ObSqlBitSet<> removed;
+            if (OB_FAIL(removed.add_member(0))) {
+            } else if (OB_FAIL(ObTransformUtils::remove_select_items(
+                           ctx_, view->table_id_, *child, *parent, removed))) {
+            } else {
+              pruned = true;
+            }
+          }
+        }
+      }
+    }
+  }
   return ret;
 }
 

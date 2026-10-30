@@ -125,20 +125,38 @@ int ObGenDicLoader::get_dic_loader(const ObString &parser_name,
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(dic_loader_key.init(parser_name, charset))) {
   } else {
-    TCWLockGuard guard(lock_);
-    if (OB_FAIL(dic_loader_map_.get_refactored(dic_loader_key, dic_loader))) {
-      if (OB_HASH_NOT_EXIST == ret) {
-        if (OB_FAIL(gen_dic_loader(dic_loader_key, dic_loader))) {
-        } else if (OB_ISNULL(dic_loader)) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(dic_loader_map_.set_refactored(dic_loader_key, dic_loader))) {
-        } else if (OB_FALSE_IT(dic_loader->inc_ref())) {
-        } else if (OB_FAIL(loader_handle.set_loader(dic_loader))) {
-        }
-      } else {
-        ret = OB_ERR_UNEXPECTED;
+    // Fast path: dic_loader_map_ is append-only after init() (entries are never
+    // erased nor overwritten), so a hit read under the shared lock is safe. This
+    // lookup sits on the tokenize / fulltext-index-build hot path (once per
+    // parser instance, i.e. once per document during an index build); taking the
+    // exclusive lock there serialized every worker in the tenant.
+    {
+      TCRLockGuard read_guard(lock_);
+      ret = dic_loader_map_.get_refactored(dic_loader_key, dic_loader);
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(loader_handle.set_loader(dic_loader))) {
       }
-    } else if (OB_FAIL(loader_handle.set_loader(dic_loader))) {
+    } else if (OB_HASH_NOT_EXIST != ret) {
+      // unexpected error, keep ret
+    } else {
+      // Slow path: create the loader under the exclusive lock, and re-check the
+      // map because another worker may have won the race.
+      ret = OB_SUCCESS;
+      TCWLockGuard guard(lock_);
+      if (OB_FAIL(dic_loader_map_.get_refactored(dic_loader_key, dic_loader))) {
+        if (OB_HASH_NOT_EXIST == ret) {
+          ret = OB_SUCCESS;
+          if (OB_FAIL(gen_dic_loader(dic_loader_key, dic_loader))) {
+          } else if (OB_ISNULL(dic_loader)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (OB_FAIL(dic_loader_map_.set_refactored(dic_loader_key, dic_loader))) {
+          } else if (OB_FALSE_IT(dic_loader->inc_ref())) {
+          } else if (OB_FAIL(loader_handle.set_loader(dic_loader))) {
+          }
+        }
+      } else if (OB_FAIL(loader_handle.set_loader(dic_loader))) {
+      }
     }
   }
   return ret;

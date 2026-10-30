@@ -1,0 +1,58 @@
+use test;
+set names utf8mb4;
+drop table if exists token_property_rows;
+create table token_property_rows (id int primary key, parser varchar(16), props varchar(512));
+insert into token_property_rows values
+(1, 'space', '[{"additional_args":[{"min_token_size":1},{"max_token_size":10}]}]'),
+(2, 'space', '[{"additional_args":[{"min_token_size":5},{"max_token_size":10}]}]'),
+(3, 'beng', '[{"additional_args":[{"min_token_size":1},{"max_token_size":10}]}]'),
+(4, 'beng', '[{"additional_args":[{"min_token_size":5},{"max_token_size":10}]}]'),
+(5, 'ngram', '[{"additional_args":[{"ngram_token_size":1}]}]'),
+(6, 'ngram', '[{"additional_args":[{"ngram_token_size":3}]}]'),
+(7, 'ngram2', '[{"additional_args":[{"min_ngram_size":1},{"max_ngram_size":3}]}]'),
+(8, 'ngram2', '[{"additional_args":[{"min_ngram_size":2},{"max_ngram_size":2}]}]'),
+(9, 'ik', '[{"additional_args":[{"ik_mode":"smart"}]}]'),
+(10, 'ik', '[{"additional_args":[{"ik_mode":"max_word"}]}]'),
+(11, 'beng', '[]'),
+(12, 'ngram2', '[]'),
+(13, 'space', '[]'),
+(14, 'ngram', '[]'),
+(15, 'ik', '[]');
+select id, json_length(tokenize('南京市长江大桥 A blue apple alpha alpha', parser, props)) as token_count
+from token_property_rows order by id;
+id	token_count
+1	4
+2	3
+3	3
+4	2
+5	14
+6	13
+7	44
+8	17
+9	6
+10	10
+11	4
+12	30
+13	4
+14	17
+15	6
+select id, json_extract(tokenize('南京市长江大桥 A blue apple alpha alpha', parser,
+json_array_append(props, '$', json_object('output', 'all'))), '$.doc_len') as doc_len
+from token_property_rows order by id;
+id	doc_len
+1	5
+2	4
+3	4
+4	3
+5	27
+6	16
+7	64
+8	21
+9	7
+10	11
+11	5
+12	37
+13	5
+14	21
+15	7
+drop table token_property_rows;

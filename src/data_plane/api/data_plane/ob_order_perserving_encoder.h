@@ -115,6 +115,24 @@ public:
                                 int64_t &to_len);
 
   static int encode_tails(unsigned char *to, int64_t max_buf_len, int64_t &to_len, bool is_mem, common::ObCollationType cs,  bool with_empty_str);
+  // Collations that the order preserving encoding of variable length strings
+  // (see ObOrderPerservingEncoder::encode_from_string_varlen) can handle.
+  inline static bool can_encode_varlen_collation(common::ObCollationType cs)
+  {
+    return (cs == CS_TYPE_COLLATION_FREE || cs == CS_TYPE_BINARY || cs == CS_TYPE_UTF8MB4_BIN
+            || cs == CS_TYPE_GBK_BIN || cs == CS_TYPE_GB18030_BIN || cs == CS_TYPE_UTF8MB4_GENERAL_CI
+            || cs == CS_TYPE_GBK_CHINESE_CI || cs == CS_TYPE_GB18030_CHINESE_CI
+            || common::ObCharset::is_gb18030_2022(cs));
+  }
+
+  // Whether a variable length sort key can be encoded. can_encode_sortkey below
+  // deliberately leaves ObVarcharType out for the cost based path, callers that
+  // force the encoding through the ENABLE_NEWSORT hint check this instead.
+  inline static bool can_encode_varlen_sortkey(common::ObObjType type, common::ObCollationType cs)
+  {
+    return ObVarcharType == type && can_encode_varlen_collation(cs);
+  }
+
   inline static bool can_encode_sortkey(common::ObObjType type, common::ObCollationType cs)
   {
     return (type == ObTinyIntType || type == ObSmallIntType || type == ObDateType

@@ -24,6 +24,7 @@
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_macro_utils.h"
+#include "lib/utility/alloc_assist.h"
 #include "lib/utility/utility.h"
 #include "lib/utility/ob_smart_var.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
@@ -378,20 +379,59 @@ int ObFTRangeDict::match_with_hit(const ObString &single_word,
   return last_hit.dict_->match_with_hit(single_word, last_hit, hit);
 }
 
+namespace
+{
+// ObCharset::strcmp(CS_TYPE_UTF8MB4_BIN, left, right) is resolved to
+// ob_strnncoll_mb_bin(), which is exactly a memcmp() over the common prefix
+// followed by a length comparison. Inlining it here skips get_charset(),
+// is_argument_valid() and the indirect call that the generic entry point does on
+// every comparison; the ordering of the range boundaries is unchanged.
+int compare_utf8mb4_bin(const ObString &left, const ObString &right)
+{
+  const int64_t cmp_len = left.length() < right.length() ? left.length() : right.length();
+  int cmp = 0;
+  if (cmp_len > 0) {
+    cmp = MEMCMP(left.ptr(), right.ptr(), static_cast<size_t>(cmp_len));
+  }
+  return 0 != cmp ? cmp : static_cast<int>(left.length() - right.length());
+}
+} // anonymous namespace
+
 int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict *&dict) const
 {
   int ret = OB_SUCCESS;
   bool found = false;
-  for (int i = 0; OB_SUCC(ret) && !found && i < range_dicts_.size(); ++i) {
-    if (ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                          range_dicts_[i].start_.get_word(),
-                          single_word)
-            <= 0
-        && ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                             range_dicts_[i].end_.get_word(),
-                             single_word)
-               >= 0) {
-      dict = range_dicts_[i].dict_;
+  const int64_t range_cnt = range_dicts_.size();
+  if (OB_UNLIKELY(0 == range_cnt)) {
+    // no range, dis match
+    ret = OB_ENTRY_NOT_EXIST;
+  } else if (1 == range_cnt) {
+    // The whole dictionary is a single range: the DAT match below already
+    // answers "not in dict" for words outside [start, end], so skip the two
+    // boundary strcmps that were done per token.
+    dict = range_dicts_[0].dict_;
+    found = true;
+  } else {
+    // Ranges are sorted by start word, non-overlapping and contiguous (they
+    // partition the sorted dictionary). Binary-search the last range whose
+    // start <= single_word, then only verify its end bound. The previous code
+    // linearly scanned every range with two collation strcmps each; with ~6
+    // ranges per dictionary that was ~12 strcmps per token on the hot path.
+    int64_t lo = 0;
+    int64_t hi = range_cnt - 1;
+    int64_t cand = -1;
+    while (lo <= hi) {
+      const int64_t mid = lo + ((hi - lo) >> 1);
+      if (compare_utf8mb4_bin(range_dicts_[mid].start_.get_word(), single_word) <= 0) {
+        cand = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    if (OB_LIKELY(cand >= 0)
+        && compare_utf8mb4_bin(range_dicts_[cand].end_.get_word(), single_word) >= 0) {
+      dict = range_dicts_[cand].dict_;
       found = true;
     }
   }

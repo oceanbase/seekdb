@@ -376,7 +376,24 @@ struct ObDatumStrCmpImpl
   static int OB_INLINE cmp(const ObDatum &l, const ObDatum &r, int &cmp_ret,
                            const ObCollationType cs, const bool with_end_space)
   {
-    cmp_ret = ObCharset::strcmpsp(cs, l.ptr_, l.len_, r.ptr_, r.len_, with_end_space);
+    const ObCharsetInfo *cs_info = ObCharset::get_charset_cached(cs);
+    if (OB_LIKELY(NULL != cs_info)
+        && OB_LIKELY(l.len_ >= 0 && r.len_ >= 0)
+        && OB_LIKELY((NULL != l.ptr_ || 0 == l.len_) && (NULL != r.ptr_ || 0 == r.len_))) {
+      // Sorts compare the keys of two rows with this function, so resolve the
+      // comparison entry once instead of going through the argument checks of
+      // ObCharset::strcmpsp() for every pair.
+      cmp_ret = cs_info->coll->strnncollsp(cs_info,
+                                           reinterpret_cast<const unsigned char *>(l.ptr_),
+                                           l.len_,
+                                           reinterpret_cast<const unsigned char *>(r.ptr_),
+                                           r.len_,
+                                           with_end_space);
+    } else {
+      // Malformed input is not expected here, keep the checked implementation for
+      // the diagnosis it emits.
+      cmp_ret = ObCharset::strcmpsp(cs, l.ptr_, l.len_, r.ptr_, r.len_, with_end_space);
+    }
     cmp_ret = cmp_ret > 0 ? 1 : (cmp_ret < 0 ? -1 : 0);
     return OB_SUCCESS;
   }

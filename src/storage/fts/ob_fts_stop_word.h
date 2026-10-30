@@ -19,6 +19,7 @@
 
 #include "lib/container/ob_iarray.h"
 #include "lib/hash/ob_hashset.h"
+#include "lib/charset/ob_ctype.h"
 #include "object/ob_object.h"
 #include "data_plane/fts/ob_fts_struct.h"
 
@@ -81,6 +82,8 @@ public:
   int check_stopword(const ObFTWord &word, bool &is_stopword);
 
 private:
+  int exist_refactored(const ObFTWord &word, bool &is_stopword);
+
   static const int64_t DEFAULT_STOPWORD_BUCKET_NUM = 37L;
   typedef common::hash::ObHashSet<storage::ObFTWord> StopWordSet;
 
@@ -123,7 +126,12 @@ private:
   int casedown_word(const ObFTWord &src, ObFTWord &dst);
   int check_stopword(const ObFTWord &word, bool &is_stopword);
   int groupby_word(const ObFTWord &word, const int64_t word_cnt);
+  // Carve `len` bytes out of a small per-ObAddWord chunk. Every byte still comes
+  // from `allocator_`, so the lifetime of the returned buffer is exactly the
+  // lifetime the previous per-word allocation had.
+  int get_cased_word_buf(const int64_t len, char *&buf);
 private:
+  static constexpr int64_t CASED_WORD_BUFFER_SIZE = 512; // 1 chunk per ~85 words
   ObObjMeta word_meta_;
   common::ObIAllocator &allocator_;
   ObFTWordMap &word_map_;
@@ -133,6 +141,11 @@ private:
   int64_t min_token_size_;
   int64_t max_token_size_;
   ObAddWordFlag flag_;
+  // Collation info of `word_meta_`, resolved once instead of once per word.
+  const ObCharsetInfo *cs_info_;
+  // Bump allocator state over the current chunk owned by `allocator_`.
+  char *cased_buf_pos_;
+  char *cased_buf_end_;
 };
 
 } // end namespace storage

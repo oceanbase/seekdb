@@ -1,0 +1,65 @@
+drop database if exists fts_count_limit;
+create database fts_count_limit;
+use fts_count_limit;
+create table docs(id int primary key, body varchar(100), payload int, fulltext index ft(body));
+insert into docs values (1, 'alpha alpha alpha', null), (2, 'alpha', 7), (3, 'beta', 9), (4, null, 11);
+select count(*) from (select id from docs where match(body) against('alpha') limit 1) t;
+count(*)
+1
+select count(*) from (select id from docs where match(body) against('alpha') limit 10) t;
+count(*)
+2
+select count(*) from (select payload from docs where match(body) against('alpha') limit 1) t;
+count(*)
+1
+select count(*) from (select 1 from docs where match(body) against('alpha') limit 1) t;
+count(*)
+1
+select count(*) from (select id from docs where match(body) against('alpha') limit 0) t;
+count(*)
+0
+select count(*) from (select id from docs where match(body) against('missing') limit 10) t;
+count(*)
+0
+select count(*) from (select id from docs where match(body) against('') limit 10) t;
+count(*)
+0
+select count(*) from (select id from docs where match(body) against('alpha') and payload is not null limit 10) t;
+count(*)
+1
+select /*+ opt_param('rowsets_max_rows', 0) */ count(*) from (select id from docs where match(body) against('alpha') limit 1) t;
+count(*)
+1
+select sum(id) from (select id from docs where match(body) against('alpha') limit 1) t;
+sum(id)
+1
+select count(payload) from (select payload from docs where match(body) against('alpha') limit 1) t;
+count(payload)
+0
+select count(*) from (select id from docs where match(body) against('alpha') limit 1) t where id = 1;
+count(*)
+1
+select count(*) from (select id from docs where match(body) against('alpha') order by id desc limit 1) t;
+count(*)
+1
+select count(*) from (select id from docs where match(body) against('alpha') limit 1 offset 1) t;
+count(*)
+1
+select count(*) from (select distinct payload from docs where match(body) against('alpha') limit 2) t;
+count(*)
+2
+select count(*) from (select id from docs where match(body) against('+alpha' in boolean mode) limit 1) t;
+count(*)
+1
+select count(*) from (select id from docs where match(body) against('alpha') > 0.5 limit 1) t;
+count(*)
+0
+select count(*) from (select id from docs where match(body) against('alpha') limit 1) t having count(*) > 0;
+count(*)
+1
+select count(*) from (select id from docs where match(body) against('alpha') limit 1) t group by id;
+count(*)
+1
+select count(*) from (select match(body) against('alpha') s from docs where match(body) against('alpha') limit 1) t;
+count(*)
+1

@@ -161,6 +161,9 @@ public:
       common::ObIAllocator *allocator,
       const common::ObString &parser_name,
       const common::ObString &parser_properties);
+  // Use already validated properties without serializing and reparsing JSON.
+  int init(common::ObIAllocator *allocator, const ObFTParser &parser,
+           const ObFTParserProperty &property);
   /**
    * Split document into multiple words
    *

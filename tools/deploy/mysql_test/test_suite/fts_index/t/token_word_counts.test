@@ -1,0 +1,13 @@
+# owner: 1114687744
+# owner group: storage
+# description: repeated tokens keep their counts and document length
+# Token objects are compared as sets because hash iteration order is unspecified.
+select json_contains(tokenize('alpha alpha alpha beta beta gamma', 'space', '[{"output":"all"}]'), '{"doc_len":6,"tokens":[{"alpha":3},{"beta":2},{"gamma":1}]}') as repeated_space_counts;
+select json_contains(tokenize('ALPHA alpha Alpha BETA beta', 'space', '[{"output":"all"}]'), '{"doc_len":5,"tokens":[{"alpha":3},{"beta":2}]}') as folded_counts;
+select json_contains(tokenize('alpha alpha alpha beta beta gamma', 'beng', '[{"output":"all"}]'), '{"doc_len":6,"tokens":[{"alpha":3},{"beta":2},{"gamma":1}]}') as repeated_beng_counts;
+select json_contains(tokenize('aaaa', 'ngram', '[{"output":"all"}]'), '{"doc_len":3,"tokens":[{"aa":3}]}') as repeated_ngram_counts;
+select json_contains(tokenize(_binary'ALPHA ALPHA BETA', 'space', '[{"output":"all"}]'), '{"doc_len":3,"tokens":[{"ALPHA":2},{"BETA":1}]}') as binary_counts;
+select json_contains(tokenize('alpha', 'space', '[{"output":"all"}]'), '{"doc_len":1,"tokens":[{"alpha":1}]}') as next_document_counts;
+select json_length(tokenize('', 'space')) as empty_document;
+select json_contains(tokenize(_utf8mb4'café cafe' collate utf8mb4_general_ci, 'space', '[{"output":"all"}]'), '{"tokens":[{"cafe":2}]}') as last_equivalent_word;
+select json_contains(tokenize(_utf8mb4'cafe café' collate utf8mb4_general_ci, 'space', '[{"output":"all"}]'), '{"tokens":[{"café":2}]}') as reversed_equivalent_word;

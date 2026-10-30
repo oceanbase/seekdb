@@ -690,6 +690,24 @@ public:
   static bool usemb(const ObCollationType collation_type);
   static int is_mbchar(const ObCollationType collation_type, const char *str, const char *end);
   static const ObCharsetInfo *get_charset(const ObCollationType coll_type);
+  /*
+   * Same as get_charset() for a collation that has already been initialized.
+   * Collation aware comparisons are called once per key pair of a sort, and both
+   * the range check and the switch over all collations inside get_charset() show
+   * up in the profile of an index build. The first call for a collation falls
+   * back to get_charset() so that the initialization is not skipped.
+   */
+  static inline const ObCharsetInfo *get_charset_cached(const ObCollationType coll_type)
+  {
+    const ObCharsetInfo *ret = NULL;
+    if (OB_LIKELY(coll_type > CS_TYPE_INVALID && coll_type < CS_TYPE_MAX)) {
+      ret = charset_arr_inited[coll_type];
+      if (OB_ISNULL(ret)) {
+        ret = get_charset(coll_type);
+      }
+    }
+    return ret;
+  }
   static int get_mbmaxlen_by_coll(const ObCollationType collation_type, int64_t &mbmaxlen);
   static int get_mbminlen_by_coll(const ObCollationType collation_type, int64_t &mbminlen);
 

@@ -3835,7 +3835,12 @@ int ObTscCgService::generate_table_lookup_ctdef(const ObLogTableScan &op,
     ObDASOpType lookup_type = ObDASOpType::DAS_OP_INVALID;
     bool need_proj_relevance_score = false;
 
+    // An index back of a text retrieval scan is always stitched together with the
+    // projecting lookup iter, even when the plan does not calculate the relevance
+    // score at all: the DAS iter builders reject a plain table lookup for that tree.
+    // The score column itself is only projected when the ir scan ctdef carries it.
     if (OB_FAIL(check_lookup_iter_type(scan_ctdef, need_proj_relevance_score))) {
+    } else if (FALSE_IT(need_proj_relevance_score |= op.is_text_retrieval_scan())) {
     } else if (FALSE_IT(lookup_type = (need_proj_relevance_score) ?
                                           ObDASOpType::DAS_OP_INDEX_PROJ_LOOKUP :
                                           ObDASOpType::DAS_OP_TABLE_LOOKUP)) {
