@@ -81,14 +81,12 @@ public:
 public:
   void handle(common::LinkTask *task);
   int create_status();
-  int remove_status(bool finished = false);
+  int remove_status();
   int finish(int64_t deadline_us);
   int enable(const palf::LSN &base_lsn,
              const share::SCN &base_scn);
   int block_submit_log();
   int unblock_submit_log();
-  int is_replay_done(const palf::LSN &end_lsn,
-                     bool &is_done);
   int submit_task(ObReplayServiceTask *task);
   int update_replayable_point(const share::SCN &replayable_scn);
   int stat_replay_process(int64_t &submitted_log_size,
@@ -164,6 +162,8 @@ private:
   palf::PalfEnv *palf_env_;
   ObILogAllocator *allocator_;
   ReplayInfo *replay_info_;
+  common::ObSpinLock status_lock_;
+  ObReplayStatus *replay_status_;
   ObMiniStat::ObStatItem wait_cost_stat_;
   ObMiniStat::ObStatItem replay_cost_stat_;
   DISALLOW_COPY_AND_ASSIGN(ObLogReplayService);

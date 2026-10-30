@@ -104,6 +104,8 @@ public:
       init_task_ts_(OB_INVALID_TIMESTAMP),
       first_handle_ts_(OB_INVALID_TIMESTAMP),
       print_error_ts_(OB_INVALID_TIMESTAMP),
+      replay_cost_(OB_INVALID_TIMESTAMP),
+      retry_cost_(OB_INVALID_TIMESTAMP),
       read_log_buf_(NULL)
   {}
   virtual ~ObLogReplayTask()
@@ -225,10 +227,6 @@ class ObReplayServiceSubmitTask : public ObReplayServiceTask
 {
 public:
   ObReplayServiceSubmitTask(): ObReplayServiceTask(),
-    next_to_submit_lsn_(),
-    next_to_submit_scn_(),
-    base_lsn_(),
-    base_scn_(),
     iterator_()
   {
     type_ = ObReplayServiceTaskType::SUBMIT_LOG_TASK;
@@ -259,28 +257,8 @@ public:
                bool &iterate_end_by_replayable_point);
   // Reset the iterator with the current endpoint as the new starting point
 
-  INHERIT_TO_STRING_KV("ObReplayServiceSubmitTask", ObReplayServiceTask,
-                       K(next_to_submit_lsn_),
-                       K(next_to_submit_scn_),
-                       K(base_lsn_),
-                       K(base_scn_),
-                       K(iterator_));
+  INHERIT_TO_STRING_KV("ObReplayServiceSubmitTask", ObReplayServiceTask, K(iterator_));
 private:
-  int update_next_to_submit_lsn_(const palf::LSN &lsn);
-  int update_next_to_submit_scn_(const share::SCN &scn);
-  void set_next_to_submit_log_info_(const palf::LSN &lsn, const share::SCN &scn);
-  int get_next_to_submit_log_info_(palf::LSN &lsn, share::SCN &scn) const;
-  int get_base_lsn_(palf::LSN &lsn) const;
-  int get_base_scn_(share::SCN &scn) const;
-
-private:
-  // location of next log after the last log that has already been submit to replay, consider as left side of iterator
-  palf::LSN next_to_submit_lsn_;
-  share::SCN next_to_submit_scn_;
-  //initial log lsn when enable replay, for stat replay process
-  palf::LSN base_lsn_;
-  //initial log scn when enable replay, logs which scn small than this value should skip replay
-  share::SCN base_scn_;
   //for unittest, should be a member not pointer
   palf::PalfBufferIterator iterator_; 
 };
@@ -313,19 +291,12 @@ public:
   }
   Link *pop();
   void push(Link *p);
-  int get_min_unreplayed_log_info(palf::LSN &lsn,
-                                  share::SCN &scn,
-                                  int64_t &replay_hint,
-                                  ObLogBaseType &log_type,
-                                  int64_t &first_handle_ts,
-                                  int64_t &replay_cost,
-                                  int64_t &retry_cost,
-                                  bool &is_queue_empty);
   bool need_batch_push();
   void set_batch_push_finish();
   INHERIT_TO_STRING_KV("ObReplayServiceReplayTask", ObReplayServiceTask,
                        K(idx_));
 private:
+  void update_progress_(); // caller holds the queue lock
   Link *pop_()
   {
     return queue_.pop();
@@ -367,52 +338,19 @@ public:
   typedef RWLock::WLockGuard WLockGuard;
   typedef RWLock::WLockGuardWithRetryInterval WLockGuardWithRetryInterval;
 public:
-  struct LSErrInfo
-  {
-  public:
-    LSErrInfo()
-    {
-      reset();
-    }
-    ~LSErrInfo()
-    {
-      reset();
-    }
-    void reset() {
-      lsn_.reset();
-      scn_.set_min();
-      log_type_ = ObLogBaseType::INVALID_LOG_BASE_TYPE;
-      replay_hint_ = 0;
-      is_submit_err_ = false;
-      err_ts_ = 0;
-      err_ret_ = common::OB_SUCCESS;
-    }
-    TO_STRING_KV(K(lsn_), K(scn_), K(log_type_),
-                 K(is_submit_err_), K(err_ts_), K(err_ret_));
-  public:
-    palf::LSN lsn_;
-    share::SCN scn_;
-    ObLogBaseType log_type_;
-    int64_t replay_hint_;
-    bool is_submit_err_;  //is submit log task error occured
-    int64_t err_ts_;  //the timestamp that partition encounts fatal error
-    int err_ret_;  //the ret code of fatal error
-  };
-public:
   ObReplayStatus();
   ~ObReplayStatus();
   int init(palf::PalfEnv *palf_env,
-           ObLogReplayService *rp_sv);
+           ObLogReplayService *rp_sv, ReplayInfo *replay_info);
   void destroy();
 public:
   int enable(const palf::LSN &base_lsn,
              const share::SCN &base_scn);
   int disable();
-  // if is_enabled_ is false,
-  // means log stream will bedestructed and no logs need to replayed any more.
-  bool is_enabled() const;
+  // Internal execution gate; closing it does not clear ReplayInfo's enabled state.
+  bool is_active() const;
   // for replay service when holding rdlock
-  bool is_enabled_without_lock() const;
+  bool is_active_without_lock() const;
   // Replay submission flow control.
   // 1. avoid more replay cause OOM because speed_limit cannot work when freeze
   // 2. quick improving max_undecided_log to reduce freeze cost
@@ -428,16 +366,6 @@ public:
   {
     rwlock_.unlock();
   }
-
-  // check whether all logs has finished replaying
-  //
-  // Before enabling local append, there must be no remaining log to replay.
-  // this function will be invoked and check whether the returned is_done is true
-  // @param [out] is_done，true if all logs have been replayed
-  //
-  // @return : OB_SUCCESS : success
-  //           OB_NOT_INIT: ObReplayStatus has not been inited
-  int is_replay_done(const palf::LSN &lsn, bool &is_done);
 
   // Completion also waits for queued/handling service tasks to release their leases.
   bool is_idle() const;
@@ -458,14 +386,6 @@ public:
   void free_replay_task_log_buf(ObLogReplayTask *task);
 
   int get_min_unreplayed_lsn(palf::LSN &lsn);
-  int get_max_replayed_scn(share::SCN &scn);
-  int get_min_unreplayed_log_info(palf::LSN &lsn,
-                                  share::SCN &scn,
-                                  int64_t &replay_hint,
-                                  ObLogBaseType &log_type,
-                                  int64_t &first_handle_ts,
-                                  int64_t &replay_cost,
-                                  int64_t &retry_cost);
   int get_replay_process(int64_t &submitted_log_size,
                          int64_t &unsubmitted_log_size,
                          int64_t &replayed_log_size,
@@ -481,8 +401,6 @@ public:
   void set_post_barrier_submitted(const palf::LSN &lsn);
   int set_post_barrier_finished(const palf::LSN &lsn);
   int trigger_fetch_log();
-  int stat(LSReplayStat &stat) const;
-  int diagnose(ReplayDiagnoseInfo &diagnose_info);
   inline void inc_ref()
   {
     ATOMIC_INC(&ref_cnt_);
@@ -505,9 +423,12 @@ public:
                     const int err_ret);
   bool has_fatal_error() const
   {
-    return is_fatal_error(err_info_.err_ret_);
+    bool error = false;
+    replay_info_->has_fatal_error(error);
+    return error;
   }
-  bool is_fatal_error(const int ret) const;
+  bool is_fatal_error(const int ret) const { return ReplayInfo::is_fatal_error(ret); }
+  ReplayInfo &get_replay_info() { return *replay_info_; }
   bool need_check_memstore(const palf::LSN &lsn)
   {
     return (lsn - last_check_memstore_lsn_) > LS_CHECK_MEMSTORE_INTERVAL_THRESHOLD;
@@ -517,22 +438,18 @@ public:
     last_check_memstore_lsn_ = lsn;
   }
 
-  TO_STRING_KV(K(is_enabled_),
+  TO_STRING_KV(K(is_active_),
                K(is_submit_blocked_),
-               K(err_info_),
                K(ref_cnt_),
                K(post_barrier_lsn_),
-               K(pending_task_count_),
                K(submit_log_task_));
 private:
-  void set_next_to_submit_log_info_(const palf::LSN &lsn, const share::SCN &scn);
   int submit_task_to_replay_service_(ObReplayServiceTask &task);
   // Register callback and submit the currently initialized submit_log_task
   int enable_(const palf::LSN &base_lsn,
               const share::SCN &base_scn);
   // Unregister callback and clear task
   int disable_();
-  bool is_replay_enabled_() const;
 
 private:
   static const int64_t PENDING_COUNT_THRESHOLD = 100;
@@ -546,24 +463,22 @@ private:
   static const int64_t WRLOCK_RETRY_INTERVAL = 20 * 1000; //20ms
 
   bool is_inited_;
-  bool is_enabled_;  // forbidden replay and fetch log if false
+  bool is_active_;  // forbidden replay and fetch log if false
   bool is_submit_blocked_; // allow replay log if true
   // guarantee the effectiveness of self memory:
   // inc_ref() before push task into replay_service, dec_ref() after replay_service finished handling task
   int64_t ref_cnt_;
   // used for barrier demand
   palf::LSN post_barrier_lsn_;
-  // record error info, reported when handle submit or replay type task
-  LSErrInfo err_info_;
-  int64_t pending_task_count_;
   palf::LSN last_check_memstore_lsn_;
-  // protect is_enabled_ and submit_log_task_
+  // protect is_active_ and submit_log_task_
   // Hold the read lock until the log replay is complete when replaying a log entry
   // Ensure that no log replay will occur after write lock is disabled
   mutable RWLock rwlock_;
   mutable RWLock local_replay_lock_;
 
   ObLogReplayService *rp_sv_;
+  ReplayInfo *replay_info_;
   // be sure to clear these queues when the partition is offline to prevent old replay task is replayed in situation of migrating out and then migrating in
   ObReplayServiceReplayTask task_queues_[common::REPLAY_TASK_QUEUE_SIZE];
   ObReplayServiceSubmitTask submit_log_task_;

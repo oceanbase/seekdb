@@ -176,6 +176,8 @@ ObLogReplayService::ObLogReplayService()
     palf_env_(NULL),
     allocator_(NULL),
     replay_info_(nullptr),
+    status_lock_(),
+    replay_status_(nullptr),
     wait_cost_stat_("[REPLAY STAT REPLAY TASK IN QUEUE TIME]", PALF_STAT_PRINT_INTERVAL_US),
     replay_cost_stat_("[REPLAY STAT REPLAY TASK EXECUTE COST TIME]", PALF_STAT_PRINT_INTERVAL_US)
 {}
@@ -323,7 +325,7 @@ void ObLogReplayService::handle(common::LinkTask *task)
     ObReplayServiceTaskType task_type = task_to_handle->get_type();
     // Here check is_enable without locking, relying on the actual internal logic to hold lock for judgment
     // Support reuse semantics, this task cannot be directly discarded, it needs to go through the normal push back process to advance the lease
-    if (!replay_status->is_enabled()) {
+    if (!replay_status->is_active()) {
       CLOG_LOG(INFO, "replay status is disabled, just ignore the task", KPC(replay_status));
     } else if (OB_FAIL(pre_check_(*replay_status, *task_to_handle))) {
       //print log in pre_check_
@@ -377,14 +379,20 @@ int ObLogReplayService::create_status()
     CLOG_LOG(WARN, "failed to alloc replay status", K(ret));
   } else {
     new (replay_status) ObReplayStatus();
-    if (OB_FAIL(replay_status->init(palf_env_, this))) {
+    if (OB_FAIL(replay_status->init(palf_env_, this, replay_info_))) {
       server_free(replay_status);
       replay_status = NULL;
       CLOG_LOG(ERROR, "failed to init replay status", K(ret), K(palf_env_), K(this));
     } else {
       replay_status->inc_ref();
-      if (OB_SUCC(ret = replay_info_->attach(replay_status))) {
-        replay_status = nullptr;
+      {
+        ObLockGuard<ObSpinLock> guard(status_lock_);
+        if (nullptr != replay_status_) {
+          ret = OB_ENTRY_EXIST;
+        } else {
+          replay_status_ = replay_status;
+          replay_status = nullptr;
+        }
       }
       if (OB_NOT_NULL(replay_status)) {
         revert_replay_status_(replay_status);
@@ -394,7 +402,7 @@ int ObLogReplayService::create_status()
   return ret;
 }
 // Detach readers before disabling and releasing the executor status.
-int ObLogReplayService::remove_status(const bool finished)
+int ObLogReplayService::remove_status()
 {
   int ret = OB_SUCCESS;
   ObReplayStatus *replay_status = NULL;
@@ -402,8 +410,10 @@ int ObLogReplayService::remove_status(const bool finished)
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "replay service not inited", K(ret));
   } else {
-    if (OB_FAIL(replay_info_->detach(finished, replay_status))) {
-      return ret;
+    {
+      ObLockGuard<ObSpinLock> guard(status_lock_);
+      replay_status = replay_status_;
+      replay_status_ = nullptr;
     }
     if (OB_NOT_NULL(replay_status)) {
       while (OB_EAGAIN == (ret = replay_status->disable())) {
@@ -435,9 +445,10 @@ int ObLogReplayService::finish(const int64_t deadline_us)
     replay_stat_.stop();
     replay_stat_.wait();
   }
-  if (OB_SUCC(ret) && OB_FAIL(remove_status(true))) {
+  if (OB_SUCC(ret) && OB_FAIL(remove_status())) {
   }
   if (OB_SUCC(ret)) {
+    replay_info_->finish();
     stop();
     wait();
   }
@@ -498,26 +509,6 @@ int ObLogReplayService::unblock_submit_log()
     CLOG_LOG(WARN, "replay status is not exist", K(ret));
   } else {
     replay_status->unblock_submit();
-  }
-  return ret;
-}
-
-int ObLogReplayService::is_replay_done(const LSN &end_lsn,
-                                       bool &is_done)
-{
-  int ret = OB_SUCCESS;
-  ObReplayStatus *replay_status = NULL;
-  ObReplayStatusGuard guard;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    CLOG_LOG(WARN, "replay service not init", K(ret));
-  } else if (OB_FAIL(get_replay_status_(guard))) {
-  } else if (NULL == (replay_status = guard.get_replay_status())) {
-    ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(WARN, "replay status is not exist", K(ret));
-  } else if (OB_FAIL(replay_status->is_replay_done(end_lsn, is_done))){
-  } else {
-    // do nothing
   }
   return ret;
 }
@@ -644,7 +635,12 @@ void *ObLogReplayService::alloc_replay_task(const int64_t size)
 
 int ObLogReplayService::get_replay_status_(ObReplayStatusGuard &guard)
 {
-  return replay_info_->get_replay_status(guard);
+  ObLockGuard<ObSpinLock> lock(status_lock_);
+  if (nullptr == replay_status_) {
+    return OB_ENTRY_NOT_EXIST;
+  }
+  guard.set_replay_status(replay_status_);
+  return OB_SUCCESS;
 }
 
 bool ObLogReplayService::is_tenant_out_of_memory_() const
@@ -726,6 +722,7 @@ int ObLogReplayService::do_replay_task_(ObLogReplayTask *replay_task,
   ObLogReplayBuffer *replay_log_buff = NULL;
   bool need_replay = false;
   replay_task->first_handle_ts_ = ObTimeUtility::fast_current_time();
+  replay_info_->set_queue_first_handle_ts(replay_queue_idx, replay_task->first_handle_ts_);
   if (OB_ISNULL(replay_status) || OB_ISNULL(replay_task)) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(ERROR, "invalid argument", KPC(replay_task), KPC(replay_status), KR(ret));
@@ -969,7 +966,7 @@ int ObLogReplayService::handle_submit_task_(ObReplayServiceSubmitTask *submit_ta
       int64_t log_size = 0;
       LSN to_submit_lsn;
       SCN to_submit_scn;
-      if (!replay_status->is_enabled_without_lock() || !replay_status->need_submit_log()) {
+      if (!replay_status->is_active_without_lock() || !replay_status->need_submit_log()) {
         need_submit_log = false;
       } else {
 #ifdef ERRSIM
@@ -1058,7 +1055,7 @@ int ObLogReplayService::handle_replay_task_(ObReplayServiceReplayTask *task_queu
       ObLogReplayTask *replay_task = NULL;
       ObLogReplayTask *replay_task_to_destroy = NULL;
       if (replay_status->try_rdlock()) {
-        if (!replay_status->is_enabled_without_lock()) {
+        if (!replay_status->is_active_without_lock()) {
           is_queue_empty = true;
         } else if (NULL == (link = task_queue->top())) {
           //queue is empty
