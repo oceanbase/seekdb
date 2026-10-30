@@ -24,10 +24,10 @@
 #define CONST const
 #endif
 #include <iphlpapi.h>
-#else
-#include <sys/ioctl.h>
-#include <net/if.h>
-#ifdef __APPLE__
+#elif defined(__linux__)
+#include <fcntl.h>
+#include <unistd.h>
+#elif defined(__APPLE__)
 #include <ifaddrs.h>
 #include <net/if_dl.h>
 #elif defined(__ANDROID__)
@@ -36,7 +36,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 #endif
-#endif
+#include <sys/ioctl.h>
+#include <net/if.h>
 #include "sql/engine/expr/ob_expr_uuid.h"
 #include "sql/engine/ob_exec_context.h"
 #include "lib/time/ob_time_utility.h"
@@ -238,8 +239,22 @@ int ObUUIDNode::init()
       }//end for
       if (OB_FAIL(ret)) {
       } else if (!mac_addr_found) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
+        // RFC 9562 section 6.10: when MAC address is unavailable in restricted
+        // Linux environments, use random bytes with multicast bit as node ID.
+        int fd = open("/dev/urandom", O_RDONLY);
+        if (fd >= 0 && read(fd, mac_addr_, 6) == 6) {
+          mac_addr_[0] |= 0x01;
+          mac_addr_found = true;
+          LOG_WARN("can not get mac address, using random UUID node ID instead", K(errno));
+        } else {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("failed to generate random UUID node ID", K(ret), K(errno));
+        }
+        if (fd >= 0) {
+          close(fd);
+        }
+      }
+      if (OB_SUCC(ret) && mac_addr_found) {
         is_inited_ = true;
       }
     }
@@ -555,7 +570,8 @@ int ObExprUuid2bin::cg_expr(ObExprCGCtx &op_cg_ctx,
                           const ObRawExpr &raw_expr,
                           ObExpr &rt_expr) const
 {
-  UNUSED(op_cg_ctx);
+  UNUSED(raw_expr);
+  ObExpr &rt_expr = rt_expr;
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(1 != rt_expr.arg_cnt_ && 2 != rt_expr.arg_cnt_)) {
     ret = OB_ERR_PARAM_SIZE;
@@ -564,7 +580,7 @@ int ObExprUuid2bin::cg_expr(ObExprCGCtx &op_cg_ctx,
     if (OB_ISNULL(flag_expr)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ObObjType flag_expr_type = flag_expr->get_result_type().get_type();
+      ObObjType flag_expr_type = flag_expr->get_result_type();
       if (OB_UNLIKELY(ObNullType != flag_expr_type &&
                   !ob_is_integer_type(flag_expr_type))) {
         ret = OB_ERR_UNEXPECTED;
@@ -842,6 +858,7 @@ int ObExprBin2uuid::cg_expr(ObExprCGCtx &op_cg_ctx,
                           ObExpr &rt_expr) const
 {
   UNUSED(op_cg_ctx);
+  ObExpr &rt_expr = rt_expr;
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(1 != rt_expr.arg_cnt_ && 2 != rt_expr.arg_cnt_)) {
     ret = OB_ERR_PARAM_SIZE;
@@ -850,7 +867,7 @@ int ObExprBin2uuid::cg_expr(ObExprCGCtx &op_cg_ctx,
     if (OB_ISNULL(flag_expr)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ObObjType flag_expr_type = flag_expr->get_result_type().get_type();
+      ObObjType flag_expr_type = flag_expr->get_result_type();
       if (OB_UNLIKELY(ObNullType != flag_expr_type &&
                   !ob_is_integer_type(flag_expr_type))) {
         ret = OB_ERR_UNEXPECTED;
@@ -888,9 +905,7 @@ int ObExprBin2uuid::bin2uuid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_d
   ObDatum *swap_flag = nullptr;
   bool need_swap = false;
   bool is_null = false;
-  if (OB_ISNULL(expr.args_[0])) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(expr.args_[0]->eval(ctx, text))) {
+  if (OB_FAIL(expr.args_[0]->eval(ctx, text))) {
   } else if (OB_ISNULL(text)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (text->is_null()) {
@@ -999,7 +1014,7 @@ int ObExprBin2uuid::bin2uuid_batch(const ObExpr &expr,
         if (OB_ISNULL(res_buf)) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_ISNULL(bin_text_ptr) || UuidCommon::BYTE_LENGTH != bin_text.length()) {
-          ObString string_type_str("binary");
+          ObString string_type_str("string");
           ObString func_str(N_BIN_TO_UUID);
           int text_len = std::min(bin_text.length(), UuidCommon::BYTE_LENGTH * 2);
           SMART_VAR(char[UuidCommon::BYTE_LENGTH * 4], hex_buf) {
@@ -1038,5 +1053,5 @@ int ObExprBin2uuid::bin2uuid_batch(const ObExpr &expr,
   return ret;
 }
 
-} //namespace sql
-} //namespace oceanbase
+} // namespace sql
+} // namespace oceanbase
