@@ -30,7 +30,8 @@ ObTableScanRange::ObTableScanRange()
     allocator_(nullptr),
     status_(EMPTY),
     enable_new_false_range_(false),
-    is_inited_(false)
+    is_inited_(false),
+    owns_rowkey_datums_(true)
 {
   rowkeys_.set_attr(ObMemAttr("TScanRowkeys"));
   ranges_.set_attr(ObMemAttr("TScanRanges"));
@@ -55,7 +56,7 @@ do {                                                                            
     RESET_SCAN_RANGES(ranges_);
 
     for (int64_t i = 0; i < rowkeys_.count(); i++) {
-      if (!rowkeys_.at(i).is_static_rowkey()) {
+      if (owns_rowkey_datums_ && !rowkeys_.at(i).is_static_rowkey()) {
         allocator_->free(const_cast<ObStorageDatum *>(rowkeys_.at(i).datums_));
       }
     }
@@ -66,6 +67,7 @@ do {                                                                            
   status_ = EMPTY;
   enable_new_false_range_ = false;
   is_inited_ = false;
+  owns_rowkey_datums_ = true;
 }
 
 int ObTableScanRange::init(ObTableScanParam &scan_param)
@@ -86,6 +88,9 @@ int ObTableScanRange::init(ObTableScanParam &scan_param)
     if (OB_UNLIKELY(!datum_utils->is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "Invalid datum utils", K(ret), KPC(scan_param.table_param_));
+    } else if (nullptr != scan_param.datum_lookup_keys_) {
+      if (OB_FAIL(init_datum_rowkeys(*scan_param.datum_lookup_keys_, scan_param.scan_flag_, *datum_utils))) {
+      }
     } else if (scan_param.is_get_) {
       if (OB_FAIL(init_rowkeys(scan_param.key_ranges_, scan_param.scan_flag_, datum_utils))) {
       }
@@ -178,6 +183,37 @@ int ObTableScanRange::init_rowkeys(
         ObDatumComparor<ObDatumRowkey> comparor(*datum_utils, ret, scan_flag.is_reverse_scan());
         lib::ob_sort(rowkeys_.begin(), rowkeys_.end(), comparor);
       }
+    }
+  }
+  return ret;
+}
+
+int ObTableScanRange::init_datum_rowkeys(
+    const common::ObIArray<DatumLookupKey> &keys,
+    const common::ObQueryFlag &scan_flag,
+    const ObStorageDatumUtils &datum_utils)
+{
+  int ret = OB_SUCCESS;
+  // The DAS lookup arena outlives this scan, including rescan. Only the rowkey
+  // wrappers are ours; do not free the producer's datums on reset.
+  owns_rowkey_datums_ = false;
+  for (int64_t i = 0; OB_SUCC(ret) && i < keys.count(); ++i) {
+    const DatumLookupKey &key = keys.at(i);
+    if (OB_UNLIKELY(!key.is_valid())) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      ObDatumRowkey rowkey(key.datums_, key.count_);
+      rowkey.set_group_idx(key.group_id_);
+      if (OB_FAIL(rowkeys_.push_back(rowkey))) {
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (rowkeys_.empty()) {
+      status_ = EMPTY;
+    } else if (rowkeys_.count() > 1 && scan_flag.is_support_sort_scan()) {
+      ObDatumComparor<ObDatumRowkey> comparor(datum_utils, ret, scan_flag.is_reverse_scan());
+      lib::ob_sort(rowkeys_.begin(), rowkeys_.end(), comparor);
     }
   }
   return ret;
