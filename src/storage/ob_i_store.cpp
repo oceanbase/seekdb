@@ -103,7 +103,7 @@ void ObStoreCtx::force_print_trace_log()
     mvcc_acc_ctx_.tx_desc_->print_trace();
   }
   if (NULL != mvcc_acc_ctx_.tx_ctx_) {
-    mvcc_acc_ctx_.tx_ctx_->print_trace_log();
+    mvcc_acc_ctx_.tx_ctx_->print_tx_state();
   }
 }
 
