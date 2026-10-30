@@ -1,0 +1,14 @@
+W20261030 12:01:56.706079 123702921351680 simple_timer.cpp:55] [rocprofv3] tool initialization ::     0.000078 sec
+W20261030 12:01:56.706306 123702921351680 simple_timer.cpp:55] [rocprofv3] 'bash -c exec 3</workspace/hipvs-competition-20261030/evidence/profile-50000x128-input.f32; exec 4>/workspace/hipvs-competition-20261030/evidence/profile-50000x128-reply.bin; exec /workspace/hipvs-competition-20261030/artifacts/bin/seekdb_hipvs_hnsw_worker 50000 128 32 200' ::     0.000000 sec
+W20261030 12:01:56.826820 124019532725056 simple_timer.cpp:55] [rocprofv3] tool initialization ::     0.000762 sec
+W20261030 12:01:56.922368 124019532725056 simple_timer.cpp:55] [rocprofv3] '/workspace/hipvs-competition-20261030/artifacts/bin/seekdb_hipvs_hnsw_worker 50000 128 32 200' ::     0.000000 sec
+W20261030 12:01:56.996992 124019532725056 tool.cpp:2422] HSA version 8.20.4 initialized (instance=0)
+W20261030 12:01:59.568833 124019532725056 simple_timer.cpp:55] [rocprofv3] '/workspace/hipvs-competition-20261030/artifacts/bin/seekdb_hipvs_hnsw_worker 50000 128 32 200' ::     2.646464 sec
+E20261030 12:01:59.661010 124019532725056 output_stream.cpp:111] Opened result file: /workspace/hipvs-competition-20261030/evidence/kernel-trace-50000x128/hipvs-build_kernel_stats.csv
+E20261030 12:01:59.662532 124019532725056 output_stream.cpp:111] Opened result file: /workspace/hipvs-competition-20261030/evidence/kernel-trace-50000x128/hipvs-build_kernel_trace.csv
+E20261030 12:01:59.679639 124019532725056 output_stream.cpp:111] Opened result file: /workspace/hipvs-competition-20261030/evidence/kernel-trace-50000x128/hipvs-build_memory_copy_stats.csv
+E20261030 12:01:59.680581 124019532725056 output_stream.cpp:111] Opened result file: /workspace/hipvs-competition-20261030/evidence/kernel-trace-50000x128/hipvs-build_memory_copy_trace.csv
+E20261030 12:01:59.685559 124019532725056 output_stream.cpp:111] Opened result file: /workspace/hipvs-competition-20261030/evidence/kernel-trace-50000x128/hipvs-build_agent_info.csv
+E20261030 12:01:59.686515 124019532725056 output_stream.cpp:111] Opened result file: /workspace/hipvs-competition-20261030/evidence/kernel-trace-50000x128/hipvs-build_domain_stats.csv
+W20261030 12:01:59.690914 124019532725056 simple_timer.cpp:55] [rocprofv3] output generation ::     0.096672 sec
+W20261030 12:01:59.702458 124019532725056 simple_timer.cpp:55] [rocprofv3] tool finalization ::     0.108271 sec

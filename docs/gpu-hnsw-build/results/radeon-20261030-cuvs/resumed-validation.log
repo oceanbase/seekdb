@@ -1,0 +1,33 @@
+started pid=33520
+ready
+{"completed": true, "checks": 27, "output": "/workspace/hipvs-competition-20261030/evidence/sql-contract.json"}
+{"round": 1, "backend": "vsag", "status": "passed", "ddl_seconds": 24.963997269049287, "build_seconds": 25.028745133429766, "availability_ids": [1000246456, 1000159552, 1000789572, 1000639088, 1000574352, 1000571836, 1000739779, 1000533603, 1000067990, 1000674448], "recall_at_10": 0.996, "queries": 100, "exact_sql_crosscheck": true}
+{"round": 1, "backend": "hipvs", "status": "passed", "ddl_seconds": 3.14877999573946, "build_seconds": 3.209281789138913, "availability_ids": [1000246456, 1000159552, 1000789572, 1000639088, 1000574352, 1000571836, 1000739779, 1000533603, 1000067990, 1000674448], "recall_at_10": 1.0, "queries": 100, "exact_sql_crosscheck": true}
+{"round": 2, "backend": "hipvs", "status": "passed", "ddl_seconds": 3.0476361867040396, "build_seconds": 3.108347810804844, "availability_ids": [1000246456, 1000159552, 1000789572, 1000639088, 1000574352, 1000571836, 1000739779, 1000533603, 1000067990, 1000674448], "recall_at_10": 1.0, "queries": 100, "exact_sql_crosscheck": true}
+{"round": 2, "backend": "vsag", "status": "passed", "ddl_seconds": 25.064026199281216, "build_seconds": 25.127499748021364, "availability_ids": [1000246456, 1000159552, 1000789572, 1000639088, 1000574352, 1000571836, 1000739779, 1000533603, 1000067990, 1000674448], "recall_at_10": 0.996, "queries": 100, "exact_sql_crosscheck": true}
+{"round": 3, "backend": "vsag", "status": "passed", "ddl_seconds": 25.053506407886744, "build_seconds": 25.114934699609876, "availability_ids": [1000246456, 1000159552, 1000789572, 1000639088, 1000574352, 1000571836, 1000739779, 1000533603, 1000067990, 1000674448], "recall_at_10": 0.996, "queries": 100, "exact_sql_crosscheck": true}
+{"round": 3, "backend": "hipvs", "status": "passed", "ddl_seconds": 3.047737469896674, "build_seconds": 3.1091820802539587, "availability_ids": [1000246456, 1000159552, 1000789572, 1000639088, 1000574352, 1000571836, 1000739779, 1000533603, 1000067990, 1000674448], "recall_at_10": 1.0, "queries": 100, "exact_sql_crosscheck": true}
+{"medians_seconds": {"vsag": 25.114934699609876, "hipvs": 3.1091820802539587}, "speedup": 8.077666103607056, "dml_and_filter": {"update": true, "delete": true, "reinsert": true, "filter_recall_at_10": 1.0, "all_filter_ids_valid": true}}
+[sdb][WARN] not sending SIGKILL to pid=33523: process no longer matches this instance
+stopped
+started pid=34873
+ready
+{"status": "passed", "recall_at_10": 1.0, "queries": 100, "per_query_recall": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], "exact_sql_crosscheck": true}
+[sdb][WARN] not sending SIGKILL to pid=34876: process no longer matches this instance
+stopped
+{"command": ["rocprofv3", "--kernel-trace", "--memory-copy-trace", "--stats", "-f", "csv", "-d", "/workspace/hipvs-competition-20261030/evidence/kernel-trace-50000x128", "-o", "hipvs-build", "--", "bash", "-c", "exec 3</workspace/hipvs-competition-20261030/evidence/profile-50000x128-input.f32; exec 4>/workspace/hipvs-competition-20261030/evidence/profile-50000x128-reply.bin; exec /workspace/hipvs-competition-20261030/artifacts/bin/seekdb_hipvs_hnsw_worker 50000 128 32 200"], "rows": 50000, "dim": 128, "m": 32, "ef_construction": 200, "input_sha256": "b51d8feb8b286e430f06e6318a3ccdd8eb6770c3ad7020b2ebce5c7454307847", "worker_sha256": "5889aaf2dfd6e68357c3b337d6663bc5770497a86f12ee99939a2f327a6d1eed", "outside_sql_timed_runs": true, "returncode": 0, "worker_reply": {"status": 0, "output_size": 39407072, "error": "", "actual_file_size": 39409160, "header_bytes": 2088}, "kernel_dispatches": 158, "nn_descent_dispatches": 61}
+{"source_files": 16, "binaries": {"/workspace/hipvs-competition-20261030/artifacts/bin/seekdb": "ebb014c6b66ea2c3675aee07a8fb489b731d34a9b36b293851c8ce8842988d13", "/workspace/hipvs-competition-20261030/artifacts/bin/seekdb_hipvs_hnsw_worker": "5889aaf2dfd6e68357c3b337d6663bc5770497a86f12ee99939a2f327a6d1eed", "/workspace/hipvs-competition-20261030/artifacts/lib/libseekdb_hipvs_hnsw.so": "8b482b5246f185b567753ee5f8b689c60ab0ee5dddf135ae4a0e9dd055035faa", "/opt/hipvs/lib/libcuvs_c.so": "b63211897276e0a6911bb534fe77c8b0b59f31c50af1df2f108845f06ad46ebf", "/opt/hipvs/lib/libcuvs.so": "5ccf012af5923c687cd2d22149740a410ca69e0aa51223a6386ba6fc129c967a"}}
+{
+  "verified": true,
+  "scope": "archived evidence consistency only; no SQL or GPU execution",
+  "source_ref": "working tree (LF normalized)",
+  "source_files": 16,
+  "build_runs": 6,
+  "medians_seconds": {
+    "vsag": 25.114934699609876,
+    "hipvs": 3.1091820802539587
+  },
+  "speedup": 8.077666103607056,
+  "kernel_dispatches": 158,
+  "nn_descent_dispatches": 61
+}

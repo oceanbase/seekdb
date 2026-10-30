@@ -883,6 +883,11 @@ int ObPluginVectorIndexAdaptor::init_mem_data(ObVectorIndexRecordType type, ObVe
         }
       }
 
+      if (OB_SUCC(ret) && param->lib_ == ObVectorIndexAlgorithmLib::VIAL_HIPVS) {
+        if (OB_FAIL(obvsag::enable_hipvs_build(snap_data_->index_))) {
+          LOG_WARN("[HIPVS_BUILD] cannot enable snapshot construction", K(ret));
+        }
+      }
       if (OB_SUCC(ret)) {
         snap_data_->set_inited();
         LOG_INFO("create snap data success.", K(ret), KP(snap_data_->index_), K(lbt())); // remove later
@@ -940,6 +945,8 @@ int ObPluginVectorIndexAdaptor::init_snap_data_without_lock(ObVectorIndexAlgorit
       }
     }
 
+    // This path prepares a native deserialization target. GPU buffering is
+    // enabled only by init_mem_data for construction, never for snapshot load.
     if (OB_SUCC(ret)) {
       snap_data_->set_inited();
       LOG_INFO("create snap data success.", K(ret), KP(snap_data_->index_));
@@ -3195,6 +3202,11 @@ int ObPluginVectorIndexAdaptor::renew_single_snap_index(bool mem_saving_mode)
       TCWLockGuard lock_guard(snap_data_->mem_data_rwlock_);
       if (OB_FAIL(renew_snapdata_in_lock())) {
       } else if (OB_FAIL(set_snapshot_key_prefix(invalid_prefix))) {
+      } else {
+        // renew_snapdata_in_lock replaces the serialized graph with an empty
+        // native index and resets its flags. Force the next query to reload
+        // the persisted snapshot before exposing this memdata.
+        snap_data_->rb_flag_ = true;
       }
     }
   // snap_data_->index_ is null for empty table
@@ -4004,10 +4016,15 @@ int ObPluginVectorIndexAdaptor::query_result(ObVectorQueryAdaptorResultContext *
         }
       } else if (OB_ISNULL(row) || row->get_column_count() < 2) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (get_snapshot_key_prefix().empty() ||
+      } else if (snap_data_->rb_flag_ || get_snapshot_key_prefix().empty() ||
           !row->storage_datums_[0].get_string().prefix_match(get_snapshot_key_prefix()))
       {
-        if (get_create_type() == CreateTypeComplete) {
+        // A changed snapshot still needs a replacement complete adapter for
+        // existing readers. A matching prefix with rb_flag_ needs reloading
+        // the same graph after its shared memdata was renewed.
+        if (get_create_type() == CreateTypeComplete &&
+            (get_snapshot_key_prefix().empty() ||
+             !row->storage_datums_[0].get_string().prefix_match(get_snapshot_key_prefix()))) {
           ctx->status_ = PVQ_REFRESH;
           LOG_INFO("query result need refresh adapter, ls leader",
               K(ret), K(ctx->get_ls_leader()), K(snapshot_tablet_id_), K(get_snapshot_key_prefix()), K(row->storage_datums_[0].get_string()));

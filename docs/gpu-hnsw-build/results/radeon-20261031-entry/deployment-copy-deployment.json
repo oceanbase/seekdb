@@ -1,0 +1,21 @@
+{
+  "harness_resume_reason": "ldd returned a path containing bin/../lib; corrected comparison to resolve paths before continuing.",
+  "gpu": {
+    "returncode": 0,
+    "main_exists": true,
+    "worker_exists": true,
+    "bridge_exists": true,
+    "bridge_resolution": "/workspace/amd-acceptance-20261031-0e86b8c/deployment-audit-20261031/copy-gpu/lib/libseekdb_hipvs_hnsw.so",
+    "loader_returncode": 2
+  },
+  "cpu": {
+    "returncode": 0,
+    "main_exists": true,
+    "worker_exists": false,
+    "bridge_exists": false
+  },
+  "missing_bridge": {
+    "returncode": 1,
+    "passed": true
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "introduced_private_headers_registered": [
+    "lib/vector/hipvs_hnsw_bridge.h",
+    "lib/vector/hipvs_hnsw_builder.h"
+  ],
+  "matches_generator_delta_from_competition_baseline": true,
+  "existing_baseline_inventory_drift_fixed": false,
+  "full_oblib_terminal_check_passed": false,
+  "module_layer_check_passed": true
+}

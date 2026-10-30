@@ -1,0 +1,15 @@
+{
+  "command": [
+    "bash",
+    "-c",
+    "exec 3</workspace/hipvs-competition-20261030/evidence/profile-50000x128-input.f32; exec 4>/workspace/hipvs-competition-20261030/evidence/worker-no-gpu-reply.bin; exec /workspace/hipvs-competition-20261030/artifacts/bin/seekdb_hipvs_hnsw_worker 50000 128 32 200"
+  ],
+  "HIP_VISIBLE_DEVICES": "-1",
+  "returncode": 1,
+  "status": 1,
+  "output_size": 0,
+  "error": "cagra_gpu_build: RAFT failure at file=/hipvs_workspace/hipVS-release-rocmds-26.03/cpp/build-gfx1100/_deps/raft-src/cpp/include/raft/util/cudart_utils.hpp line=86: Failed to query device(ID=-1) for warp size\nObtained 13 stack frames\n#1 in /opt/hipvs/lib/libcuvs_c.so: raft::logic_error::logic_error(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) +0x102 [0x725c1ba77792]\n#2 in /opt/hipvs/lib/libcuvs.so: raft::host_warp_size(int) +0x190 [0x725c1ab84c80]\n#3 in /opt/hipvs/lib/libcuvs.so: cuvs::neighbors::nn_descent::detail::GnndGraph<int>::GnndGraph(raft::resources const&, unsigned long, unsigned long, unsigned long, unsigned long) +0x44 [0x725c1b5591e4]\n#4 in /opt/hipvs/lib/libcuvs.so: cuvs::neighbors::nn_descent::detail::GNND<float const, int>::GNND(raft::resources const&, cuvs::neighbors::nn_descent::detail::BuildConfig const&) +0x72 [0x725c1b5589c2]\n#5 in /opt/hipvs/lib/libcuvs.so: void cuvs::neighbors::nn_descent::detail::build<float, unsigned int, raft::host_device_accessor<std::experimental::default_accessor<float const>, (raft::memory_type)0> >(raft::resources const&, cuvs::neighbors::nn_descent::index_params const&, std::experimental::mdspan<float const, std::experimental::extents<long, 18446744073709551615ul, 18446744073709551615ul>, std::experimental::layout_right, raft::host_device_accessor<std::experimental::default_accessor<float const>, (raft::memory_type)0> >, cuvs::neighbors::nn_descent::index<unsigned int>&) +0x137 [0x725c1b560ca7]\n#6 in /opt/hipvs/lib/libcuvs.so: cuvs::neighbors::nn_descent::build(raft::resources const&, cuvs::neighbors::nn_descent::index_params const&, std::experimental::mdspan<float const, std::experimental::extents<long, 18446744073709551615ul, 18446744073709551615ul>, std::experimental::layout_right, raft::host_device_accessor<std::experimental::default_accessor<float const>, (raft::memory_type)0> >, std::optional<std::experimental::mdspan<unsigned int, std::experimental::extents<long, 18446744073709551615ul, 18446744073709551615ul>, std::e",
+  "stdout": "CUDA call='cudaGetDevice(&cur_dev)' at file=/hipvs_workspace/hipVS-release-rocmds-26.03/cpp/build-gfx1100/_deps/raft-src/cpp/include/raft/core/resource/device_id.hpp line=54 failed with no ROCm-capable device is detected\n",
+  "stderr": "",
+  "passed": true
+}

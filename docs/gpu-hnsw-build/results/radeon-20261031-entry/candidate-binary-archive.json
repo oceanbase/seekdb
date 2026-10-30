@@ -1,0 +1,26 @@
+{
+  "archive": "/workspace/amd-acceptance-20261031-0e86b8c/entry-audit-20261031/linux-x86_64-b35b7d4.tgz",
+  "bytes": 51361766,
+  "sha256": "99707a2c05d18cf11c764b7f9e7b9faeabcaa8c6f06d5ebd4d075d9ba6b02347",
+  "source_commit": "b35b7d4c824d13c71737332b1c5ce333b5f1ff28",
+  "files": {
+    "usr/bin/seekdb": {
+      "original_sha256": "cf20664c40464ddb204bb36f64f3e1a3e1308eb211bad5b200a9beca1167c04e",
+      "stripped_sha256": "63fdacb8d0bf3f161370a739ca52351d3a3dcc9ee0260bb6a7c1a6bebfb8fb06",
+      "original_bytes": 1332839888,
+      "stripped_bytes": 165082656
+    },
+    "usr/bin/seekdb_hipvs_hnsw_worker": {
+      "original_sha256": "5605bc5994794f721c454ac0adc9d1f82d21a80e083c0a2c4c88764470738db1",
+      "stripped_sha256": "42ea8092bc9ba1e0c79bfde9ce67f581535036c2bec17b2696464a8751de2818",
+      "original_bytes": 13600,
+      "stripped_bytes": 7488
+    },
+    "usr/libexec/seekdb/lib/libseekdb_hipvs_hnsw.so": {
+      "original_sha256": "39f073e3721780cbe8efec5cf70b03bdc32760886fb4844fa3ea0bde409954dd",
+      "stripped_sha256": "9e8da60bbf6abc3db411736451d5d8a1accc391fd61e36a135df86789f00df46",
+      "original_bytes": 24336,
+      "stripped_bytes": 10720
+    }
+  }
+}

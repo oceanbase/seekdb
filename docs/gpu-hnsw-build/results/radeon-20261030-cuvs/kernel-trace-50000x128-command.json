@@ -1,0 +1,35 @@
+{
+  "command": [
+    "rocprofv3",
+    "--kernel-trace",
+    "--memory-copy-trace",
+    "--stats",
+    "-f",
+    "csv",
+    "-d",
+    "/workspace/hipvs-competition-20261030/evidence/kernel-trace-50000x128",
+    "-o",
+    "hipvs-build",
+    "--",
+    "bash",
+    "-c",
+    "exec 3</workspace/hipvs-competition-20261030/evidence/profile-50000x128-input.f32; exec 4>/workspace/hipvs-competition-20261030/evidence/profile-50000x128-reply.bin; exec /workspace/hipvs-competition-20261030/artifacts/bin/seekdb_hipvs_hnsw_worker 50000 128 32 200"
+  ],
+  "rows": 50000,
+  "dim": 128,
+  "m": 32,
+  "ef_construction": 200,
+  "input_sha256": "b51d8feb8b286e430f06e6318a3ccdd8eb6770c3ad7020b2ebce5c7454307847",
+  "worker_sha256": "5889aaf2dfd6e68357c3b337d6663bc5770497a86f12ee99939a2f327a6d1eed",
+  "outside_sql_timed_runs": true,
+  "returncode": 0,
+  "worker_reply": {
+    "status": 0,
+    "output_size": 39407072,
+    "error": "",
+    "actual_file_size": 39409160,
+    "header_bytes": 2088
+  },
+  "kernel_dispatches": 158,
+  "nn_descent_dispatches": 61
+}

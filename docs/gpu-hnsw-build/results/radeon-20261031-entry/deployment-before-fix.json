@@ -1,0 +1,38 @@
+{
+  "server": {
+    "command": [
+      "/opt/venv/bin/cmake",
+      "-DCMAKE_INSTALL_PREFIX=/workspace/amd-acceptance-20261031-0e86b8c/deployment-audit-20261031/install-server",
+      "-DCMAKE_INSTALL_COMPONENT=server",
+      "-P",
+      "/workspace/amd-acceptance-20261031-0e86b8c/src/build_release/src/oblib/lib/cmake_install.cmake"
+    ],
+    "returncode": 0,
+    "worker_exists": false,
+    "bridge_exists": false
+  },
+  "Unspecified": {
+    "command": [
+      "/opt/venv/bin/cmake",
+      "-DCMAKE_INSTALL_PREFIX=/workspace/amd-acceptance-20261031-0e86b8c/deployment-audit-20261031/install-Unspecified",
+      "-DCMAKE_INSTALL_COMPONENT=Unspecified",
+      "-P",
+      "/workspace/amd-acceptance-20261031-0e86b8c/src/build_release/src/oblib/lib/cmake_install.cmake"
+    ],
+    "returncode": 0,
+    "worker_exists": true,
+    "bridge_exists": true,
+    "without_ld_library_path": {
+      "returncode": 2,
+      "stderr": ""
+    }
+  },
+  "ldconfig_libcuvs_c.so": [
+    "libcuvs_c.so (libc6,x86-64) => /opt/hipvs/lib/libcuvs_c.so"
+  ],
+  "ldconfig_libamdhip64.so": [
+    "libamdhip64.so.7 (libc6,x86-64) => /opt/rocm-7.2.4/lib/libamdhip64.so.7",
+    "libamdhip64.so.5 (libc6,x86-64) => /lib/x86_64-linux-gnu/libamdhip64.so.5",
+    "libamdhip64.so (libc6,x86-64) => /opt/rocm-7.2.4/lib/libamdhip64.so"
+  ]
+}

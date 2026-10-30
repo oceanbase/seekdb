@@ -1,0 +1,21 @@
+{
+  "base_commit": "c393a801db3b3ad1640b5445ed292799101d3e11",
+  "branch": "competition/amd-hipvs-build",
+  "line_endings": "Linux LF (git archive core.autocrlf=false, LF normalized local text overlay)",
+  "dirty_overlay": {
+    "docs/gpu-hnsw-build/RADEON_CLOUD_SETUP.md": "0c086b41ed2e81e3ba4da9029bf192e8639655409e5a6f3386c5f8d8b160d050",
+    "docs/gpu-hnsw-build/README.md": "a36f4adcaf3ebe70a9000449b5ec99d60487a0f0a1a4587b9a90ed23fc261a91",
+    "docs/gpu-hnsw-build/REPORT.md": "e5250fe982428df0e719caa5956a434d1fba87a98e93d3ece6a188172d64221b",
+    "docs/gpu-hnsw-build/VIDEO_ALIGNMENT.md": "6e591442fd986e022d1d5901bc00147a70675cd09ea2b2fe16d854e7998ef28f",
+    "docs/gpu-hnsw-build/benchmark.py": "0a865e042aa2810f51425424088f7dbd62cb2cd8a08d38ed121eb2493ac7e5d4",
+    "docs/gpu-hnsw-build/verify_evidence.py": "c7f65984a26e294e9fde412754ebf99342da5f1c93d3a0f532bc98c915f362a0",
+    "src/observer/vector_index/ob_vector_index_util.cpp": "aa5869351bd3ae737a97f99401cd2043eb082aad20fd4c60e8f2b4b2131c9b3d",
+    "tools/deploy/mysql_test/test_suite/vector_index/r/vector_index_hipvs_validation.result": "2e426a298c5fe833dc554573038c1b68b95ec26538f7565670f898858549c3c8",
+    "tools/deploy/mysql_test/test_suite/vector_index/t/vector_index_hipvs_validation.test": "3da5b0c55b12720fc7406b16a0538b4a8f3d7f4069b2ac87063833c39fa8cc72",
+    "unittest/sql/vector_index/test_hipvs_benchmark.py": "ee4249f80da9bd07132a44aa54e898ac8870cfce12bad47563a8421c8729f292",
+    "unittest/sql/vector_index/test_hipvs_evidence.py": "2d3b119de6344ec97c6a3258dbda4a7f8ca9340256a0324f059441b1c198f57c"
+  },
+  "deleted": [],
+  "bundle_sha256": "1b060a495b81ef80fdfeea154639928d85f23a558ae4780ad81e3c2159c19a2f",
+  "scope": "current local working tree, tracked source plus untracked project files; no Git credentials or local environments"
+}

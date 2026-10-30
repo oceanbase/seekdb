@@ -52,6 +52,25 @@ ob_define(USE_LTO_CACHE OFF)
 # 开源模式默认支持系统租户使用向量索引
 ob_define(OB_BUILD_SYS_VEC_IDX ON)
 
+# The course/reference integration spells the optional AMD backend CUVS.
+# Resolve that build flag as well as the explicit HIPVS spelling so a valid
+# course command cannot silently produce a CPU-only binary.
+if(DEFINED OB_BUILD_CUVS)
+  if(DEFINED OB_BUILD_HIPVS AND
+     ((OB_BUILD_CUVS AND NOT OB_BUILD_HIPVS) OR
+      (OB_BUILD_HIPVS AND NOT OB_BUILD_CUVS)))
+    message(FATAL_ERROR "OB_BUILD_CUVS and OB_BUILD_HIPVS must agree when both are set")
+  endif()
+  ob_define(OB_BUILD_HIPVS "${OB_BUILD_CUVS}")
+endif()
+ob_define(OB_BUILD_HIPVS OFF)
+if(OB_BUILD_HIPVS)
+  if(NOT CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
+    message(FATAL_ERROR "hipVS construction requires Linux with glibc and ROCm")
+  endif()
+  add_definitions(-DOB_BUILD_HIPVS)
+endif()
+
 if(WIN32)
   EXECUTE_PROCESS(COMMAND powershell -NoProfile -Command "$env:PROCESSOR_ARCHITECTURE"
     OUTPUT_VARIABLE ARCHITECTURE)

@@ -1,0 +1,602 @@
+Using image standalone compiler for initial build while pinned toolchain source is checked:
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+cargo 1.97.1 (c980f4866 2026-06-30)
+[build.sh] command: ./build.sh release -DOB_BUILD_HIPVS=ON -DHIPVS_ROOT=/opt/hipvs -DROCM_ROOT=/opt/rocm -DCARGO=/root/hipvs-competition-build-20261030/tooling/bin/cargo
+[build.sh] configuring CMake release build: /workspace/hipvs-competition-20261030/src/build_release
+-- ARCHITECTURE: x86_64
+-- Using C++20 standard
+-- build without pie
+-- Using OB_CC compiler: /workspace/hipvs-competition-20261030/src/deps/3rd/usr/local/oceanbase/devtools/bin/clang-17
+-- Using OB_CXX compiler: /workspace/hipvs-competition-20261030/src/deps/3rd/usr/local/oceanbase/devtools/bin/clang++-17
+-- ob-compile not found, compile locally.
+-- Ubuntu 24.04 detected, using libaio1t64
+/workspace/hipvs-competition-20261030/src/tools/cmake/emit_bazel_source_inventory.py:36: DeprecationWarning: ast.Str is deprecated and will be removed in Python 3.14; use ast.Constant instead
+  _AST_STR = getattr(ast, "Str", None)
+/workspace/hipvs-competition-20261030/src/tools/cmake/emit_bazel_source_inventory.py:37: DeprecationWarning: ast.Num is deprecated and will be removed in Python 3.14; use ast.Constant instead
+  _AST_NUM = getattr(ast, "Num", None)
+/workspace/hipvs-competition-20261030/src/tools/cmake/emit_bazel_source_inventory.py:38: DeprecationWarning: ast.NameConstant is deprecated and will be removed in Python 3.14; use ast.Constant instead
+  _AST_NAME_CONSTANT = getattr(ast, "NameConstant", None)
+/workspace/hipvs-competition-20261030/src/tools/cmake/emit_bazel_source_inventory.py:48: DeprecationWarning: ast.Str is deprecated and will be removed in Python 3.14; use ast.Constant instead
+  if _AST_STR is not None and isinstance(node, _AST_STR):
+/workspace/hipvs-competition-20261030/src/tools/cmake/emit_bazel_source_inventory.py:52: DeprecationWarning: ast.NameConstant is deprecated and will be removed in Python 3.14; use ast.Constant instead
+  and isinstance(node, _AST_NAME_CONSTANT)
+/workspace/hipvs-competition-20261030/src/tools/cmake/emit_bazel_source_inventory.py:64: DeprecationWarning: ast.Num is deprecated and will be removed in Python 3.14; use ast.Constant instead
+  and isinstance(node, _AST_NUM)
+-- STDC_SHARED_LIB: /opt/seekdb-deps-cache/ac032efc6b707fc0273e6b553db53011/3rd/usr/local/oceanbase/devtools/lib64/libstdc++.so.6.0.30
+-- [rust] cargo: /root/hipvs-competition-build-20261030/tooling/bin/cargo
+-- [rust] config target ready -> /workspace/hipvs-competition-20261030/src/build_release/rust-target/exports/libconfig.a
+-- [rust] local target ready -> /workspace/hipvs-competition-20261030/src/build_release/rust-target/exports/liblocal.a
+-- [rust] sql_nio target ready -> /workspace/hipvs-competition-20261030/src/build_release/rust-target/exports/libsql_nio.a
+-- Ubuntu 24.04 detected, using libaio1t64 package and linking to /usr/lib/x86_64-linux-gnu/libaio.so.1t64
+-- oblib_add_library compress
+-- oblib_add_library zstd_1_3_8
+-- oblib_add_library restore
+-- ob_lib_add_target oblib_lib
+-- ob_lib_add_target oblib_lib_simd
+-- ob_lib_add_target oblib_lib_bitmap
+-- ob_add_new_object_target ob_malloc_object
+-- ob_lib_add_target oblib_common
+-- ob_lib_add_target oblib_rpc
+-- oblib_add_library oblib_grpc
+-- oblib_extra_objects /workspace/hipvs-competition-20261030/src/build_release/src/oblib/lib/compress/zstd_1_3_8/zstd_1_3_8_objs.o
+-- ob_add_new_object_target ob_share
+-- ob_add_new_object_target ob_share_extra
+-- observer_add_target ob_data_plane
+-- observer_add_target ob_query
+-- ob_add_new_object_target ob_sql
+-- ob_add_new_object_target ob_sql_extra
+-- observer_add_target ob_sql_simd
+-- observer_add_target ob_pl
+-- observer_add_target syspack_source
+-- observer_add_target ob_standby_runtime
+-- observer_add_target ob_standby
+-- observer_add_target ob_rootserver
+-- observer_add_target ob_logservice
+-- observer_add_target ob_storage_tablet_autoincrement_state
+-- ob_add_new_object_target ob_storage
+-- observer_add_target ob_storage_simd
+-- observer_add_target ob_server
+fatal: not a git repository (or any parent up to mount point /)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+fatal: not a git repository (or any parent up to mount point /)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+-- Configuring done (0.3s)
+-- Generating done (1.1s)
+-- Build files have been written to: /workspace/hipvs-competition-20261030/src/build_release
+make: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[1]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[2]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+[  0%] Building jemalloc with Cargo
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[  1%] [rust] cargo build workspace (release)
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[  7%] Built target zstd_1_3_8_objs
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[  7%] Built target oblib_lib_simd
+[  7%] Built target restore
+[  8%] Built target oblib_grpc
+[  8%] Built target oblib_lib_bitmap
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[  8%] Built target generate_syspack_source
+[  9%] Built target zstd_1_3_8
+    Updating `mirror` index
+[ 10%] Built target seekdb_hipvs_hnsw
+[ 10%] Built target oblib_rpc
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+    Blocking waiting for file lock on package cache
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 11%] Built target seekdb_hipvs_hnsw_worker
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 14%] Built target oblib_common
+[ 15%] Built target compress
+    Blocking waiting for file lock on package cache
+ Downloading crates ...
+    Blocking waiting for file lock on package cache
+  Downloaded seekdb-jemalloc-sys v0.2.2+5.3.1 (registry `mirror`)
+    Blocking waiting for file lock on package cache
+   Compiling seekdb-jemalloc-sys v0.2.2+5.3.1
+   Compiling config v0.1.0 (/workspace/hipvs-competition-20261030/src/rust/config)
+    Finished `release` profile [optimized + debuginfo] target(s) in 45.06s
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 15%] Built target rust_staticlibs_build
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+[ 16%] Building CXX object src/query/CMakeFiles/ob_query.dir/Unity/unity_ob_query_runtime/0_cxx.cxx.o
+[ 16%] Building CXX object src/observer/CMakeFiles/ob_main.dir/main.cpp.o
+[ 16%] Building CXX object src/data_plane/CMakeFiles/ob_data_plane.dir/Unity/unity_ob_data_plane_runtime/0_cxx.cxx.o
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+[ 16%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs.cpp.o
+[ 16%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_geo_2_c___cxx.cxx.o
+[ 16%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_datum_cast.cpp.o
+[ 16%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_ddl_1_c___cxx.cxx.o
+[ 16%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs_compilation/ob_datum_funcs_all.cpp.o
+[ 16%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs_compilation/ob_datum_funcs_compilation_0.cpp.o
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 16%] Built target ob_data_plane
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+[ 17%] Building CXX object src/sql/CMakeFiles/ob_sql_simd.dir/Unity/unity_ob_sql_simd_ob_sql_simd_common_0_c___cxx.cxx.o
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 17%] Built target ob_query
+[ 17%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_dcl_0_c___cxx.cxx.o
+[ 17%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_geo_1_c___cxx.cxx.o
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 17%] Built target ob_sql_simd
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+[ 18%] Building C object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/sql_parser_mysql_mode_lex.c.o
+[ 18%] Building C object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/sql_parser_mysql_mode_tab.c.o
+[ 19%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs_compilation/ob_datum_funcs_compilation_1.cpp.o
+[ 19%] Building CXX object src/observer/CMakeFiles/ob_main.dir/ob_command_line_parser.cpp.o
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 19%] Built target ob_main
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+[ 19%] Building CXX object src/pl/CMakeFiles/ob_pl.dir/Unity/unity_ob_pl_pl_common_c___cxx.cxx.o
+[ 19%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs_compilation/ob_datum_funcs_compilation_2.cpp.o
+[ 19%] Building CXX object src/pl/CMakeFiles/ob_pl.dir/Unity/unity_ob_pl_pl_cache_c___cxx.cxx.o
+[ 19%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_0_c___cxx.cxx.o
+   Compiling seekdb-external-sources v0.0.0 (/workspace/hipvs-competition-20261030/src/deps/external)
+    Finished `release` profile [optimized] target(s) in 1m 04s
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 19%] Built target seekdb_jemalloc_build
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+[ 19%] Building CXX object src/pl/CMakeFiles/syspack_source.dir/syspack_codegen/syspack_source.cpp.o
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 19%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs_compilation/ob_datum_funcs_compilation_3.cpp.o
+[ 19%] Built target syspack_source
+[ 19%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs_compilation/ob_datum_funcs_compilation_4.cpp.o
+[ 20%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs_compilation/ob_datum_funcs_compilation_5.cpp.o
+[ 20%] Building C object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/ftsblex_lex.c.o
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+[ 20%] Building CXX object src/standby/CMakeFiles/ob_standby_runtime.dir/Unity/unity_ob_standby_runtime_common/0_cxx.cxx.o
+[ 20%] Building CXX object src/pl/CMakeFiles/ob_pl.dir/Unity/unity_ob_pl_pl_recompile_c___cxx.cxx.o
+[ 20%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs_compilation/ob_datum_funcs_compilation_6.cpp.o
+[ 20%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_obj_cast_runtime.cpp.o
+[ 21%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_cmp_func.cpp.o
+[ 21%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs_compilation/ob_datum_funcs_compilation_7.cpp.o
+[ 21%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_compile_init.cpp.o
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+[ 21%] Building CXX object src/standby/CMakeFiles/ob_standby.dir/Unity/unity_ob_standby_common/0_cxx.cxx.o
+[ 21%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part0.cpp.o
+[ 21%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_str_datum_funcs_compilation/ob_str_datum_funcs_all.cpp.o
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 21%] Built target ob_standby
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+[ 21%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_base_common_0_c___cxx.cxx.o
+[ 21%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part1.cpp.o
+[ 22%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_str_datum_funcs_compilation/ob_str_datum_funcs_compilation_0.cpp.o
+[ 23%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_3_c___cxx.cxx.o
+[ 24%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part2.cpp.o
+[ 24%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_str_datum_funcs_compilation/ob_str_datum_funcs_compilation_1.cpp.o
+[ 24%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part3.cpp.o
+[ 25%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_base_maintenance_0_c___cxx.cxx.o
+[ 25%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_str_datum_funcs_compilation/ob_str_datum_funcs_compilation_2.cpp.o
+[ 25%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part4.cpp.o
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 25%] Built target ob_standby_runtime
+[ 25%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_str_datum_funcs_compilation/ob_str_datum_funcs_compilation_3.cpp.o
+[ 26%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part5.cpp.o
+[ 26%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_query_0_c___cxx.cxx.o
+[ 26%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_storage_common_0_c___cxx.cxx.o
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 26%] Built target ob_share_extra
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+[ 26%] Building CXX object src/logservice/CMakeFiles/ob_logservice.dir/Unity/unity_ob_logservice_ob_logservice_common_0_c___cxx.cxx.o
+[ 26%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part6.cpp.o
+[ 27%] Building CXX object src/pl/CMakeFiles/ob_pl.dir/Unity/unity_ob_pl_pl_sys_package_c___cxx.cxx.o
+[ 27%] Building C object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/ftsparser_tab.c.o
+[ 28%] Building C object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/fts_base.c.o
+[ 28%] Building C object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/fts_parse.c.o
+[ 28%] Building C object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/non_reserved_keywords_mysql_mode.c.o
+[ 28%] Building C object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/ob_non_reserved_keywords.c.o
+[ 29%] Building CXX object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/ob_sql_parser.cpp.o
+[ 29%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part7.cpp.o
+[ 29%] Building CXX object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/parse_malloc.cpp.o
+[ 29%] Building C object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/parse_node.c.o
+[ 29%] Building CXX object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/parse_node_hash.cpp.o
+[ 30%] Building CXX object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/ob_fast_parser.cpp.o
+[ 30%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_all.cpp.o
+[ 31%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_0.cpp.o
+[ 31%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_plan_cache_0_c___cxx.cxx.o
+[ 32%] Building CXX object src/logservice/CMakeFiles/ob_logservice.dir/Unity/unity_ob_logservice_ob_logservice_common_mixed_0_c___cxx.cxx.o
+[ 32%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_1.cpp.o
+[ 32%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_2.cpp.o
+[ 32%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_3.cpp.o
+[ 32%] Building CXX object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/ob_parser_charset_utils.cpp.o
+[ 32%] Building C object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/sql_parser_base.c.o
+[ 32%] Building CXX object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/parser_utility.cpp.o
+[ 34%] Building C object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/type_name.c.o
+[ 34%] Building CXX object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/ob_parse_simd.cpp.o
+[ 34%] Building CXX object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/ob_parser.cpp.o
+[ 34%] Building CXX object src/logservice/CMakeFiles/ob_logservice.dir/Unity/unity_ob_logservice_ob_logservice_common_util_0_c___cxx.cxx.o
+[ 35%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_4.cpp.o
+[ 35%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_5.cpp.o
+[ 35%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_storage_freeze_0_c___cxx.cxx.o
+[ 35%] Building CXX object src/logservice/CMakeFiles/ob_logservice.dir/Unity/unity_ob_logservice_ob_logservice_palf_0_c___cxx.cxx.o
+[ 35%] Building CXX object src/logservice/CMakeFiles/ob_logservice.dir/Unity/unity_ob_logservice_ob_logservice_palf_1_c___cxx.cxx.o
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 35%] Built target ob_sql_server_parser_objects
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+[ 35%] Building CXX object src/storage/CMakeFiles/ob_storage_tablet_autoincrement_state.dir/Unity/unity_ob_storage_tablet_autoincrement_state_runtime/0_cxx.cxx.o
+[ 35%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_6.cpp.o
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 35%] Built target ob_storage_tablet_autoincrement_state
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+[ 36%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_multi_data_source_0_c___cxx.cxx.o
+[ 36%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_7.cpp.o
+[ 36%] Building CXX object src/pl/CMakeFiles/ob_pl.dir/parser/ob_pl_parser.cpp.o
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 36%] Built target ob_sql_extra
+[ 36%] Building C object src/pl/CMakeFiles/ob_pl.dir/parser/pl_non_reserved_keywords_mysql_mode.c.o
+[ 36%] Building C object src/pl/CMakeFiles/ob_pl.dir/parser/pl_parser_base.c.o
+[ 36%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_8_c___cxx.cxx.o
+[ 36%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_config_0_c___cxx.cxx.o
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 36%] Built target ob_logservice
+[ 37%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_geo_0_c___cxx.cxx.o
+[ 37%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_common_mixed_1_c___cxx.cxx.o
+[ 38%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_sql_mixed_0_c___cxx.cxx.o
+[ 39%] Building C object src/pl/CMakeFiles/ob_pl.dir/parser/pl_parser_mysql_mode_lex.c.o
+[ 39%] Building C object src/pl/CMakeFiles/ob_pl.dir/parser/pl_parser_mysql_mode_tab.c.o
+[ 39%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_ls_0_c___cxx.cxx.o
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 39%] Built target ob_pl
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+[ 39%] Building CXX object src/storage/CMakeFiles/ob_storage_simd.dir/Unity/unity_ob_storage_simd_ob_storage_simd_common_0_c___cxx.cxx.o
+[ 39%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_common_1_c___cxx.cxx.o
+[ 39%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_optimizer_stat_1_c___cxx.cxx.o
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 39%] Built target ob_storage_simd
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+[ 39%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_vector_index_0_c___cxx.cxx.o
+[ 40%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_optimizer_0_c___cxx.cxx.o
+[ 40%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_common_1_c___cxx.cxx.o
+[ 40%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_common_0_c___cxx.cxx.o
+[ 40%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_executor_0_c___cxx.cxx.o
+[ 40%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_access_1_c___cxx.cxx.o
+[ 40%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_common_2_c___cxx.cxx.o
+[ 40%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_lob_0_c___cxx.cxx.o
+[ 40%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_ddl_0_c___cxx.cxx.o
+[ 40%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_vector_fixed_0_c___cxx.cxx.o
+[ 40%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_ddl_2_c___cxx.cxx.o
+[ 41%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_cache_0_c___cxx.cxx.o
+[ 42%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_fork_freeze_0_c___cxx.cxx.o
+[ 42%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_DUMP_SCHEMA_0_c___cxx.cxx.o
+[ 43%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_0_c___cxx.cxx.o
+[ 44%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_blocksstable_encoding2_0_c___cxx.cxx.o
+[ 44%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_SCHEMA_CPPS_0_c___cxx.cxx.o
+[ 44%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_fts_0_c___cxx.cxx.o
+[ 44%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_ckpt_0_c___cxx.cxx.o
+[ 44%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_services_0_c___cxx.cxx.o
+[ 44%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_common_mixed_0_c___cxx.cxx.o
+[ 44%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_mysql_0_c___cxx.cxx.o
+[ 44%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_memtable_mvcc_0_c___cxx.cxx.o
+[ 45%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_deadlock_0_c___cxx.cxx.o
+[ 45%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_retrieval_0_c___cxx.cxx.o
+[ 45%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_compaction_1_c___cxx.cxx.o
+[ 45%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_blocksstable_0_c___cxx.cxx.o
+[ 46%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_truncate_info_0_c___cxx.cxx.o
+[ 46%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tx_table_0_c___cxx.cxx.o
+[ 46%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/ddl_task/ob_ddl_redefinition_task.cpp.o
+[ 46%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_vector_index_0_c___cxx.cxx.o
+[ 46%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_omt_0_c___cxx.cxx.o
+[ 47%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_LOAD_SCHEMA_0_c___cxx.cxx.o
+[ 47%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_transaction_id_0_c___cxx.cxx.o
+[ 47%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_common_0_c___cxx.cxx.o
+[ 48%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_vector_uniform_0_c___cxx.cxx.o
+[ 48%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_vector_discrete_0_c___cxx.cxx.o
+[ 48%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_ddl_1_c___cxx.cxx.o
+[ 48%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_ai_service_0_c___cxx.cxx.o
+[ 48%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_vector_continuous_0_c___cxx.cxx.o
+[ 49%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_ddl_0_c___cxx.cxx.o
+[ 49%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/ob_ddl_service.cpp.o
+[ 49%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_table_0_c___cxx.cxx.o
+[ 49%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_resource_limit_calculator_0_c___cxx.cxx.o
+[ 50%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_10_c___cxx.cxx.o
+[ 50%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_vector_cmp_0_c___cxx.cxx.o
+[ 51%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_2_c___cxx.cxx.o
+[ 52%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_io_0_c___cxx.cxx.o
+[ 52%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_set_0_c___cxx.cxx.o
+[ 52%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_compaction_filter_0_c___cxx.cxx.o
+[ 52%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_redolog_0_c___cxx.cxx.o
+[ 52%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_resource_0_c___cxx.cxx.o
+[ 52%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_schema_0_c___cxx.cxx.o
+[ 52%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_px_1_c___cxx.cxx.o
+[ 53%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_px_0_c___cxx.cxx.o
+[ 53%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_common_0_c___cxx.cxx.o
+[ 53%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_net_0_c___cxx.cxx.o
+[ 53%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_code_generator_0_c___cxx.cxx.o
+[ 54%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tmp_file_0_c___cxx.cxx.o
+[ 55%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/ob_ddl_service_launcher.cpp.o
+[ 55%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_mysql_1_c___cxx.cxx.o
+[ 56%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_dbms_job_0_c___cxx.cxx.o
+[ 56%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/ob_debug_sync_broadcaster_adapter.cpp.o
+[ 56%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/ob_lonely_table_cleaner.cpp.o
+[ 56%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_scheduler_0_c___cxx.cxx.o
+[ 57%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_schema_1_c___cxx.cxx.o
+[ 57%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tx_storage_0_c___cxx.cxx.o
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 57%] Built target ob_rootserver
+[ 57%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_ik_0_c___cxx.cxx.o
+[ 57%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_pdml_0_c___cxx.cxx.o
+[ 57%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_1_c___cxx.cxx.o
+[ 58%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_join_0_c___cxx.cxx.o
+[ 59%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_access_0_c___cxx.cxx.o
+[ 59%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_optimizer_stat_0_c___cxx.cxx.o
+[ 59%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_meta_store_0_c___cxx.cxx.o
+[ 59%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tablet_0_c___cxx.cxx.o
+[ 59%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_das_0_c___cxx.cxx.o
+[ 59%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_allocator_0_c___cxx.cxx.o
+[ 59%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_optimizer_1_c___cxx.cxx.o
+[ 59%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_3_c___cxx.cxx.o
+[ 60%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tablelock_0_c___cxx.cxx.o
+[ 60%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_semistruct_0_c___cxx.cxx.o
+[ 60%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_blocksstable_2_c___cxx.cxx.o
+[ 60%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_schema_2_c___cxx.cxx.o
+[ 60%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_vector_0_c___cxx.cxx.o
+[ 61%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_tablet_0_c___cxx.cxx.o
+[ 61%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_rebase_0_c___cxx.cxx.o
+[ 61%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_text_analysis_0_c___cxx.cxx.o
+[ 61%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_common_mixed_0_c___cxx.cxx.o
+[ 61%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_log_protocol_0_c___cxx.cxx.o
+[ 62%] Building C object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_geo_1_c_c.c.o
+[ 62%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_covered_by1.cpp.o
+[ 62%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_covered_by2.cpp.o
+[ 62%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_crosses1.cpp.o
+[ 63%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_13_c___cxx.cxx.o
+[ 63%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_common_mixed_0_c___cxx.cxx.o
+[ 63%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_compaction_0_c___cxx.cxx.o
+[ 64%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_blocksstable_1_c___cxx.cxx.o
+[ 65%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_common_0_c___cxx.cxx.o
+[ 67%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_crosses2.cpp.o
+[ 67%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_vector_base_0_c___cxx.cxx.o
+[ 67%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_basic_1_c___cxx.cxx.o
+[ 67%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_ddl_0_c___cxx.cxx.o
+[ 67%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_memtable_0_c___cxx.cxx.o
+[ 67%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_blocksstable_encoding1_0_c___cxx.cxx.o
+[ 67%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_blocksstable_index_block_0_c___cxx.cxx.o
+[ 67%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_schema_0_c___cxx.cxx.o
+[ 67%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_difference1.cpp.o
+[ 68%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_monitor_0_c___cxx.cxx.o
+[ 68%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_difference2.cpp.o
+[ 69%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_common_1_c___cxx.cxx.o
+[ 69%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_rebase_0_c___cxx.cxx.o
+[ 69%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_0_c___cxx.cxx.o
+[ 69%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_slog_0_c___cxx.cxx.o
+[ 69%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_rewrite_1_c___cxx.cxx.o
+[ 69%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_4_c___cxx.cxx.o
+[ 69%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tablet_1_c___cxx.cxx.o
+[ 70%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_throttle_0_c___cxx.cxx.o
+[ 70%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_change_stream_0_c___cxx.cxx.o
+[ 70%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_difference3.cpp.o
+[ 70%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tx_0_c___cxx.cxx.o
+[ 70%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tx_1_c___cxx.cxx.o
+[ 71%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_scheduler_0_c___cxx.cxx.o
+[ 71%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_5_c___cxx.cxx.o
+[ 71%] Building CXX object src/observer/CMakeFiles/ob_server.dir/ob_server.cpp.o
+[ 71%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tx_2_c___cxx.cxx.o
+[ 71%] Building CXX object src/observer/CMakeFiles/ob_server.dir/ob_service.cpp.o
+[ 71%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_basic_0_c___cxx.cxx.o
+[ 72%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_vector_type_0_c___cxx.cxx.o
+[ 73%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_cmd_0_c___cxx.cxx.o
+[ 73%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_4_c___cxx.cxx.o
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 73%] Built target ob_storage
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+[ 73%] Building CXX object src/oblib/lib/CMakeFiles/ob_malloc_object.dir/Unity/unity_ob_malloc_object_ob_malloc_object_list_common_alloc_0_c___cxx.cxx.o
+[ 74%] Building CXX object src/observer/CMakeFiles/ob_server.dir/composition/retrieval/ob_das_legacy_tr_merge_iter.cpp.o
+[ 74%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_7_c___cxx.cxx.o
+[ 75%] Building CXX object src/oblib/lib/CMakeFiles/ob_malloc_object.dir/Unity/unity_ob_malloc_object_ob_malloc_object_list_common_alloc_1_c___cxx.cxx.o
+[ 75%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_aggregate_groupby_0_c___cxx.cxx.o
+[ 76%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_distance.cpp.o
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 76%] Built target ob_malloc_object
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+[ 76%] Building CXX object src/oblib/lib/CMakeFiles/malloc_hook.dir/alloc/malloc_hook.cpp.o
+[ 77%] Building CXX object src/oblib/lib/CMakeFiles/malloc_hook.dir/alloc/malloc_hook_extended.cpp.o
+[ 77%] Linking CXX static library libmalloc_hook.a
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 77%] Built target malloc_hook
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+[ 77%] Linking CXX static library libob_sql_server_parser_static.a
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 77%] Built target ob_sql_server_parser_static
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+[ 77%] Linking CXX static library libob_storage_static.a
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 77%] Built target ob_storage_static
+[ 77%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_equals1.cpp.o
+[ 78%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_executor_1_c___cxx.cxx.o
+[ 78%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_1_c___cxx.cxx.o
+[ 78%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_2_c___cxx.cxx.o
+[ 78%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_dtl_0_c___cxx.cxx.o
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 78%] Built target ob_server
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+[ 78%] Linking CXX static library libob_malloc.a
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 78%] Built target ob_malloc
+[ 78%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_equals2.cpp.o
+[ 79%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_common_0_c___cxx.cxx.o
+[ 79%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_equals3.cpp.o
+[ 79%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_dml_0_c___cxx.cxx.o
+[ 80%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_intersects.cpp.o
+[ 80%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_15_c___cxx.cxx.o
+[ 80%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_9_c___cxx.cxx.o
+[ 81%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_common_mixed_0_c___cxx.cxx.o
+[ 81%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_overlaps1.cpp.o
+[ 81%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_overlaps2.cpp.o
+[ 81%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_cmd_0_c___cxx.cxx.o
+[ 82%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_overlaps3.cpp.o
+[ 82%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_1_c___cxx.cxx.o
+[ 82%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_aggregate_core_0_c___cxx.cxx.o
+[ 83%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_11_c___cxx.cxx.o
+[ 83%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_printer_0_c___cxx.cxx.o
+[ 83%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_optimizer_2_c___cxx.cxx.o
+[ 83%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_symdifference1.cpp.o
+[ 83%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_symdifference2.cpp.o
+[ 83%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_symdifference3.cpp.o
+[ 83%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_6_c___cxx.cxx.o
+[ 84%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_hybrid_search_0_c___cxx.cxx.o
+[ 84%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_session_0_c___cxx.cxx.o
+[ 84%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_cmd_1_c___cxx.cxx.o
+[ 84%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_das_1_c___cxx.cxx.o
+[ 85%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_0_c___cxx.cxx.o
+[ 85%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_14_c___cxx.cxx.o
+[ 85%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_5_c___cxx.cxx.o
+[ 85%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_12_c___cxx.cxx.o
+[ 86%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_touches1.cpp.o
+[ 87%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_dml_0_c___cxx.cxx.o
+[ 87%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_expr_0_c___cxx.cxx.o
+[ 87%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_prepare_0_c___cxx.cxx.o
+[ 87%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_rewrite_0_c___cxx.cxx.o
+[ 88%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_tablelock_0_c___cxx.cxx.o
+[ 88%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/engine/aggregate/ob_aggregate_processor.cpp.o
+[ 88%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_touches2.cpp.o
+[ 88%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/engine/expr/ob_expr_add.cpp.o
+[ 88%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/engine/expr/ob_expr_array_sort.cpp.o
+[ 89%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/engine/expr/ob_expr_in.cpp.o
+[ 89%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_touches3.cpp.o
+[ 89%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/engine/expr/ob_expr_mul.cpp.o
+[ 89%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_union1.cpp.o
+[ 90%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_union2.cpp.o
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+[ 91%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_charset_0_c___cxx.cxx.o
+[ 91%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_within1.cpp.o
+[ 91%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_within2.cpp.o
+[ 91%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_downsink_qt_0_c___cxx.cxx.o
+[ 91%] Building CXX object src/share/CMakeFiles/ob_share.dir/ob_ddl_args.cpp.o
+[ 91%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_utility_0_c___cxx.cxx.o
+[ 92%] Building CXX object src/share/CMakeFiles/ob_share.dir/ob_local_device.cpp.o
+[ 92%] Building CXX object src/share/CMakeFiles/ob_share.dir/ob_lonely_table_clean_rpc_struct.cpp.o
+[ 92%] Building CXX object src/share/CMakeFiles/ob_share.dir/ob_rpc_struct.cpp.o
+[ 93%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_codec_0_c___cxx.cxx.o
+[ 93%] Building CXX object src/share/CMakeFiles/ob_share.dir/ob_sql_client_decorator.cpp.o
+[ 94%] Building CXX object src/share/CMakeFiles/ob_share.dir/ob_timezone_mgr.cpp.o
+[ 94%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_common_0_c___cxx.cxx.o
+[ 94%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_downsink_0_c___cxx.cxx.o
+[ 94%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_thread_0_c___cxx.cxx.o
+[ 95%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_common_mixed_0_c___cxx.cxx.o
+[ 95%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_lock_0_c___cxx.cxx.o
+[ 95%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_ob_vector_util_0_c___cxx.cxx.o
+[ 95%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_common_mixed_1_c___cxx.cxx.o
+[ 96%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_oblog_0_c___cxx.cxx.o
+[ 96%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_signal_0_c___cxx.cxx.o
+[ 96%] Building C object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_common_mixed_0_c_c.c.o
+[ 96%] Building C object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_signal_0_c_c.c.o
+[ 97%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/oblog/ob_log_compressor.cpp.o
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 97%] Built target oblib_lib
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+[ 98%] Linking CXX static library liboblib.a
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 98%] Built target oblib
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 98%] Built target ob_sql
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+[ 98%] Linking CXX static library libob_sql_static.a
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 98%] Built target ob_sql_static
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[ 98%] Built target ob_share
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+[100%] Linking CXX static library libob_share_static.a
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[100%] Built target ob_share_static
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+[100%] Building CXX object src/observer/CMakeFiles/oceanbase_static.dir/ob_version.cpp.o
+[100%] Linking CXX static library liboceanbase_static.a
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[100%] Built target oceanbase_static
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+[100%] Linking CXX executable seekdb
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+[100%] Built target seekdb
+make[2]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[1]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make: Leaving directory '/root/hipvs-competition-build-20261030/build_release'

@@ -1,0 +1,23 @@
+[
+  {
+    "package": "cargo",
+    "file": "cargo-1.98.1-x86_64-unknown-linux-gnu.tar.xz",
+    "bytes": 11662108,
+    "sha256": "ea1de9f9e23107d97ee2b41a72c552f34064a593da503789218387aee59f3ba4",
+    "source": "https://static.rust-lang.org/dist/2026-09-03/cargo-1.98.1-x86_64-unknown-linux-gnu.tar.xz"
+  },
+  {
+    "package": "rustc",
+    "file": "rustc-1.98.1-x86_64-unknown-linux-gnu.tar.xz",
+    "bytes": 79727616,
+    "sha256": "e974f036b28565f37c0f3bd92ddefa809bee16c04f9dcf07b9ed96e05aaaf7c4",
+    "source": "https://static.rust-lang.org/dist/2026-09-03/rustc-1.98.1-x86_64-unknown-linux-gnu.tar.xz"
+  },
+  {
+    "package": "rust-std",
+    "file": "rust-std-1.98.1-x86_64-unknown-linux-gnu.tar.xz",
+    "bytes": 30715684,
+    "sha256": "fa3ff450172a16c026944030230c5069947af93c728d9179971d44e5e0cfb561",
+    "source": "https://static.rust-lang.org/dist/2026-09-03/rust-std-1.98.1-x86_64-unknown-linux-gnu.tar.xz"
+  }
+]

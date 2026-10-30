@@ -1,0 +1,11 @@
+--- generated-base-5bce
++++ generated-current
+@@ -1879,6 +1879,8 @@
+     "lib/thread/ob_map_queue_thread_pool.h",
+     "lib/thread/ob_test_util.h",
+     "lib/thread_local/thread_buffer.h",
++    "lib/vector/hipvs_hnsw_bridge.h",
++    "lib/vector/hipvs_hnsw_builder.h",
+     "rpc/frame/ob_rpc_checksum.h",
+     "rpc/obmysql/ob_mysql_packet_storage.h",
+     ]

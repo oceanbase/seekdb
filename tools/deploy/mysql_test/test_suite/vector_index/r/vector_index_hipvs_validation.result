@@ -1,0 +1,49 @@
+DROP TABLE IF EXISTS hipvs_contract;
+CREATE TABLE hipvs_contract(id INT PRIMARY KEY, vec VECTOR(3));
+CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=cosine,type=hnsw,lib=hipvs,m=16);
+ERROR 0A000: hipVS requires dense float32 L2 HNSW without extra info, m in (16,32,64) not supported
+CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=l2,type=hnsw_sq,lib=hipvs,m=16);
+ERROR 0A000: hipVS requires dense float32 L2 HNSW without extra info, m in (16,32,64) not supported
+CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=l2,type=hnsw_bq,lib=hipvs,m=16);
+ERROR 0A000: hipVS requires dense float32 L2 HNSW without extra info, m in (16,32,64) not supported
+CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=l2,type=hnsw,lib=hipvs,m=20);
+ERROR 0A000: hipVS requires dense float32 L2 HNSW without extra info, m in (16,32,64) not supported
+CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=l2,type=ivf_flat,lib=hipvs);
+ERROR 0A000: ivf vector index lib name not equal to 'OB' is not supported
+CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=cosine,type=hnsw,lib=cuvs,m=16);
+ERROR 0A000: hipVS requires dense float32 L2 HNSW without extra info, m in (16,32,64) not supported
+CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=l2,type=hnsw_sq,lib=cuvs,m=16);
+ERROR 0A000: hipVS requires dense float32 L2 HNSW without extra info, m in (16,32,64) not supported
+CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=l2,type=hnsw,lib=cuvs,m=20);
+ERROR 0A000: hipVS requires dense float32 L2 HNSW without extra info, m in (16,32,64) not supported
+INSERT INTO hipvs_contract VALUES (11,'[1,0,0]'),(29,'[2,0,0]');
+CREATE VECTOR INDEX cpu_idx ON hipvs_contract(vec) WITH (distance=l2,type=hnsw,lib=vsag,m=16);
+SELECT id FROM hipvs_contract ORDER BY l2_distance(vec,'[1,0,0]') APPROXIMATE LIMIT 1;
+id
+11
+DROP INDEX cpu_idx ON hipvs_contract;
+id
+11
+id
+11
+id
+11
+id
+11
+id
+11
+id
+11
+id
+11
+id
+11
+id
+11
+id
+11
+id
+11
+id
+11
+DROP TABLE hipvs_contract;

@@ -1,0 +1,13 @@
+"Name","Calls","TotalDurationNs","AverageNs","Percentage","MinNs","MaxNs","StdDev"
+"void cuvs::neighbors::cagra::detail::graph::(anonymous namespace)::kern_prune<1024, unsigned int>(unsigned int const*, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned char*, unsigned int*, unsigned long*)",1,713398110,713398110.000000,73.21,713398110,713398110,0.00000000e+00
+"void cuvs::neighbors::nn_descent::detail::local_join_kernel<512, int, cuvs::neighbors::nn_descent::detail::InternalID_t<int>, raft::identity_op>(int const*, int const*, HIP_vector_type<int, 2u> const*, int const*, int const*, HIP_vector_type<int, 2u> const*, int, __half const*, int, cuvs::neighbors::nn_descent::detail::InternalID_t<int>*, float*, int, int*, float*, cuvsDistanceType, raft::identity_op, unsigned long, unsigned long)",20,244186374,12209318.700000,25.06,8425367,15730014,1529616.633944
+"void cuvs::neighbors::nn_descent::detail::add_rev_edges_kernel<int>(int const*, int*, int, HIP_vector_type<int, 2u>*)",40,9817041,245426.025000,1.01,10840,292320,40299.948065
+"void cuvs::neighbors::cagra::detail::graph::(anonymous namespace)::kern_sort<float, unsigned int, 8>(float const*, unsigned int, unsigned int, unsigned int*, unsigned int, unsigned int, cuvsDistanceType)",1,6062245,6062245.000000,0.6222,6062245,6062245,0.00000000e+00
+"void cuvs::neighbors::cagra::detail::graph::(anonymous namespace)::kern_make_rev_graph<unsigned int>(unsigned int const*, unsigned int*, unsigned int*, unsigned int, unsigned int)",64,395360,6177.500000,0.0406,4840,24320,2652.705118
+"void raft::linalg::detail::map_kernel<4, false, float, unsigned long, raft::const_op<float>>(float*, unsigned long, raft::const_op<float>)",21,258360,12302.857143,0.0265,10280,37120,5873.378196
+"__amd_rocclr_fillBufferAligned",6,106560,17760.000000,0.0109,2760,57160,20926.614633
+"void cuvs::neighbors::nn_descent::detail::preprocess_data_kernel<float>(float const*, __half*, int, float*, unsigned long, cuvsDistanceType)",1,101720,101720.000000,0.0104,101720,101720,0.00000000e+00
+"void raft::linalg::detail::map_kernel<8, false, __half, unsigned long, raft::const_op<__half>>(__half*, unsigned long, raft::const_op<__half>)",1,39320,39320.000000,4.035e-03,39320,39320,0.00000000e+00
+"void raft::linalg::detail::map_kernel<4, false, int, long, raft::const_op<int>>(int*, long, raft::const_op<int>)",1,19480,19480.000000,1.999e-03,19480,19480,0.00000000e+00
+"void raft::linalg::detail::map_kernel<4, false, int, unsigned long, raft::const_op<int>>(int*, unsigned long, raft::const_op<int>)",1,7920,7920.000000,8.128e-04,7920,7920,0.00000000e+00
+"__amd_rocclr_copyBuffer",1,4200,4200.000000,4.310e-04,4200,4200,0.00000000e+00

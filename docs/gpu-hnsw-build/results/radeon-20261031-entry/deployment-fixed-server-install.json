@@ -1,0 +1,23 @@
+{
+  "component": "server",
+  "worker_installed": true,
+  "bridge_installed": true,
+  "worker_beside_seekdb": true,
+  "loader_without_ld_library_path_returncode": 2,
+  "elf": {
+    "usr/bin/seekdb_hipvs_hnsw_worker": [
+      "0x000000000000001d (RUNPATH)            Library runpath: [$ORIGIN/../libexec/seekdb/lib]",
+      "0x0000000000000001 (NEEDED)             Shared library: [libseekdb_hipvs_hnsw.so]",
+      "0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]"
+    ],
+    "usr/libexec/seekdb/lib/libseekdb_hipvs_hnsw.so": [
+      "0x000000000000001d (RUNPATH)            Library runpath: [/opt/hipvs/lib:/opt/rocm/lib]",
+      "0x0000000000000001 (NEEDED)             Shared library: [libcuvs_c.so]",
+      "0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]"
+    ]
+  },
+  "main_binary_reused_from_verified_acceptance": true,
+  "main_binary_rebuilt": false,
+  "full_cpack_package_passed": false,
+  "cpack_blocker": "Baseline lacks tools/systemd/profile/telemetry.sh.template and further profile files; configure failed before a package was produced."
+}

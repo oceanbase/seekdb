@@ -1,0 +1,30 @@
+{
+  "full_build_commit": "b35b7d4c824d13c71737332b1c5ce333b5f1ff28",
+  "same_as_full_build": [
+    "cmake/Env.cmake",
+    "src/oblib/lib/CMakeLists.txt",
+    "src/oblib/lib/vector/ob_vsag_adaptor.cpp",
+    "src/oblib/lib/vector/ob_vsag_adaptor.h",
+    "src/observer/CMakeLists.txt",
+    "src/observer/vector_index/ob_plugin_vector_index_adaptor.cpp",
+    "src/observer/vector_index/ob_plugin_vector_index_utils.cpp",
+    "src/observer/vector_index/ob_vector_index_util.cpp",
+    "src/query/api/query/vector/ob_vector_index_util.h",
+    "src/oblib/lib/vector/hipvs_hnsw_bridge.c",
+    "src/oblib/lib/vector/hipvs_hnsw_bridge.h",
+    "src/oblib/lib/vector/hipvs_hnsw_builder.h",
+    "src/oblib/lib/vector/hipvs_hnsw_worker.c",
+    "docs/gpu-hnsw-build/benchmark.py",
+    "docs/gpu-hnsw-build/verify_evidence.py",
+    "unittest/sql/vector_index/check_hipvs_sql.py",
+    "src/oblib/oblib_header_inventory.bzl"
+  ],
+  "separately_validated": {
+    "tools/deploy/copy.sh": {
+      "sha256": "771c0f5ab56b4b6eb943a968eb4374c78c47084f2264f118526b1175ada2d31c",
+      "evidence": "copy-configurations.json"
+    }
+  },
+  "full_cpp_build_and_installed_sql_passed": true,
+  "later_changes_require_no_cpp_rebuild": "deployment shell script, documentation and evidence only"
+}

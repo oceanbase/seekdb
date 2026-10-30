@@ -1,0 +1,20 @@
+install: creating uninstall script at /root/hipvs-competition-build-20261030/tooling/rust-1.98.1/lib/rustlib/uninstall.sh
+install: installing component 'cargo'
+
+    cargo installed.
+
+Installed and verified: cargo
+install: creating uninstall script at /root/hipvs-competition-build-20261030/tooling/rust-1.98.1/lib/rustlib/uninstall.sh
+install: installing component 'rustc'
+
+    rustc installed.
+
+Installed and verified: rustc
+install: creating uninstall script at /root/hipvs-competition-build-20261030/tooling/rust-1.98.1/lib/rustlib/uninstall.sh
+install: installing component 'rust-std-x86_64-unknown-linux-gnu'
+
+    rust std installed.
+
+Installed and verified: rust-std
+rustc 1.98.1 (48a229cea 2026-09-01)
+cargo 1.98.1 (797e8a9bc 2026-08-05)

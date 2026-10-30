@@ -1,0 +1,26 @@
+{
+  "base_revision": "5bce9e06d1281347ad61344e4b01fab9158c58a2",
+  "built_revision": "Starting seekdb (OceanBase seekdb 1.4.0.0) source revision 1-5bce9e06d1281347ad61344e4b01fab9158c58a2.\nseekdb (OceanBase seekdb 1.4.0.0)\n\nREVISION: 1-5bce9e06d1281347ad61344e4b01fab9158c58a2\nBUILD_BRANCH: competition/amd-hipvs-build\nBUILD_TIME: Oct 29 2026 22:19:10\nBUILD_FLAGS: RelWithDebInfo\nBUILD_INFO: \n\nCopyright (c) 2011-present OceanBase Inc.",
+  "compiler": "clang version 17.0.6 (git@gitlab.oceanbase-dev.com:oceanbase-ce-publish/ob-deps.git e363299bcdda429f8e7c00590d1dfeac7656ad3c)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /workspace/oceanbase-amd/src/seekdb/deps/3rd/usr/local/oceanbase/devtools/bin",
+  "cmake": "cmake version 3.30.3\n\nCMake suite maintained and supported by Kitware (kitware.com/cmake).",
+  "cpu_max": "1600000 100000",
+  "memory_max": "59055800320",
+  "rocm_version": "7.2.4",
+  "gpu_name": "AMD Radeon Graphics",
+  "gpu_arch": "gfx1100",
+  "gpu_vram_bytes": 51522830336,
+  "hip_runtime_version": 70253211,
+  "hipvs_header_version": "1.0.0",
+  "ldd_seekdb": "linux-vdso.so.1 (0x00007ffe99df4000)\n\tlibm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007fad6094a000)\n\tlibaio.so.1t64 => /lib/x86_64-linux-gnu/libaio.so.1t64 (0x00007fad60945000)\n\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007fad60733000)\n\t/lib64/ld-linux-x86-64.so.2 (0x00007fad60a45000)",
+  "restart_gpu_visibility": "HIP_VISIBLE_DEVICES=-1",
+  "cpu_off_full_build": false,
+  "cpu_off_configure_and_affected_source_syntax": true,
+  "sql_profiled": false,
+  "sha256": {
+    "/workspace/oceanbase-amd/src/seekdb/build_release/src/observer/seekdb": "d330a8198e6b14554051582c2e91fba8511d737c3d9d948574157aaf9085ff06",
+    "/workspace/oceanbase-amd/src/seekdb/build_release/src/observer/seekdb_hipvs_hnsw_worker": "5a9875001720b0af18cf028552d47314a935fc771d0f4df328368e7163a06204",
+    "/workspace/oceanbase-amd/src/seekdb/build_release/lib/libseekdb_hipvs_hnsw.so": "8b482b5246f185b567753ee5f8b689c60ab0ee5dddf135ae4a0e9dd055035faa",
+    "/opt/hipvs/lib/libcuvs_c.so": "b63211897276e0a6911bb534fe77c8b0b59f31c50af1df2f108845f06ad46ebf",
+    "/opt/hipvs/lib/libcuvs.so": "5ccf012af5923c687cd2d22149740a410ca69e0aa51223a6386ba6fc129c967a"
+  }
+}

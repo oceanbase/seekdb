@@ -1,0 +1,20 @@
+{
+  "cmake/Env.cmake": "88d7d43bbf8482d10e26ec7eca662a09c920fa01d15231f49de86d5fe591d001",
+  "src/oblib/lib/CMakeLists.txt": "2c639407baad9468424c8ee676ff7705a6e48258782dc42baf04991ccac1ac9a",
+  "src/oblib/lib/vector/ob_vsag_adaptor.cpp": "6d7b683a8524d76e1a930208c2d46d8f71ac5284bc5f1e0a09f41a0da54b534a",
+  "src/oblib/lib/vector/ob_vsag_adaptor.h": "74607f09ad3ea401877dbdb210f29ff147d743874626fb9b1ef798325fdf9e0e",
+  "src/observer/CMakeLists.txt": "48d19aafd5f61e683ecb40ee7c07dabc6b34e7c49392caf95fcb399309084219",
+  "src/observer/vector_index/ob_plugin_vector_index_adaptor.cpp": "91ce6e6e8a393c4d503a8004059c6803e4008e97e996e41745469cf78108f19d",
+  "src/observer/vector_index/ob_plugin_vector_index_utils.cpp": "aa39d994df0a8cb2c921a3efc672ebbdd95e132ba381b3b5a037cc505157cd72",
+  "src/observer/vector_index/ob_vector_index_util.cpp": "aa5869351bd3ae737a97f99401cd2043eb082aad20fd4c60e8f2b4b2131c9b3d",
+  "src/query/api/query/vector/ob_vector_index_util.h": "4186f609c047f74619a33b37bbece6f76608cb43f66a920904fd4d606ae87cc2",
+  "src/oblib/lib/vector/hipvs_hnsw_bridge.c": "a1b825484d9bf8b289112ee5e15cddd801abd676217411c38ae317de333b6ad3",
+  "src/oblib/lib/vector/hipvs_hnsw_bridge.h": "d415bc5ff582acee9e3440ff012bc43baf4a4301c70cdd0e9a65e89d47a206f3",
+  "src/oblib/lib/vector/hipvs_hnsw_builder.h": "f3ac4e8b6e5084ead5bf181de170668750b43a7df9b7b76b518e2d9d4814b901",
+  "src/oblib/lib/vector/hipvs_hnsw_worker.c": "eaedaa4b279f449c7c0148378629b628eafcfa39d3dd2c2549afcb7402084aae",
+  "docs/gpu-hnsw-build/benchmark.py": "0a865e042aa2810f51425424088f7dbd62cb2cd8a08d38ed121eb2493ac7e5d4",
+  "docs/gpu-hnsw-build/verify_evidence.py": "273ec3249c927a36b30702bc079487f0b95ed8095f0e6ac555a62f5e3c2ab60f",
+  "unittest/sql/vector_index/check_hipvs_sql.py": "11a500b1208ba0facf29a08a39f6b56af1e8e1566159d421c13f6f6589fbc6f2",
+  "tools/deploy/copy.sh": "d1cbbc12f2aa1671dc079435bf18e7598e7edffdb7b3c0ce65c2cb0e2f09f7b9",
+  "src/oblib/oblib_header_inventory.bzl": "c040775da0119371acb586a15324d236d87540f2a5d3d56587fa1a6593f7b3d7"
+}

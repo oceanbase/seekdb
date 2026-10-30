@@ -1,0 +1,16 @@
+{
+  "cmake/Env.cmake": "60a894913f22de11759444ea89494fc27bdc9063b8a8c61cc7e1261db7f1a238",
+  "src/oblib/lib/CMakeLists.txt": "63ec960de1a01c66be8902ff728e625073ef5c1d58656bfa1d536a6bc367c984",
+  "src/oblib/lib/vector/ob_vsag_adaptor.cpp": "6d7b683a8524d76e1a930208c2d46d8f71ac5284bc5f1e0a09f41a0da54b534a",
+  "src/oblib/lib/vector/ob_vsag_adaptor.h": "74607f09ad3ea401877dbdb210f29ff147d743874626fb9b1ef798325fdf9e0e",
+  "src/observer/CMakeLists.txt": "48d19aafd5f61e683ecb40ee7c07dabc6b34e7c49392caf95fcb399309084219",
+  "src/observer/vector_index/ob_plugin_vector_index_adaptor.cpp": "91ce6e6e8a393c4d503a8004059c6803e4008e97e996e41745469cf78108f19d",
+  "src/observer/vector_index/ob_plugin_vector_index_utils.cpp": "aa39d994df0a8cb2c921a3efc672ebbdd95e132ba381b3b5a037cc505157cd72",
+  "src/observer/vector_index/ob_vector_index_util.cpp": "19ee351360a42892b8ebcea4c0b013ac820f4b0fef9b204d14721e7f694a9b71",
+  "src/query/api/query/vector/ob_vector_index_util.h": "4186f609c047f74619a33b37bbece6f76608cb43f66a920904fd4d606ae87cc2",
+  "src/oblib/lib/vector/hipvs_hnsw_bridge.c": "a1b825484d9bf8b289112ee5e15cddd801abd676217411c38ae317de333b6ad3",
+  "src/oblib/lib/vector/hipvs_hnsw_bridge.h": "d415bc5ff582acee9e3440ff012bc43baf4a4301c70cdd0e9a65e89d47a206f3",
+  "src/oblib/lib/vector/hipvs_hnsw_builder.h": "f3ac4e8b6e5084ead5bf181de170668750b43a7df9b7b76b518e2d9d4814b901",
+  "src/oblib/lib/vector/hipvs_hnsw_worker.c": "eaedaa4b279f449c7c0148378629b628eafcfa39d3dd2c2549afcb7402084aae",
+  "docs/gpu-hnsw-build/benchmark.py": "15c14c9f84e2e1b5f65fa4ced89d92b60bf2a784f8107fcb746882d87b393c0e"
+}

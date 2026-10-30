@@ -1,0 +1,7 @@
+-- Configuring incomplete, errors occurred!
+CMake Error at cmake/Env.cmake:62 (message):
+  OB_BUILD_CUVS and OB_BUILD_HIPVS must agree when both are set
+Call Stack (most recent call first):
+  CMakeLists.txt:10 (include)
+
+
