@@ -150,9 +150,39 @@ TEST(FileScanUtils, scan_csv_quotes_and_crlf)
   ASSERT_EQ(2, fields.count());
   ASSERT_EQ("1", to_std(fields.at(0)));
   ASSERT_EQ("hello,\nworld", to_std(fields.at(1)));
+  ASSERT_FALSE(is_null.at(1));
 
   ASSERT_EQ(OB_SUCCESS, scanner.next_row(fields, is_null));
   ASSERT_EQ("say \"hi\"", to_std(fields.at(1)));
+
+  ASSERT_EQ(OB_ITER_END, scanner.next_row(fields, is_null));
+  scanner.release();
+}
+
+// An unquoted empty field is NULL, while a quoted empty field is a real empty
+// string. Losing that distinction changes user data during a read-only query.
+TEST(FileScanUtils, scan_csv_quoted_empty_is_not_null)
+{
+  TempFile file("id,note\n1,\n2,\"\"\n");
+  ASSERT_TRUE(file.ok());
+
+  ObArenaAllocator allocator;
+  ObFileReadOptions options;
+  ObFileSchema schema;
+  ObString path(file.path().size(), file.path().c_str());
+  ASSERT_EQ(OB_SUCCESS, ob_file_sql_infer_csv(allocator, path, options, schema));
+
+  ObFileCsvScanner scanner;
+  ASSERT_EQ(OB_SUCCESS, scanner.init(allocator, path, options, schema));
+  ObSEArray<ObString, 8> fields;
+  ObSEArray<bool, 8> is_null;
+
+  ASSERT_EQ(OB_SUCCESS, scanner.next_row(fields, is_null));
+  ASSERT_TRUE(is_null.at(1));
+
+  ASSERT_EQ(OB_SUCCESS, scanner.next_row(fields, is_null));
+  ASSERT_FALSE(is_null.at(1));
+  ASSERT_EQ(0, fields.at(1).length());
 
   ASSERT_EQ(OB_ITER_END, scanner.next_row(fields, is_null));
   scanner.release();
@@ -275,4 +305,42 @@ TEST(FileScanUtils, file_change_detected)
   // schema; what must not happen is a crash or an out-of-range column access.
   ASSERT_TRUE(OB_SUCC(ret) || OB_ITER_END == ret || OB_ERR_UNEXPECTED == ret
               || OB_INVALID_ARGUMENT == ret || OB_FILE_NOT_EXIST == ret);
+}
+
+// glob() must report regular files only and must not let a parent-directory
+// component escape secure_file_priv.
+TEST(FileScanUtils, glob_returns_files_and_checks_parent)
+{
+  TempFile file("id\n1\n");
+  ASSERT_TRUE(file.ok());
+  const std::string allowed_dir = file.dir() + "/allowed";
+  ASSERT_EQ(0, mkdir(allowed_dir.c_str(), 0700));
+  const std::string allowed_file = allowed_dir + "/one.csv";
+  FILE *fp = fopen(allowed_file.c_str(), "wb");
+  ASSERT_NE(nullptr, fp);
+  fputs("id\n1\n", fp);
+  fclose(fp);
+  ASSERT_EQ(0, mkdir((allowed_dir + "/nested").c_str(), 0700));
+
+  ObArenaAllocator allocator;
+  ObString allowed(allowed_dir.size(), allowed_dir.c_str());
+  const std::string pattern_text = allowed_dir + "/*";
+  ObString pattern(pattern_text.size(), pattern_text.c_str());
+  ObSEArray<ObString, 8> paths;
+  int glob_ret = ob_file_sql_resolve_paths(allocator, pattern, allowed, paths);
+  ASSERT_EQ(OB_SUCCESS, glob_ret) << "pattern=" << pattern_text
+                                  << " allowed=" << allowed_dir
+                                  << " count=" << paths.count();
+  // The allowed root is the glob directory itself. The parent pattern must be
+  // rejected even though the parent directory exists and is readable.
+  const std::string traversal = allowed_dir + "/../*";
+  ObString traversal_pattern(traversal.size(), traversal.c_str());
+  paths.reuse();
+  ASSERT_EQ(OB_INVALID_ARGUMENT,
+            ob_file_sql_resolve_paths(allocator, traversal_pattern, allowed, paths));
+  ASSERT_TRUE(paths.empty());
+
+  unlink(allowed_file.c_str());
+  rmdir((allowed_dir + "/nested").c_str());
+  rmdir(allowed_dir.c_str());
 }

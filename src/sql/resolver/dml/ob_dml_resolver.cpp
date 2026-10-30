@@ -4125,17 +4125,23 @@ int ObDMLResolver::text_to_obj(const ObString &text,
       // Files carry no fractional seconds; an unset scale would print as .000000.
       obj.set_scale(0);
     }
-  } else {
+  } else if (OB_FILE_TYPE_VARCHAR == static_cast<ObFileColumnType>(type) || text.empty()) {
+    // An empty string is a valid VARCHAR value. It must not fall through to a
+    // numeric/date conversion even when inference reported the column as NULL.
     char *copy = static_cast<char *>(allocator_->alloc(text.length()));
-    if (OB_ISNULL(copy)) {
+    if (OB_ISNULL(copy) && text.length() > 0) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
       if (text.length() > 0) {
         MEMCPY(copy, text.ptr(), text.length());
       }
-      obj.set_varchar(copy, static_cast<ObString::obstr_size_t>(text.length()));
+      obj.set_varchar(copy == nullptr ? "" : copy,
+                      static_cast<ObString::obstr_size_t>(text.length()));
       obj.set_collation_type(session_info_->get_local_collation_connection());
     }
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected file column type", K(ret), K(type));
   }
   return ret;
 }

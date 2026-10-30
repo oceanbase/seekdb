@@ -336,7 +336,10 @@ int check_path_contained(common::ObIAllocator &allocator,
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("secure_file_priv does not exist", K(ret), K(secure_file_priv));
       } else {
-        const int64_t priv_len = static_cast<int64_t>(strlen(priv_buf));
+        int64_t priv_len = static_cast<int64_t>(strlen(priv_buf));
+        while (priv_len > 1 && priv_buf[priv_len - 1] == '/') {
+          priv_buf[--priv_len] = '\0';
+        }
         const bool contained = priv_len == 1 ? priv_buf[0] == '/' :
             0 == strncmp(resolved_buf, priv_buf, priv_len) &&
             (resolved_buf[priv_len] == '/' || resolved_buf[priv_len] == '\0');
@@ -349,7 +352,12 @@ int check_path_contained(common::ObIAllocator &allocator,
     }
   }
   if (OB_SUCC(ret)) {
-    const int64_t len = static_cast<int64_t>(strlen(resolved_buf));
+    int64_t len = static_cast<int64_t>(strlen(resolved_buf));
+    // Directory resolution keeps the trailing slash. Strip it before comparing
+    // paths and before joining a child name; the root slash is meaningful.
+    while (len > 1 && resolved_buf[len - 1] == '/') {
+      resolved_buf[--len] = '\0';
+    }
     char *ptr = static_cast<char *>(allocator.alloc(len + 1));
     if (OB_ISNULL(ptr)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -399,49 +407,48 @@ int ob_file_sql_resolve_paths(common::ObIAllocator &allocator,
                               common::ObIArray<common::ObString> &paths)
 {
   int ret = OB_SUCCESS;
-  common::ObString resolved_pattern;
   if (pattern.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "file pattern is empty");
-  } else if (OB_FAIL(check_path_contained(allocator, ObString::make_string(pattern.ptr()),
-                                          secure_file_priv, resolved_pattern))) {
-    // A glob pattern usually does not name an existing file; fall back to
-    // resolving the directory part so containment is still enforced.
-    const bool has_glob = has_glob_meta(pattern);
-    if (OB_FILE_NOT_EXIST == ret && has_glob) {
-      ret = OB_SUCCESS;
-      resolved_pattern = pattern;
+  } else if (!has_glob_meta(pattern)) {
+    if (OB_FAIL(ob_file_sql_check_access(allocator, pattern, secure_file_priv, true))) {
+    } else if (OB_FAIL(paths.push_back(pattern))) {
     }
-  }
-  if (OB_SUCC(ret)) {
-    const bool has_glob = has_glob_meta(resolved_pattern);
-    if (!has_glob) {
-      common::ObString single;
-      if (OB_FAIL(ob_file_sql_check_access(allocator, resolved_pattern, secure_file_priv, true))) {
-      } else if (OB_FAIL(paths.push_back(resolved_pattern))) {
-      }
-      UNUSED(single);
+  } else {
+    const char *raw = pattern.ptr();
+    const char *base = path_basename(raw);
+    common::ObString raw_dir;
+    const int64_t dir_len = base == raw ? 1 : static_cast<int64_t>(base - raw);
+    char *dir_prefix = static_cast<char *>(allocator.alloc(dir_len + 1));
+    if (OB_ISNULL(dir_prefix)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
-      // Split into directory + filename pattern, then match entries of that one
-      // directory. Recursive expansion is intentionally not supported.
-      const char *raw = resolved_pattern.ptr();
-      const char *base = path_basename(raw);
-      ObString dir;
+      // The pattern itself is not NUL terminated at the basename boundary, so
+      // realpath() needs a standalone copy of just the directory prefix.
       if (base == raw) {
-        dir = ObString::make_string(".");
+        dir_prefix[0] = '.';
       } else {
-        dir.assign_ptr(raw, static_cast<int32_t>(base - raw));
+        MEMCPY(dir_prefix, raw, dir_len);
       }
-      const char *dir_c = static_cast<const char *>(allocator.alloc(dir.length() + 1));
+      dir_prefix[dir_len] = '\0';
+      raw_dir.assign_ptr(dir_prefix, static_cast<int32_t>(dir_len));
+    }
+    common::ObString dir;
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(check_path_contained(allocator, raw_dir, secure_file_priv, dir))) {
+      LOG_WARN("glob directory is outside secure_file_priv", K(ret), K(raw_dir),
+               K(secure_file_priv));
+    } else {
+      char *dir_c = static_cast<char *>(allocator.alloc(dir.length() + 1));
       if (OB_ISNULL(dir_c)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else {
-        MEMCPY(const_cast<char *>(dir_c), dir.ptr(), dir.length());
-        const_cast<char *>(dir_c)[dir.length()] = '\0';
+        MEMCPY(dir_c, dir.ptr(), dir.length());
+        dir_c[dir.length()] = '\0';
         DIR *d = opendir(dir_c);
         if (OB_ISNULL(d)) {
           ret = OB_FILE_NOT_EXIST;
-          LOG_WARN("failed to open directory", K(ret), K(dir), K(errno));
+          LOG_WARN("failed to open directory", K(ret), K(dir), K(dir_c), K(errno));
         } else {
           struct dirent *ent = nullptr;
           while (OB_SUCC(ret) && OB_NOT_NULL(ent = readdir(d))) {
@@ -456,17 +463,27 @@ int ob_file_sql_resolve_paths(common::ObIAllocator &allocator,
             if (0 != fnmatch(base, ent->d_name, FNM_PERIOD)) {
               continue;
             }
-            const int64_t full_len = dir.length() + 1 + static_cast<int64_t>(strlen(ent->d_name));
+            const bool trailing = dir.length() > 0 && dir.ptr()[dir.length() - 1] == '/';
+            const int64_t sep = trailing ? 0 : 1;
+            const int64_t name_len = static_cast<int64_t>(strlen(ent->d_name));
+            const int64_t full_len = dir.length() + sep + name_len;
             char *full = static_cast<char *>(allocator.alloc(full_len + 1));
             if (OB_ISNULL(full)) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
             } else {
               MEMCPY(full, dir.ptr(), dir.length());
-              full[dir.length()] = '/';
-              MEMCPY(full + dir.length() + 1, ent->d_name, strlen(ent->d_name));
+              if (!trailing) {
+                full[dir.length()] = '/';
+              }
+              MEMCPY(full + dir.length() + sep, ent->d_name, name_len);
               full[full_len] = '\0';
-              common::ObString one(full_len, full);
-              if (OB_FAIL(paths.push_back(one))) {
+              struct stat st;
+              if (0 != stat(full, &st)) {
+                ret = OB_IO_ERROR;
+                LOG_WARN("failed to stat glob result", K(ret), K(full), K(errno));
+              } else if (!S_ISREG(st.st_mode)) {
+                continue;
+              } else if (OB_FAIL(paths.push_back(common::ObString(full_len, full)))) {
               }
             }
           }
@@ -477,7 +494,6 @@ int ob_file_sql_resolve_paths(common::ObIAllocator &allocator,
   }
   return ret;
 }
-
 // Reads one CSV row honoring quotes, escaped quotes and embedded newlines. The
 // cursor advances past the row terminator.
 // Reads one CSV row honoring quotes, escaped quotes and embedded newlines.
@@ -534,10 +550,14 @@ struct ObCsvFieldBuf
 int read_csv_row(const char *&cursor, const char *end,
                  const ObFileReadOptions &options,
                  common::ObIAllocator &allocator,
-                 common::ObIArray<common::ObString> &fields)
+                 common::ObIArray<common::ObString> &fields,
+                 common::ObIArray<bool> *is_quoted = nullptr)
 {
   int ret = OB_SUCCESS;
   fields.reuse();
+  if (OB_NOT_NULL(is_quoted)) {
+    is_quoted->reuse();
+  }
   if (cursor >= end) {
     ret = OB_ITER_END;
   } else {
@@ -551,6 +571,7 @@ int read_csv_row(const char *&cursor, const char *end,
           common::ObString out;
           if (OB_FAIL(field.finish(allocator, out))) {
           } else if (OB_FAIL(fields.push_back(out))) {
+          } else if (OB_NOT_NULL(is_quoted) && OB_FAIL(is_quoted->push_back(field.quoted_))) {
           }
         }
         row_done = true;
@@ -590,6 +611,7 @@ int read_csv_row(const char *&cursor, const char *end,
         common::ObString out;
         if (OB_FAIL(field.finish(allocator, out))) {
         } else if (OB_FAIL(fields.push_back(out))) {
+        } else if (OB_NOT_NULL(is_quoted) && OB_FAIL(is_quoted->push_back(field.quoted_))) {
         }
         field = ObCsvFieldBuf();
         ++cursor;
@@ -597,6 +619,7 @@ int read_csv_row(const char *&cursor, const char *end,
         common::ObString out;
         if (OB_FAIL(field.finish(allocator, out))) {
         } else if (OB_FAIL(fields.push_back(out))) {
+        } else if (OB_NOT_NULL(is_quoted) && OB_FAIL(is_quoted->push_back(field.quoted_))) {
         }
         row_done = true;
         if (c == '\r' && cursor + 1 < end && *(cursor + 1) == '\n') {
@@ -702,8 +725,9 @@ int ObFileCsvScanner::next_row(common::ObIArray<common::ObString> &fields,
       }
     }
     if (OB_SUCC(ret) && impl_->cursor_ < impl_->end_) {
+      common::ObSEArray<bool, 24> quoted;
       if (OB_FAIL(read_csv_row(impl_->cursor_, impl_->end_, impl_->options_,
-                               *impl_->allocator_, fields))) {
+                               *impl_->allocator_, fields, &quoted))) {
       } else if (OB_UNLIKELY(fields.count() != column_cnt)) {
         ret = OB_INVALID_ARGUMENT;
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, "csv row has a different field count than the header");
@@ -711,9 +735,9 @@ int ObFileCsvScanner::next_row(common::ObIArray<common::ObString> &fields,
       } else if (OB_FAIL(is_null.prepare_allocate(column_cnt))) {
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < column_cnt; ++i) {
-          // An empty cell means "no value" for this format, which is what the
-          // fixtures rely on for their NULL cells.
-          is_null.at(i) = fields.at(i).empty();
+          // An empty unquoted cell is NULL; an explicitly quoted empty string
+          // is a real empty value and must survive as an empty VARCHAR.
+          is_null.at(i) = fields.at(i).empty() && !quoted.at(i);
         }
       }
     } else if (OB_SUCC(ret)) {
