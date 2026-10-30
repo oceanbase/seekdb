@@ -44,7 +44,7 @@ class Server:
         for parameter in [f"rpc_port={self.rpc_port}", "cpu_count=2",
                           "memory_budget=1G", "log_disk_size=2G",
                           f"datafile_size={self.datafile_size}", "datafile_maxsize=4G",
-                          "enable_rpc_service=true", "enable_syslog_recycle=true", "max_syslog_file_count=4"]:
+                          "enable_rpc_service=true"]:
             args += ["--parameter", parameter]
         if self.source:
             args += ["--parameter", f"log_restore_source=127.0.0.1:{self.source.rpc_port}"]
