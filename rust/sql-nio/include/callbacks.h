@@ -36,5 +36,9 @@ void ob_sql_sock_handler_on_close(ObSqlSockHandler *handler, ObSqlSockSession *s
 void ob_sql_nio_log_accept_state(int32_t kind, int32_t raw_error, uint64_t drain_id,
     uint64_t accepted, uint32_t transient_errors, uint32_t consecutive_errors,
     int32_t outcome);
+void ob_sql_nio_log_reactor_state(int32_t poll_result, uint64_t poll_id,
+    uint64_t event_count, uint64_t listener_events, uint64_t accept_calls,
+    uint64_t accepted, uint64_t cxx_connect_attempts, uint64_t cxx_connect_returns,
+    uint64_t cxx_connect_rejects, uint32_t listener_event_flags);
 } // namespace obmysql
 } // namespace oceanbase
