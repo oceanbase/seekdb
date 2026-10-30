@@ -27,8 +27,9 @@ struct ObNotNullContext;
 class ObTransformSimplifyExpr : public ObTransformRule
 {
 public:
-  ObTransformSimplifyExpr(ObTransformerCtx *ctx)
-    : ObTransformRule(ctx, TransMethod::POST_ORDER, T_SIMPLIFY_EXPR)
+  ObTransformSimplifyExpr(ObTransformerCtx *ctx, bool predicates_only = false)
+    : ObTransformRule(ctx, TransMethod::POST_ORDER, T_SIMPLIFY_EXPR),
+      predicates_only_(predicates_only)
   {}
 
   virtual ~ObTransformSimplifyExpr() {}
@@ -219,6 +220,17 @@ private:
                                               ObIArray<ObRawExpr*> &extracted_preds);
   int add_constraint_for_convert_case_when_by_then(ObIArray<ObRawExpr *> &false_null_exprs,
                                                    ObIArray<ObRawExpr *> &true_exprs);
+  bool predicates_only_;
+};
+
+// ANN permits Boolean filter canonicalization while retaining its existing ban
+// on structural and other expression rewrites.
+class AnnFilterSimplifier : public ObTransformSimplifyExpr
+{
+public:
+  explicit AnnFilterSimplifier(ObTransformerCtx *ctx)
+    : ObTransformSimplifyExpr(ctx, true)
+  {}
 };
 }
 }
