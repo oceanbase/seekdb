@@ -33,6 +33,7 @@
 #include "rootserver/ob_partition_creator.h"
 #include "share/ob_version.h" // for get_package_and_svn
 #include "share/ob_server_struct.h" // GCTX
+#include "common/ob_timeout_ctx.h"
 
 namespace oceanbase
 {
@@ -670,7 +671,17 @@ int ObBootstrap::init_global_stat()
     const int64_t ddl_epoch = 0;
     ObGlobalStatProxy global_stat_proxy(trans);
     ObSchemaStatusProxy *schema_status_proxy = GCTX.schema_status_proxy_;
-    if (OB_FAIL(trans.start(&sql_proxy))) {
+
+    // Windows 磁盘 I/O 慢，bootstrap 需要更长的超时时间
+    ObTimeoutCtx timeout_ctx;
+#ifdef _WIN32
+    const int64_t BOOTSTRAP_INNER_SQL_EXECUTE_TIMEOUT = 60L * 1000 * 1000; // 60秒
+#else
+    const int64_t BOOTSTRAP_INNER_SQL_EXECUTE_TIMEOUT = 10L * 1000 * 1000; // 10秒
+#endif
+    if (OB_FAIL(timeout_ctx.set_trx_timeout_us(BOOTSTRAP_INNER_SQL_EXECUTE_TIMEOUT))) {
+    } else if (OB_FAIL(timeout_ctx.set_timeout(BOOTSTRAP_INNER_SQL_EXECUTE_TIMEOUT))) {
+    } else if (OB_FAIL(trans.start(&sql_proxy))) {
     } else if (OB_ISNULL(schema_status_proxy)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(global_stat_proxy.set_init_value(

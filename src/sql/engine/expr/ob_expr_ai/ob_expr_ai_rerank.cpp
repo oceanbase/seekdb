@@ -101,7 +101,8 @@ int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   ObDatum *arg_query = nullptr;
   ObDatum *arg_documents = nullptr;
   ObDatum *arg_doc_key = nullptr;
-  if (OB_FAIL(expr.eval_param_value(ctx, arg_model_id, arg_query, arg_documents, arg_doc_key))) {
+  if (expr.arg_cnt_ == 4 ? OB_FAIL(expr.eval_param_value(ctx, arg_model_id, arg_query, arg_documents, arg_doc_key))
+                         : OB_FAIL(expr.eval_param_value(ctx, arg_model_id, arg_query, arg_documents))) {
   } else if (arg_model_id->is_null() || arg_query->is_null() || arg_documents->is_null()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_rerank, model id or query or documents is null");
@@ -124,6 +125,7 @@ int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     ObIJsonBase *j_base = nullptr;
     int64_t batch_size = 20; // max batch size for rerank
     bool is_null_result = false;
+    bool has_doc_key = OB_NOT_NULL(arg_doc_key) && !arg_doc_key->is_null();
     if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, DOCUMENTS_IDX,
           j_base, is_null_result))) {
     } else if (OB_ISNULL(j_base)) {
@@ -141,10 +143,10 @@ int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
         ObJsonNode *doc_node = document_array->get_value(i);
         if (OB_ISNULL(doc_node)) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_NOT_NULL(arg_doc_key) && doc_node->json_type() != ObJsonNodeType::J_OBJECT) {
+        } else if (has_doc_key && doc_node->json_type() != ObJsonNodeType::J_OBJECT) {
           ret = OB_INVALID_ARGUMENT;
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_rerank, document_array element is not object");
-        } else if (OB_ISNULL(arg_doc_key) && doc_node->json_type() != ObJsonNodeType::J_STRING) {
+        } else if (!has_doc_key && doc_node->json_type() != ObJsonNodeType::J_STRING) {
           ret = OB_INVALID_ARGUMENT;
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_rerank, document_array element is not string");
         }
@@ -160,7 +162,7 @@ int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     } 
 
     if (OB_FAIL(ret)) {
-    } else if (OB_NOT_NULL(arg_doc_key)) {
+    } else if (has_doc_key) {
       ObString doc_key = arg_doc_key->get_string();
       if (OB_FAIL(eval_ai_rerank_with_doc_key(expr, ctx, temp_allocator, model_id,
                   query, document_array, doc_key, *info, *endpoint_info, res))) {
@@ -385,10 +387,10 @@ int ObExprAIRerank::compact_json_array_by_key(ObIAllocator &allocator, ObJsonArr
   } else {
     int64_t count1 = array1->element_count();
     int64_t count2 = array2->element_count();
-    int64_t min_count = count1 < count2 ? count1 : count2;
     int64_t i = 0;
     int64_t j = 0;
-    while (i < min_count && j < min_count) {
+    // stable merge by score desc: on tie prefer array1 (earlier batch, smaller index)
+    while (i < count1 && j < count2) {
       ObJsonObject *obj1 = static_cast<ObJsonObject *>(array1->get_value(i));
       ObJsonObject *obj2 = static_cast<ObJsonObject *>(array2->get_value(j));
       if (OB_ISNULL(obj1) || OB_ISNULL(obj2)) {
@@ -399,7 +401,7 @@ int ObExprAIRerank::compact_json_array_by_key(ObIAllocator &allocator, ObJsonArr
         if (OB_ISNULL(double1) || OB_ISNULL(double2)) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          if (double1->value() > double2->value()) {
+          if (double1->value() >= double2->value()) {
             if (OB_FAIL(result_array->append(obj1))) {
             }
             i++;

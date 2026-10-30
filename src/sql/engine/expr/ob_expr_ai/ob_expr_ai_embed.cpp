@@ -83,8 +83,7 @@ int ObExprAIEmbed::eval_ai_embed(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
   if (expr.arg_cnt_ == 3 ? OB_FAIL(expr.eval_param_value(ctx, arg_model_id, arg_content, arg_dim))
                          : OB_FAIL(expr.eval_param_value(ctx, arg_model_id, arg_content))) {
   } else if (arg_model_id->is_null() || arg_content->is_null()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_embed, model id or content is null");
+    // null input produces null result, the row must not fail the query
     res.set_null();
   } else {
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -107,7 +106,7 @@ int ObExprAIEmbed::eval_ai_embed(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
     ObJsonInt *dim_json = nullptr;
     ObJsonObject *config = nullptr;
     if (OB_FAIL(ret)) {
-    } else if (OB_NOT_NULL(arg_dim)) {
+    } else if (OB_NOT_NULL(arg_dim) && !arg_dim->is_null()) {
       dim = arg_dim->get_int();
       if (dim <= 0) {
         ret = OB_INVALID_ARGUMENT;
