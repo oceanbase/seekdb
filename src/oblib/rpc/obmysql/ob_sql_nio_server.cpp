@@ -120,13 +120,8 @@ void ob_sql_nio_log_accept_state(int32_t kind, int32_t raw_error, uint64_t drain
   const char *kind_name = nio_accept_error_kind_name(kind);
   const char *outcome_name = nio_accept_outcome_name(outcome);
   const int ret = (1 == outcome || 3 == outcome) ? OB_ERR_UNEXPECTED : OB_SUCCESS;
-  if (1 == outcome || 3 == outcome) { // fatal or rearm_failed
-    LOG_ERROR("Rust SQL-NIO TCP accept drain stopped", KCSTRING(kind_name), K(raw_error), K(drain_id),
-              K(accepted), K(transient_errors), K(consecutive_errors), KCSTRING(outcome_name));
-  } else {
-    LOG_WARN("Rust SQL-NIO TCP accept drain state", KCSTRING(kind_name), K(raw_error), K(drain_id),
-             K(accepted), K(transient_errors), K(consecutive_errors), KCSTRING(outcome_name));
-  }
+  LOG_ERROR("Rust SQL-NIO TCP accept drain state", KCSTRING(kind_name), K(raw_error), K(drain_id),
+            K(accepted), K(transient_errors), K(consecutive_errors), KCSTRING(outcome_name));
 }
 
 static const char *nio_reactor_poll_result_name(const int32_t poll_result)
@@ -149,17 +144,10 @@ void ob_sql_nio_log_reactor_state(int32_t poll_result, uint64_t poll_id,
                                   uint32_t listener_event_flags) {
   const char *poll_result_name = nio_reactor_poll_result_name(poll_result);
   const int ret = (2 == poll_result) ? OB_ERR_UNEXPECTED : OB_SUCCESS;
-  if (2 == poll_result) {
-    LOG_ERROR("Rust SQL-NIO reactor poll state", KCSTRING(poll_result_name), K(poll_id),
-              K(event_count), K(listener_events), K(accept_calls), K(accepted),
-              K(cxx_connect_attempts), K(cxx_connect_returns), K(cxx_connect_rejects),
-              K(listener_event_flags));
-  } else {
-    LOG_WARN("Rust SQL-NIO reactor poll state", KCSTRING(poll_result_name), K(poll_id),
-             K(event_count), K(listener_events), K(accept_calls), K(accepted),
-             K(cxx_connect_attempts), K(cxx_connect_returns), K(cxx_connect_rejects),
-             K(listener_event_flags));
-  }
+  LOG_ERROR("Rust SQL-NIO reactor poll state", KCSTRING(poll_result_name), K(poll_id),
+            K(event_count), K(listener_events), K(accept_calls), K(accepted),
+            K(cxx_connect_attempts), K(cxx_connect_returns), K(cxx_connect_rejects),
+            K(listener_event_flags));
 }
 
 static uint8_t nio_tls_min_version(const char *value)
