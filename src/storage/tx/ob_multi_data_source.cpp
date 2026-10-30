@@ -21,6 +21,7 @@
 #include "storage/multi_data_source/compile_utility/mds_register.h"
 #undef NEED_MDS_REGISTER_DEFINE
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
+#include "share/ob_debug_sync.h"
 
 namespace oceanbase
 {
@@ -139,6 +140,13 @@ int ObMulSourceTxDataNotifier::notify(const ObTxBufferNodeArray &array,
         if (arg.is_incomplete_replay_) {
           // pass incomplete replay arg
           buffer_ctx.set_incomplete_replay(arg.is_incomplete_replay_);
+        }
+        if (NotifyType::ON_COMMIT == notify_type
+            && ObTxDataSourceType::TABLET_BINDING == node.type_
+            && !arg.for_replay_) {
+          // Hold the exchange binding before its MDS commit callback. The transaction
+          // has released its table locks, so concurrent DML can check this binding.
+          DEBUG_SYNC(AFTER_EXCHANGE_PARTITION_BINDING_UPDATE);
         }
         switch (node.type_) {
           #define NEED_GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION
