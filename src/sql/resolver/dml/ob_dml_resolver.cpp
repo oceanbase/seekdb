@@ -5344,13 +5344,39 @@ int ObDMLResolver::resolve_approx_clause(const ParseNode *approx_node)
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "Using vector index without column ref or vector const expr is");
         }
       }
-      if (OB_SUCC(ret) && is_match && is_vec_index_valid && tmp_expr->get_expr_type() != T_FUN_SYS_INNER_PRODUCT) {
-        stmt->set_has_vec_approx(true);
-      }
       if (OB_SUCC(ret) && !has_const) {
         // if has vector expr, but no const param, not support use vector index
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "Using vector index without const param is");
+      }
+      if (OB_SUCC(ret) && is_match && is_vec_index_valid) {
+        OrderItem &order_item = stmt->get_order_item(0);
+        if (tmp_expr->get_expr_type() != T_FUN_SYS_INNER_PRODUCT) {
+          stmt->set_has_vec_approx(true);
+        } else if (is_descending_direction(order_item.order_type_)) {
+          // IP indexes order by negative inner product ASC. Build a separate
+          // expression: ORDER BY aliases/positions can share the SELECT expr.
+          ObSysFunRawExpr *negative_ip_expr = NULL;
+          if (OB_ISNULL(params_.expr_factory_)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (OB_FAIL(params_.expr_factory_->create_raw_expr(
+                         T_FUN_SYS_NEGATIVE_INNER_PRODUCT, negative_ip_expr))) {
+          } else if (OB_ISNULL(negative_ip_expr)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else {
+            negative_ip_expr->set_func_name(ObString::make_string(N_VECTOR_NEGATIVE_INNER_PRODUCT));
+            if (OB_FAIL(negative_ip_expr->set_param_exprs(tmp_expr->get_param_expr(0),
+                                                        tmp_expr->get_param_expr(1)))) {
+            } else if (OB_FAIL(negative_ip_expr->formalize(session_info_))) {
+            } else {
+              order_item.expr_ = negative_ip_expr;
+              // Negation reverses the direction, but preserves NULL placement.
+              order_item.order_type_ = is_null_first(order_item.order_type_)
+                                       ? NULLS_FIRST_ASC : NULLS_LAST_ASC;
+              stmt->set_has_vec_approx(true);
+            }
+          }
+        }
       }
     } else {
       ret = OB_NOT_SUPPORTED;
