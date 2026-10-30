@@ -22,7 +22,7 @@
 #include "rpc/obmysql/ob_i_sm_conn_callback.h"
 #include "rpc/ob_request.h"
 
-struct NioConnectionHandle;
+namespace oceanbase { namespace nio { struct NioConnectionHandle; } }
 
 namespace oceanbase
 {
@@ -56,7 +56,7 @@ public:
   int on_disconnect();
   int clear_sql_session_info();
   void bind_sql_session();
-  NioConnectionHandle *get_nio_connection_handle() const
+  oceanbase::nio::NioConnectionHandle *get_nio_connection_handle() const
   {
     return nio_connection_handle_;
   }
@@ -69,7 +69,7 @@ public:
   uint32_t sql_session_id_; // debug only
   // One connection-scoped Rust owner acquired during admission. The Rust
   // request gate keeps it live until on_close, where destroy() releases it.
-  NioConnectionHandle *nio_connection_handle_;
+  oceanbase::nio::NioConnectionHandle *nio_connection_handle_;
 };
 
 }; // end namespace obmysql

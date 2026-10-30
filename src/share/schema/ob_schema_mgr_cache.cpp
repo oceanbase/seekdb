@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SHARE_SCHEMA
 
 #include "share/rc/ob_server_runtime.h"
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_schema_mgr_cache.h"
 #include "share/schema/ob_schema_service.h"
 #include "share/schema/ob_schema_mgr.h"

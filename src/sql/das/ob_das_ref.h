@@ -192,21 +192,21 @@ struct DasRefKey
 {
 public:
   DasRefKey()
-    : tablet_loc_(NULL),
+    : tablet_access_(NULL),
       op_type_(ObDASOpType::DAS_OP_INVALID)
   {}
-  DasRefKey(const ObDASTabletLoc *tablet_loc, ObDASOpType op_type)
-    : tablet_loc_(tablet_loc),
+  DasRefKey(const DASRuntimeTabletAccess *tablet_access, ObDASOpType op_type)
+    : tablet_access_(tablet_access),
       op_type_(op_type)
   {}
   ~DasRefKey() {}
   bool operator==(const DasRefKey &other) const;
   uint64_t hash() const;
   int hash(uint64_t &hash_val) const { hash_val = hash(); return OB_SUCCESS; }
-  TO_STRING_KV(KP_(tablet_loc), K_(op_type));
+  TO_STRING_KV(KP_(tablet_access), K_(op_type));
 
 public:
-  const ObDASTabletLoc *tablet_loc_;
+  const DASRuntimeTabletAccess *tablet_access_;
   ObDASOpType op_type_;
 };
 
@@ -228,16 +228,16 @@ public:
   void set_mem_attr(const common::ObMemAttr &memattr) { das_alloc_.set_attr(memattr); }
   ObExecContext &get_exec_ctx() { return exec_ctx_; }
   template <typename DASOp>
-  bool has_das_op(const ObDASTabletLoc *tablet_loc, DASOp *&das_op);
-  ObIDASTaskOp* find_das_task(const ObDASTabletLoc *tablet_loc, ObDASOpType op_type);
+  bool has_das_op(const DASRuntimeTabletAccess *tablet_access, DASOp *&das_op);
+  ObIDASTaskOp* find_das_task(const DASRuntimeTabletAccess *tablet_access, ObDASOpType op_type);
   int add_aggregated_task(ObIDASTaskOp *das_task, ObDASOpType op_type);
   int create_agg_task(ObDASOpType op_type, ObDasAggregatedTask *&agg_task);
   int find_agg_task(ObDASOpType op_type, ObDasAggregatedTask *&agg_task);
   int add_batched_task(ObIDASTaskOp *das_task);
   // Create a DAS Task, and hold it by das_ref
   template <typename DASOp>
-  int prepare_das_task(const ObDASTabletLoc *tablet_loc, DASOp *&task_op);
-  int create_das_task(const ObDASTabletLoc *tablet_loc,
+  int prepare_das_task(const DASRuntimeTabletAccess *tablet_access, DASOp *&task_op);
+  int create_das_task(const DASRuntimeTabletAccess *tablet_access,
                       ObDASOpType op_type,
                       ObIDASTaskOp *&task_op);
   bool has_task() const { return !batched_tasks_.empty(); }
@@ -256,7 +256,6 @@ public:
   int execute_all_task(DasAggregatedTaskList &agg_task_list);
   int retry_all_fail_tasks(common::ObIArray<ObIDASTaskOp *> &failed_tasks);
   int close_all_task();
-  bool is_all_local_task() const;
   bool is_snapshot_opt_enabled() const { return use_snapshot_opt_; }
   void set_use_snapshot_opt(bool v) { use_snapshot_opt_ = v; }
   common::ObIAllocator &get_das_alloc() { return das_alloc_; }
@@ -270,7 +269,6 @@ public:
   void reset();
   // Terminal error cleanup passes false to release every reusable arena page.
   void reuse(bool retain_one_page = true);
-  void set_lookup_iter(DASOpResultIter *lookup_iter) { wild_datum_info_.lookup_iter_ = lookup_iter; }
   DASRefCountContext &get_das_ref_count_ctx() { return das_ref_count_ctx_; }
   void clear_task_map();
 private:
@@ -293,7 +291,6 @@ private:
   ObExecContext &exec_ctx_;
   ObEvalCtx &eval_ctx_;
   const ObExprFrameInfo *expr_frame_info_;
-  DASOpResultIter::WildDatumPtrInfo wild_datum_info_;
   DasAggregatedTaskList del_aggregated_tasks_; // we must execute all delete tasks firstly
 
   DasAggregatedTaskList aggregated_tasks_;
@@ -315,11 +312,11 @@ public:
 };
 
 template <typename DASOp>
-OB_INLINE bool ObDASRef::has_das_op(const ObDASTabletLoc *tablet_loc, DASOp *&das_op)
+OB_INLINE bool ObDASRef::has_das_op(const DASRuntimeTabletAccess *tablet_access, DASOp *&das_op)
 {
   ObDASOpType type = static_cast<ObDASOpType>(das_reg::ObDASOpTraits<DASOp>::type_);
   bool bret = false;
-  ObIDASTaskOp *das_task = find_das_task(tablet_loc, type);
+  ObIDASTaskOp *das_task = find_das_task(tablet_access, type);
   if (das_task != nullptr) {
     bret = true;
     OB_ASSERT(typeid(*das_task) == typeid(DASOp));
@@ -329,11 +326,11 @@ OB_INLINE bool ObDASRef::has_das_op(const ObDASTabletLoc *tablet_loc, DASOp *&da
 }
 
 template <typename DASOp>
-OB_INLINE int ObDASRef::prepare_das_task(const ObDASTabletLoc *tablet_loc, DASOp *&task_op)
+OB_INLINE int ObDASRef::prepare_das_task(const DASRuntimeTabletAccess *tablet_access, DASOp *&task_op)
 {
   ObDASOpType type = static_cast<ObDASOpType>(das_reg::ObDASOpTraits<DASOp>::type_);
   ObIDASTaskOp *tmp_op = nullptr;
-  int ret = create_das_task(tablet_loc, type, tmp_op);
+  int ret = create_das_task(tablet_access, type, tmp_op);
   if (OB_SUCC(ret)) {
     task_op = static_cast<DASOp*>(tmp_op);
   }

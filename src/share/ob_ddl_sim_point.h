@@ -22,6 +22,7 @@
 #include "lib/hash/ob_hashmap.h"
 #include "lib/hash/ob_hashset.h"
 #include "lib/lock/ob_drw_lock.h"
+#include "lib/random/ob_random.h"
 
 namespace oceanbase
 {

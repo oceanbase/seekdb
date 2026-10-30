@@ -109,7 +109,7 @@ OB_SERIALIZE_MEMBER((ObDASRangesCostOp, ObIDASTaskOp),
                      timeout_us_);
 
 int ObDASSimpleUtils::split_multi_ranges(ObExecContext &exec_ctx,
-                                         ObDASTabletLoc *tablet_loc,
+                                         DASRuntimeTabletAccess *tablet_access,
                                          const common::ObIArray<ObStoreRange> &ranges,
                                          const int64_t expected_task_count,
                                          ObArrayArray<ObStoreRange> &multi_range_split_array)
@@ -120,7 +120,7 @@ int ObDASSimpleUtils::split_multi_ranges(ObExecContext &exec_ctx,
   ObEvalCtx eval_ctx(exec_ctx);
   ObDASRef das_ref(eval_ctx, exec_ctx);
   das_ref.set_mem_attr(ObMemAttr("DASSplitRanges"));
-  if (OB_FAIL(das_ref.create_das_task(tablet_loc, DAS_OP_SPLIT_MULTI_RANGES, task_op))) {
+  if (OB_FAIL(das_ref.create_das_task(tablet_access, DAS_OP_SPLIT_MULTI_RANGES, task_op))) {
   } else {
     split_ranges_op = static_cast<ObDASSplitRangesOp*>(task_op);
     split_ranges_op->set_can_part_retry(true);
@@ -159,7 +159,7 @@ int ObDASSimpleUtils::split_multi_ranges(ObExecContext &exec_ctx,
 }
 
 int ObDASSimpleUtils::get_multi_ranges_cost(ObExecContext &exec_ctx,
-                                            ObDASTabletLoc *tablet_loc,
+                                            DASRuntimeTabletAccess *tablet_access,
                                             const common::ObIArray<common::ObStoreRange> &ranges,
                                             int64_t &total_size)
 {
@@ -169,7 +169,7 @@ int ObDASSimpleUtils::get_multi_ranges_cost(ObExecContext &exec_ctx,
   ObEvalCtx eval_ctx(exec_ctx);
   ObDASRef das_ref(eval_ctx, exec_ctx);
   das_ref.set_mem_attr(ObMemAttr("DASGetRangeCost"));
-  if (OB_FAIL(das_ref.create_das_task(tablet_loc, DAS_OP_GET_RANGES_COST, task_op))) {
+  if (OB_FAIL(das_ref.create_das_task(tablet_access, DAS_OP_GET_RANGES_COST, task_op))) {
   } else {
     ranges_cost_op = static_cast<ObDASRangesCostOp*>(task_op);
     ranges_cost_op->set_can_part_retry(true);

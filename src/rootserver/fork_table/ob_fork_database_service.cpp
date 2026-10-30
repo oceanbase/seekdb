@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h"
 #include "rootserver/fork_table/ob_fork_table_helper.h"
 #include "rootserver/ob_ddl_operator.h"

@@ -181,7 +181,6 @@ public:
   int rebuild_vec_index(const obcall::ObRebuildIndexArg &arg, obcall::ObAlterTableRes &res);
 
 
-  //the interface only for switchover: execute skip check enable_ddl
   int purge_index(const obcall::ObPurgeIndexArg &arg);
   int create_table_like(const obcall::ObCreateTableLikeArg &arg);
   int parallel_create_table_like(const obcall::ObCreateTableLikeArg &arg, obcall::ObCreateTableRes &res);

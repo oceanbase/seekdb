@@ -19,7 +19,6 @@ set global ob_query_timeout = 100000000000;
 set global ob_trx_timeout = 100000000000;
 set global ob_trx_idle_timeout = 100000000000;
 alter system set minor_compact_trigger = 10;
-alter system set syslog_io_bandwidth_limit = '100G';
 
 connect (conn1,$ip,admin@obtest,admin,oceanbase,$port);
 connect (conn2,$ip,root@sys,,oceanbase,$port);

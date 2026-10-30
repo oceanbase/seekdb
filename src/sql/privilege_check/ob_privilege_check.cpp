@@ -46,6 +46,10 @@
 #include "sql/resolver/ddl/ob_alter_routine_stmt.h"
 #include "sql/resolver/ddl/ob_drop_routine_stmt.h"
 #include "sql/resolver/ddl/ob_trigger_stmt.h"
+#include "sql/resolver/ddl/ob_create_package_stmt.h"
+#include "sql/resolver/ddl/ob_drop_package_stmt.h"
+#include "sql/resolver/ddl/ob_optimize_stmt.h"
+#include "sql/resolver/ddl/ob_analyze_stmt.h"
 #include "sql/resolver/dcl/ob_alter_user_role_stmt.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/resolver/cmd/ob_merge_table_stmt.h"
@@ -311,7 +315,8 @@ int get_dml_stmt_need_privs(
         if (stmt::T_SELECT == stmt_type) {
           priv_set = OB_PRIV_SELECT;
           op_literal = ObString::make_string("SELECT");
-          if (static_cast<const ObSelectStmt*>(basic_stmt)->is_select_into_outfile()) {
+          const ObSelectStmt *select_stmt = static_cast<const ObSelectStmt*>(basic_stmt);
+          if (select_stmt->is_select_into_outfile() || select_stmt->is_select_into_dumpfile()) {
             ObNeedPriv need_priv;
             need_priv.priv_set_ = OB_PRIV_FILE;
             need_priv.priv_level_ = OB_PRIV_USER_LEVEL;
@@ -1060,6 +1065,74 @@ int get_routine_stmt_need_privs(
   return ret;
 }
 
+int get_table_maintenance_stmt_need_privs(
+    const ObSessionPrivInfo &session_priv,
+    const ObStmt *basic_stmt,
+    ObIArray<ObNeedPriv> &need_privs)
+{
+  UNUSED(session_priv);
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(basic_stmt)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (stmt::T_OPTIMIZE_TABLE == basic_stmt->get_stmt_type()) {
+    const auto &tables = static_cast<const ObOptimizeTableStmt *>(basic_stmt)->get_optimize_table_arg().tables_;
+    for (int64_t i = 0; OB_SUCC(ret) && i < tables.count(); ++i) {
+      ObNeedPriv need_priv;
+      need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
+      need_priv.db_ = tables.at(i).database_name_;
+      need_priv.table_ = tables.at(i).table_name_;
+      need_priv.priv_set_ = OB_PRIV_SELECT | OB_PRIV_INSERT;
+      ADD_NEED_PRIV(need_priv);
+    }
+  } else if (stmt::T_ANALYZE == basic_stmt->get_stmt_type()) {
+    const auto &tables = static_cast<const ObAnalyzeStmt *>(basic_stmt)->get_tables();
+    for (int64_t i = 0; OB_SUCC(ret) && i < tables.count(); ++i) {
+      ObNeedPriv need_priv;
+      need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
+      need_priv.db_ = tables.at(i).get_database_name();
+      need_priv.table_ = tables.at(i).get_table_name();
+      need_priv.priv_set_ = OB_PRIV_SELECT | OB_PRIV_INSERT;
+      ADD_NEED_PRIV(need_priv);
+    }
+  } else {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  return ret;
+}
+
+int get_package_stmt_need_privs(
+    const ObSessionPrivInfo &session_priv,
+    const ObStmt *basic_stmt,
+    ObIArray<ObNeedPriv> &need_privs)
+{
+  UNUSED(session_priv);
+  int ret = OB_SUCCESS;
+  ObNeedPriv need_priv;
+  need_priv.priv_level_ = OB_PRIV_DB_LEVEL;
+  if (OB_ISNULL(basic_stmt)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (stmt::T_CREATE_PACKAGE == basic_stmt->get_stmt_type()
+             || stmt::T_CREATE_PACKAGE_BODY == basic_stmt->get_stmt_type()) {
+    const obcall::ObCreatePackageArg &arg =
+        static_cast<const ObCreatePackageStmt *>(basic_stmt)->get_create_package_arg();
+    need_priv.db_ = arg.db_name_;
+    need_priv.priv_set_ = OB_PRIV_CREATE_ROUTINE;
+    // A body supplies executable code for an existing specification. Replacing
+    // either part must not be authorized by CREATE ROUTINE alone.
+    if (arg.is_replace_ || arg.package_info_.is_package_body()) {
+      need_priv.priv_set_ |= OB_PRIV_ALTER_ROUTINE;
+    }
+    ADD_NEED_PRIV(need_priv);
+  } else if (stmt::T_DROP_PACKAGE == basic_stmt->get_stmt_type()) {
+    need_priv.db_ = static_cast<const ObDropPackageStmt *>(basic_stmt)->get_drop_package_arg().db_name_;
+    need_priv.priv_set_ = OB_PRIV_ALTER_ROUTINE;
+    ADD_NEED_PRIV(need_priv);
+  } else {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  return ret;
+}
+
 int get_trigger_stmt_need_privs(
     const ObSessionPrivInfo &session_priv,
     const ObStmt *basic_stmt,
@@ -1644,6 +1717,37 @@ int ObPrivilegeCheck::check_privilege(
       LOG_DEBUG("check priv",
                 K(session_priv),
                 "enable_roles", ctx.session_info_->get_enable_role_array());
+    }
+  }
+  return ret;
+}
+
+int ObPrivilegeCheck::check_maintenance_priv(const ObSqlCtx &ctx,
+                                            const ObString &database_name,
+                                            const ObString &table_name,
+                                            const ObPrivSet required_privs)
+{
+  int ret = OB_SUCCESS;
+  ObSchemaGetterGuard *guard = const_cast<ObSchemaGetterGuard *>(ctx.schema_guard_);
+  ObSQLSessionInfo *session = ctx.session_info_;
+  if (OB_ISNULL(session) || OB_ISNULL(guard)
+      || (database_name.empty() && !table_name.empty())) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!session->is_real_inner_session()) {
+    ObSessionPrivInfo session_priv;
+    ObArenaAllocator allocator(ObModIds::OB_TEMP_VARIABLES);
+    ObStmtNeedPrivs required(allocator);
+    ObNeedPriv need_priv;
+    need_priv.db_ = database_name;
+    need_priv.table_ = table_name;
+    need_priv.priv_set_ = required_privs;
+    need_priv.priv_level_ = database_name.empty() ? OB_PRIV_USER_LEVEL
+                          : table_name.empty() ? OB_PRIV_DB_LEVEL : OB_PRIV_TABLE_LEVEL;
+    if (OB_FAIL(guard->get_session_priv_info(session->get_priv_user_id(), database_name, session_priv))) {
+    } else if (OB_FAIL(required.need_privs_.init(1))) {
+    } else if (OB_FAIL(required.need_privs_.push_back(need_priv))) {
+    } else {
+      ret = guard->check_priv(session_priv, session->get_enable_role_array(), required);
     }
   }
   return ret;

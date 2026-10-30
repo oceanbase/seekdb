@@ -202,7 +202,7 @@ int ObMediumLoop::update_report_scn_as_ls_leader(ObLS &ls, const ObScheduleTable
             GCTX.local_store_, inner_table_merged_scn, tablet_id_array))) {
     }
   } else {
-    ret = OB_LS_LOCATION_LEADER_NOT_EXIST;
+    ret = OB_LOG_STREAM_ACCESS_NOT_READY;
   }
   return ret;
 }

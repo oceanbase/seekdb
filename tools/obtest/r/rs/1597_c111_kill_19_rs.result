@@ -7,7 +7,6 @@ ob1.mysql alter system set balancer_idle_time = '10s';
 ob1.mysql alter system set server_data_copy_out_concurrency = 20;
 ob1.mysql alter system set server_data_copy_in_concurrency = 20;
 ob1.mysql alter system set election_blacklist_interval = '0s';
-ob1.mysql alter system set dead_socket_detection_timeout = '5s';
 'case 1 : z1 kill -19'
 ob1.z1.obs0.kill -19;
 'case 1 : leader should switch to z2'

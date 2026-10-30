@@ -20,76 +20,25 @@
 #include <cstddef>
 #include <cstdlib>
 #include <stdint.h>
+#include "lib/ob_abort.h"
+#include "lib/alloc/alloc_func.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/utility/ob_mod_define.h"
 #include "lib/allocator/ob_jemalloc.h"
 #include "lib/allocator/ob_tc_malloc.h"
 #include "lib/time/ob_time_utility.h"
 #include "lib/alloc/ob_malloc_allocator.h"
-#ifdef _WIN32
-namespace oceanbase { namespace common { extern bool g_ob_log_main_entered; } }
-#endif
 
 namespace oceanbase
 {
 namespace common
 {
 
-enum ObMallocBackend : int8_t
-{
-  OB_MALLOC_BACKEND_UNINITIALIZED = -1,
-  OB_MALLOC_BACKEND_OBMALLOC = 0,
-  OB_MALLOC_BACKEND_JEMALLOC,
-  OB_MALLOC_BACKEND_UNKNOWN,
-};
-
-const char *ob_malloc_backend_env_name();
-const char *ob_malloc_backend_name(const ObMallocBackend backend);
-ObMallocBackend parse_ob_malloc_backend(const char *name);
-ObMallocBackend initialize_ob_malloc_backend();
-bool restore_malloc_backend_after_fork();
-extern std::atomic<int8_t> g_ob_malloc_backend;
-#if defined(__APPLE__)
-bool configure_darwin_malloc_zone(const ObMallocBackend backend);
+bool restore_allocator_after_fork();
+#if defined(__APPLE__) && defined(OB_HAVE_BUNDLED_JEMALLOC) && !defined(OB_USE_ASAN)
+bool configure_darwin_malloc_zone();
 #endif
 
-inline ObMallocBackend get_ob_malloc_backend()
-{
-  ObMallocBackend backend = static_cast<ObMallocBackend>(
-      g_ob_malloc_backend.load(std::memory_order_relaxed));
-  if (OB_UNLIKELY(OB_MALLOC_BACKEND_UNINITIALIZED == backend)) {
-    backend = initialize_ob_malloc_backend();
-  }
-  return backend;
-}
-
-inline bool is_ob_malloc_backend(const ObMallocBackend backend)
-{
-  return OB_MALLOC_BACKEND_OBMALLOC == backend;
-}
-
-inline bool is_jemalloc_backend(const ObMallocBackend backend)
-{
-  return OB_MALLOC_BACKEND_JEMALLOC == backend;
-}
-
-inline bool is_ob_malloc_backend()
-{
-  return is_ob_malloc_backend(get_ob_malloc_backend());
-}
-
-inline bool is_jemalloc_backend()
-{
-  return is_jemalloc_backend(get_ob_malloc_backend());
-}
-
-#ifdef _WIN32
-// Magic tag placed before every system-malloc'd block during static init.
-// ob_free/ob_realloc check for this tag to distinguish system-allocated
-// memory from OB-allocator-managed memory, avoiding use-after-free if
-// the block is freed after main() enters (when the OB allocator is active).
-static constexpr uint64_t OB_SYS_ALLOC_MAGIC = 0xDEAD5741C0DE5741ULL;
-#endif
 inline void ob_print_mod_memory_usage(bool print_to_std = false,
                                       bool print_glibc_malloc_stats = false)
 {
@@ -99,81 +48,34 @@ inline void ob_print_mod_memory_usage(bool print_to_std = false,
 inline void *ob_malloc(const int64_t nbyte, const ObMemAttr &attr)
 {
   void *ptr = NULL;
-  const ObMallocBackend backend = get_ob_malloc_backend();
-  if (OB_LIKELY(is_ob_malloc_backend(backend))) {
-    auto allocator = lib::ObMallocAllocator::get_instance();
-    if (!OB_ISNULL(allocator)) {
-      ptr = allocator->alloc(nbyte, attr);
-#ifndef _WIN32
-      if (OB_ISNULL(ptr)) {
-        LIB_LOG_RET(WARN, OB_ALLOCATE_MEMORY_FAILED, "allocate memory fail", K(attr), K(nbyte));
-      }
-#endif
-    }
-#ifdef _WIN32
-    else {
-      ptr = ::malloc(nbyte);
-    }
-#endif
-  } else if (OB_LIKELY(is_jemalloc_backend(backend))) {
-    if (OB_LIKELY(nbyte > 0)) {
-      ptr = jemalloc_malloc(static_cast<size_t>(nbyte));
-    }
-    if (OB_ISNULL(ptr)) {
-      LIB_LOG_RET(WARN, OB_ALLOCATE_MEMORY_FAILED, "allocate memory fail", K(attr), K(nbyte));
-    }
+  auto *allocator = lib::ObMallocAllocator::get_instance();
+  if (OB_NOT_NULL(allocator)) {
+    ptr = allocator->alloc(nbyte, attr);
+  }
+  if (OB_ISNULL(ptr)) {
+    LIB_LOG_RET(WARN, OB_ALLOCATE_MEMORY_FAILED,
+                "allocate memory fail", K(attr), K(nbyte));
   }
   return ptr;
 }
 
 inline void ob_free(void *ptr)
 {
-  const ObMallocBackend backend = get_ob_malloc_backend();
-  if (OB_LIKELY(is_ob_malloc_backend(backend))) {
-    if (OB_LIKELY(lib::ObMallocAllocator::is_inited_)) {
-      auto *allocator = lib::ObMallocAllocator::get_instance();
-      abort_unless(!OB_ISNULL(allocator));
-      allocator->free(ptr);
-      ptr = NULL;
-    }
-#ifdef _WIN32
-    else if (ptr != nullptr) {
-      ::free(ptr);
-    }
-#endif
-  } else if (OB_LIKELY(is_jemalloc_backend(backend))) {
-    jemalloc_free(ptr);
-  }
+  auto *allocator = lib::ObMallocAllocator::get_instance();
+  abort_unless(OB_NOT_NULL(allocator));
+  allocator->free(ptr);
 }
 
 inline void *ob_realloc(void *ptr, const int64_t nbyte, const ObMemAttr &attr)
 {
   void *nptr = NULL;
-  const ObMallocBackend backend = get_ob_malloc_backend();
-  if (OB_LIKELY(is_ob_malloc_backend(backend))) {
-    if (OB_LIKELY(lib::ObMallocAllocator::is_inited_)) {
-      auto *allocator = lib::ObMallocAllocator::get_instance();
-      if (!OB_ISNULL(allocator)) {
-        nptr = allocator->realloc(ptr, nbyte, attr);
-#ifndef _WIN32
-        if (OB_ISNULL(nptr)) {
-          LIB_LOG_RET(ERROR, OB_ALLOCATE_MEMORY_FAILED, "allocate memory fail", K(attr), K(nbyte));
-        }
-#endif
-      }
-    }
-#ifdef _WIN32
-    else {
-      nptr = ::realloc(ptr, nbyte);
-    }
-#endif
-  } else if (OB_LIKELY(is_jemalloc_backend(backend))) {
-    if (OB_LIKELY(nbyte >= 0)) {
-      nptr = jemalloc_realloc(ptr, static_cast<size_t>(nbyte));
-    }
-    if (OB_ISNULL(nptr) && nbyte > 0) {
-      LIB_LOG_RET(ERROR, OB_ALLOCATE_MEMORY_FAILED, "allocate memory fail", K(attr), K(nbyte));
-    }
+  auto *allocator = lib::ObMallocAllocator::get_instance();
+  if (OB_NOT_NULL(allocator)) {
+    nptr = allocator->realloc(ptr, nbyte, attr);
+  }
+  if (OB_ISNULL(nptr) && nbyte > 0) {
+    LIB_LOG_RET(ERROR, OB_ALLOCATE_MEMORY_FAILED,
+                "allocate memory fail", K(attr), K(nbyte));
   }
   return nptr;
 }

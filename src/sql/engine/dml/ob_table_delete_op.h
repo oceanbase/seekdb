@@ -88,9 +88,9 @@ protected:
   int inner_open_with_das();
   int delete_row_to_das();
   virtual int write_rows_post_proc(int last_errno);
-  int calc_tablet_loc(const ObDelCtDef &del_ctdef,
+  int resolve_tablet_access(const ObDelCtDef &del_ctdef,
                       ObDelRtDef &del_rtdef,
-                      ObDASTabletLoc *&tablet_loc);
+                      DASRuntimeTabletAccess *&tablet_access);
   int open_table_for_each();
   int close_table_for_each();
   int check_delete_affected_row();

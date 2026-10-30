@@ -19,7 +19,6 @@ SDK_HEADERS = {
     "boost_headers": _headers("boost"),
     "curl_headers": _headers("curl"),
     "fast_float_headers": _headers("fast_float", ["include", "include/fast_float"]),
-    "icu_headers": {"hdrs": ["include/icu/**/*.h", "include/unicode/*.h"], "includes": ["include", "include/icu", "include/icu/common", "include/icu/i18n"]},
     "libaio_headers": {"hdrs": ["include/libaio.h"], "includes": ["include"]},
     "libunwind_headers": {"hdrs": ["include/libunwind*.h", "include/unwind.h"], "includes": ["include"]},
     "libxml2_headers": _headers("libxml2", ["include/libxml2"]),
@@ -62,9 +61,6 @@ SDK_IMPORTS.update({
         "protobuf_c": "libprotobuf-c.a",
         "curl": "libcurl.a",
         "lzma": "liblzma.a",
-        "icu_common": "libicuuc.a",
-        "icu_i18n": "libicui18n.a",
-        "icu_data": "libicudata.a",
     }.items()
 })
 
@@ -94,9 +90,6 @@ _WINDOWS_SHARED = {
     "libxml2": ("lib/libxml2.lib", "bin/libxml2.dll", [":zlib", ":iconv"]),
     "protobuf_c": ("lib/protobuf-c.lib", "bin/protobuf-c.dll", []),
     "curl": ("lib/libcurl.lib", "bin/libcurl.dll", [":zlib"]),
-    "icu_common": ("lib/icuuc.lib", "bin/icuuc78.dll", [":icu_data"]),
-    "icu_i18n": ("lib/icuin.lib", "bin/icuin78.dll", [":icu_common"]),
-    "icu_data": ("lib/icudt.lib", "bin/icudt78.dll", []),
     "abseil_dll": ("lib/abseil_dll.lib", "bin/abseil_dll.dll", []),
     "protobuf_cpp": ("lib/libprotobuf.lib", "bin/libprotobuf.dll", [":absl", ":utf8_range"]),
     "roaring": ("lib/roaring.lib", "bin/roaring.dll", []),
@@ -109,7 +102,6 @@ _WINDOWS_SHARED = {
 _WINDOWS_HEADER_LIBRARIES = {
     "absl_headers": [":absl"],
     "curl_headers": [":curl"],
-    "icu_headers": [":icu_i18n"],
     "libxml2_headers": [":libxml2"],
     "openssl_headers": [":libssl"],
     "protobuf_c_headers": [":protobuf_c"],
@@ -195,8 +187,8 @@ def sdk_aliases():
         name = "base_libraries",
         deps = [":libcrypto", ":libssl", ":libxml2", ":protobuf_c"] + select({
             "@platforms//os:emscripten": [],
-            "@platforms//os:windows": [":curl", ":icu_common", ":icu_data", ":icu_i18n", ":zlib"],
-            "//conditions:default": [":curl", ":icu_common", ":icu_data", ":icu_i18n", ":lzma", ":zlib"],
+            "@platforms//os:windows": [":curl", ":zlib"],
+            "//conditions:default": [":curl", ":lzma", ":zlib"],
         }),
     )
     for name in list(SDK_HEADERS) + list(SDK_IMPORTS) + list(SDK_FILEGROUPS) + HOST_FILES + NATIVE_LINK_FILES:
@@ -213,8 +205,6 @@ def sdk_aliases():
             elif name == "boost_headers":
                 ios = "@sdk_boost//:library"
                 simulator = ios
-            elif name == "icu_headers":
-                wasm = "@sdk_icu//:library"
             actual = select({
                 "@platforms//os:android": "@third_party_android//:" + name,
                 "@platforms//os:emscripten": wasm,

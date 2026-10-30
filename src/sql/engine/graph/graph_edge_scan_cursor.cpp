@@ -425,27 +425,27 @@ int GraphEdgeScanCursor::build_adjacency_ranges(
 }
 
 int GraphEdgeScanCursor::attach_edge_lookup(
-    ObDASScanOp &scan_op, const ObDASTabletLoc &index_tablet_loc)
+    ObDASScanOp &scan_op, const DASRuntimeTabletAccess &index_tablet_access)
 {
   int ret = OB_SUCCESS;
-  ObDASTableLoc *lookup_table_loc = edge_lookup_rtdef_ == nullptr
-      ? nullptr : edge_lookup_rtdef_->table_loc_;
-  ObDASTabletLoc *lookup_tablet_loc = nullptr;
-  if (OB_ISNULL(lookup_table_loc) || OB_ISNULL(lookup_table_loc->loc_meta_)
+  DASRuntimeTableAccess *lookup_table_access = edge_lookup_rtdef_ == nullptr
+      ? nullptr : edge_lookup_rtdef_->table_access_;
+  DASRuntimeTabletAccess *lookup_tablet_access = nullptr;
+  if (OB_ISNULL(lookup_table_access) || OB_ISNULL(lookup_table_access->access_meta_)
       || OB_ISNULL(edge_binding_.output_ctdef_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(lookup_tablet_loc = ObDASUtils::get_related_tablet_loc(
-                           index_tablet_loc,
-                           lookup_table_loc->loc_meta_->ref_table_id_))) {
+  } else if (OB_ISNULL(lookup_tablet_access = ObDASUtils::get_related_tablet_access(
+                           index_tablet_access,
+                           lookup_table_access->access_meta_->ref_table_id_))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("graph edge lookup tablet is missing", K(ret),
-             K(index_tablet_loc), KPC(lookup_table_loc));
+             K(index_tablet_access), KPC(lookup_table_access));
   } else if (OB_FAIL(scan_op.reserve_related_buffer(1))) {
   } else if (OB_FAIL(scan_op.set_related_task_info(
                  edge_binding_.output_ctdef_, edge_lookup_rtdef_,
-                 lookup_tablet_loc->tablet_id_))) {
+                 lookup_tablet_access->tablet_id_))) {
   } else {
-    lookup_table_loc->is_reading_ = true;
+    lookup_table_access->is_reading_ = true;
   }
   return ret;
 }
@@ -468,13 +468,13 @@ int GraphEdgeScanCursor::start_full_edge_scan(bool &empty)
     empty = true;
   } else if (OB_FAIL(init_edge_scan_rtdefs(false))) {
   }
-  ObDASTableLoc *table_loc = edge_scan_rtdef_ == nullptr
-      ? nullptr : edge_scan_rtdef_->table_loc_;
+  DASRuntimeTableAccess *table_access = edge_scan_rtdef_ == nullptr
+      ? nullptr : edge_scan_rtdef_->table_access_;
   if (OB_SUCC(ret) && !empty
-      && (OB_ISNULL(table_loc) || table_loc->get_tablet_locs().empty())) {
+      && (OB_ISNULL(table_access) || table_access->empty())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("graph edge full scan has no tablet location", K(ret),
-             KPC(table_loc));
+             KPC(table_access));
   }
   if (OB_SUCC(ret) && !empty) {
     ObNewRange whole_range;
@@ -483,10 +483,12 @@ int GraphEdgeScanCursor::start_full_edge_scan(bool &empty)
     // DASOpResultIter keeps its current task and row iterator between calls,
     // so a page can end in one tablet and resume there before advancing to the
     // next tablet. SQL does not promise a global row order without ORDER BY.
-    for (DASTabletLocListIter node = table_loc->tablet_locs_begin();
-         OB_SUCC(ret) && node != table_loc->tablet_locs_end(); ++node) {
+    for (DASRuntimeTabletListIter node = table_access->tablet_accesses_begin();
+         OB_SUCC(ret) && node != table_access->tablet_accesses_end(); ++node) {
       ObDASScanOp *scan_op = nullptr;
-      if (OB_FAIL(edge_das_ref_.prepare_das_task(*node, scan_op))) {
+      if (OB_ISNULL(*node)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(edge_das_ref_.prepare_das_task(*node, scan_op))) {
       } else if (OB_ISNULL(scan_op)) {
         ret = OB_ERR_UNEXPECTED;
       } else {
@@ -499,7 +501,7 @@ int GraphEdgeScanCursor::start_full_edge_scan(bool &empty)
       }
     }
     if (OB_SUCC(ret)) {
-      table_loc->is_reading_ = true;
+      table_access->is_reading_ = true;
     }
   }
   if (OB_SUCC(ret) && !empty
@@ -540,23 +542,25 @@ int GraphEdgeScanCursor::start_adjacency_edge_scan(
   } else if (ranges.empty()) {
     empty = true;
   }
-  ObDASTableLoc *table_loc = edge_scan_rtdef_ == nullptr
-      ? nullptr : edge_scan_rtdef_->table_loc_;
+  DASRuntimeTableAccess *table_access = edge_scan_rtdef_ == nullptr
+      ? nullptr : edge_scan_rtdef_->table_access_;
   if (OB_SUCC(ret) && !empty
-      && (OB_ISNULL(table_loc) || table_loc->get_tablet_locs().empty())) {
+      && (OB_ISNULL(table_access) || table_access->empty())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("graph adjacency scan has no tablet location", K(ret),
-             KPC(table_loc));
+             KPC(table_access));
   }
   if (OB_SUCC(ret) && !empty) {
     // Local secondary indexes have one related index tablet per base-table
     // tablet. Fan the prefix ranges to each local tablet; only the owning
     // tablet can return a row, so this preserves correctness before range
     // routing is optimized.
-    for (DASTabletLocListIter node = table_loc->tablet_locs_begin();
-         OB_SUCC(ret) && node != table_loc->tablet_locs_end(); ++node) {
+    for (DASRuntimeTabletListIter node = table_access->tablet_accesses_begin();
+         OB_SUCC(ret) && node != table_access->tablet_accesses_end(); ++node) {
       ObDASScanOp *scan_op = nullptr;
-      if (OB_FAIL(edge_das_ref_.prepare_das_task(*node, scan_op))) {
+      if (OB_ISNULL(*node)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(edge_das_ref_.prepare_das_task(*node, scan_op))) {
       } else if (OB_ISNULL(scan_op)) {
         ret = OB_ERR_UNEXPECTED;
       } else {
@@ -572,7 +576,9 @@ int GraphEdgeScanCursor::start_adjacency_edge_scan(
         }
       }
     }
-    table_loc->is_reading_ = true;
+    if (OB_SUCC(ret)) {
+      table_access->is_reading_ = true;
+    }
   }
   if (OB_SUCC(ret) && !empty
       && OB_FAIL(edge_das_ref_.execute_all_task())) {

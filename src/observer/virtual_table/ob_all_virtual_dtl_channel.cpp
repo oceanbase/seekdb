@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_DTL
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "observer/virtual_table/ob_all_virtual_dtl_channel.h"
 #include "sql/dtl/ob_dtl.h"
 #include "sql/dtl/ob_dtl_basic_channel.h"

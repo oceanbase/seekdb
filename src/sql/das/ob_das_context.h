@@ -28,6 +28,8 @@ namespace sql
 {
 class ObDASTabletMapper;
 class ObQueryRetryInfo;
+class TabletAccessTarget;
+class TableAccessTargets;
 
 struct DmlRowkeyDistCtx
 {
@@ -65,9 +67,9 @@ class ObDASCtx
   OB_UNIS_VERSION(1);
 public:
   ObDASCtx(common::ObIAllocator &allocator)
-    : table_locs_(allocator),
+    : table_accesses_(allocator),
       sql_ctx_(nullptr),
-      last_location_errno_(OB_SUCCESS),
+      last_retry_error_(OB_SUCCESS),
       history_retry_cnt_(0),
       cur_retry_cnt_(0),
       das_factory_(allocator),
@@ -105,26 +107,26 @@ public:
   }
 
   int init(const ObPhysicalPlan &plan, ObExecContext &ctx);
-  ObDASTableLoc *get_table_loc_by_id(uint64_t table_loc_id, uint64_t ref_table_id);
-  DASTableLocList &get_table_loc_list() { return table_locs_; }
-  const DASTableLocList &get_table_loc_list() const { return table_locs_; }
+  DASRuntimeTableAccess *find_table_access(uint64_t table_ref_id, uint64_t ref_table_id);
+  DASRuntimeTableList &get_table_accesses() { return table_accesses_; }
+  const DASRuntimeTableList &get_table_accesses() const { return table_accesses_; }
   DASDelCtxList& get_das_del_ctx_list() { return del_ctx_list_; }
   DASTableIdList& get_parent_table_set() { return parent_table_set_; }
-  int extended_tablet_loc(ObDASTableLoc &table_loc,
+  int ensure_tablet_access(DASRuntimeTableAccess &table_access,
                           const common::ObTabletID &tablet_id,
-                          ObDASTabletLoc *&tablet_loc,
+                          DASRuntimeTabletAccess *&tablet_access,
                           const common::ObObjectID &partition_id = OB_INVALID_ID,
                           const common::ObObjectID &first_level_part_id = OB_INVALID_ID);
-  int extended_tablet_loc(ObDASTableLoc &table_loc,
-                          const ObCandiTabletLoc &candi_tablet_loc,
-                          ObDASTabletLoc *&talet_loc);
-  int extended_table_loc(const ObDASTableLocMeta &loc_meta, ObDASTableLoc *&table_loc);
-  int add_candi_table_loc(const ObDASTableLocMeta &loc_meta, const ObCandiTableLoc &candi_table_loc);
-  int add_final_table_loc(const ObDASTableLocMeta &loc_meta,
+  int ensure_tablet_access(DASRuntimeTableAccess &table_access,
+                          const TabletAccessTarget &tablet_target,
+                          DASRuntimeTabletAccess *&tablet_access);
+  int ensure_table_access(const DASTableAccessMeta &access_meta, DASRuntimeTableAccess *&table_access);
+  int add_table_access_targets(const DASTableAccessMeta &access_meta, const TableAccessTargets &table_targets);
+  int add_final_table_access(const DASTableAccessMeta &access_meta,
                           const ObIArray<ObTabletID> &tablet_ids,
                           const ObIArray<ObObjectID> &partition_ids,
                           const ObIArray<ObObjectID> &first_level_part_ids);
-  int build_table_loc_meta(const ObDASTableLocMeta &src, ObDASTableLocMeta *&dst);
+  int build_table_access_meta(const DASTableAccessMeta &src, DASTableAccessMeta *&dst);
   int get_das_tablet_mapper(const uint64_t ref_table_id,
                             ObDASTabletMapper &tablet_mapper,
                             const DASTableIDArrayWrap *related_table_ids = nullptr);
@@ -135,14 +137,11 @@ public:
   void set_savepoint(const transaction::ObTxSEQ savepoint) { savepoint_ = savepoint; }
   void set_write_branch_id(const int16_t branch_id) { write_branch_id_ = branch_id; }
   int16_t get_write_branch_id() const { return write_branch_id_; }
-  int build_local_tablet_loc(uint64_t ref_table_id,
-                             const common::ObTabletID &tablet_id,
-                             ObDASTabletLoc &tablet_loc);
-  void refresh_location_cache_by_errno(bool is_nonblock, int err_no);
-  void force_refresh_location_cache(bool is_nonblock, int err_no);
-  bool is_refresh_location_error(int err_no) const;
-  void set_last_errno(int err_no) { last_location_errno_ = err_no; }
-  int get_last_errno() const { return last_location_errno_; }
+  int validate_tablet_access(uint64_t ref_table_id, const common::ObTabletID &tablet_id);
+  bool is_tablet_retry_error(int err_no) const;
+  // Explicitly set/reset the retry error propagated to local PX.
+  void record_retry_error(int err_no) { last_retry_error_ = err_no; }
+  int get_retry_error() const { return last_retry_error_; }
   void set_history_retry_cnt(int64_t history_retry_cnt) { history_retry_cnt_ = history_retry_cnt; }
   void accumulate_retry_count()
   {
@@ -154,22 +153,23 @@ public:
   void reset_cur_retry_cnt() { cur_retry_cnt_ = 0; }
   void inc_cur_retry_cnt() { ++cur_retry_cnt_; }
   void set_retry_info(const ObQueryRetryInfo *retry_info);
-  void save_cur_exec_status(int err_no);
-  int build_related_tablet_loc(ObDASTabletLoc &tablet_loc);
-  int build_related_table_loc(ObDASTableLoc &table_loc);
-  int rebuild_tablet_loc_reference();
+  // Successful cleanup and unrelated errors must not erase a retry error.
+  void record_access_error(int err_no);
+  int build_related_tablet_accesses(DASRuntimeTabletAccess &tablet_access);
+  int build_related_table_accesses(DASRuntimeTableAccess &table_access);
+  int rebuild_tablet_access_links();
   const GroupParamArray* get_group_params() { return group_params_; }
   int64_t get_current_group_id() const { return current_group_id_; }
   int64_t get_group_rescan_cnt() const { return group_rescan_cnt_; }
-  void clear_all_location_info()
+  void clear_table_accesses()
   {
-    table_locs_.clear();
+    table_accesses_.clear();
     related_tablet_map_.clear();
   }
   ObDASTaskFactory &get_das_factory() { return das_factory_; }
   void set_sql_ctx(ObSqlCtx *sql_ctx) { sql_ctx_ = sql_ctx; }
   DASRelatedTabletMap &get_related_tablet_map() { return related_tablet_map_; }
-  int build_related_tablet_map(const ObDASTableLocMeta &loc_meta);
+  int build_related_tablet_map(const DASTableAccessMeta &access_meta);
 
   int find_group_param_by_param_idx(int64_t param_idx,
                                     bool &exist, uint64_t &array_idx);
@@ -178,8 +178,8 @@ public:
   void set_use_snapshot_opt(bool v) { use_snapshot_opt_ = v; }
   bool get_use_snapshot_opt() { return use_snapshot_opt_; }
 
-  TO_STRING_KV(K_(table_locs),
-               K_(last_location_errno),
+  TO_STRING_KV(K_(table_accesses),
+               K_(last_retry_error),
                K_(history_retry_cnt),
                K_(cur_retry_cnt),
                K_(is_fk_cascading),
@@ -188,9 +188,9 @@ public:
                K_(write_branch_id),
                K_(real_das_dop));
 private:
-  DASTableLocList table_locs_;
+  DASRuntimeTableList table_accesses_;
   ObSqlCtx *sql_ctx_;
-  int last_location_errno_;
+  int last_retry_error_;
   int64_t history_retry_cnt_; // Total retries before the current retry round.
   int64_t cur_retry_cnt_; // Continuous retries in the current round.
   ObDASTaskFactory das_factory_;

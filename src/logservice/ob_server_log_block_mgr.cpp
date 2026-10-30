@@ -78,6 +78,53 @@ namespace logservice
 int ObServerLogBlockMgr::check_clog_directory_is_empty(const char *clog_dir, bool &result)
 {
   int ret = OB_SUCCESS;
+#ifdef _WIN32
+  result = false;
+  ObSqlString pattern;
+  if (OB_ISNULL(clog_dir)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    const DWORD attributes = GetFileAttributesA(clog_dir);
+    if (INVALID_FILE_ATTRIBUTES == attributes
+        || 0 == (attributes & FILE_ATTRIBUTE_DIRECTORY)
+        || 0 != (attributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
+      ret = OB_IO_ERROR;
+    } else if (OB_FAIL(pattern.assign_fmt("%s/*", clog_dir))) {
+    } else {
+      WIN32_FIND_DATAA entry;
+      HANDLE find = FindFirstFileA(pattern.ptr(), &entry);
+      if (INVALID_HANDLE_VALUE == find) {
+        if (ERROR_FILE_NOT_FOUND == GetLastError()) {
+          result = true;
+        } else {
+          ret = OB_IO_ERROR;
+        }
+      } else {
+        result = true;
+        do {
+          if (0 != strcmp(entry.cFileName, ".") && 0 != strcmp(entry.cFileName, "..")) {
+            bool exists = false;
+            if (OB_FAIL(check_log_directory_entry(clog_dir, entry.cFileName, exists))) {
+              result = false;
+              break;
+            } else if (exists) {
+              result = false;
+            }
+          }
+        } while (FindNextFileA(find, &entry));
+        // Only the documented end-of-enumeration code proves a complete scan.
+        if (ERROR_NO_MORE_FILES != GetLastError()) {
+          result = false;
+          ret = OB_IO_ERROR;
+        }
+        if (!FindClose(find)) {
+          result = false;
+          ret = OB_IO_ERROR;
+        }
+      }
+    }
+  }
+#else
   DIR *dir = NULL;
   struct dirent *entry = NULL;
   result = false;
@@ -99,11 +146,13 @@ int ObServerLogBlockMgr::check_clog_directory_is_empty(const char *clog_dir, boo
   if (NULL != dir) {
     closedir(dir);
   }
+#endif
   return ret;
 }
 
-ObServerLogBlockMgr::ObServerLogBlockMgr()
-    : get_log_disk_info_in_config_func_(NULL),
+ObServerLogBlockMgr::ObServerLogBlockMgr(share::StartupResult &startup_result)
+    : startup_result_(startup_result),
+      get_log_disk_info_in_config_func_(NULL),
       log_service_(NULL),
       block_cnt_in_use_(0),
       is_started_(false),
@@ -118,7 +167,8 @@ ObServerLogBlockMgr::~ObServerLogBlockMgr()
 
 int ObServerLogBlockMgr::init(
     const char *log_disk_base_path,
-    GetLogDiskInfoInConfig get_log_disk_info_in_config)
+    GetLogDiskInfoInConfig get_log_disk_info_in_config,
+    const share::LocalIOConfig &io_config)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
@@ -130,6 +180,7 @@ int ObServerLogBlockMgr::init(
     CLOG_LOG(ERROR, "Invalid argument", K(ret), KPC(this), KP(log_disk_base_path));
   } else if (OB_FAIL(do_load_(log_disk_base_path))) {
   } else {
+    io_config_ = io_config;
     get_log_disk_info_in_config_func_ = get_log_disk_info_in_config;
     is_inited_ = true;
     CLOG_LOG(INFO, "ObServerLogBlockMgr init success", KPC(this));
@@ -216,21 +267,38 @@ int ObServerLogBlockMgr::create_block_at(const FileDesc &dest_dir_fd,
              K(dest_block_path), K(block_size));
   }
   if (OB_SUCC(ret)) {
+    while (true) {
+      if (OB_FAIL(startup_result_.error())) {
+        break;
+      } else if (stopped_.load()) {
+        ret = OB_CANCELED;
+        break;
+      } else if (OB_SUCCESS == (ret = allocate_block_at_(dest_dir_fd, dest_block_path, block_size))) {
+        break;
+      } else {
+        CLOG_LOG(WARN, "allocate_block_at_ failed", K(ret), KPC(this),
+                 K(dest_dir_fd), K(dest_block_path));
+        const int startup_error = startup_result_.report_failure(ret);
+        if (OB_SUCCESS != startup_error) {
+          ret = startup_error;
+          break;
+        }
 #ifdef __EMSCRIPTEN__
-    // Quota exhaustion is actionable by the browser host. Retrying forever
-    // would keep the Worker blocked and prevent that error from reaching it.
-    ret = allocate_block_at_(dest_dir_fd, dest_block_path, block_size);
+        // After startup, browser quota errors still return to the host.
+        break;
 #else
-    while (OB_FAIL(allocate_block_at_(dest_dir_fd, dest_block_path, block_size))) {
-      CLOG_LOG(WARN, "allocate_block_at_ failed", K(ret), KPC(this),
-               K(dest_dir_fd), K(dest_block_path));
-      ob_usleep(10 * 1000); // 10ms
-    }
+        ob_usleep(10 * 1000); // 10ms
 #endif
+      }
+    }
   }
   // make sure the meta info of both directory has been flushed.
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(fsync_until_success_(dest_dir_fd))) {
+    if (-1 == ::unlinkat(dest_dir_fd, dest_block_path, 0)) {
+      CLOG_LOG(ERROR, "remove log block after directory fsync failed", K(ret),
+               K(dest_dir_fd), K(dest_block_path), K(errno));
+    }
   } else {
     ATOMIC_INC(&block_cnt_in_use_);
     CLOG_LOG(INFO, "create_new_block_at success", K(ret), KPC(this), K(dest_dir_fd),
@@ -346,7 +414,7 @@ int ObServerLogBlockMgr::allocate_block_at_(const FileDesc &dir_fd,
 {
   int ret = OB_SUCCESS;
   FileDesc fd = -1;
-  if (-1 == (fd = ::openat(dir_fd, block_path, CREATE_FILE_FLAG, CREATE_FILE_MODE))) {
+  if (-1 == (fd = ::openat(dir_fd, block_path, io_config_.file_flags(CREATE_FILE_FLAG), CREATE_FILE_MODE))) {
     ret = convert_sys_errno();
     CLOG_LOG(ERROR, "::openat failed", K(ret), KPC(this), K(dir_fd), K(block_path));
 #ifdef __EMSCRIPTEN__
@@ -376,7 +444,6 @@ int ObServerLogBlockMgr::allocate_block_at_(const FileDesc &dir_fd,
     CLOG_LOG(ERROR, "::close failed", K(ret), K(tmp_ret), KPC(this), K(dir_fd), K(block_path));
     ret = (OB_SUCCESS == ret ? tmp_ret : ret);
   }
-#ifdef __EMSCRIPTEN__
   if (OB_SUCCESS != ret && -1 != fd) {
     // Only unlink a file created by our O_EXCL open. Otherwise a failed write
     // leaves a partial block that makes every subsequent attempt hit EEXIST.
@@ -384,7 +451,6 @@ int ObServerLogBlockMgr::allocate_block_at_(const FileDesc &dir_fd,
       CLOG_LOG(ERROR, "remove failed log block allocation failed", K(ret), K(block_path), K(errno));
     }
   }
-#endif
   return ret;
 }
 
@@ -417,9 +483,12 @@ int ObServerLogBlockMgr::get_has_allocated_blocks_cnt_in_(
     char current_file_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
     while ((entry = readdir(dir)) != NULL && OB_SUCC(ret)) {
       bool is_dir = false;
+      bool exists = false;
       MEMSET(current_file_path, '\0', OB_MAX_FILE_NAME_LENGTH);
       if (0 == strcmp(entry->d_name, ".") || 0 == strcmp(entry->d_name, "..")) {
         // do nothing
+      } else if (OB_FAIL(check_log_directory_entry(log_disk_path, entry->d_name, exists))) {
+      } else if (!exists) {
       } else if (0 >= snprintf(current_file_path, OB_MAX_FILE_NAME_LENGTH, "%s/%s",
                                log_disk_path, entry->d_name)) {
         ret = OB_ERR_UNEXPECTED;
@@ -462,9 +531,12 @@ int ObServerLogBlockMgr::remove_tmp_file_or_directory_for_runtime_(const char *l
     char current_file_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
     while ((entry = readdir(dir)) != NULL && OB_SUCC(ret)) {
       bool is_dir = false;
+      bool exists = false;
       MEMSET(current_file_path, '\0', OB_MAX_FILE_NAME_LENGTH);
       if (0 == strcmp(entry->d_name, ".") || 0 == strcmp(entry->d_name, "..")) {
         // do nothing
+      } else if (OB_FAIL(check_log_directory_entry(log_disk_path, entry->d_name, exists))) {
+      } else if (!exists) {
       } else if (0 >= snprintf(current_file_path, OB_MAX_FILE_NAME_LENGTH, "%s/%s",
                                log_disk_path, entry->d_name)) {
         ret = OB_ERR_UNEXPECTED;
@@ -508,7 +580,20 @@ int ObServerLogBlockMgr::unlinkat_until_success_(const palf::FileDesc &src_dir_f
 int ObServerLogBlockMgr::fsync_until_success_(const FileDesc &dest_dir_fd)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(fsync_with_retry(dest_dir_fd))) {
+  while (OB_SUCC(ret)) {
+    if (OB_FAIL(startup_result_.error())) {
+    } else if (stopped_.load()) {
+      ret = OB_CANCELED;
+    } else if (0 == ::fsync(dest_dir_fd)) {
+      break;
+    } else {
+      const int io_error = convert_sys_errno();
+      CLOG_LOG(ERROR, "fsync log directory failed", K(io_error), K(dest_dir_fd));
+      ret = startup_result_.report_failure(io_error);
+      if (OB_SUCC(ret)) {
+        ob_usleep(SLEEP_TS_US);
+      }
+    }
   }
   return ret;
 }
@@ -526,9 +611,12 @@ int ObServerLogBlockMgr::scan_runtime_dir_(const char *runtime_dir,
     char current_file_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
     while ((entry = readdir(dir)) != NULL && OB_SUCC(ret)) {
       bool is_dir = false;
+      bool exists = false;
       MEMSET(current_file_path, '\0', OB_MAX_FILE_NAME_LENGTH);
       if (0 == strcmp(entry->d_name, ".") || 0 == strcmp(entry->d_name, "..")) {
         // do nothing
+      } else if (OB_FAIL(check_log_directory_entry(runtime_dir, entry->d_name, exists))) {
+      } else if (!exists) {
       } else if (0 >= snprintf(current_file_path, OB_MAX_FILE_NAME_LENGTH, "%s/%s",
                                runtime_dir, entry->d_name)) {
         ret = OB_ERR_UNEXPECTED;
@@ -572,9 +660,12 @@ int ObServerLogBlockMgr::scan_ls_dir_(const char *ls_dir,
     char current_file_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
     while ((entry = readdir(dir)) != NULL && OB_SUCC(ret)) {
       bool is_dir = false;
+      bool exists = false;
       MEMSET(current_file_path, '\0', OB_MAX_FILE_NAME_LENGTH);
       if (0 == strcmp(entry->d_name, ".") || 0 == strcmp(entry->d_name, "..")) {
         // do nothing
+      } else if (OB_FAIL(check_log_directory_entry(ls_dir, entry->d_name, exists))) {
+      } else if (!exists) {
       } else if (0 >= snprintf(current_file_path, OB_MAX_FILE_NAME_LENGTH, "%s/%s",
                                ls_dir, entry->d_name)) {
         ret = OB_ERR_UNEXPECTED;

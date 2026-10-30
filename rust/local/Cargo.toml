@@ -3,7 +3,6 @@ name = "local"
 version = "0.1.0"
 edition = "2021"
 publish = false
-links = "local"
 
 [lib]
 crate-type = ["rlib"]
@@ -11,6 +10,3 @@ crate-type = ["rlib"]
 [dependencies]
 kv = { path = "../kv" }
 cxx = "1"
-
-[build-dependencies]
-cxx-build = "1"

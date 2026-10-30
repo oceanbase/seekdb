@@ -6,7 +6,7 @@ title: System Log
 
 ## Introduction
 
-This document introduces seekdb system logs, including log levels, output macros, rotation, compression, and rate limiting.
+This document introduces seekdb system logs, including log levels, output macros, rotation, and compression.
 
 
 ## System Log Introduction
@@ -25,8 +25,6 @@ The current cluster-level syslog parameters are dynamically effective. Their def
 | Configuration item | Default | Description |
 | --- | --- | --- |
 | `syslog_level` | build default | Minimum enabled level: DEBUG, TRACE, WDIAG, EDIAG, INFO, WARN, or ERROR |
-| `syslog_io_bandwidth_limit` | `5MB` | Syslog I/O bandwidth limit |
-| `diag_syslog_per_error_limit` | `200` | Maximum DIAG messages per error code per second |
 | `max_syslog_file_count` | `2` | Maximum retained files of each log type; `0` disables count-based removal |
 | `enable_async_syslog` | `True` | Enables asynchronous logging |
 | `syslog_disk_size` | `0M` | Disk-space budget for syslog files; `0M` leaves it unset |
@@ -273,38 +271,6 @@ Currently, two information related to thread will be recorded:
 
 - Thread ID: the information returned by the system call `__NR_gettid` (the system call is relatively inefficient, and this value will be cached);
 - Thread name: The thread name field contains the thread pool type and may include its index. seekdb sets the thread name through `set_thread_name`; it is also displayed in the `top` command.
-
-### Log Rate Limit
-
-seekdb supports two log rate limits: a common system log disk IO bandwidth limit and a WDIAG system log limit.
-
-
-**System log bandwidth rate limit**
-
-seekdb will limit log output according to disk bandwidth. The log bandwidth rate limit does not limit the rate for different log levels. If the log rate is limited, the rate limit log may be printed with the keyword `REACH SYSLOG RATE LIMIT`.
-
-Rate limit log example:
-
-```txt
-[2023-12-26 09:46:04.621435] INFO  [SHARE.LOCATION] fetch_vtable_location_ (ob_vtable_location_service.cpp:281) [35675][VTblLocAsyncUp0][T0][YB427F000001-00060D52A9614571-0-0] [lt=0]  REACH SYSLOG RATE LIMIT [bandwidth]
-```
-
-The rate limit can be adjusted through the configuration item `syslog_io_bandwidth_limit`.
-
-Please refer to the `check_tl_log_limiter` function for rate limiting code details.
-
-**WDIAG log rate limit**
-
-seekdb has implemented a current limit for WARN level logs. Each error code is limited to 200 logs per second by default. If the limit is exceeded, the current limiting log will be output, keyword `Throttled WDIAG logs in last second`. The current limiting threshold can be adjusted through the configuration item `diag_syslog_per_error_limit`.
-
-Limiting log example:
-
-```txt
-[2023-12-25 18:01:15.527519] WDIAG [SHARE] refresh (ob_task_define.cpp:402) [35585][LogLimiterRefre][T0][Y0-0000000000000000-0-0] [lt=8][errcode=0] Throttled WDIAG logs in last second(details {error code, dropped logs, earliest tid}=[{errcode:-4006, dropped:31438, tid:35585}])
-```
-
-The rate-limiter implementations are `ObSyslogSimpleRateLimiter` and `ObSyslogSampleRateLimiter`; the latter implements `do_acquire`.
-
 
 ## Some Other Details
 

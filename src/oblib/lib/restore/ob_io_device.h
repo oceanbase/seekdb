@@ -290,7 +290,6 @@ class ObIODevice
 public:
   ObIODevice() : device_type_(OB_STORAGE_MAX_TYPE), media_id_(0), ref_cnt_(0) {}
   virtual ~ObIODevice() {}
-  virtual int init(const ObIODOpts &opts) = 0;
   virtual int reconfig(const ObIODOpts &opts) = 0;
   virtual int get_config(ObIODOpts &opts) = 0;
   int get_device_name(char *buf, int32_t len);
@@ -353,40 +352,42 @@ public:
     const int64_t size,
     int64_t &write_size) = 0;
 
+  virtual bool supports_native_aio() const { return false; }
+
   //async io interfaces
   virtual int io_setup(
     uint32_t max_events,
-    ObIOContext *&io_context) = 0;
-  virtual int io_destroy(ObIOContext *io_context) = 0;
+    ObIOContext *&io_context) { return OB_NOT_SUPPORTED; }
+  virtual int io_destroy(ObIOContext *io_context) { return OB_NOT_SUPPORTED; }
   virtual int io_prepare_pwrite(
     const ObIOFd &fd,
     void *buf,
     size_t count,
     int64_t offset,
     ObIOCB *iocb,
-    void *callback) = 0;
+    void *callback) { return OB_NOT_SUPPORTED; }
   virtual int io_prepare_pread(
     const ObIOFd &fd,
     void *buf,
     size_t count,
     int64_t offset,
     ObIOCB *iocb,
-    void *callback) = 0;
+    void *callback) { return OB_NOT_SUPPORTED; }
   virtual int io_submit(
     ObIOContext *io_context,
-    ObIOCB *iocb) = 0;
+    ObIOCB *iocb) { return OB_NOT_SUPPORTED; }
   virtual int io_cancel(
     ObIOContext *io_context,
-    ObIOCB *iocb) = 0;
+    ObIOCB *iocb) { return OB_NOT_SUPPORTED; }
   virtual int io_getevents(
     ObIOContext *io_context,
     int64_t min_nr,
     ObIOEvents *events,
-    struct timespec *timeout) = 0;
-  virtual ObIOCB *alloc_iocb() = 0;
-  virtual ObIOEvents *alloc_io_events(const uint32_t max_events) = 0;
-  virtual void free_iocb(ObIOCB *iocb) = 0;
-  virtual void free_io_events(ObIOEvents *io_event) = 0;
+    struct timespec *timeout) { return OB_NOT_SUPPORTED; }
+  virtual ObIOCB *alloc_iocb() { return nullptr; }
+  virtual ObIOEvents *alloc_io_events(const uint32_t max_events) { return nullptr; }
+  virtual void free_iocb(ObIOCB *iocb) {}
+  virtual void free_io_events(ObIOEvents *io_event) {}
 
   // space management interface
   virtual int64_t get_total_block_size() const = 0;

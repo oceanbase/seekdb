@@ -432,7 +432,7 @@ public:
   {
     //for the local index lookup,
     //need to use the local index id as the table_id for partition calculation
-    //get the real table location info use the real table id
+    //get the real table access info use the real table id
     return ref_table_id_;
   }
 
@@ -458,7 +458,7 @@ public:
   {
     //for the local index lookup,
     //need to use the local index id as the table_id for partition calculation
-    //get the real table location info use the real table id
+    //get the real table access info use the real table id
     return index_table_id_;
   }
 
@@ -746,7 +746,7 @@ public:
   inline bool is_gi_above() const override { return gi_charged_; }
   inline void set_gi_above(bool gi_charged) { gi_charged_ = gi_charged; }
   inline bool is_sample_scan() const { return !sample_info_.is_no_sample(); }
-  inline uint64_t get_location_table_id() const { return is_index_global_ ? index_table_id_ : ref_table_id_; }
+  inline uint64_t get_table_ref_id() const { return is_index_global_ ? index_table_id_ : ref_table_id_; }
   int is_table_get(bool &is_get) const;
   void set_session_id(const uint64_t  v) { session_id_ = v; }
   uint64_t get_session_id() const { return session_id_; }
@@ -765,7 +765,7 @@ public:
   inline const ObRawExpr* get_snapshot_query_expr() const { return fq_expr_; }
   inline ObRawExpr* &get_snapshot_query_expr() { return fq_expr_; }
   inline void set_snapshot_query_expr(ObRawExpr *expr) { fq_expr_ = expr; }
-  int get_phy_location_type(ObTableLocationType &location_type);
+  int get_physical_access_shape(TableAccessShape &access_shape);
   virtual int generate_access_exprs();
   int copy_filter_before_index_back();
   int copy_filter_for_index_merge();
@@ -1158,7 +1158,7 @@ protected: // memeber variables
   // whether a filter can be evaluated before index back
   common::ObSEArray<bool, 4, common::ModulePageAllocator, true> filter_before_index_back_;
   common::ObSEArray<uint64_t, 4, common::ModulePageAllocator, true> ddl_output_column_ids_;
-  // table partition locations
+  // table partition accesses
   ObTablePartitionInfo *table_partition_info_; //this member is not in copy_without_child,
                                                //because its used in EXCHANGE stage, and
                                                //copy_without_child used before this

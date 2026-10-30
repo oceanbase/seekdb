@@ -12,7 +12,7 @@ import tarfile
 
 
 def output(*command):
-    return subprocess.check_output(command, text=True)
+    return subprocess.check_output(command, universal_newlines=True)
 
 
 def digest(path):
@@ -46,14 +46,12 @@ def verify(binary, exports, revision, platform):
     if actual != expected:
         raise ValueError("Unexpected ABI exports: " + repr(actual ^ expected))
     markers = output("strings", str(binary))
-    if "SEEKDB_IOS_ARTIFACT_HOOK_MODE=disabled" not in markers or "SEEKDB_IOS_ARTIFACT_HOOK_MODE=enabled" in markers:
-        raise ValueError("Missing or conflicting disabled test hook marker")
-    if "SEEKDB_IOS_ARTIFACT_BUILD_ID=" + revision not in markers:
+    if "SEEKDB_IN_PROCESS_ARTIFACT_BUILD_ID=" + revision not in markers:
         raise ValueError("Framework binary does not match its stamped source revision")
     return minimum_os, dependencies, sorted(actual)
 
 
-def package_licenses(destination, licenses, cargo_sources):
+def package_licenses(destination, licenses, rust_licenses):
     with tarfile.open(destination, "w") as archive:
         for path in sorted(licenses):
             content = path.read_bytes()
@@ -61,25 +59,23 @@ def package_licenses(destination, licenses, cargo_sources):
             entry.size = len(content)
             entry.mode = 0o644
             archive.addfile(entry, io.BytesIO(content))
-        with tarfile.open(cargo_sources) as source:
-            for member in source:
-                if member.isfile() and re.match(r"(?i)^(license|copying|copyright|notice)", Path(member.name).name):
-                    content = source.extractfile(member).read()
-                    entry = tarfile.TarInfo("rust/" + member.name)
-                    entry.size = len(content)
-                    entry.mode = 0o644
-                    archive.addfile(entry, io.BytesIO(content))
+        for notice in json.loads(rust_licenses.read_text()):
+            content = Path(notice["source"]).read_bytes()
+            entry = tarfile.TarInfo(notice["destination"])
+            entry.size = len(content)
+            entry.mode = 0o644
+            archive.addfile(entry, io.BytesIO(content))
 
 
 def main():
     parser = argparse.ArgumentParser(description="Verify and package an iOS framework")
-    for name in ("binary", "config", "header", "output", "exports", "link-inputs", "rust-lock", "cargo-sources"):
+    for name in ("binary", "config", "header", "output", "exports", "link-inputs", "rust-lock", "rust-licenses"):
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--platform", choices=["IOS", "IOSSIMULATOR"], required=True)
     parser.add_argument("--source-metadata", type=Path, nargs="+", required=True)
     parser.add_argument("--licenses", type=Path, nargs="+", required=True)
     args = parser.parse_args()
-    revision = re.search(r'#define SEEKDB_IOS_BUILD_ID "([^"]+)"', args.config.read_text()).group(1)
+    revision = re.search(r'#define SEEKDB_IN_PROCESS_BUILD_ID "([^"]+)"', args.config.read_text()).group(1)
     minimum_os, dependencies, exports = verify(args.binary, args.exports, revision, args.platform)
     destination = args.output
     (destination / "Headers").mkdir(parents=True, exist_ok=True)
@@ -90,14 +86,13 @@ def main():
         "CFBundleVersion": "1", "CFBundleShortVersionString": "1.0",
         "CFBundleSupportedPlatforms": [{"IOS": "iPhoneOS", "IOSSIMULATOR": "iPhoneSimulator"}[args.platform]],
         "MinimumOSVersion": minimum_os, "SeekDBSourceRevision": revision,
-        "SeekDBTestHooks": "disabled",
     }
     (destination / "Info.plist").write_bytes(plistlib.dumps(info))
     archives = sorted({Path(line) for line in args.link_inputs.read_text().splitlines() if line.endswith(".a")})
     records = [json.loads(path.read_text()) for path in args.source_metadata]
     manifest = {
         "source_revision": revision, "platform": args.platform,
-        "architecture": "arm64", "deployment_target": minimum_os, "test_hooks": "disabled",
+        "architecture": "arm64", "deployment_target": minimum_os,
         "binary_sha256": digest(args.binary), "public_header_sha256": digest(args.header),
         "dynamic_dependencies": dependencies, "exported_symbols": exports,
         "static_dependencies": [{"path": str(path), "sha256": digest(path)} for path in archives],
@@ -105,7 +100,7 @@ def main():
     }
     (destination / "build-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     shutil.copyfile(args.rust_lock, destination / "rust-Cargo.lock")
-    package_licenses(destination / "Licenses.tar", args.licenses, args.cargo_sources)
+    package_licenses(destination / "Licenses.tar", args.licenses, args.rust_licenses)
 
 
 if __name__ == "__main__":

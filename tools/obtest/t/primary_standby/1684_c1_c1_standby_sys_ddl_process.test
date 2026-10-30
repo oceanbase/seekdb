@@ -332,13 +332,11 @@ ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, T
 #virtual
 ob1.mysql alter system upgrade virtual schema;
 ob1.mysql alter system set enable_sys_table_ddl = false;
-ob1.mysql alter system set enable_ddl = false;
 ob1.mysql alter system run job 'STATISTIC_PRIMARY_ZONE_ENTITY_COUNT';
 ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
 connection conn2;
 --error 4179
 alter system upgrade virtual schema;
-ob1.mysql alter system set enable_ddl = true;
 
 ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
 ob1.mysql alter system commit to switchover to physical standby;

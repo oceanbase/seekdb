@@ -30,6 +30,9 @@ public:
   static bool is_retryable_error(int ret_code);
   static int check_need_retry(ObLobAccessParam &param, const int error_code, const int retry_cnt, bool &need_retry);
 
+private:
+  static int check_tablet_exists(ObLobAccessParam &param, uint64_t table_id);
+  static int prepare_retry(ObLobAccessParam &param, int last_err, int retry_cnt);
 };
 
 }  // storage

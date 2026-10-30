@@ -20,11 +20,25 @@ cd seekdb
 ./build.py build seekdb
 ```
 
-`init` 准备平台依赖，首次编译或依赖定义变化后执行。后续增量编译只需重复 `build` 命令。产物位于 `build/bin/src/observer/seekdb`。
+`init` 准备 Rust 和平台依赖，首次编译、依赖定义或 `rust-toolchain.toml` 变化后执行。后续增量编译只需重复 `build` 命令。产物位于 `build/bin/src/observer/seekdb`。
 
 所有参数都放在命令后，包括 `--batch`、`--bazelrc` 等 Bazel 启动参数。`build.py` 每次读取当前 Bazel 的参数定义，在内部将启动参数移到命令前。参数名称保留 Bazel 原生拼写，多词参数用下划线连接。
 
-Windows 使用 `python build.py`，命令参数相同。C++ 测试目标参见[编写与运行单元测试](unittest.md)。修改 Rust 依赖时，一并提交更新后的 `rust/Cargo.lock`。
+Windows 使用 `python build.py`，命令参数相同。C++ 测试目标参见[编写与运行单元测试](unittest.md)。修改 Rust 依赖时，一并提交更新后的 `Cargo.lock`。
+
+Rust 的 CXX 接口由 Bazel 自动生成，头文件路径为 `rust/<Bazel target name>.h`，例如 `#include "rust/local.h"`。C++ 编译只等待所需头文件，不等待 Rust 静态库。只想查看接口时执行 `./build.py build //rust:generated_headers`，文件位于 `build/bin/rust/`；该目标不编译 Rust 业务库。配置 YAML 由 Python 生成配置源码和 `config_checkers.h`，生成文件无需入库。
+
+Rust workspace 的 `Cargo.toml`、`Cargo.lock` 和 `rust-toolchain.toml` 位于仓库根目录。各 crate 的 `Cargo.toml` 负责社区依赖及其版本；crate_universe 直接读取真实 workspace，在构建的仓库解析阶段生成这些依赖的 Bazel 规则。没有自定义 metadata 转换或临时 manifest。
+
+新增 Rust crate 时，在它的目录添加 `BUILD.bazel`，使用标准 `rust_library` 声明源码、本地依赖和启用的 features。社区依赖通过 `all_crate_deps`、`aliases`、`crate_edition` 从 Cargo 声明读取，无需重复写版本。内部 path 依赖在 Cargo 和 BUILD 中各声明一次；新增 build.rs 时显式使用 `cargo_build_script` 并声明其输入。可参考 `rust/logger/BUILD.bazel`；生成文件的接入可参考 `rust/config/BUILD.bazel`。
+
+需要进入最终静态库的模块，在 `rust/seekdb-rust` 的 Cargo.toml、BUILD.bazel 和 src/lib.rs 中添加依赖及引用。workspace 内的 path 依赖会自动成为成员，不需要修改 MODULE.bazel、SDK 初始化脚本或 C++ 最终链接清单。普通 build 检查 manifest 和锁文件变化，Rust 依赖变化不需要重新 init。
+
+向 C++ 提供接口的模块，在 `rust/modules.bzl` 的模块表中登记一次。`bridge` 和 `headers` 路径相对 crate 目录，crate 名中的 `-` 转成目标名中的 `_`。在 crate 的 BUILD 中将桥接输入文件导出给 `//rust:__pkg__`。声明会自动创建头文件和桥接目标，并加入 `generated_headers` 和最终桥接链接集合。只需要编译接口的调用方依赖 `//rust:<name>_headers`；需要同时链接 Rust 实现的目标依赖 `//rust:<name>`。
+
+CXX 的 `features` 与 Rust 编译启用的 features 必须一致。需要共享时使用模块内的常量文件，例如 `rust/sql-nio/features.bzl`，由 BUILD 和接口表同时引用。`exclude_platforms` 继续控制 CXX 桥接的平台可用性。仅供 Rust 调用的 crate 不登记 CXX 接口。
+
+原生目标使用固定版本的 stable Rust SDK。Wasm 使用固定版本的 nightly，以及 `init --wasm` 准备的带补丁标准库。Cargo 的目标依赖声明选择各平台的社区依赖；sql-nio 共享的 feature 表让 Rust 和 CXX 一致选择原生网络或 Wasm 内存传输。
 
 ## 设置编译并发
 
@@ -46,7 +60,7 @@ Bazel 默认按本机可用 CPU 数量设置并发。显式指定本地编译并
 ./build.py build --remote_executor=grpc://HOST:PORT --jobs=100 seekdb
 ```
 
-`.bazelrc` 默认让 C++ 编译优先使用远程执行；未配置远程执行器时，使用本地执行策略。指定 `--remote_executor` 即可，无需再加 `--config=remote`。Cargo、生成器和链接仍在本机运行。默认本地策略顺序为 `worker,sandboxed,local`，保留沙箱优先级。命令行显式指定的执行策略可覆盖默认值。如果服务需要 SSH 隧道，先单独建立隧道。
+`.bazelrc` 默认让 C++ 编译优先使用远程执行；未配置远程执行器时，使用本地执行策略。指定 `--remote_executor` 即可，无需再加 `--config=remote`。Rust 编译、生成器和链接仍在本机运行。Linux 和 macOS 的默认本地策略顺序为 `worker,sandboxed,local`；Windows 使用 `worker,local`，因为 Bazel 在 Windows 上不支持沙箱。命令行显式指定的执行策略可覆盖默认值。如果服务需要 SSH 隧道，先单独建立隧道。
 
 命令行指定 `--config=remote` 或非空 `--remote_executor` 时，`--jobs` 只控制总并发，本地 CPU 额度仍由 Bazel 自动识别或通过 `--local_resources=cpu=N` 单独设置。
 
@@ -117,26 +131,40 @@ C++ 库从 `//bazel:defs.bzl` 加载 `cc_library`、`unity_cc_library` 或 `grou
 
 ## 运行本地实例
 
-使用仓库中的 `obd.sh` 包装脚本准备隔离环境并启动 seekdb：
+在 Linux 和 macOS 上，使用仓库中的实例管理脚本启动编译产物：
 
 ```bash
-./tools/deploy/obd.sh prepare -p /tmp/obtest
-./tools/deploy/obd.sh deploy -c ./tools/deploy/single.yaml
+python3 tools/deploy/sdb.py start \
+  --binary build/bin/src/observer/seekdb \
+  --base-dir "$PWD/build/dev-instance" --port 2881
+python3 tools/deploy/sdb.py wait-ready \
+  --client deps/3rd/u01/obclient/bin/obclient \
+  --base-dir "$PWD/build/dev-instance" --port 2881
 ```
 
-从 `tools/deploy/single.yaml` 读取 `mysql_port`。如果生成的端口是 `10000`，可以使用以下任一客户端连接：
+脚本直接启动 seekdb，新数据目录会自动初始化。需要调整服务端参数时，向 `start` 传入一个或多个 `--parameter key=value`。`start` 在创建进程后返回；`wait-ready` 检查受管理的进程，并等待 `SELECT 1` 执行成功。
+
+使用以下任一客户端连接：
 
 ```bash
-mysql -h127.0.0.1 -P10000 -uroot
-./deps/3rd/u01/obclient/bin/obclient -h127.0.0.1 -P10000 -uroot -Doceanbase -A
+mysql -h127.0.0.1 -P2881 -uroot
+./deps/3rd/u01/obclient/bin/obclient -h127.0.0.1 -P2881 -uroot -Doceanbase -A
 ```
 
-如果生成了其他端口，应以文件中的实际值为准。
+需要前台运行时，包括在 Windows 上，可以直接执行二进制，传入 `--nodaemon --base-dir=<目录> --port=2881`。Python 实例管理脚本目前支持 Linux 和 macOS。
 
-## 停止并清理本地实例
+## 停止或清理本地实例
+
+停止实例并保留数据：
 
 ```bash
-./tools/deploy/obd.sh destroy --rm -n single
+python3 tools/deploy/sdb.py stop --base-dir "$PWD/build/dev-instance"
 ```
 
-该命令会停止实例并删除此示例创建的部署数据。不要对需要保留的数据执行该命令。
+再次执行相同的 `start` 和 `wait-ready` 命令即可重启。需要停止实例并删除本例创建的数据时，执行：
+
+```bash
+python3 tools/deploy/sdb.py destroy --base-dir "$PWD/build/dev-instance"
+```
+
+`destroy` 会删除整个受管理的实例目录，只能用于无需保留的数据。SQL 回归测试使用独立的临时实例，见[运行 mysqltest](mysqltest.md)。

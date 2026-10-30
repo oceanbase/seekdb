@@ -2115,16 +2115,6 @@ id	field	type	length	precision	nullable
 18	freeze_cnt	5	0	20	0
 19	memstore_used	5	0	20	0
 20	memstore_limit	5	0	20	0
-table oceanbase.__all_virtual_concurrency_object_pool column_count 7 table_id 11019
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11019 order by column_id;
-id	field	type	length	precision	nullable
-16	free_list_name	22	1024	-1	0
-17	allocated	5	0	20	0
-18	in_use	5	0	20	0
-19	count	5	0	20	0
-20	type_size	5	0	20	0
-21	chunk_count	5	0	20	0
-22	chunk_byte_size	5	0	20	0
 table oceanbase.__all_virtual_disk_stat column_count 6 table_id 11023
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11023 order by column_id;
 id	field	type	length	precision	nullable
@@ -2318,18 +2308,6 @@ id	field	type	length	precision	nullable
 45	skip_index_attr	5	0	20	0
 46	lob_chunk_size	5	0	20	0
 47	local_session_vars	30	536870911	-1	1
-table oceanbase.__all_virtual_memory_info column_count 9 table_id 11037
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11037 order by column_id;
-id	field	type	length	precision	nullable
-16	ctx_id	5	0	20	0
-17	label	22	256	-1	0
-18	ctx_name	22	256	-1	0
-19	mod_type	22	256	-1	0
-20	mod_id	5	0	20	0
-21	mod_name	22	256	-1	0
-22	hold	5	0	20	0
-23	used	5	0	20	0
-24	count	5	0	20	0
 table oceanbase.__all_virtual_sys_parameter_stat column_count 14 table_id 11039
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11039 order by column_id;
 id	field	type	length	precision	nullable
@@ -2446,16 +2424,6 @@ id	field	type	length	precision	nullable
 28	last_end_time	18	0	25	0
 29	mark_finished	1	0	4	0
 30	comment	22	4096	-1	0
-table oceanbase.__all_virtual_io_stat column_count 7 table_id 11080
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11080 order by column_id;
-id	field	type	length	precision	nullable
-16	fd	5	0	20	0
-17	disk_type	22	32	-1	0
-18	sys_io_up_limit_in_mb	5	0	20	0
-19	sys_io_bandwidth_in_mb	5	0	20	0
-20	sys_io_low_watermark_in_mb	5	0	20	0
-21	sys_io_high_watermark_in_mb	5	0	20	0
-22	io_bench_result	22	1024	-1	0
 table oceanbase.__all_virtual_long_ops_status column_count 11 table_id 11081
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11081 order by column_id;
 id	field	type	length	precision	nullable
@@ -2470,22 +2438,6 @@ id	field	type	length	precision	nullable
 24	percentage	5	0	20	0
 25	message	22	512	-1	0
 26	trace_id	22	64	-1	0
-table oceanbase.__all_virtual_server_object_pool column_count 13 table_id 11084
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11084 order by column_id;
-id	field	type	length	precision	nullable
-16	object_type	22	1024	-1	0
-17	arena_id	5	0	20	0
-18	lock	5	0	20	0
-19	borrow_count	5	0	20	0
-20	return_count	5	0	20	0
-21	miss_count	5	0	20	0
-22	miss_return_count	5	0	20	0
-23	free_num	5	0	20	0
-24	last_borrow_ts	5	0	20	0
-25	last_return_ts	5	0	20	0
-26	last_miss_ts	5	0	20	0
-27	last_miss_return_ts	5	0	20	0
-28	next	5	0	20	0
 table oceanbase.__all_virtual_trans_lock_stat column_count 8 table_id 11085
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11085 order by column_id;
 id	field	type	length	precision	nullable
@@ -2520,18 +2472,6 @@ id	field	type	length	precision	nullable
 16	refreshed_schema_version	5	0	20	0
 17	received_schema_version	5	0	20	0
 18	schema_count	5	0	20	0
-table oceanbase.__all_virtual_memory_context_stat column_count 9 table_id 11094
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11094 order by column_id;
-id	field	type	length	precision	nullable
-16	entity	22	128	-1	0
-17	p_entity	22	128	-1	0
-18	hold	5	0	20	0
-19	malloc_hold	5	0	20	0
-20	malloc_used	5	0	20	0
-21	arena_hold	5	0	20	0
-22	arena_used	5	0	20	0
-23	create_time	18	0	25	0
-24	location	22	512	-1	0
 table oceanbase.__all_virtual_dump_info column_count 13 table_id 11095
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11095 order by column_id;
 id	field	type	length	precision	nullable
@@ -2964,18 +2904,6 @@ id	field	type	length	precision	nullable
 54	index_block_cache_miss_count	5	0	20	0
 55	logical_read_count	5	0	20	0
 56	physical_read_count	5	0	20	0
-table oceanbase.__all_virtual_raid_stat column_count 9 table_id 12121
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12121 order by column_id;
-id	field	type	length	precision	nullable
-16	disk_idx	5	0	20	0
-17	install_seq	5	0	20	0
-18	data_num	5	0	20	0
-19	parity_num	5	0	20	0
-20	create_ts	5	0	20	0
-21	finish_ts	5	0	20	0
-22	alias_name	22	1024	-1	0
-23	status	22	64	-1	0
-24	percent	5	0	20	0
 table oceanbase.__all_virtual_dtl_channel column_count 25 table_id 12123
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12123 order by column_id;
 id	field	type	length	precision	nullable
@@ -3150,47 +3078,6 @@ id	field	type	length	precision	nullable
 25	CURSOR_TYPE	22	30	-1	0
 26	CHILD_ADDRESS	22	30	-1	0
 27	CON_ID	5	0	20	0
-table oceanbase.__all_virtual_files column_count 38 table_id 12196
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12196 order by column_id;
-id	field	type	length	precision	nullable
-16	FILE_ID	5	0	4	0
-17	FILE_NAME	22	64	-1	1
-18	FILE_TYPE	22	20	-1	0
-19	TABLESPACE_NAME	22	64	-1	1
-20	TABLE_CATALOG	22	64	-1	0
-21	TABLE_SCHEMA	22	64	-1	1
-22	TABLE_NAME	22	64	-1	1
-23	LOGFILE_GROUP_NAME	22	64	-1	1
-24	LOGFILE_GROUP_NUMBER	5	0	4	1
-25	ENGINE	22	64	-1	0
-26	FULLTEXT_KEYS	22	64	-1	1
-27	DELETED_ROWS	5	0	4	1
-28	UPDATE_COUNT	5	0	4	1
-29	FREE_EXTENTS	5	0	4	1
-30	TOTAL_EXTENTS	5	0	4	1
-31	EXTENT_SIZE	5	0	4	0
-32	INITIAL_SIZE	10	0	20	1
-33	MAXIMUM_SIZE	10	0	20	1
-34	AUTOEXTEND_SIZE	10	0	20	1
-35	CREATION_TIME	18	0	25	1
-36	LAST_UPDATE_TIME	18	0	25	1
-37	LAST_ACCESS_TIME	18	0	25	1
-38	RECOVER_TIME	5	0	4	1
-39	TRANSACTION_COUNTER	5	0	4	1
-40	VERSION	10	0	20	1
-41	ROW_FORMAT	22	10	-1	1
-42	TABLE_ROWS	10	0	20	1
-43	AVG_ROW_LENGTH	10	0	20	1
-44	DATA_LENGTH	10	0	20	1
-45	MAX_DATA_LENGTH	10	0	20	1
-46	INDEX_LENGTH	10	0	20	1
-47	DATA_FREE	10	0	20	1
-48	CREATE_TIME	18	0	25	1
-49	UPDATE_TIME	18	0	25	1
-50	CHECK_TIME	18	0	25	1
-51	CHECKSUM	10	0	20	1
-52	STATUS	22	20	-1	0
-53	EXTRA	22	255	-1	1
 table oceanbase.__all_virtual_deadlock_event_history column_count 19 table_id 12209
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12209 order by column_id;
 id	field	type	length	precision	nullable
@@ -3213,14 +3100,6 @@ id	field	type	length	precision	nullable
 32	extra_value2	22	256	-1	1
 33	extra_name3	22	256	-1	1
 34	extra_value3	22	256	-1	1
-table oceanbase.__all_virtual_ctx_memory_info column_count 5 table_id 12211
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12211 order by column_id;
-id	field	type	length	precision	nullable
-16	ctx_id	5	0	20	0
-17	ctx_name	22	256	-1	0
-18	hold	5	0	20	0
-19	used	5	0	20	0
-20	limit	5	0	20	0
 table oceanbase.__all_virtual_show_create_trigger column_count 7 table_id 12222
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12222 order by column_id;
 id	field	type	length	precision	nullable
@@ -3611,15 +3490,6 @@ id	field	type	length	precision	nullable
 57	qblock_name	22	128	-1	0
 58	remarks	22	4000	-1	0
 59	other_xml	22	4000	-1	0
-table oceanbase.__all_virtual_malloc_sample_info column_count 6 table_id 12363
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12363 order by column_id;
-id	field	type	length	precision	nullable
-16	ctx_id	5	0	20	0
-17	mod_name	22	256	-1	0
-18	back_trace	22	4096	-1	0
-19	ctx_name	22	256	-1	0
-20	alloc_count	5	0	20	0
-21	alloc_bytes	5	0	20	0
 table oceanbase.__all_virtual_mds_node_stat column_count 13 table_id 12373
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12373 order by column_id;
 id	field	type	length	precision	nullable
@@ -3915,16 +3785,15 @@ id	field	type	length	precision	nullable
 52	aggregate_read_io_cnt	5	0	20	0
 53	total_wbp_page_read_cnt	5	0	20	0
 54	wbp_page_hits	5	0	20	0
-table oceanbase.__all_virtual_vector_mem_info column_count 7 table_id 12550
+table oceanbase.__all_virtual_vector_mem_info column_count 6 table_id 12550
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12550 order by column_id;
 id	field	type	length	precision	nullable
-16	raw_malloc_size	5	0	20	0
-17	index_metadata_size	5	0	20	0
-18	vector_mem_hold	5	0	20	0
-19	vector_mem_used	5	0	20	0
-20	vector_mem_limit	5	0	20	0
-21	tx_share_limit	5	0	20	0
-22	vector_mem_detail_info	22	65535	-1	0
+16	index_metadata_size	5	0	20	0
+17	vector_mem_hold	5	0	20	0
+18	vector_mem_used	5	0	20	0
+19	vector_mem_limit	5	0	20	0
+20	tx_share_limit	5	0	20	0
+21	vector_mem_detail_info	22	65535	-1	0
 table oceanbase.__all_virtual_rootservice_job column_count 6 table_id 12563
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12563 order by column_id;
 id	field	type	length	precision	nullable

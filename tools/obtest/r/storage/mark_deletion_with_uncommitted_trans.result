@@ -5,7 +5,6 @@ set global ob_query_timeout = 100000000000;
 set global ob_trx_timeout = 100000000000;
 set global ob_trx_idle_timeout = 100000000000;
 alter system set minor_compact_trigger = 10;
-alter system set syslog_io_bandwidth_limit = '100G';
 use test;
 create table mark_deletion_with_uncom(c1 int primary key, c2 int);
 alter system minor freeze;

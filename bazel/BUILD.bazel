@@ -4,7 +4,6 @@ exports_files([
     "build_metadata.py",
     "parser.bzl",
     "parser_codegen.py",
-    "cargo.bzl",
     "platforms.bzl",
     "defs.bzl",
     "cc_library.bzl",
@@ -38,9 +37,6 @@ config_setting(
     visibility = ["//visibility:public"],
 )
 
-toolchain_type(name = "cargo_toolchain_type", visibility = ["//visibility:public"])
-exports_files(["cargo_toolchain.bzl", "prepare_cargo.py", "cargo_runner.py"])
-
 bool_flag(
     name = "package_runtime",
     build_setting_default = False,
@@ -64,10 +60,4 @@ config_setting(
     name = "rpm_logging_enabled",
     flag_values = {":rpm_logging": "true"},
     visibility = ["//visibility:public"],
-)
-
-filegroup(
-    name = "wasm_rust_build_tools",
-    srcs = ["prepare_wasm_rust.py", "//deps/init/wasm:dependencies.json"],
-    visibility = ["//rust:__pkg__"],
 )

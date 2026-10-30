@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "share/config/ob_config_helper.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_local_management_service.h"
@@ -2786,7 +2786,6 @@ int ObLocalManagementService::set_config_after_bootstrap_()
 
   const char* configs[][2] = {
     {"enable_record_trace_log", "false"},
-    {"_enable_dbms_job_package", "false"},
     {"_bloom_filter_ratio", "3"},
     {"_enable_mysql_compatible_dates", "true"}
   };

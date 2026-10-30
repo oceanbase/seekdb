@@ -1,3 +1,82 @@
+SELECT ICU_VERSION();
+SELECT 'abab' REGEXP '^(ab)\\1$' AS regexp_backref, 'abab' RLIKE '^(ab)\\1$' AS rlike_backref, REGEXP_LIKE('abac', '^(ab)\\1$', 'c') AS backref_miss;
+regexp_backref	rlike_backref	backref_miss
+1	1	0
+SELECT REGEXP_SUBSTR('100元', '[0-9]+(?=元)', 1, 1, 'c') AS lookahead, REGEXP_SUBSTR('xabc', '(?<=x)abc', 2, 1, 'c') AS lookbehind;
+lookahead	lookbehind
+100	abc
+SELECT REGEXP_LIKE('abc', '^(a|ab)c$', 'c') AS normal_group, REGEXP_LIKE('abc', '^(?>a|ab)c$', 'c') AS atomic_group, REGEXP_LIKE('aa', '^a++a$', 'c') AS possessive;
+normal_group	atomic_group	possessive
+1	0	0
+SELECT REGEXP_LIKE(_utf8mb4'A' COLLATE utf8mb4_bin, 'a') AS binary_default, REGEXP_LIKE(_utf8mb4'A' COLLATE utf8mb4_general_ci, 'a') AS ci_default, REGEXP_LIKE('A', 'a', 'c') AS explicit_case, REGEXP_LIKE('A', 'a', 'i') AS explicit_ignore_case;
+binary_default	ci_default	explicit_case	explicit_ignore_case
+0	1	0	1
+SELECT REGEXP_INSTR('a😀b😀c', '😀', 1, 2) AS emoji_start, REGEXP_INSTR('a😀b😀c', '😀', 1, 2, 1) AS emoji_end, REGEXP_SUBSTR('a😀b', '.', 2, 1, 'c') AS emoji_substr;
+emoji_start	emoji_end	emoji_substr
+5	7	😀
+SELECT REGEXP_INSTR('a😀b', 'b', 4) AS start_after_surrogate;
+start_after_surrogate
+4
+SELECT REGEXP_SUBSTR('a12b', '([a-z])([0-9]+)', 1, 1, 'c', 2) AS capture, REGEXP_INSTR('a12b', '([a-z])([0-9]+)', 1, 1, 0, 'c') AS whole_match_start;
+capture	whole_match_start
+12	1
+SELECT REGEXP_INSTR('ab', '^b', 2) AS anchored_start, REGEXP_INSTR('abc', 'z') AS no_match, REGEXP_SUBSTR('abc', 'z') IS NULL AS substr_no_match;
+anchored_start	no_match	substr_no_match
+0	0	1
+SELECT REGEXP_SUBSTR('abc', 'z', 1, 1, 'c', 99) IS NULL AS absent_group_substr, REGEXP_SUBSTR('abc', 'a', 1, 2, 'c', 99) IS NULL AS absent_occurrence_substr;
+absent_group_substr	absent_occurrence_substr
+1	1
+SELECT REGEXP_INSTR('aba', 'a', 1, 0) AS zero_occurrence;
+zero_occurrence
+1
+SELECT REGEXP_SUBSTR('b', '(a)?b', 1, 1, 'c', 1) IS NULL AS unmatched_capture, REGEXP_SUBSTR('abc', '()', 1, 1, 'c') IS NULL AS empty_capture;
+unmatched_capture	empty_capture
+1	1
+SELECT REGEXP_LIKE(NULL, 'a') IS NULL AS null_text, REGEXP_LIKE('a', NULL) IS NULL AS null_pattern, REGEXP_REPLACE('a', 'a', NULL) IS NULL AS null_replacement;
+null_text	null_pattern	null_replacement
+1	1	1
+SELECT REGEXP_REPLACE('ab12cd34', '([0-9]+)', '<$1>') AS numbered_replacement, REGEXP_REPLACE('a12', '(?<n>[0-9]+)', '<${n}>') AS named_replacement;
+numbered_replacement	named_replacement
+ab<12>cd<34>	a<12>
+SELECT REGEXP_REPLACE('ab', '(a)', '$0$1') AS full_match_replacement, REGEXP_REPLACE('b', '(a)?b', '<$1>') AS optional_replacement;
+full_match_replacement	optional_replacement
+aab	<>
+SELECT REGEXP_REPLACE('a', 'a', '\\$1') AS literal_dollar, HEX(REGEXP_REPLACE('a', 'a', '\\\\')) AS literal_backslash;
+literal_dollar	literal_backslash
+$1	5C
+SELECT REGEXP_REPLACE('a1b2c3', '[0-9]', 'X', 1, 2) AS second_only, REGEXP_REPLACE('a1b2c3', '[0-9]', 'X', 3, 0) AS preserve_prefix, REGEXP_REPLACE('abc', 'z', 'X') AS replace_no_match;
+second_only	preserve_prefix	replace_no_match
+a1bXc3	a1bXcX	abc
+SELECT REGEXP_LIKE('', '^$', 'c') AS empty_input, REGEXP_REPLACE('a😀b', '()', '|') AS empty_matches, REGEXP_INSTR('a😀b', '()', 2, 2) AS second_empty_match;
+empty_input	empty_matches	second_empty_match
+1	|a|😀|b|	4
+SELECT s, REGEXP_REPLACE(s, '([0-9]+)', '<$1>') AS replaced FROM (SELECT 'a12' AS s UNION ALL SELECT 'b34' UNION ALL SELECT 'c') AS t ORDER BY s;
+s	replaced
+a12	a<12>
+b34	b<34>
+c	c
+SELECT REGEXP_LIKE('ß', '^ss$', 'i') AS full_fold, REGEXP_LIKE('中文', '^[[:alpha:]]+$', 'c') AS posix_ascii, REGEXP_LIKE('中文', '^\\p{Alphabetic}+$', 'c') AS unicode_alpha;
+full_fold	posix_ascii	unicode_alpha
+0	0	1
+SELECT REGEXP_LIKE('$^', '^[[:punct:]]+$', 'c') AS posix_punctuation, REGEXP_LIKE('$^', '^\\p{P}+$', 'c') AS unicode_punctuation;
+posix_punctuation	unicode_punctuation
+1	0
+SELECT REGEXP_LIKE(CONVERT(0x09 USING utf8mb4), '^\\h$', 'c') AS h_tab, REGEXP_LIKE('AF', '^\\h+$', 'c') AS h_hex, REGEXP_LIKE(CONVERT(0x09 USING utf8mb4), '^[\\p{Zs}\\t]$', 'c') AS horizontal_space;
+h_tab	h_hex	horizontal_space
+0	1	1
+SELECT REGEXP_LIKE(CONVERT(0x610D62 USING utf8mb4), '^b', 'm') AS cr_multiline, REGEXP_LIKE(CONVERT(0x610D62 USING utf8mb4), '^b', 'mu') AS cr_unix, REGEXP_LIKE(CONVERT(0x610A62 USING utf8mb4), '^b', 'mu') AS lf_unix;
+cr_multiline	cr_unix	lf_unix
+1	0	1
+SELECT REGEXP_LIKE(CONVERT(0x610D62 USING utf8mb4), 'a.b', 'c') AS dot_cr, REGEXP_LIKE(CONVERT(0x610D62 USING utf8mb4), 'a.b', 'cu') AS dot_cr_unix, REGEXP_LIKE(CONVERT(0x610A62 USING utf8mb4), 'a.b', 'cn') AS dotall;
+dot_cr	dot_cr_unix	dotall
+0	1	1
+SELECT REGEXP_LIKE(CONVERT(0x61E280A862 USING utf8mb4), '^b', 'm') AS unicode_line_anchor, REGEXP_LIKE(CONVERT(0x61E280A862 USING utf8mb4), 'a.b', 'c') AS unicode_line_dot;
+unicode_line_anchor	unicode_line_dot
+0	1
+SELECT REGEXP_LIKE('a', '\\X', 'c');
+SELECT REGEXP_LIKE('a.b', '\\Qa.b\\E', 'c');
+SELECT REGEXP_LIKE('word', '(?w)\\bword\\b', 'c');
+SELECT REGEXP_INSTR('a😀b', 'b', 3);
 drop table if exists t1;
 create table t1 (a varchar(10) primary key, b int default 0);
 insert into t1 (a) values ('a'),('abc'),('abcd'),('hello'),('test');
@@ -6,27 +85,30 @@ ERROR HY000: unmatched parentheses in regular expression
 select * from t1 where a regexp 'a(b';
 ERROR HY000: unmatched parentheses in regular expression
 select * from t1 where a regexp '*';
-ERROR 42000: Got error 'U_REGEX_RULE_SYNTAX, Syntax error in regular expression on line 1, character 1.' from regexp
+ERROR 42000: Got error 'Parsing error at position 0: Target of repeat operator is invalid' from regexp
 select * from t1 where a regexp '+';
-ERROR 42000: Got error 'U_REGEX_RULE_SYNTAX, Syntax error in regular expression on line 1, character 1.' from regexp
+ERROR 42000: Got error 'Parsing error at position 0: Target of repeat operator is invalid' from regexp
 select * from t1 where a regexp '?';
-ERROR 42000: Got error 'U_REGEX_RULE_SYNTAX, Syntax error in regular expression on line 1, character 1.' from regexp
+ERROR 42000: Got error 'Parsing error at position 0: Target of repeat operator is invalid' from regexp
 select * from t1 where a regexp '(*a)';
-ERROR 42000: Got error 'U_REGEX_RULE_SYNTAX, Syntax error in regular expression on line 1, character 2.' from regexp
+ERROR 42000: Got error 'Parsing error at position 1: Target of repeat operator is invalid' from regexp
 select * from t1 where a regexp '(+a)';
-ERROR 42000: Got error 'U_REGEX_RULE_SYNTAX, Syntax error in regular expression on line 1, character 2.' from regexp
+ERROR 42000: Got error 'Parsing error at position 1: Target of repeat operator is invalid' from regexp
 select * from t1 where a regexp '(?a)';
-ERROR 42000: Got error 'U_REGEX_RULE_SYNTAX, Syntax error in regular expression on line 1, character 3.' from regexp
+ERROR 42000: Got error 'Parsing error at position 2: Unknown group flag: (?a' from regexp
 select * from t1 where a regexp '({1}a)';
-ERROR 42000: Got error 'U_REGEX_RULE_SYNTAX, Syntax error in regular expression on line 1, character 2.' from regexp
+a	b
 select * from t1 where a regexp '(a|*b)';
-ERROR 42000: Got error 'U_REGEX_RULE_SYNTAX, Syntax error in regular expression on line 1, character 4.' from regexp
+ERROR 42000: Got error 'Parsing error at position 3: Target of repeat operator is invalid' from regexp
 select * from t1 where a regexp '(a|+b)';
-ERROR 42000: Got error 'U_REGEX_RULE_SYNTAX, Syntax error in regular expression on line 1, character 4.' from regexp
+ERROR 42000: Got error 'Parsing error at position 3: Target of repeat operator is invalid' from regexp
 select * from t1 where a regexp '(a|?b)';
-ERROR 42000: Got error 'U_REGEX_RULE_SYNTAX, Syntax error in regular expression on line 1, character 4.' from regexp
+ERROR 42000: Got error 'Parsing error at position 3: Target of repeat operator is invalid' from regexp
 select * from t1 where a regexp '(a|{1}b)';
-ERROR 42000: Got error 'U_REGEX_RULE_SYNTAX, Syntax error in regular expression on line 1, character 4.' from regexp
+a	b
+a	0
+abc	0
+abcd	0
 select * from t1 where a regexp '^*';
 a	b
 a	0
@@ -56,23 +138,26 @@ abcd	0
 hello	0
 test	0
 select * from t1 where a regexp '{1';
-ERROR 42000: Got error 'U_REGEX_RULE_SYNTAX, Syntax error in regular expression on line 1, character 1.' from regexp
+a	b
 select * from t1 where a regexp '{1}';
-ERROR 42000: Got error 'U_REGEX_RULE_SYNTAX, Syntax error in regular expression on line 1, character 1.' from regexp
+a	b
 select * from t1 where a regexp 'a{1';
-ERROR 42000: Got error 'U_REGEX_BAD_INTERVAL' from regexp
+a	b
 select * from t1 where a regexp 'a{1a';
-ERROR 42000: Got error 'U_REGEX_BAD_INTERVAL' from regexp
+a	b
 select * from t1 where a regexp 'a{1a}';
-ERROR 42000: Got error 'U_REGEX_BAD_INTERVAL' from regexp
+a	b
 select * from t1 where a regexp 'a{1,x}';
-ERROR 42000: Got error 'U_REGEX_BAD_INTERVAL' from regexp
+a	b
 select * from t1 where a regexp 'a{1,x';
-ERROR 42000: Got error 'U_REGEX_BAD_INTERVAL' from regexp
+a	b
 select * from t1 where a regexp 'a{300}';
 a	b
 select * from t1 where a regexp 'a{1,0}';
-ERROR 42000: Got error 'U_REGEX_MAX_LT_MIN' from regexp
+a	b
+a	0
+abc	0
+abcd	0
 select * from t1 where a regexp 'a++';
 a	b
 a	0
@@ -86,9 +171,9 @@ abcd	0
 hello	0
 test	0
 select * from t1 where a regexp 'a+*';
-ERROR 42000: Got error 'U_REGEX_RULE_SYNTAX, Syntax error in regular expression on line 1, character 3.' from regexp
+ERROR 42000: Got error 'Parsing error at position 2: Target of repeat operator is invalid' from regexp
 select * from t1 where a regexp 'a?*';
-ERROR 42000: Got error 'U_REGEX_RULE_SYNTAX, Syntax error in regular expression on line 1, character 3.' from regexp
+ERROR 42000: Got error 'Parsing error at position 2: Target of repeat operator is invalid' from regexp
 select * from t1 where a regexp 'a?+';
 a	b
 a	0
@@ -97,15 +182,15 @@ abcd	0
 hello	0
 test	0
 select * from t1 where a regexp 'a{1}{1}';
-ERROR 42000: Got error 'U_REGEX_RULE_SYNTAX, Syntax error in regular expression on line 1, character 5.' from regexp
+a	b
 select * from t1 where a regexp 'a*{1}';
-ERROR 42000: Got error 'U_REGEX_RULE_SYNTAX, Syntax error in regular expression on line 1, character 3.' from regexp
+a	b
 select * from t1 where a regexp 'a+{1}';
-ERROR 42000: Got error 'U_REGEX_RULE_SYNTAX, Syntax error in regular expression on line 1, character 3.' from regexp
+a	b
 select * from t1 where a regexp 'a?{1}';
-ERROR 42000: Got error 'U_REGEX_RULE_SYNTAX, Syntax error in regular expression on line 1, character 3.' from regexp
+a	b
 select * from t1 where a regexp 'a{1}*';
-ERROR 42000: Got error 'U_REGEX_RULE_SYNTAX, Syntax error in regular expression on line 1, character 5.' from regexp
+ERROR 42000: Got error 'Parsing error at position 4: Target of repeat operator is invalid' from regexp
 select * from t1 where a regexp 'a{1}+';
 a	b
 a	0
@@ -1403,9 +1488,303 @@ id	name
 524	abcd
 573	ab
 select * from t1 where name regexp 'a{,2}';
-ERROR 42000: Got error 'U_REGEX_BAD_INTERVAL' from regexp
+id	name
+1	hello
+2	hell
+3	hel
+4	hello1
+5	hell1
+6	hel1
+7	hel
+1
+8	hel1
+9	hel	1
+10	hel
+1o
+11	111 <title>Hello World</title> 222
+138	abc
+139	abc
+142	abc
+146	a(
+152	a)
+153	)
+158	ab
+163	a^b
+165	a$b
+170	""
+173	""
+174	""
+192	b
+203	abc
+272	abc
+273	abc
+287	ab
+289	ab
+291	aab
+299	a{,2}
+301	a{,}
+311	abcac
+313	abcac
+315	abbcac
+317	acabc
+319	acabc
+321	abcabbc
+323	abcabbc
+325	a
+344	a{b}
+384	-%@a?X-
+385	-%@aX0-
+386	aSSTb
+387	aNTb
+388	a019b
+389	Sa%bS
+390	AabC
+391	NaSbN
+392	S%-&T
+393	aSNTb
+394	aBCd
+395	p0f3Cq
+405	abc
+406	abd
+407	abbd
+409	aaaaabaaaabaaaabaaaab
+411	aaaaabaaaabaaaabaaaab
+413	aaaaabaaaabaaaabaaaabweeknights
+415	a12345678901234567890123456789b
+416	a123456789012345678901234567890b
+417	a1234567890123456789012345678901b
+418	a12345678901234567890123456789012b
+419	a123456789012345678901234567890123b
+421	a1234567890123456789012345678901234567890123456789012345678901234567890b
+423	xacegikmoq
+424	xacegikmoq
+425	xacegikmoqy
+426	xacegikmoqy
+438	abc
+439	aba
+440	abc
+441	abd
+442	accd
+443	weeknights
+444	weeknights
+445	xyzaaabcaababdacd
+446	aaabc
+452	/*x*/
+454	/*x*/y/*z*/
+456	/*x*/
+457	/*x*/y/*z*/
+459	/*x**/y/*z*/
+461	/*x*/
+462	/*x*/y/*z*/
+463	/*x**/y/*z*/
+464	/*x****/y/*z*/
+465	/*x**x*/y/*z*/
+466	/*x***x/y/*z*/
+469	abcd
+470	abc
+471	abd
+472	abbd
+473	acd
+474	ad
+475	abc
+476	ac
+477	abc
+478	abbbc
+479	ac
+480	abcdef
+482	abcdefghijk
+483	abcdefghijkl
+484	abc
+485	ac
+486	abc
+487	abcc
+488	abcbc
+489	abb
+490	abb
+491	abbb
+492	abbb
+493	abcdef
+494	bc
+497	ad
+498	abcd
+499	abd
+500	abcd
+501	ad
+502	abcd
+503	ad
+504	ad
+505	abd
+506	ad
+507	abcd
+508	ad
+509	abcd
+510	abd
+511	acd
+512	abd
+513	abcd
+514	abd
+515	abcd
+516	acbd
+517	abcd
+518	abcd
+519	abcbd
+520	abcbcd
+521	abcd
+522	abcbd
+523	abd
+524	abcd
+567	A1
+571	CC11
+573	ab
 select * from t1 where name regexp 'a{,}';
-ERROR 42000: Got error 'U_REGEX_BAD_INTERVAL' from regexp
+id	name
+1	hello
+2	hell
+3	hel
+4	hello1
+5	hell1
+6	hel1
+7	hel
+1
+8	hel1
+9	hel	1
+10	hel
+1o
+11	111 <title>Hello World</title> 222
+138	abc
+139	abc
+142	abc
+146	a(
+152	a)
+153	)
+158	ab
+163	a^b
+165	a$b
+170	""
+173	""
+174	""
+192	b
+203	abc
+272	abc
+273	abc
+287	ab
+289	ab
+291	aab
+299	a{,2}
+301	a{,}
+311	abcac
+313	abcac
+315	abbcac
+317	acabc
+319	acabc
+321	abcabbc
+323	abcabbc
+325	a
+344	a{b}
+384	-%@a?X-
+385	-%@aX0-
+386	aSSTb
+387	aNTb
+388	a019b
+389	Sa%bS
+390	AabC
+391	NaSbN
+392	S%-&T
+393	aSNTb
+394	aBCd
+395	p0f3Cq
+405	abc
+406	abd
+407	abbd
+409	aaaaabaaaabaaaabaaaab
+411	aaaaabaaaabaaaabaaaab
+413	aaaaabaaaabaaaabaaaabweeknights
+415	a12345678901234567890123456789b
+416	a123456789012345678901234567890b
+417	a1234567890123456789012345678901b
+418	a12345678901234567890123456789012b
+419	a123456789012345678901234567890123b
+421	a1234567890123456789012345678901234567890123456789012345678901234567890b
+423	xacegikmoq
+424	xacegikmoq
+425	xacegikmoqy
+426	xacegikmoqy
+438	abc
+439	aba
+440	abc
+441	abd
+442	accd
+443	weeknights
+444	weeknights
+445	xyzaaabcaababdacd
+446	aaabc
+452	/*x*/
+454	/*x*/y/*z*/
+456	/*x*/
+457	/*x*/y/*z*/
+459	/*x**/y/*z*/
+461	/*x*/
+462	/*x*/y/*z*/
+463	/*x**/y/*z*/
+464	/*x****/y/*z*/
+465	/*x**x*/y/*z*/
+466	/*x***x/y/*z*/
+469	abcd
+470	abc
+471	abd
+472	abbd
+473	acd
+474	ad
+475	abc
+476	ac
+477	abc
+478	abbbc
+479	ac
+480	abcdef
+482	abcdefghijk
+483	abcdefghijkl
+484	abc
+485	ac
+486	abc
+487	abcc
+488	abcbc
+489	abb
+490	abb
+491	abbb
+492	abbb
+493	abcdef
+494	bc
+497	ad
+498	abcd
+499	abd
+500	abcd
+501	ad
+502	abcd
+503	ad
+504	ad
+505	abd
+506	ad
+507	abcd
+508	ad
+509	abcd
+510	abd
+511	acd
+512	abd
+513	abcd
+514	abd
+515	abcd
+516	acbd
+517	abcd
+518	abcd
+519	abcbd
+520	abcbcd
+521	abcd
+522	abcbd
+523	abd
+524	abcd
+567	A1
+571	CC11
+573	ab
 select * from t1 where name regexp 'ab{0,0}c';
 id	name
 311	abcac
@@ -1766,7 +2145,8 @@ id	name
 567	A1
 573	ab
 select * from t1 where name regexp 'a*{b}';
-ERROR 42000: Got error 'U_REGEX_RULE_SYNTAX, Syntax error in regular expression on line 1, character 3.' from regexp
+id	name
+344	a{b}
 select * from t1 where name regexp '[[:alnum:]]+';
 id	name
 1	hello
@@ -2542,6 +2922,8 @@ id	name
 146	a(
 152	a)
 153	)
+163	a^b
+165	a$b
 170	""
 173	""
 174	""

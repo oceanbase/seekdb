@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_lcl_node.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/deadlock/ob_deadlock_detector_mgr.h"

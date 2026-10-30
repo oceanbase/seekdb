@@ -15,6 +15,10 @@
 use std::ffi::{c_char, c_int};
 use std::slice;
 
+use crate::bridge::ffi::{
+    NioMysqlExecuteParam, NioMysqlExecuteParamMeta, NioMysqlExecuteParseResult,
+};
+use crate::bridge::*;
 use crate::codec::read_lenenc;
 
 const MYSQL_TYPE_DECIMAL: u16 = 0;
@@ -47,64 +51,6 @@ const MYSQL_TYPE_STRING: u16 = 254;
 const MYSQL_TYPE_GEOMETRY: u16 = 255;
 
 const UNSIGNED_TYPE_FLAG: u8 = 0x80;
-
-pub const NIO_MYSQL_EXECUTE_PARSE_OK: c_int = 0;
-pub const NIO_MYSQL_EXECUTE_PARSE_INVALID_ARGUMENT: c_int = -1;
-pub const NIO_MYSQL_EXECUTE_PARSE_MALFORMED: c_int = -2;
-pub const NIO_MYSQL_EXECUTE_PARSE_UNSUPPORTED: c_int = -3;
-pub const NIO_MYSQL_EXECUTE_PARSE_CAPACITY: c_int = -4;
-
-pub const NIO_MYSQL_EXECUTE_VALUE_NULL: u8 = 1;
-pub const NIO_MYSQL_EXECUTE_VALUE_I64: u8 = 2;
-pub const NIO_MYSQL_EXECUTE_VALUE_U64: u8 = 3;
-pub const NIO_MYSQL_EXECUTE_VALUE_F32_BITS: u8 = 4;
-pub const NIO_MYSQL_EXECUTE_VALUE_F64_BITS: u8 = 5;
-pub const NIO_MYSQL_EXECUTE_VALUE_BYTES: u8 = 6;
-pub const NIO_MYSQL_EXECUTE_VALUE_YEAR: u8 = 7;
-pub const NIO_MYSQL_EXECUTE_VALUE_DATE: u8 = 8;
-pub const NIO_MYSQL_EXECUTE_VALUE_DATETIME: u8 = 9;
-pub const NIO_MYSQL_EXECUTE_VALUE_TIMESTAMP: u8 = 10;
-pub const NIO_MYSQL_EXECUTE_VALUE_TIME: u8 = 11;
-pub const NIO_MYSQL_EXECUTE_VALUE_LONG_DATA: u8 = 12;
-
-pub const NIO_MYSQL_EXECUTE_PARAM_UNSIGNED: u8 = 1 << 0;
-pub const NIO_MYSQL_EXECUTE_PARAM_NEGATIVE: u8 = 1 << 1;
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct NioMysqlExecuteParamMeta {
-    pub mysql_type: u16,
-    pub type_flags: u8,
-    pub reserved: u8,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct NioMysqlExecuteParam {
-    pub value: u64,
-    pub value_off: i32,
-    pub value_len: i32,
-    pub days: u32,
-    pub microseconds: u32,
-    pub year: u16,
-    pub mysql_type: u16,
-    pub type_flags: u8,
-    pub kind: u8,
-    pub flags: u8,
-    pub month: u8,
-    pub day: u8,
-    pub hour: u8,
-    pub minute: u8,
-    pub second: u8,
-    pub reserved: [u8; 4],
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct NioMysqlExecuteParseResult {
-    pub new_params_bound_flag: u8,
-    pub reserved: [u8; 7],
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ParseError {
@@ -434,8 +380,7 @@ fn parse(
     Ok((params, result))
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn nio_parse_mysql_execute_params(
+pub unsafe fn nio_parse_mysql_execute_params(
     tail: *const c_char,
     tail_len: i64,
     param_count: i64,

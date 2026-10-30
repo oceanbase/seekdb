@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_BLKMGR
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "storage/blocksstable/ob_shared_macro_block_manager.h"
 #include "share/rc/ob_server_runtime.h"
 

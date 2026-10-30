@@ -1,3 +1,57 @@
+# SQL adapter behavior and intentional differences from the former ICU engine.
+--disable_query_log
+set @regexp_saved_sql_mode = @@session.sql_mode;
+set session sql_mode = '';
+set names utf8mb4;
+--enable_query_log
+
+--disable_result_log
+--error 1305
+SELECT ICU_VERSION();
+--enable_result_log
+SELECT 'abab' REGEXP '^(ab)\\1$' AS regexp_backref, 'abab' RLIKE '^(ab)\\1$' AS rlike_backref, REGEXP_LIKE('abac', '^(ab)\\1$', 'c') AS backref_miss;
+SELECT REGEXP_SUBSTR('100元', '[0-9]+(?=元)', 1, 1, 'c') AS lookahead, REGEXP_SUBSTR('xabc', '(?<=x)abc', 2, 1, 'c') AS lookbehind;
+SELECT REGEXP_LIKE('abc', '^(a|ab)c$', 'c') AS normal_group, REGEXP_LIKE('abc', '^(?>a|ab)c$', 'c') AS atomic_group, REGEXP_LIKE('aa', '^a++a$', 'c') AS possessive;
+SELECT REGEXP_LIKE(_utf8mb4'A' COLLATE utf8mb4_bin, 'a') AS binary_default, REGEXP_LIKE(_utf8mb4'A' COLLATE utf8mb4_general_ci, 'a') AS ci_default, REGEXP_LIKE('A', 'a', 'c') AS explicit_case, REGEXP_LIKE('A', 'a', 'i') AS explicit_ignore_case;
+SELECT REGEXP_INSTR('a😀b😀c', '😀', 1, 2) AS emoji_start, REGEXP_INSTR('a😀b😀c', '😀', 1, 2, 1) AS emoji_end, REGEXP_SUBSTR('a😀b', '.', 2, 1, 'c') AS emoji_substr;
+SELECT REGEXP_INSTR('a😀b', 'b', 4) AS start_after_surrogate;
+SELECT REGEXP_SUBSTR('a12b', '([a-z])([0-9]+)', 1, 1, 'c', 2) AS capture, REGEXP_INSTR('a12b', '([a-z])([0-9]+)', 1, 1, 0, 'c') AS whole_match_start;
+SELECT REGEXP_INSTR('ab', '^b', 2) AS anchored_start, REGEXP_INSTR('abc', 'z') AS no_match, REGEXP_SUBSTR('abc', 'z') IS NULL AS substr_no_match;
+SELECT REGEXP_SUBSTR('abc', 'z', 1, 1, 'c', 99) IS NULL AS absent_group_substr, REGEXP_SUBSTR('abc', 'a', 1, 2, 'c', 99) IS NULL AS absent_occurrence_substr;
+SELECT REGEXP_INSTR('aba', 'a', 1, 0) AS zero_occurrence;
+SELECT REGEXP_SUBSTR('b', '(a)?b', 1, 1, 'c', 1) IS NULL AS unmatched_capture, REGEXP_SUBSTR('abc', '()', 1, 1, 'c') IS NULL AS empty_capture;
+SELECT REGEXP_LIKE(NULL, 'a') IS NULL AS null_text, REGEXP_LIKE('a', NULL) IS NULL AS null_pattern, REGEXP_REPLACE('a', 'a', NULL) IS NULL AS null_replacement;
+SELECT REGEXP_REPLACE('ab12cd34', '([0-9]+)', '<$1>') AS numbered_replacement, REGEXP_REPLACE('a12', '(?<n>[0-9]+)', '<${n}>') AS named_replacement;
+SELECT REGEXP_REPLACE('ab', '(a)', '$0$1') AS full_match_replacement, REGEXP_REPLACE('b', '(a)?b', '<$1>') AS optional_replacement;
+SELECT REGEXP_REPLACE('a', 'a', '\\$1') AS literal_dollar, HEX(REGEXP_REPLACE('a', 'a', '\\\\')) AS literal_backslash;
+SELECT REGEXP_REPLACE('a1b2c3', '[0-9]', 'X', 1, 2) AS second_only, REGEXP_REPLACE('a1b2c3', '[0-9]', 'X', 3, 0) AS preserve_prefix, REGEXP_REPLACE('abc', 'z', 'X') AS replace_no_match;
+SELECT REGEXP_LIKE('', '^$', 'c') AS empty_input, REGEXP_REPLACE('a😀b', '()', '|') AS empty_matches, REGEXP_INSTR('a😀b', '()', 2, 2) AS second_empty_match;
+SELECT s, REGEXP_REPLACE(s, '([0-9]+)', '<$1>') AS replaced FROM (SELECT 'a12' AS s UNION ALL SELECT 'b34' UNION ALL SELECT 'c') AS t ORDER BY s;
+
+# Accepted changes: simple case folding, ASCII POSIX classes, and hexadecimal \h.
+SELECT REGEXP_LIKE('ß', '^ss$', 'i') AS full_fold, REGEXP_LIKE('中文', '^[[:alpha:]]+$', 'c') AS posix_ascii, REGEXP_LIKE('中文', '^\\p{Alphabetic}+$', 'c') AS unicode_alpha;
+SELECT REGEXP_LIKE('$^', '^[[:punct:]]+$', 'c') AS posix_punctuation, REGEXP_LIKE('$^', '^\\p{P}+$', 'c') AS unicode_punctuation;
+SELECT REGEXP_LIKE(CONVERT(0x09 USING utf8mb4), '^\\h$', 'c') AS h_tab, REGEXP_LIKE('AF', '^\\h+$', 'c') AS h_hex, REGEXP_LIKE(CONVERT(0x09 USING utf8mb4), '^[\\p{Zs}\\t]$', 'c') AS horizontal_space;
+SELECT REGEXP_LIKE(CONVERT(0x610D62 USING utf8mb4), '^b', 'm') AS cr_multiline, REGEXP_LIKE(CONVERT(0x610D62 USING utf8mb4), '^b', 'mu') AS cr_unix, REGEXP_LIKE(CONVERT(0x610A62 USING utf8mb4), '^b', 'mu') AS lf_unix;
+SELECT REGEXP_LIKE(CONVERT(0x610D62 USING utf8mb4), 'a.b', 'c') AS dot_cr, REGEXP_LIKE(CONVERT(0x610D62 USING utf8mb4), 'a.b', 'cu') AS dot_cr_unix, REGEXP_LIKE(CONVERT(0x610A62 USING utf8mb4), 'a.b', 'cn') AS dotall;
+SELECT REGEXP_LIKE(CONVERT(0x61E280A862 USING utf8mb4), '^b', 'm') AS unicode_line_anchor, REGEXP_LIKE(CONVERT(0x61E280A862 USING utf8mb4), 'a.b', 'c') AS unicode_line_dot;
+
+# Assert error categories without depending on the backend's diagnostic wording.
+--disable_result_log
+--error 5811
+SELECT REGEXP_LIKE('a', '\\X', 'c');
+--error 5811
+SELECT REGEXP_LIKE('a.b', '\\Qa.b\\E', 'c');
+--error 1139
+SELECT REGEXP_LIKE('word', '(?w)\\bword\\b', 'c');
+--error 1210
+SELECT REGEXP_INSTR('a😀b', 'b', 3);
+--enable_result_log
+
+--disable_query_log
+set session sql_mode = @regexp_saved_sql_mode;
+--enable_query_log
+
 --disable_query_log
 set @@session.explicit_defaults_for_timestamp=off;
 --enable_query_log
@@ -30,7 +84,7 @@ select * from t1 where a regexp '(*a)';
 select * from t1 where a regexp '(+a)';
 --error 1139
 select * from t1 where a regexp '(?a)';
---error 1139
+# fancy-regex accepts some brace interval syntax rejected by ICU; retain result coverage.
 select * from t1 where a regexp '({1}a)';
 --error 1139
 select * from t1 where a regexp '(a|*b)';
@@ -38,7 +92,6 @@ select * from t1 where a regexp '(a|*b)';
 select * from t1 where a regexp '(a|+b)';
 --error 1139
 select * from t1 where a regexp '(a|?b)';
---error 1139
 select * from t1 where a regexp '(a|{1}b)';
 
 select * from t1 where a regexp '^*';
@@ -48,23 +101,15 @@ select * from t1 where a regexp '^+';
 select * from t1 where a regexp '^?';
 
 select * from t1 where a regexp '^{1}';
---error 1139
 select * from t1 where a regexp '{1';
---error 1139
 select * from t1 where a regexp '{1}';
---error 1139
 select * from t1 where a regexp 'a{1';
---error 1139
 select * from t1 where a regexp 'a{1a';
---error 1139
 select * from t1 where a regexp 'a{1a}';
---error 1139
 select * from t1 where a regexp 'a{1,x}';
---error 1139
 select * from t1 where a regexp 'a{1,x';
 
 select * from t1 where a regexp 'a{300}';
---error 1139
 select * from t1 where a regexp 'a{1,0}';
 
 select * from t1 where a regexp 'a++';
@@ -76,13 +121,9 @@ select * from t1 where a regexp 'a+*';
 select * from t1 where a regexp 'a?*';
 
 select * from t1 where a regexp 'a?+';
---error 1139
 select * from t1 where a regexp 'a{1}{1}';
---error 1139
 select * from t1 where a regexp 'a*{1}';
---error 1139
 select * from t1 where a regexp 'a+{1}';
---error 1139
 select * from t1 where a regexp 'a?{1}';
 --error 1139
 select * from t1 where a regexp 'a{1}*';
@@ -279,9 +320,7 @@ select * from t1 where name regexp 'ab?c';
 select * from t1 where name regexp 'a{1}b';
 select * from t1 where name regexp 'a{1,}b';
 select * from t1 where name regexp 'a{1,2}b';
---error 1139
 select * from t1 where name regexp 'a{,2}';
---error 1139
 select * from t1 where name regexp 'a{,}';
 select * from t1 where name regexp 'ab{0,0}c';
 select * from t1 where name regexp 'ab{0,1}c';
@@ -291,7 +330,6 @@ select * from t1 where name regexp 'ab{1,3}c';
 select * from t1 where name regexp 'ab{2,2}c';
 select * from t1 where name regexp 'ab{2,4}c';
 select * from t1 where name regexp '((a{1,10}){1,10}){1,10}';
---error 1139
 select * from t1 where name regexp 'a*{b}';
 select * from t1 where name regexp '[[:alnum:]]+';
 select * from t1 where name regexp '[[:alpha:]]+';

@@ -12,25 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@cargo_exports//:exports.bzl", "EXPORTS")
-load("//bazel:cargo.bzl", "cargo_workspace")
+load("//bazel:rust.bzl", "rust_modules")
+load(":modules.bzl", "MODULES")
 
 package(default_visibility = ["//visibility:private"])
 
-exports_files(
-    ["rust-toolchain.toml"],
-    visibility = ["//deps/external:__pkg__"],
-)
-exports_files(["exports.json"])
-exports_files(["Cargo.lock"], visibility = ["//src/observer:__pkg__"])
-
-# Cargo resolves all Rust dependencies; Bazel tracks build inputs and exposes
-# only the libraries explicitly exported to C++.
-cargo_workspace(
-    exports = EXPORTS,
-    srcs = glob(
-        ["**/*.rs", "**/*.h", "**/*.py", "**/*.toml", "**/*.yaml", "**/*.yml", "**/*.json", "*.lock"],
-        exclude = ["target/**"],
-        allow_empty = True,
-    ),
+rust_modules(
+    modules = MODULES,
+    generated_headers = ["//rust/config:config_checkers.h"],
 )

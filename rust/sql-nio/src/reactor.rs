@@ -870,13 +870,6 @@ fn bind_tcp_listener(addr: SocketAddr) -> std::io::Result<TcpListener> {
     TcpListener::bind(addr)
 }
 
-pub const NIO_START_OK: i32 = 0;
-pub const NIO_START_EINVAL: i32 = 1;
-pub const NIO_START_EADDR: i32 = 3;
-pub const NIO_START_ECALLBACKS: i32 = 4;
-pub const NIO_START_EIO: i32 = 5;
-pub const NIO_START_ETLS: i32 = 6;
-
 #[cfg(feature = "native-network")]
 fn build_tls_server_config(
     tls: &NioTlsConfig,
@@ -930,14 +923,12 @@ fn write_start_err(out_err: *mut i32, reason: i32) {
 /// `addr` is a valid C string; `handler` is the ObSqlSockHandler* the
 /// ob_sql_sock_handler_on_* shims accept; `out_err` is null or points to
 /// writable i32 storage.
-#[no_mangle]
-pub unsafe extern "C" fn nio_start(
+pub unsafe fn nio_start(
     addr: *const c_char,
-    handler: *mut c_void,
+    handler: *mut ObSqlSockHandler,
     session_size: usize,
     thread_count: usize,
     tls: *const NioTlsConfig,
-    tls_size: usize,
     out_err: *mut i32,
     disable_tcp: c_int,
 ) -> *mut NioReactor {
@@ -948,7 +939,6 @@ pub unsafe extern "C" fn nio_start(
             session_size,
             thread_count,
             tls,
-            tls_size,
             out_err,
             disable_tcp,
             Path::new(LOCAL_RUN_DIR),
@@ -959,11 +949,10 @@ pub unsafe extern "C" fn nio_start(
 #[allow(clippy::too_many_arguments)]
 pub(crate) unsafe fn nio_start_in_dir(
     addr: *const c_char,
-    handler: *mut c_void,
+    handler: *mut ObSqlSockHandler,
     session_size: usize,
     thread_count: usize,
     tls: *const NioTlsConfig,
-    tls_size: usize,
     out_err: *mut i32,
     disable_tcp: c_int,
     local_run_dir: &Path,
@@ -972,8 +961,6 @@ pub(crate) unsafe fn nio_start_in_dir(
         || session_size == 0
         || !(1..=MAX_IO_THREADS).contains(&thread_count)
         || !matches!(disable_tcp, 0 | 1)
-        || (tls.is_null() && tls_size != 0)
-        || (!tls.is_null() && tls_size != std::mem::size_of::<NioTlsConfig>())
     {
         write_start_err(out_err, NIO_START_EINVAL);
         return std::ptr::null_mut();
@@ -1273,8 +1260,7 @@ pub(crate) unsafe fn nio_start_in_dir(
 
 /// # Safety
 /// `reactor` is null or a live handle.
-#[no_mangle]
-pub unsafe extern "C" fn nio_get_bound_tcp_port(reactor: *const NioReactor) -> u32 {
+pub unsafe fn nio_get_bound_tcp_port(reactor: *const NioReactor) -> u32 {
     unsafe { reactor.as_ref() }
         .map(|reactor| reactor.bound_tcp_port)
         .unwrap_or(0)
@@ -1282,8 +1268,7 @@ pub unsafe extern "C" fn nio_get_bound_tcp_port(reactor: *const NioReactor) -> u
 
 /// # Safety
 /// `reactor` is null or a live handle.
-#[no_mangle]
-pub unsafe extern "C" fn nio_update_tcp_keepalive_params(
+pub unsafe fn nio_update_tcp_keepalive_params(
     reactor: *mut NioReactor,
     enabled: c_int,
     idle: u32,
@@ -1310,8 +1295,7 @@ pub unsafe extern "C" fn nio_update_tcp_keepalive_params(
 
 /// # Safety
 /// `reactor` is null or a live handle.
-#[no_mangle]
-pub unsafe extern "C" fn nio_stop(reactor: *mut NioReactor) {
+pub unsafe fn nio_stop(reactor: *mut NioReactor) {
     if let Some(e) = unsafe { reactor.as_ref() } {
         if let Some(endpoint) = e.local_endpoint.as_ref() {
             endpoint.remove_once();
@@ -1325,8 +1309,7 @@ pub unsafe extern "C" fn nio_stop(reactor: *mut NioReactor) {
 
 /// # Safety
 /// `reactor` is null or a live handle, used once.
-#[no_mangle]
-pub unsafe extern "C" fn nio_wait_destroy(reactor: *mut NioReactor) {
+pub unsafe fn nio_wait_destroy(reactor: *mut NioReactor) {
     if reactor.is_null() {
         return;
     }

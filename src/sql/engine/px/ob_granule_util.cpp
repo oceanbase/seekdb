@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_EXE
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_granule_util.h"
 #include "data_plane/access/ob_parallel_range_task_planner.h"
 #include "share/config/ob_server_config.h"
@@ -74,11 +74,11 @@ int ObGranuleUtil::split_block_ranges(ObExecContext &exec_ctx,
                                       ObIAllocator &allocator,
                                       const ObTableScanSpec *tsc,//may be is null, attention use
                                       const ObIArray<common::ObNewRange> &in_ranges,
-                                      const ObIArray<ObDASTabletLoc*> &tablets,
+                                      const ObIArray<DASRuntimeTabletAccess*> &tablets,
                                       int64_t parallelism,
                                       int64_t tablet_size,
                                       bool force_partition_granule,
-                                      common::ObIArray<ObDASTabletLoc*> &granule_tablets,
+                                      common::ObIArray<DASRuntimeTabletAccess*> &granule_tablets,
                                       common::ObIArray<common::ObNewRange> &granule_ranges,
                                       common::ObIArray<int64_t> &granule_idx,
                                       bool range_independent)
@@ -153,10 +153,10 @@ int ObGranuleUtil::split_block_granule(ObExecContext &exec_ctx,
                                       ObIAllocator &allocator,
                                       const ObTableScanSpec *tsc,//may be is null, attention use!
                                       const ObIArray<ObNewRange> &input_ranges,
-                                      const ObIArray<ObDASTabletLoc*> &tablets,
+                                      const ObIArray<DASRuntimeTabletAccess*> &tablets,
                                       int64_t parallelism,
                                       int64_t tablet_size,
-                                      ObIArray<ObDASTabletLoc*> &granule_tablets,
+                                      ObIArray<DASRuntimeTabletAccess*> &granule_tablets,
                                       ObIArray<ObNewRange> &granule_ranges,
                                       ObIArray<int64_t> &granule_idx,
                                       bool range_independent)
@@ -182,7 +182,7 @@ int ObGranuleUtil::split_block_granule(ObExecContext &exec_ctx,
   bool need_convert_new_range = true;//only rowid range need extra convert.
   if (OB_SUCC(ret)) {
     for (int i = 0; i < tablets.count() && OB_SUCC(ret); i++) {
-      const ObDASTabletLoc &tablet = *tablets.at(i);
+      const DASRuntimeTabletAccess &tablet = *tablets.at(i);
       int64_t partition_size = 0;
       // get partition size from storage
       if (need_convert_new_range &&
@@ -245,7 +245,7 @@ int ObGranuleUtil::split_block_granule(ObExecContext &exec_ctx,
   if (OB_SUCC(ret)) {
     int64_t tablet_idx = 0;
     for (int i = 0; i < tablets.count() && OB_SUCC(ret); i++) {
-      ObDASTabletLoc *tablet = tablets.at(i);
+      DASRuntimeTabletAccess *tablet = tablets.at(i);
       int64_t expected_task_cnt = task_cnt_each_partitions.at(i);
       // split input ranges to n task by PG interface
       if (need_convert_new_range &&
@@ -328,9 +328,9 @@ int ObGranuleUtil::compute_task_count_each_partition(int64_t total_size,
 int ObGranuleUtil::get_tasks_for_partition(ObExecContext &exec_ctx,
                                            ObIAllocator &allocator,
                                            int64_t expected_task_cnt,
-                                           ObDASTabletLoc &tablet,
+                                           DASRuntimeTabletAccess &tablet,
                                            ObIArray<ObStoreRange> &input_storage_ranges,
-                                           common::ObIArray<ObDASTabletLoc*> &granule_tablets,
+                                           common::ObIArray<DASRuntimeTabletAccess*> &granule_tablets,
                                            common::ObIArray<common::ObNewRange> &granule_ranges,
                                            common::ObIArray<int64_t> &granule_idx,
                                            int64_t &tablet_idx,

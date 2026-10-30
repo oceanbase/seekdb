@@ -3,7 +3,6 @@ ob1.reboot;
 ob1.mysql alter tenant sys set primary_zone='z1';
 ob1.check_until_timeout select role from oceanbase.__all_ls_meta_table where tenant_id=1 and ls_id=1 and zone='z1', 1, 600;
 ob1.check_until_timeout select count(*)>0 from oceanbase.__all_virtual_server_event_history where event='full_rootservice' and value1=0 and value2 like '%$ip:$port%' order by 1 desc, 1, 10;
-ob1.mysql alter system set syslog_io_bandwidth_limit='300M';
 ob1.mysql create resource unit box max_cpu 2, memory_size='6G';
 ob1.mysql create resource pool pool1 unit = 'box', unit_num = 1;
 ob1.mysql create resource pool pool2 unit = 'box', unit_num = 2;

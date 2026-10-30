@@ -37,7 +37,7 @@
 #include "sql/plan_cache/ob_adaptive_auto_dop.h"
 #include "sql/engine/ob_physical_plan_ctx.h"
 #include "sql/engine/ob_subschema_ctx.h"
-#include "query/optimizer/ob_optimizer_location_defs.h"
+#include "query/optimizer/table_access_defs.h"
 
 #define GET_PHY_PLAN_CTX(ctx) ((ctx).get_physical_plan_ctx())
 #define GET_MY_SESSION(ctx) ((ctx).get_my_session())
@@ -912,8 +912,8 @@ protected:
   int64_t expect_range_count_;
   common::ObDList<ObIExtraStatusCheck> extra_status_check_;
   // -----------------
-  // ObDASCtx contain ALL table locations of this query
-  // Note: NOT ONLY the locations processed by one of the query task
+  // ObDASCtx contain ALL table accesses of this query
+  // Note: NOT ONLY the accesses processed by one of the query task
   // ObDASCtx contain the query snapshot info of this query
   ObDASCtx das_ctx_;
   //to link the parent exec ctx in the nested sql

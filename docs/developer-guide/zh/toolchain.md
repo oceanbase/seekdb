@@ -1,44 +1,18 @@
 # 安装工具链
 
-seekdb 使用 Bazel、Rust 以及仓库管理的编译器和依赖集合。先安装 Rust 和少量宿主机工具，再由 `./build.py init` 将固定版本的 C/C++ 构建依赖准备到 `deps/3rd`。
+seekdb 使用 Bazel、Rust 以及仓库管理的编译器和依赖集合。先安装少量宿主机工具，再由 `./build.py init` 准备 Rust，并将固定版本的 C/C++ 构建依赖准备到 `deps/3rd`。
 
 ## Rust
 
-通过 [rustup](https://rustup.rs/) 安装 Rust。在 Linux、macOS 或 WSL 上，执行官方安装脚本，并让 Cargo 环境在当前 shell 中生效：
+`./build.py init` 会在缺少 rustup 时安装它，再准备 `rust-toolchain.toml` 声明的工具链、组件和目标。仓库固定使用 Rust `1.98.1`。首次编译及修改工具链配置后运行 `init`；下载和安装日志直接显示在终端中。`build` 阶段缺少工具链时会提示重新执行 `init`。
 
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source "$HOME/.cargo/env"
-```
+原生 init 只要求宿主平台的 Rust 标准库和 clippy。Android、iOS 真机和 iOS 模拟器目标分别由对应的 init 参数按需安装；Windows GNU 的交叉检查目标由 CI 检查步骤显式安装。交叉目标与宿主工具链使用同一份版本固定配置。
 
-> **中国大陆网络：** 如果官方源下载缓慢，可以在当前终端使用[清华大学 TUNA rustup 镜像](https://mirrors.tuna.tsinghua.edu.cn/help/rustup/)，然后执行安装命令：
+Rustup 下载默认使用 [RsProxy](https://rsproxy.cn/)。调用 `build.py` 前设置 `RUSTUP_DIST_SERVER` 或 `RUSTUP_UPDATE_ROOT` 可以覆盖默认源，`RUSTUP_INIT_URL` 可以指定 rustup 安装程序的 URL。这些默认值只作用于构建进程及其子进程，不修改 shell 配置，也不改变用户的默认 Rust 工具链。
 
-```bash
-export RUSTUP_DIST_SERVER=https://mirrors.tuna.tsinghua.edu.cn/rustup
-export RUSTUP_UPDATE_ROOT=https://mirrors.tuna.tsinghua.edu.cn/rustup/rustup
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source "$HOME/.cargo/env"
-```
+已有的 `CARGO_HOME`、`RUSTUP_HOME` 设置会被保留；未设置时使用 rustup 的默认用户目录。`build.py` 会将 Cargo 可执行文件目录加入自己的 `PATH`。如需在其他终端直接运行 Cargo，将该目录加入对应 shell 的 `PATH`。
 
-上述环境变量也会让同一终端中后续的 rustup 工具链下载使用 TUNA 镜像。
-
-在 Windows 上，从 [Rust 官方安装页面](https://www.rust-lang.org/tools/install) 下载并运行 `rustup-init.exe`，然后重新打开 PowerShell，使 `%USERPROFILE%\.cargo\bin` 出现在 `PATH` 中。
-
-仓库通过 `rust/rust-toolchain.toml` 固定使用 Rust `1.98.1`。本机构建会调用 rustup 定位该版本；缺失时，rustup 默认自动安装（除非设置了 `RUSTUP_AUTO_INSTALL=0`），无需先手动执行安装命令。
-
-该配置文件还为 Rust 检查和交叉编译声明了 `clippy` 组件及以下目标；普通本机构建不需要全部安装：
-
-```text
-x86_64-unknown-linux-gnu
-x86_64-pc-windows-gnu
-aarch64-linux-android
-aarch64-apple-ios
-aarch64-apple-ios-sim
-```
-
-如需提前安装配置文件声明的工具链、组件和目标，可在 `rust/` 目录执行 `rustup toolchain install --no-self-update`。这是可选的预安装步骤；`--no-self-update` 仅禁止更新 rustup 自身。
-
-构建脚本统一通过 [RsProxy 稀疏源](https://rsproxy.cn/)下载锁定的 Cargo 依赖，在这一步覆盖用户的 crates.io 源选择，无需修改全局镜像配置；下载仍复用原有 Cargo 缓存（`$CARGO_HOME`，默认 `~/.cargo`）。
+构建脚本通过 RsProxy 稀疏源下载锁定的 Cargo 依赖，在这一步覆盖用户的 crates.io 源选择。下载复用原有 Cargo 缓存（`CARGO_HOME`，默认 `~/.cargo`）。
 
 ## 宿主机检测与架构
 

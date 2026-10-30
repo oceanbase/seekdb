@@ -25,6 +25,7 @@
 #include "common/ob_tablet_id.h"
 #include "lib/core_local/ob_core_local_storage.h"
 #include "lib/list/ob_list.h"
+#include "lib/random/ob_random.h"
 #include "lib/trace/ob_trace_event.h"
 #include "share/log/palf/lsn.h"
 #include "share/log/ob_log_base_header.h"

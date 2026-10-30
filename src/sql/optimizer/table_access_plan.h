@@ -1,0 +1,1172 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#pragma once
+
+#include "lib/hash/ob_pointer_hashmap.h"
+#include "query/optimizer/table_access_defs.h"
+#include "sql/rewrite/ob_query_range_define.h"
+#include "sql/das/ob_das_define.h"
+#include "sql/das/ob_das_tablet_mapper.h"
+#include "sql/engine/expr/ob_sql_expression.h"
+#include "sql/engine/expr/ob_sql_expression_factory.h"
+#include "sql/engine/expr/ob_expr_operator_factory.h"
+#include "sql/code_generator/ob_column_index_provider.h"
+#include "sql/optimizer/table_access_targets.h"
+#include "sql/engine/px/ob_granule_util.h"
+#include "sql/resolver/dml/ob_dml_stmt.h"
+#include "lib/hash/ob_pointer_hashmap.h"
+//#include "sql/resolver/ddl/ob_alter_table_stmt.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+class ObRawExpr;
+class ObRawExprFactory;
+class ObColumnRefRawExpr;
+class ObExprEqualCheckContext;
+class ObDASTabletMapper;
+class ObDASCtx;
+typedef common::ObSEArray<int64_t, 1> RowkeyArray;
+
+enum ValueExprType {
+  INVILID_TYPE,
+  QUESTMARK_TYPE,
+  CONST_OBJ_TYPE,
+  CONST_EXPR_TYPE
+};
+
+struct ValueItemExpr {
+
+public:
+  ValueItemExpr() : type_(INVILID_TYPE), idx_(0),
+                    dst_type_(ObMaxType), dst_cs_type_(CS_TYPE_INVALID),
+                    enum_set_values_cnt_(0), enum_set_values_(NULL)
+  {}
+
+  int deep_copy(common::ObIAllocator &allocator, ValueItemExpr &dst) const;
+  TO_STRING_KV(K_(type), K_(idx), K_(dst_type), K_(dst_cs_type), K_(enum_set_values_cnt));
+
+  int serialize(char *buf, const int64_t buf_len, int64_t &pos) const;
+  int deserialize(common::ObIAllocator &alloc, const char *buf,
+                  const int64_t data_len, int64_t &pos);
+  int64_t get_serialize_size() const;
+
+public:
+  ValueExprType type_;
+  union {
+    uint64_t idx_;
+    ObTempExpr *expr_;
+  };
+  ObObj obj_;
+
+  ObObjType dst_type_;
+  ObCollationType dst_cs_type_;
+  uint16_t enum_set_values_cnt_;
+  common::ObString *enum_set_values_;
+};
+
+class ObInsertStmt;
+struct PartitionCalcNode
+{
+  OB_UNIS_VERSION_V(1);
+public:
+  enum NodeType
+  {
+    INVALID = 0,
+    CALC_AND,
+    CALC_OR,
+    QUERY_RANGE,
+    FUNC_VALUE,
+    COLUMN_VALUE,
+    PRE_RANGE_GRAPH,
+    LIST_VALUE,
+    GATHER_STAT
+  };
+
+  PartitionCalcNode (common::ObIAllocator &allocator): node_type_(INVALID), allocator_(allocator)
+  { }
+  virtual ~PartitionCalcNode()=default;
+
+  inline void set_node_type(NodeType node_type) { node_type_ = node_type; }
+  inline NodeType get_node_type() const { return node_type_; }
+
+  inline bool is_and_node() const { return CALC_AND == node_type_; }
+  inline bool is_or_node() const { return CALC_OR == node_type_; }
+  inline bool is_func_value_node() const { return FUNC_VALUE == node_type_; }
+  inline bool is_column_value_node() const { return COLUMN_VALUE == node_type_; }
+  inline bool is_pre_range_graph_node() const { return PRE_RANGE_GRAPH == node_type_; }
+
+  static PartitionCalcNode *create_part_calc_node(common::ObIAllocator &allocator,
+                                                  common::ObIArray<PartitionCalcNode*> &calc_nodes,
+                                                  PartitionCalcNode::NodeType type);
+
+  static int create_part_calc_node(common::ObIAllocator &allocator,
+                                   PartitionCalcNode::NodeType type,
+                                   PartitionCalcNode *&calc_node);
+
+  virtual int deep_copy(common::ObIAllocator &allocator,
+                        common::ObIArray<PartitionCalcNode*> &calc_nodes,
+                        PartitionCalcNode *&other) const = 0;
+  virtual int add_part_calc_node(common::ObIArray<PartitionCalcNode*> &calc_nodes) = 0;
+
+  TO_STRING_KV(K_(node_type));
+
+  NodeType node_type_;
+  // for deserialize
+  common::ObIAllocator &allocator_;
+};
+
+struct ObPLAndNode : public PartitionCalcNode
+{
+  OB_UNIS_VERSION_V(1);
+public:
+  ObPLAndNode(common::ObIAllocator &allocator)
+    : PartitionCalcNode(allocator), left_node_(NULL), right_node_(NULL)
+  {
+    set_node_type(CALC_AND);
+  }
+
+  virtual ~ObPLAndNode()
+  { }
+  virtual int deep_copy(common::ObIAllocator &allocator,
+                        common::ObIArray<PartitionCalcNode*> &calc_nodes,
+                        PartitionCalcNode *&other) const;
+  virtual int add_part_calc_node(common::ObIArray<PartitionCalcNode*> &calc_nodes);
+  PartitionCalcNode *left_node_;
+  PartitionCalcNode *right_node_;
+};
+
+struct ObPLOrNode : public PartitionCalcNode
+{
+  OB_UNIS_VERSION_V(1);
+public:
+  ObPLOrNode(common::ObIAllocator &allocator) : PartitionCalcNode(allocator),
+      left_node_(NULL), right_node_(NULL)
+  {
+    set_node_type(CALC_OR);
+  }
+
+  virtual ~ObPLOrNode()
+  { }
+  virtual int deep_copy(common::ObIAllocator &allocator,
+                        common::ObIArray<PartitionCalcNode*> &calc_nodes,
+                        PartitionCalcNode *&other) const;
+  virtual int add_part_calc_node(common::ObIArray<PartitionCalcNode*> &calc_nodes);
+  PartitionCalcNode *left_node_;
+  PartitionCalcNode *right_node_;
+};
+
+struct ObPLPreRangeGraphNode : public PartitionCalcNode
+{
+  OB_UNIS_VERSION_V(1);
+public:
+  ObPLPreRangeGraphNode(common::ObIAllocator &allocator)
+    : PartitionCalcNode(allocator), pre_range_graph_(allocator)
+  { set_node_type(PRE_RANGE_GRAPH); }
+  virtual ~ObPLPreRangeGraphNode()
+  { pre_range_graph_.reset(); }
+  virtual int deep_copy(common::ObIAllocator &allocator,
+                        common::ObIArray<PartitionCalcNode*> &calc_nodes,
+                        PartitionCalcNode *&other) const;
+  virtual int add_part_calc_node(common::ObIArray<PartitionCalcNode*> &calc_nodes);
+  ObPreRangeGraph pre_range_graph_;
+};
+
+struct ObPLFuncValueNode : public PartitionCalcNode
+{
+  OB_UNIS_VERSION_V(1);
+public:
+  struct ParamValuePair
+  {
+    OB_UNIS_VERSION_V(1);
+  public:
+    ParamValuePair(int64_t param_idx, const common::ObObj obj_val)
+        : param_idx_(param_idx), obj_value_(obj_val)
+    { }
+    ParamValuePair() : param_idx_(-1), obj_value_()
+    { }
+    virtual ~ParamValuePair() {}
+    TO_STRING_KV(K_(param_idx), K_(obj_value));
+    int64_t param_idx_;
+    common::ObObj obj_value_;
+  };
+
+  ObPLFuncValueNode(common::ObIAllocator &allocator)
+    : PartitionCalcNode(allocator)
+  {
+    set_node_type(FUNC_VALUE);
+  }
+  virtual ~ObPLFuncValueNode()
+  { }
+  virtual int deep_copy(common::ObIAllocator &allocator,
+                        common::ObIArray<PartitionCalcNode*> &calc_nodes,
+                        PartitionCalcNode *&other) const;
+  virtual int add_part_calc_node(common::ObIArray<PartitionCalcNode*> &calc_nodes);
+  ValueItemExpr vie_;
+  common::ObSEArray<ParamValuePair, 3, common::ModulePageAllocator, false> param_value_;
+};
+
+struct ObPLColumnValueNode : public PartitionCalcNode
+{
+  OB_UNIS_VERSION_V(1);
+public:
+  ObPLColumnValueNode(common::ObIAllocator &allocator) :
+      PartitionCalcNode(allocator)
+  {
+    set_node_type(COLUMN_VALUE);
+  }
+
+  virtual ~ObPLColumnValueNode()
+  { }
+  virtual int deep_copy(common::ObIAllocator &allocator,
+                        common::ObIArray<PartitionCalcNode*> &calc_nodes,
+                        PartitionCalcNode *&other) const;
+  virtual int add_part_calc_node(common::ObIArray<PartitionCalcNode*> &calc_nodes);
+
+  ValueItemExpr vie_;
+};
+
+struct ObPLListValueNode : public PartitionCalcNode
+{
+  OB_UNIS_VERSION_V(1);
+public:
+  ObPLListValueNode(common::ObIAllocator &allocator) :
+      PartitionCalcNode(allocator),
+      vies_(allocator)
+  {
+    set_node_type(LIST_VALUE);
+  }
+
+  virtual ~ObPLListValueNode()
+  { }
+  virtual int deep_copy(common::ObIAllocator &allocator,
+                        common::ObIArray<PartitionCalcNode*> &calc_nodes,
+                        PartitionCalcNode *&other) const;
+  virtual int add_part_calc_node(common::ObIArray<PartitionCalcNode*> &calc_nodes);
+
+  common::ObFixedArray<ValueItemExpr*, common::ObIAllocator> vies_;
+};
+
+struct ObPLGatherStatNode : public PartitionCalcNode
+{
+  OB_UNIS_VERSION_V(1);
+public:
+  ObPLGatherStatNode(common::ObIAllocator &allocator)
+    : PartitionCalcNode(allocator)
+  {
+    set_node_type(GATHER_STAT);
+  }
+
+  virtual ~ObPLGatherStatNode()
+  { }
+  virtual int deep_copy(common::ObIAllocator &allocator,
+                        common::ObIArray<PartitionCalcNode*> &calc_nodes,
+                        PartitionCalcNode *&other) const;
+  virtual int add_part_calc_node(common::ObIArray<PartitionCalcNode*> &calc_nodes);
+
+  ValueItemExpr vie_;
+};
+
+struct ObListPartMapKey {
+  common::ObNewRow row_;
+
+  TO_STRING_KV(K_(row));
+};
+
+struct ObListPartMapValue
+{
+  ObListPartMapKey key_;
+  int64_t part_id_;
+
+  TO_STRING_KV(K_(key), K_(part_id));
+};
+
+template<class T, class V>
+struct ObGetListPartMapKey
+{
+  void operator()(const T & t, const V &v) const
+  {
+    UNUSED(t);
+    UNUSED(v);
+  }
+};
+
+
+template<>
+struct ObGetListPartMapKey<ObListPartMapKey, ObListPartMapValue *>
+{
+  ObListPartMapKey operator()(const ObListPartMapValue *value) const
+  {
+    return value->key_;
+  }
+};
+
+struct ObHashPartMapKey {
+  int64_t part_idx_;
+
+  TO_STRING_KV(K_(part_idx));
+};
+
+struct ObHashPartMapValue
+{
+  ObHashPartMapKey key_;
+  int64_t part_id_;
+
+  TO_STRING_KV(K_(key), K_(part_id));
+};
+
+template<class T, class V>
+struct ObGetHashPartMapKey
+{
+  void operator()(const T & t, const V &v) const
+  {
+    UNUSED(t);
+    UNUSED(v);
+  }
+};
+
+template<>
+struct ObGetHashPartMapKey<ObHashPartMapKey, ObHashPartMapValue *>
+{
+  ObHashPartMapKey operator()(const ObHashPartMapValue *value) const
+  {
+    return value->key_;
+  }
+};
+
+class ObOptimizerContext;
+// Default false=false, array etc memory uses the allocator inside the array, must explicitly destruct this object.
+// For non-plan set calls, specifying false makes no difference, because the allocator must be passed to the constructor,
+// Then pass the allocator to array etc. in the constructor.
+class ObSqlSchemaGuard;
+class TableAccessPlan
+{
+public:
+  enum TablePartType {
+    NONE,
+    HASH,
+    RANGE,
+    LIST,
+  };
+  typedef common::ObIArray<ObTempExpr *> ISeKeyExprs;
+  typedef common::ObIArray<ValueItemExpr> ISeValueItemExprs;
+  typedef common::ObSEArray<ObTempExpr *, 32, common::ModulePageAllocator, false> SeKeyExprs;
+  typedef common::ObSEArray<ValueItemExpr, 32, common::ModulePageAllocator, false> SeValueItemExprs;
+
+  class PartProjector
+  {
+    OB_UNIS_VERSION(1);
+  public:
+    PartProjector(common::ObIAllocator &allocator)
+      : allocator_(allocator)
+    {
+      reset();
+    }
+    inline void reset()
+    {
+      column_cnt_ = 0;
+      part_projector_ = NULL;
+      part_projector_size_ = 0;
+      subpart_projector_ = NULL;
+      subpart_projector_size_ = 0;
+      se_virtual_column_exprs_.reset();
+      virtual_column_result_idx_.reset();
+    }
+    int deep_copy(const PartProjector &other);
+    int init_part_projector(ObExecContext *exec_ctx,
+                            const ObRawExpr *part_expr,
+                            RowDesc &row_desc);
+    int init_subpart_projector(ObExecContext *exec_ctx,
+                               const ObRawExpr *part_expr,
+                               RowDesc &row_desc);
+    inline void set_column_cnt(int64_t column_cnt) { column_cnt_ = column_cnt; }
+    int calc_part_row(ObExecContext &ctx,
+                      const common::ObNewRow &input_row,
+                      common::ObNewRow *&part_row) const;
+    void project_part_row(share::schema::ObPartitionLevel part_level, common::ObNewRow &part_row) const;
+    TO_STRING_KV(K_(column_cnt),
+                 "part_projector", common::ObArrayWrap<int32_t>(part_projector_, part_projector_size_),
+                 "subpart_projector", common::ObArrayWrap<int32_t>(subpart_projector_, subpart_projector_size_));
+  private:
+
+    int init_part_projector(ObExecContext *exec_ctx,
+                            const ObRawExpr *part_expr,
+                            RowDesc &row_desc,
+                            int32_t *&projector,
+                            int64_t &projector_size);
+  private:
+    int64_t column_cnt_;
+    int32_t *part_projector_;
+    int64_t part_projector_size_;
+    int32_t *subpart_projector_;
+    int64_t subpart_projector_size_;
+    common::ObSEArray<ObTempExpr *, 2> se_virtual_column_exprs_;
+    common::ObSEArray<int64_t, 2> virtual_column_result_idx_;
+
+    common::ObIAllocator &allocator_;
+  };
+
+  TableAccessShape get_access_shape(
+      const TabletAccessTargetIArray &tablet_targets) const;
+
+  //get virtual talbe partition ids or fake id. ref_table_id should be partitioned virtual table
+  //@param [in] ref_table_id partitioned virtual table
+  //@param [out] partition ids. all partition ids
+  //@param [out] fake id. Fake id, if has local partition return local part_id
+//  static int get_vt_partition_id(
+//      ObExecContext &exec_ctx,
+//      const uint64_t ref_table_id,
+//      common::ObIArray<int64_t> *partition_ids,
+//      int64_t *fake_id);
+  OB_UNIS_VERSION(1);
+public:
+  // for array: new(&data_[count_]) T();
+  // for normal usage, like plan set
+  TableAccessPlan()
+  : inited_(false),
+    is_partitioned_(true),
+    part_level_(share::schema::PARTITION_LEVEL_ZERO),
+    part_type_(share::schema::PARTITION_FUNC_TYPE_MAX),
+    subpart_type_(share::schema::PARTITION_FUNC_TYPE_MAX),
+    part_get_all_(false),
+    subpart_get_all_(false),
+    is_col_part_expr_(false),
+    is_col_subpart_expr_(false),
+    table_type_(share::schema::MAX_TABLE_TYPE),
+    inner_allocator_(common::ObModIds::OB_SQL_TABLE_ACCESS_PLAN),
+    allocator_(inner_allocator_),
+    access_meta_(inner_allocator_),
+    calc_node_(NULL),
+    gen_col_node_(NULL),
+    subcalc_node_(NULL),
+    sub_gen_col_node_(NULL),
+    stmt_type_(stmt::T_NONE),
+    se_part_expr_(NULL),
+    se_gen_col_expr_(NULL),
+    se_subpart_expr_(NULL),
+    se_sub_gen_col_expr_(NULL),
+    part_hint_ids_(allocator_),
+    part_col_type_(ObNullType),
+    part_collation_type_(CS_TYPE_INVALID),
+    subpart_col_type_(ObNullType),
+    subpart_collation_type_(CS_TYPE_INVALID),
+    is_in_hit_(false),
+    part_projector_(allocator_),
+    is_valid_range_columns_part_range_(false),
+    is_valid_range_columns_subpart_range_(false),
+    has_dynamic_exec_param_(false),
+    is_valid_temporal_part_range_(false),
+    is_valid_temporal_subpart_range_(false),
+    is_part_range_precise_get_(false),
+    is_subpart_range_precise_get_(false),
+    is_non_partition_optimized_(false),
+    tablet_id_(ObTabletID::INVALID_TABLET_ID),
+    object_id_(OB_INVALID_ID),
+    related_list_(allocator_),
+    check_no_partition_(false)
+  {
+  }
+  // Used for optimizers etc., where destructors are not called, to ensure each member array is passed an external allocator
+  TableAccessPlan(common::ObIAllocator &allocator)
+  : inited_(false),
+    is_partitioned_(true),
+    part_level_(share::schema::PARTITION_LEVEL_ZERO),
+    part_type_(share::schema::PARTITION_FUNC_TYPE_MAX),
+    subpart_type_(share::schema::PARTITION_FUNC_TYPE_MAX),
+    part_get_all_(false),
+    subpart_get_all_(false),
+    is_col_part_expr_(false),
+    is_col_subpart_expr_(false),
+    table_type_(share::schema::MAX_TABLE_TYPE),
+    allocator_(allocator),
+    access_meta_(allocator),
+    calc_node_(NULL),
+    gen_col_node_(NULL),
+    subcalc_node_(NULL),
+    sub_gen_col_node_(NULL),
+    calc_nodes_(common::OB_MALLOC_NORMAL_BLOCK_SIZE, common::ModulePageAllocator(allocator_)),
+    stmt_type_(stmt::T_NONE),
+    vies_(common::OB_MALLOC_NORMAL_BLOCK_SIZE, common::ModulePageAllocator(allocator_)),
+    sub_vies_(common::OB_MALLOC_NORMAL_BLOCK_SIZE, common::ModulePageAllocator(allocator_)),
+    se_part_expr_(NULL),
+    se_gen_col_expr_(NULL),
+    se_subpart_expr_(NULL),
+    se_sub_gen_col_expr_(NULL),
+    part_hint_ids_(allocator_),
+    part_col_type_(ObNullType),
+    part_collation_type_(CS_TYPE_INVALID),
+    subpart_col_type_(ObNullType),
+    subpart_collation_type_(CS_TYPE_INVALID),
+    is_in_hit_(false),
+    part_projector_(allocator_),
+    is_valid_range_columns_part_range_(false),
+    is_valid_range_columns_subpart_range_(false),
+    has_dynamic_exec_param_(false),
+    is_valid_temporal_part_range_(false),
+    is_valid_temporal_subpart_range_(false),
+    is_part_range_precise_get_(false),
+    is_subpart_range_precise_get_(false),
+    is_non_partition_optimized_(false),
+    tablet_id_(ObTabletID::INVALID_TABLET_ID),
+    object_id_(OB_INVALID_ID),
+    related_list_(allocator_),
+    check_no_partition_(false)
+  {
+  }
+  virtual ~TableAccessPlan() { reset(); }
+
+  TableAccessPlan(const TableAccessPlan &other);
+
+  TableAccessPlan &operator=(const TableAccessPlan &other);
+
+  int assign(const TableAccessPlan &other);
+
+  void reset();
+  inline bool is_inited() const { return inited_; }
+  //get preliminary_query_range and partition_expr. For sql with filters.
+  int init_access_plan(ObSqlSchemaGuard *schema_guard,
+           const ObDMLStmt &stmt,
+           ObExecContext *exec_ctx,
+           const common::ObIArray<ObRawExpr*> &filter_exprs,
+           const uint64_t table_id,
+           const uint64_t ref_table_id,
+           const ObIArray<common::ObObjectID> *part_ids,
+           const common::ObDataTypeCastParams &dtc_params,
+           const bool is_dml_table,
+           common::ObIArray<ObRawExpr*> *sort_exprs = NULL);
+  int init(ObSqlSchemaGuard &schema_guard,
+           const ObDMLStmt &stmt,
+           ObExecContext *exec_ctx,
+           const common::ObIArray<ObRawExpr*> &filter_exprs,
+           const uint64_t table_id,
+           const uint64_t ref_table_id,
+           const common::ObIArray<common::ObObjectID> *part_ids,
+           const common::ObDataTypeCastParams &dtc_params,
+           const bool is_dml_table,
+           common::ObIArray<ObRawExpr*> *sort_exprs = NULL);
+  int init(ObSchemaGetterGuard &schema_guard,
+           const share::schema::ObTableSchema *table_schema,
+           const ObDMLStmt &stmt,
+           ObExecContext *exec_ctx,
+           const common::ObIArray<ObRawExpr*> &filter_exprs,
+           const uint64_t table_id,
+           const uint64_t ref_table_id,
+           const common::ObIArray<common::ObObjectID> *part_ids,
+           const common::ObDataTypeCastParams &dtc_params,
+           const bool is_dml_table,
+           common::ObIArray<ObRawExpr*> *sort_exprs = NULL);
+
+  static int get_is_weak_read(const ObDMLStmt &dml_stmt,
+                              const ObSQLSessionInfo *session_info,
+                              const ObSqlCtx *sql_ctx,
+                              bool &is_weak_read);
+
+  /**
+   * Calculate the table's partition access list from the input parameters.
+   *
+   * This function is used after TableAccessPlan inited.
+   * The function assumes that:
+   *    TableAccessPlan has been inited.
+   *
+   * @param params[in]  SQL parameters
+   * @param tablet_targets[out] local tablets selected by partition calculation
+   */
+  int calculate_tablet_targets(
+      ObExecContext &exec_ctx,
+      const ParamStore &params,
+      TabletAccessTargetIArray &tablet_targets,
+      const common::ObDataTypeCastParams &dtc_params) const;
+
+  int calculate_single_tablet_partition(ObExecContext &exec_ctx,
+                                        const ParamStore &params,
+                                        const ObDataTypeCastParams &dtc_params) const;
+
+  int calculate_final_tablet_accesses(ObExecContext &exec_ctx,
+                                       const ParamStore &params,
+                                       const common::ObDataTypeCastParams &dtc_params) const;
+
+  /**
+   * Calculate tablet ids from input parameters.
+   */
+  int calculate_tablet_ids(ObExecContext &exec_ctx,
+                           const ParamStore &params,
+                           ObIArray<ObTabletID> &tablet_ids,
+                           ObIArray<ObObjectID> &partition_ids,
+                           ObIArray<ObObjectID> &first_level_part_ids,
+                           const ObDataTypeCastParams &dtc_params,
+                           bool *is_default_tablet = NULL) const;
+
+  int set_is_das_empty_part(ObExecContext &exec_ctx,
+                            const ParamStore &params,
+                            const ObDataTypeCastParams &dtc_params);
+
+  int init_partition_ids_by_rowkey2(ObExecContext &exec_ctx,
+                                    ObSQLSessionInfo &session_info,
+                                    ObSchemaGetterGuard &schema_guard,
+                                    uint64_t table_id);
+
+  int calculate_partition_ids_by_rows2(ObSQLSessionInfo &session_info,
+                                        ObSchemaGetterGuard &schema_guard,
+                                        uint64_t table_id,
+                                        ObIArray<ObNewRow> &part_rows,
+                                        ObIArray<ObTabletID> &tablet_ids,
+                                        ObIArray<ObObjectID> &part_ids) const;//FIXME
+
+   int calculate_partition_ids_by_rowkey(ObSQLSessionInfo &session_info,
+                                         share::schema::ObSchemaGetterGuard &schema_guard,
+                                         uint64_t table_id,
+                                         const common::ObIArray<ObRowkey> &rowkeys,
+                                         ObIArray<ObTabletID> &tablet_ids,
+                                         ObIArray<ObObjectID> &part_ids);
+
+  int calculate_tablet_id_by_row(ObExecContext &exec_ctx,
+                                 uint64_t table_id,
+                                 const common::ObIArray<uint64_t> &column_ids,
+                                 common::ObNewRow &cur_row,
+                                 common::ObIArray<common::ObTabletID> &tablet_ids,
+                                 common::ObIArray<common::ObObjectID> &partition_ids);
+
+  int get_tablet_targets(const ObIArray<ObTabletID> &tablet_ids,
+                           const ObIArray<ObObjectID> &partition_ids,
+                           const ObIArray<ObObjectID> &first_level_part_ids,
+                           TabletAccessTargetIArray &tablet_targets) const;
+
+  int add_final_tablet_accesses(ObDASCtx &das_ctx,
+                                 const ObIArray<ObTabletID> &tablet_ids,
+                                 const ObIArray<ObObjectID> &partition_ids,
+                                 const ObIArray<ObObjectID> &first_level_part_ids) const;
+
+  inline void set_table_id(uint64_t table_id) { access_meta_.table_ref_id_ = table_id; }
+
+  inline uint64_t get_table_id() const { return access_meta_.table_ref_id_; }
+
+  inline uint64_t get_ref_table_id() const { return access_meta_.ref_table_id_; }
+
+  inline const DASTableAccessMeta &get_access_meta() const { return access_meta_; }
+  inline DASTableAccessMeta &get_access_meta() { return access_meta_; }
+
+  bool is_partitioned() const { return is_partitioned_; }
+
+  void set_is_non_partition_optimized(bool is_non_partition_optimized) {
+    is_non_partition_optimized_ = is_non_partition_optimized;
+  }
+
+  bool is_non_partition_optimized() const { return is_non_partition_optimized_; }
+
+  share::schema::ObPartitionLevel get_part_level() const { return part_level_; }
+
+  const stmt::StmtType &get_stmt_type() const { return stmt_type_; }
+  int replace_ref_table_id(const uint64_t index_table_id, ObExecContext &exec_ctx);
+
+  int get_not_insert_dml_part_sort_expr(const ObDMLStmt &stmt,
+                                        common::ObIArray<ObRawExpr *> *sort_exprs) const;
+  bool has_generated_column() const { return NULL != se_gen_col_expr_ || NULL != se_sub_gen_col_expr_ ||
+                                             NULL != gen_col_node_ || NULL != sub_gen_col_node_; }
+  static int build_full_table_access(ObDASCtx &das_ctx,
+                                        ObIAllocator &allocator,
+                                        uint64_t table_id,
+                                        uint64_t ref_table_id,
+                                        DASRuntimeTableAccess *&table_access);
+  int add_part_hint_ids(const ObIArray<ObObjectID> &part_ids) {
+    return append_array_no_dup(part_hint_ids_, part_ids);
+  }
+
+  int get_partition_ids_by_range(ObExecContext &exec_ctx,
+                                 const ObNewRange *part_range,
+                                 const ObNewRange *gen_range,
+                                 ObIArray<ObTabletID> &tablet_ids,
+                                 ObIArray<ObObjectID> &partition_ids,
+                                 const ObIArray<ObObjectID> *level_one_part_ids) const;
+
+  int calc_partition_ids_by_range(ObExecContext &exec_ctx,
+                                  ObDASTabletMapper &tablet_mapper,
+                                  const ObNewRange *range,
+                                  ObIArray<ObTabletID> &tablet_ids,
+                                  ObIArray<ObObjectID> &partition_ids,
+                                  bool &all_part,
+                                  const ObIArray<ObObjectID> *part_ids,
+                                  const ObTempExpr *se_gen_col_expr) const;
+
+
+  void set_use_das(bool use_das) { access_meta_.use_dist_das_ = use_das; }
+  bool use_das() const { return access_meta_.use_dist_das_; }
+  void set_is_das_empty_part(bool das_empty_part) { access_meta_.das_empty_part_ = das_empty_part; }
+  bool is_das_empty_part() const { return access_meta_.das_empty_part_; }
+
+  inline bool is_all_partition() const
+  {
+    return (part_level_ == share::schema::PARTITION_LEVEL_ZERO) ||
+      (part_get_all_ && (part_level_ == share::schema::PARTITION_LEVEL_ONE)) ||
+      (part_get_all_ && subpart_get_all_ && (part_level_ == share::schema::PARTITION_LEVEL_TWO));
+  }
+
+  inline bool is_part_or_subpart_all_partition() const
+  {
+    return (part_level_ == share::schema::PARTITION_LEVEL_ZERO) ||
+           (part_level_ == share::schema::PARTITION_LEVEL_ONE && (part_get_all_ || !is_part_range_precise_get_)) ||
+           (part_level_ == share::schema::PARTITION_LEVEL_TWO && (subpart_get_all_ || part_get_all_ || !is_part_range_precise_get_ || !is_subpart_range_precise_get_));
+  }
+
+  inline bool is_column_list_part(share::schema::ObPartitionFuncType part_type, bool is_col_expr)
+  {
+    return (PARTITION_FUNC_TYPE_LIST == part_type && is_col_expr) || PARTITION_FUNC_TYPE_LIST_COLUMNS == part_type;
+  }
+
+  void set_has_dynamic_exec_param(bool flag) {  has_dynamic_exec_param_ = flag; }
+  bool get_has_dynamic_exec_param() const {  return has_dynamic_exec_param_; }
+
+  int pruning_single_partition(int64_t tablet_id,
+      ObExecContext &exec_ctx, bool &pruning,
+      common::ObIArray<ObTabletID> &tablet_ids);
+
+  int init_access_plan_with_column_ids(ObSqlSchemaGuard &schema_guard,
+                                          uint64_t table_id,
+                                          const common::ObIArray<uint64_t> &column_ids,
+                                          ObExecContext &exec_ctx,
+                                          const bool is_dml_table = true);
+
+  int calc_not_partitioned_table_ids(ObExecContext &exec_ctx);
+  void set_check_no_partition(const bool check)
+  {
+    check_no_partition_ = check;
+  }
+  TO_STRING_KV(K_(access_meta),
+               K_(part_projector),
+               K_(has_dynamic_exec_param),
+               K_(part_hint_ids),
+               K_(related_list));
+private:
+  int init_access_plan(ObExecContext &exec_ctx,
+                          ObSqlSchemaGuard &schema_guard,
+                          uint64_t table_id,
+                          uint64_t ref_table_id,
+                          const ObDMLStmt &stmt,
+                          const RowDesc &row_desc,
+                          const bool is_dml_table,
+                          const ObOrderDirection &direction = default_asc_direction());
+
+  int init_access_plan_with_rowkey(ObSqlSchemaGuard &schema_guard,
+                                      uint64_t table_id,
+                                      ObExecContext &exec_ctx,
+                                      const bool is_dml_table = true);
+
+  //gen_col_node: partition information of dependented column of generated partition column
+  //gen_col_expr: expression of dependented column of generated partition column
+  int calc_partition_ids_by_calc_node(ObExecContext &exec_ctx,
+                                      ObDASTabletMapper &tablet_mapper,
+                                      const ParamStore &params,
+                                      const PartitionCalcNode *calc_node,
+                                      const PartitionCalcNode *gen_col_node,
+                                      const ObTempExpr *se_gen_col_expr,
+                                      const bool part_col_get_all,
+                                      common::ObIArray<common::ObTabletID> &tablet_ids,
+                                      common::ObIArray<common::ObObjectID> &partition_ids,
+                                      const common::ObDataTypeCastParams &dtc_params,
+                                      const common::ObIArray<common::ObObjectID> *part_ids = NULL) const;
+
+  int calc_and_partition_ids(ObExecContext &exec_ctx,
+                             ObDASTabletMapper &tablet_mapper,
+                             const ParamStore &params,
+                             const ObPLAndNode *calc_node,
+                             common::ObIArray<common::ObTabletID> &tablet_ids,
+                             common::ObIArray<common::ObObjectID> &partition_ids,
+                             bool &all_part,
+                             const common::ObDataTypeCastParams &dtc_params,
+                             const common::ObIArray<ObObjectID> *part_ids = NULL) const;
+
+  int calc_or_partition_ids(ObExecContext &exec_ctx,
+                            ObDASTabletMapper &tablet_mapper,
+                            const ParamStore &params,
+                            const ObPLOrNode *calc_node,
+                            common::ObIArray<common::ObTabletID> &tablet_ids,
+                            common::ObIArray<common::ObObjectID> &partition_ids,
+                            bool &all_part,
+                            const common::ObDataTypeCastParams &dtc_params,
+                            const common::ObIArray<ObObjectID> *part_ids = NULL) const;
+
+  int calc_pre_range_graph_partition_ids(ObExecContext &exec_ctx,
+                                         ObDASTabletMapper &tablet_mapper,
+                                         const ParamStore &params,
+                                         const ObPLPreRangeGraphNode *calc_node,
+                                         ObIArray<ObTabletID> &tablet_ids,
+                                         ObIArray<ObObjectID> &partition_ids,
+                                         bool &all_part,
+                                         const ObDataTypeCastParams &dtc_params,
+                                         const ObIArray<ObObjectID> *part_ids,
+                                         const ObTempExpr *se_gen_col_expr) const;
+
+  int calc_func_value_partition_ids(ObExecContext &exec_ctx,
+                                    ObDASTabletMapper &tablet_mapper,
+                                    const ParamStore &params,
+                                    const ObPLFuncValueNode *calc_node,
+                                    common::ObIArray<common::ObTabletID> &tablet_ids,
+                                    common::ObIArray<common::ObObjectID> &partition_ids,
+                                    bool &all_part,
+                                    const common::ObDataTypeCastParams &dtc_params,
+                                    const common::ObIArray<common::ObObjectID> *part_ids = NULL) const;
+
+  int calc_column_value_partition_ids(ObExecContext &exec_ctx,
+                                      ObDASTabletMapper &tablet_mapper,
+                                      const ParamStore &params,
+                                      const ObPLColumnValueNode *calc_node,
+                                      common::ObIArray<common::ObTabletID> &tablet_ids,
+                                      common::ObIArray<common::ObObjectID> &partition_ids,
+                                      const common::ObDataTypeCastParams &dtc_params,
+                                      const common::ObIArray<ObObjectID> *part_ids = NULL) const;
+
+  int calc_partition_id_by_func_value(ObDASTabletMapper &tablet_mapper,
+                                      const common::ObObj &func_value,
+                                      const bool calc_hash,
+                                      common::ObIArray<common::ObTabletID> &tablet_ids,
+                                      common::ObIArray<common::ObObjectID> &partition_ids,
+                                      const common::ObIArray<common::ObObjectID> *part_ids = NULL) const;
+
+
+  int calc_partition_ids_by_calc_node(ObExecContext &exec_ctx,
+                                      ObDASTabletMapper &tablet_mapper,
+                                      const ParamStore &params,
+                                      const PartitionCalcNode *calc_node,
+                                      common::ObIArray<common::ObTabletID> &tablet_ids,
+                                      common::ObIArray<common::ObObjectID> &partition_ids,
+                                      bool &all_part,
+                                      const common::ObDataTypeCastParams &dtc_params,
+                                      const common::ObIArray<common::ObObjectID> *part_ids = NULL) const;
+
+  //get partition columns and generate partition_expr_
+  //partition_columns:partition columns
+  //gen_cols: columns dependented by generated partition column
+  //partition_raw_expr: raw expr of partition
+  //gen_col_expression: dependented expression of generated partition column
+  int get_partition_column_info(const ObDMLStmt &stmt,
+                                const share::schema::ObPartitionLevel part_level,
+                                common::ObIArray<ColumnItem> &partition_columns,
+                                common::ObIArray<ColumnItem> &gen_cols,
+                                const ObRawExpr *&partition_raw_expr,
+                                bool &is_col_part_expr,
+                                ObTempExpr *&part_temp_expr,
+                                ObTempExpr *&gen_col_temp_expr,
+                                ObExecContext *exec_ctx);
+  int generate_rowkey_desc(const ObDMLStmt &stmt,
+                           const common::ObIArray<uint64_t> &column_ids,
+                           uint64_t data_table_id,
+                           ObRawExprFactory &expr_factory,
+                           RowDesc &row_desc);
+  // Take the intersection of partition ids and to_inter_ids, and store the result in partition_ids
+  template <typename T>
+  int intersect_partition_ids(const common::ObIArray<T> &to_inter_ids,
+                              common::ObIArray<T> &partition_ids) const;
+
+  //add partition columns.
+  //For insert stmt with generated column,
+  //the dependent columns would added to partitoin columns.
+  //gen_cols: for non-insert statements, single-column partition expr stores the dependent column of generated_column
+  //gen_col_expr: generated column's dependent expr
+  int add_partition_columns(const ObDMLStmt &stmt,
+                            const ObRawExpr *part_expr,
+                            common::ObIArray<ColumnItem> &partition_columns,
+                            common::ObIArray<ColumnItem> &gen_cols,
+                            ObRawExpr *&gen_col_expr,
+                            RowDesc &row_desc,
+                            RowDesc &gen_row_desc,
+                            const bool only_gen_cols = false);
+  int check_can_replace(ObRawExpr *gen_col_expr, 
+                        ObRawExpr *col_expr,
+                        bool &can_replace);
+  //add partition column
+  //add column to row desc and partition columns
+  int add_partition_column(const ObDMLStmt &stmt,
+                           const uint64_t table_id,
+                           const uint64_t column_id,
+                           common::ObIArray<ColumnItem> &partition_columns,
+                           RowDesc &row_desc);
+
+  int record_not_insert_dml_partition_info(const ObDMLStmt &stmt,
+                                           ObExecContext *exec_ctx,
+                                           const share::schema::ObTableSchema *table_schema,
+                                           const common::ObIArray<ObRawExpr*> &filter_exprs,
+                                           const common::ObDataTypeCastParams &dtc_params,
+                                           const bool is_in_range_optimization_enabled);
+
+  int add_se_value_expr(const ObRawExpr *value_expr,
+                        RowDesc &value_row_desc,
+                        int64_t expr_idx,
+                        ObExecContext *exec_ctx,
+                        ISeValueItemExprs &vies);
+
+  int clear_columnlized_in_row_desc(RowDesc &row_desc);
+
+  ///Get all partition ids with virtual table considered. by qianfu.zpf and tingshuai.yts
+  int get_all_part_ids(ObDASTabletMapper &tablet_mapper,
+                       common::ObIArray<common::ObTabletID> &tablet_ids,
+                       common::ObIArray<common::ObObjectID> &partition_ids,
+                       const common::ObIArray<common::ObObjectID> *part_ids = NULL) const;
+
+  ///Get partition key row desc for generating partition expr
+  int deal_partition_selection(common::ObIArray<common::ObTabletID> &tablet_ids,
+                               common::ObIArray<common::ObObjectID> &part_ids) const;
+
+  int get_partition_calc_node(const ObPartitionLevel part_level,
+                             common::ObIArray<ColumnItem> &partition_columns,
+                             const ObRawExpr *partition_expr,
+                             const common::ObIArray<ObRawExpr*> &filter_exprs,
+                             PartitionCalcNode *&res_node,
+                             bool &get_all,
+                             bool &is_precise_get,
+                             const common::ObDataTypeCastParams &dtc_params,
+                             ObExecContext *exec_ctx,
+                             ObQueryCtx *query_ctx,
+                             const bool is_in_range_optimization_enabled);
+
+  int analyze_filter(const common::ObIArray<ColumnItem> &partition_columns,
+                     const ObRawExpr *partition_expr,
+                     uint64_t column_id,
+                     const ObRawExpr *filter,
+                     bool &always_true,
+                     PartitionCalcNode *&calc_node,
+                     bool &cnt_func_expr,
+                     const common::ObDataTypeCastParams &dtc_params,
+                     ObExecContext *exec_ctx);
+
+  int get_pre_range_graph_node(const ObPartitionLevel part_level,
+                               const ColumnIArray &partition_columns,
+                               const ObIArray<ObRawExpr*> &filter_exprs,
+                               bool &always_true,
+                               PartitionCalcNode *&calc_node,
+                               ObExecContext *exec_ctx);
+
+  int extract_eq_op(ObExecContext *exec_ctx,
+                    const ObRawExpr *l_expr,
+                    const ObRawExpr *r_expr,
+                    const uint64_t column_id,
+                    const ObRawExpr *partition_expr,
+                    bool &cnt_func_expr,
+                    bool &always_true,
+                    PartitionCalcNode *&calc_node);
+
+  int extract_value_item_expr(ObExecContext *exec_ctx,
+                              const ObRawExpr *expr,
+                              const ObRawExpr *dst_expr,
+                              ValueItemExpr &vie,
+                              RowDesc *row_desc = nullptr);
+
+  int check_expr_equal(const ObRawExpr *partition_expr,
+                       const ObRawExpr *check_expr,
+                       bool &equal,
+                       ObExprEqualCheckContext &equal_ctx);
+
+  int add_and_node(PartitionCalcNode *l_node,
+                   PartitionCalcNode *&r_node);
+
+  int add_or_node(PartitionCalcNode *l_node,
+                  PartitionCalcNode *&r_node);
+
+  int calc_partition_ids_by_ranges(ObExecContext &exec_ctx,
+                                   ObDASTabletMapper &tablet_mapper,
+                                   const common::ObIArray<common::ObNewRange*> &ranges,
+                                   const bool is_all_single_value_ranges,
+                                   common::ObIArray<common::ObTabletID> &tablet_ids,
+                                   common::ObIArray<common::ObObjectID> &partition_ids,
+                                   bool &all_part,
+                                   const common::ObIArray<common::ObObjectID> *part_ids,
+                                   const ObTempExpr *se_gen_col_expr) const;
+
+  int get_part_ids_by_ranges(ObDASTabletMapper &tablet_mapper,
+                             const common::ObIArray<common::ObNewRange*> &ranges,
+                             common::ObIArray<common::ObTabletID> &tablet_ids,
+                             common::ObIArray<common::ObObjectID> &partition_ids,
+                             const common::ObIArray<ObObjectID> *part_ids) const;
+
+  int calc_partition_id_by_row(ObExecContext &exec_ctx,
+                               ObDASTabletMapper &tablet_mapper,
+                               common::ObNewRow &row,
+                               common::ObIArray<common::ObTabletID> &tablet_ids,
+                               common::ObIArray<common::ObObjectID> &partition_ids,
+                               const common::ObIArray<common::ObObjectID> *part_ids = NULL) const;
+
+  int calc_partition_ids_by_rowkey(ObExecContext &exec_ctx,
+                                   ObDASTabletMapper &tablet_mapper,
+                                   const common::ObIArray<ObRowkey> &rowkeys,
+                                   common::ObIArray<common::ObTabletID> &tablet_ids,
+                                   common::ObIArray<common::ObObjectID> &part_ids) const;
+
+  int init_row(common::ObIAllocator &allocator,
+               const int64_t column_num,
+               common::ObNewRow &row) const;
+
+public:
+  static int se_calc_value_item(ObCastCtx cast_ctx,
+                                ObExecContext &exec_ctx,
+                                const ParamStore &params,
+                                const ValueItemExpr &vie,
+                                const ObNewRow &input_row,
+                                ObObj &value);
+private:
+  int se_calc_value_item_row(common::ObExprCtx &expr_ctx,
+                             ObExecContext &exec_ctx,
+                             const ISeValueItemExprs &vies,
+                             const int64_t key_count,
+                             const int64_t value_idx,
+                             common::ObNewRow &input_row,
+                             common::ObNewRow &output_row) const;
+
+  int set_partition_calc_node(const ObDMLStmt &stmt,
+                             const common::ObIArray<ObRawExpr*> &filter_exprs,
+                             const share::schema::ObPartitionLevel part_level,
+                             const common::ObDataTypeCastParams &dtc_params,
+                             ObExecContext *exec_ctx,
+                             ObTempExpr *&se_part_expr,
+                             ObTempExpr *&se_gen_col_expr,
+                             bool &is_col_part_expr,
+                             PartitionCalcNode *&calc_node,
+                             PartitionCalcNode *&gen_col_node,
+                             bool &get_all,
+                             bool &is_range_get,
+                             const bool is_in_range_optimization_enabled);
+
+  int calc_partition_ids_by_in_expr(
+                   ObExecContext &exec_ctx,
+                   ObDASTabletMapper &tablet_mapper,
+                   ObIArray<ObTabletID> &tablet_ids,
+                   ObIArray<ObObjectID> &partition_ids,
+                   const common::ObDataTypeCastParams &dtc_params) const;
+
+  int record_in_dml_partition_info(const ObDMLStmt &stmt,
+                                   ObExecContext *exec_ctx,
+                                   const common::ObIArray<ObRawExpr*> &filter_exprs,
+                                   bool &hit,
+                                   const share::schema::ObTableSchema *table_schema);
+  int get_part_col_type(const ObRawExpr *expr,
+                        ObObjType &col_type,
+                        ObCollationType &collation_type,
+                        const share::schema::ObTableSchema *table_schema,
+                        bool &is_valid);
+  int convert_row_obj_type(const ObNewRow &from,
+                           ObNewRow &to,
+                           ObObjType col_type,
+                           ObCollationType collation_type,
+                           const common::ObDataTypeCastParams &dtc_params,
+                           bool &is_all,
+                           bool &is_none) const;
+
+  int can_get_part_by_range_for_range_columns(const ObRawExpr *part_expr, bool &is_valid) const;
+  int can_get_part_by_range_for_temporal_column(const ObRawExpr *part_expr, bool &is_valid) const;
+  int calc_range_by_part_expr(ObExecContext &exec_ctx,
+                              const common::ObIArray<common::ObNewRange*> &ranges,
+                              const ObIArray<ObObjectID> *part_ids,
+                              common::ObIAllocator &allocator,
+                              common::ObIArray<common::ObNewRange*> &new_ranges,
+                              bool &is_all_single_value_ranges) const;
+  int try_split_integer_range(const common::ObIArray<common::ObNewRange*> &ranges,
+                              common::ObIAllocator &allocator,
+                              common::ObIArray<common::ObNewRange*> &new_ranges,
+                              bool &all_part) const;
+
+
+  int get_list_value_node(const ObPartitionLevel part_level,
+                         const ColumnIArray &partition_columns,
+                         const ObIArray<ObRawExpr*> &filter_exprs,
+                         bool &always_true,
+                         PartitionCalcNode *&calc_node,
+                         ObExecContext *exec_ctx);
+  
+  int calc_list_value_partition_ids(
+      ObExecContext &exec_ctx,
+      ObDASTabletMapper &tablet_mapper,
+      const ParamStore &params,
+      const ObPLListValueNode *calc_node,
+      ObIArray<ObTabletID> &tablet_ids,
+      ObIArray<ObObjectID> &partition_ids,
+      const ObDataTypeCastParams &dtc_params,
+      const ObIArray<ObObjectID> *part_ids) const;
+
+  int try_get_gather_stat_partition_info(ObExecContext *exec_ctx,
+                                         uint64_t ref_table_id,
+                                         const ObIArray<ObRawExpr*> &filter_exprs,
+                                         PartitionCalcNode *&calc_node,
+                                         PartitionCalcNode *&subcalc_node);
+  int calc_gather_stat_partition_ids(ObExecContext &exec_ctx,
+                                     ObDASTabletMapper &tablet_mapper,
+                                     const ParamStore &params,
+                                     const ObPLGatherStatNode *calc_node,
+                                     ObIArray<ObTabletID> &tablet_ids,
+                                     ObIArray<ObObjectID> &partition_ids,
+                                     const ObDataTypeCastParams &dtc_params,
+                                     const ObIArray<ObObjectID> *part_ids) const;
+
+public:
+  inline const ObIArray<common::ObObjectID> &get_part_hint_ids() const
+  {
+    return part_hint_ids_;
+  }
+private:
+  bool inited_;
+  bool is_partitioned_;
+  share::schema::ObPartitionLevel part_level_;
+  share::schema::ObPartitionFuncType part_type_;
+  share::schema::ObPartitionFuncType subpart_type_;
+  bool part_get_all_;//get all parts with information of partition column
+  bool subpart_get_all_;//get all subparts with information of sub-partition column
+  bool is_col_part_expr_;
+  bool is_col_subpart_expr_;
+  share::schema::ObTableType table_type_;
+  common::ObArenaAllocator inner_allocator_;
+  common::ObIAllocator &allocator_; //used for deep copy other table access
+  DASTableAccessMeta access_meta_;
+  PartitionCalcNode *calc_node_;//first-level partition access calculation node
+  PartitionCalcNode *gen_col_node_;//query range node of columns dependented by generated column
+  PartitionCalcNode *subcalc_node_;//secondary partition access calculation Node
+  PartitionCalcNode *sub_gen_col_node_;//query range node of column dependented by sub partition generated column
+
+  common::ObSEArray<PartitionCalcNode *, 5, common::ModulePageAllocator, false> calc_nodes_;
+  stmt::StmtType stmt_type_;
+
+  SeValueItemExprs vies_;
+  SeValueItemExprs sub_vies_;
+
+  ObTempExpr *se_part_expr_;
+  ObTempExpr *se_gen_col_expr_;
+  ObTempExpr *se_subpart_expr_;
+  ObTempExpr *se_sub_gen_col_expr_;
+
+  common::ObFixedArray<common::ObObjectID, common::ObIAllocator> part_hint_ids_;
+  ObObjType part_col_type_;
+  ObCollationType part_collation_type_;
+  ObObjType subpart_col_type_;
+  ObCollationType subpart_collation_type_;
+  bool is_in_hit_;
+  PartProjector part_projector_;
+
+  bool is_valid_range_columns_part_range_;
+  bool is_valid_range_columns_subpart_range_;
+  bool has_dynamic_exec_param_;
+
+  //mysql enable partition pruning by query range if part expr is temporal func like year(date)
+  bool is_valid_temporal_part_range_;
+  bool is_valid_temporal_subpart_range_;
+  bool is_part_range_precise_get_;
+  bool is_subpart_range_precise_get_;
+
+  bool is_non_partition_optimized_;
+  ObTabletID tablet_id_;
+  ObObjectID object_id_;
+  common::ObList<DASRelatedTabletMap::MapEntry, common::ObIAllocator> related_list_;
+  bool check_no_partition_;
+};
+
+}
+}

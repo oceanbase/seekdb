@@ -34,7 +34,7 @@ int GraphExpandScanDesc::init(const ObTableScanSpec &scan_spec)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(scan_spec.get_id() == OB_INVALID_ID
-                  || scan_spec.get_table_loc_id() == OB_INVALID_ID
+                  || scan_spec.get_table_ref_id() == OB_INVALID_ID
                   || scan_spec.ref_table_id_ == OB_INVALID_ID
                   || scan_spec.tsc_ctdef_.scan_ctdef_.ref_table_id_
                          == OB_INVALID_ID)) {
@@ -46,7 +46,7 @@ int GraphExpandScanDesc::init(const ObTableScanSpec &scan_spec)
     LOG_WARN("failed to copy graph scan filters", K(ret));
   } else {
     scan_op_id_ = scan_spec.get_id();
-    table_loc_id_ = scan_spec.get_table_loc_id();
+    table_ref_id_ = scan_spec.get_table_ref_id();
     ref_table_id_ = scan_spec.ref_table_id_;
     frozen_version_ = scan_spec.frozen_version_;
     rows_ = scan_spec.rows_;
@@ -61,7 +61,7 @@ bool GraphExpandScanDesc::is_valid() const
 {
   const ObTableScanCtDef &ctdef = get_tsc_ctdef();
   return scan_op_id_ != OB_INVALID_ID
-      && table_loc_id_ != OB_INVALID_ID
+      && table_ref_id_ != OB_INVALID_ID
       && ref_table_id_ != OB_INVALID_ID
       && ctdef.scan_ctdef_.ref_table_id_ != OB_INVALID_ID;
 }
@@ -72,7 +72,7 @@ OB_DEF_SERIALIZE(GraphExpandScanDesc)
   const ObTableScanCtDef &tsc_ctdef = get_tsc_ctdef();
   LST_DO_CODE(OB_UNIS_ENCODE,
               scan_op_id_,
-              table_loc_id_,
+              table_ref_id_,
               ref_table_id_,
               frozen_version_,
               rows_,
@@ -91,7 +91,7 @@ OB_DEF_DESERIALIZE(GraphExpandScanDesc)
   codegen_ctdef_ = nullptr;
   LST_DO_CODE(OB_UNIS_DECODE,
               scan_op_id_,
-              table_loc_id_,
+              table_ref_id_,
               ref_table_id_,
               frozen_version_,
               rows_,
@@ -110,7 +110,7 @@ OB_DEF_SERIALIZE_SIZE(GraphExpandScanDesc)
   const ObTableScanCtDef &tsc_ctdef = get_tsc_ctdef();
   LST_DO_CODE(OB_UNIS_ADD_LEN,
               scan_op_id_,
-              table_loc_id_,
+              table_ref_id_,
               ref_table_id_,
               frozen_version_,
               rows_,

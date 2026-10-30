@@ -41,13 +41,13 @@ public:
   {
     return codegen_ctdef_ == nullptr ? owned_ctdef_ : *codegen_ctdef_;
   }
-  uint64_t get_table_loc_id() const { return table_loc_id_; }
+  uint64_t get_table_ref_id() const { return table_ref_id_; }
   uint64_t get_id() const { return scan_op_id_; }
 
   // scan_op_id_ is retained for DAS diagnostics and runtime statistics only;
   // it is not used to locate an operator at execution time.
   uint64_t scan_op_id_{common::OB_INVALID_ID};
-  uint64_t table_loc_id_{common::OB_INVALID_ID};
+  uint64_t table_ref_id_{common::OB_INVALID_ID};
   uint64_t ref_table_id_{common::OB_INVALID_ID};
   int64_t frozen_version_{0};
   int64_t rows_{0};

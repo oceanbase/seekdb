@@ -32,7 +32,7 @@ int init_scan_rtdef(ObExecContext &exec_ctx,
                     ObEvalCtx &eval_ctx,
                     const GraphExpandScanDesc &scan_desc,
                     const ObDASScanCtDef &scan_ctdef,
-                    const ObDASTableLocMeta *loc_meta,
+                    const DASTableAccessMeta *access_meta,
                     bool uses_index_back,
                     common::ObIAllocator &scan_allocator,
                     ObDASScanRtDef &scan_rtdef);

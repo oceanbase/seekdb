@@ -32,7 +32,7 @@ while ($cnt < 10)
 ob1.mysql alter system major freeze;
 ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 2,3600;
 
-#在zone2上进行备机读查询，预热location cache
+# Exercise query retry after replica/role state changes.
 select /*+read_consistency(weak)+*/* from test01;
 
 #将leader切到zone2上

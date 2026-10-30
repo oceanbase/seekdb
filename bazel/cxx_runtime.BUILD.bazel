@@ -1,0 +1,17 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+# Match seekdb's std::string ABI when CxxString crosses the language boundary.
+cc_library(
+    name = "cxx_cc",
+    srcs = ["src/cxx.cc"],
+    hdrs = ["include/cxx.h"],
+    include_prefix = "rust",
+    includes = ["include"],
+    local_defines = ["_GLIBCXX_USE_CXX11_ABI=1"] + select({
+        "@platforms//os:windows": ["_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH"],
+        "//conditions:default": [],
+    }),
+    linkstatic = True,
+    strip_include_prefix = "include",
+    visibility = ["//visibility:public"],
+)

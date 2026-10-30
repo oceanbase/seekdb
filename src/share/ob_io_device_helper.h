@@ -25,6 +25,7 @@ namespace oceanbase
 namespace share
 {
 class ObLocalDevice;
+struct LocalIOConfig;
 class ObILocalDeviceSpaceProvider;
 
 class ObGetFileIdRangeFunctor : public common::ObBaseDirEntryOperator
@@ -94,7 +95,8 @@ public:
       const int64_t block_size,
       const int64_t data_disk_percentage,
       const int64_t data_disk_size,
-      const ObILocalDeviceSpaceProvider &space_provider);
+      const ObILocalDeviceSpaceProvider &space_provider,
+      const LocalIOConfig &io_config);
   void destroy();
 
   ObIODevice &get_local_device();
@@ -229,6 +231,7 @@ public:
                              const int64_t file_size,
                              const int64_t disk_percentage,
                              const int64_t reserved_size,
+                             const LocalIOConfig &io_config,
                              BlockFileAttr &block_file_attr);
 };
 

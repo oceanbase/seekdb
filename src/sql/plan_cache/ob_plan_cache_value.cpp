@@ -126,7 +126,6 @@ ObPlanCacheValue::ObPlanCacheValue()
   : pcv_set_(NULL),
     pc_alloc_(NULL),
     last_plan_id_(OB_INVALID_ID),
-    //use_global_location_cache_(true),
     runtime_schema_version_(OB_INVALID_VERSION),
     sys_schema_version_(OB_INVALID_VERSION),
     outline_state_(),
@@ -173,7 +172,6 @@ int ObPlanCacheValue::init(ObPCVSet *pcv_set, const ObILibCacheObject *cache_obj
   if (OB_SUCC(ret)) {
     switchover_epoch_ = share::server_switchover_epoch();
     pcv_set_ = pcv_set;
-    //use_global_location_cache_ = !cache_obj->is_contain_virtual_table();
     outline_state_ = plan->get_outline_state();
     sys_schema_version_ = plan->get_sys_schema_version();
     runtime_schema_version_ = plan->get_runtime_schema_version();
@@ -1007,7 +1005,6 @@ void ObPlanCacheValue::reset()
   param_charset_type_.reset();
   sql_traits_.reset();
 
-  //use_global_location_cache_ = true;
   runtime_schema_version_ = OB_INVALID_VERSION;
   sys_schema_version_ = OB_INVALID_VERSION;
   outline_state_.reset();

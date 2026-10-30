@@ -33,8 +33,8 @@ public:
       das_scan_rtdef_(),
       checker_ctdef_(checker_ctdef),
       das_ref_(eval_ctx, eval_ctx.exec_ctx_),
-      table_loc_(nullptr),
-      local_tablet_loc_(nullptr),
+      table_access_(nullptr),
+      local_tablet_access_(nullptr),
       se_rowkey_dist_ctx_(nullptr),
       table_rowkey_(),
       batch_distinct_fk_cnt_(0),
@@ -47,8 +47,8 @@ public:
 
   TO_STRING_KV(K_(das_scan_rtdef),
                K_(checker_ctdef),
-               KPC_(table_loc),
-               KPC_(local_tablet_loc),
+               KPC_(table_access),
+               KPC_(local_tablet_access),
                KPC_(se_rowkey_dist_ctx),
                K_(table_rowkey),
                K_(batch_distinct_fk_cnt),
@@ -73,8 +73,8 @@ public:
                                     bool &need_check);
 private:
   int init_das_scan_rtdef();
-  int calc_lookup_tablet_loc(ObDASTabletLoc *&tablet_loc);
-  int get_das_scan_op(ObDASTabletLoc *tablet_loc, ObDASScanOp *&das_scan_op);
+  int resolve_lookup_tablet_access(DASRuntimeTabletAccess *&tablet_access);
+  int get_das_scan_op(DASRuntimeTabletAccess *tablet_access, ObDASScanOp *&das_scan_op);
   // map fk column to the rowkey column of parent/parent index table
   int build_table_range(const ObIArray<ObForeignKeyColumn> &columns,
                         const ObExprPtrIArray &row,
@@ -109,12 +109,12 @@ private:
 public:
   ObEvalCtx &eval_ctx_; // used for expression evaluation
   ObDASScanRtDef das_scan_rtdef_;
-  // Store calculation table loc and the partition key, primary key expr, etc., needed for constructing das-task
+  // Store the table access plan and the partition key, primary key expr, etc., needed for constructing das-task
   const ObForeignKeyCheckerCtdef  &checker_ctdef_;
   // Foreign key check back-table construction for das-task use
   ObDASRef das_ref_;
-  ObDASTableLoc *table_loc_;
-  ObDASTabletLoc *local_tablet_loc_; // The table used for foreign key check is a non-partitioned table when used
+  DASRuntimeTableAccess *table_access_;
+  DASRuntimeTabletAccess *local_tablet_access_; // The table used for foreign key check is a non-partitioned table when used
   SeRowkeyDistCtx *se_rowkey_dist_ctx_;
   ObRowkey table_rowkey_;
   int64_t batch_distinct_fk_cnt_;

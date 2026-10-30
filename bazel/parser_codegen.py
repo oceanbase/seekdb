@@ -28,7 +28,7 @@ def type_names(source):
     names = re.findall(r"^\s*(T_[A-Z0-9_]+)[ =0-9]*,", source, flags=re.MULTILINE)
     cases = "".join(f'\tcase {name} : return "{name}";\n' for name in names)
     return (
-        '#include "sql/parser/ob_item_type.h"\n'
+        '#include "query/parser/ob_item_type.h"\n'
         "const char* get_type_name(int type)\n{\n\tswitch(type){\n"
         + cases
         + '\tdefault:return "Unknown";\n\t}\n}\n'

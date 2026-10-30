@@ -110,29 +110,29 @@ public:
                                 ObTableModifyOp &dml_op);
   static int insert_row(const ObInsCtDef &ins_ctdef,
                         ObInsRtDef &ins_rtdef,
-                        const ObDASTabletLoc *tablet_loc,
+                        const DASRuntimeTabletAccess *tablet_access,
                         ObDMLRtCtx &dml_rtctx,
                         ObChunkDatumStore::StoredRow *&stored_row);
   static int insert_row(const ObDASInsCtDef &ins_ctdef,
                         ObDASInsRtDef &ins_rtdef,
-                        const ObDASTabletLoc *tablet_loc,
+                        const DASRuntimeTabletAccess *tablet_access,
                         ObDMLRtCtx &das_rtctx,
                         const ExprFixedArray &new_row,
                         ObChunkDatumStore::StoredRow *&stored_row);
   static int delete_row(const ObDelCtDef &del_ctdef,
                         ObDelRtDef &del_rtdef,
-                        const ObDASTabletLoc *tablet_loc,
+                        const DASRuntimeTabletAccess *tablet_access,
                         ObDMLRtCtx &dml_rtctx,
                         ObChunkDatumStore::StoredRow *&stored_row);
   static int update_row(const ObDASUpdCtDef &ctdef,
                         ObDASUpdRtDef &rtdef,
-                        const ObDASTabletLoc *tablet_loc,
+                        const DASRuntimeTabletAccess *tablet_access,
                         ObDMLRtCtx &dml_rtctx,
                         const ExprFixedArray &full_row);
   static int update_row(const ObUpdCtDef &upd_ctdef,
                         ObUpdRtDef &upd_rtdef,
-                        const ObDASTabletLoc *old_tablet_loc,
-                        const ObDASTabletLoc *new_tablet_loc,
+                        const DASRuntimeTabletAccess *old_tablet_access,
+                        const DASRuntimeTabletAccess *new_tablet_access,
                         ObDMLRtCtx &dml_rtctx,
                         ObChunkDatumStore::StoredRow *&old_row,
                         ObChunkDatumStore::StoredRow *&new_row,
@@ -140,28 +140,28 @@ public:
 
   static int split_upd_to_del_and_ins(const ObUpdCtDef &upd_ctdef,
                                       ObUpdRtDef &upd_rtdef,
-                                      const ObDASTabletLoc *old_tablet_loc,
-                                      const ObDASTabletLoc *new_tablet_loc,
+                                      const DASRuntimeTabletAccess *old_tablet_access,
+                                      const DASRuntimeTabletAccess *new_tablet_access,
                                       ObDMLRtCtx &dml_rtctx,
                                       ObChunkDatumStore::StoredRow *&old_row,
                                       ObChunkDatumStore::StoredRow *&new_row);
 
   static int delete_row(const ObDASDelCtDef &ctdef,
                         ObDASDelRtDef &rtdef,
-                        const ObDASTabletLoc *tablet_loc,
+                        const DASRuntimeTabletAccess *tablet_access,
                         ObDMLRtCtx &das_rtctx,
                         const ExprFixedArray &old_row,
                         ObChunkDatumStore::StoredRow *&stored_row);
 
   static int lock_row(const ObDASLockCtDef &dlock_ctdef,
                       ObDASLockRtDef &dlock_rtdef,
-                      const ObDASTabletLoc *tablet_loc,
+                      const DASRuntimeTabletAccess *tablet_access,
                       ObDMLRtCtx &das_rtctx,
                       const ExprFixedArray &old_row);
 
   static int lock_row(const ObLockCtDef &lock_ctdef,
                       ObLockRtDef &lock_rtdef,
-                      const ObDASTabletLoc *tablet_loc,
+                      const DASRuntimeTabletAccess *tablet_access,
                       ObDMLRtCtx &dml_rtctx);
 
   static void init_dml_write_flag(const ObDASDMLBaseCtDef &base_ctdef,
@@ -181,7 +181,7 @@ public:
   static int init_das_dml_rtdef(ObDMLRtCtx &dml_rtctx,
                                 const ObDASDMLBaseCtDef &das_ctdef,
                                 ObDASDMLBaseRtDef &das_rtdef,
-                                const ObDASTableLocMeta *loc_meta);
+                                const DASTableAccessMeta *access_meta);
   static int init_related_das_rtdef(ObDMLRtCtx &dml_rtctx,
                                     const DASDMLCtDefArray &das_ctdefs,
                                     DASDMLRtDefArray &das_rtdefs);
@@ -243,7 +243,7 @@ public:
                                              const ObDASDMLBaseCtDef &related_ctdef,
                                              ObDASDMLBaseRtDef &related_rtdef);
   static int check_dml_tablet_validity(ObDMLRtCtx &dml_rtctx,
-                                       const ObDASTabletLoc &tablet_loc,
+                                       const DASRuntimeTabletAccess &tablet_access,
                                        const ExprFixedArray &row,
                                        const ObDMLBaseCtDef &dml_ctdef,
                                        ObDMLBaseRtDef &dml_rtdef);
@@ -277,15 +277,15 @@ private:
   template <int N>
   static int write_row_to_das_op(const ObDASDMLBaseCtDef &ctdef,
                                  ObDASDMLBaseRtDef &rtdef,
-                                 const ObDASTabletLoc *tablet_loc,
+                                 const DASRuntimeTabletAccess *tablet_access,
                                  ObDMLRtCtx &dml_rtctx,
                                  const ExprFixedArray &row,
                                  ObExpr *trans_info_expr, // debug info for 4377 defensive check
                                  ObChunkDatumStore::StoredRow *&stored_row);
   template <typename T>
-  static const ObDASTableLocMeta *get_table_loc_meta(const T *multi_ctdef);
+  static const DASTableAccessMeta *get_table_access_meta(const T *multi_ctdef);
   static int check_nested_sql_legality(ObExecContext &ctx, common::ObTableID ref_table_id);
-  static int add_related_index_info(const ObDASTabletLoc &tablet_loc,
+  static int add_related_index_info(const DASRuntimeTabletAccess &tablet_access,
                                     const DASDMLCtDefArray &related_ctdefs,
                                     DASDMLRtDefArray &related_rtdefs,
                                     ObIDASTaskOp &das_op);

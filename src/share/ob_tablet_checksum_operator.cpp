@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "common/ob_timeout_ctx.h"
 #include "common/mysqlclient/ob_mysql_proxy.h"
 #include "common/mysqlclient/ob_mysql_transaction.h"

@@ -48,7 +48,7 @@ int init_scan_rtdef(
     ObEvalCtx &eval_ctx,
     const GraphExpandScanDesc &scan_desc,
     const ObDASScanCtDef &scan_ctdef,
-    const ObDASTableLocMeta *loc_meta,
+    const DASTableAccessMeta *access_meta,
     bool uses_index_back,
     ObIAllocator &scan_allocator,
     ObDASScanRtDef &scan_rtdef)
@@ -89,26 +89,30 @@ int init_scan_rtdef(
       LOG_WARN("failed to initialize graph DAS scan snapshot", K(ret),
                K(scan_desc.get_id()));
     } else {
-      scan_rtdef.table_loc_ = DAS_CTX(exec_ctx).get_table_loc_by_id(
-          scan_desc.get_table_loc_id(), scan_ctdef.ref_table_id_);
-      if (scan_rtdef.table_loc_ == nullptr
-          && loc_meta != nullptr) {
-        ret = DAS_CTX(exec_ctx).extended_table_loc(
-            *loc_meta, scan_rtdef.table_loc_);
-      } else if (scan_rtdef.table_loc_ == nullptr
-                 && &scan_ctdef == tsc_ctdef.lookup_ctdef_
-                 && tsc_ctdef.lookup_loc_meta_ != nullptr) {
-        ret = DAS_CTX(exec_ctx).extended_table_loc(
-            *tsc_ctdef.lookup_loc_meta_, scan_rtdef.table_loc_);
+      scan_rtdef.table_access_ = DAS_CTX(exec_ctx).find_table_access(
+          scan_desc.get_table_ref_id(), scan_ctdef.ref_table_id_);
+      if (scan_rtdef.table_access_ == nullptr) {
+        const DASTableAccessMeta *fallback_meta = access_meta;
+        if (fallback_meta == nullptr && is_lookup) {
+          fallback_meta = tsc_ctdef.lookup_access_meta_;
+        }
+        if (fallback_meta == nullptr) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("graph DAS scan table access is missing", K(ret),
+                   K(scan_desc.get_table_ref_id()), K(scan_ctdef.ref_table_id_));
+        } else if (OB_FAIL(DAS_CTX(exec_ctx).ensure_table_access(
+                       *fallback_meta, scan_rtdef.table_access_))) {
+          LOG_WARN("failed to ensure graph DAS table access", K(ret), KPC(fallback_meta));
+        }
       }
       if (OB_SUCC(ret)
-          && (OB_ISNULL(scan_rtdef.table_loc_)
-              || OB_ISNULL(scan_rtdef.table_loc_->loc_meta_))) {
+          && (OB_ISNULL(scan_rtdef.table_access_)
+              || OB_ISNULL(scan_rtdef.table_access_->access_meta_))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("graph DAS scan table location metadata is missing", K(ret),
-                 K(scan_desc.get_table_loc_id()), K(scan_ctdef.ref_table_id_));
+        LOG_WARN("graph DAS scan table access metadata is missing", K(ret),
+                 K(scan_desc.get_table_ref_id()), K(scan_ctdef.ref_table_id_));
       } else if (OB_SUCC(ret)
-                 && scan_rtdef.table_loc_->loc_meta_->is_weak_read_) {
+                 && scan_rtdef.table_access_->access_meta_->is_weak_read_) {
         scan_rtdef.scan_flag_.set_is_select_follower();
       }
       if (OB_SUCC(ret) && scan_desc.ref_table_id_ != scan_ctdef.ref_table_id_) {

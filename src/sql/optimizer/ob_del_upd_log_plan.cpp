@@ -260,7 +260,7 @@ int ObDelUpdLogPlan::check_table_rowkey_distinct(
   return ret;
 }
 
-int ObDelUpdLogPlan::calculate_insert_table_location_and_sharding(ObTablePartitionInfo *&insert_table_part,
+int ObDelUpdLogPlan::calculate_insert_access_targets_and_sharding(ObTablePartitionInfo *&insert_table_part,
                                                                   ObShardingInfo *&insert_sharding)
 {
   int ret = OB_SUCCESS;
@@ -289,9 +289,9 @@ int ObDelUpdLogPlan::calculate_insert_table_location_and_sharding(ObTablePartiti
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(table_schema->has_before_insert_row_trigger(*schema_guard, trigger_exist))) {
-  } else if (OB_FAIL(calculate_table_location_and_sharding(*del_upd_stmt,
+  } else if (OB_FAIL(calculate_access_targets_and_sharding(*del_upd_stmt,
                                                            del_upd_stmt->get_sharding_conditions(),
-                                                           dml_table_infos.at(0)->loc_table_id_,
+                                                           dml_table_infos.at(0)->target_table_ref_id_,
                                                            dml_table_infos.at(0)->ref_table_id_,
                                                            &dml_table_infos.at(0)->part_ids_,
                                                            insert_sharding,
@@ -305,7 +305,7 @@ int ObDelUpdLogPlan::calculate_insert_table_location_and_sharding(ObTablePartiti
   return ret;
 }
 
-int ObDelUpdLogPlan::calculate_table_location_and_sharding(const ObDelUpdStmt &stmt,
+int ObDelUpdLogPlan::calculate_access_targets_and_sharding(const ObDelUpdStmt &stmt,
                                                            const ObIArray<ObRawExpr*> &filters,
                                                            const uint64_t table_id,
                                                            const uint64_t ref_table_id,
@@ -325,29 +325,29 @@ int ObDelUpdLogPlan::calculate_table_location_and_sharding(const ObDelUpdStmt &s
     const ObIArray<ObRawExpr*> &real_filters = get_optimizer_context().is_online_ddl() ? empty_filters : filters;
     sharding_info = new(sharding_info) ObShardingInfo();
     table_partition_info = new(table_partition_info) ObTablePartitionInfo(allocator_);
-    ObTableLocationType location_type = OB_TBL_LOCATION_UNINITIALIZED;
-    table_partition_info->get_table_location().set_check_no_partition(false);
-    if (OB_FAIL(calculate_table_location(stmt,
+    TableAccessShape access_shape = TABLE_ACCESS_UNINITIALIZED;
+    table_partition_info->get_table_access_plan().set_check_no_partition(false);
+    if (OB_FAIL(calculate_access_targets(stmt,
                                          real_filters,
                                          table_id,
                                          ref_table_id,
                                          part_ids,
                                          *table_partition_info))) {
-    } else if (FALSE_IT(location_type = table_partition_info->get_location_type())) {
-    } else if (FALSE_IT(sharding_info->set_location_type(location_type))) {
+    } else if (FALSE_IT(access_shape = table_partition_info->get_access_shape())) {
+    } else if (FALSE_IT(sharding_info->set_access_shape(access_shape))) {
       // do nothing
     } else if (OB_FAIL(sharding_info->init_partition_info(get_optimizer_context(),
                                                           stmt,
                                                           table_id,
                                                           ref_table_id,
-                                                          table_partition_info->get_phy_tbl_location_info_for_update()))) {
+                                                          table_partition_info->get_access_targets_for_update()))) {
     } else {
     }
   }
   return ret;
 }
 
-int ObDelUpdLogPlan::calculate_table_location(const ObDelUpdStmt &stmt,
+int ObDelUpdLogPlan::calculate_access_targets(const ObDelUpdStmt &stmt,
                                               const ObIArray<ObRawExpr*> &filters,
                                               const uint64_t table_id,
                                               const uint64_t ref_table_id,
@@ -362,7 +362,7 @@ int ObDelUpdLogPlan::calculate_table_location(const ObDelUpdStmt &stmt,
       get_optimizer_context().get_session_info());
   ObArray<ObRawExpr *> correlated_filters;
   ObArray<ObRawExpr *> uncorrelated_filters;
-  // initialized the table location
+  // initialized the table access
   if (OB_ISNULL(sql_schema_guard) || OB_ISNULL(exec_ctx) ||
       OB_ISNULL(params)) {
     ret = OB_ERR_UNEXPECTED;
@@ -370,7 +370,7 @@ int ObDelUpdLogPlan::calculate_table_location(const ObDelUpdStmt &stmt,
             filters,
             correlated_filters,
             uncorrelated_filters))) {
-  } else if (OB_FAIL(table_partition_info.init_table_location(*sql_schema_guard,
+  } else if (OB_FAIL(table_partition_info.init_access_plan(*sql_schema_guard,
                                                                stmt,
                                                                exec_ctx,
                                                                uncorrelated_filters,
@@ -379,7 +379,7 @@ int ObDelUpdLogPlan::calculate_table_location(const ObDelUpdStmt &stmt,
                                                                part_ids,
                                                                dtc_params,
                                                                true))) {
-  } else if (OB_FAIL(table_partition_info.calculate_phy_table_location_info(*exec_ctx,
+  } else if (OB_FAIL(table_partition_info.calculate_access_targets(*exec_ctx,
                                                                              *params,
                                                                              dtc_params))) {
   } else {
@@ -403,14 +403,14 @@ int ObDelUpdLogPlan::compute_exchange_info_for_pdml_del_upd(const ObShardingInfo
   } else if (OB_FAIL(exch_info.repartition_func_exprs_.assign(source_sharding.get_partition_func()))) {
   } else if (OB_FAIL(compute_hash_dist_exprs_for_pdml_del_upd(exch_info, index_dml_info))) {
   } else if (!is_index_maintenance &&
-             OB_FAIL(get_pdml_parallel_degree(target_table_partition.get_phy_tbl_location_info().get_partition_cnt(),
+             OB_FAIL(get_pdml_parallel_degree(target_table_partition.get_access_targets().get_tablet_count(),
                                               exch_info.parallel_))) {
   } else {
     share::schema::ObPartitionLevel part_level = source_sharding.get_part_level();
     if (share::schema::PARTITION_LEVEL_ZERO != part_level) {
       exch_info.slice_count_ = source_sharding.get_part_cnt();
       exch_info.repartition_ref_table_id_ = index_dml_info.ref_table_id_;
-      exch_info.repartition_table_id_ = index_dml_info.loc_table_id_;
+      exch_info.repartition_table_id_ = index_dml_info.target_table_ref_id_;
       exch_info.repartition_table_name_ = index_dml_info.index_name_;
     }
     bool can_use_random = !need_duplicate_date &&
@@ -438,7 +438,7 @@ int ObDelUpdLogPlan::compute_exchange_info_for_pdml_del_upd(const ObShardingInfo
         (part_level == share::schema::PARTITION_LEVEL_ONE ||
          part_level == share::schema::PARTITION_LEVEL_TWO)) {
       ObRawExpr *part_id_expr = NULL;
-      if (OB_FAIL(gen_calc_part_id_expr(index_dml_info.loc_table_id_,
+      if (OB_FAIL(gen_calc_part_id_expr(index_dml_info.target_table_ref_id_,
                                         index_dml_info.ref_table_id_,
                                         CALC_TABLET_ID,
                                         part_id_expr))) {
@@ -499,13 +499,13 @@ int ObDelUpdLogPlan::compute_exchange_info_for_pdml_insert(const ObShardingInfo 
                              get_optimizer_context().get_expr_factory(),
                              exch_info))) {
   } else if (!is_index_maintenance && !is_pdml_update_split &&
-             OB_FAIL(get_pdml_parallel_degree(target_table_partition.get_phy_tbl_location_info().get_partition_cnt(),
+             OB_FAIL(get_pdml_parallel_degree(target_table_partition.get_access_targets().get_tablet_count(),
                                               exch_info.parallel_))) {
   } else {
     share::schema::ObPartitionLevel part_level = target_sharding.get_part_level();
     if (share::schema::PARTITION_LEVEL_ZERO != part_level) {
       exch_info.repartition_ref_table_id_ = index_dml_info.ref_table_id_;
-      exch_info.repartition_table_id_ = index_dml_info.loc_table_id_;
+      exch_info.repartition_table_id_ = index_dml_info.target_table_ref_id_;
       exch_info.repartition_table_name_ = index_dml_info.index_name_;
       exch_info.slice_count_ = target_sharding.get_part_cnt();
     }
@@ -616,7 +616,7 @@ int ObDelUpdLogPlan::compute_repartition_info_for_pdml_insert(const IndexDMLInfo
   } else if (OB_FAIL(exch_info.repartition_keys_.assign(repart_exprs)) ||
              OB_FAIL(exch_info.repartition_sub_keys_.assign(repart_sub_exprs)) ||
              OB_FAIL(exch_info.repartition_func_exprs_.assign(repart_func_exprs))) {
-  } else if (OB_FAIL(gen_calc_part_id_expr(index_dml_info.loc_table_id_,
+  } else if (OB_FAIL(gen_calc_part_id_expr(index_dml_info.target_table_ref_id_,
                                            index_dml_info.ref_table_id_,
                                            CALC_TABLET_ID,
                                            part_id_expr))) {
@@ -693,10 +693,10 @@ int ObDelUpdLogPlan::candi_allocate_one_pdml_delete(bool is_index_maintain,
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(tmp.push_back(index_dml_info))) {
   } else if (OB_FAIL(!is_index_maintain && check_table_rowkey_distinct(tmp, need_duplicate_date))) {
-  } else if (OB_FAIL(calculate_table_location_and_sharding(
+  } else if (OB_FAIL(calculate_access_targets_and_sharding(
                      *get_stmt(),
                      is_index_maintain ? dummy_filters : get_stmt()->get_condition_exprs(),
-                     index_dml_info->loc_table_id_,
+                     index_dml_info->target_table_ref_id_,
                      index_dml_info->ref_table_id_,
                      NULL,
                      source_sharding,
@@ -821,10 +821,10 @@ int ObDelUpdLogPlan::candi_allocate_one_pdml_insert(bool is_index_maintenance,
                                             insert_stmt->get_sharding_conditions()))) {
       }
     }
-    if (FAILEDx(calculate_table_location_and_sharding(
+    if (FAILEDx(calculate_access_targets_and_sharding(
                        *get_stmt(),
                        sharding_conditions,
-                       index_dml_info->loc_table_id_,
+                       index_dml_info->target_table_ref_id_,
                        index_dml_info->ref_table_id_,
                        get_stmt()->is_insert_stmt() ? &index_dml_info->part_ids_ : NULL,
                        target_sharding,
@@ -1097,7 +1097,7 @@ int ObDelUpdLogPlan::allocate_pdml_insert_as_top(ObLogicalOperator *&top,
       if (insert_stmt->is_insert_up()) {
         insert_op->set_insert_up(true);
         insert_op->set_is_multi_part_dml(true);
-        insert_op->set_table_location_uncertain(true);
+        insert_op->set_has_dynamic_tablets(true);
         insert_op->set_constraint_infos(&(static_cast<ObInsertLogPlan *>(this)->get_uk_constraint_infos()));
       }
       insert_op->set_is_insert_select(insert_stmt->value_from_select());
@@ -1107,7 +1107,7 @@ int ObDelUpdLogPlan::allocate_pdml_insert_as_top(ObLogicalOperator *&top,
       }
     } else if (get_stmt()->is_update_stmt()) {
       const ObUpdateStmt *update_stmt = static_cast<const ObUpdateStmt*>(get_stmt());
-      insert_op->set_table_location_uncertain(true);
+      insert_op->set_has_dynamic_tablets(true);
       if (!is_index_maintenance) {
         if (OB_FAIL(update_stmt->get_view_check_exprs(insert_op->get_view_check_exprs()))) {
         }
@@ -1139,10 +1139,10 @@ int ObDelUpdLogPlan::candi_allocate_one_pdml_update(bool is_index_maintenance,
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(tmp.push_back(index_dml_info))) {
   } else if (OB_FAIL(!is_index_maintenance && check_table_rowkey_distinct(tmp, need_duplicate_date))) {
-  } else if (OB_FAIL(calculate_table_location_and_sharding(
+  } else if (OB_FAIL(calculate_access_targets_and_sharding(
                      *get_stmt(),
                      is_index_maintenance ? dummy_filters : get_stmt()->get_condition_exprs(),
-                     index_dml_info->loc_table_id_,
+                     index_dml_info->target_table_ref_id_,
                      index_dml_info->ref_table_id_,
                      NULL,
                      source_sharding,
@@ -1515,7 +1515,7 @@ int ObDelUpdLogPlan::prepare_table_dml_info_basic(const ObDmlTableInfo& table_in
         if (OB_FAIL(index_schema->get_index_name(index_dml_info->index_name_))) {
         } else {
           index_dml_info->table_id_ = table_info.table_id_;
-          index_dml_info->loc_table_id_ = table_info.loc_table_id_;
+          index_dml_info->target_table_ref_id_ = table_info.target_table_ref_id_;
           index_dml_info->ref_table_id_ = index_tid[i];
           index_dml_info->rowkey_cnt_ = index_schema->get_rowkey_column_num();
           index_dml_info->spk_cnt_ = index_schema->get_shadow_rowkey_column_num();

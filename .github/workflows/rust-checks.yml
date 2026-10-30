@@ -18,9 +18,21 @@ name: rust-checks
 on:
   pull_request:
     paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
       - 'rust/**'
+      - 'bazel/rust*'
+      - 'package/ios/**'
+      - 'bazel/cxx_runtime.BUILD.bazel'
+      - 'deps/external/**'
+      - 'bazel/cxx.bzl'
+      - 'build.py'
+      - 'deps/init/**'
+      - 'MODULE.bazel'
+      - 'MODULE.bazel.lock'
+      - '.bazelrc'
       - '.github/workflows/rust-checks.yml'
-      - '.github/actions/setup-rust/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -34,8 +46,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Rust
-        uses: ./.github/actions/setup-rust
+      - name: Configure Rust cache directories
+        run: |
+          echo "CARGO_HOME=${CARGO_HOME:-$HOME/.cargo}" >> "$GITHUB_ENV"
+          echo "RUSTUP_HOME=${RUSTUP_HOME:-$HOME/.rustup}" >> "$GITHUB_ENV"
+          echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> "$GITHUB_PATH"
+
+      - name: Cache Cargo registry and tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.CARGO_HOME }}/registry/index
+            ${{ env.CARGO_HOME }}/registry/cache
+            ${{ env.CARGO_HOME }}/bin
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      - name: Prepare generated Rust configuration
+        run: |
+          ./build.py init
+          ./build.py build --lockfile_mode=error //rust/config:generated_config.rs
+          echo "CONFIG_RS=$PWD/build/bin/rust/config/generated_config.rs" >> "$GITHUB_ENV"
 
       - name: clippy (deny warnings)
         working-directory: rust
@@ -45,18 +76,15 @@ jobs:
         working-directory: rust
         run: cargo test --locked --workspace
 
-      - name: generated sources are committed
-        run: git diff --exit-code -- rust
-
       # Compile Windows code on Linux; this does not run Windows tests.
       - name: check windows target
         working-directory: rust
         run: |
+          rustup target add x86_64-pc-windows-gnu
           sudo apt-get update -qq && sudo apt-get install -y -qq gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
           cargo check --locked --workspace --target x86_64-pc-windows-gnu
 
       - name: cargo audit
-        working-directory: rust
         run: |
           command -v cargo-audit >/dev/null 2>&1 || cargo install cargo-audit --locked
           cargo audit

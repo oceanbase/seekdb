@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_LOB_ACCESS_PARAM_H_
 #define OCEANBASE_STORAGE_OB_LOB_ACCESS_PARAM_H_
 
+#include "common/sql_mode/ob_sql_mode.h"
 #include "storage/tx/ob_trans_define_v4.h"
 #include "share/ob_tablet_autoincrement_param.h"
 

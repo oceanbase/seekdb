@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_EXE
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_cmd_executor.h"
 #include "sql/engine/cmd/graph_ddl_executor.h"
@@ -398,10 +398,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       }
       case stmt::T_ADMIN_MERGE: {
         DEFINE_EXECUTE_CMD(ObAdminMergeStmt, ObAdminMergeExecutor);
-        break;
-      }
-      case stmt::T_REFRESH_MEMORY_STAT: {
-        DEFINE_EXECUTE_CMD(ObRefreshMemStatStmt, ObRefreshMemStatExecutor);
         break;
       }
       case stmt::T_REFRESH_IO_CALIBRATION: {

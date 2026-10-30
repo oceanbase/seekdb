@@ -2,6 +2,6 @@ load(":targets.bzl", "sdk_aliases")
 
 package(default_visibility = ["//visibility:public"])
 
-exports_files(["repositories.bzl", "targets.bzl"])
+exports_files(["repositories.bzl", "targets.bzl", "patch_windows_dirent.py"])
 
 sdk_aliases()

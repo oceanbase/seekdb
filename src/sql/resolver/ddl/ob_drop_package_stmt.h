@@ -34,6 +34,7 @@ public:
         drop_package_arg_() {}
   virtual ~ObDropPackageStmt() {}
   obcall::ObDropPackageArg &get_drop_package_arg() { return drop_package_arg_; }
+  const obcall::ObDropPackageArg &get_drop_package_arg() const { return drop_package_arg_; }
   virtual obcall::ObDDLArg &get_ddl_arg() { return drop_package_arg_; }
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDropPackageStmt);

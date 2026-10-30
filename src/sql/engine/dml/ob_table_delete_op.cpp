@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "sql/engine/dml/ob_table_delete_op.h"
 #include "sql/engine/dml/ob_dml_service.h"
 
@@ -170,8 +170,8 @@ OB_INLINE int ObTableDeleteOp::open_table_for_each()
     if (OB_SUCC(ret) && !rtdefs.empty()) {
       ObDelRtDef &primary_del_rtdef = rtdefs.at(0);
       if (OB_SUCC(ret)) {
-        //this table is being accessed by dml operator, mark its table location as writing
-        primary_del_rtdef.das_rtdef_.table_loc_->is_writing_ = true;
+        //this table is being accessed by dml operator, mark its table access as writing
+        primary_del_rtdef.das_rtdef_.table_access_->is_writing_ = true;
       }
     }
   }
@@ -185,8 +185,8 @@ OB_INLINE int ObTableDeleteOp::close_table_for_each()
     for (int64_t i = 0; OB_SUCC(ret) && i < del_rtdefs_.count(); ++i) {
       if (!del_rtdefs_.at(i).empty()) {
         ObDelRtDef &primary_del_rtdef = del_rtdefs_.at(i).at(0);
-        if (OB_NOT_NULL(primary_del_rtdef.das_rtdef_.table_loc_)) {
-          primary_del_rtdef.das_rtdef_.table_loc_->is_writing_ = false;
+        if (OB_NOT_NULL(primary_del_rtdef.das_rtdef_.table_access_)) {
+          primary_del_rtdef.das_rtdef_.table_access_->is_writing_ = false;
         }
       }
     }
@@ -198,24 +198,24 @@ OB_INLINE int ObTableDeleteOp::close_table_for_each()
   return ret;
 }
 
-OB_INLINE int ObTableDeleteOp::calc_tablet_loc(const ObDelCtDef &del_ctdef,
+OB_INLINE int ObTableDeleteOp::resolve_tablet_access(const ObDelCtDef &del_ctdef,
                                                ObDelRtDef &del_rtdef,
-                                               ObDASTabletLoc *&tablet_loc)
+                                               DASRuntimeTabletAccess *&tablet_access)
 {
   int ret = OB_SUCCESS;
   if (MY_SPEC.use_dist_das_) {
     if (del_ctdef.multi_ctdef_ != nullptr) {
       ObExpr *calc_part_id_expr = del_ctdef.multi_ctdef_->calc_part_id_expr_;
-      ObDASTableLoc &table_loc = *del_rtdef.das_rtdef_.table_loc_;
+      DASRuntimeTableAccess &table_access = *del_rtdef.das_rtdef_.table_access_;
       ObObjectID partition_id = OB_INVALID_ID;
       ObTabletID tablet_id;
       if (OB_FAIL(ObExprCalcPartitionBase::calc_part_and_tablet_id(calc_part_id_expr, eval_ctx_, partition_id, tablet_id))) {
-      } else if (OB_FAIL(DAS_CTX(ctx_).extended_tablet_loc(table_loc, tablet_id, tablet_loc))) {
+      } else if (OB_FAIL(DAS_CTX(ctx_).ensure_tablet_access(table_access, tablet_id, tablet_access))) {
       }
     }
   } else {
     //direct write delete row to storage
-    tablet_loc = MY_INPUT.get_tablet_loc();
+    tablet_access = MY_INPUT.get_tablet_access();
   }
   return ret;
 }
@@ -238,7 +238,7 @@ OB_INLINE int ObTableDeleteOp::delete_row_to_das()
       //delete each table with fetched row
       const ObDelCtDef &del_ctdef = *ctdefs.at(j);
       ObDelRtDef &del_rtdef = rtdefs.at(j);
-      ObDASTabletLoc *tablet_loc = nullptr;
+      DASRuntimeTabletAccess *tablet_access = nullptr;
       ObDMLModifyRowNode modify_row(this, &del_ctdef, &del_rtdef, ObDmlEventType::DE_DELETING);
       bool is_skipped = false;
       if (OB_FAIL(ObDMLService::process_delete_row(del_ctdef, del_rtdef, is_skipped, *this))) {
@@ -246,8 +246,8 @@ OB_INLINE int ObTableDeleteOp::delete_row_to_das()
         //this row has been skipped, so can not write to DAS buffer(include its global index)
         //so need to break this loop
         break;
-      } else if (OB_FAIL(calc_tablet_loc(del_ctdef, del_rtdef, tablet_loc))) {
-      } else if (OB_FAIL(ObDMLService::delete_row(del_ctdef, del_rtdef, tablet_loc, dml_rtctx_, modify_row.old_row_))) {
+      } else if (OB_FAIL(resolve_tablet_access(del_ctdef, del_rtdef, tablet_access))) {
+      } else if (OB_FAIL(ObDMLService::delete_row(del_ctdef, del_rtdef, tablet_access, dml_rtctx_, modify_row.old_row_))) {
       } else if (need_after_row_process(del_ctdef) && OB_FAIL(dml_modify_rows_.push_back(modify_row))) {
       } else {
         ++del_rtdef.cur_row_num_;

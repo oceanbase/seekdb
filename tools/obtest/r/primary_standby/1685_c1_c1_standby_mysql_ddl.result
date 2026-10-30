@@ -144,7 +144,6 @@ CREATE PROCEDURE my_proc() BEGIN INSERT INTO t VALUES(3); UPDATE t SET COL = COL
 DROP PROCEDURE my_proc;
 ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
 ob1.mysql alter system set enable_sys_table_ddl = false;
-ob1.mysql alter system set enable_ddl = false;
 ob1.mysql alter system run job 'STATISTIC_PRIMARY_ZONE_ENTITY_COUNT';
 operation_type
 1503
@@ -155,7 +154,6 @@ ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, T
 ob1.mysql alter system run job 'STATISTIC_PRIMARY_ZONE_ENTITY_COUNT';
 ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
 operation_type
-ob1.mysql alter system set enable_ddl = true;
 ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
 ob1.mysql alter system commit to switchover to physical standby;
 ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 30;

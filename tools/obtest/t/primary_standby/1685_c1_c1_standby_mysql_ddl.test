@@ -250,7 +250,6 @@ ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, T
 #virtual
 #run job
 ob1.mysql alter system set enable_sys_table_ddl = false;
-ob1.mysql alter system set enable_ddl = false;
 ob1.mysql alter system run job 'STATISTIC_PRIMARY_ZONE_ENTITY_COUNT';
 connection conn1;
 let $schema_version = query_get_value(select max(schema_version) s from oceanbase.__all_ddl_operation, s, 1);
@@ -270,7 +269,6 @@ ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, T
 eval select operation_type from oceanbase.__all_ddl_operation where schema_version > $schema_version;
 --enable_query_log
 
-ob1.mysql alter system set enable_ddl = true;
 ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
 ob1.mysql alter system commit to switchover to physical standby;
 ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 30;

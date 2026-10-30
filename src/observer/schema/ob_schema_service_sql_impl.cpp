@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_schema_service_sql_impl.h"
 #include <inttypes.h>
 #include "share/ob_global_stat_proxy.h"

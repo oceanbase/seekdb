@@ -76,7 +76,7 @@ If `base-dir` was changed in `/etc/seekdb/seekdb.cnf`, use the corresponding log
 SELECT last_trace_id();
 ```
 
-The trace ID appears in the log line; use `rg` or `grep` to find all related entries. The [logging guide](logging.md) documents log fields, levels, rotation, and rate limiting.
+The trace ID appears in the log line; use `rg` or `grep` to find all related entries. The [logging guide](logging.md) documents log fields, levels, and rotation.
 
 ## Adjust logging while debugging
 
@@ -84,8 +84,6 @@ The following settings are dynamically effective cluster parameters:
 
 ```sql
 ALTER SYSTEM SET syslog_level = 'DEBUG';
-ALTER SYSTEM SET syslog_io_bandwidth_limit = '50MB';
-ALTER SYSTEM SET diag_syslog_per_error_limit = 1000;
 ALTER SYSTEM SET enable_async_syslog = false;
 ```
 

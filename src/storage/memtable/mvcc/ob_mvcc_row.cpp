@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_mvcc_row.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/memtable/ob_row_compactor.h"

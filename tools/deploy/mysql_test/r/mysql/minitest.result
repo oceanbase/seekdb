@@ -240,7 +240,6 @@ ob_enable_pl_cache	ON
 ob_enable_show_trace	OFF
 ob_enable_transformation	ON
 ob_hnsw_ef_search	64
-ob_hnsw_extra_info_max_size	1024
 ob_ivf_nprobes	8
 ob_log_level	disabled
 ob_max_read_stale_time	-1
@@ -271,7 +270,6 @@ ob_enable_index_direct_select	OFF
 ob_enable_plan_cache	ON
 ob_enable_pl_cache	ON
 ob_enable_transformation	ON
-ob_hnsw_extra_info_max_size	1024
 ob_log_level	disabled
 ob_max_read_stale_time	-1
 ob_plan_cache_evict_high_percentage	90

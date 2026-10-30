@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX TRANS
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_tx_ctx.h"
 #include "share/ob_debug_sync.h"
 #include "share/rc/ob_server_runtime.h"

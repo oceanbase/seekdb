@@ -18,6 +18,7 @@
 #define _OB_OPTIMIZER_UTIL_H
 #include "lib/container/ob_array.h"
 #include "lib/allocator/ob_allocator.h"
+#include "lib/random/ob_random.h"
 #include "sql/resolver/dml/ob_insert_stmt.h"
 #include "sql/resolver/dml/ob_select_stmt.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"

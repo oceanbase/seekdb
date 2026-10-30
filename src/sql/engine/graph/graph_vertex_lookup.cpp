@@ -22,7 +22,7 @@
 #include "sql/das/ob_das_scan_op.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/ob_operator.h"
-#include "sql/optimizer/ob_table_location.h"
+#include "sql/optimizer/table_access_plan.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/engine/graph/graph_das_access_utils.h"
 namespace oceanbase
@@ -140,10 +140,10 @@ bool GraphVertexLookup::VertexLookupBinding::is_valid() const
       && key_count_ <= OB_USER_MAX_ROWKEY_COLUMN_NUMBER
       && scan_desc_ != nullptr
       && scan_ctdef_ != nullptr
-      && loc_meta_ != nullptr
+      && access_meta_ != nullptr
       && scan_ctdef_->ref_table_id_ == table_id_
-      && loc_meta_->table_loc_id_ == scan_desc_->get_table_loc_id()
-      && loc_meta_->ref_table_id_ == table_id_;
+      && access_meta_->table_ref_id_ == scan_desc_->get_table_ref_id()
+      && access_meta_->ref_table_id_ == table_id_;
   for (int64_t i = 0; valid && i < key_count_; ++i) {
     valid = key_columns_[i] != OB_INVALID_ID && key_exprs_[i] != nullptr;
   }
@@ -153,12 +153,12 @@ bool GraphVertexLookup::VertexLookupBinding::is_valid() const
 void GraphVertexLookup::destroy_vertex_routers()
 {
   if (source_vertex_router_ != nullptr) {
-    source_vertex_router_->~ObTableLocation();
+    source_vertex_router_->~TableAccessPlan();
     work_area_allocator_.free(source_vertex_router_);
     source_vertex_router_ = nullptr;
   }
   if (target_vertex_router_ != nullptr) {
-    target_vertex_router_->~ObTableLocation();
+    target_vertex_router_->~TableAccessPlan();
     work_area_allocator_.free(target_vertex_router_);
     target_vertex_router_ = nullptr;
   }
@@ -167,11 +167,11 @@ void GraphVertexLookup::destroy_vertex_routers()
 
 int GraphVertexLookup::get_vertex_router(
     const VertexLookupBinding &binding,
-    ObTableLocation *&router)
+    TableAccessPlan *&router)
 {
   int ret = OB_SUCCESS;
   router = nullptr;
-  ObTableLocation **slot = nullptr;
+  TableAccessPlan **slot = nullptr;
   if (&binding == &source_binding_) {
     slot = &source_vertex_router_;
   } else if (&binding == &target_binding_) {
@@ -180,8 +180,8 @@ int GraphVertexLookup::get_vertex_router(
     ret = OB_INVALID_ARGUMENT;
   }
   if (OB_SUCC(ret) && *slot == nullptr) {
-    void *buf = work_area_allocator_.alloc(sizeof(ObTableLocation));
-    ObTableLocation *candidate = nullptr;
+    void *buf = work_area_allocator_.alloc(sizeof(TableAccessPlan));
+    TableAccessPlan *candidate = nullptr;
     ObSqlCtx *sql_ctx = exec_ctx_.get_sql_ctx();
     ObSQLSessionInfo *session = exec_ctx_.get_my_session();
     ObArray<uint64_t> key_columns(
@@ -195,7 +195,7 @@ int GraphVertexLookup::get_vertex_router(
       LOG_WARN("graph vertex router context is incomplete", K(ret),
                K(sql_ctx), K(session));
     } else {
-      candidate = new(buf) ObTableLocation(vertex_router_allocator_);
+      candidate = new(buf) TableAccessPlan(vertex_router_allocator_);
       for (int64_t i = 0; OB_SUCC(ret) && i < binding.key_count_; ++i) {
         if (OB_FAIL(key_columns.push_back(binding.key_columns_[i]))) {
           LOG_WARN("failed to append graph vertex routing column", K(ret),
@@ -205,7 +205,7 @@ int GraphVertexLookup::get_vertex_router(
       if (OB_SUCC(ret)) {
         ObSqlSchemaGuard schema_guard;
         schema_guard.set_schema_guard(sql_ctx->schema_guard_);
-        if (OB_FAIL(candidate->init_table_location_with_column_ids(
+        if (OB_FAIL(candidate->init_access_plan_with_column_ids(
                 schema_guard, binding.table_id_, key_columns, exec_ctx_,
                 false))) {
           LOG_WARN("failed to initialize graph vertex router", K(ret),
@@ -216,7 +216,7 @@ int GraphVertexLookup::get_vertex_router(
     if (OB_SUCC(ret)) {
       *slot = candidate;
     } else if (candidate != nullptr) {
-      candidate->~ObTableLocation();
+      candidate->~TableAccessPlan();
       work_area_allocator_.free(candidate);
     } else if (buf != nullptr) {
       work_area_allocator_.free(buf);
@@ -240,28 +240,28 @@ int GraphVertexLookup::init_vertex_binding(
   const ObTableScanCtDef &tsc_ctdef = scan_desc.get_tsc_ctdef();
   const ObDASScanCtDef *scan_ctdef
       = tsc_ctdef.graph_lookup_ctdef_;
-  const ObDASTableLocMeta *loc_meta
-      = tsc_ctdef.graph_lookup_loc_meta_;
+  const DASTableAccessMeta *access_meta
+      = tsc_ctdef.graph_lookup_access_meta_;
   VertexLookupBinding candidate;
   if (OB_UNLIKELY(element_id == OB_INVALID_ID || table_id == OB_INVALID_ID
                   || key_count <= 0
                   || key_count > OB_USER_MAX_ROWKEY_COLUMN_NUMBER
                   || key_columns == nullptr)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(scan_ctdef) || OB_ISNULL(loc_meta)) {
+  } else if (OB_ISNULL(scan_ctdef) || OB_ISNULL(access_meta)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("graph vertex scan has no dedicated base-table DAS ctdef", K(ret),
              K(table_id), K(scan_desc.ref_table_id_),
              "access_table_id",
              tsc_ctdef.scan_ctdef_.ref_table_id_);
   } else if (OB_UNLIKELY(scan_ctdef->ref_table_id_ != table_id
-                         || loc_meta->ref_table_id_ != table_id
-                         || loc_meta->table_loc_id_
-                                != scan_desc.get_table_loc_id())) {
+                         || access_meta->ref_table_id_ != table_id
+                         || access_meta->table_ref_id_
+                                != scan_desc.get_table_ref_id())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("graph vertex lookup definition does not match table scan", K(ret),
-             K(table_id), K(scan_ctdef->ref_table_id_), KPC(loc_meta),
-             K(scan_desc.get_table_loc_id()));
+             K(table_id), K(scan_ctdef->ref_table_id_), KPC(access_meta),
+             K(scan_desc.get_table_ref_id()));
   } else if (OB_UNLIKELY(scan_ctdef->access_column_ids_.count()
                          != scan_ctdef->pd_expr_spec_.access_exprs_.count())) {
     ret = OB_ERR_UNEXPECTED;
@@ -274,7 +274,7 @@ int GraphVertexLookup::init_vertex_binding(
     candidate.key_count_ = key_count;
     candidate.scan_desc_ = &scan_desc;
     candidate.scan_ctdef_ = scan_ctdef;
-    candidate.loc_meta_ = loc_meta;
+    candidate.access_meta_ = access_meta;
     for (int64_t key = 0; OB_SUCC(ret) && key < key_count; ++key) {
       candidate.key_columns_[key] = key_columns[key];
       for (int64_t column = 0;
@@ -408,10 +408,10 @@ int GraphVertexLookup::lookup_vertices(
       ModulePageAllocator(das_ref.get_das_alloc(), "GraphVtxRoute"));
   const bool use_identity_index = !has_tolerance_compared_key(requested);
   bool has_task = false;
-  ObTableLocation *router = nullptr;
+  TableAccessPlan *router = nullptr;
   das_ref.set_mem_attr(ObMemAttr("GraphVtxLookup"));
   if (OB_FAIL(graph_das_detail::init_scan_rtdef(exec_ctx_, eval_ctx_, *binding.scan_desc_, *binding.scan_ctdef_,
-                              binding.loc_meta_, false,
+                              binding.access_meta_, false,
                               das_ref.get_das_alloc(), scan_rtdef))) {
   } else if (use_identity_index
              && OB_FAIL(requested_index.init(requested.count()))) {
@@ -422,11 +422,11 @@ int GraphVertexLookup::lookup_vertices(
     LOG_WARN("failed to initialize graph vertex result index", K(ret),
              "request_count", requested.count());
   }
-  ObDASTableLoc *table_loc = scan_rtdef.table_loc_;
-  if (OB_SUCC(ret) && OB_ISNULL(table_loc)) {
+  DASRuntimeTableAccess *table_access = scan_rtdef.table_access_;
+  if (OB_SUCC(ret) && OB_ISNULL(table_access)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("graph vertex lookup has no tablet location", K(ret),
-             KPC(table_loc));
+    LOG_WARN("graph vertex lookup has no table access", K(ret),
+             KPC(table_access));
   } else if (OB_SUCC(ret)
              && OB_FAIL(get_vertex_router(binding, router))) {
     LOG_WARN("failed to get graph vertex router", K(ret), K(binding));
@@ -463,9 +463,9 @@ int GraphVertexLookup::lookup_vertices(
       }
     }
     if (OB_SUCC(ret) && append_range) {
-      ObDASTabletLoc *tablet_loc = nullptr;
+      DASRuntimeTabletAccess *tablet_access = nullptr;
       if (router == nullptr) {
-        tablet_loc = table_loc->get_first_tablet_loc();
+        tablet_access = table_access->get_first_tablet_access();
       } else {
         routed_tablet_ids.reuse();
         routed_partition_ids.reuse();
@@ -486,15 +486,15 @@ int GraphVertexLookup::lookup_vertices(
                    K(i), K(requested.at(i)), K(routed_tablet_ids),
                    K(routed_partition_ids));
         } else if (!routed_tablet_ids.empty()
-                   && OB_FAIL(DAS_CTX(exec_ctx_).extended_tablet_loc(
-                       *table_loc, routed_tablet_ids.at(0), tablet_loc,
+                   && OB_FAIL(DAS_CTX(exec_ctx_).ensure_tablet_access(
+                       *table_access, routed_tablet_ids.at(0), tablet_access,
                        routed_partition_ids.at(0)))) {
-          LOG_WARN("failed to extend routed graph vertex tablet", K(ret),
+          LOG_WARN("failed to ensure routed graph vertex tablet access", K(ret),
                    K(i), K(routed_tablet_ids.at(0)),
                    K(routed_partition_ids.at(0)));
         }
       }
-      if (OB_SUCC(ret) && tablet_loc != nullptr) {
+      if (OB_SUCC(ret) && tablet_access != nullptr) {
         ObObj *keys = static_cast<ObObj *>(
             das_ref.get_das_alloc().alloc(
                 sizeof(ObObj) * binding.key_count_));
@@ -514,8 +514,8 @@ int GraphVertexLookup::lookup_vertices(
         if (OB_SUCC(ret)) {
           ObRowkey rowkey(keys, binding.key_count_);
           if (OB_FAIL(range.build_range(binding.table_id_, rowkey))) {
-          } else if (!das_ref.has_das_op(tablet_loc, scan_op)) {
-            if (OB_FAIL(das_ref.prepare_das_task(tablet_loc, scan_op))) {
+          } else if (!das_ref.has_das_op(tablet_access, scan_op)) {
+            if (OB_FAIL(das_ref.prepare_das_task(tablet_access, scan_op))) {
             } else if (OB_ISNULL(scan_op)) {
               ret = OB_ERR_UNEXPECTED;
             } else {
@@ -536,7 +536,7 @@ int GraphVertexLookup::lookup_vertices(
     }
   }
   if (OB_SUCC(ret) && has_task) {
-    table_loc->is_reading_ = true;
+    table_access->is_reading_ = true;
   }
   if (OB_SUCC(ret) && has_task && OB_FAIL(das_ref.execute_all_task())) {
     LOG_WARN("failed to execute graph vertex lookup DAS tasks", K(ret));

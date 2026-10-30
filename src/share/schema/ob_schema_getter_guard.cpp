@@ -18,7 +18,7 @@
 
 
 #include "share/rc/ob_server_runtime.h"
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_schema_getter_guard.h"
 #include "ob_ai_model_schema_getter_guard.ipp"
 

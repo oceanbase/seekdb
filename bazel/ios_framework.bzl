@@ -8,12 +8,12 @@ def ios_framework():
     """Declare device/simulator framework targets inside the Observer package."""
     version_source(
         name = "_ios_build_config",
-        template = "ios/driver/build_config.h.in",
+        template = "ios/build_config.h.in",
         out = "ios-build-config.h",
     )
     cc_library(
         name = "_ios_entry",
-        srcs = ["ios/seekdb_ios.cpp", "ios/driver/seekdb_lifecycle.cpp"],
+        srcs = ["in_process/in_process_server.cpp"],
         copts = CXX_COPTS + ["-include", "$(location :_ios_build_config)"],
         additional_compiler_inputs = [":_ios_build_config"],
         deps = [
@@ -24,26 +24,25 @@ def ios_framework():
             "//src/oblib:oblib_rpc",
             "//deps/external:jemalloc_headers",
             "//bazel/third_party:curl_headers",
+            "//rust:in_process_headers",
+            "//rust:logger_headers",
         ],
         target_compatible_with = ["@platforms//os:ios"],
         tags = ["manual"],
     )
     final_link(
         name = "_ios_framework_link",
-        direct_object_deps = [":_ios_entry"],
+        direct_object_deps = [":_ios_entry", ":in_process_api"],
         group_deps = [":observer_embedded_runtime"],
         sdk_deps = ["//bazel/sdk_sources:source_sdk", "//bazel/third_party:base_libraries"],
         ordered_link_files = [
-            "//rust:sql_nio_archive",
-            "//rust:config_archive",
-            "//rust:local_archive",
-            "//rust:logger_archive",
+            "//rust:archive",
             "//deps/external:jemalloc_archive",
         ],
-        extra_inputs = ["ios/driver/exports.txt"],
+        extra_inputs = ["ios/exports.txt"],
         linkopts = [
             "-Wl,-install_name,@rpath/SeekDB.framework/SeekDB",
-            "-Wl,-exported_symbols_list,$(location ios/driver/exports.txt)",
+            "-Wl,-exported_symbols_list,$(location ios/exports.txt)",
             "-Wl,-framework,Security",
             "-Wl,-framework,CoreFoundation",
             "-Wl,-framework,SystemConfiguration",
@@ -76,11 +75,12 @@ def ios_framework():
             ":_ios_build_config",
             ":_ios_framework_link_inputs",
             ":_ios_framework_link_manifest",
-            "ios/driver/seekdb.h",
-            "ios/driver/exports.txt",
+            "in_process/seekdb.h",
+            "ios/exports.txt",
             "//:LICENSE",
-            "//rust:Cargo.lock",
-            "@cargo_native_sources//:vendor.tar",
+            "//:Cargo.lock",
+            "//package/ios:rust_licenses",
+            "//package/ios:rust_license_files",
             "//bazel/sdk_sources:ios_source_metadata",
             "//bazel/sdk_sources:ios_licenses",
             "//bazel/third_party:ios_base_metadata",
@@ -96,10 +96,10 @@ def ios_framework():
         ],
         cmd = 'python3 "$(location //package/ios:package_framework.py)"' +
               ' --binary "$(location :_ios_framework_link)" --config "$(location :_ios_build_config)"' +
-              ' --header "$(location ios/driver/seekdb.h)" --exports "$(location ios/driver/exports.txt)"' +
+              ' --header "$(location in_process/seekdb.h)" --exports "$(location ios/exports.txt)"' +
               ' --link-inputs "$(location :_ios_framework_link_manifest)"' +
-              ' --rust-lock "$(location //rust:Cargo.lock)"' +
-              ' --cargo-sources "$(location @cargo_native_sources//:vendor.tar)"' +
+              ' --rust-lock "$(location //:Cargo.lock)"' +
+              ' --rust-licenses "$(location //package/ios:rust_licenses)"' +
               ' --source-metadata $(locations //bazel/sdk_sources:ios_source_metadata)' +
               ' $(locations //bazel/third_party:ios_base_metadata)' +
               ' --licenses $(location //:LICENSE) $(locations //bazel/sdk_sources:ios_licenses)' +

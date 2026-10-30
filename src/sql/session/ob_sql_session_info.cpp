@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_SESSION
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include <new>
 #include "data_plane/ob_iter_cache_api.h"
 #include "data_plane/ob_tx_ctx_cache_api.h"

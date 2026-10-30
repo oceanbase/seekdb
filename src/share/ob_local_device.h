@@ -17,48 +17,20 @@
 #ifndef SRC_SHARE_OB_LOCAL_DEVICE_H_
 #define SRC_SHARE_OB_LOCAL_DEVICE_H_
 
-#if defined(__EMSCRIPTEN__)
-#include "share/wasm_aio.h"
-#elif defined(__linux__) && !defined(__ANDROID__)
+#if defined(__linux__) && !defined(__ANDROID__)
 #include <libaio.h>
-#elif defined(__APPLE__) || defined(_WIN32) || defined(__ANDROID__)
-#ifndef OB_LIBAIO_STUB_DEFINED
-#define OB_LIBAIO_STUB_DEFINED
-#include <stdint.h>
-#include <stddef.h>
-// Stub types for libaio (not available on macOS/Windows/Android)
-typedef uintptr_t io_context_t;
-struct iocb {
-  void *data;
-  short aio_lio_opcode;
-  int aio_fildes;
-  void *aio_buf;
-  size_t aio_nbytes;
-  long long aio_offset;
-};
-struct io_event { void *data; struct iocb *obj; long res; long res2; };
-static inline int io_submit(io_context_t, long, struct iocb**) { return -1; }
-static inline int io_getevents(io_context_t, long, long, struct io_event*, struct timespec*) { return -1; }
-static inline int io_setup(unsigned, io_context_t*) { return -1; }
-static inline int io_destroy(io_context_t) { return -1; }
-static inline int io_cancel(io_context_t, struct iocb*, struct io_event*) { return -1; }
-static inline void io_prep_pwrite(struct iocb *iocb, int fd, void *buf, size_t count, long long offset) {
-  iocb->aio_fildes = fd; iocb->aio_buf = buf; iocb->aio_nbytes = count; iocb->aio_offset = offset; iocb->aio_lio_opcode = 1;
-}
-static inline void io_prep_pread(struct iocb *iocb, int fd, void *buf, size_t count, long long offset) {
-  iocb->aio_fildes = fd; iocb->aio_buf = buf; iocb->aio_nbytes = count; iocb->aio_offset = offset; iocb->aio_lio_opcode = 0;
-}
-#endif // OB_LIBAIO_STUB_DEFINED
 #endif
 #include "lib/allocator/ob_vslice_alloc.h"
 #include "lib/restore/ob_io_device.h"
 #include "share/ob_i_local_device_space_provider.h"
+#include "share/local_io_config.h"
 
 namespace oceanbase {
 namespace share {
 
 class ObLocalDevice;
 
+#if defined(__linux__) && !defined(__ANDROID__)
 class ObLocalIOCB : public common::ObIOCB
 {
 public:
@@ -106,14 +78,16 @@ private:
   struct io_event *io_events_;
 };
 
+#endif
+
 class ObLocalDevice : public common::ObIODevice {
 public:
   ObLocalDevice();
   virtual ~ObLocalDevice();
-  virtual int init(const common::ObIODOpts &opts) override;
   int init(
       const common::ObIODOpts &opts,
-      const ObILocalDeviceSpaceProvider &space_provider);
+      const LocalIOConfig &io_config,
+      const ObILocalDeviceSpaceProvider *space_provider = nullptr);
   virtual int reconfig(const common::ObIODOpts &opts) override;
   virtual int get_config(common::ObIODOpts &opts) override;
   virtual void destroy() override;
@@ -174,7 +148,11 @@ public:
     const int64_t size,
     int64_t &write_size) override;
 
-  //async io interfaces
+  bool supports_native_aio() const override
+  { return io_config_.backend == LocalIOBackend::NATIVE_AIO; }
+
+  // Native backend only; the base device rejects unavailable operations.
+#if defined(__linux__) && !defined(__ANDROID__)
   virtual int io_setup(
     uint32_t max_events,
     common::ObIOContext *&io_context) override;
@@ -208,6 +186,8 @@ public:
   virtual common::ObIOEvents *alloc_io_events(const uint32_t max_events) override;
   virtual void free_iocb(common::ObIOCB *iocb) override;
   virtual void free_io_events(common::ObIOEvents *io_event) override;
+
+#endif
 
   // space management interface
   virtual int64_t get_total_block_size() const override;
@@ -249,7 +229,10 @@ private:
   int64_t *free_block_array_;
   bool *block_bitmap_;
   common::ObVSliceAlloc allocator_;
+#if defined(__linux__) && !defined(__ANDROID__)
   ObIOCBPool<ObLocalIOCB> iocb_pool_;
+#endif
+  LocalIOConfig io_config_;
   bool is_fs_support_punch_hole_;
   const ObILocalDeviceSpaceProvider *space_provider_;
 };

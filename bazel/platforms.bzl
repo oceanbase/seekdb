@@ -54,7 +54,8 @@ def platform_local_defines():
             "HAVE_LIBAIO=0",
         ],
         "@platforms//os:android": ["_LIBCPP_ENABLE_CXX17_REMOVED_UNARY_BINARY_FUNCTION"],
-        "@platforms//os:macos": ["_DARWIN_C_SOURCE"],
+        "@platforms//os:linux": ["OB_HAVE_BUNDLED_JEMALLOC=1"],
+        "@platforms//os:macos": ["_DARWIN_C_SOURCE", "OB_HAVE_BUNDLED_JEMALLOC=1"],
         "@platforms//os:ios": [
             "_DARWIN_C_SOURCE",
             "_XOPEN_SOURCE=700",

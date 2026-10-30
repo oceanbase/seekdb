@@ -73,6 +73,7 @@
 #include "storage/ob_disk_usage_reporter.h"
 #include "storage/tx_storage/ob_access_service.h"
 #include "logservice/ob_server_log_block_mgr.h"
+#include "logservice/palf/log_io_adapter.h"
 
 
 
@@ -482,7 +483,6 @@ private:
   common::ObTimer server_gtimer_;
   common::ObTimer sql_mem_timer_;
   common::ObTimer ctas_clean_up_timer_;
-  ObServerDutyTask duty_task_;
   ObSqlMemoryTimerTask sql_mem_task_;
   ObCTASCleanUpTask ctas_clean_up_task_;     // repeat & no retry
   ObRedefTableHeartBeatTask redef_table_heart_beat_task_;
@@ -494,6 +494,8 @@ private:
   sql::ObConnectResourceMgr conn_res_mgr_;
   ObDiskUsageReportTask disk_usage_report_task_;
 
+  palf::LogIODeviceWrapper log_device_;
+  share::StartupResult startup_result_;
   logservice::ObServerLogBlockMgr log_block_mgr_;
 
   // This handler is used to process tasks during startup. it can speed up the startup process.

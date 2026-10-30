@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_RESV
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_ddl_resolver.h"
 #include "data_plane/blocksstable/ob_index_block_util.h"
 #include "sql/resolver/dml/ob_dml_resolver.h"

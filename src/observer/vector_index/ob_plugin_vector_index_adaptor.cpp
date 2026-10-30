@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "query/vector/ob_vector_index_adaptor.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "share/rc/ob_server_runtime.h"
@@ -3285,8 +3285,8 @@ int ObPluginVectorIndexAdaptor::print_bitmap(roaring::api::roaring64_bitmap_t *b
       ObStringBuffer buffer(&tmp_allocator);
       roaring64_bitmap_to_uint64_array(bitmap, nums);
       for (int64_t i = 0; i < bitmap_cnt; i++) {
-        char buf[15];
-        sprintf(buf, "%llu ", static_cast<unsigned long long>(nums[i]));
+        char buf[24];
+        snprintf(buf, sizeof(buf), "%llu ", static_cast<unsigned long long>(nums[i]));
         buffer.append(buf);
       }
       LOG_INFO("PRINT_BITMAP_DEBUG", K(buffer), KP(buffer.ptr()), K(buffer.string()));

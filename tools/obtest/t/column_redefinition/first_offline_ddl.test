@@ -12,7 +12,6 @@ ob1.reboot;
 sleep 3;
 let $sys_tenant_id = 1;
 ob1.mysql alter system set enable_rebalance='false';
-ob1.mysql alter system set syslog_io_bandwidth_limit = '4G';
 ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
 --echo test case for bootstrap finish
 

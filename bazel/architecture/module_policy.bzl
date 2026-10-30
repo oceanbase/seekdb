@@ -11,7 +11,6 @@ cross-module edge that is absent here.
 MODULE_ROOTS = {
     "data_plane": "src/data_plane",
     "logservice": "src/logservice",
-    "objit": "src/objit",
     "oblib": "src/oblib",
     "observer": "src/observer",
     "pl": "src/pl",
@@ -38,12 +37,10 @@ ALLOWED_MODULE_DEPS = {
         "query",
         "share",
     ],
-    "objit": [],
     "oblib": [],
     "observer": [
         "data_plane",
         "logservice",
-        "objit",
         "oblib",
         "pl",
         "query",
@@ -61,7 +58,6 @@ ALLOWED_MODULE_DEPS = {
         "sql",
     ],
     "query": [
-        "objit",
         "oblib",
         "share",
     ],

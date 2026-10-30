@@ -4,7 +4,6 @@ ob1.mysql set @@global.ob_query_timeout = 100000000000;
 ob1.mysql alter system set merger_check_interval='10s';
 ob1.mysql alter system set enable_rebalance = 'false';
 ob1.mysql alter system set debug_sync_timeout = '100000s';
-ob1.mysql alter system set syslog_io_bandwidth_limit = '4G';
 ob1.mysql alter system set enable_async_syslog = 'false';
 ob1.mysql alter system set ddl_thread_score = 8;
 To test dag exit when status mismatches REDEFINITION.

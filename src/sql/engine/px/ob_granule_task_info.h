@@ -31,17 +31,17 @@ class ObGranuleTaskInfo
 public:
   ObGranuleTaskInfo()
     : ranges_(),
-      tablet_loc_(nullptr),
+      tablet_access_(nullptr),
       task_id_(0),
       granule_type_(OB_GRANULE_UNINITIALIZED)
   {}
   ~ObGranuleTaskInfo() = default;
   int assign(const ObGranuleTaskInfo &other);
   TO_STRING_KV(K_(ranges), K_(task_id), K_(granule_type), "tablet_id: ",
-               OB_ISNULL(tablet_loc_) ? OB_INVALID_ID : tablet_loc_->tablet_id_.id());
+               OB_ISNULL(tablet_access_) ? OB_INVALID_ID : tablet_access_->tablet_id_.id());
 
   common::ObSEArray<common::ObNewRange, 1> ranges_;
-  ObDASTabletLoc *tablet_loc_;
+  DASRuntimeTabletAccess *tablet_access_;
   int64_t task_id_;
   ObGranuleType granule_type_;
 };

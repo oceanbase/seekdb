@@ -258,7 +258,6 @@ public:
   static const int64_t LOCK_RETRY_TIME = 1L * 1000 * 1000;
   static const uint32_t INNER_SQL_SESS_ID = 1;
   static const int64_t MAX_BT_SIZE = 20;
-  static const int64_t EXTRA_REFRESH_LOCATION_TIME = 1L * 1000 * 1000;
 private:
   int init_session(sql::ObSQLSessionInfo* session_info = NULL, const bool is_ddl = false);
   int init_result(ObInnerSQLResult &res,

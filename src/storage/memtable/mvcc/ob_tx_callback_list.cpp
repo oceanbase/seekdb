@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_tx_callback_list.h"
 #include "storage/tx/ob_tx_ctx.h"
 

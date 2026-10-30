@@ -25,7 +25,6 @@
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
-#include "sql/engine/expr/ob_expr_regexp_context.h"
 #include "sql/engine/expr/ob_json_param_type.h"
 #include "sql/engine/graph/graph_path_spec.h"
 #include "sql/parser/ob_parser_utils.h"
@@ -1553,11 +1552,6 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
             }
           } else if (T_FUN_SYS_OB_VERSION == name_expr->get_expr_type()) {
             if (OB_FAIL(ob_write_string(*allocator_, common::ObString(OB_COMPATIBILITY_VERSION), select_item.alias_name_))) {
-            }
-          } else if (T_FUN_SYS_ICU_VERSION == name_expr->get_expr_type()) {
-            if (OB_FAIL(ob_write_string(*allocator_,
-                                        common::ObString(ObExprRegexContext::icu_version_string()),
-                                        select_item.alias_name_))) {
             }
           } else {
             //invalid name, do nothing

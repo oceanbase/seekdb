@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_memtable_context.h"
 #include "storage/tx/ob_tx_ctx.h"
 #include "storage/tablelock/ob_lock_memtable.h"

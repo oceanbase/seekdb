@@ -76,7 +76,7 @@ ob1.z1.obs0.switch_partition obtest:test:test02:1;
 ob1.z2.obs0.switch_partition obtest:test:test02:0;
 sleep 10;
 
-#case5 : 由于location cache的问题，第一次查询语句会出现重试；
+# Exercise query retry after replica/role state changes.
 begin;
 select * from test01 where pk=1;
 select * from test02 where pk=1;

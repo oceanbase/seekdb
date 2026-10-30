@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "share/rc/ob_server_runtime.h"
-#include "config_bridge.h"
+#include "rust/config.h"
 #include <algorithm>
 #include "rootserver/ob_dependency_ddl_helper.h"
 #include "share/ob_sys_time_zone_util.h"

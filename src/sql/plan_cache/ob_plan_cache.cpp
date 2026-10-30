@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_PC
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_plan_cache.h"
 #include "share/ob_truncated_string.h"
 #include "sql/plan_cache/ob_plan_cache_callback.h"

@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX RS
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "common/ob_timeout_ctx.h"
 #include "common/mysqlclient/ob_isql_connection.h"
 #include "ob_ddl_redefinition_task.h"

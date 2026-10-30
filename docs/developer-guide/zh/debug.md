@@ -76,7 +76,7 @@ tail -F /var/lib/oceanbase/log/seekdb.log
 SELECT last_trace_id();
 ```
 
-trace ID 会出现在日志行中，可以使用 `rg` 或 `grep` 搜索相关内容。日志字段、级别、轮转和限流请参考[日志系统](logging.md)。
+trace ID 会出现在日志行中，可以使用 `rg` 或 `grep` 搜索相关内容。日志字段、级别和轮转请参考[日志系统](logging.md)。
 
 ## 调试时调整日志配置
 
@@ -84,8 +84,6 @@ trace ID 会出现在日志行中，可以使用 `rg` 或 `grep` 搜索相关内
 
 ```sql
 ALTER SYSTEM SET syslog_level = 'DEBUG';
-ALTER SYSTEM SET syslog_io_bandwidth_limit = '50MB';
-ALTER SYSTEM SET diag_syslog_per_error_limit = 1000;
 ALTER SYSTEM SET enable_async_syslog = false;
 ```
 

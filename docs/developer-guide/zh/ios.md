@@ -1,6 +1,6 @@
 # 在 iOS 上构建 seekdb
 
-本文介绍如何在 Apple Silicon Mac 上将 seekdb 交叉编译为 `SeekDB.framework`。这是一个在 iOS App 进程内运行引擎的动态 framework，支持 arm64 真机和 arm64 模拟器。
+本文介绍如何在 Apple Silicon Mac 上将 seekdb 交叉编译为 `SeekDB.framework`。这是一个在 iOS App 进程内运行引擎的动态 framework，支持 arm64 真机和 arm64 模拟器。iOS App 不能启动其他进程，所以 App 中要嵌入 framework。
 
 ## 前置条件
 
@@ -48,7 +48,7 @@ build/bin/src/observer/framework/SeekDB.framework
 ## framework 内容
 
 - `SeekDB`：引擎、Rust 库和第三方库链接成的一个 arm64 动态库，只依赖系统库
-- `Headers/seekdb.h`：声明 `seekdb_open`、`seekdb_close` 和 `seekdb_connection_options`
+- `Headers/seekdb.h`：声明 `seekdb_open`、`seekdb_last_open_error`、`seekdb_close` 和 `seekdb_connection_options`，与桌面版 `seekdb.h` 中的声明相同
 - `Info.plist`：源码 revision、平台和最低系统版本
 - `build-manifest.json`、`rust-Cargo.lock`、`Licenses.tar`：链接归档哈希、依赖来源记录和许可证
 
@@ -59,7 +59,7 @@ build/bin/src/observer/framework/SeekDB.framework
 framework 只负责启动和停止引擎。执行 SQL 时，使用任意 MySQL 兼容的客户端库，连接 `seekdb_connection_options` 返回的 Unix socket，用户为 `root`，密码为空：
 
 ```c
-#include <stddef.h>
+#include <stdio.h>
 #include <SeekDB/seekdb.h>
 
 SeekdbHandle db = NULL;
@@ -67,13 +67,15 @@ const char *parameters[] = {"memory_budget", "1G", NULL};
 if (seekdb_open(absolute_data_dir, parameters, &db) == SEEKDB_SUCCESS) {
   SeekdbConnectionOptions options;
   seekdb_connection_options(db, &options);
-  /* 用 MySQL 客户端以 options.user 连接 socket options.endpoint。 */
-  /* 最后一次调用 seekdb_close 之前，先关闭客户端的连接。 */
+  /* 用 MySQL 客户端以 options.user 连接 socket options.unix_socket。 */
+  /* seekdb_close 只释放 handle，引擎会一直运行到 App 进程退出。 */
   seekdb_close(db);
+} else {
+  fprintf(stderr, "%s\n", seekdb_last_open_error());
 }
 ```
 
 - 数据目录使用 App 容器内的绝对路径。新数据库默认 `memory_budget=1G`、`vector_memory_limit=128M`、`log_disk_size=2G`、`datafile_maxsize=20G`，创建数据库时可以用 key/value 参数覆盖。
 - 不支持 TCP：传入非零 `port` 会返回 `SEEKDB_INVALID_ARGUMENT`。
-- 再次打开同一目录会共享正在运行的引擎，打开其他目录会失败。每个进程只能启动一次引擎：最后一次 `seekdb_close` 之后，要重新打开数据库必须启动新的 App 进程。
-- 引擎运行期间会改变进程工作目录，请使用绝对路径。framework 应一直保持加载，直到进程退出。
+- 第一次调用 `seekdb_open` 时启动引擎，之后引擎一直运行到 App 进程退出；`seekdb_close` 只释放 handle。再次打开同一目录会复用正在运行的引擎，所有 handle 都关闭之后也一样。打开其他目录会失败，引擎启动失败之后再打开也会失败。
+- 引擎会把进程工作目录设为它的数据目录，并且不再改回，请使用绝对路径。framework 应一直保持加载，直到进程退出。

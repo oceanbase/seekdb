@@ -25,7 +25,7 @@ namespace oceanbase
 {
 namespace sql
 {
-class ObTableLocation;
+class TableAccessPlan;
 
 // Owns vertex multi-get and its reusable source/target partition routers.
 // Tasks are closed after each call; the DAS arena is reused between batches.
@@ -59,11 +59,11 @@ private:
     uint64_t key_columns_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
     const GraphExpandScanDesc *scan_desc_{nullptr};
     const ObDASScanCtDef *scan_ctdef_{nullptr};
-    const ObDASTableLocMeta *loc_meta_{nullptr};
+    const DASTableAccessMeta *access_meta_{nullptr};
     ObExpr *key_exprs_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
     TO_STRING_KV(K_(element_id), K_(table_id), K_(key_count),
                  "key_columns", common::ObArrayWrap<uint64_t>(key_columns_, key_count_),
-                 KP_(scan_desc), KP_(scan_ctdef), KP_(loc_meta));
+                 KP_(scan_desc), KP_(scan_ctdef), KP_(access_meta));
   };
 
   int init_vertex_binding(uint64_t element_id,
@@ -81,7 +81,7 @@ private:
                       common::ObIArray<GraphElementIdentity> &existing,
                       GraphVertexLookupPhase phase);
   int get_vertex_router(const VertexLookupBinding &binding,
-                        ObTableLocation *&router);
+                        TableAccessPlan *&router);
   void destroy_vertex_routers();
 
   int check_status();
@@ -97,8 +97,8 @@ private:
   GraphPathDesc path_desc_{};
   VertexLookupBinding source_binding_{};
   VertexLookupBinding target_binding_{};
-  ObTableLocation *source_vertex_router_{nullptr};
-  ObTableLocation *target_vertex_router_{nullptr};
+  TableAccessPlan *source_vertex_router_{nullptr};
+  TableAccessPlan *target_vertex_router_{nullptr};
   // Preserve transient DAS usage until the caller checks query memory.
   int64_t vertex_lookup_memory_bytes_{0};
   bool initialized_{false};

@@ -93,21 +93,21 @@ int ObTscCgService::generate_tsc_ctdef(ObLogTableScan &op, ObTableScanCtDef &tsc
     ObSqlSchemaGuard *schema_guard = cg_.opt_ctx_->get_sql_schema_guard();
     if (OB_ISNULL(info)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (info->get_table_location().use_das()
-               && info->get_table_location().get_has_dynamic_exec_param()) {
-      if (OB_FAIL(tsc_ctdef.allocate_dppr_table_loc())) {
-      } else if (OB_FAIL(tsc_ctdef.das_dppr_tbl_->assign(info->get_table_location()))) {
+    } else if (info->get_table_access_plan().use_das()
+               && info->get_table_access_plan().get_has_dynamic_exec_param()) {
+      if (OB_FAIL(tsc_ctdef.allocate_dppr_access_plan())) {
+      } else if (OB_FAIL(tsc_ctdef.das_dppr_tbl_->assign(info->get_table_access_plan()))) {
       } else if (OB_FAIL(schema_guard->get_table_schema(op.get_table_id(),
                                                         scan_ctdef.ref_table_id_,
                                                         op.get_stmt(),
                                                         table_schema))) {
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(generate_table_loc_meta(op.get_table_id(),
+      } else if (OB_FAIL(generate_table_access_meta(op.get_table_id(),
                                                  *op.get_stmt(),
                                                  *table_schema,
                                                  *cg_.opt_ctx_->get_session_info(),
-                                                 tsc_ctdef.das_dppr_tbl_->get_loc_meta()))) {
+                                                 tsc_ctdef.das_dppr_tbl_->get_access_meta()))) {
       }
     }
   }
@@ -227,7 +227,7 @@ int ObTscCgService::generate_tsc_ctdef(ObLogTableScan &op, ObTableScanCtDef &tsc
   if (OB_SUCC(ret) && need_attach) {
     if (!op.get_is_index_global()) {
       tsc_ctdef.lookup_ctdef_ = nullptr;
-      tsc_ctdef.lookup_loc_meta_ = nullptr;
+      tsc_ctdef.lookup_access_meta_ = nullptr;
     }
     tsc_ctdef.attach_spec_.attach_ctdef_ = root_ctdef;
   }
@@ -274,11 +274,11 @@ int ObTscCgService::generate_graph_lookup_ctdef(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("graph vertex base table schema is missing", K(ret),
                K(op.get_table_id()), K(op.get_ref_table_id()));
-    } else if (OB_FAIL(generate_table_loc_meta(
+    } else if (OB_FAIL(generate_table_access_meta(
                            op.get_table_id(), *op.get_stmt(), *table_schema,
                            *cg_.opt_ctx_->get_session_info(),
-                           *tsc_ctdef.graph_lookup_loc_meta_))) {
-      LOG_WARN("failed to generate graph vertex lookup location", K(ret),
+                           *tsc_ctdef.graph_lookup_access_meta_))) {
+      LOG_WARN("failed to generate graph vertex lookup access metadata", K(ret),
                K(op.get_table_id()), K(table_schema->get_table_id()));
     } else {
       // The caller supplies exact graph keys, so this DAS operation is always
@@ -1370,52 +1370,52 @@ int ObTscCgService::extract_das_column_ids(const ObIArray<ObRawExpr*> &column_ex
   return ret;
 }
 
-int ObTscCgService::generate_table_loc_meta(uint64_t table_loc_id,
+int ObTscCgService::generate_table_access_meta(uint64_t table_ref_id,
                                             const ObDMLStmt &stmt,
                                             const ObTableSchema &table_schema,
                                             const ObSQLSessionInfo &session,
-                                            ObDASTableLocMeta &loc_meta)
+                                            DASTableAccessMeta &access_meta)
 {
   int ret = OB_SUCCESS;
-  const bool is_das_empty_part = loc_meta.das_empty_part_;
+  const bool is_das_empty_part = access_meta.das_empty_part_;
   ObSqlSchemaGuard *schema_guard = cg_.opt_ctx_->get_sql_schema_guard();
   CK(OB_NOT_NULL(schema_guard));
-  loc_meta.reset();
-  loc_meta.das_empty_part_ = is_das_empty_part;
-  loc_meta.table_loc_id_ = table_loc_id;
+  access_meta.reset();
+  access_meta.das_empty_part_ = is_das_empty_part;
+  access_meta.table_ref_id_ = table_ref_id;
   ObTableID real_table_id = table_schema.get_table_id();
-  loc_meta.ref_table_id_ = real_table_id;
+  access_meta.ref_table_id_ = real_table_id;
   bool is_weak_read = false;
   if (OB_ISNULL(cg_.opt_ctx_) || OB_ISNULL(cg_.opt_ctx_->get_exec_ctx())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (stmt.get_query_ctx()->has_dml_write_stmt_) {
-    loc_meta.is_weak_read_ = 0;
-  } else if (OB_FAIL(ObTableLocation::get_is_weak_read(stmt, &session,
+    access_meta.is_weak_read_ = 0;
+  } else if (OB_FAIL(TableAccessPlan::get_is_weak_read(stmt, &session,
                                                        cg_.opt_ctx_->get_exec_ctx()->get_sql_ctx(),
                                                        is_weak_read))) {
   } else if (is_weak_read) {
-    loc_meta.is_weak_read_ = 1;
+    access_meta.is_weak_read_ = 1;
   } else {
-    loc_meta.is_weak_read_ = 0;
+    access_meta.is_weak_read_ = 0;
   }
 
   // For rowkey doc auxiliary tables, table scan must be together with the data table,
   // and it does not have a relative table. Also, there is no relative table for global index.
   if (OB_SUCC(ret) && !table_schema.is_global_index_table() && !table_schema.is_rowkey_doc_id() && !table_schema.is_vec_rowkey_vid_type()) {
-    TableLocRelInfo *rel_info = nullptr;
+    RelatedTableAccessInfo *rel_info = nullptr;
     ObTableID data_table_id = table_schema.is_index_table() && !table_schema.is_vec_rowkey_vid_type() ?
                               table_schema.get_data_table_id() :
                               real_table_id;
-    rel_info = cg_.opt_ctx_->get_loc_rel_info_by_id(table_loc_id, data_table_id);
+    rel_info = cg_.opt_ctx_->get_access_relation_by_id(table_ref_id, data_table_id);
     if (OB_ISNULL(rel_info)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (rel_info->related_ids_.count() <= 1) {
       //the first table id is the source table, <=1 mean no dependency table
     } else {
-      loc_meta.related_table_ids_.set_capacity(rel_info->related_ids_.count() - 1);
+      access_meta.related_table_ids_.set_capacity(rel_info->related_ids_.count() - 1);
       for (int64_t i = 0; OB_SUCC(ret) && i < rel_info->related_ids_.count(); ++i) {
-        if (rel_info->related_ids_.at(i) != loc_meta.ref_table_id_) {
-          if (OB_FAIL(loc_meta.related_table_ids_.push_back(rel_info->related_ids_.at(i)))) {
+        if (rel_info->related_ids_.at(i) != access_meta.ref_table_id_) {
+          if (OB_FAIL(access_meta.related_table_ids_.push_back(rel_info->related_ids_.at(i)))) {
           }
         }
       }
@@ -3400,20 +3400,20 @@ int ObTscCgService::generate_vec_id_lookup_ctdef(const ObLogTableScan &op,
     ObArray<ObExpr*> result_outputs;
     scan_ctdef->ref_table_id_ = vec_id_index_tid;
     aux_lookup_ctdef->children_cnt_ = 2;
-    ObDASTableLocMeta *scan_loc_meta = OB_NEWx(ObDASTableLocMeta, &cg_.phy_plan_->get_allocator(), cg_.phy_plan_->get_allocator());
+    DASTableAccessMeta *scan_access_meta = OB_NEWx(DASTableAccessMeta, &cg_.phy_plan_->get_allocator(), cg_.phy_plan_->get_allocator());
     const int vid_rowkey_rowkey_cnt = 1;
-    if (OB_ISNULL(scan_loc_meta)) {
+    if (OB_ISNULL(scan_access_meta)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else if (OB_FAIL(generate_das_scan_ctdef(op, cg_ctx, *scan_ctdef, has_rowscn))) {
     } else if (OB_FAIL(result_outputs.assign(scan_ctdef->result_output_))) {
     } else if (OB_FAIL(scan_ctdef->rowkey_exprs_.init(vid_rowkey_rowkey_cnt))) {
     } else if (OB_FAIL(scan_ctdef->rowkey_exprs_.push_back(vid_col))) {
-    } else if (OB_FAIL(generate_table_loc_meta(op.get_table_id(),
+    } else if (OB_FAIL(generate_table_access_meta(op.get_table_id(),
                                                *op.get_stmt(),
                                                *index_schema,
                                                *cg_.opt_ctx_->get_session_info(),
-                                               *scan_loc_meta))) {
-    } else if (OB_FAIL(tsc_ctdef.attach_spec_.attach_loc_metas_.push_back(scan_loc_meta))) {
+                                               *scan_access_meta))) {
+    } else if (OB_FAIL(tsc_ctdef.attach_spec_.attach_access_metas_.push_back(scan_access_meta))) {
     } else {
       aux_lookup_ctdef->children_[0] = vec_scan_ctdef;
       aux_lookup_ctdef->children_[1] = scan_ctdef;
@@ -3481,8 +3481,8 @@ int ObTscCgService::generate_doc_id_lookup_ctdef(const ObLogTableScan &op,
     ObArray<ObExpr*> result_outputs;
     scan_ctdef->ref_table_id_ = doc_id_index_tid;
     aux_lookup_ctdef->children_cnt_ = 2;
-    ObDASTableLocMeta *scan_loc_meta = OB_NEWx(ObDASTableLocMeta, &cg_.phy_plan_->get_allocator(), cg_.phy_plan_->get_allocator());
-    if (OB_ISNULL(scan_loc_meta)) {
+    DASTableAccessMeta *scan_access_meta = OB_NEWx(DASTableAccessMeta, &cg_.phy_plan_->get_allocator(), cg_.phy_plan_->get_allocator());
+    if (OB_ISNULL(scan_access_meta)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else if (OB_FAIL(generate_das_scan_ctdef(op, cg_ctx, *scan_ctdef, has_rowscn))) {
     } else if (OB_FAIL(result_outputs.assign(scan_ctdef->result_output_))) {
@@ -3490,12 +3490,12 @@ int ObTscCgService::generate_doc_id_lookup_ctdef(const ObLogTableScan &op,
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(scan_ctdef->rowkey_exprs_.reserve(1))) {
     } else if (OB_FAIL(scan_ctdef->rowkey_exprs_.push_back(doc_id_expr))) {
-    } else if (OB_FAIL(generate_table_loc_meta(op.get_table_id(),
+    } else if (OB_FAIL(generate_table_access_meta(op.get_table_id(),
                                                *op.get_stmt(),
                                                *index_schema,
                                                *cg_.opt_ctx_->get_session_info(),
-                                               *scan_loc_meta))) {
-    } else if (OB_FAIL(tsc_ctdef.attach_spec_.attach_loc_metas_.push_back(scan_loc_meta))) {
+                                               *scan_access_meta))) {
+    } else if (OB_FAIL(tsc_ctdef.attach_spec_.attach_access_metas_.push_back(scan_access_meta))) {
     } else {
       aux_lookup_ctdef->children_[0] = ir_scan_ctdef;
       aux_lookup_ctdef->children_[1] = scan_ctdef;
@@ -3778,18 +3778,18 @@ int ObTscCgService::generate_rowkey_domain_id_ctdef(
   } else {
     bool has_rowscn = false;
     scan_ctdef->ref_table_id_ = rowkey_domain_id_tid;
-    ObDASTableLocMeta *scan_loc_meta =
-      OB_NEWx(ObDASTableLocMeta, &cg_.phy_plan_->get_allocator(), cg_.phy_plan_->get_allocator());
+    DASTableAccessMeta *scan_access_meta =
+      OB_NEWx(DASTableAccessMeta, &cg_.phy_plan_->get_allocator(), cg_.phy_plan_->get_allocator());
     share::ObDasSemanticIndexInfo &semantic_index_info = scan_ctdef->semantic_index_info_;
-    if (OB_ISNULL(scan_loc_meta)) {
+    if (OB_ISNULL(scan_access_meta)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else if (OB_FAIL(generate_das_scan_ctdef(op, cg_ctx, *scan_ctdef, has_rowscn))) {
-    } else if (OB_FAIL(generate_table_loc_meta(op.get_table_id(),
+    } else if (OB_FAIL(generate_table_access_meta(op.get_table_id(),
                                                *op.get_stmt(),
                                                *rowkey_domain_id_schema,
                                                *cg_.opt_ctx_->get_session_info(),
-                                               *scan_loc_meta))) {
-    } else if (OB_FAIL(tsc_ctdef.attach_spec_.attach_loc_metas_.push_back(scan_loc_meta))) {
+                                               *scan_access_meta))) {
+    } else if (OB_FAIL(tsc_ctdef.attach_spec_.attach_access_metas_.push_back(scan_access_meta))) {
     } else if (cur_type == ObDomainIdUtils::ObDomainIDType::EMB_VEC &&
                OB_FAIL(semantic_index_info.generate(data_schema,
                                                     rowkey_domain_id_schema,
@@ -3833,8 +3833,8 @@ int ObTscCgService::generate_table_lookup_ctdef(const ObLogTableScan &op,
 {
   int ret = OB_SUCCESS;
   ObIAllocator &allocator = cg_.phy_plan_->get_allocator();
-  tsc_ctdef.lookup_loc_meta_ = OB_NEWx(ObDASTableLocMeta, &allocator, allocator);
-  if (OB_ISNULL(tsc_ctdef.lookup_loc_meta_)) {
+  tsc_ctdef.lookup_access_meta_ = OB_NEWx(DASTableAccessMeta, &allocator, allocator);
+  if (OB_ISNULL(tsc_ctdef.lookup_access_meta_)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(ObDASTaskFactory::alloc_das_ctdef(DAS_OP_TABLE_SCAN,
                                                        cg_.phy_plan_->get_allocator(),
@@ -3853,11 +3853,11 @@ int ObTscCgService::generate_table_lookup_ctdef(const ObLogTableScan &op,
                                                        table_schema))) {
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(generate_table_loc_meta(op.get_table_id(),
+    } else if (OB_FAIL(generate_table_access_meta(op.get_table_id(),
                                                *op.get_stmt(),
                                                *table_schema,
                                                *cg_.opt_ctx_->get_session_info(),
-                                               *tsc_ctdef.lookup_loc_meta_))) {
+                                               *tsc_ctdef.lookup_access_meta_))) {
     } else {
       tsc_ctdef.snapshot_item_.need_scn_ |= has_rowscn;
       // lookup to main table should invoke get
@@ -3868,7 +3868,7 @@ int ObTscCgService::generate_table_lookup_ctdef(const ObLogTableScan &op,
       if (OB_ISNULL(op.get_calc_part_id_expr()) || op.get_rowkey_exprs().empty()) {
         ret = OB_INVALID_ARGUMENT;
       } else if (OB_FAIL(cg_.generate_calc_part_id_expr(*op.get_calc_part_id_expr(),
-                                                        tsc_ctdef.lookup_loc_meta_,
+                                                        tsc_ctdef.lookup_access_meta_,
                                                         tsc_ctdef.calc_part_id_expr_))) {
       } else if (OB_FAIL(cg_.generate_rt_exprs(op.get_rowkey_exprs(),
                                                tsc_ctdef.global_index_rowkey_exprs_))) {
@@ -3901,7 +3901,7 @@ int ObTscCgService::generate_table_lookup_ctdef(const ObLogTableScan &op,
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
       lookup_ctdef->children_cnt_ = 2;
-      if (OB_FAIL(tsc_ctdef.attach_spec_.attach_loc_metas_.push_back(tsc_ctdef.lookup_loc_meta_))) {
+      if (OB_FAIL(tsc_ctdef.attach_spec_.attach_access_metas_.push_back(tsc_ctdef.lookup_access_meta_))) {
       } else {
         lookup_ctdef->children_[0] = scan_ctdef;
         if (op.is_tsc_with_domain_id()) {

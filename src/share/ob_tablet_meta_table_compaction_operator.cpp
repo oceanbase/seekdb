@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SHARE
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_tablet_meta_table_compaction_operator.h"
 #include "share/tablet/ob_tablet_table_operator.h"
 #include "share/tablet/ob_tablet_meta_table_storage.h"

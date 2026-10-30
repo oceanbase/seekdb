@@ -850,8 +850,7 @@ inline int ObHashPartInfrastructure<HashCol, HashRowStore>::init_mem_context()
     lib::ContextParam param;
     param.set_properties(lib::USE_TL_PAGE_OPTIONAL)
       .set_mem_attr("HashPartInfra",
-                    common::ObCtxIds::WORK_AREA)
-      .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
+                    common::ObCtxIds::WORK_AREA);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
     } else if (OB_ISNULL(mem_context_)) {
       ret = OB_ERR_UNEXPECTED;

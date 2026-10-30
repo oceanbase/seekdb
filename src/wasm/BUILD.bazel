@@ -63,10 +63,7 @@ final_link(
     group_deps = ["//src/observer:observer_embedded_runtime"],
     sdk_deps = ["//bazel/sdk_sources:source_sdk", "//bazel/third_party:base_libraries"],
     ordered_link_files = [
-        "//rust:sql_nio_archive",
-        "//rust:config_archive",
-        "//rust:local_archive",
-        "//rust:logger_archive",
+        "//rust:archive",
     ],
     linkopts = [
         "-Oz",
@@ -88,7 +85,7 @@ final_link(
         "-sASSERTIONS=2",
         "-sEXIT_RUNTIME=1",
         "-Wl,--error-limit=0",
-        "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_nio_memory_read','_nio_memory_write','_nio_memory_close']",
+        "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free']",
         "-sEXPORTED_RUNTIME_METHODS=['HEAPU8','getValue']",
         "-sWASMFS",
     ] + ["-Wl,--wrap=" + call for call in _WRAPPED_CALLS],

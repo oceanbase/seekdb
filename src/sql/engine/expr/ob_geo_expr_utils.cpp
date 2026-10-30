@@ -793,9 +793,11 @@ int ObGeoExprUtils::ob_geo_find_unit(const ObGeoUnit *units, const ObString &nam
 
   if (!is_found) {
     ret = OB_ERR_UNIT_NOT_FOUND;
-    char name_str[name.length() + 1];
-    name_str[name.length()] = '\0';
-    MEMCPY(name_str, name.ptr(), name.length());
+    // Bound diagnostic text independently of SQL input size.
+    char name_str[256];
+    const int32_t name_len = MIN(name.length(), static_cast<int32_t>(sizeof(name_str) - 1));
+    MEMCPY(name_str, name.ptr(), name_len);
+    name_str[name_len] = '\0';
     LOG_USER_ERROR(OB_ERR_UNIT_NOT_FOUND, name_str);
   }
   return ret;
@@ -808,9 +810,11 @@ int ObGeoExprUtils::length_unit_conversion(const ObString &unit_str, const ObSrs
   double factor = 0.0;
   if (OB_ISNULL(srs) || srs->get_srid() == 0) {
     ret = OB_ERR_GEOMETRY_IN_UNKNOWN_LENGTH_UNIT;
-    char name_str[unit_str.length() + 1];
-    name_str[unit_str.length()] = '\0';
-    MEMCPY(name_str, unit_str.ptr(), unit_str.length());
+    // Bound diagnostic text independently of SQL input size.
+    char name_str[256];
+    const int32_t name_len = MIN(unit_str.length(), static_cast<int32_t>(sizeof(name_str) - 1));
+    MEMCPY(name_str, unit_str.ptr(), name_len);
+    name_str[name_len] = '\0';
     LOG_USER_ERROR(OB_ERR_GEOMETRY_IN_UNKNOWN_LENGTH_UNIT, N_ST_DISTANCE, name_str);
   } else if (OB_FAIL(ob_geo_find_unit(OB_GEO_UNITS, unit_str, factor))) {
   } else {

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_sstable_merge_info_mgr.h"
+#include "lib/alloc/alloc_func.h"
 
 namespace oceanbase
 {

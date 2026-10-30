@@ -16,9 +16,10 @@
 
 #define USING_LOG_PREFIX LIB
 #include "share/rc/ob_server_runtime.h"
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "sql/executor/ob_memory_tracker.h"
 #include "share/ob_errno.h"
+#include "lib/alloc/alloc_func.h"
 #include "lib/rc/context.h"
 
 using namespace oceanbase::lib;

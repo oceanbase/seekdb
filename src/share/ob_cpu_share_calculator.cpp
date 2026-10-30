@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include <algorithm>
 
 #include "share/ob_cpu_share_calculator.h"

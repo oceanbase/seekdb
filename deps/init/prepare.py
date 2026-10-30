@@ -48,10 +48,10 @@ def host_profile():
         tag = "windows." + arch
     elif system == "Darwin":
         arm = subprocess.run(["sysctl", "-n", "hw.optional.arm64"],
-                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, universal_newlines=True)
         if arch == "aarch64" or arm.stdout.strip() == "1":
             arch = "arm64"
-        major = int(subprocess.check_output(["sw_vers", "-productVersion"], text=True).split(".")[0])
+        major = int(subprocess.check_output(["sw_vers", "-productVersion"], universal_newlines=True).split(".")[0])
         release = next((v for v in (27, 15, 13) if major >= v), None)
         tag = "macos%s.%s" % (release, arch)
     elif system == "Linux":
@@ -182,6 +182,30 @@ def install(profile, destination, cache_directory=None):
     print("Dependencies ready: " + str(destination), flush=True)
 
 
+def prepare_rust(target=None):
+    if not shutil.which("rustup") or not shutil.which("cargo"):
+        with tempfile.TemporaryDirectory(prefix="rustup-init.") as directory:
+            if os.name == "nt":
+                arch = {"amd64": "x86_64", "x86_64": "x86_64", "arm64": "aarch64", "aarch64": "aarch64"}[platform.machine().lower()]
+                installer = Path(directory) / "rustup-init.exe"
+                url = os.environ["RUSTUP_UPDATE_ROOT"].rstrip("/") + "/dist/" + arch + "-pc-windows-msvc/rustup-init.exe"
+                command = [str(installer)]
+            else:
+                installer = Path(directory) / "rustup-init.sh"
+                url = "https://rsproxy.cn/rustup-init.sh"
+                command = ["sh", str(installer)]
+            print("Installing rustup", flush=True)
+            download(os.environ.get("RUSTUP_INIT_URL", url), installer)
+            subprocess.run(command + ["-y", "--profile", "minimal", "--default-toolchain", "none",
+                                      "--no-modify-path"], check=True)
+    print("Preparing Rust toolchain from rust-toolchain.toml", flush=True)
+    environment = dict(os.environ, RUSTUP_AUTO_INSTALL="1")
+    environment.pop("RUSTUP_TOOLCHAIN", None)
+    subprocess.run(["rustup", "show", "active-toolchain"], cwd=ROOT, env=environment, check=True)
+    if target:
+        subprocess.run(["rustup", "target", "add", target], cwd=ROOT, env=environment, check=True)
+
+
 def main(arguments):
     parser = argparse.ArgumentParser(prog="build.py init", description=__doc__)
     targets = parser.add_mutually_exclusive_group()
@@ -202,16 +226,19 @@ def main(arguments):
         ).returncode:
             raise ValueError("iOS SDK unavailable; install Xcode and set DEVELOPER_DIR to its Contents/Developer directory")
 
+    profile = host_profile()
+    rust_target = None
+    if options.android:
+        rust_target = "aarch64-linux-android"
+    elif options.ios:
+        rust_target = "aarch64-apple-ios-sim" if options.simulator else "aarch64-apple-ios"
+    prepare_rust(rust_target)
     cache = os.environ.get("DEP_CACHE_DIR") if os.name != "nt" else None
-    install(host_profile(), ROOT / "deps/3rd", Path(cache).expanduser().resolve() if cache else None)
+    install(profile, ROOT / "deps/3rd", Path(cache).expanduser().resolve() if cache else None)
     if options.wasm:
         subprocess.run([sys.executable, str(PROFILES / "wasm/build.py")], cwd=ROOT, check=True)
     if options.android:
         install(PROFILES / "oceanbase.android.arm64.deps", ROOT / "deps/android")
-    if options.ios or options.android:
-        target = "aarch64-linux-android" if options.android else (
-            "aarch64-apple-ios-sim" if options.simulator else "aarch64-apple-ios")
-        subprocess.run(["rustup", "target", "add", target], cwd=ROOT / "rust", check=True)
     if options.ios:
         subprocess.run([
             sys.executable, str(PROFILES / "ios/build.py"), "--reuse", "--jobs", str(os.cpu_count() or 1),

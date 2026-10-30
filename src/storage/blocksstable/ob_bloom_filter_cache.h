@@ -17,7 +17,7 @@
 #ifndef OB_BLOOM_FILTER_CACHE_H_
 #define OB_BLOOM_FILTER_CACHE_H_
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "share/config/ob_server_config.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 

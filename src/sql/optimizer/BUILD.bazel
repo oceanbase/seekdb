@@ -121,7 +121,6 @@ grouped_unity_cc_library(
         "//src/share:io_bench_controller_interface",
         "//src/share:lib_cache_namespace",
         "//src/share:local_storage_interface",
-        "//src/share:location",
         "//src/share:log_protocol",
         "//src/share:ls_restore_status",
         "//src/share:memory_support",

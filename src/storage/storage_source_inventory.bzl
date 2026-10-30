@@ -502,7 +502,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/lob/ob_lob_persistent_iterator.cpp",
             "src/storage/lob/ob_lob_write_buffer.cpp",
             "src/storage/lob/ob_lob_cursor.cpp",
-            "src/storage/lob/ob_lob_location.cpp",
             "src/storage/lob/ob_lob_iterator.cpp",
             "src/storage/lob/ob_lob_handler.cpp",
             "src/storage/lob/ob_lob_meta_manager.cpp",

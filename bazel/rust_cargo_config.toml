@@ -1,0 +1,5 @@
+[source.crates-io]
+replace-with = "seekdb"
+
+[registries.seekdb]
+index = "sparse+https://rsproxy.cn/index/"

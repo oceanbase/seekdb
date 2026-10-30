@@ -10,7 +10,6 @@ ob1.check_until_timeout select count(*)>0 from oceanbase.__all_virtual_server_ev
 
 ob1.check_until_timeout select count(*) from oceanbase.__all_admin_job where job_status='INPROGRESS', 0, 60;
 
-ob1.mysql alter system set syslog_io_bandwidth_limit='300M';
 
 ob1.mysql create resource unit box max_cpu 2, memory_size='6G';
 ob1.mysql create resource pool pool unit = 'box', unit_num = 1;

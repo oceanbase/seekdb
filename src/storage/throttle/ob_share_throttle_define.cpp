@@ -15,7 +15,7 @@
  */
 
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_share_throttle_define.h"
 #include "lib/alloc/alloc_func.h"
 #include "storage/throttle/ob_throttle_info.h"

@@ -9,11 +9,6 @@ description = "Durable instance parameter configuration for seekdb"
 name = "config"
 crate-type = ["rlib"]
 
-[build-dependencies]
-cxx-build = "1"
-serde = { version = "1", features = ["derive"] }
-serde_yaml = "0.9"
-
 [dependencies]
 cxx = "1"
 kv = { path = "../kv" }

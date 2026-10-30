@@ -15,9 +15,9 @@
  */
 
 #define USING_LOG_PREFIX SERVER
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "query/protocol/ob_mysql_packet_sender.h"
-#include "nio.h"
+#include "rust/sql_nio.h"
 #include "observer/mysql/ob_mysql_result_set.h"
 #include "query/protocol/ob_mysql_rust_row.h"
 #include "observer/mysql/obmp_utils.h"
@@ -56,47 +56,47 @@ namespace observer
 namespace
 {
 
-static_assert(sizeof(NioByteView) == 16, "NioByteView ABI mismatch");
-static_assert(sizeof(NioMysqlKvView) == 32, "NioMysqlKvView ABI mismatch");
-static_assert(std::is_standard_layout<NioMysqlKvView>::value,
-              "NioMysqlKvView must have standard layout");
-static_assert(std::is_trivially_copyable<NioMysqlKvView>::value,
-              "NioMysqlKvView must be trivially copyable");
-static_assert(offsetof(NioMysqlKvView, key) == 0,
-              "NioMysqlKvView.key ABI mismatch");
-static_assert(offsetof(NioMysqlKvView, value) == 16,
-              "NioMysqlKvView.value ABI mismatch");
-static_assert(sizeof(NioMysqlOkView) == 96, "NioMysqlOkView ABI mismatch");
-static_assert(offsetof(NioMysqlOkView, message) == 32,
-              "NioMysqlOkView.message ABI mismatch");
-static_assert(offsetof(NioMysqlOkView, system_vars) == 64,
-              "NioMysqlOkView.system_vars ABI mismatch");
-static_assert(sizeof(NioMysqlFieldView) == 136,
-              "NioMysqlFieldView ABI mismatch");
-static_assert(std::is_standard_layout<NioMysqlFieldView>::value,
-              "NioMysqlFieldView must have standard layout");
-static_assert(std::is_trivially_copyable<NioMysqlFieldView>::value,
-              "NioMysqlFieldView must be trivially copyable");
-static_assert(offsetof(NioMysqlFieldView, column_length) == 112,
-              "NioMysqlFieldView.column_length ABI mismatch");
-static_assert(offsetof(NioMysqlFieldView, field_type) == 120,
-              "NioMysqlFieldView.field_type ABI mismatch");
-static_assert(offsetof(NioMysqlFieldView, decimals) == 128,
-              "NioMysqlFieldView.decimals ABI mismatch");
+static_assert(sizeof(oceanbase::nio::NioByteView) == 16, "oceanbase::nio::NioByteView ABI mismatch");
+static_assert(sizeof(oceanbase::nio::NioMysqlKvView) == 32, "oceanbase::nio::NioMysqlKvView ABI mismatch");
+static_assert(std::is_standard_layout<oceanbase::nio::NioMysqlKvView>::value,
+              "oceanbase::nio::NioMysqlKvView must have standard layout");
+static_assert(std::is_trivially_copyable<oceanbase::nio::NioMysqlKvView>::value,
+              "oceanbase::nio::NioMysqlKvView must be trivially copyable");
+static_assert(offsetof(oceanbase::nio::NioMysqlKvView, key) == 0,
+              "oceanbase::nio::NioMysqlKvView.key ABI mismatch");
+static_assert(offsetof(oceanbase::nio::NioMysqlKvView, value) == 16,
+              "oceanbase::nio::NioMysqlKvView.value ABI mismatch");
+static_assert(sizeof(oceanbase::nio::NioMysqlOkView) == 96, "oceanbase::nio::NioMysqlOkView ABI mismatch");
+static_assert(offsetof(oceanbase::nio::NioMysqlOkView, message) == 32,
+              "oceanbase::nio::NioMysqlOkView.message ABI mismatch");
+static_assert(offsetof(oceanbase::nio::NioMysqlOkView, system_vars) == 64,
+              "oceanbase::nio::NioMysqlOkView.system_vars ABI mismatch");
+static_assert(sizeof(oceanbase::nio::NioMysqlFieldView) == 136,
+              "oceanbase::nio::NioMysqlFieldView ABI mismatch");
+static_assert(std::is_standard_layout<oceanbase::nio::NioMysqlFieldView>::value,
+              "oceanbase::nio::NioMysqlFieldView must have standard layout");
+static_assert(std::is_trivially_copyable<oceanbase::nio::NioMysqlFieldView>::value,
+              "oceanbase::nio::NioMysqlFieldView must be trivially copyable");
+static_assert(offsetof(oceanbase::nio::NioMysqlFieldView, column_length) == 112,
+              "oceanbase::nio::NioMysqlFieldView.column_length ABI mismatch");
+static_assert(offsetof(oceanbase::nio::NioMysqlFieldView, field_type) == 120,
+              "oceanbase::nio::NioMysqlFieldView.field_type ABI mismatch");
+static_assert(offsetof(oceanbase::nio::NioMysqlFieldView, decimals) == 128,
+              "oceanbase::nio::NioMysqlFieldView.decimals ABI mismatch");
 static_assert(static_cast<uint32_t>(MYSQL_TYPE_COMPLEX) == 160,
               "Rust Field encoder assumes the MySQL complex-type sentinel");
 static_assert(static_cast<uint32_t>(MYSQL_TYPE_NOT_DEFINED) == 65535,
               "Rust Field encoder assumes the undefined default-type sentinel");
 
-NioByteView make_byte_view(const ObString &value) {
-  NioByteView view = {};
+oceanbase::nio::NioByteView make_byte_view(const ObString &value) {
+  oceanbase::nio::NioByteView view = {};
   view.data = value.ptr();
   view.len = value.length();
   return view;
 }
 
-NioMysqlFieldView make_field_view(const ObMySQLField &field) {
-  NioMysqlFieldView view = {};
+oceanbase::nio::NioMysqlFieldView make_field_view(const ObMySQLField &field) {
+  oceanbase::nio::NioMysqlFieldView view = {};
   view.schema = make_byte_view(field.dname_);
   view.table = make_byte_view(field.tname_);
   view.org_table = make_byte_view(field.org_tname_);
@@ -114,20 +114,20 @@ NioMysqlFieldView make_field_view(const ObMySQLField &field) {
 }
 
 OB_NOINLINE int encode_field_packet(const OMPKField &field_packet,
-                                    NioConnectionHandle *connection_handle,
+                                    oceanbase::nio::NioConnectionHandle *connection_handle,
                                     const uint64_t generation,
                                     int64_t *framed_len) {
-  const NioMysqlFieldView view = make_field_view(field_packet.get_field());
-  return nio_response_append_field(connection_handle, generation, &view,
+  const oceanbase::nio::NioMysqlFieldView view = make_field_view(field_packet.get_field());
+  return oceanbase::nio::response_append_field(connection_handle, generation, &view,
                                    framed_len);
 }
 
 OB_NOINLINE int encode_row_packet(const OMPKRow &row_packet,
-                                  NioConnectionHandle *connection_handle,
+                                  oceanbase::nio::NioConnectionHandle *connection_handle,
                                   const uint64_t generation,
                                   int64_t *framed_len, int &encode_ret) {
   int ret = OB_SUCCESS;
-  int frame_ret = NIO_FRAME_ERROR;
+  int frame_ret = static_cast<int32_t>(oceanbase::nio::FrameStatus::Error);
   const ObMySQLRow &row = row_packet.get_row();
   if (row.is_packed()) {
     const char *blob = NULL;
@@ -135,7 +135,7 @@ OB_NOINLINE int encode_row_packet(const OMPKRow &row_packet,
     if (OB_FAIL(row.get_packed_row_blob(blob, blob_len))) {
       encode_ret = ret;
     } else {
-      frame_ret = nio_response_append_packed_row_blob(
+      frame_ret = oceanbase::nio::response_append_packed_row_blob(
           connection_handle, generation, blob, blob_len, framed_len);
     }
   } else {
@@ -146,7 +146,7 @@ OB_NOINLINE int encode_row_packet(const OMPKRow &row_packet,
     } else {
       ObArenaAllocator scratch_allocator(ObMemAttr("MySQLRowEncode"));
       ObSEArray<ObMySQLCellValue, 16> values;
-      ObSEArray<NioMysqlCellView, 16> views;
+      ObSEArray<oceanbase::nio::NioMysqlCellView, 16> views;
       if (OB_FAIL(values.prepare_allocate(cell_count))) {
         encode_ret = ret;
       } else if (OB_FAIL(views.prepare_allocate(cell_count))) {
@@ -162,14 +162,14 @@ OB_NOINLINE int encode_row_packet(const OMPKRow &row_packet,
         if (OB_FAIL(ret)) {
           encode_ret = ret;
         } else {
-          NioMysqlRowView view = {};
+          oceanbase::nio::NioMysqlRowView view = {};
           view.cells = &views.at(0);
           view.cell_count = views.count();
           if (OB_FAIL(query::get_nio_mysql_row_protocol(row.get_protocol_type(),
                                                         view.protocol))) {
             encode_ret = ret;
           } else {
-            frame_ret = nio_response_append_row(connection_handle, generation,
+            frame_ret = oceanbase::nio::response_append_row(connection_handle, generation,
                                                 &view, framed_len);
           }
         }
@@ -180,11 +180,11 @@ OB_NOINLINE int encode_row_packet(const OMPKRow &row_packet,
 }
 
 int append_ok_kv_views(const ObIArray<ObStringKV> &source,
-                       ObIArray<NioMysqlKvView> &views) {
+                       ObIArray<oceanbase::nio::NioMysqlKvView> &views) {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < source.count(); ++i) {
     const ObStringKV &kv = source.at(i);
-    NioMysqlKvView view = {};
+    oceanbase::nio::NioMysqlKvView view = {};
     view.key = make_byte_view(kv.key_);
     view.value = make_byte_view(kv.value_);
     if (OB_FAIL(views.push_back(view))) {
@@ -193,18 +193,18 @@ int append_ok_kv_views(const ObIArray<ObStringKV> &source,
   return ret;
 }
 
-void fill_ok_view(const OMPKOK &ok, NioMysqlOkView &view) {
+void fill_ok_view(const OMPKOK &ok, oceanbase::nio::NioMysqlOkView &view) {
   view.affected_rows = ok.get_affected_rows();
   view.last_insert_id = ok.get_last_insert_id();
   view.capability_flags = ok.get_capability().capability_;
   if (ok.use_standard_serialize()) {
-    view.behavior_flags |= NIO_MYSQL_OK_USE_STANDARD_SERIALIZE;
+    view.behavior_flags |= static_cast<uint32_t>(oceanbase::nio::OkFlag::UseStandardSerialize);
   }
   if (ok.is_schema_changed()) {
-    view.behavior_flags |= NIO_MYSQL_OK_SCHEMA_CHANGED;
+    view.behavior_flags |= static_cast<uint32_t>(oceanbase::nio::OkFlag::SchemaChanged);
   }
   if (ok.is_state_changed()) {
-    view.behavior_flags |= NIO_MYSQL_OK_STATE_CHANGED;
+    view.behavior_flags |= static_cast<uint32_t>(oceanbase::nio::OkFlag::StateChanged);
   }
   view.status_flags = ok.get_server_status().flags_;
   view.warnings = ok.get_warnings();
@@ -213,14 +213,14 @@ void fill_ok_view(const OMPKOK &ok, NioMysqlOkView &view) {
 }
 
 OB_NOINLINE int
-encode_ok_packet_with_vars(const OMPKOK &ok, NioMysqlOkView &view,
-                           NioConnectionHandle *connection_handle,
+encode_ok_packet_with_vars(const OMPKOK &ok, oceanbase::nio::NioMysqlOkView &view,
+                           oceanbase::nio::NioConnectionHandle *connection_handle,
                            const uint64_t generation,
                            int64_t *framed_len, int &encode_ret) {
   int ret = OB_SUCCESS;
-  int frame_ret = NIO_FRAME_ERROR;
+  int frame_ret = static_cast<int32_t>(oceanbase::nio::FrameStatus::Error);
   const int64_t system_var_count = ok.get_system_vars().count();
-  ObSEArray<NioMysqlKvView, 24> variable_views;
+  ObSEArray<oceanbase::nio::NioMysqlKvView, 24> variable_views;
   if (OB_FAIL(variable_views.reserve(system_var_count))) {
     encode_ret = ret;
   } else if (OB_FAIL(
@@ -229,23 +229,23 @@ encode_ok_packet_with_vars(const OMPKOK &ok, NioMysqlOkView &view,
   } else {
     view.system_vars = 0 == system_var_count ? NULL : &variable_views.at(0);
     view.system_var_count = system_var_count;
-    frame_ret = nio_response_append_ok(connection_handle, generation, &view,
+    frame_ret = oceanbase::nio::response_append_ok(connection_handle, generation, &view,
                                        framed_len);
   }
   return frame_ret;
 }
 
 OB_NOINLINE int encode_ok_packet(const OMPKOK &ok,
-                                 NioConnectionHandle *connection_handle,
+                                 oceanbase::nio::NioConnectionHandle *connection_handle,
                                  const uint64_t generation, int64_t *framed_len,
                                  int &encode_ret) {
-  NioMysqlOkView view = {};
+  oceanbase::nio::NioMysqlOkView view = {};
   fill_ok_view(ok, view);
   const bool has_system_vars = !ok.get_system_vars().empty();
   return has_system_vars
              ? encode_ok_packet_with_vars(ok, view, connection_handle,
                                           generation, framed_len, encode_ret)
-             : nio_response_append_ok(connection_handle, generation, &view,
+             : oceanbase::nio::response_append_ok(connection_handle, generation, &view,
                                       framed_len);
 }
 
@@ -376,7 +376,7 @@ int ObMPPacketSender::do_init(rpc::ObRequest *req, bool owns_request,
                               int64_t query_receive_ts) {
   int ret = OB_SUCCESS;
   ObSMConnection *conn = NULL;
-  NioConnectionHandle *connection_handle = NULL;
+  oceanbase::nio::NioConnectionHandle *connection_handle = NULL;
   if (RequestOwnership::RELEASED != request_ownership_ &&
       RequestOwnership::DETACHED_FOR_RETRY != request_ownership_) {
     ret = OB_STATE_NOT_MATCH;
@@ -495,7 +495,7 @@ int ObMPPacketSender::response_resultset_metadata(
   int ret = OB_SUCCESS;
   int64_t packet_count = 0;
   int64_t framed_len = 0;
-  ObSEArray<NioMysqlFieldView, 16> views;
+  ObSEArray<oceanbase::nio::NioMysqlFieldView, 16> views;
   if (!is_conn_valid()) {
     ret = OB_CONNECT_ERROR;
   } else if (OB_UNLIKELY(RequestOwnership::OWNED != request_ownership_) ||
@@ -509,9 +509,9 @@ int ObMPPacketSender::response_resultset_metadata(
       for (int64_t i = 0; i < fields.count(); ++i) {
         views.at(i) = make_field_view(fields.at(i));
       }
-      const NioMysqlFieldView *view_data =
+      const oceanbase::nio::NioMysqlFieldView *view_data =
           views.count() == 0 ? NULL : &views.at(0);
-      const int append_ret = nio_response_append_resultset_metadata(
+      const int append_ret = oceanbase::nio::response_append_resultset_metadata(
           nio_connection_handle_, request_generation_,
           include_result_header ? 1 : 0, view_data, views.count(),
           eof_field_count, warnings, status_flags, &packet_count, &framed_len);
@@ -937,7 +937,7 @@ int ObMPPacketSender::append_response(ObMySQLPacket &pkt, int64_t &seri_size) {
     // safe: a failed encoder may already have flushed an earlier batch, moved
     // a sequence cursor, or marked the Rust connection unusable.
     response_started_ = true;
-    NioConnectionHandle *connection_handle = nio_connection_handle_;
+    oceanbase::nio::NioConnectionHandle *connection_handle = nio_connection_handle_;
     int encode_ret = OB_SUCCESS;
     int append_ret = -1;
     switch (pkt.get_mysql_packet_type()) {
@@ -945,7 +945,7 @@ int ObMPPacketSender::append_response(ObMySQLPacket &pkt, int64_t &seri_size) {
         const OMPKError &error = static_cast<const OMPKError &>(pkt);
         const ObString sql_state = error.get_sql_state();
         const ObString message = error.get_message();
-        append_ret = nio_response_append_error(
+        append_ret = oceanbase::nio::response_append_error(
             connection_handle, request_generation_, error.get_err_code(),
             sql_state.ptr(), sql_state.length(), message.ptr(),
             message.length(), &seri_size);
@@ -956,7 +956,7 @@ int ObMPPacketSender::append_response(ObMySQLPacket &pkt, int64_t &seri_size) {
             static_cast<const OMPKAuthSwitch &>(pkt);
         const ObString &plugin_name = auth_switch.get_plugin_name();
         const ObString &scramble = auth_switch.get_scramble();
-        append_ret = nio_response_append_auth_switch(
+        append_ret = oceanbase::nio::response_append_auth_switch(
             connection_handle, request_generation_, plugin_name.ptr(),
             plugin_name.length(), scramble.ptr(), scramble.length(),
             &seri_size);
@@ -966,7 +966,7 @@ int ObMPPacketSender::append_response(ObMySQLPacket &pkt, int64_t &seri_size) {
         const OMPKLocalInfile &local_infile =
             static_cast<const OMPKLocalInfile &>(pkt);
         const ObString &filename = local_infile.get_filename();
-        append_ret = nio_response_append_local_infile(
+        append_ret = oceanbase::nio::response_append_local_infile(
             connection_handle, request_generation_, filename.ptr(),
             filename.length(), &seri_size);
         break;
@@ -975,21 +975,21 @@ int ObMPPacketSender::append_response(ObMySQLPacket &pkt, int64_t &seri_size) {
         const OMPKString &string = static_cast<const OMPKString &>(pkt);
         const ObString &value = string.get_string();
         append_ret =
-            nio_response_append_string(connection_handle, request_generation_,
+            oceanbase::nio::response_append_string(connection_handle, request_generation_,
                                        value.ptr(), value.length(), &seri_size);
         break;
       }
       case ObMySQLPacketType::PKT_RESHEAD: {
         const OMPKResheader &resheader =
             static_cast<const OMPKResheader &>(pkt);
-        append_ret = nio_response_append_result_header(
+        append_ret = oceanbase::nio::response_append_result_header(
             connection_handle, request_generation_, resheader.get_field_count(),
             &seri_size);
         break;
       }
       case ObMySQLPacketType::PKT_EOF: {
         const OMPKEOF &eof = static_cast<const OMPKEOF &>(pkt);
-        append_ret = nio_response_append_eof(
+        append_ret = oceanbase::nio::response_append_eof(
             connection_handle, request_generation_, eof.get_field_count(),
             eof.get_warning_count(), eof.get_server_status().flags_,
             &seri_size);
@@ -997,7 +997,7 @@ int ObMPPacketSender::append_response(ObMySQLPacket &pkt, int64_t &seri_size) {
       }
       case ObMySQLPacketType::PKT_PREPARE: {
         const OMPKPrepare &prepare = static_cast<const OMPKPrepare &>(pkt);
-        append_ret = nio_response_append_prepare_ok(
+        append_ret = oceanbase::nio::response_append_prepare_ok(
             connection_handle, request_generation_, prepare.get_statement_id(),
             prepare.get_column_num(), prepare.get_param_num(),
             prepare.get_warning_count(), &seri_size);
@@ -1038,7 +1038,7 @@ int ObMPPacketSender::append_response(ObMySQLPacket &pkt, int64_t &seri_size) {
 
 int ObMPPacketSender::flush_buffer(const bool is_last) {
   int ret = OB_SUCCESS;
-  NioConnectionHandle *connection_handle = nio_connection_handle_;
+  oceanbase::nio::NioConnectionHandle *connection_handle = nio_connection_handle_;
   if (OB_UNLIKELY(!is_conn_valid())) {
     ret = OB_CONNECT_ERROR;
   } else if (RequestOwnership::OWNED != request_ownership_) {
@@ -1047,7 +1047,7 @@ int ObMPPacketSender::flush_buffer(const bool is_last) {
   } else if (OB_ISNULL(req_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("req_ is null", KP_(req), K(ret));
-  } else if (0 != nio_response_flush(connection_handle, request_generation_,
+  } else if (0 != oceanbase::nio::response_flush(connection_handle, request_generation_,
                                      is_last ? 1 : 0)) {
     ret = OB_IO_ERROR;
   }

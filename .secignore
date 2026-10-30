@@ -555,7 +555,6 @@
 **/deps/init/oceanbase.el7.x86_64.deps
   https://ob-yum.oceanbase-dev.com/7/x86_64/test/corebolt/
 **/deps/init/oceanbase.el7.aarch64.deps
-  https://ob-yum.oceanbase-dev.com/7/aarch64/test/ob-deploy/
   https://ob-yum.oceanbase-dev.com/7/aarch64/test/corebolt/
 **/deps/init/oceanbase.el7.aarch64.deps.opensource
   https://ob-yum.oceanbase-dev.com/7/aarch64/test/obshell/

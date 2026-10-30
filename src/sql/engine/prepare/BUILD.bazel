@@ -58,7 +58,6 @@ unity_cc_library(
         "//src/share:io",
         "//src/share:lib_cache_namespace",
         "//src/share:lob_runtime",
-        "//src/share:location",
         "//src/share:memory_support",
         "//src/share:object_cast",
         "//src/share:pl_integer_type",

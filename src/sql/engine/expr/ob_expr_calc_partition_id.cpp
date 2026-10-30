@@ -107,7 +107,7 @@ int ObExprCalcPartitionBase::cg_expr(ObExprCGCtx &expr_cg_ctx,
     int64_t param_cnt = raw_expr.get_param_count();
     if (0 == param_cnt) {
       OB_ASSERT(PARTITION_LEVEL_ZERO == calc_part_info->part_level_);
-      rt_expr.eval_func_ = ObExprCalcPartitionBase::calc_no_partition_location;
+      rt_expr.eval_func_ = ObExprCalcPartitionBase::resolve_nonpartitioned_tablet;
     } else if (1 == param_cnt) {
       OB_ASSERT(1 == rt_expr.arg_cnt_);
       OB_ASSERT(PARTITION_LEVEL_ONE == calc_part_info->part_level_);
@@ -150,7 +150,7 @@ int ObExprCalcPartitionBase::init_calc_part_info(ObIAllocator *allocator,
   return ret;
 }
 
-int ObExprCalcPartitionBase::calc_no_partition_location(const ObExpr &expr,
+int ObExprCalcPartitionBase::resolve_nonpartitioned_tablet(const ObExpr &expr,
                                                         ObEvalCtx &ctx,
                                                         ObDatum &res_datum)
 {

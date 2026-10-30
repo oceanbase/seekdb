@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_multi_version_schema_service.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/schema/ob_schema_publish_signal.h"

@@ -1847,7 +1847,7 @@ int ObSelectLogPlan::get_distribute_distinct_method(ObLogicalOperator *top,
 
   if (OB_SUCC(ret) && (distinct_dist_methods & DistAlgo::DIST_HASH_HASH_LOCAL)) {
     if (NULL == top->get_strong_sharding()
-        || !top->get_strong_sharding()->is_distributed_with_table_location_and_partitioning()) {
+        || !top->get_strong_sharding()->is_partitioned_multi_tablet_with_targets()) {
       distinct_dist_methods &= ~DistAlgo::DIST_HASH_HASH_LOCAL;
       OPT_TRACE("distinct will not use hash local method, due to the sharding");
     } else if (!reduce_exprs.empty()
@@ -2784,7 +2784,7 @@ int ObSelectLogPlan::check_if_union_all_match_extended_partition_wise(const ObIA
     if (OB_ISNULL(child_op = child_ops.at(i)) ||
         OB_ISNULL(child_sharding = child_op->get_sharding())) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (!child_sharding->is_distributed_without_table_location_with_partitioning()) {
+    } else if (!child_sharding->is_partitioned_multi_tablet_without_targets()) {
       is_union_all_ext_pw = false;
       OPT_TRACE("not a local hash-distributed sharding, can not use extended partition wise");
     }
@@ -3334,8 +3334,8 @@ int ObSelectLogPlan::get_distributed_set_methods(const EqualSets &equal_sets,
   if (OB_SUCC(ret) && (set_dist_methods & DistAlgo::DIST_EXT_PARTITION_WISE)) {
     OPT_TRACE("check extended partition wise method");
     bool is_ext_partition_wise = false;
-    if (!left_sharding->is_distributed_without_table_location_with_partitioning() ||
-        !right_sharding->is_distributed_without_table_location_with_partitioning()) {
+    if (!left_sharding->is_partitioned_multi_tablet_without_targets() ||
+        !right_sharding->is_partitioned_multi_tablet_without_targets()) {
       set_dist_methods &= ~DistAlgo::DIST_EXT_PARTITION_WISE;
       OPT_TRACE("sharding or exchange is not expected, plan will not use extended partition wise method");
     } else if (OB_FAIL(ObShardingInfo::check_if_match_extended_partition_wise(equal_sets,
@@ -3518,7 +3518,7 @@ int ObSelectLogPlan::check_if_set_match_repart(const EqualSets &equal_sets,
     /* do nothing */
   } else if (OB_ISNULL(target_sharding = target_child.get_sharding())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (!target_child.is_distributed() || NULL == target_sharding->get_phy_table_location_info()) {
+  } else if (!target_child.is_distributed() || NULL == target_sharding->get_access_targets()) {
     /* do nothing */
   } else if (OB_FAIL(target_sharding->get_all_partition_keys(target_part_keys, true))) {
   } else if (target_part_keys.empty()) {
@@ -3547,7 +3547,7 @@ int ObSelectLogPlan::check_if_set_match_rehash(const EqualSets &equal_sets,
     /* do nothing */
   } else if (OB_ISNULL(target_sharding = target_child.get_sharding())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (!target_sharding->is_distributed_without_table_location()) {
+  } else if (!target_sharding->is_multi_tablet_without_targets()) {
     /* do nothing */
   } else if (OB_FAIL(target_sharding->get_all_partition_keys(target_part_keys, true))) {
   } else if (target_part_keys.empty()) {
@@ -5482,7 +5482,7 @@ int ObSelectLogPlan::get_distribute_window_method(ObLogicalOperator *top,
     if (win_dist_methods & WinDistAlgo::WIN_DIST_HASH_LOCAL) {
       OPT_TRACE("check slave mapping dist method");
       if (NULL == top->get_strong_sharding()
-          || !top->get_strong_sharding()->is_distributed_with_table_location_and_partitioning()) {
+          || !top->get_strong_sharding()->is_partitioned_multi_tablet_with_targets()) {
         win_dist_methods &= ~WinDistAlgo::WIN_DIST_HASH_LOCAL;
         OPT_TRACE("window function will not use slave mapping method, due to the sharding");
       } else if (OB_FAIL(top->check_sharding_compatible_with_reduce_expr(win_func_helper.partition_exprs_,
@@ -7424,13 +7424,13 @@ int ObSelectLogPlan::generate_late_materialization_table_get(ObLogTableScan *ind
     table_scan->set_index_table_id(index_scan->get_ref_table_id());
     table_scan->set_scan_direction(index_scan->get_scan_direction());
     // Change the table_id of project table partition info
-    table_scan_part_info->get_table_location().set_table_id(table_scan->get_table_id());
-    table_scan_part_info->get_phy_tbl_location_info_for_update().set_table_location_key(
+    table_scan_part_info->get_table_access_plan().set_table_id(table_scan->get_table_id());
+    table_scan_part_info->get_access_targets_for_update().set_table_identity(
         table_scan->get_table_id(), table_scan->get_ref_table_id());
     table_scan->set_table_partition_info(table_scan_part_info);
     table_scan->set_strong_sharding(index_scan->get_strong_sharding());
     table_scan->set_phy_plan_type(index_scan->get_phy_plan_type());
-    table_scan->set_location_type(index_scan->get_location_type());
+    table_scan->set_access_shape(index_scan->get_access_shape());
     table_scan->set_snapshot_query_expr(index_scan->get_snapshot_query_expr());
     table_scan->set_snapshot_query_type(index_scan->get_snapshot_query_type());
     table_scan->set_part_ids(index_scan->get_part_ids());
@@ -7546,7 +7546,7 @@ int ObSelectLogPlan::allocate_late_materialization_join_as_top(ObLogicalOperator
                                                        get_optimizer_context());
     if (OB_FAIL(join->set_op_ordering(left_child->get_op_ordering()))) {
     } else {
-      join->set_location_type(left_child->get_location_type());
+      join->set_access_shape(left_child->get_access_shape());
       join->set_phy_plan_type(left_child->get_phy_plan_type());
       join->set_strong_sharding(left_child->get_sharding());
       join->set_interesting_order_info(left_child->get_interesting_order_info());

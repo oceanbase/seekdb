@@ -48,6 +48,8 @@ public:
   void set_table_id(const uint64_t id) { table_id_ = id; }
   void set_ref_table_type(const share::schema::ObTableType type) { ref_table_type_ = type; }
 
+  const ObString &get_database_name() const { return database_name_; }
+  const ObString &get_table_name() const { return table_name_; }
   uint64_t get_database_id() { return database_id_; }
   uint64_t get_table_id() { return table_id_; }
   share::schema::ObTableType get_table_type() { return ref_table_type_; }
@@ -125,6 +127,7 @@ public:
                  const uint64_t table_id,
                  const share::schema::ObTableType table_type);
   ObIArray<ObAnalyzeTableInfo> & get_tables() { return tables_; }
+  const ObIArray<ObAnalyzeTableInfo> &get_tables() const { return tables_; }
 
   void set_sample_info(const ObAnalyzeSampleInfo &sample_info)
   { sample_info_ = sample_info; }

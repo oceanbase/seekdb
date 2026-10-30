@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "storage/meta_store/ob_local_storage_meta_service.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/tablet/ob_tablet_persister.h"

@@ -17,10 +17,8 @@
 #ifndef DEV_SRC_SQL_DAS_OB_DAS_UTILS_H_
 #define DEV_SRC_SQL_DAS_OB_DAS_UTILS_H_
 #include "share/ob_define.h"
-#include "share/location_cache/ob_location_struct.h"
 #include "common/ob_tablet_id.h"
 #include "sql/dtl/ob_dtl_task.h"
-#include "sql/ob_phy_table_location.h"
 #include "sql/das/ob_das_define.h"
 #include "sql/das/ob_das_dml_ctx_define.h"
 #include "sql/das/ob_das_def_reg.h"
@@ -32,17 +30,17 @@ namespace sql
 class ObDASUtils
 {
 public:
-  static int get_tablet_loc_by_id(const ObTabletID &tablet_id,
-                                  ObDASTableLoc &table_loc,
-                                  ObDASTabletLoc *&tablet_loc);
+  static int find_tablet_access(const ObTabletID &tablet_id,
+                                  DASRuntimeTableAccess &table_access,
+                                  DASRuntimeTabletAccess *&tablet_access);
   static int check_nested_sql_mutating(common::ObTableID ref_table_id,
                                        ObExecContext &exec_ctx,
                                        bool is_reading = false);
-  static ObDASTabletLoc *get_related_tablet_loc(const ObDASTabletLoc &tablet_loc,
+  static DASRuntimeTabletAccess *get_related_tablet_access(const DASRuntimeTabletAccess &tablet_access,
                                                 common::ObTableID related_table_id);
-  static int build_table_loc_meta(common::ObIAllocator &allocator,
-                                  const ObDASTableLocMeta &src,
-                                  ObDASTableLocMeta *&dst);
+  static int build_table_access_meta(common::ObIAllocator &allocator,
+                                  const DASTableAccessMeta &src,
+                                  DASTableAccessMeta *&dst);
   static int serialize_das_ctdefs(char *buf, int64_t buf_len, int64_t &pos,
                                   const DASDMLCtDefArray &ctdefs);
   static int64_t das_ctdefs_serialize_size(const DASDMLCtDefArray &ctdefs);

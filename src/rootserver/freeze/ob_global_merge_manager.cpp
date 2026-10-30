@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX RS_COMPACTION
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "rootserver/freeze/ob_global_merge_manager.h"
 
 #include "lib/stat/ob_diagnostic_info_guard.h"

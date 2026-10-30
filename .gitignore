@@ -1,4 +1,5 @@
 ############# root #############
+/target/
 *.a
 *.bak
 *.gcda
@@ -105,6 +106,33 @@ compile_commands.json
 src/.settings/
 src/observer/*:*
 src/observer/observer
+# Legacy in-tree parser generation artifacts.
+src/sql/parser/*.output
+src/sql/parser/ftsblex_lex.c
+src/sql/parser/ftsblex_lex.h
+src/sql/parser/ftsparser_tab.c
+src/sql/parser/ftsparser_tab.h
+src/sql/parser/sql_parser_mysql_mode_lex.c
+src/sql/parser/sql_parser_mysql_mode_lex.h
+src/sql/parser/sql_parser_mysql_mode_tab.c
+src/sql/parser/sql_parser_mysql_mode_tab.h
+src/sql/parser/type_name.c
+src/sql/parser/_gen_parser.output
+src/sql/parser/_gen_parser.error
+src/sql/parser/_MD5
+src/pl/parser/pl_parser_mysql_mode_lex.c
+src/pl/parser/pl_parser_mysql_mode_lex.h
+src/pl/parser/pl_parser_mysql_mode_tab.c
+src/pl/parser/pl_parser_mysql_mode_tab.h
+src/pl/parser/pl_parser_oracle_mode_lex.c
+src/pl/parser/pl_parser_oracle_mode_lex.h
+src/pl/parser/pl_parser_oracle_mode_tab.c
+src/pl/parser/pl_parser_oracle_mode_tab.h
+src/pl/parser/_gen_parser.error
+src/pl/parser/_gen_pl_parser.output
+src/pl/parser/_MD5
+src/pl/parser/pl_parser_mysql_mode.output
+src/pl/parser/pl_parser_oracle_mode.output
 src/share/inner_table/sys_package/syspack_source.cpp
 src/share/inner_table/sys_package/*.plw
 src/share/inner_table/ob_inner_table_schema.h
@@ -118,6 +146,17 @@ src/share/system_variable/standalone_default_system_variable.json
 src/share/system_variable/shared_storage_default_system_variable.json
 
 ############# tools #############
+# Legacy packaging artifacts.
+tools/systemd/profile/pre_install.sh
+tools/systemd/profile/post_install.sh
+tools/systemd/profile/pre_uninstall.sh
+tools/systemd/profile/post_uninstall.sh
+tools/systemd/profile/telemetry.sh
+tools/systemd/profile/preinst
+tools/systemd/profile/postinst
+tools/systemd/profile/prerm
+tools/systemd/profile/postrm
+tools/ocp/software_package
 tools/deploy/admin
 tools/deploy/avg_rt_*
 tools/deploy/bin/
@@ -140,12 +179,9 @@ tools/deploy/run/
 tools/deploy/server.list
 tools/deploy/server_list
 tools/deploy/tools
-tools/deploy/.obd
 tools/deploy/distributed-with-proxy.yaml
 tools/deploy/distributed.yaml
-tools/deploy/obd_profile.sh
 tools/deploy/single-with-proxy.yaml
-tools/deploy/single.yaml
 tools/deploy/bmsqlobp_test.yaml
 tools/deploy/oci_test.yaml
 tools/deploy/mirror_create

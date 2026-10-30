@@ -14,6 +14,8 @@ import shutil
 import tarfile
 import tempfile
 
+from rust import prepare as prepare_rust_std
+
 
 def locked_source(prefix, spec, suffix, checksum_error, *, reuse=False):
     root = prefix / "sources"
@@ -179,7 +181,7 @@ def main():
     sdk_version = Path(__file__).with_name("emscripten-version").read_text().strip()
     version_error = f"Activate Emscripten {sdk_version} before running ./build.py init --wasm."
     try:
-        compiler = subprocess.run(["emcc", "--version"], stdout=subprocess.PIPE, text=True, check=True)
+        compiler = subprocess.run(["emcc", "--version"], stdout=subprocess.PIPE, universal_newlines=True, check=True)
     except (OSError, subprocess.CalledProcessError):
         raise SystemExit(version_error)
     if not re.search(r" " + re.escape(sdk_version) + r"([ -]|$)", compiler.stdout.partition("\n")[0]):
@@ -210,6 +212,10 @@ def main():
             "-sUSE_ZLIB=1", "-sWASMFS", "-sASSERTIONS=2", "-sPROXY_TO_PTHREAD=1", "-sEXIT_RUNTIME=1",
             "-o", str(probe / "main.mjs"),
         ], check=True)
+    rustc = Path(subprocess.check_output(
+        ["rustup", "which", "rustc", "--toolchain", channel], universal_newlines=True,
+    ).strip())
+    prepare_rust_std(prefix, rustc.parent.parent, args.jobs)
 
 
 if __name__ == "__main__":

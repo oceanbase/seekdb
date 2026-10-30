@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-include!(concat!(env!("OUT_DIR"), "/generated_config.rs"));
+include!(env!("CONFIG_RS"));
 
 use crate::bridge::{
     bootstrap_set_status, load_active_status, save_bootstrap_status, update_checked_status,

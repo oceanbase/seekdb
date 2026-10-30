@@ -16,3 +16,6 @@ sql-nio = { path = "../sql-nio", default-features = false }
 logger = { path = "../logger" }
 config = { path = "../config" }
 local = { path = "../local" }
+in-process = { path = "../in-process" }
+regex-engine = { path = "../regex-engine" }
+uuid-generator = { path = "../uuid-generator" }

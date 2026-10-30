@@ -100,8 +100,7 @@ int ObSPIService::PLPrepareResult::init(
   param.set_mem_attr(ObModIds::OB_PL_TEMP,
                     ObCtxIds::DEFAULT_CTX_ID)
     .set_properties(lib::USE_TL_PAGE_OPTIONAL)
-    .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE)
-    .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
+    .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE);
   if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
   } else {
     result_set_ = new (buf_) ObResultSet(
@@ -120,8 +119,7 @@ int ObSPIResultSet::init(
   param.set_mem_attr(ObModIds::OB_RESULT_SET,
                     ObCtxIds::DEFAULT_CTX_ID)
     .set_properties(lib::USE_TL_PAGE_OPTIONAL)
-    .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE)
-    .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
+    .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE);
   if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
   } else {
     plan_cache_access_service_ = &plan_cache_access_service;
@@ -4621,7 +4619,7 @@ int ObSPIService::inner_fetch_with_retry(ObPLExecCtx *ctx,
         if (can_retry) {
           retry_guard.test();
         }
-      // NOTE: cursor fetch failed can not retry, we only use this to refresh location cache.
+      // NOTE: cursor fetch failed can not retry, we only use this to record access errors.
       // actully, this function only called by cursor, so `for_cursor` just in case.
       } while (RETRY_TYPE_NONE != retry_ctrl.get_retry_type() && !for_cursor);
       session->get_retry_info_for_update().clear();

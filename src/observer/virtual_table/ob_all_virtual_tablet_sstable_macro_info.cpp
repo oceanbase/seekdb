@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_all_virtual_tablet_sstable_macro_info.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/meta_mem/ob_storage_meta_mem_mgr.h"

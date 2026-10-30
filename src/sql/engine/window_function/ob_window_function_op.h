@@ -17,11 +17,11 @@
 #ifndef _OB_WINDOW_FUNCTION_OP_H
 #define _OB_WINDOW_FUNCTION_OP_H 1
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "lib/container/ob_array.h"
 #include "lib/container/ob_fixed_array.h"
 #include "lib/lock/ob_scond.h"
-#include "sql/parser/ob_item_type.h"
+#include "query/parser/ob_item_type.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "sql/engine/basic/ob_ra_datum_store.h"
 #include "sql/engine/aggregate/ob_aggregate_processor.h"

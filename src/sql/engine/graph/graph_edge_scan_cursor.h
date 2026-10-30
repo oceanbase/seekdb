@@ -86,7 +86,7 @@ private:
       const common::ObIArray<GraphElementIdentity> &sources,
       common::ObIArray<common::ObNewRange> &ranges);
   int attach_edge_lookup(ObDASScanOp &scan_op,
-                         const ObDASTabletLoc &index_tablet_loc);
+                         const DASRuntimeTabletAccess &index_tablet_access);
   int start_full_edge_scan(bool &empty);
   int start_adjacency_edge_scan(
       const common::ObIArray<GraphElementIdentity> &sources,

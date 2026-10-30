@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "observer/report/ob_tablet_meta_checker.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/tablet/ob_tablet_iterator.h" // ObLSTabletIterator

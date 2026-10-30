@@ -15,7 +15,7 @@
  */
 #define USING_LOG_PREFIX STORAGE
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_local_storage_meta_service.h"
 #include "storage/meta_store/storage_meta_service.h"
 

@@ -239,29 +239,5 @@ int DASOpResultIter::next_result()
   return ret;
 }
 
-int DASOpResultIter::reset_wild_datums_ptr()
-{
-  int ret = OB_SUCCESS;
-  if (wild_datum_info_ != nullptr) {
-    if (wild_datum_info_->exprs_ != nullptr &&
-        wild_datum_info_->max_output_rows_ > 0) {
-      FOREACH_CNT(e, *wild_datum_info_->exprs_) {
-        (*e)->locate_datums_for_update(wild_datum_info_->eval_ctx_,
-                                       wild_datum_info_->max_output_rows_);
-        ObEvalInfo &info = (*e)->get_eval_info(wild_datum_info_->eval_ctx_);
-        info.point_to_frame_ = true;
-      }
-      wild_datum_info_->exprs_ = nullptr;
-      wild_datum_info_->max_output_rows_ = 0;
-    }
-    // A global index scan and its lookup can share expressions. Associate the
-    // two iterators so resetting either side also restores the shared datums.
-    if (wild_datum_info_->lookup_iter_ != nullptr) {
-      wild_datum_info_->lookup_iter_->reset_wild_datums_ptr();
-    }
-  }
-  return ret;
-}
-
 }  // namespace sql
 }  // namespace oceanbase

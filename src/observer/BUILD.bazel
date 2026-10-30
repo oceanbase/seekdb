@@ -1,4 +1,4 @@
-load("//bazel:compile_config.bzl", "sanity_linkopts")
+load("//bazel:compile_config.bzl", "MODULE_CXX_COPTS", "sanity_linkopts")
 load(":observer_link_deps.bzl", "observer_third_party_link_files")
 load("//bazel:ios_framework.bzl", "ios_framework")
 load(
@@ -29,6 +29,8 @@ _OBSERVER_GENERATED_SOURCE_REPLACEMENTS = {
 
 
 _OBSERVER_NATIVE_DEPS = [
+    "//src/share:startup_result",
+    "//src/share:local_io_config",
     "//rust:sql_nio_headers",
     "//src/oblib/easy:easy",
     "//src/oblib:common_sql_mode",
@@ -44,7 +46,6 @@ _OBSERVER_NATIVE_DEPS = [
     "//src/data_plane:virtual_tx_data",
     "//src/logservice:logservice",
     "//src/share:log_protocol",
-    "//src/objit:objit_api_interface",
     "//src/pl:pl_interface",
     "//src/pl:pl_internal_headers",
     "//src/pl:_generated_pl_parser_headers",
@@ -363,6 +364,7 @@ filegroup(
 )
 
 _CORE_LINK_DEPS = [
+    "//rust:bridges",
     "//src/oblib:ob_malloc_objects",
     ":observer_version",
     "//src/sql:sql_runtime_simd",
@@ -398,10 +400,10 @@ _TAIL_LINK_DEPS = select({
 ]
 
 _ORDERED_LINK_FILES = [
-    "//rust:sql_nio_archive",
-    "//rust:config_archive",
+    "//rust:archive",
 ] + select({
-    "//bazel:sanity_enabled": ["//deps/external:jemalloc_archive"],
+    "@platforms//os:linux": ["//deps/external:jemalloc_archive"],
+    "@platforms//os:macos": ["//deps/external:jemalloc_archive"],
     "//conditions:default": [],
 }) + select({
     "@platforms//os:windows": [],
@@ -440,6 +442,8 @@ _EXECUTABLE_LINKOPTS = select({
     "@platforms//os:windows": ["/INCREMENTAL:NO", "/OPT:REF", "/OPT:ICF"],
     "@platforms//os:android": ["-pie", "-fopenmp", "-static-openmp", "-Wl,--gc-sections", "-Wl,--build-id=sha1"],
     "@platforms//os:macos": [
+        # Retain jemalloc's standalone malloc-zone registration constructor.
+        "-Wl,-u,_je_zone_register",
         "-Wl,-dead_strip",
         "-Wl,-framework,Security",
         "-Wl,-framework,CoreFoundation",
@@ -503,8 +507,36 @@ alias(
     visibility = ["//visibility:public"],
 )
 
+cc_library(
+    name = "in_process_api",
+    srcs = ["in_process/seekdb.cpp"],
+    hdrs = ["in_process/seekdb.h"],
+    deps = ["//rust:in_process_headers"],
+)
+
+cc_library(
+    name = "_unittest_in_process_entry",
+    testonly = True,
+    srcs = ["in_process/in_process_server.cpp"],
+    copts = MODULE_CXX_COPTS + ["-include", "$(location :_ios_build_config)"],
+    additional_compiler_inputs = [":_ios_build_config"],
+    deps = [
+        ":observer_internal_interface",
+        "//src/oblib:oblib_foundation",
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_io_primitives",
+        "//src/oblib:oblib_rpc",
+        "//deps/external:jemalloc_headers",
+        "//bazel/third_party:curl_headers",
+        "//rust:in_process_headers",
+        "//rust:logger_headers",
+    ],
+    tags = ["manual"],
+)
+
 final_link(
     name = "_liboceanbase_link",
+    testonly = True,
     whole_group_deps = (
         _OBSERVER_RETRIEVAL_COMPOSITION_OBJECT_TARGETS +
         _CORE_LINK_DEPS +
@@ -517,7 +549,12 @@ final_link(
                 "//src/sql/parser:sql_server_parser",
             ],
         })
-    ),
+    ) + select({
+        # The shared test runtime retains the Rust in-process bridge, including
+        # its reference to run_server. Supply the real implementation on Linux.
+        "@platforms//os:linux": [":_unittest_in_process_entry", ":in_process_api"],
+        "//conditions:default": [],
+    }),
     ordered_link_files = _ORDERED_LINK_FILES,
     extra_inputs = _EXTRA_LINK_INPUTS,
     linkopts = _SYSTEM_LINKOPTS + _SHARED_LINKOPTS + sanity_linkopts(),

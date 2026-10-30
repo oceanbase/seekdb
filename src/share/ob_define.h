@@ -102,20 +102,14 @@ inline bool is_duplicate_key_err(int err)
   return ret;
 }
 
-inline bool is_get_location_timeout_error(int err)
-{
-  return OB_GET_LOCATION_TIME_OUT == err;
-}
-
 inline bool is_partition_change_error(int err)
 {
   bool ret = false;
   switch (err) {
     case OB_PARTITION_NOT_EXIST:
-    case OB_LOCATION_NOT_EXIST:
+    case OB_ACCESS_TARGET_NOT_EXIST:
     case OB_PARTITION_IS_STOPPED:
     case OB_PARTITION_IS_BLOCKED:
-    case OB_LS_LOCATION_NOT_EXIST:
     case OB_MAPPING_BETWEEN_TABLET_AND_LS_NOT_EXIST:
     case OB_LS_NOT_EXIST:
     case OB_TABLET_NOT_EXIST:
@@ -160,18 +154,12 @@ inline bool is_process_timeout_error(int err)
   return ret;
 }
 
-inline bool is_location_leader_not_exist_error(int err)
-{
-  return OB_LOCATION_LEADER_NOT_EXIST == err
-      || OB_LS_LOCATION_LEADER_NOT_EXIST == err;
-}
 
 inline bool is_master_changed_error(int err)
 {
   bool ret = false;
   switch (err) {
-    case OB_LOCATION_LEADER_NOT_EXIST:
-    case OB_LS_LOCATION_LEADER_NOT_EXIST:
+    case OB_LOG_STREAM_ACCESS_NOT_READY:
     case OB_NOT_MASTER:
     case OB_RS_NOT_MASTER:
     case OB_RS_SHUTDOWN:

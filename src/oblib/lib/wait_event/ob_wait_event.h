@@ -75,7 +75,6 @@ WAIT_EVENT_DEF(PARTITION_TABLE_UPDATER_COND_WAIT, 15109, "partition table update
 WAIT_EVENT_DEF(ASYNC_RPC_PROXY_COND_WAIT, 15111, "async rpc proxy condition wait", "address", "", "", NETWORK, true, true)
 WAIT_EVENT_DEF(THREAD_IDLING_COND_WAIT, 15112, "thread idling condition wait", "address", "", "", IDLE, true, true)
 WAIT_EVENT_DEF(RPC_SESSION_HANDLER_COND_WAIT, 15113, "rpc session handler condition wait", "address", "", "", CONCURRENCY, true, true)
-WAIT_EVENT_DEF(LOCATION_CACHE_COND_WAIT, 15114, "location cache condition wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(REENTRANT_THREAD_COND_WAIT, 15115, "reentrant thread condition wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(TH_WORKER_COND_WAIT, 15118, "th worker condition wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(DEBUG_SYNC_COND_WAIT, 15119, "debug sync condition wait", "address", "", "", CONCURRENCY, true, true)
@@ -134,10 +133,6 @@ WAIT_EVENT_DEF(INSUFFICIENT_PX_WORKER_RETRY_WAIT, 30103, "retry: insufficient px
 WAIT_EVENT_DEF(GARBAGE_COLLECTOR_SLEEP, 31000, "sleep: wait log callback sleep wait", "sleep_interval", "", "", SYSTEM_IO, true, true)
 
 // cluster 32000-32999
-WAIT_EVENT_DEF(SCHEMA_RETRY_WAIT, 32002, "retry: wait schema cache load", "error code", "table id", "table schema version", CLUSTER, true, true)
-WAIT_EVENT_DEF(LOCATION_RETRY_WAIT, 32003, "retry: wait location cache load", "error", "ls_id", "", CLUSTER, true, true)
-WAIT_EVENT_DEF(OTHER_RETRY_WAIT, 32004, "retry: other retry wait", "error", "", "", CLUSTER, true, true)
-WAIT_EVENT_DEF(TX_PENDING_LOG_OVERFLOW_RETRY_WAIT, 32005, "retry: wait for the pending log synchronization", "error code", "ls_id", "", CLUSTER, true, true)
 
 // END. DO NOT MODIFY.
 WAIT_EVENT_DEF(WAIT_EVENT_DEF_END, 99999, "event end", "", "", "", OTHER, false, true)
