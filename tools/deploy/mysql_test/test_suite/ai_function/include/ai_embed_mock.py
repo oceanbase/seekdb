@@ -28,6 +28,7 @@ def events():
 def serve():
     lock = threading.Lock()
     attempts = {}
+    default_dimension = int(os.environ.get('SEEKDB_AI_EMBED_TEST_DEFAULT_DIMENSION', '3'))
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -37,8 +38,8 @@ def serve():
             body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
             dashscope = self.path.startswith('/dashscope/')
             texts = body['input']['texts'] if dashscope else body['input']
-            dimension = (body.get('parameters', {}).get('dimension', 3) if dashscope
-                         else body.get('dimensions', 3))
+            dimension = (body.get('parameters', {}).get('dimension', default_dimension) if dashscope
+                         else body.get('dimensions', default_dimension))
             mode = self.path.rsplit('/', 1)[-1]
             with lock:
                 attempts[self.path] = attempts.get(self.path, 0) + 1

@@ -1,0 +1,30 @@
+# AI_EMBED subset of ai_function_enhancement, with an explicitly supplemental mock.
+# The official service is not bundled with this repository. This is not a grader run.
+connection default;
+--exec env SEEKDB_AI_EMBED_TEST_DEFAULT_DIMENSION=768 python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py start
+--disable_query_log
+--disable_result_log
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('embed_contract_ep');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('embed_contract');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('embed_contract', '{"type":"dense_embedding","model_name":"text-embedding-v1"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('embed_contract_ep', '{"ai_model_name":"embed_contract","scope":"all","url":"http://127.0.0.1:18082/openai/shuffle","access_key":"test","provider":"openai"}');
+drop table if exists embed_contract_rows;
+create table embed_contract_rows(id int primary key, content text);
+insert into embed_contract_rows values(1,'first'),(2,null),(3,'third');
+--enable_result_log
+--enable_query_log
+select json_length(ai_embed('embed_contract', 'single-row')) as embed_dimension;
+select json_length(ai_embed('embed_contract', 'dimension-row', 768)) as requested_dimension;
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py clear
+select id, json_length(ai_embed('embed_contract', content)) as dimension
+  from embed_contract_rows order by id;
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py assert-batch 2
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py assert-requests 1
+--disable_query_log
+drop table embed_contract_rows;
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('embed_contract_ep');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('embed_contract');
+--enable_query_log
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py stop
