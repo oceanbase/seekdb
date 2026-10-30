@@ -51,6 +51,160 @@ int has_scalar_in_predicate(ObRawExpr *expr, bool &has_in)
   return ret;
 }
 
+// A single-column range bound extracted from a comparison predicate, e.g.
+// `t1.c1 < 10`, `10 <= t1.c1`. Only integer bounds are extracted so that two
+// predicates can be compared without cast/collation ambiguity. A bound value may
+// come from a bound parameter; the caller then has to constrain the plan cache
+// to the observed value.
+struct ObCmpBoundInfo
+{
+  ObCmpBoundInfo() : expr_(NULL), operand_(NULL), value_(), is_upper_(false),
+                     is_inclusive_(false), param_idx_(-1) {}
+  ObRawExpr *expr_;
+  ObRawExpr *operand_;
+  ObObj value_;
+  bool is_upper_;
+  bool is_inclusive_;
+  int64_t param_idx_;
+};
+
+// Resolve the value of a constant comparison operand. Returns false when the
+// value is not known at optimization time (e.g. an unbound parameter); the
+// predicate is then simply kept. `param_idx` is set when the value comes from a
+// bound parameter.
+bool get_cmp_bound_value(const ObConstRawExpr &const_expr,
+                         const ParamStore *param_store,
+                         ObObj &value,
+                         int64_t &param_idx)
+{
+  bool is_valid = false;
+  param_idx = -1;
+  if (T_QUESTIONMARK == const_expr.get_expr_type()) {
+    const int64_t idx = const_expr.get_value().get_unknown();
+    if (NULL != param_store && idx >= 0 && idx < param_store->count()) {
+      const ObObjParam &param = param_store->at(idx);
+      if (!param.is_null() && !param.is_nop_value() && !param.is_batch_parameters()) {
+        value = param;
+        param_idx = idx;
+        is_valid = true;
+      }
+    }
+  } else {
+    value = const_expr.get_value();
+    is_valid = true;
+  }
+  return is_valid;
+}
+
+// Extract a range bound from `expr` when it is a simple comparison between an
+// integer bound and a non-constant operand. `is_valid` is false for every other
+// predicate shape, and the caller then simply keeps the predicate.
+int extract_cmp_bound(ObRawExpr *expr,
+                      const ParamStore *param_store,
+                      ObCmpBoundInfo &bound,
+                      bool &is_valid)
+{
+  int ret = OB_SUCCESS;
+  is_valid = false;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get null expr", K(ret));
+  } else {
+    const ObItemType cmp_type = expr->get_expr_type();
+    // `is_lt` describes whether the left operand is the upper-bounded one.
+    const bool is_lt = (T_OP_LT == cmp_type || T_OP_LE == cmp_type);
+    const bool is_gt = (T_OP_GT == cmp_type || T_OP_GE == cmp_type);
+    if ((!is_lt && !is_gt) || 2 != expr->get_param_count()) {
+      // not a range comparison
+    } else {
+      ObRawExpr *left = expr->get_param_expr(0);
+      ObRawExpr *right = expr->get_param_expr(1);
+      if (OB_ISNULL(left) || OB_ISNULL(right)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get null param expr", K(ret), KPC(expr));
+      } else if (left->is_const_expr() == right->is_const_expr()) {
+        // both sides are constant or both are non-constant
+      } else {
+        const bool const_on_left = left->is_const_expr();
+        ObRawExpr *const_expr = const_on_left ? left : right;
+        ObRawExpr *operand = const_on_left ? right : left;
+        ObObj value;
+        int64_t param_idx = -1;
+        if (!const_expr->is_const_raw_expr()) {
+          // dynamic parameter, keep the predicate
+        } else if (get_cmp_bound_value(*static_cast<const ObConstRawExpr *>(const_expr),
+                                       param_store, value, param_idx)
+                   && value.is_integer_type() && !value.is_null()) {
+          bound.expr_ = expr;
+          bound.operand_ = operand;
+          bound.value_ = value;
+          bound.is_upper_ = const_on_left ? !is_lt : is_lt;
+          bound.is_inclusive_ = (T_OP_LE == cmp_type || T_OP_GE == cmp_type);
+          bound.param_idx_ = param_idx;
+          is_valid = true;
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+// Check whether `lhs` is at least as restrictive as `rhs`. Both bounds must
+// constrain the same operand in the same direction.
+int check_cmp_bound_implies(const ObCmpBoundInfo &lhs,
+                            const ObCmpBoundInfo &rhs,
+                            bool &lhs_implies_rhs)
+{
+  int ret = OB_SUCCESS;
+  lhs_implies_rhs = false;
+  int cmp = 0;
+  if (lhs.is_upper_ != rhs.is_upper_ || lhs.value_.get_type() != rhs.value_.get_type()) {
+    // bounds of different directions or types are not comparable
+  } else if (OB_FAIL(lhs.value_.compare(rhs.value_, cmp))) {
+    LOG_WARN("failed to compare bound values", K(ret), K(lhs.value_), K(rhs.value_));
+  } else if (lhs.is_upper_) {
+    // c1 < 5 implies c1 < 6, c1 < 5 implies c1 <= 5, c1 <= 5 does not imply c1 < 5
+    lhs_implies_rhs = cmp < 0 || (0 == cmp && (!lhs.is_inclusive_ || rhs.is_inclusive_));
+  } else {
+    // c1 > 5 implies c1 > 4, c1 > 5 implies c1 >= 5, c1 >= 5 does not imply c1 > 5
+    lhs_implies_rhs = cmp > 0 || (0 == cmp && (!lhs.is_inclusive_ || rhs.is_inclusive_));
+  }
+  return ret;
+}
+
+// The removal decision is taken from the parameter values seen while optimizing,
+// so the cached plan may only be reused for the same values.
+int record_cmp_bound_param_constraints(ObTransformerCtx *ctx,
+                                       const ObCmpBoundInfo &lhs,
+                                       const ObCmpBoundInfo &rhs)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(ctx)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null ctx", K(ret));
+  } else if (lhs.param_idx_ >= 0 || rhs.param_idx_ >= 0) {
+    ObPCConstParamInfo info;
+    const ObCmpBoundInfo *bounds[2] = {&lhs, &rhs};
+    for (int64_t i = 0; OB_SUCC(ret) && i < 2; ++i) {
+      const ObCmpBoundInfo *bound = bounds[i];
+      bool found = false;
+      for (int64_t j = 0; !found && bound->param_idx_ >= 0 && j < info.const_idx_.count(); ++j) {
+        found = (info.const_idx_.at(j) == bound->param_idx_);
+      }
+      if (!found && bound->param_idx_ >= 0) {
+        if (OB_FAIL(info.const_idx_.push_back(bound->param_idx_))) {
+        } else if (OB_FAIL(info.const_params_.push_back(bound->value_))) {
+        }
+      }
+    }
+    if (OB_SUCC(ret) && info.const_idx_.count() > 0
+        && OB_FAIL(ctx->plan_const_param_constraints_.push_back(info))) {
+      LOG_WARN("failed to record const param constraint", K(ret), K(info));
+    }
+  }
+  return ret;
+}
+
 }
 
 int ObTransformSimplifyExpr::transform_one_stmt(common::ObIArray<ObParentDMLStmt> &parent_stmts,
@@ -2264,6 +2418,7 @@ int ObTransformSimplifyExpr::do_canonicalize(ObDMLStmt *stmt, ObIArray<ObRawExpr
   bool push_not_happend = false;
   bool remove_duplicate_happend = false;
   bool pull_similar_happend = false;
+  bool implied_cmp_happend = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (conditions.count() == 0) {
@@ -2273,8 +2428,10 @@ int ObTransformSimplifyExpr::do_canonicalize(ObDMLStmt *stmt, ObIArray<ObRawExpr
                                             conditions,
                                             remove_duplicate_happend))) {
   } else if (OB_FAIL(pull_similar_expr(stmt, conditions, pull_similar_happend))) {
+  } else if (OB_FAIL(remove_implied_cmp_exprs(conditions, implied_cmp_happend))) {
   } else {
-    trans_happened =  push_not_happend | remove_duplicate_happend | pull_similar_happend;
+    trans_happened =  push_not_happend | remove_duplicate_happend |
+                      pull_similar_happend | implied_cmp_happend;
     if (trans_happened) {
       for (int64_t i = 0; OB_SUCC(ret) && i < conditions.count(); ++i) {
         if (OB_ISNULL(conditions.at(i))) {
@@ -2285,6 +2442,7 @@ int ObTransformSimplifyExpr::do_canonicalize(ObDMLStmt *stmt, ObIArray<ObRawExpr
       OPT_TRACE("   push_not_happend:", push_not_happend);
       OPT_TRACE("   remove_duplicate_happend:", remove_duplicate_happend);
       OPT_TRACE("   pull_similar_happend:", pull_similar_happend);
+      OPT_TRACE("   implied_cmp_happend:", implied_cmp_happend);
     }
   }
   return ret;
@@ -2595,6 +2753,97 @@ int ObTransformSimplifyExpr::get_opposite_op(ObItemType type, ObItemType& opposi
     default: {
       opposit_type = type;//the same as itself, can not do_push_not
       break;
+    }
+  }
+  return ret;
+}
+
+int ObTransformSimplifyExpr::remove_implied_cmp_exprs(ObIArray<ObRawExpr*> &conditions,
+                                                       bool &trans_happened)
+{
+  /* basic case
+   * c1 < 5 and c1 < 10 -> c1 < 5
+   * c1 >= 5 and c1 >= 10 -> c1 >= 10
+   * The weaker bound can never filter out a row that the stronger one keeps, but
+   * it is still evaluated for every row, so it is dropped here.
+   */
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  const int64_t count = conditions.count();
+  const ParamStore *param_store = NULL;
+  ObPhysicalPlanCtx *plan_ctx = NULL;
+  if (OB_ISNULL(ctx_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null ctx", K(ret));
+  } else if (NULL != ctx_->exec_ctx_
+             && NULL != (plan_ctx = ctx_->exec_ctx_->get_physical_plan_ctx())) {
+    param_store = &plan_ctx->get_param_store();
+  }
+  if (OB_FAIL(ret) || count <= 1 || count > 512) {
+    // do nothing for a single condition; bound the quadratic work for huge filters
+  } else {
+    ObSEArray<ObCmpBoundInfo, 8> bounds;
+    bool removed[512];
+    MEMSET(removed, 0, sizeof(removed));
+    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+      ObCmpBoundInfo bound;
+      bool is_valid = false;
+      if (OB_FAIL(extract_cmp_bound(conditions.at(i), param_store, bound, is_valid))) {
+      } else if (!is_valid) {
+        bound.operand_ = NULL;
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(bounds.push_back(bound))) {
+      }
+    }
+    if (OB_SUCC(ret)) {
+      ObQuestionmarkEqualCtx cmp_ctx(false);
+      for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+        const ObCmpBoundInfo &bound_i = bounds.at(i);
+        if (removed[i] || NULL == bound_i.operand_) {
+          continue;
+        }
+        for (int64_t j = i + 1; OB_SUCC(ret) && j < count; ++j) {
+          const ObCmpBoundInfo &bound_j = bounds.at(j);
+          bool lhs_implies_rhs = false;
+          bool rhs_implies_lhs = false;
+          if (removed[j] || NULL == bound_j.operand_) {
+            continue;
+          } else if (!bound_i.operand_->same_as(*bound_j.operand_, &cmp_ctx)) {
+            if (!cmp_ctx.equal_pairs_.empty()) {
+              cmp_ctx.equal_pairs_.reset();
+            }
+          } else if (!cmp_ctx.equal_pairs_.empty()) {
+            cmp_ctx.equal_pairs_.reset();
+          } else if (OB_FAIL(check_cmp_bound_implies(bound_i, bound_j, lhs_implies_rhs))) {
+            LOG_WARN("failed to compare bounds", K(ret), K(i), K(j));
+          } else if (OB_FAIL(check_cmp_bound_implies(bound_j, bound_i, rhs_implies_lhs))) {
+            LOG_WARN("failed to compare bounds", K(ret), K(i), K(j));
+          } else if (lhs_implies_rhs || rhs_implies_lhs) {
+            const bool remove_i = rhs_implies_lhs && !lhs_implies_rhs;
+            if (OB_FAIL(record_cmp_bound_param_constraints(ctx_,
+                                                           remove_i ? bound_j : bound_i,
+                                                           remove_i ? bound_i : bound_j))) {
+            } else if (remove_i) {
+              removed[i] = true;
+              break;
+            } else {
+              // bound_j is weaker than (or equivalent to) bound_i
+              removed[j] = true;
+            }
+          }
+        }
+      }
+    }
+    for (int64_t i = count - 1; OB_SUCC(ret) && i >= 0; --i) {
+      if (removed[i]) {
+        if (OB_FAIL(conditions.remove(i))) {
+          LOG_WARN("failed to remove redundant predicate", K(ret), K(i));
+        } else {
+          trans_happened = true;
+          OPT_TRACE("remove implied comparison condition at index:", i);
+        }
+      }
     }
   }
   return ret;
