@@ -315,7 +315,7 @@ int ObOllamaUtils::ObOllamaComplete::set_config_json_format(common::ObIAllocator
 
 int ObOllamaUtils::ObOllamaComplete::parse_output(common::ObIAllocator &allocator,
                                                   common::ObJsonObject *http_response,
-                                                  common::ObIJsonBase *&result) 
+                                                  common::ObIJsonBase *&result)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(http_response)) {
@@ -328,7 +328,20 @@ int ObOllamaUtils::ObOllamaComplete::parse_output(common::ObIAllocator &allocato
     if (OB_FAIL(j_path.parse_path())) {
     } else if (OB_FAIL(j_tree->seek(j_path, j_path.path_node_cnt(), false, false, hit))) {
     } else if (hit.size() == 0) {
-      ret = OB_ERR_UNEXPECTED;
+      // The response carries no native "response" member, so the endpoint
+      // answered with another dialect. Accept the OpenAI chat shape as well
+      // instead of failing the statement.
+      common::ObString chat_path_text("$.choices[0].message.content");
+      ObJsonPath chat_path(chat_path_text, &allocator);
+      ObJsonSeekResult chat_hit;
+      if (OB_FAIL(chat_path.parse_path())) {
+      } else if (OB_FAIL(j_tree->seek(chat_path, chat_path.path_node_cnt(), false, false, chat_hit))) {
+      } else if (chat_hit.size() == 0) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("ollama completion response has no response", K(ret));
+      } else {
+        result = chat_hit[0];
+      }
     } else {
       result = hit[0];
     }
@@ -372,9 +385,48 @@ int ObOllamaUtils::ObOllamaEmbed::get_body(common::ObIAllocator &allocator,
   return ret;
 }
 
+// Extracts the embedding arrays out of an OpenAI-shaped embedding response
+// ({"data":[{"index":i,"embedding":[...]}]}) into one array of arrays. The
+// Ollama endpoint answers with its native shape, but the endpoint in front of
+// it may translate the response into the OpenAI one, so both are accepted.
+static int extract_openai_embeddings(common::ObIAllocator &allocator,
+                                      common::ObJsonObject *http_response,
+                                      common::ObIJsonBase *&result)
+{
+  int ret = OB_SUCCESS;
+  ObJsonArray *result_array = nullptr;
+  ObJsonNode *data_node = nullptr;
+  if (OB_FAIL(ObAIFuncJsonUtils::get_json_array(allocator, result_array))) {
+  } else if (OB_ISNULL(data_node = http_response->get_value("data"))
+             || data_node->json_type() != ObJsonNodeType::J_ARRAY) {
+    ret = OB_INVALID_DATA;
+  } else {
+    ObJsonArray *data_array = static_cast<ObJsonArray *>(data_node);
+    ObJsonNode *embedding_node = nullptr;
+    for (int64_t i = 0; OB_SUCC(ret) && i < data_array->element_count(); i++) {
+      if (OB_ISNULL(embedding_node = data_array->get_value(i))) {
+        ret = OB_INVALID_DATA;
+      } else if (embedding_node->json_type() != ObJsonNodeType::J_OBJECT) {
+        ret = OB_INVALID_DATA;
+      } else {
+        ObJsonObject *embedding_obj = static_cast<ObJsonObject *>(embedding_node);
+        ObJsonNode *embedding = embedding_obj->get_value("embedding");
+        if (OB_ISNULL(embedding)) {
+          ret = OB_INVALID_DATA;
+        } else if (OB_FAIL(result_array->append(embedding))) {
+        }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      result = result_array;
+    }
+  }
+  return ret;
+}
+
 int ObOllamaUtils::ObOllamaEmbed::parse_output(common::ObIAllocator &allocator,
                                                common::ObJsonObject *http_response,
-                                               common::ObIJsonBase *&result) 
+                                               common::ObIJsonBase *&result)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(http_response)) {
@@ -387,7 +439,13 @@ int ObOllamaUtils::ObOllamaEmbed::parse_output(common::ObIAllocator &allocator,
     if (OB_FAIL(j_path.parse_path())) {
     } else if (OB_FAIL(j_tree->seek(j_path, j_path.path_node_cnt(), false, false, hit))) {
     } else if (hit.size() == 0) {
-      ret = OB_ERR_UNEXPECTED;
+      // The response carries no native "embeddings" member, so the endpoint
+      // answered with another dialect. Accept the OpenAI one as well instead
+      // of failing the statement.
+      if (OB_FAIL(extract_openai_embeddings(allocator, http_response, result))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("ollama embedding response has no embeddings", K(ret));
+      }
     } else {
       result = hit[0];
     }
