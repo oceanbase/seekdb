@@ -40,6 +40,11 @@ namespace
 
 const int64_t AI_COLUMN_WORKER_BATCH = 64;
 const int64_t AI_COLUMN_WORKER_IDLE_US = 100 * 1000;
+// After a task was written the worker polls at this short interval, so a row
+// that is still invisible because its transaction has not committed yet is
+// claimed right after the commit instead of one idle tick later.
+const int64_t AI_COLUMN_WORKER_FAST_US = 10 * 1000;
+const int32_t AI_COLUMN_WORKER_FAST_ROUNDS = 40;
 const int64_t AI_COLUMN_RETRY_DELAY_US = 500 * 1000;
 
 struct AiTaskRow
@@ -306,6 +311,16 @@ void process_group(const std::vector<AiTaskRow> &group)
     outcome.max_retries_ = 0;
     if (OB_FAIL(load_task_metadata(group[i], outcome))) {
       LOG_WARN("failed to load ai column metadata", K(ret), K(group[i].task_id_));
+      if (OB_ENTRY_NOT_EXIST == ret) {
+        // The column, or the table that owns it, is gone: the task can never
+        // run. Drop it, otherwise the worker keeps re-reading it every tick.
+        ObMySQLTransaction trans;
+        if (OB_SUCC(trans.start(GCTX.sql_proxy_))) {
+          int del_ret = delete_task(trans, group[i].task_id_);
+          trans.end(OB_SUCC(del_ret));
+        }
+      }
+      ret = OB_SUCCESS;
     } else if (OB_FAIL(claim_task(group[i].task_id_))) {
       if (OB_ENTRY_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
@@ -350,15 +365,25 @@ void process_group(const std::vector<AiTaskRow> &group)
             }
           }
         } else if (outcome.row_.retry_count_ < outcome.max_retries_) {
-          ObSqlString sql;
-          int64_t affected_rows = 0;
-          if (OB_FAIL(sql.append_fmt(
-                  "UPDATE %s SET state = 3, retry_count = IFNULL(retry_count, 0) + 1,"
-                  " eligible_ts = DATE_ADD(now(6), INTERVAL %ld MICROSECOND)"
-                  " WHERE task_id = %ld",
-                  OB_ALL_AI_COLUMN_TASK_TNAME, AI_COLUMN_RETRY_DELAY_US,
-                  outcome.row_.task_id_))) {
-          } else if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {
+          bool alive = false;
+          if (OB_FAIL(check_task_alive(trans, outcome.row_.task_id_,
+                                       outcome.row_.request_id_, alive))) {
+          } else if (!alive) {
+            // A newer change owns the row already; the stale task is dropped
+            // instead of being retried.
+            if (OB_FAIL(delete_task(trans, outcome.row_.task_id_))) {
+            }
+          } else {
+            ObSqlString sql;
+            int64_t affected_rows = 0;
+            if (OB_FAIL(sql.append_fmt(
+                    "UPDATE %s SET state = 3, retry_count = IFNULL(retry_count, 0) + 1,"
+                    " eligible_ts = DATE_ADD(now(6), INTERVAL %ld MICROSECOND)"
+                    " WHERE task_id = %ld",
+                    OB_ALL_AI_COLUMN_TASK_TNAME, AI_COLUMN_RETRY_DELAY_US,
+                    outcome.row_.task_id_))) {
+            } else if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {
+            }
           }
         } else {
           bool alive = false;
@@ -413,11 +438,27 @@ void ObAiColumnWorker::stop()
   stopped_ = true;
 }
 
+void ObAiColumnWorker::notify_task_created()
+{
+  ObAiColumnWorker &worker = get_instance();
+  {
+    std::lock_guard<std::mutex> guard(worker.mutex_);
+    worker.fast_rounds_.store(AI_COLUMN_WORKER_FAST_ROUNDS);
+  }
+  worker.cv_.notify_one();
+}
+
 void ObAiColumnWorker::run()
 {
   while (!stopped_) {
     process_tasks();
-    usleep(AI_COLUMN_WORKER_IDLE_US);
+    std::unique_lock<std::mutex> lock(mutex_);
+    if (fast_rounds_.load() > 0) {
+      fast_rounds_.fetch_sub(1);
+      cv_.wait_for(lock, std::chrono::microseconds(AI_COLUMN_WORKER_FAST_US));
+    } else {
+      cv_.wait_for(lock, std::chrono::microseconds(AI_COLUMN_WORKER_IDLE_US));
+    }
   }
 }
 

@@ -2268,6 +2268,10 @@ int ObAlterTableExecutor::execute_ai_column_retry(ObExecContext &ctx,
           }
         }
         int end_ret = trans.end(OB_SUCC(ret));
+        if (OB_SUCC(end_ret)) {
+          // The retried rows are committed now, so the worker can claim them.
+          ObAiColumnWorker::get_instance().notify_task_created();
+        }
         if (OB_SUCCESS != end_ret && OB_SUCC(ret)) {
           ret = end_ret;
         }

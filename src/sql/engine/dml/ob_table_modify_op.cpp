@@ -20,6 +20,7 @@
 #include "share/ob_autoincrement_service.h"
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "observer/ob_inner_sql_connection.h"
+#include "observer/ai_service/ob_ai_column_worker.h"
 #include "sql/engine/ob_physical_plan.h"
 #include "sql/engine/dml/ob_dml_service.h"
 #include "share/schema/ob_schema_getter_guard.h"
@@ -1339,6 +1340,11 @@ int ObTableModifyOp::ai_column_write_tasks(
       } else if (OB_FAIL(append_ai_task_string(sql, predicate.ptr(), predicate.length()))) {
       } else if (OB_FAIL(sql.append(", 0, 0, now(6), 0, NULL)"))) {
       } else if (OB_FAIL(ai_column_execute_inner_write(sql.ptr()))) {
+      } else {
+        // The task is visible once the DML commits. Wake the worker up so it
+        // claims the task right away: a task that is invalidated again before
+        // the next poll tick would otherwise never be claimed at all.
+        ObAiColumnWorker::get_instance().notify_task_created();
       }
     }
   }
