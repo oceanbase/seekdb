@@ -370,13 +370,16 @@ Free for 7 days. [Learn more →](https://d0.seekdb.ai)
 <summary><b>🐳 Docker (Quick Testing)</b></summary>
 
 ```bash
+docker volume create seekdb-data
 docker run -d \
   --name seekdb \
   -p 2881:2881 \
   -p 2886:2886 \
-  -v ./data:/var/lib/oceanbase \
+  -v seekdb-data:/var/lib/seekdb \
   oceanbase/seekdb:latest
 ```
+SeekDB 1.4+ stores its data in `/var/lib/seekdb`; mounting only `/var/lib/oceanbase` does not persist that data. The named volume above also works on Windows, where this image requires a Docker volume instead of a host-directory bind mount. Older 1.3.x images use `/var/lib/oceanbase`.
+
 Please refer to the [document](https://github.com/oceanbase/docker-images/blob/main/seekdb/README.md) of this docker image for details.
 
 </details>

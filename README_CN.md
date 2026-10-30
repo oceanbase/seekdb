@@ -356,13 +356,16 @@ curl -X POST https://d0.seekdb.ai/api/v1/instances
 <summary><b>🐳 Docker（快速测试）</b></summary>
 
 ```bash
+docker volume create seekdb-data
 docker run -d \
   --name seekdb \
   -p 2881:2881 \
   -p 2886:2886 \
-  -v ./data:/var/lib/oceanbase \
+  -v seekdb-data:/var/lib/seekdb \
   oceanbase/seekdb:latest
 ```
+SeekDB 1.4+ 将数据保存在 `/var/lib/seekdb`，仅挂载 `/var/lib/oceanbase` 无法持久化这些数据。上述命名卷也适用于 Windows；在 Windows 上运行此镜像时，应使用 Docker 卷，而不是主机目录绑定挂载。旧版 1.3.x 镜像使用 `/var/lib/oceanbase`。
+
 请参考此 Docker 镜像的[文档](https://github.com/oceanbase/docker-images/blob/main/seekdb/README.md)获取详细信息。
 
 </details>
