@@ -33,8 +33,8 @@ int32_t ob_sql_sock_handler_on_readable(ObSqlSockHandler *handler,
     int32_t packet_kind, const nio::NioMysqlCommandView *command, uint64_t generation);
 void ob_sql_sock_handler_on_disconnect(ObSqlSockHandler *handler, ObSqlSockSession *session);
 void ob_sql_sock_handler_on_close(ObSqlSockHandler *handler, ObSqlSockSession *session, int32_t error);
-void ob_sql_nio_log_accept_state(const char *kind, int32_t raw_error, uint64_t drain_id,
+void ob_sql_nio_log_accept_state(int32_t kind, int32_t raw_error, uint64_t drain_id,
     uint64_t accepted, uint32_t transient_errors, uint32_t consecutive_errors,
-    const char *outcome);
+    int32_t outcome);
 } // namespace obmysql
 } // namespace oceanbase

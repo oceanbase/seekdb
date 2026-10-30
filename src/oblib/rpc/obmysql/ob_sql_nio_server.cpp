@@ -29,7 +29,6 @@
 #else
 #include <unistd.h>
 #endif
-#include <cstring>
 
 namespace oceanbase
 {
@@ -76,15 +75,56 @@ void ob_sql_sock_handler_on_disconnect(ObSqlSockHandler* handler, ObSqlSockSessi
 void ob_sql_sock_handler_on_close(ObSqlSockHandler* handler, ObSqlSockSession* sess, int err) {
   handler->on_close(sess, err);
 }
-void ob_sql_nio_log_accept_state(const char *kind, int32_t raw_error, uint64_t drain_id,
+static const char *nio_accept_error_kind_name(const int32_t kind)
+{
+  switch (kind) {
+    case 1: return "NotFound"; // ACCEPT_ERROR_KIND_NOT_FOUND
+    case 2: return "PermissionDenied"; // ACCEPT_ERROR_KIND_PERMISSION_DENIED
+    case 3: return "ConnectionRefused"; // ACCEPT_ERROR_KIND_CONNECTION_REFUSED
+    case 4: return "ConnectionReset"; // ACCEPT_ERROR_KIND_CONNECTION_RESET
+    case 5: return "HostUnreachable"; // ACCEPT_ERROR_KIND_HOST_UNREACHABLE
+    case 6: return "NetworkUnreachable"; // ACCEPT_ERROR_KIND_NETWORK_UNREACHABLE
+    case 7: return "ConnectionAborted"; // ACCEPT_ERROR_KIND_CONNECTION_ABORTED
+    case 8: return "NotConnected"; // ACCEPT_ERROR_KIND_NOT_CONNECTED
+    case 9: return "AddrInUse"; // ACCEPT_ERROR_KIND_ADDR_IN_USE
+    case 10: return "AddrNotAvailable"; // ACCEPT_ERROR_KIND_ADDR_NOT_AVAILABLE
+    case 11: return "BrokenPipe"; // ACCEPT_ERROR_KIND_BROKEN_PIPE
+    case 12: return "AlreadyExists"; // ACCEPT_ERROR_KIND_ALREADY_EXISTS
+    case 13: return "WouldBlock"; // ACCEPT_ERROR_KIND_WOULD_BLOCK
+    case 14: return "InvalidInput"; // ACCEPT_ERROR_KIND_INVALID_INPUT
+    case 15: return "InvalidData"; // ACCEPT_ERROR_KIND_INVALID_DATA
+    case 16: return "TimedOut"; // ACCEPT_ERROR_KIND_TIMED_OUT
+    case 17: return "WriteZero"; // ACCEPT_ERROR_KIND_WRITE_ZERO
+    case 18: return "Interrupted"; // ACCEPT_ERROR_KIND_INTERRUPTED
+    case 19: return "Unsupported"; // ACCEPT_ERROR_KIND_UNSUPPORTED
+    case 20: return "UnexpectedEof"; // ACCEPT_ERROR_KIND_UNEXPECTED_EOF
+    case 21: return "OutOfMemory"; // ACCEPT_ERROR_KIND_OUT_OF_MEMORY
+    default: return "Other"; // ACCEPT_ERROR_KIND_OTHER
+  }
+}
+
+static const char *nio_accept_outcome_name(const int32_t outcome)
+{
+  switch (outcome) {
+    case 0: return "would_block"; // ACCEPT_OUTCOME_WOULD_BLOCK
+    case 1: return "fatal"; // ACCEPT_OUTCOME_FATAL
+    case 2: return "rearmed"; // ACCEPT_OUTCOME_REARMED
+    case 3: return "rearm_failed"; // ACCEPT_OUTCOME_REARM_FAILED
+    default: return "unknown";
+  }
+}
+
+void ob_sql_nio_log_accept_state(int32_t kind, int32_t raw_error, uint64_t drain_id,
                                  uint64_t accepted, uint32_t transient_errors,
-                                 uint32_t consecutive_errors, const char *outcome) {
-  if (0 == std::strcmp(outcome, "fatal") || 0 == std::strcmp(outcome, "rearm_failed")) {
-    LOG_ERROR("Rust SQL-NIO TCP accept drain stopped", KPC(kind), K(raw_error), K(drain_id),
-              K(accepted), K(transient_errors), K(consecutive_errors), KPC(outcome));
+                                 uint32_t consecutive_errors, int32_t outcome) {
+  const char *kind_name = nio_accept_error_kind_name(kind);
+  const char *outcome_name = nio_accept_outcome_name(outcome);
+  if (1 == outcome || 3 == outcome) { // fatal or rearm_failed
+    LOG_ERROR("Rust SQL-NIO TCP accept drain stopped", KPC(kind_name), K(raw_error), K(drain_id),
+              K(accepted), K(transient_errors), K(consecutive_errors), KPC(outcome_name));
   } else {
-    LOG_WARN("Rust SQL-NIO TCP accept drain state", KPC(kind), K(raw_error), K(drain_id),
-             K(accepted), K(transient_errors), K(consecutive_errors), KPC(outcome));
+    LOG_WARN("Rust SQL-NIO TCP accept drain state", KPC(kind_name), K(raw_error), K(drain_id),
+             K(accepted), K(transient_errors), K(consecutive_errors), KPC(outcome_name));
   }
 }
 
