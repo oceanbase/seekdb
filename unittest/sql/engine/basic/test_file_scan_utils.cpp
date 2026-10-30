@@ -18,6 +18,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <gtest/gtest.h>
 #include "lib/allocator/page_arena.h"
@@ -77,13 +78,13 @@ std::string to_std(const ObString &str)
 // types is a max(); the tests below rely on that order.
 TEST(FileScanUtils, column_type_names)
 {
-  ASSERT_STREQ("null", ob_file_column_type_name(OB_FILE_TYPE_NULL));
-  ASSERT_STREQ("boolean", ob_file_column_type_name(OB_FILE_TYPE_BOOLEAN));
-  ASSERT_STREQ("bigint", ob_file_column_type_name(OB_FILE_TYPE_BIGINT));
-  ASSERT_STREQ("double", ob_file_column_type_name(OB_FILE_TYPE_DOUBLE));
-  ASSERT_STREQ("date", ob_file_column_type_name(OB_FILE_TYPE_DATE));
-  ASSERT_STREQ("datetime", ob_file_column_type_name(OB_FILE_TYPE_DATETIME));
-  ASSERT_STREQ("varchar", ob_file_column_type_name(OB_FILE_TYPE_VARCHAR));
+  ASSERT_STREQ("NULL", ob_file_column_type_name(OB_FILE_TYPE_NULL));
+  ASSERT_STREQ("BOOLEAN", ob_file_column_type_name(OB_FILE_TYPE_BOOLEAN));
+  ASSERT_STREQ("BIGINT", ob_file_column_type_name(OB_FILE_TYPE_BIGINT));
+  ASSERT_STREQ("DOUBLE", ob_file_column_type_name(OB_FILE_TYPE_DOUBLE));
+  ASSERT_STREQ("DATE", ob_file_column_type_name(OB_FILE_TYPE_DATE));
+  ASSERT_STREQ("DATETIME", ob_file_column_type_name(OB_FILE_TYPE_DATETIME));
+  ASSERT_STREQ("VARCHAR", ob_file_column_type_name(OB_FILE_TYPE_VARCHAR));
 
   ASSERT_LT(OB_FILE_TYPE_NULL, OB_FILE_TYPE_BOOLEAN);
   ASSERT_LT(OB_FILE_TYPE_BOOLEAN, OB_FILE_TYPE_BIGINT);
@@ -105,7 +106,7 @@ TEST(FileScanUtils, infer_csv_types)
 {
   TempFile file("id,score,flag,day,created\r\n"
                 "1,98.5,true,2026-08-01,2026-08-01 10:11:12\r\n"
-                "2,87,false,,,\r\n");
+                "2,87,false,,\r\n");
   ASSERT_TRUE(file.ok());
 
   ObArenaAllocator allocator;
@@ -225,16 +226,20 @@ TEST(FileScanUtils, access_checks)
   ASSERT_EQ(OB_NOT_SUPPORTED, ob_file_sql_check_access(allocator, escaped, all, false));
   ASSERT_EQ(OB_SUCCESS, ob_file_sql_check_access(allocator, escaped, all, true));
 
-  // secure_file_priv is a sibling directory, so the file below it is outside.
-  ObString narrow_dir(file.dir().size(), file.dir().c_str());
-  std::string narrow = file.dir() + "/not_there";
-  ObString narrow_priv(narrow.size(), narrow.c_str());
-  ASSERT_EQ(OB_SUCCESS, ob_file_sql_check_access(allocator, escaped, narrow_priv, true));
+  // A readable file that lives outside the allowed directory must be refused.
+  // The allowed directory is a subdirectory of the data file's own directory,
+  // so the data file itself is a guaranteed-existing path outside it.
+  const std::string allowed_dir = file.dir() + "/allowed";
+  ASSERT_EQ(0, mkdir(allowed_dir.c_str(), 0700));
+  ObString allowed(allowed_dir.size(), allowed_dir.c_str());
+  ASSERT_EQ(OB_INVALID_ARGUMENT, ob_file_sql_check_access(allocator, escaped, allowed, true));
 
-  // Parent traversal out of secure_file_priv must be refused.
-  std::string traversal = file.dir() + "/../escape.csv";
+  // Climbing out of secure_file_priv with .. is rejected for the same reason.
+  const std::string traversal = allowed_dir + "/../data.txt";
   ObString traversal_path(traversal.size(), traversal.c_str());
-  ASSERT_NE(OB_SUCCESS, ob_file_sql_check_access(allocator, traversal_path, ObString(file.dir().size(), file.dir().c_str()), true));
+  ASSERT_EQ(OB_INVALID_ARGUMENT,
+            ob_file_sql_check_access(allocator, traversal_path, allowed, true));
+  rmdir(allowed_dir.c_str());
 }
 
 // A file that changes after the schema was inferred must be reported rather

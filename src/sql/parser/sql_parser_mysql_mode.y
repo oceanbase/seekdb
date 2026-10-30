@@ -11322,6 +11322,12 @@ READ_CSV '(' file_table_arg_list ')' relation_name
   malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, alias_node, NULL);
   $$->value_ = 0; // read_csv
 }
+| READ_CSV '(' file_table_arg_list ')' AS relation_name
+{
+  // AS is optional in MySQL, so both spellings have to reach the same node.
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, $6, NULL);
+  $$->value_ = 0; // read_csv
+}
 | READ_CSV '(' file_table_arg_list ')'
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, NULL, NULL);
@@ -11331,6 +11337,11 @@ READ_CSV '(' file_table_arg_list ')' relation_name
 {
   ParseNode *alias_node = $5;
   malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, alias_node, NULL);
+  $$->value_ = 1; // read_json
+}
+| READ_JSON '(' file_table_arg_list ')' AS relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, $6, NULL);
   $$->value_ = 1; // read_json
 }
 | READ_JSON '(' file_table_arg_list ')'
@@ -11344,6 +11355,11 @@ READ_CSV '(' file_table_arg_list ')' relation_name
   malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, alias_node, NULL);
   $$->value_ = 2; // read_parquet
 }
+| READ_PARQUET '(' file_table_arg_list ')' AS relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, $6, NULL);
+  $$->value_ = 2; // read_parquet
+}
 | READ_PARQUET '(' file_table_arg_list ')'
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, NULL, NULL);
@@ -11353,6 +11369,11 @@ READ_CSV '(' file_table_arg_list ')' relation_name
 {
   ParseNode *alias_node = $5;
   malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, alias_node, NULL);
+  $$->value_ = 3; // glob
+}
+| GLOB '(' file_table_arg_list ')' AS relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_TABLE_EXPRESSION, 3, $3, $6, NULL);
   $$->value_ = 3; // glob
 }
 | GLOB '(' file_table_arg_list ')'

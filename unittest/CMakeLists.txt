@@ -8,12 +8,25 @@
 
 find_package(GTest QUIET)
 
-# The bundled toolchain ships libgtest.a without a CMake package config, so fall
-# back to a plain library lookup before giving up on the real tests.
-if(NOT GTest_FOUND AND DEFINED GTEST_ROOT)
-  find_library(SEEKDB_GTEST_LIB gtest PATHS "${GTEST_ROOT}/lib" NO_DEFAULT_PATH)
-  find_library(SEEKDB_GTEST_MAIN_LIB gtest_main PATHS "${GTEST_ROOT}/lib" NO_DEFAULT_PATH)
-  find_path(SEEKDB_GTEST_INCLUDE gtest/gtest.h PATHS "${GTEST_ROOT}/include" NO_DEFAULT_PATH)
+# The bundled toolchain ships libgtest.a without a CMake package config, so
+# probe the dependency tree directly before giving up on the real tests. The
+# search covers both the devel prefix the build already points at and the
+# GTEST_ROOT override used by farm toolchains.
+set(SEEKDB_GTEST_HINTS "")
+foreach(SEEKDB_GTEST_PREFIX IN ITEMS
+    "${GTEST_ROOT}"
+    "${CMAKE_SOURCE_DIR}/deps/3rd/usr/local/oceanbase/deps/devel"
+    "${CMAKE_PREFIX_PATH}"
+    "${CMAKE_SOURCE_DIR}/../deps/3rd/usr/local/oceanbase/deps/devel")
+  if(SEEKDB_GTEST_PREFIX)
+    list(APPEND SEEKDB_GTEST_HINTS "${SEEKDB_GTEST_PREFIX}")
+  endif()
+endforeach()
+
+if(NOT GTest_FOUND)
+  find_library(SEEKDB_GTEST_LIB gtest HINTS ${SEEKDB_GTEST_HINTS} PATH_SUFFIXES lib)
+  find_library(SEEKDB_GTEST_MAIN_LIB gtest_main HINTS ${SEEKDB_GTEST_HINTS} PATH_SUFFIXES lib)
+  find_path(SEEKDB_GTEST_INCLUDE gtest/gtest.h HINTS ${SEEKDB_GTEST_HINTS} PATH_SUFFIXES include)
   if(SEEKDB_GTEST_LIB AND SEEKDB_GTEST_MAIN_LIB AND SEEKDB_GTEST_INCLUDE)
     set(GTest_FOUND TRUE)
   endif()
@@ -38,12 +51,18 @@ foreach(SEEKDB_TEST_SOURCE IN LISTS SEEKDB_FILE_SQL_TEST_SOURCES)
 endforeach()
 
 add_executable(sql_tests ${SEEKDB_FILE_SQL_TEST_SOURCES})
+# The tests exercise the same object graph as the server, so they link the
+# aggregate archive rather than a hand-picked subset: ob_sql_static alone leaves
+# schema, config and jemalloc symbols undefined. sql_nio is an INTERFACE target
+# that carries the Rust NIO archive the server objects call into.
+set(SEEKDB_FILE_SQL_TEST_LIBS
+  oceanbase_static ob_sql_server_parser_static ob_base sql_nio)
 if(TARGET GTest::gtest)
   target_link_libraries(sql_tests PRIVATE
-    ob_sql_static ob_sql_server_parser_static ob_base GTest::gtest GTest::gtest_main)
+    ${SEEKDB_FILE_SQL_TEST_LIBS} GTest::gtest GTest::gtest_main)
 else()
   target_link_libraries(sql_tests PRIVATE
-    ob_sql_static ob_sql_server_parser_static ob_base
+    ${SEEKDB_FILE_SQL_TEST_LIBS}
     "${SEEKDB_GTEST_LIB}" "${SEEKDB_GTEST_MAIN_LIB}")
   target_include_directories(sql_tests PRIVATE "${SEEKDB_GTEST_INCLUDE}")
 endif()
