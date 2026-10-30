@@ -55,6 +55,9 @@ public:
   int append(const char *str);
   int append(const char *str, const int64_t len);
   int append(const ObString &str);
+  // Escape the contents of a MySQL backtick-quoted identifier. The caller
+  // supplies the surrounding backticks; this only doubles embedded backticks.
+  int append_escaped_identifier(const ObString &identifier);
   int append_fmt(const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 
   int assign(const char *str);
