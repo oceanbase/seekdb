@@ -422,3 +422,10 @@ cc_library(
     tags = ["manual"],
     visibility = ["//src/observer:__pkg__"],
 )
+
+cc_library(
+    name = "inlist_cardinality",
+    hdrs = ["resolver/dml/inlist_cardinality.h"],
+    includes = [".."],
+    visibility = ["//unittest/sql:__pkg__"],
+)
