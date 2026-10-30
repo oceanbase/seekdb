@@ -92,6 +92,8 @@ private:
   /*
    * following functions are used to add all rowkey columns
    */
+  int remove_redundant_ann_bounds(ObDMLStmt &stmt, bool &trans_happened);
+
   int add_all_rowkey_columns_to_stmt(ObDMLStmt *stmt, bool &trans_happened);
   int add_all_rowkey_columns_to_stmt(const ObTableSchema &table_schema,
                                      const TableItem &table_item,
