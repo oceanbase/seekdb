@@ -258,6 +258,7 @@ int ObSRTaaTIterImpl::fill_chunk_stores()
     ObSEArray<ObExpr *, 2> exprs;
     if (OB_FAIL(exprs.push_back(iter_param_->id_proj_expr_))) {
     } else if (iter_param_->need_project_relevance()
+        && OB_NOT_NULL(iter_param_->relevance_expr_)
         && OB_FAIL(exprs.push_back(iter_param_->relevance_expr_))) {
     }
     ObEvalCtx *eval_ctx = iter_param_->eval_ctx_;
@@ -378,6 +379,7 @@ int ObSRTaaTIterImpl::load_next_hash_map()
     ObSEArray<ObExpr *, 2> exprs;
     if (OB_FAIL(exprs.push_back(iter_param_->id_proj_expr_))) {
     } else if (iter_param_->need_project_relevance()
+        && OB_NOT_NULL(iter_param_->relevance_expr_)
         && OB_FAIL(exprs.push_back(iter_param_->relevance_expr_))) {
     }
     ObEvalCtx *eval_ctx = iter_param_->eval_ctx_;
@@ -395,7 +397,8 @@ int ObSRTaaTIterImpl::load_next_hash_map()
       } else {
         ObDatum &id_datum = iter_param_->id_proj_expr_->locate_expr_datum(*eval_ctx);
         if (OB_FAIL(id.from_datum(id_datum))) {
-        } else if (iter_param_->need_project_relevance()) {
+        } else if (iter_param_->need_project_relevance()
+            && OB_NOT_NULL(iter_param_->relevance_expr_)) {
           ObDatum &relevance_datum = iter_param_->relevance_expr_->locate_expr_datum(*eval_ctx);
           cur_relevance = relevance_datum.get_double();
           if (OB_FAIL(map->get_refactored(id, last_relevance))) {

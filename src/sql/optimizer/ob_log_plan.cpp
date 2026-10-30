@@ -49,6 +49,9 @@
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/optimizer/ob_log_insert.h"
 #include "sql/ob_sql_trans_control.h"
+#include "sql/parser/ob_item_type.h"
+#include "sql/resolver/dml/ob_select_stmt.h"
+#include "sql/resolver/expr/ob_expr_info_flag.h"
 
 using namespace oceanbase;
 using namespace sql;
@@ -60,6 +63,89 @@ using namespace oceanbase::sql::log_op_def;
 using share::schema::ObTableSchema;
 using share::schema::ObColumnSchemaV2;
 using share::schema::ObSchemaGetterGuard;
+
+// C7: check whether one expression refers to a match-against expression.
+static bool expr_refers_to_match_against(const ObRawExpr *expr)
+{
+  if (OB_ISNULL(expr)) {
+    return false;
+  }
+  return expr->has_flag(IS_MATCH_EXPR) || expr->has_flag(CNT_MATCH_EXPR);
+}
+
+// C7: check whether the select statement uses the match-against expression
+// outside of a boolean predicate position. In such a case the accurate
+// relevance score is still required.
+static bool select_stmt_references_match(const ObSelectStmt *stmt)
+{
+  if (OB_ISNULL(stmt)) {
+    return true;
+  }
+  const common::ObIArray<SelectItem> &select_items = stmt->get_select_items();
+  for (int64_t i = 0; i < select_items.count(); ++i) {
+    if (expr_refers_to_match_against(select_items.at(i).expr_)) {
+      return true;
+    }
+  }
+  const common::ObIArray<ObRawExpr *> &having_exprs = stmt->get_having_exprs();
+  for (int64_t i = 0; i < having_exprs.count(); ++i) {
+    if (expr_refers_to_match_against(having_exprs.at(i))) {
+      return true;
+    }
+  }
+  const common::ObIArray<ObRawExpr *> &group_exprs = stmt->get_group_exprs();
+  for (int64_t i = 0; i < group_exprs.count(); ++i) {
+    if (expr_refers_to_match_against(group_exprs.at(i))) {
+      return true;
+    }
+  }
+  const common::ObIArray<OrderItem> &order_items = stmt->get_order_items();
+  for (int64_t i = 0; i < order_items.count(); ++i) {
+    if (expr_refers_to_match_against(order_items.at(i).expr_)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// C7: decide whether the relevance score of a text retrieval scan can be
+// skipped. The relevance score is only used to filter the matched documents,
+// so it can be replaced by the number of matched dimensions as long as the
+// statement does not observe the score itself.
+static bool can_skip_text_retrieval_relevance(const ObDMLStmt *stmt,
+                                              const ObLogTableScan *table_scan,
+                                              const ObRawExpr *match_pred,
+                                              const ObMatchFunRawExpr *match_against)
+{
+  if (OB_ISNULL(stmt) || OB_ISNULL(table_scan) || OB_ISNULL(match_pred) || OB_ISNULL(match_against)) {
+    return false;
+  }
+  if (!stmt->is_select_stmt()) {
+    return false;
+  }
+  // LIMIT/OFFSET may pick the rows with the highest relevance score.
+  if (stmt->has_limit()) {
+    return false;
+  }
+  if (table_scan->has_func_lookup()) {
+    return false;
+  }
+  // only the natural language mode is supported, the boolean mode and the
+  // es match mode have their own relevance semantics.
+  if (match_against->get_mode_flag() != NATURAL_LANGUAGE_MODE || match_against->is_es_match()) {
+    return false;
+  }
+  // the match expression must be used in a boolean position only.
+  if (match_pred != match_against) {
+    if (match_pred->get_expr_type() != T_OP_BOOL
+        || 1 != match_pred->get_param_count()
+        || match_pred->get_param_expr(0) != static_cast<const ObRawExpr *>(match_against)) {
+      return false;
+    }
+  }
+  const ObSelectStmt *select_stmt = static_cast<const ObSelectStmt *>(stmt);
+  return !select_stmt_references_match(select_stmt);
+}
 
 ERRSIM_POINT_DEF(EN_FORCE_GBY_PUSHDOWN_STORAGE, "force pushdown group by to storage layer");
 
@@ -12042,6 +12128,11 @@ int ObLogPlan::prepare_text_retrieval_scan(const ObIArray<ObRawExpr *> &scan_mat
     ObTextRetrievalInfo &tr_info = table_scan->get_text_retrieval_info();
     tr_info.match_expr_ = match_against;
     tr_info.pushdown_match_filter_ = match_pred;
+    // C7: the relevance score is not observed by this statement, so the
+    // expensive BM25 relevance calculation can be skipped.
+    if (can_skip_text_retrieval_relevance(get_stmt(), table_scan, match_pred, match_against)) {
+      tr_info.need_calc_relevance_ = false;
+    }
     // The mapping table is absent when the data-table rowkey is used as the document ID.
     table_scan->set_doc_id_index_table_id(tr_info.doc_id_idx_tid_);
     if (table_scan->is_vec_adaptive_scan() || table_scan->is_vec_idx_scan_post_filter()) {
