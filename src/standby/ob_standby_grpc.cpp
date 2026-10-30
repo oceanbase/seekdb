@@ -18,7 +18,7 @@
 
 #include "standby/ob_standby_grpc.h"
 #include "standby/ob_standby_grpc_service.h"
-#include "grpc/rpc_transport.h"
+#include "standby/rpc_transport.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/allocator/ob_malloc.h"
@@ -49,6 +49,89 @@ namespace oceanbase
 {
 namespace standby
 {
+
+namespace {
+int encode_address(const common::ObAddr &address, rpc::NodeAddress &value)
+{
+  char ip[common::MAX_IP_ADDR_LENGTH]{};
+  if (!address.is_valid() || !address.ip_to_string(ip, sizeof(ip))) {
+    return OB_INVALID_ARGUMENT;
+  }
+  value.ip = ip;
+  value.port = address.get_port();
+  return OB_SUCCESS;
+}
+
+int decode_address(const rpc::NodeAddress &value, common::ObAddr &address)
+{
+  const std::string ip(value.ip);
+  if (value.port == 0 || value.port > UINT16_MAX
+      || !address.set_ip_addr(ip.c_str(), value.port)) {
+    return OB_INVALID_ARGUMENT;
+  }
+  return OB_SUCCESS;
+}
+
+int encode_boundary_request(const StandbyPromotionBoundaryRequest &request, rpc::Control &control)
+{
+  int ret = OB_SUCCESS;
+  control.visited.clear();
+  for (int64_t i = 0; OB_SUCC(ret) && i < request.visited_.count(); ++i) {
+    rpc::NodeAddress value{};
+    if (OB_SUCC(ret = encode_address(request.visited_.at(i), value))) {
+      control.visited.push_back(std::move(value));
+    }
+  }
+  return ret;
+}
+
+int decode_boundary_request(const rpc::Control &control, StandbyPromotionBoundaryRequest &request)
+{
+  int ret = OB_SUCCESS;
+  request = StandbyPromotionBoundaryRequest();
+  if (control.visited.size() > MAX_PROMOTION_BOUNDARY_HOPS) return OB_INVALID_ARGUMENT;
+  for (const auto &value : control.visited) {
+    common::ObAddr address;
+    if (OB_FAIL(decode_address(value, address)) || OB_FAIL(request.add_visited(address))) break;
+  }
+  return ret;
+}
+
+int encode_boundary(const StandbyPromotionBoundary &boundary, rpc::Control &control)
+{
+  int ret = OB_SUCCESS;
+  if (!boundary.is_valid()) return OB_INVALID_ARGUMENT;
+  auto &value = control.boundary;
+  if (OB_FAIL(encode_address(boundary.origin_, value.origin))) return ret;
+  value.cutover_scn = boundary.cutover_scn_.get_val_for_logservice();
+  value.source_chain.clear();
+  for (int64_t i = 0; OB_SUCC(ret) && i < boundary.source_chain_.count(); ++i) {
+    const auto &hop = boundary.source_chain_.at(i);
+    rpc::SourceHop entry{};
+    if (OB_FAIL(encode_address(hop.relay_, entry.relay))
+        || OB_FAIL(encode_address(hop.source_, entry.source))) break;
+    value.source_chain.push_back(std::move(entry));
+  }
+  return ret;
+}
+
+int decode_boundary(const rpc::Control &control, StandbyPromotionBoundary &boundary)
+{
+  int ret = OB_SUCCESS;
+  boundary = StandbyPromotionBoundary();
+  const auto &value = control.boundary;
+  if (value.source_chain.size() > MAX_PROMOTION_BOUNDARY_HOPS) return OB_INVALID_DATA;
+  if (OB_FAIL(decode_address(value.origin, boundary.origin_))
+      || OB_FAIL(boundary.cutover_scn_.convert_for_logservice(value.cutover_scn))) return ret;
+  for (const auto &hop : value.source_chain) {
+    common::ObAddr relay, source;
+    if (OB_FAIL(decode_address(hop.relay, relay)) || OB_FAIL(decode_address(hop.source, source))
+        || OB_FAIL(boundary.add_source_hop(relay, source))) break;
+  }
+  if (OB_SUCC(ret) && !boundary.is_valid()) ret = OB_INVALID_DATA;
+  return ret;
+}
+} // namespace
 
 class StandbyGrpcService final : public rpc::Service
 {
@@ -169,7 +252,6 @@ ObStandbyLSViewTabletCountResult::ObStandbyLSViewTabletCountResult()
 {
 }
 
-OB_SERIALIZE_MEMBER(ObStandbyLSViewTabletCountResult, tablet_count_);
 
 ObStandbyLSViewMeta::ObStandbyLSViewMeta()
   : ls_meta_(), physical_checkpoint_scn_()
@@ -235,10 +317,6 @@ int StandbyPromotionBoundary::add_source_hop(
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(StandbyPromotionBoundary::SourceHop,
-    relay_, source_);
-OB_SERIALIZE_MEMBER(StandbyPromotionBoundary,
-    origin_, cutover_scn_, source_chain_);
 
 bool StandbyPromotionBoundaryRequest::is_valid() const
 {
@@ -274,7 +352,6 @@ int StandbyPromotionBoundaryRequest::add_visited(const common::ObAddr &addr)
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(StandbyPromotionBoundaryRequest, visited_);
 
 int StandbyGrpcService::fetch_ls_view(
     rpc::ServerContext* context,
@@ -430,12 +507,9 @@ int StandbyGrpcService::get_ls_view_tablet_count(
   }
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(serialize_message(result, response))) {
-      LOG_WARN("failed to serialize ObStandbyLSViewTabletCountResult", K(ret));
-    } else {
-      share::ObLSID ls_id(share::ObLSID::SYS_LS_ID);
-      LOG_INFO("get_ls_view_tablet_count RPC handled successfully", K(ls_id), K(result.tablet_count_));
-    }
+    response->control().tablet_count = result.tablet_count_;
+    share::ObLSID ls_id(share::ObLSID::SYS_LS_ID);
+    LOG_INFO("get_ls_view_tablet_count RPC handled successfully", K(ls_id), K(result.tablet_count_));
   }
 
   return ret;
@@ -764,13 +838,12 @@ int StandbyGrpcService::check_restore_precondition(
   }
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(serialize_message(result, response))) {
-      LOG_WARN("failed to serialize ObCheckRestorePreconditionResult", K(ret));
-    } else {
-      share::ObLSID ls_id(share::ObLSID::SYS_LS_ID);
-      LOG_INFO("check_restore_precondition RPC handled successfully",
-               K(ls_id), K(result.required_disk_size_), K(result.data_version_));
-    }
+    response->control().required_disk_size = result.required_disk_size_;
+    response->control().total_tablet_size = result.total_tablet_size_;
+    response->control().data_version = result.data_version_;
+    share::ObLSID ls_id(share::ObLSID::SYS_LS_ID);
+    LOG_INFO("check_restore_precondition RPC handled successfully",
+             K(ls_id), K(result.required_disk_size_), K(result.data_version_));
   }
 
   return ret;
@@ -919,8 +992,8 @@ int StandbyGrpcService::get_promotion_boundary(
   UNUSED(context);
   if (OB_ISNULL(request) || OB_ISNULL(response)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(deserialize_message(*request, boundary_request))) {
-    LOG_WARN("failed to deserialize promotion boundary request", K(ret));
+  } else if (OB_FAIL(decode_boundary_request(request->control(), boundary_request))) {
+    LOG_WARN("failed to decode promotion boundary request fields", K(ret));
   } else if (!boundary_request.is_valid()
              || boundary_request.contains(promotion_node_id_)) {
     ret = OB_INVALID_ARGUMENT;
@@ -1020,8 +1093,8 @@ int StandbyGrpcService::get_promotion_boundary(
       if (OB_SUCC(ret) && !boundary.is_valid()) {
         ret = OB_INVALID_DATA;
         LOG_WARN("resolved invalid promotion boundary", K(ret), K(boundary));
-      } else if (OB_SUCC(ret) && OB_FAIL(serialize_message(boundary, response))) {
-        LOG_WARN("failed to serialize promotion boundary", K(ret), K(boundary));
+      } else if (OB_SUCC(ret) && OB_FAIL(encode_boundary(boundary, response->control()))) {
+        LOG_WARN("failed to encode promotion boundary fields", K(ret), K(boundary));
       }
     }
   }
@@ -1280,8 +1353,9 @@ int ObStandbyGrpcClient::get_ls_view_tablet_count(ObStandbyLSViewTabletCountResu
     auto status = grpc_client_.call(rpc::Method::get_ls_view_tablet_count, context, req, res);
     if (OB_FAIL(status)) {
       LOG_WARN("failed to call get_ls_view_tablet_count RPC", K(ret));
-    } else if (OB_FAIL(deserialize_message(res, result))) {
-      LOG_WARN("failed to deserialize ObStandbyLSViewTabletCountResult", K(ret));
+    } else {
+      result.tablet_count_ = res.control().tablet_count;
+      if (!result.is_valid()) ret = OB_INVALID_DATA;
     }
   }
 
@@ -1304,8 +1378,10 @@ int ObStandbyGrpcClient::check_restore_precondition(
     auto status = grpc_client_.call(rpc::Method::check_restore_precondition, context, req, res);
     if (OB_FAIL(status)) {
       LOG_WARN("failed to call check_restore_precondition RPC", K(ret));
-    } else if (OB_FAIL(deserialize_message(res, result))) {
-      LOG_WARN("failed to deserialize ObCheckRestorePreconditionResult", K(ret));
+    } else {
+      result.required_disk_size_ = res.control().required_disk_size;
+      result.total_tablet_size_ = res.control().total_tablet_size;
+      result.data_version_ = res.control().data_version;
     }
   }
 
@@ -1417,16 +1493,16 @@ int ObStandbyGrpcClient::get_promotion_boundary(
     rpc::Message request;
     rpc::Message response;
     rpc::Context context;
-    if (OB_FAIL(serialize_message(boundary_request, &request))) {
-      LOG_WARN("failed to serialize promotion boundary request",
+    if (OB_FAIL(encode_boundary_request(boundary_request, request.control()))) {
+      LOG_WARN("failed to encode promotion boundary request fields",
           K(ret), K(boundary_request));
     } else {
       grpc_client_.prepare(context);
       const int status = grpc_client_.call(rpc::Method::get_promotion_boundary, context, request, response);
       if (OB_FAIL(status)) {
         LOG_WARN("get source promotion boundary failed", K(ret));
-      } else if (OB_FAIL(deserialize_message(response, boundary))) {
-        LOG_WARN("failed to deserialize source promotion boundary", K(ret));
+      } else if (OB_FAIL(decode_boundary(response.control(), boundary))) {
+        LOG_WARN("failed to decode source promotion boundary fields", K(ret));
       } else if (!boundary.is_valid()) {
         ret = OB_INVALID_DATA;
         LOG_WARN("source returned invalid promotion boundary", K(ret), K(boundary));

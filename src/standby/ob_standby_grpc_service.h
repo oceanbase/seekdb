@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_STANDBY_GRPC_SERVICE_H_
 #define OCEANBASE_STANDBY_GRPC_SERVICE_H_
 
-#include "grpc/rpc_transport.h"
+#include "standby/rpc_transport.h"
 namespace oceanbase::standby {
 struct StandbyConfig;
 class IStandbyHost;

@@ -170,10 +170,14 @@ def sdk_targets(windows = False):
         cc_import(name = name, **(attributes | ({"hdrs": native.glob(attributes["hdrs"], allow_empty = True)} if "hdrs" in attributes else {})))
     for name, attributes in SDK_FILEGROUPS.items():
         native.filegroup(name = name, **(attributes | {"srcs": native.glob(attributes["srcs"], allow_empty = True)}))
+    native.filegroup(
+        name = "protoc",
+        srcs = ["protoc/protoc.exe"] if windows else native.glob(["bin/protoc"], allow_empty = True),
+    )
+    native.filegroup(name = "protoc_runtime", srcs = native.glob(["protoc/*.dll"]) if windows else [])
     if windows:
         _windows_libraries()
         native.exports_files(["protoc/protoc.exe", "grpc_tools/grpc_cpp_plugin.exe"])
-        native.filegroup(name = "protoc_runtime", srcs = native.glob(["protoc/*.dll", "grpc_tools/*.dll"]))
 
 _SOURCE_HEADERS = {
     "absl_headers": ("abseil", "abseil"),
@@ -183,6 +187,9 @@ _SOURCE_HEADERS = {
 }
 
 def sdk_aliases():
+    # Generators always execute on the build host, including cross builds.
+    native.alias(name = "protoc", actual = "@third_party_native//:protoc")
+    native.alias(name = "protoc_runtime", actual = "@third_party_native//:protoc_runtime")
     cc_library(
         name = "base_libraries",
         deps = [":libcrypto", ":libssl", ":libxml2", ":protobuf_c"] + select({

@@ -14,7 +14,7 @@
 
 
 #pragma once
-#include "rust/rpc.h"
+#include "rust/standby_rpc.h"
 #include "lib/net/ob_addr.h"
 #include "lib/ob_errno.h"
 #include <memory>
@@ -52,6 +52,8 @@ public:
   void set_source_lsn(uint64_t value) { frame_.source_lsn = value; }
   uint64_t end_scn() const { return frame_.end_scn; }
   void set_end_scn(uint64_t value) { frame_.end_scn = value; }
+  Control &control() { return frame_.control; }
+  const Control &control() const { return frame_.control; }
   Frame take_frame() { return std::exchange(frame_, Frame{}); }
 private:
   Frame frame_{};

@@ -1126,13 +1126,10 @@ dependencies = [
 name = "rpc"
 version = "0.1.0"
 dependencies = [
- "cxx",
- "prost",
  "rustls-pki-types",
  "tokio",
  "tokio-stream",
  "tonic",
- "tonic-prost",
  "x509-parser",
 ]
 
@@ -1222,8 +1219,8 @@ dependencies = [
  "local",
  "logger",
  "regex-engine",
- "rpc",
  "sql-nio",
+ "standby-rpc",
  "uuid-generator",
 ]
 
@@ -1372,6 +1369,19 @@ dependencies = [
  "socket2",
  "windows-sys 0.61.2",
  "x509-parser",
+]
+
+[[package]]
+name = "standby-rpc"
+version = "0.1.0"
+dependencies = [
+ "cxx",
+ "prost",
+ "rpc",
+ "tokio",
+ "tokio-stream",
+ "tonic",
+ "tonic-prost",
 ]
 
 [[package]]

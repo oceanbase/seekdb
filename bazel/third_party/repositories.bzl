@@ -93,6 +93,8 @@ def _third_party_headers_repository_impl(repository_ctx):
                 repository_ctx.symlink(child, "include/" + child.basename)
     else:
         repository_ctx.symlink(headers, "include")
+    if platform == "native":
+        repository_ctx.symlink(sdk + "/deps/devel/bin", "bin")
     repository_ctx.symlink(sdk + "/devtools", "devtools")
     repository_ctx.symlink(libraries, "lib")
     repository_ctx.symlink(libraries64, "lib64")

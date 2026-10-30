@@ -13,49 +13,61 @@
 // limitations under the License.
 
 use super::*;
+use std::{
+    convert::Infallible,
+    future::{ready, Ready},
+    task::{Context, Poll},
+};
+use tonic::codegen::{
+    http::{Request, Response},
+    Service,
+};
 
-#[test]
-fn database_error_codes_survive_transport() {
-    for error in [-4002, -4007, -4012, -4018, -4072, -4121, -4016, -12345] {
-        assert_eq!(status_error(&error_status(error)), error);
+#[derive(Clone)]
+struct TestService;
+impl tonic::server::NamedService for TestService {
+    const NAME: &'static str = "test.Transport";
+}
+impl Service<Request<tonic::body::Body>> for TestService {
+    type Response = Response<tonic::body::Body>;
+    type Error = Infallible;
+    type Future = Ready<Result<Self::Response, Self::Error>>;
+    fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+    fn call(&mut self, _: Request<tonic::body::Body>) -> Self::Future {
+        ready(Ok(Response::new(tonic::body::Body::empty())))
     }
 }
 
 #[test]
-fn transport_errors_map_to_database_errors() {
-    for (status, error) in [
-        (Status::ok(""), 0),
-        (Status::deadline_exceeded(""), -4012),
-        (Status::cancelled(""), -4072),
-        (Status::unimplemented(""), -4007),
-        (Status::invalid_argument(""), -4002),
-        (Status::not_found(""), -4018),
-        (Status::unavailable("connection closed"), RPC_ERROR),
-    ] {
-        assert_eq!(status_error(&status), error);
-    }
-    for message in [
-        "OB_ERROR:0",
-        "OB_ERROR:1",
-        "OB_ERROR:-4012garbage",
-        "OB_ERROR:999999999999",
-    ] {
-        assert_eq!(status_error(&Status::internal(message)), RPC_ERROR);
-    }
+fn shutdown_waits_for_registered_blocking_work() {
+    let active = Arc::new(Dispatches::default());
+    let work = active.enter();
+    let mut server = start_server(0, false, TestService, active).unwrap();
+    assert_eq!(server.cert_expire_time(), 0);
+    let (finished, receiver) = std::sync::mpsc::channel();
+    let thread = std::thread::spawn(move || {
+        server.stop();
+        finished.send(()).unwrap();
+    });
+    assert!(receiver.recv_timeout(Duration::from_millis(50)).is_err());
+    drop(work);
+    receiver.recv_timeout(Duration::from_secs(5)).unwrap();
+    thread.join().unwrap();
 }
 
 #[test]
-fn response_queue_transfers_buffer_ownership() {
-    let (sender, mut receiver) = mpsc::channel(2);
-    let writer = Writer { sender };
-    let mut frame = Frame::empty();
-    frame.buf = vec![42; 4096];
-    let data = frame.buf.as_ptr();
-    assert!(writer.write(frame));
-    let received = receiver.blocking_recv().unwrap().unwrap();
-    assert_eq!(received.buf.as_ptr(), data);
-    assert_eq!(received.buf.len(), 4096);
-    drop(receiver);
-    assert!(writer.cancelled());
-    assert!(!writer.write(Frame::empty()));
+fn deadline_covers_a_pending_operation() {
+    runtime().block_on(async {
+        let result: Result<(), tonic::Status> =
+            with_timeout(Duration::from_millis(5), std::future::pending()).await;
+        assert_eq!(result.unwrap_err().code(), tonic::Code::DeadlineExceeded);
+        assert_eq!(
+            with_timeout(Duration::from_secs(1), async { Ok(42) })
+                .await
+                .unwrap(),
+            42
+        );
+    });
 }

@@ -27,7 +27,29 @@ pub mod ffi {
         fetch_log,
         get_promotion_boundary,
     }
+    struct NodeAddress {
+        ip: String,
+        port: u32,
+    }
+    struct SourceHop {
+        relay: NodeAddress,
+        source: NodeAddress,
+    }
+    struct PromotionBoundary {
+        origin: NodeAddress,
+        cutover_scn: u64,
+        source_chain: Vec<SourceHop>,
+    }
+    struct Control {
+        tablet_count: i64,
+        required_disk_size: i64,
+        total_tablet_size: i64,
+        data_version: u64,
+        visited: Vec<NodeAddress>,
+        boundary: PromotionBoundary,
+    }
     struct Frame {
+        control: Control,
         buf: Vec<u8>,
         size: u64,
         entry_type: i32,
@@ -53,7 +75,7 @@ pub mod ffi {
         error: i32,
     }
     unsafe extern "C++" {
-        include!("rust/rpc/include/service.h");
+        include!("rust/standby-rpc/include/service.h");
         type Service;
         fn dispatch(
             self: &Service,

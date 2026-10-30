@@ -43,7 +43,7 @@
 #undef ERROR
 #undef DELETE
 #endif
-#include "grpc/rpc_transport.h"
+#include "standby/rpc_transport.h"
 #include "lib/container/ob_se_array.h"
 #include "standby/ob_standby_palf_base_info.h"
 #include "standby/restore/ob_standby_restore_rpc.h"
@@ -117,7 +117,6 @@ static constexpr int64_t MAX_PROMOTION_BOUNDARY_HOPS = 16;
 
 struct ObStandbyLSViewTabletCountResult final
 {
-  OB_UNIS_VERSION(1);
 public:
   bool is_valid() const { return tablet_count_ > 0; }
   ObStandbyLSViewTabletCountResult();
@@ -142,7 +141,6 @@ public:
 
 struct StandbyPromotionBoundary final
 {
-  OB_UNIS_VERSION(1);
 public:
   StandbyPromotionBoundary();
   ~StandbyPromotionBoundary() = default;
@@ -154,7 +152,6 @@ public:
 
   struct SourceHop final
   {
-    OB_UNIS_VERSION(1);
   public:
     SourceHop() : relay_(), source_() {}
     SourceHop(
@@ -186,7 +183,6 @@ public:
 
 struct StandbyPromotionBoundaryRequest final
 {
-  OB_UNIS_VERSION(1);
 public:
   StandbyPromotionBoundaryRequest() : visited_() {}
   ~StandbyPromotionBoundaryRequest() = default;

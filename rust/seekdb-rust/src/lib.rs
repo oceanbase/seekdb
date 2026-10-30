@@ -18,6 +18,6 @@ pub use in_process;
 pub use local as local_storage;
 pub use logger::*;
 pub use regex_engine;
-pub use rpc;
+pub use standby_rpc;
 pub use sql_nio as network;
 pub use uuid_generator;

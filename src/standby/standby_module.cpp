@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "standby/standby_module.h"
-#include "grpc/rpc_transport.h"
+#include "standby/rpc_transport.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/lock/ob_mutex.h"
 #include "lib/oblog/ob_log.h"
