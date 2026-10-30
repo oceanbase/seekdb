@@ -23,6 +23,11 @@
 #include "common/object/ob_obj_compare.h"
 #include "ob_vector_op_common.h"
 
+#if defined(_WIN32) && (defined(_M_X64) || defined(__x86_64__))
+#include <cfloat>
+#include <emmintrin.h>
+#endif
+
 namespace oceanbase
 {
 namespace common
@@ -99,6 +104,158 @@ OB_DECLARE_DEFAULT_CODE(inline static int l2_square(const float *a, const float 
                                                     const int64_t len, double &square) {
   return l2_square_normal(a, b, len, square);
 })
+
+#if defined(_WIN32) && (defined(_M_X64) || defined(__x86_64__))
+// MSVC style builds (Windows) reject the GNU target attributes that
+// OB_DECLARE_*_SPECIFIC_CODE is built on, so OB_USE_MULTITARGET_CODE is 0 there
+// (see ob_target_specific.h) and l2_square_func() falls back to
+// l2_square_normal(), which accumulates in double. The float32 lane kernels
+// used by the SSE/AVX variants round differently, so the same vectors produced
+// last-bit different l2_distance() values on Windows and on x86-64 Linux
+// builds. The helpers below reimplement the AVX2 kernel with baseline SSE2 - no
+// CPU feature dispatch is involved, every x86-64 Windows CPU executes them - so
+// that the arithmetic, and therefore the returned value, is identical to the
+// AVX2 path: 8 float32 lanes reduced like two _mm256_hadd_ps(), the 4 element
+// remainder reduced left to right as in the non-SSE3 branch of
+// l2_square_simd4_avx128(), and the final 1..3 elements accumulated in double.
+// Keeping the values identical across platforms matters because callers derive
+// ordered scores (e.g. round(1 / (1 + l2), 8)) whose last digits flip on a
+// single ULP difference.
+//
+// The float32 lane arithmetic only agrees with the double reference while every
+// intermediate stays a normal float32: a square that is subnormal
+// (0 < d * d < FLT_MIN) has already lost mantissa bits, and a square or a lane
+// sum above FLT_MAX saturates to inf. There the deviation is by orders of
+// magnitude and not by an ulp (1e20 squares to inf, 1e-30 to 0), so such input
+// is detected while accumulating and the whole length is then recomputed by
+// l2_square_normal(), i.e. the checked double kernel a build without SIMD
+// support uses. Input inside the normal range - the case the cross-platform
+// value agreement above is about - keeps the lane arithmetic.
+
+// Lanes that hold a float32 term the lane arithmetic must not use: a subnormal
+// square that does not come from an exactly zero difference, or a saturated
+// square.
+OB_INLINE static __m128 l2_square_lane_risk(__m128 diff, __m128 prod)
+{
+  const __m128 zero = _mm_setzero_ps();
+  const __m128 flt_min = _mm_set1_ps(FLT_MIN);
+  const __m128 flt_max = _mm_set1_ps(FLT_MAX);
+  const __m128 subnormal = _mm_and_ps(_mm_cmplt_ps(prod, flt_min), _mm_cmpneq_ps(diff, zero));
+  return _mm_or_ps(subnormal, _mm_cmpgt_ps(prod, flt_max));
+}
+
+// True when every lane is a finite float32 (the comparison is false for NaN).
+OB_INLINE static bool l2_square_lane_finite(__m128 v)
+{
+  return 0xF == _mm_movemask_ps(_mm_cmple_ps(v, _mm_set1_ps(FLT_MAX)));
+}
+
+// Returns false when the lane result cannot be trusted; *square* is then not
+// meaningful and the caller has to use the double kernel.
+static bool l2_square_lane8_sse2(const float *a, const float *b, const int64_t len,
+                                 float &square)
+{
+  __m128 vlo = _mm_setzero_ps();
+  __m128 vhi = _mm_setzero_ps();
+  __m128 vrisk = _mm_setzero_ps();
+  for (int64_t i = 0; i + 8 <= len; i += 8) {
+    const __m128 dlo = _mm_sub_ps(_mm_loadu_ps(a + i), _mm_loadu_ps(b + i));
+    const __m128 dhi = _mm_sub_ps(_mm_loadu_ps(a + i + 4), _mm_loadu_ps(b + i + 4));
+    const __m128 plo = _mm_mul_ps(dlo, dlo);
+    const __m128 phi = _mm_mul_ps(dhi, dhi);
+    vlo = _mm_add_ps(vlo, plo);
+    vhi = _mm_add_ps(vhi, phi);
+    vrisk = _mm_or_ps(vrisk, _mm_or_ps(l2_square_lane_risk(dlo, plo),
+                                      l2_square_lane_risk(dhi, phi)));
+  }
+  if (0 != _mm_movemask_ps(vrisk)
+      || !l2_square_lane_finite(vlo) || !l2_square_lane_finite(vhi)) {
+    return false;
+  }
+  float lo[4];
+  float hi[4];
+  _mm_storeu_ps(lo, vlo);
+  _mm_storeu_ps(hi, vhi);
+  // Same reduction tree as two _mm256_hadd_ps() calls.
+  const float left = (lo[0] + lo[1]) + (lo[2] + lo[3]);
+  const float right = (hi[0] + hi[1]) + (hi[2] + hi[3]);
+  square = left + right;
+  return square <= FLT_MAX;
+}
+
+static bool l2_square_lane4_sse2(const float *a, const float *b, const int64_t len,
+                                 float &square)
+{
+  __m128 vsum = _mm_setzero_ps();
+  __m128 vrisk = _mm_setzero_ps();
+  for (int64_t i = 0; i + 4 <= len; i += 4) {
+    const __m128 diff = _mm_sub_ps(_mm_loadu_ps(a + i), _mm_loadu_ps(b + i));
+    const __m128 prod = _mm_mul_ps(diff, diff);
+    vsum = _mm_add_ps(vsum, prod);
+    vrisk = _mm_or_ps(vrisk, l2_square_lane_risk(diff, prod));
+  }
+  if (0 != _mm_movemask_ps(vrisk) || !l2_square_lane_finite(vsum)) {
+    return false;
+  }
+  float sum[4];
+  _mm_storeu_ps(sum, vsum);
+  // Left-to-right reduction, i.e. the non-SSE3 branch of
+  // l2_square_simd4_avx128().
+  square = ((sum[0] + sum[1]) + sum[2]) + sum[3];
+  return square <= FLT_MAX;
+}
+
+// Mirrors l2_square_simd4_avx128_extra(). Returns false when the float32 lane
+// part cannot be trusted or the double tail is not finite.
+static bool l2_square_lane4_extra_sse2(const float *a, const float *b, const int64_t len,
+                                       double &square)
+{
+  int ret = OB_SUCCESS;
+  const int64_t dim = len >> 2 << 2;
+  double extra_square = 0;
+  float lane4 = 0;
+  square = 0;
+  if (!l2_square_lane4_sse2(a, b, dim, lane4)) {
+    return false;
+  }
+  if (0 < len - dim && OB_FAIL(l2_square_normal(a + dim, b + dim, len - dim, extra_square))) {
+    LIB_LOG(WARN, "failed to cal l2 square", K(ret), K(len), K(dim), K(extra_square));
+    return false;
+  }
+  square = static_cast<double>(lane4);
+  square += extra_square;
+  return true;
+}
+
+// Mirrors the AVX2 l2_square(): 8 lanes above 8 elements, 4 lanes above 4, the
+// double kernel otherwise. Input outside the float32 lane range is summed by
+// the double kernel over the whole length, so no returned value depends on a
+// saturated or denormal float32 intermediate.
+static int l2_square_float_lane(const float *a, const float *b, const int64_t len,
+                                double &square)
+{
+  int ret = OB_SUCCESS;
+  bool lane_ok = false;
+  double extra_square = 0;
+  square = 0;
+  if (8 < len) {
+    const int64_t dim = len >> 3 << 3;
+    float lane8 = 0;
+    lane_ok = l2_square_lane8_sse2(a, b, dim, lane8)
+              && l2_square_lane4_extra_sse2(a + dim, b + dim, len - dim, extra_square);
+    if (lane_ok) {
+      square = static_cast<double>(lane8);
+      square += extra_square;
+    }
+  } else if (4 < len) {
+    lane_ok = l2_square_lane4_extra_sse2(a, b, len, square);
+  }
+  if (!lane_ok && OB_FAIL(l2_square_normal(a, b, len, square))) {
+    LIB_LOG(WARN, "failed to cal l2 square", K(ret), K(len), K(square));
+  }
+  return ret;
+}
+#endif
 
 OB_DECLARE_SSE_AND_AVX_CODE(
     inline static int l2_square_simd4_avx128(const float *a, const float *b, const int64_t len,

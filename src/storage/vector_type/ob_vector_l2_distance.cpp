@@ -41,7 +41,14 @@ int ObVectorL2Distance<float>::l2_square_func(const float *a, const float *b, co
       ret = common::specific::normal::l2_square(a, b, len, square);
     }
 #else
+#if defined(_WIN32) && (defined(_M_X64) || defined(__x86_64__))
+    // No GNU target attributes on MSVC style builds: use the SSE2 port of the
+    // float32 lane kernel so that the value matches the AVX2 build. Input that
+    // leaves the float32 lane range is summed by the checked double kernel.
+    ret = l2_square_float_lane(a, b, len, square);
+#else
     ret = common::specific::normal::l2_square(a, b, len, square);
+#endif
 #endif
   return ret;
 }
