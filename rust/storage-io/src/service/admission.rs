@@ -327,14 +327,17 @@ impl Admission {
         direction: Direction,
         bytes: &[u8],
     ) -> io::Result<()> {
-        self.prepare_with(target, direction, bytes, AlignedBuffer::zeroed)
+        self.prepare_with(target, direction, bytes, |len, alignment| match direction {
+            Direction::Read => AlignedBuffer::zeroed(len, alignment),
+            Direction::Write => AlignedBuffer::from_slice(bytes, alignment),
+        })
     }
     pub(super) fn prepare_with(
         &mut self,
         target: Target,
         direction: Direction,
         bytes: &[u8],
-        allocate: impl FnOnce(usize, usize) -> io::Result<AlignedBuffer>,
+        make_buffer: impl FnOnce(usize, usize) -> io::Result<AlignedBuffer>,
     ) -> io::Result<()> {
         if !matches!(self.state, Preparation::Reserved) {
             return Err(invalid("buffer capacity has not been reserved"));
@@ -348,12 +351,9 @@ impl Admission {
                 "write source must match the reserved aligned length",
             ));
         }
-        let mut buffer = allocate(options.length, options.alignment)?;
+        let buffer = make_buffer(options.length, options.alignment)?;
         if buffer.as_slice().len() != options.length {
             return Err(invalid("allocation does not match reservation"));
-        }
-        if direction == Direction::Write {
-            buffer.as_mut_slice().copy_from_slice(bytes);
         }
         self.prepare_buffer(target, direction, buffer)
     }

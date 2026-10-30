@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::alloc::{alloc_zeroed, dealloc, Layout};
+use std::alloc::{alloc, alloc_zeroed, dealloc, Layout};
 use std::io;
 use std::ptr::NonNull;
 
-/// Exclusively owns zero-initialized bytes with a caller-selected alignment.
+/// Exclusively owns initialized bytes with a caller-selected alignment.
 #[derive(Debug)]
 pub struct AlignedBuffer {
     ptr: NonNull<u8>,
@@ -26,17 +26,33 @@ pub struct AlignedBuffer {
 
 impl AlignedBuffer {
     pub fn zeroed(len: usize, alignment: usize) -> io::Result<Self> {
-        // Allocate one byte for an empty buffer so its pointer has the same alignment contract.
-        let layout = Layout::from_size_align(len.max(1), alignment).map_err(|_| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "invalid buffer size or alignment",
-            )
-        })?;
+        let layout = Self::allocation_layout(len, alignment)?;
         // SAFETY: layout has nonzero size and valid alignment.
         let ptr = NonNull::new(unsafe { alloc_zeroed(layout) })
             .ok_or_else(|| io::Error::from(io::ErrorKind::OutOfMemory))?;
         Ok(Self { ptr, layout, len })
+    }
+
+    pub fn from_slice(bytes: &[u8], alignment: usize) -> io::Result<Self> {
+        let len = bytes.len();
+        let layout = Self::allocation_layout(len, alignment)?;
+        // SAFETY: layout has nonzero size and valid alignment.
+        let ptr = NonNull::new(unsafe { alloc(layout) })
+            .ok_or_else(|| io::Error::from(io::ErrorKind::OutOfMemory))?;
+        // SAFETY: the fresh allocation cannot overlap bytes and has room for len bytes.
+        // The full copy initializes every exposed byte before constructing the owner.
+        unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr.as_ptr(), len) };
+        Ok(Self { ptr, layout, len })
+    }
+
+    fn allocation_layout(len: usize, alignment: usize) -> io::Result<Layout> {
+        // Allocate one byte for an empty buffer so its pointer has the same alignment contract.
+        Layout::from_size_align(len.max(1), alignment).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "invalid buffer size or alignment",
+            )
+        })
     }
 
     pub fn as_slice(&self) -> &[u8] {
@@ -57,7 +73,7 @@ unsafe impl Sync for AlignedBuffer {}
 
 impl Drop for AlignedBuffer {
     fn drop(&mut self) {
-        // SAFETY: ptr came from alloc_zeroed with this layout and is freed exactly once.
+        // SAFETY: ptr came from alloc or alloc_zeroed with this layout and is freed exactly once.
         unsafe { dealloc(self.ptr.as_ptr(), self.layout) };
     }
 }

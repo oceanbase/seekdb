@@ -305,11 +305,40 @@ fn aligned_buffer_owns_zeroed_mutable_bytes() {
             assert_eq!(buffer.as_slice(), vec![31; len]);
         }
     }
-    for (len, alignment) in [(1, 0), (1, 3), (usize::MAX, 8)] {
+    for (len, alignment) in [(0, 0), (0, 3), (1, 0), (1, 3), (usize::MAX, 8)] {
         assert_eq!(
             AlignedBuffer::zeroed(len, alignment).unwrap_err().kind(),
             io::ErrorKind::InvalidInput
         );
+    }
+}
+
+#[test]
+fn aligned_buffer_copies_and_owns_source_bytes() {
+    for len in [0, 1, 4096, 8193] {
+        for alignment in [1, 8, 512, 4096] {
+            let expected: Vec<u8> = (0..len).map(|i| (i % 251) as u8).collect();
+            let mut source = expected.clone();
+            let mut buffer = AlignedBuffer::from_slice(&source, alignment).unwrap();
+            assert_eq!((buffer.as_slice().as_ptr() as usize) % alignment, 0);
+            assert_eq!(buffer.as_slice(), expected);
+            source.fill(73);
+            assert_eq!(buffer.as_slice(), expected);
+            drop(source);
+            assert_eq!(buffer.as_slice(), expected);
+            buffer.as_mut_slice().fill(31);
+            assert_eq!(buffer.as_slice(), vec![31; len]);
+        }
+    }
+    for bytes in [&[][..], &[1][..]] {
+        for alignment in [0, 3] {
+            assert_eq!(
+                AlignedBuffer::from_slice(bytes, alignment)
+                    .unwrap_err()
+                    .kind(),
+                io::ErrorKind::InvalidInput
+            );
+        }
     }
 }
 

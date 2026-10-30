@@ -601,6 +601,72 @@ fn prepared_admission_reserves_before_build_and_releases_on_failure() {
     service.shutdown().unwrap();
 }
 #[test]
+fn preparation_rejects_malformed_input_before_building_buffer() {
+    let directory = Directory::new();
+    let file = directory.file();
+    let service = service();
+    for (direction, bytes) in [
+        (Direction::Read, &b"x"[..]),
+        (Direction::Write, &b"short"[..]),
+    ] {
+        let (options, target) = spec(&file, 8).split();
+        let mut admission = service.begin(options).unwrap();
+        admission.wait_capacity().unwrap();
+        assert_eq!(
+            admission
+                .prepare_with(target, direction, bytes, |_, _| {
+                    panic!("invalid input must be rejected before buffer construction")
+                })
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::InvalidInput
+        );
+        drop(admission);
+        let snapshot = service.snapshot().unwrap();
+        assert_eq!(snapshot.admitted_requests, 0);
+        assert_eq!(snapshot.reserved_bytes, 0);
+    }
+    service.shutdown().unwrap();
+}
+
+#[test]
+fn prepared_write_owns_source_and_retains_charge_through_completion() {
+    let directory = Directory::new();
+    let file = directory.file();
+    let service = service();
+    let expected: Vec<u8> = (0..8193).map(|i| (i % 251) as u8).collect();
+    let mut source = expected.clone();
+    let mut admission = prepare(
+        &service,
+        spec(&file, source.len()),
+        Direction::Write,
+        &source,
+    );
+    source.fill(73);
+    drop(source);
+    assert_eq!(service.snapshot().unwrap().reserved_bytes, expected.len());
+    let (destination, completed) = mpsc::channel();
+    admission
+        .publish(engine::Destination::Caller(destination))
+        .unwrap();
+    drop(admission);
+    let completion = receive_driven(&service, &completed);
+    assert!(matches!(completion.status, CompletionStatus::Complete));
+    assert_eq!(completion.transferred, expected.len());
+    let mut actual = vec![0; expected.len()];
+    file_io::read_exact_at(&file, &mut actual, 0).unwrap();
+    assert_eq!(actual, expected);
+    let snapshot = service.snapshot().unwrap();
+    assert_eq!(snapshot.admitted_requests, 1);
+    assert_eq!(snapshot.reserved_bytes, expected.len());
+    drop(completion);
+    let snapshot = service.snapshot().unwrap();
+    assert_eq!(snapshot.admitted_requests, 0);
+    assert_eq!(snapshot.reserved_bytes, 0);
+    service.shutdown().unwrap();
+}
+
+#[test]
 fn prepared_request_retains_charge_across_submission_and_shrink() {
     let directory = Directory::new();
     let file = directory.file();
