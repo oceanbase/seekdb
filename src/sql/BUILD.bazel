@@ -205,6 +205,14 @@ cc_library(
     visibility = ["//src/sql:__subpackages__"],
 )
 
+cc_library(
+    name = "inlist_resolver_test_headers",
+    testonly = True,
+    deps = [":sql_runtime_internal_headers"] + _SQL_INTERFACE_NATIVE_DEPS,
+    tags = ["manual"],
+    visibility = ["//unittest/sql/resolver/dml:__pkg__"],
+)
+
 _SQL_RUNTIME_UNITY_GROUPS = groups_without(
     SQL_UNITY_GROUPS,
     OPTIMIZER_GROUP_NAMES,
