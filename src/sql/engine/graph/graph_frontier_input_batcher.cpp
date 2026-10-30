@@ -23,6 +23,18 @@ namespace oceanbase
 using namespace common;
 namespace sql
 {
+namespace
+{
+bool identity_has_double_key(const GraphElementIdentity &identity)
+{
+  bool has_double = false;
+  for (int64_t i = 0;
+       !has_double && i < identity.rowkey_.get_obj_cnt(); ++i) {
+    has_double = identity.rowkey_.get_obj_ptr()[i].get_type_class() == ObDoubleTC;
+  }
+  return has_double;
+}
+} // namespace
 
 GraphFrontierInputBatcher::GraphFrontierInputBatcher(
     ObIAllocator &allocator, const GraphPathStateStore &states, GraphExpand &expand,
@@ -48,12 +60,19 @@ int64_t GraphFrontierInputBatcher::used_memory() const
 
 int GraphFrontierInputBatcher::check_memory_limit(int64_t memory_budget) const
 {
-  return memory_budget <= 0 || used_memory() > memory_budget
+  const int64_t used = used_memory();
+  int ret = memory_budget <= 0 || used > memory_budget
       ? OB_EXCEED_QUERY_MEM_LIMIT : OB_SUCCESS;
+  if (OB_FAIL(ret)) {
+    LOG_WARN("graph frontier input batch exceeded remaining work-area budget",
+             K(ret), K(used), K(memory_budget), K_(hop));
+  }
+  return ret;
 }
 
 int GraphFrontierInputBatcher::begin_level(
-    const ObIArray<int64_t> &states, int64_t hop, int64_t memory_budget)
+    const ObIArray<int64_t> &states, int64_t hop, int64_t memory_budget,
+    bool sources_unique_by_shortest)
 {
   int ret = OB_SUCCESS;
   GraphPathState first;
@@ -64,12 +83,20 @@ int GraphFrontierInputBatcher::begin_level(
   state_ids_ = &states;
   hop_ = hop;
   next_position_ = 0;
+  unique_sources_ = false;
   if (states.empty() || batch_size_ <= 0 || batch_size_ > GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(states_.get_state(states.at(0), first))) {
   } else {
     // This execution capability must not depend on starting statistics.
-    source_index_enabled_ = !identity_has_double_key(first.current_identity_);
+    // One shortest binding has at most one frontier state per vertex. Avoid
+    // allocating another whole-level identity index and source grouping just
+    // to rediscover that fact. DOUBLE tolerance equality is non-transitive,
+    // so keep the conservative existing path for those keys.
+    unique_sources_ = sources_unique_by_shortest
+        && !identity_has_double_key(first.current_identity_);
+    source_index_enabled_ = !unique_sources_
+        && !identity_has_double_key(first.current_identity_);
     batch_by_source_groups_ = expand_.can_partition_sources() && source_index_enabled_;
     if (source_index_enabled_ && OB_FAIL(source_index_.init(states.count()))) {
     } else if (OB_FAIL(check_memory_limit(memory_budget))) {
@@ -83,6 +110,7 @@ void GraphFrontierInputBatcher::finish_level()
 {
   source_index_.reset();
   state_ids_ = nullptr;
+  unique_sources_ = false;
 }
 
 void GraphFrontierInputBatcher::reset()
@@ -96,6 +124,7 @@ void GraphFrontierInputBatcher::reset()
   next_position_ = 0;
   source_index_enabled_ = false;
   batch_by_source_groups_ = false;
+  unique_sources_ = false;
 }
 
 int GraphFrontierInputBatcher::prepare_source_groups(int64_t memory_budget)

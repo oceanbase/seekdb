@@ -127,6 +127,8 @@ int GraphPathStateStore::add_root(int64_t binding_id,
     state.hop_ = 0;
     if (OB_FAIL(deep_copy_identity(source_identity, state.current_identity_))) {
     } else if (OB_FAIL(append_state(state, path_state_id))) {
+    } else {
+      ++root_state_count_;
     }
   }
   if (OB_SUCCESS != ret) {
@@ -200,6 +202,69 @@ int GraphPathStateStore::add_child(const GraphExpandOutput &extension,
   }
   if (OB_SUCCESS != ret) {
     ret = fail(ret);
+  }
+  return ret;
+}
+
+int GraphPathStateStore::compact_endpoint_frontier(
+    ObIArray<int64_t> &frontier_state_ids)
+{
+  int ret = OB_SUCCESS;
+  const int64_t state_count = states_.count();
+  int64_t previous_id = root_state_count_ - 1;
+  int64_t frontier_hop = -1;
+  // Validate before changing either array. In particular all roots must be a
+  // prefix: adding a new seed after a child is legal for the general store,
+  // but that layout cannot be compacted by this endpoint-only fast path.
+  if (OB_UNLIKELY(root_state_count_ <= 0 || root_state_count_ > state_count
+                  || frontier_state_ids.count() > state_count - root_state_count_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid graph endpoint frontier for compaction", K(ret),
+             K_(root_state_count), K(state_count),
+             "frontier_count", frontier_state_ids.count());
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < root_state_count_; ++i) {
+    const GraphPathState &root = states_.at(i);
+    if (OB_UNLIKELY(!root.is_valid() || root.hop_ != 0
+                    || root.path_state_id_ != i || root.root_path_state_id_ != i)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("graph endpoint root prefix is inconsistent", K(ret), K(i), K(root));
+    }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < frontier_state_ids.count(); ++i) {
+    const int64_t old_id = frontier_state_ids.at(i);
+    if (OB_UNLIKELY(old_id <= previous_id || old_id >= state_count)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("graph endpoint frontier IDs are not increasing", K(ret), K(i),
+               K(old_id), K(previous_id), K(state_count));
+    } else {
+      const GraphPathState &state = states_.at(old_id);
+      if (OB_UNLIKELY(!state.is_valid() || state.path_state_id_ != old_id
+                      || state.retains_history_ || state.hop_ == 0
+                      || (frontier_hop >= 0 && state.hop_ != frontier_hop)
+                      || state.root_path_state_id_ < 0
+                      || state.root_path_state_id_ >= root_state_count_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("invalid endpoint-only frontier state", K(ret), K(i), K(state));
+      } else {
+        frontier_hop = state.hop_;
+        previous_id = old_id;
+      }
+    }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < frontier_state_ids.count(); ++i) {
+    const int64_t old_id = frontier_state_ids.at(i);
+    const int64_t compact_id = root_state_count_ + i;
+    if (old_id != compact_id) {
+      GraphPathState state = states_.at(old_id);
+      state.path_state_id_ = compact_id;
+      states_.at(compact_id) = state;
+      frontier_state_ids.at(i) = compact_id;
+    }
+  }
+  if (OB_SUCC(ret)) {
+    const int64_t live_count = root_state_count_ + frontier_state_ids.count();
+    while (states_.count() > live_count) { states_.pop_back(); }
   }
   return ret;
 }
@@ -388,6 +453,7 @@ void GraphPathStateStore::reset()
 {
   states_.reset();
   identity_allocator_.reset();
+  root_state_count_ = 0;
   peak_memory_bytes_ = 0;
 }
 

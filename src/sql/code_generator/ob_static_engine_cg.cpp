@@ -1195,6 +1195,7 @@ int ObStaticEngineCG::generate_spec(GraphFeedbackLoopLogOp &op,
   uint64_t edge_scan_op_id = OB_INVALID_ID;
   uint64_t target_scan_op_id = OB_INVALID_ID;
   bool prune_duplicate_states = false;
+  ObRawExpr *goal_value_expr = nullptr;
   UNUSED(in_root_job);
   if (OB_FAIL(generate_recursive_pump_spec(op, spec))) {
   } else if (OB_FAIL(op.get_seed_key_exprs(seed_key_exprs))) {
@@ -1207,17 +1208,28 @@ int ObStaticEngineCG::generate_spec(GraphFeedbackLoopLogOp &op,
     LOG_WARN("failed to get graph expand scan operator ids", K(ret));
   } else if (OB_FAIL(op.can_prune_duplicate_states(prune_duplicate_states))) {
     LOG_WARN("failed to check graph duplicate-insensitive consumer", K(ret));
+  } else if (prune_duplicate_states
+             && OB_FAIL(op.get_shortest_goal_value_expr(goal_value_expr))) {
+    LOG_WARN("failed to get graph shortest goal expression", K(ret));
   } else {
     spec.set_graph_path(op.get_path_desc());
     spec.set_expand_access(op.get_expand_access_desc());
     spec.set_native_step_supported(op.is_native_step_supported());
     spec.set_prune_duplicate_states(prune_duplicate_states);
+    if (goal_value_expr != nullptr) {
+      ObArray<ObRawExpr *> goal_raw_exprs;
+      if (OB_FAIL(goal_raw_exprs.push_back(goal_value_expr))) {
+      } else if (OB_FAIL(generate_rt_exprs(
+                     goal_raw_exprs, spec.get_shortest_goal_value_exprs()))) {
+        LOG_WARN("failed to compile graph shortest goal expression", K(ret));
+      }
+    }
     ObArray<ObRawExpr *> adjacency_parameters;
     spec.set_reuse_adjacency(op.can_reuse_adjacency(&adjacency_parameters));
     ObArray<ObRawExpr *> parameter_raw_exprs;
     // These values are set by the enclosing join, not calculated by this
     // operator. Their edge-filter references already retain them in the frame.
-    if (OB_FAIL(spec.get_adjacency_parameters().reserve(adjacency_parameters.count()))) {
+    if (OB_SUCC(ret) && OB_FAIL(spec.get_adjacency_parameters().reserve(adjacency_parameters.count()))) {
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < adjacency_parameters.count(); ++i) {
       ObExpr *expr = nullptr;

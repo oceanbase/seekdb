@@ -46,6 +46,11 @@ public:
   // validates that association, inherits its binding and creates the child.
   int add_child(const GraphExpandOutput &extension, int64_t &path_state_id,
                 bool retain_history = true);
+  // After a complete endpoint-only shortest BFS level, the previous level is
+  // no longer needed as a parent. Keep the roots and the new frontier in
+  // place, rewriting its transient state IDs before the next expansion.
+  // Call only after all input/edge cursors for the old level are released.
+  int compact_endpoint_frontier(common::ObIArray<int64_t> &frontier_state_ids);
   int build_endpoints(int64_t leaf_path_state_id,
                        common::ObIArray<GraphPathState> &endpoints) const;
 
@@ -68,6 +73,7 @@ public:
 
   void reset();
   int64_t count() const { return states_.count(); }
+  int64_t root_count() const { return root_state_count_; }
   bool empty() const { return states_.empty(); }
   int64_t used_memory() const;
   int64_t peak_memory() const { return peak_memory_bytes_; }
@@ -85,6 +91,7 @@ private:
   common::ObArenaAllocator identity_allocator_;
   int64_t memory_limit_;
   common::ObArray<GraphPathState> states_;
+  int64_t root_state_count_{0};
   int64_t peak_memory_bytes_{0};
 
   DISALLOW_COPY_AND_ASSIGN(GraphPathStateStore);

@@ -101,7 +101,13 @@ int64_t GraphExpandInputBindings::used_memory() const
 
 int GraphExpandInputBindings::check_memory_limit() const
 {
-  return used_memory() > memory_limit_ ? OB_EXCEED_QUERY_MEM_LIMIT : OB_SUCCESS;
+  const int64_t used = used_memory();
+  int ret = used > memory_limit_ ? OB_EXCEED_QUERY_MEM_LIMIT : OB_SUCCESS;
+  if (OB_FAIL(ret)) {
+    LOG_WARN("graph expand input bindings exceeded work-area limit",
+             K(ret), K(used), K_(memory_limit));
+  }
+  return ret;
 }
 
 void GraphExpandInputBindings::reset()

@@ -36,7 +36,7 @@ class GraphShortestRowAdmission;
 // the recursive CTE operator hierarchy.
 class GraphFeedbackLoopSpec final : public RecursivePumpSpec
 {
-  OB_UNIS_VERSION_V(2);
+  OB_UNIS_VERSION_V(3);
 public:
   explicit GraphFeedbackLoopSpec(common::ObIAllocator &allocator,
                                  const ObPhyOperatorType type);
@@ -56,6 +56,9 @@ public:
   }
   void set_prune_duplicate_states(bool prune) { prune_duplicate_states_ = prune; }
   bool prune_duplicate_states() const { return prune_duplicate_states_; }
+  ExprFixedArray &get_shortest_goal_value_exprs() { return shortest_goal_value_exprs_; }
+  const ExprFixedArray &get_shortest_goal_value_exprs() const
+  { return shortest_goal_value_exprs_; }
   void set_reuse_adjacency(bool reuse) { reuse_adjacency_ = reuse; }
   bool reuse_adjacency() const { return reuse_adjacency_; }
   ExprFixedArray &get_adjacency_parameters() { return adjacency_parameters_; }
@@ -113,6 +116,8 @@ private:
   // the source element's declared key order, so it can be copied directly into
   // a typed GraphElementIdentity without inspecting generated column names.
   ExprFixedArray seed_key_exprs_;
+  // Present only when both resolver and final-plan proof admit a one-key goal.
+  ExprFixedArray shortest_goal_value_exprs_;
   // Complete outer bindings used by edge filters, captured once per rescan.
   ExprFixedArray adjacency_parameters_;
   // These snapshots cross DFO boundaries with the feedback-loop spec. The

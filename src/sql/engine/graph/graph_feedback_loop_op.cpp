@@ -71,6 +71,7 @@ public:
         frontier_(binding_store_.get_work_area_allocator(), expand_,
                   GRAPH_EXPAND_MAX_SOURCE_BATCH_SIZE, memory_limit),
         payload_allocator_(binding_store_.get_work_area_allocator()),
+        goal_allocator_(binding_store_.get_work_area_allocator()),
         output_batch_allocator_(binding_store_.get_work_area_allocator()),
         output_batch_rows_(OB_MALLOC_NORMAL_BLOCK_SIZE,
             ModulePageAllocator(binding_store_.get_work_area_allocator(), "GraphOutBatch")),
@@ -104,11 +105,12 @@ public:
           && spec.get_target_scan_desc().get_tsc_ctdef().snapshot_item_.snapshot_query_type_ == TableItem::NOT_USING);
       // Also check the complete physical statement: a SELECT subplan may
       // belong to DML or a statement with locking/side-effecting PL functions.
-      cached_access_.set_enabled(spec.reuse_adjacency()
+      cache_eligible_ = spec.reuse_adjacency()
           && plan_ctx != nullptr && plan_ctx->get_phy_plan() != nullptr
           && plan_ctx->get_phy_plan()->is_plain_select()
           && spec.get_edge_scan_desc().get_tsc_ctdef().snapshot_item_.snapshot_query_type_
-                 == TableItem::NOT_USING);
+                 == TableItem::NOT_USING;
+      cached_access_.set_enabled(cache_eligible_);
     }
     return ret;
   }
@@ -142,6 +144,9 @@ public:
       } else if (OB_FAIL(parameters.push_back(value))) {
       }
     }
+    // A prior rescan may have disabled reuse for one shortest seed. Restore
+    // the plan's eligibility before selecting this execution's context.
+    if (OB_SUCC(ret)) { cached_access_.set_enabled(cache_eligible_); }
     if (OB_SUCC(ret) && OB_FAIL(cached_access_.select_context(parameters))) {
       LOG_WARN("failed to select graph adjacency context", K(ret));
     }
@@ -155,6 +160,20 @@ public:
       } else if (OB_FAIL(add_seed(anchor.get_spec().output_, spec))) {
         LOG_WARN("failed to save graph feedback seed row", K(ret));
       }
+    }
+    // A standalone shortest search expands each source at most once, apart
+    // from a possible first-hop return to the root. Correlated rescans are
+    // different: the same seed and edge parameters may recur, so retain
+    // adjacency across those executions once a rescan has occurred.
+    if (OB_SUCC(ret) && !rescan_seen_ && binding_store_.count() == 1
+        && spec.get_path_desc().any_shortest_
+        && spec.get_path_desc().shortest_single_segment_
+        && spec.prune_duplicate_states() && spec.get_lower_bound() <= 1) {
+      cached_access_.set_enabled(false);
+      cached_access_.clear();
+    }
+    if (OB_SUCC(ret) && OB_FAIL(init_shortest_goal(spec))) {
+      LOG_WARN("failed to initialize graph shortest goal", K(ret));
     }
     if (OB_SUCCESS != ret) {
       ret = normalize_work_area_error(ret);
@@ -235,6 +254,15 @@ public:
     if (OB_UNLIKELY(!seeds_loaded_)) {
       ret = OB_NOT_INIT;
       LOG_WARN("graph feedback seeds are not loaded", K(ret));
+    } else if (goal_finished_) {
+      // The parent has consumed (or staged) the previous output row. Only
+      // now may its identity backing and the live DAS cursor be released.
+      if (frontier_.is_expanding()) {
+        add_hop_stats(frontier_.get_pending_hop_stats(), cumulative_stats_);
+        expanded_hop_count_ = saturated_stat_add(expanded_hop_count_, 1);
+      }
+      frontier_.reset();
+      ret = OB_ITER_END;
     }
     while (OB_SUCC(ret) && path == nullptr) {
       if (has_output_frontier(spec)
@@ -248,6 +276,12 @@ public:
                    K_(next_output_index));
         } else {
           ++next_output_index_;
+          if (goal_enabled_ && path->at(path->count() - 1).current_identity_
+                                   == goal_identity_) {
+            goal_found_ = true;
+            LOG_TRACE("graph shortest goal found", "hop", frontier_.get_output_hop(),
+                      K_(goal_identity));
+          }
         }
       } else if (!frontier_.is_expanding()
                  && (frontier_.output_empty()
@@ -284,6 +318,11 @@ public:
       }
     } else if (OB_FAIL(materialize_basic_output_row(spec, *path))) {
       LOG_WARN("failed to materialize basic graph feedback output", K(ret));
+    } else if (goal_found_) {
+      // The next fetch (or close) releases the frontier. Releasing here could
+      // invalidate variable-length key data still read by the parent operator.
+      goal_finished_ = true;
+      goal_found_ = false;
     }
     if (OB_SUCCESS != ret && OB_ITER_END != ret) {
       reset();
@@ -310,7 +349,11 @@ public:
       ret = OB_ITER_END;
     } else if (OB_FAIL(frontier_.expand(spec.get_direction(),
                                         spec.get_path_mode(),
-                                        spec.prune_duplicate_states()))) {
+                                        spec.prune_duplicate_states(),
+                                        spec.get_path_desc().any_shortest_
+                                            && spec.get_path_desc().shortest_single_segment_
+                                            && spec.prune_duplicate_states()
+                                                ? spec.get_lower_bound() : -1))) {
       ret = normalize_work_area_error(ret);
       if (ret != OB_ITER_END) {
         LOG_WARN("failed to advance graph feedback frontier", K(ret),
@@ -384,18 +427,60 @@ public:
       expanded_hop_count_ = saturated_stat_add(expanded_hop_count_, 1);
     }
     payload_allocator_.reset();
+    goal_identity_.reset();
+    goal_allocator_.reset();
     output_batch_rows_.reset();
     output_batch_allocator_.reset();
     frontier_.reset();
     if (!keep_adjacency) { cached_access_.clear(); }
+    rescan_seen_ = keep_adjacency;
     binding_store_.reset();
     next_output_index_ = 0;
     seeds_loaded_ = false;
+    goal_enabled_ = false;
+    goal_found_ = false;
+    goal_finished_ = false;
     // Operator monitor counters are cumulative across rescans, just like its
     // output-row and rescan counters, so retain cumulative_stats_ here.
   }
 
 private:
+  int init_shortest_goal(const GraphFeedbackLoopSpec &spec)
+  {
+    int ret = OB_SUCCESS;
+    goal_enabled_ = false;
+    const ExprFixedArray &values = spec.get_shortest_goal_value_exprs();
+    // A single binding lets the first BFS goal witness finish this execution.
+    // With several seeds, one goal reached by one binding must not suppress
+    // the remaining bindings' results.
+    if (values.count() == 1 && binding_store_.count() == 1
+        && spec.prune_duplicate_states() && spec.get_lower_bound() <= 1
+        && spec.get_path_desc().shortest_goal_key_filter_) {
+      ObExpr *expr = values.at(0);
+      ObDatum *datum = nullptr;
+      ObObj cell;
+      if (OB_ISNULL(expr)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
+      } else if (OB_ISNULL(datum)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (!datum->is_null()) {
+        if (OB_FAIL(datum->to_obj(cell, expr->obj_meta_, expr->obj_datum_map_))) {
+        } else {
+          ObRowkey key(&cell, 1);
+          goal_identity_.graph_id_ = spec.get_path_desc().graph_id_;
+          goal_identity_.element_id_ = spec.get_path_desc().target_element_id_;
+          if (OB_FAIL(key.deep_copy(goal_identity_.rowkey_, goal_allocator_))) {
+            LOG_WARN("failed to copy graph shortest goal key", K(ret));
+          } else {
+            goal_enabled_ = true;
+          }
+        }
+      }
+    }
+    return ret;
+  }
+
   int write_output_value(ObExpr *expr, const ObObj &value)
   {
     int ret = OB_SUCCESS;
@@ -607,11 +692,16 @@ private:
     return ret;
   }
 
-  int normalize_work_area_error(int error) const
+  int normalize_work_area_error(int ret) const
   {
-    return error == OB_ALLOCATE_MEMORY_FAILED
-        && binding_store_.memory_limit_exceeded()
-        ? OB_EXCEED_QUERY_MEM_LIMIT : error;
+    if (ret == OB_ALLOCATE_MEMORY_FAILED
+        && binding_store_.memory_limit_exceeded()) {
+      LOG_WARN("graph work-area allocator rejected an allocation",
+               K(ret), "used", binding_store_.used_memory(),
+               K_(memory_limit), "hop", frontier_.get_output_hop());
+      return OB_EXCEED_QUERY_MEM_LIMIT;
+    }
+    return ret;
   }
 
   void accumulate_last_hop_stats()
@@ -643,6 +733,9 @@ private:
   GraphExpand expand_;
   GraphFeedbackFrontier frontier_;
   common::ObArenaAllocator payload_allocator_;
+  // Unlike per-row JSON payloads, the bound goal must survive every output
+  // row until the search finishes or this runtime is reset.
+  common::ObArenaAllocator goal_allocator_;
   // DAS and scalar expression evaluation may overwrite output frames. Stage
   // deep-copied rows, then publish the whole batch only after all access ends.
   common::ObArenaAllocator output_batch_allocator_;
@@ -651,7 +744,13 @@ private:
   int64_t next_output_index_{0};
   GraphExpandStats cumulative_stats_{};
   int64_t expanded_hop_count_{0};
+  bool cache_eligible_{false};
+  bool rescan_seen_{false};
   bool seeds_loaded_{false};
+  GraphElementIdentity goal_identity_{};
+  bool goal_enabled_{false};
+  bool goal_found_{false};
+  bool goal_finished_{false};
 
   DISALLOW_COPY_AND_ASSIGN(GraphFeedbackRuntime);
 };
@@ -673,23 +772,13 @@ const ObTableScanSpec *find_table_scan_spec(const ObOpSpec *root,
   return result;
 }
 
-bool identity_has_double_key(const GraphElementIdentity &identity)
-{
-  bool has_double = false;
-  for (int64_t i = 0;
-       !has_double && i < identity.rowkey_.get_obj_cnt(); ++i) {
-    has_double = identity.rowkey_.get_obj_ptr()[i].get_type_class()
-        == ObDoubleTC;
-  }
-  return has_double;
-}
-
 } // namespace
 
 GraphFeedbackLoopSpec::GraphFeedbackLoopSpec(common::ObIAllocator &allocator,
                                              const ObPhyOperatorType type)
     : RecursivePumpSpec(allocator, type),
       seed_key_exprs_(allocator),
+      shortest_goal_value_exprs_(allocator),
       adjacency_parameters_(allocator),
       source_scan_desc_(allocator),
       edge_scan_desc_(allocator),
@@ -1106,12 +1195,14 @@ OB_SERIALIZE_MEMBER((GraphFeedbackLoopSpec, RecursivePumpSpec),
                     path_desc_.need_path_,
                     path_desc_.any_shortest_,
                     path_desc_.shortest_single_segment_,
+                    path_desc_.shortest_goal_key_filter_,
                     expand_access_desc_,
                     output_row_desc_,
                     native_step_supported_,
                     prune_duplicate_states_,
                     reuse_adjacency_,
                     seed_key_exprs_,
+                    shortest_goal_value_exprs_,
                     adjacency_parameters_,
                     source_scan_desc_,
                     edge_scan_desc_,

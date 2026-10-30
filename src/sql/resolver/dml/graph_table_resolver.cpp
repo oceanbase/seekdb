@@ -530,6 +530,44 @@ const GraphProperty *find_graph_property(const GraphSchema &graph,
   return property;
 }
 
+// This is only a certificate for the native shortest-path fast path, never a
+// replacement for the normal terminal predicate. Keep the first version
+// intentionally narrow: a single primary-key property equated to a literal
+// or prepared parameter, with no other terminal condition. Composite keys or
+// coercions still use the fully general graph result plan.
+bool is_exact_shortest_goal_filter(const ParseNode *filter,
+                                   const GraphSchema &graph,
+                                   const GraphBinding &target)
+{
+  bool exact = false;
+  if (filter != nullptr && filter->type_ == T_OP_EQ && filter->num_child_ == 2
+      && filter->children_ != nullptr && target.element_ != nullptr
+      && target.element_->key_count_ == 1 && target.variable_ != nullptr) {
+    for (int64_t side = 0; !exact && side < 2; ++side) {
+      const ParseNode *column = filter->children_[side];
+      const ParseNode *value = filter->children_[1 - side];
+      if (column != nullptr && column->type_ == T_COLUMN_REF
+          && column->num_child_ == 3 && column->children_ != nullptr
+          && column->children_[0] == nullptr
+          && column->children_[1] != nullptr
+          && column->children_[2] != nullptr
+          && column->children_[1]->type_ == T_IDENT
+          && column->children_[2]->type_ == T_IDENT
+          && value != nullptr
+          && (value->type_ == T_INT || value->type_ == T_UINT64
+              || value->type_ == T_QUESTIONMARK)) {
+        const GraphProperty *property = find_graph_property(
+            graph, target.element_->id_, graph_node_name(*column->children_[2]));
+        exact = graph_name_equal(graph_node_name(*column->children_[1]),
+                                 graph_node_name(*target.variable_))
+            && property != nullptr
+            && property->column_id_ == target.element_->key_columns_[0];
+      }
+    }
+  }
+  return exact;
+}
+
 int collect_path_projection_requirements(
     const ParseNode &node,
     const GraphSchema &graph,
@@ -3434,6 +3472,10 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
         path_desc.path_mode_ = path_mode;
         path_desc.any_shortest_ = any_shortest;
         path_desc.shortest_single_segment_ = any_shortest && chain.num_child_ == 3;
+        path_desc.shortest_goal_key_filter_ = path_desc.shortest_single_segment_
+            && is_exact_shortest_goal_filter(
+                   chain.children_[quantified_index + 1]->children_[2], *graph,
+                                             bindings.at(quantified_index + 1));
         path_desc.row_shape_ = shape != nullptr && shape->value_ == 1
             ? GraphPathRowShape::PER_STEP : GraphPathRowShape::PER_MATCH;
         path_desc.need_path_ = path_desc.path_mode_ == GraphPathMode::TRAIL

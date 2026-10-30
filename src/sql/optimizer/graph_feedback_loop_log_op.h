@@ -60,6 +60,9 @@ public:
   // Final-plan proof: only an enclosing DISTINCT across deterministic,
   // multiplicity-insensitive relational operators can discard path copies.
   int can_prune_duplicate_states(bool &can_prune);
+  // Return the value side of a proven one-key terminal equality, if the
+  // final plan still exposes it directly above the feedback loop.
+  int get_shortest_goal_value_expr(ObRawExpr *&value_expr) const;
   bool can_reuse_adjacency(common::ObIArray<ObRawExpr *> *parameters = nullptr) const;
   int get_expand_scan_op_ids(uint64_t &source_scan_op_id,
                              uint64_t &edge_scan_op_id,

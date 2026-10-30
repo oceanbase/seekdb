@@ -199,6 +199,8 @@ int GraphExpand::check_memory_limit()
   const int64_t resident_bytes = used_memory();
   if (resident_bytes > memory_limit_) {
     ret = OB_EXCEED_QUERY_MEM_LIMIT;
+    LOG_WARN("graph expand resident memory exceeded work-area limit",
+             K(ret), K(resident_bytes), K_(memory_limit));
   } else {
     stats_.peak_path_memory_ = std::max(stats_.peak_path_memory_,
                                        resident_bytes);
@@ -334,6 +336,9 @@ int GraphExpand::validate_and_account(const ObIArray<GraphExpandInput> &inputs)
       stats_.peak_path_memory_ = bytes;
       if (bytes > memory_limit_) {
         ret = OB_EXCEED_QUERY_MEM_LIMIT;
+        LOG_WARN("graph expand preflight exceeded work-area limit",
+                 K(ret), K(bytes), K_(memory_limit),
+                 "input_count", inputs.count(), K_(page_size));
       }
     }
   }
