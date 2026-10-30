@@ -259,6 +259,14 @@ private:
 class ObVectorQueryAdaptorResultContext {
 public:
   friend class ObPluginVectorIndexAdaptor;
+  struct DeltaCandidate {
+    int64_t vid_;
+    float distance_;
+    bool operator<(const DeltaCandidate &other) const
+    {
+      return distance_ < other.distance_ || (distance_ == other.distance_ && vid_ < other.vid_);
+    }
+  };
   ObVectorQueryAdaptorResultContext(int64_t extra_column_count,
                                     ObIAllocator *allocator,
                                     ObIAllocator *tmp_allocator)
@@ -276,7 +284,10 @@ public:
       batch_allocator_("BATCHALLOC", OB_MALLOC_NORMAL_BLOCK_SIZE),
       search_allocator_{},
       ls_leader_(true),
-      is_sparse_vector_(false) {};
+      is_sparse_vector_(false),
+      scan_delta_exact_(false),
+      delta_candidates_(nullptr),
+      delta_candidate_count_(0) {};
   ~ObVectorQueryAdaptorResultContext();
   int init_bitmaps();
   int init_prefilter(const int64_t &min, const int64_t &max);
@@ -336,6 +347,9 @@ private:
   ObVsagSearchAlloc search_allocator_;
   bool ls_leader_;
   bool is_sparse_vector_;
+  bool scan_delta_exact_;
+  DeltaCandidate *delta_candidates_;
+  int64_t delta_candidate_count_;
 };
 
 class ObVectorQueryConditions {
@@ -683,7 +697,9 @@ public:
   int check_delta_buffer_table_readnext_status(ObVectorQueryAdaptorResultContext *ctx,
                                                common::ObNewRowIterator *row_iter,
                                                SCN query_scn);
-  int complete_delta_buffer_table_data(ObVectorQueryAdaptorResultContext *ctx);
+  int complete_delta_buffer_table_data(ObVectorQueryAdaptorResultContext *ctx,
+                                      ObVectorQueryConditions *query_cond = nullptr,
+                                      bool is_async_mode = false);
   // Query Processor second
   int check_index_id_table_readnext_status(ObVectorQueryAdaptorResultContext *ctx,
                                            common::ObNewRowIterator *row_iter,
@@ -879,6 +895,9 @@ private:
                            ObVidBound vid_bound,
                            uint32_t *sparse_byte_lens = nullptr);
   int write_into_index_mem(int64_t dim, SCN read_scn, ObArray<uint64_t> &i_vids, ObArray<uint64_t> &d_vids);
+  int scan_delta_candidates(ObVectorQueryAdaptorResultContext *ctx, const ObVectorQueryConditions &query_cond);
+  int merge_delta_candidates(ObVectorQueryAdaptorResultContext *ctx, const ObVectorQueryConditions &query_cond,
+                            ObVectorQueryVidIterator *vids_iter);
 
   void output_bitmap(roaring::api::roaring64_bitmap_t *bitmap);
   int print_bitmap(roaring::api::roaring64_bitmap_t *bitmap);

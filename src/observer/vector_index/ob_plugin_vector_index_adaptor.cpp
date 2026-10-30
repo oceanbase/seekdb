@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SHARE
 
+#include <algorithm>
+#include <cmath>
 #include "rust/config.h"
 #include "query/vector/ob_vector_index_adaptor.h"
 #include "storage/tx/ob_ts_mgr.h"
@@ -32,6 +34,7 @@
 #include "share/ob_server_struct.h"
 #include "share/ob_share_util.h"
 #include "common/ob_timeout_ctx.h"
+#include "data_plane/vector/ob_vector_l2_distance.h"
 #include "storage/tx/ob_ts_mgr.h"
 
 namespace oceanbase
@@ -2201,9 +2204,127 @@ int ObPluginVectorIndexAdaptor::write_into_delta_mem(ObVectorQueryAdaptorResultC
   return ret;
 }
 
-int ObPluginVectorIndexAdaptor::complete_delta_buffer_table_data(ObVectorQueryAdaptorResultContext *ctx)
+int ObPluginVectorIndexAdaptor::scan_delta_candidates(
+    ObVectorQueryAdaptorResultContext *ctx, const ObVectorQueryConditions &query_cond)
+{
+  int ret = OB_SUCCESS;
+  const int64_t dim = ctx->get_dim();
+  const int64_t limit = query_cond.query_limit_;
+  const float *query = reinterpret_cast<const float *>(query_cond.query_vector_.ptr());
+  if (dim <= 0 || query_cond.query_vector_.length() != dim * sizeof(float) || OB_ISNULL(query)
+      || limit <= 0 || OB_ISNULL(ctx->bitmaps_) || OB_ISNULL(ctx->bitmaps_->insert_bitmap_)
+      || OB_ISNULL(ctx->bitmaps_->delete_bitmap_)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_ISNULL(ctx->delta_candidates_)
+             && OB_ISNULL(ctx->delta_candidates_ = static_cast<ObVectorQueryAdaptorResultContext::DeltaCandidate *>(
+                 ctx->tmp_allocator_->alloc(sizeof(ObVectorQueryAdaptorResultContext::DeltaCandidate) * limit)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < ctx->get_vec_cnt(); ++i) {
+    const ObObj &value = ctx->vec_data_.vectors_[i];
+    const int64_t vid = ctx->get_vids()[ctx->get_curr_idx() + i].get_int();
+    if (value.is_null() || value.get_string().empty()
+        || !roaring64_bitmap_contains(ctx->bitmaps_->insert_bitmap_, vid)
+        || roaring64_bitmap_contains(ctx->bitmaps_->delete_bitmap_, vid)) {
+      // The row lookup and the query-local bitmaps use this statement's read view.
+    } else if (value.get_string().length() != dim * sizeof(float)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      const float distance = ObVectorL2Distance<float>::l2_square_flt_func(
+          query, reinterpret_cast<const float *>(value.get_string().ptr()), dim);
+      ObVectorQueryAdaptorResultContext::DeltaCandidate candidate{vid, distance};
+      auto *heap = ctx->delta_candidates_;
+      int64_t &count = ctx->delta_candidate_count_;
+      if (!std::isfinite(distance)) {
+        ret = OB_NUMERIC_OVERFLOW;
+      } else if (count < limit) {
+        heap[count++] = candidate;
+        std::push_heap(heap, heap + count);
+      } else if (candidate < heap[0]) {
+        std::pop_heap(heap, heap + count);
+        heap[count - 1] = candidate;
+        std::push_heap(heap, heap + count);
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    ctx->batch_allocator_.reuse();
+    ctx->do_next_batch();
+    ctx->status_ = ctx->if_next_batch() ? PVQ_COM_DATA : PVQ_LACK_SCN;
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexAdaptor::merge_delta_candidates(
+    ObVectorQueryAdaptorResultContext *ctx, const ObVectorQueryConditions &query_cond,
+    ObVectorQueryVidIterator *vids_iter)
+{
+  int ret = OB_SUCCESS;
+  const int64_t count = ctx->delta_candidate_count_;
+  const int64_t capacity = std::min<int64_t>(query_cond.query_limit_, count + vids_iter->get_total());
+  if (count == 0) {
+    // No visible missing vectors; the normal index result is already complete.
+  } else {
+    int64_t *delta_vids = nullptr;
+    float *delta_distances = nullptr;
+    int64_t *merged_vids = nullptr;
+    float *merged_distances = nullptr;
+    if (OB_ISNULL(delta_vids = static_cast<int64_t *>(ctx->tmp_allocator_->alloc(count * sizeof(int64_t))))
+        || OB_ISNULL(delta_distances = static_cast<float *>(ctx->tmp_allocator_->alloc(count * sizeof(float))))
+        || OB_ISNULL(merged_vids = static_cast<int64_t *>(ctx->allocator_->alloc(capacity * sizeof(int64_t))))
+        || OB_ISNULL(merged_distances = static_cast<float *>(ctx->allocator_->alloc(capacity * sizeof(float))))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      std::sort(ctx->delta_candidates_, ctx->delta_candidates_ + count);
+      for (int64_t i = 0; i < count; ++i) {
+        delta_vids[i] = ctx->delta_candidates_[i].vid_;
+        delta_distances[i] = ctx->delta_candidates_[i].distance_;
+      }
+      ObVecExtraInfoPtr extra_info;
+      const ObVsagQueryResult delta{count, delta_vids, delta_distances, extra_info};
+      const ObVsagQueryResult indexed{vids_iter->get_total(), vids_iter->get_vids(),
+                                     vids_iter->get_distance(), vids_iter->get_extra_info()};
+      int64_t actual_count = 0;
+      if (OB_FAIL(ObPluginVectorIndexHelper::sort_merge_delta_and_snap_vids(
+          delta, indexed, capacity, actual_count, merged_vids, merged_distances, extra_info))) {
+      } else {
+        vids_iter->reset();
+        ret = vids_iter->init(actual_count, merged_vids, merged_distances, extra_info, ctx->allocator_);
+      }
+    }
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexAdaptor::complete_delta_buffer_table_data(
+    ObVectorQueryAdaptorResultContext *ctx, ObVectorQueryConditions *query_cond, bool is_async_mode)
 {
   INIT_SUCC(ret);
+  if (OB_NOT_NULL(ctx) && OB_NOT_NULL(query_cond) && is_async_mode && ctx->get_curr_idx() == 0) {
+    ObVectorIndexParam *param = nullptr;
+    if (OB_FAIL(get_hnsw_param(param))) {
+      return ret;
+    }
+    // Restoring a cold delta by Add() rebuilds HNSW on the request thread. For an
+    // unfiltered L2 query, scan its missing vectors instead, keeping only top-K.
+    // Do not publish these vectors in the shared graph's completeness bitmap.
+    ctx->delta_candidates_ = nullptr;
+    ctx->delta_candidate_count_ = 0;
+    ctx->scan_delta_exact_ = param->type_ == VIAT_HNSW && param->dist_algorithm_ == VIDA_L2
+        && ctx->bitmap_view_ready_
+        && ctx->get_count() >= ObVectorParamData::VI_PARAM_DATA_BATCH_SIZE
+        && !ctx->is_prefilter_valid() && !query_cond->is_post_with_filter_
+        && !query_cond->only_complete_data_ && query_cond->extra_column_count_ == 0
+        && query_cond->rel_count_ == 0 && query_cond->query_order_
+        && query_cond->distance_threshold_ == FLT_MAX
+        && query_cond->query_limit_ > 0 && query_cond->query_limit_ <= 16384;
+    if (ctx->scan_delta_exact_) {
+      LOG_INFO("scan cold L2 delta without rebuilding HNSW", K(ctx->get_count()), K(query_cond->query_limit_));
+    }
+  }
+  if (OB_NOT_NULL(ctx) && ctx->scan_delta_exact_ && OB_NOT_NULL(query_cond)) {
+    return scan_delta_candidates(ctx, *query_cond);
+  }
   float *vectors = nullptr;
   uint64_t *vids = nullptr;
   ObVecExtraInfoObj *extra_info_objs = nullptr;
@@ -4037,6 +4158,9 @@ int ObPluginVectorIndexAdaptor::query_result(ObVectorQueryAdaptorResultContext *
   }
 
   int tmp_ret = OB_SUCCESS;
+  if (OB_SUCC(ret) && PVQ_REFRESH != ctx->status_ && ctx->scan_delta_exact_) {
+    ret = merge_delta_candidates(ctx, *query_cond, vids_iter);
+  }
   if (PVQ_REFRESH == ctx->status_) {
   } else if ((tmp_ret = check_if_need_optimize(ctx)) != OB_SUCCESS) {
   }
