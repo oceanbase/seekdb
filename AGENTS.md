@@ -18,6 +18,7 @@
 
 ## Rust–C++ Interoperability
 
+- Before designing, implementing, or reviewing a Rust migration or refactor, read and follow [Rust refactoring guidelines](docs/developer-guide/en/rust-refactoring.md). This includes changes to C++ callers, CXX bridges, and build integration within that task.
 - Use CXX (`#[cxx::bridge]`) for Rust–C++ interoperability in both directions.
 - Extend the repository's existing CXX bridges and build integration; do not add handwritten C ABI bridges or another FFI framework for Rust–C++ calls.
 

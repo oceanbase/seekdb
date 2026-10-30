@@ -223,6 +223,7 @@ test/var
 .worktrees/
 .claude/
 CLAUDE.md
+!/CLAUDE.md
 .omo/
 seekdb_data/
 

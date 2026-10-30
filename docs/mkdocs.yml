@@ -29,6 +29,7 @@ nav:
       - WebAssembly: webassembly.md
       - Homebrew optimization: homebrew.md
   - Development:
+      - Rust refactoring guidelines: rust-refactoring.md
       - Unit tests: unittest.md
       - mysqltest: mysqltest.md
   - Contributing: contributing.md
