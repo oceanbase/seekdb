@@ -119,12 +119,13 @@ void ob_sql_nio_log_accept_state(int32_t kind, int32_t raw_error, uint64_t drain
                                  uint32_t consecutive_errors, int32_t outcome) {
   const char *kind_name = nio_accept_error_kind_name(kind);
   const char *outcome_name = nio_accept_outcome_name(outcome);
+  const int ret = (1 == outcome || 3 == outcome) ? OB_ERR_UNEXPECTED : OB_SUCCESS;
   if (1 == outcome || 3 == outcome) { // fatal or rearm_failed
-    LOG_ERROR("Rust SQL-NIO TCP accept drain stopped", KPC(kind_name), K(raw_error), K(drain_id),
-              K(accepted), K(transient_errors), K(consecutive_errors), KPC(outcome_name));
+    LOG_ERROR("Rust SQL-NIO TCP accept drain stopped", KCSTRING(kind_name), K(raw_error), K(drain_id),
+              K(accepted), K(transient_errors), K(consecutive_errors), KCSTRING(outcome_name));
   } else {
-    LOG_WARN("Rust SQL-NIO TCP accept drain state", KPC(kind_name), K(raw_error), K(drain_id),
-             K(accepted), K(transient_errors), K(consecutive_errors), KPC(outcome_name));
+    LOG_WARN("Rust SQL-NIO TCP accept drain state", KCSTRING(kind_name), K(raw_error), K(drain_id),
+             K(accepted), K(transient_errors), K(consecutive_errors), KCSTRING(outcome_name));
   }
 }
 
