@@ -1,0 +1,44 @@
+# Regression for shared DDL identifier quoting (issue #1469).
+# Run with mysqltest --test-file=... --result-file=... on a disposable instance.
+--disable_query_log
+CREATE DATABASE ddl_identifier_1469;
+USE ddl_identifier_1469;
+SET ob_query_timeout = 60000000;
+SET ob_trx_timeout = 60000000;
+
+# Nullable index columns exercise shadow primary-key aliases. The ENUM and SET
+# columns exercise the cast-to-unsigned branch of the shared DDL formatter.
+CREATE TABLE quoted_columns (
+  `pk``id` INT PRIMARY KEY,
+  `enum``value` ENUM('red','blue'),
+  `set````value` SET('x','y'),
+  `tail``` INT,
+  ordinary INT
+);
+INSERT INTO quoted_columns VALUES
+  (1,'red','x',NULL,10),
+  (2,'blue','x,y',20,20),
+  (3,'red','y',30,30);
+CREATE UNIQUE INDEX quoted_unique ON quoted_columns
+  (`enum``value`,`set````value`,`tail```);
+SELECT `pk``id` AS id, CAST(`enum``value` AS UNSIGNED) AS enum_value,
+       CAST(`set````value` AS UNSIGNED) AS set_value, `tail``` AS tail
+FROM quoted_columns ORDER BY `pk``id`;
+SELECT /*+ INDEX(quoted_columns quoted_unique) */ `pk``id` AS id
+FROM quoted_columns WHERE `enum``value` = 'blue';
+
+--disable_result_log
+--error ER_DUP_ENTRY
+INSERT INTO quoted_columns VALUES (4,'blue','x,y',20,40);
+--enable_result_log
+SELECT COUNT(*) AS row_count FROM quoted_columns;
+
+--disable_query_log
+# Control: ordinary identifiers and NULL-containing unique keys stay valid.
+CREATE TABLE ordinary_columns (id INT PRIMARY KEY, value INT);
+INSERT INTO ordinary_columns VALUES (1,NULL),(2,NULL),(3,7);
+CREATE UNIQUE INDEX ordinary_unique ON ordinary_columns(value);
+SELECT id,value FROM ordinary_columns ORDER BY id;
+--disable_query_log
+USE test;
+DROP DATABASE ddl_identifier_1469;
