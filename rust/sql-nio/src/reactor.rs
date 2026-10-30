@@ -301,6 +301,15 @@ struct ReactorDiagnostics {
     cxx_connect_attempts: AtomicU64,
     cxx_connect_returns: AtomicU64,
     cxx_connect_rejects: AtomicU64,
+    greeting_sent: AtomicU64,
+    greeting_deferred: AtomicU64,
+    greeting_failed: AtomicU64,
+    greeting_flushed: AtomicU64,
+    admission_register_failed: AtomicU64,
+    dispatch_handoff: AtomicU64,
+    dispatch_direct: AtomicU64,
+    dispatch_queue_full: AtomicU64,
+    greeting_close_before_flush: AtomicU64,
     listener_event_flags: AtomicU32,
 }
 
@@ -316,6 +325,15 @@ impl ReactorDiagnostics {
             cxx_connect_attempts: AtomicU64::new(0),
             cxx_connect_returns: AtomicU64::new(0),
             cxx_connect_rejects: AtomicU64::new(0),
+            greeting_sent: AtomicU64::new(0),
+            greeting_deferred: AtomicU64::new(0),
+            greeting_failed: AtomicU64::new(0),
+            greeting_flushed: AtomicU64::new(0),
+            admission_register_failed: AtomicU64::new(0),
+            dispatch_handoff: AtomicU64::new(0),
+            dispatch_direct: AtomicU64::new(0),
+            dispatch_queue_full: AtomicU64::new(0),
+            greeting_close_before_flush: AtomicU64::new(0),
             listener_event_flags: AtomicU32::new(0),
         }
     }
@@ -577,6 +595,7 @@ impl EventLoop {
             raw_caps: AtomicU32::new(0),
             transport_caps: AtomicU32::new(0),
             session_constructed: AtomicBool::new(false),
+            greeting_complete: AtomicBool::new(false),
             disconnect_notified: AtomicBool::new(false),
             close_notified: AtomicBool::new(false),
             close_requested: AtomicBool::new(false),
@@ -606,7 +625,35 @@ impl EventLoop {
         }
         conn.session_constructed.store(true, Ordering::Release);
         let rejected = rc != 0;
-        if rejected || conn.err.load(Ordering::Acquire) || !send_greeting(conn, &greeting) {
+        let greeting_outcome = if rejected || conn.err.load(Ordering::Acquire) {
+            GreetingSendOutcome::Failed
+        } else {
+            send_greeting(conn, &greeting)
+        };
+        #[cfg(feature = "native-network")]
+        match greeting_outcome {
+            GreetingSendOutcome::Sent => {
+                self.reactor_diagnostics
+                    .greeting_sent
+                    .fetch_add(1, Ordering::Relaxed);
+                conn.greeting_complete.store(true, Ordering::Release);
+            }
+            GreetingSendOutcome::Deferred => {
+                self.reactor_diagnostics
+                    .greeting_deferred
+                    .fetch_add(1, Ordering::Relaxed);
+            }
+            GreetingSendOutcome::Failed => {
+                self.reactor_diagnostics
+                    .greeting_failed
+                    .fetch_add(1, Ordering::Relaxed);
+            }
+        }
+        #[cfg(feature = "memory-transport")]
+        if greeting_outcome == GreetingSendOutcome::Sent {
+            conn.greeting_complete.store(true, Ordering::Release);
+        }
+        if greeting_outcome == GreetingSendOutcome::Failed {
             self.abort_admission(conn, preregistered);
             return false;
         }
@@ -626,6 +673,10 @@ impl EventLoop {
             }
         };
         if !registered {
+            #[cfg(feature = "native-network")]
+            self.reactor_diagnostics
+                .admission_register_failed
+                .fetch_add(1, Ordering::Relaxed);
             self.abort_admission(conn, true);
         }
         registered
@@ -674,6 +725,25 @@ impl EventLoop {
                 self.cxx_connect_attempts.load(Ordering::Acquire),
                 self.cxx_connect_returns.load(Ordering::Acquire),
                 self.cxx_connect_rejects.load(Ordering::Acquire),
+                self.reactor_diagnostics.greeting_sent.load(Ordering::Acquire),
+                self.reactor_diagnostics.greeting_deferred.load(Ordering::Acquire),
+                self.reactor_diagnostics.greeting_failed.load(Ordering::Acquire),
+                self.reactor_diagnostics.greeting_flushed.load(Ordering::Acquire),
+                self.reactor_diagnostics
+                    .admission_register_failed
+                    .load(Ordering::Acquire),
+                self.reactor_diagnostics
+                    .dispatch_handoff
+                    .load(Ordering::Acquire),
+                self.reactor_diagnostics
+                    .dispatch_direct
+                    .load(Ordering::Acquire),
+                self.reactor_diagnostics
+                    .dispatch_queue_full
+                    .load(Ordering::Acquire),
+                self.reactor_diagnostics
+                    .greeting_close_before_flush
+                    .load(Ordering::Acquire),
                 listener_event_flags,
             );
         }
@@ -1018,12 +1088,23 @@ impl EventLoop {
                     }
                 };
                 if pushed {
+                    self.reactor_diagnostics
+                        .dispatch_handoff
+                        .fetch_add(1, Ordering::Relaxed);
                     let _ = peer.waker.wake();
                     break;
                 }
             }
         }
         if let Some(stream) = stream.take() {
+            self.reactor_diagnostics
+                .dispatch_direct
+                .fetch_add(1, Ordering::Relaxed);
+            if target != 0 {
+                self.reactor_diagnostics
+                    .dispatch_queue_full
+                    .fetch_add(1, Ordering::Relaxed);
+            }
             self.admit_incoming(stream);
         }
     }
@@ -1122,6 +1203,12 @@ impl EventLoop {
             let drained = flush_buffer_locked(conn, &mut g);
             let mut failed = conn.err.load(Ordering::Acquire);
             if drained && g.want_write {
+                if !conn.greeting_complete.swap(true, Ordering::AcqRel) {
+                    #[cfg(feature = "native-network")]
+                    self.reactor_diagnostics
+                        .greeting_flushed
+                        .fetch_add(1, Ordering::Relaxed);
+                }
                 g.want_write = false;
                 if !failed
                     && conn
@@ -1237,6 +1324,14 @@ impl EventLoop {
             Some(c) => c,
             None => return,
         };
+        #[cfg(feature = "native-network")]
+        if conn.session_constructed.load(Ordering::Acquire)
+            && !conn.greeting_complete.load(Ordering::Acquire)
+        {
+            self.reactor_diagnostics
+                .greeting_close_before_flush
+                .fetch_add(1, Ordering::Relaxed);
+        }
         {
             let mut g = conn.mu.lock().unwrap();
             send_tls_close_notify_locked(&conn, &mut g);
@@ -1756,6 +1851,25 @@ impl NioReactor {
                     .load(Ordering::Acquire),
                 self.reactor_diagnostics
                     .cxx_connect_rejects
+                    .load(Ordering::Acquire),
+                self.reactor_diagnostics.greeting_sent.load(Ordering::Acquire),
+                self.reactor_diagnostics.greeting_deferred.load(Ordering::Acquire),
+                self.reactor_diagnostics.greeting_failed.load(Ordering::Acquire),
+                self.reactor_diagnostics.greeting_flushed.load(Ordering::Acquire),
+                self.reactor_diagnostics
+                    .admission_register_failed
+                    .load(Ordering::Acquire),
+                self.reactor_diagnostics
+                    .dispatch_handoff
+                    .load(Ordering::Acquire),
+                self.reactor_diagnostics
+                    .dispatch_direct
+                    .load(Ordering::Acquire),
+                self.reactor_diagnostics
+                    .dispatch_queue_full
+                    .load(Ordering::Acquire),
+                self.reactor_diagnostics
+                    .greeting_close_before_flush
                     .load(Ordering::Acquire),
                 self.reactor_diagnostics
                     .listener_event_flags

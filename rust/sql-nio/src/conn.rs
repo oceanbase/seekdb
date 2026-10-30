@@ -257,6 +257,7 @@ pub(crate) struct Conn {
     pub(crate) raw_caps: AtomicU32,
     pub(crate) transport_caps: AtomicU32,
     pub(crate) session_constructed: AtomicBool,
+    pub(crate) greeting_complete: AtomicBool,
     pub(crate) disconnect_notified: AtomicBool,
     pub(crate) close_notified: AtomicBool,
     pub(crate) close_requested: AtomicBool,

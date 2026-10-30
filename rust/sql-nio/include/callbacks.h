@@ -39,6 +39,11 @@ void ob_sql_nio_log_accept_state(int32_t kind, int32_t raw_error, uint64_t drain
 void ob_sql_nio_log_reactor_state(int32_t poll_result, uint64_t poll_id,
     uint64_t event_count, uint64_t listener_events, uint64_t accept_calls,
     uint64_t accepted, uint64_t cxx_connect_attempts, uint64_t cxx_connect_returns,
-    uint64_t cxx_connect_rejects, uint32_t listener_event_flags);
+    uint64_t cxx_connect_rejects, uint64_t greeting_sent,
+    uint64_t greeting_deferred, uint64_t greeting_failed,
+    uint64_t greeting_flushed, uint64_t admission_register_failed,
+    uint64_t dispatch_handoff, uint64_t dispatch_direct,
+    uint64_t dispatch_queue_full, uint64_t greeting_close_before_flush,
+    uint32_t listener_event_flags);
 } // namespace obmysql
 } // namespace oceanbase

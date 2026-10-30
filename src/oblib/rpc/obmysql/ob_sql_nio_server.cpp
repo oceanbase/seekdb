@@ -146,12 +146,24 @@ void ob_sql_nio_log_reactor_state(int32_t poll_result, uint64_t poll_id,
                                   uint64_t cxx_connect_attempts,
                                   uint64_t cxx_connect_returns,
                                   uint64_t cxx_connect_rejects,
+                                  uint64_t greeting_sent,
+                                  uint64_t greeting_deferred,
+                                  uint64_t greeting_failed,
+                                  uint64_t greeting_flushed,
+                                  uint64_t admission_register_failed,
+                                  uint64_t dispatch_handoff,
+                                  uint64_t dispatch_direct,
+                                  uint64_t dispatch_queue_full,
+                                  uint64_t greeting_close_before_flush,
                                   uint32_t listener_event_flags) {
   const char *poll_result_name = nio_reactor_poll_result_name(poll_result);
-  const int ret = (2 == poll_result) ? OB_ERR_UNEXPECTED : OB_SUCCESS;
+  const int ret = (2 == poll_result || 8 == poll_result) ? OB_ERR_UNEXPECTED : OB_SUCCESS;
   LOG_ERROR("Rust SQL-NIO reactor poll state", KCSTRING(poll_result_name), K(poll_id),
             K(event_count), K(listener_events), K(accept_calls), K(accepted),
             K(cxx_connect_attempts), K(cxx_connect_returns), K(cxx_connect_rejects),
+            K(greeting_sent), K(greeting_deferred), K(greeting_failed), K(greeting_flushed),
+            K(admission_register_failed), K(dispatch_handoff), K(dispatch_direct),
+            K(dispatch_queue_full), K(greeting_close_before_flush),
             K(listener_event_flags));
 }
 
