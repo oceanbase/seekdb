@@ -226,32 +226,57 @@ pub(crate) struct EventLoop {
 }
 
 const MAX_TRANSIENT_TCP_ACCEPT_ERRORS: usize = 64;
+const ACCEPT_ERROR_KIND_OTHER: i32 = 0;
+const ACCEPT_ERROR_KIND_NOT_FOUND: i32 = 1;
+const ACCEPT_ERROR_KIND_PERMISSION_DENIED: i32 = 2;
+const ACCEPT_ERROR_KIND_CONNECTION_REFUSED: i32 = 3;
+const ACCEPT_ERROR_KIND_CONNECTION_RESET: i32 = 4;
+const ACCEPT_ERROR_KIND_HOST_UNREACHABLE: i32 = 5;
+const ACCEPT_ERROR_KIND_NETWORK_UNREACHABLE: i32 = 6;
+const ACCEPT_ERROR_KIND_CONNECTION_ABORTED: i32 = 7;
+const ACCEPT_ERROR_KIND_NOT_CONNECTED: i32 = 8;
+const ACCEPT_ERROR_KIND_ADDR_IN_USE: i32 = 9;
+const ACCEPT_ERROR_KIND_ADDR_NOT_AVAILABLE: i32 = 10;
+const ACCEPT_ERROR_KIND_BROKEN_PIPE: i32 = 11;
+const ACCEPT_ERROR_KIND_ALREADY_EXISTS: i32 = 12;
+const ACCEPT_ERROR_KIND_WOULD_BLOCK: i32 = 13;
+const ACCEPT_ERROR_KIND_INVALID_INPUT: i32 = 14;
+const ACCEPT_ERROR_KIND_INVALID_DATA: i32 = 15;
+const ACCEPT_ERROR_KIND_TIMED_OUT: i32 = 16;
+const ACCEPT_ERROR_KIND_WRITE_ZERO: i32 = 17;
+const ACCEPT_ERROR_KIND_INTERRUPTED: i32 = 18;
+const ACCEPT_ERROR_KIND_UNSUPPORTED: i32 = 19;
+const ACCEPT_ERROR_KIND_UNEXPECTED_EOF: i32 = 20;
+const ACCEPT_ERROR_KIND_OUT_OF_MEMORY: i32 = 21;
+const ACCEPT_OUTCOME_WOULD_BLOCK: i32 = 0;
+const ACCEPT_OUTCOME_FATAL: i32 = 1;
+const ACCEPT_OUTCOME_REARMED: i32 = 2;
+const ACCEPT_OUTCOME_REARM_FAILED: i32 = 3;
 
-fn accept_error_kind_name(kind: std::io::ErrorKind) -> &'static str {
+fn accept_error_kind_code(kind: std::io::ErrorKind) -> i32 {
     match kind {
-        std::io::ErrorKind::NotFound => "NotFound",
-        std::io::ErrorKind::PermissionDenied => "PermissionDenied",
-        std::io::ErrorKind::ConnectionRefused => "ConnectionRefused",
-        std::io::ErrorKind::ConnectionReset => "ConnectionReset",
-        std::io::ErrorKind::HostUnreachable => "HostUnreachable",
-        std::io::ErrorKind::NetworkUnreachable => "NetworkUnreachable",
-        std::io::ErrorKind::ConnectionAborted => "ConnectionAborted",
-        std::io::ErrorKind::NotConnected => "NotConnected",
-        std::io::ErrorKind::AddrInUse => "AddrInUse",
-        std::io::ErrorKind::AddrNotAvailable => "AddrNotAvailable",
-        std::io::ErrorKind::BrokenPipe => "BrokenPipe",
-        std::io::ErrorKind::AlreadyExists => "AlreadyExists",
-        std::io::ErrorKind::WouldBlock => "WouldBlock",
-        std::io::ErrorKind::InvalidInput => "InvalidInput",
-        std::io::ErrorKind::InvalidData => "InvalidData",
-        std::io::ErrorKind::TimedOut => "TimedOut",
-        std::io::ErrorKind::WriteZero => "WriteZero",
-        std::io::ErrorKind::Interrupted => "Interrupted",
-        std::io::ErrorKind::Unsupported => "Unsupported",
-        std::io::ErrorKind::UnexpectedEof => "UnexpectedEof",
-        std::io::ErrorKind::OutOfMemory => "OutOfMemory",
-        std::io::ErrorKind::Other => "Other",
-        _ => "Other",
+        std::io::ErrorKind::NotFound => ACCEPT_ERROR_KIND_NOT_FOUND,
+        std::io::ErrorKind::PermissionDenied => ACCEPT_ERROR_KIND_PERMISSION_DENIED,
+        std::io::ErrorKind::ConnectionRefused => ACCEPT_ERROR_KIND_CONNECTION_REFUSED,
+        std::io::ErrorKind::ConnectionReset => ACCEPT_ERROR_KIND_CONNECTION_RESET,
+        std::io::ErrorKind::HostUnreachable => ACCEPT_ERROR_KIND_HOST_UNREACHABLE,
+        std::io::ErrorKind::NetworkUnreachable => ACCEPT_ERROR_KIND_NETWORK_UNREACHABLE,
+        std::io::ErrorKind::ConnectionAborted => ACCEPT_ERROR_KIND_CONNECTION_ABORTED,
+        std::io::ErrorKind::NotConnected => ACCEPT_ERROR_KIND_NOT_CONNECTED,
+        std::io::ErrorKind::AddrInUse => ACCEPT_ERROR_KIND_ADDR_IN_USE,
+        std::io::ErrorKind::AddrNotAvailable => ACCEPT_ERROR_KIND_ADDR_NOT_AVAILABLE,
+        std::io::ErrorKind::BrokenPipe => ACCEPT_ERROR_KIND_BROKEN_PIPE,
+        std::io::ErrorKind::AlreadyExists => ACCEPT_ERROR_KIND_ALREADY_EXISTS,
+        std::io::ErrorKind::WouldBlock => ACCEPT_ERROR_KIND_WOULD_BLOCK,
+        std::io::ErrorKind::InvalidInput => ACCEPT_ERROR_KIND_INVALID_INPUT,
+        std::io::ErrorKind::InvalidData => ACCEPT_ERROR_KIND_INVALID_DATA,
+        std::io::ErrorKind::TimedOut => ACCEPT_ERROR_KIND_TIMED_OUT,
+        std::io::ErrorKind::WriteZero => ACCEPT_ERROR_KIND_WRITE_ZERO,
+        std::io::ErrorKind::Interrupted => ACCEPT_ERROR_KIND_INTERRUPTED,
+        std::io::ErrorKind::Unsupported => ACCEPT_ERROR_KIND_UNSUPPORTED,
+        std::io::ErrorKind::UnexpectedEof => ACCEPT_ERROR_KIND_UNEXPECTED_EOF,
+        std::io::ErrorKind::OutOfMemory => ACCEPT_ERROR_KIND_OUT_OF_MEMORY,
+        _ => ACCEPT_ERROR_KIND_OTHER,
     }
 }
 
@@ -525,16 +550,13 @@ impl EventLoop {
                     if first_error_kind.is_some() || should_log_accept_sample(drain_id) {
                         unsafe {
                             ob_sql_nio_log_accept_state(
-                                first_error_kind
-                                    .unwrap_or("none")
-                                    .as_ptr()
-                                    .cast(),
+                                first_error_kind.unwrap_or(0),
                                 first_error_raw,
                                 drain_id,
                                 accepted,
                                 transient_errors,
                                 consecutive_errors,
-                                c"would_block".as_ptr(),
+                                ACCEPT_OUTCOME_WOULD_BLOCK,
                             );
                         }
                     }
@@ -542,7 +564,7 @@ impl EventLoop {
                 }
                 Err(e) => {
                     if first_error_kind.is_none() {
-                        first_error_kind = Some(accept_error_kind_name(e.kind()));
+                        first_error_kind = Some(accept_error_kind_code(e.kind()));
                         first_error_raw = e.raw_os_error().unwrap_or(-1);
                     }
                     if !is_transient_tcp_accept_error(&e) {
@@ -554,7 +576,7 @@ impl EventLoop {
                                 accepted,
                                 transient_errors,
                                 consecutive_errors,
-                                c"fatal".as_ptr(),
+                                ACCEPT_OUTCOME_FATAL,
                             );
                         }
                         break;
@@ -578,9 +600,9 @@ impl EventLoop {
                                 transient_errors,
                                 consecutive_errors,
                                 if rearmed {
-                                    c"rearmed".as_ptr()
+                                    ACCEPT_OUTCOME_REARMED
                                 } else {
-                                    c"rearm_failed".as_ptr()
+                                    ACCEPT_OUTCOME_REARM_FAILED
                                 },
                             );
                         }
