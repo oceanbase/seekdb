@@ -24,20 +24,23 @@
 #include "lib/ob_define.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/hash/ob_hashmap.h"
+#include "lib/lock/ob_scond.h"
 #include "common/ob_tablet_id.h"
 #include "share/scn.h"
 #include "share/ob_thread_pool.h"
 #include "share/log/palf/lsn.h"
 #include "logservice/palf/log_entry.h"
 #include "logservice/palf/palf_iterator.h"
+#include "logservice/palf/palf_handle.h"
+#include "logservice/palf/palf_callback.h"
 #include "storage/tx/ob_tx_seq.h"
 #include "storage/tx/ob_trans_define.h"
 
 namespace oceanbase
 {
-namespace logservice
+namespace palf
 {
-class ObILogStorage;
+class PalfEnv;
 }
 namespace share
 {
@@ -61,8 +64,8 @@ static constexpr int64_t CS_FETCHER_INIT_RETRY_SLEEP_US = 500 * 1000;
 static constexpr int64_t CS_FETCHER_INIT_FAIL_SLEEP_US = 1000 * 1000;
 /// Cond wait timeout in IDLE mode (no async-index tables). 10s fallback; schema changes wake immediately.
 static constexpr int64_t CS_FETCHER_IDLE_COND_WAIT_MS = 10 * 1000;
-/// Sleep when caught up (OB_ITER_END).
 static constexpr int64_t CS_FETCHER_ITER_END_SLEEP_US = 200 * 1000;
+static constexpr int64_t CS_FETCHER_CALLBACK_RETRY_INTERVAL_US = 1000 * 1000;
 /// Sleep when iter.next/get_entry fails.
 static constexpr int64_t CS_FETCHER_ITER_ERR_SLEEP_US = 100 * 1000;
 /// tx_info_ hash bucket count.
@@ -123,7 +126,7 @@ struct ObCSTxInfo
 // ObCSFetcher: single-threaded CLOG consumer, assembles by transaction, pushes on commit.
 // ---------------------------------------------------------------------------
 
-class ObCSFetcher : public share::ObThreadPool
+class ObCSFetcher : public share::ObThreadPool, private palf::PalfFSCb
 {
 public:
   ObCSFetcher();
@@ -131,7 +134,7 @@ public:
 
   int init(
       ObCSDispatcher *dispatcher,
-      logservice::ObILogStorage &log_storage,
+      palf::PalfEnv &palf_env,
       schema::ObSchemaPublishSignal &schema_publish_signal,
       lib::IRunWrapper *run_wrapper);
   int start();
@@ -166,9 +169,17 @@ protected:
   void run1() override;
 
 private:
+  friend class TestCSFetcherWake;
+  ObCSFetcher(const ObCSFetcher &) = delete;
+  ObCSFetcher &operator=(const ObCSFetcher &) = delete;
   enum RunningMode { IDLE = 0, ACTIVE = 1 };
 
   int init_consumption_position_();
+  int bind_log_();
+  void unbind_log_();
+  void try_register_log_callback_();
+  int next_log_();
+  int update_end_lsn(const palf::LSN &end_lsn, const SCN &end_scn) override;
   void try_advance_min_dep_lsn_();
   void try_advance_refresh_scn_();
   /// Check if any async vector index tables exist; returns OB_SUCCESS and sets has_async on success.
@@ -192,8 +203,13 @@ private:
 
   bool is_inited_;
   ObCSDispatcher *dispatcher_;
-  logservice::ObILogStorage *log_storage_;
+  palf::PalfEnv *palf_env_;
+  palf::PalfHandle read_handle_;
   palf::PalfBufferIterator iter_;
+  common::SimpleCond log_ready_;
+  int32_t wake_armed_;
+  bool callback_registered_;
+  int64_t next_callback_retry_ts_;
   palf::LSN current_lsn_;
   SCN current_scn_;
   int64_t current_schema_version_;

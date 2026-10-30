@@ -38,6 +38,7 @@
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "logservice/ob_log_handler.h"
+#include "logservice/palf/palf_env.h"
 #include "logservice/palf/log_io_context.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/tx/ob_ts_mgr.h"
@@ -51,8 +52,13 @@ ObCSFetcher::ObCSFetcher()
   : share::ObThreadPool(1),
     is_inited_(false),
     dispatcher_(nullptr),
-    log_storage_(nullptr),
+    palf_env_(nullptr),
+    read_handle_(),
     iter_(),
+    log_ready_(),
+    wake_armed_(0),
+    callback_registered_(false),
+    next_callback_retry_ts_(0),
     current_lsn_(),
     current_scn_(),
     current_schema_version_(0),
@@ -73,7 +79,7 @@ ObCSFetcher::~ObCSFetcher()
 
 int ObCSFetcher::init(
     ObCSDispatcher *dispatcher,
-    logservice::ObILogStorage &log_storage,
+    palf::PalfEnv &palf_env,
     schema::ObSchemaPublishSignal &schema_publish_signal,
     lib::IRunWrapper *run_wrapper)
 {
@@ -87,7 +93,7 @@ int ObCSFetcher::init(
   } else if (OB_FAIL(ObThreadPool::init())) {
   } else {
     dispatcher_ = dispatcher;
-    log_storage_ = &log_storage;
+    palf_env_ = &palf_env;
     schema_publish_signal_ = &schema_publish_signal;
     observed_schema_publish_epoch_ = schema_publish_signal.current_epoch();
     current_scn_.set_min();
@@ -102,6 +108,7 @@ int ObCSFetcher::init_consumption_position_()
   int ret = common::OB_SUCCESS;
   int64_t persisted_min_dep_lsn = 0;
   palf::LSN start_lsn;
+  unbind_log_();
   if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObGlobalStatProxy::get_change_stream_min_dep_lsn(
@@ -115,8 +122,8 @@ int ObCSFetcher::init_consumption_position_()
       start_lsn = current_lsn_;
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(logservice::seek_log_iterator(
-          *log_storage_, start_lsn, iter_))) {
+      if (OB_FAIL(bind_log_())) {
+      } else if (OB_FAIL(read_handle_.seek(start_lsn, iter_))) {
       } else {
         current_lsn_ = start_lsn;
         FLOG_INFO("CSFetcher: initialized from global_stat min_dep_lsn", K(start_lsn));
@@ -163,13 +170,80 @@ int ObCSFetcher::init_consumption_position_()
             LOG_INFO("CSFetcher: schema version initialized by SCN", K(current_schema_version_));
           }
         }
-        if (OB_SUCC(ret) && OB_FAIL(logservice::seek_log_iterator(
-            *log_storage_, start_lsn, iter_))) {
+        if (OB_SUCC(ret) && OB_FAIL(read_handle_.seek(start_lsn, iter_))) {
         }
       }
     }
   }
+  if (OB_FAIL(ret)) {
+    unbind_log_();
+  }
   return ret;
+}
+
+int ObCSFetcher::bind_log_()
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(palf_env_)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(palf_env_->open(read_handle_))) {
+  } else {
+    try_register_log_callback_();
+  }
+  return ret;
+}
+
+void ObCSFetcher::unbind_log_()
+{
+  ATOMIC_STORE(&wake_armed_, 0);
+  iter_.destroy();
+  if (read_handle_.is_valid()) {
+    // close unregisters and drains callbacks before the condition can be destroyed.
+    palf_env_->close(read_handle_);
+  }
+  callback_registered_ = false;
+  next_callback_retry_ts_ = 0;
+}
+
+void ObCSFetcher::try_register_log_callback_()
+{
+  if (!callback_registered_ && read_handle_.is_valid()) {
+    const int64_t now = common::ObTimeUtility::current_time();
+    if (now >= next_callback_retry_ts_) {
+      const int ret = read_handle_.register_file_size_cb(this);
+      if (OB_SUCCESS == ret) {
+        callback_registered_ = true;
+      } else {
+        next_callback_retry_ts_ = now + CS_FETCHER_CALLBACK_RETRY_INTERVAL_US;
+        LOG_WARN("CSFetcher: log notification unavailable, using timed wait", KR(ret));
+      }
+    }
+  }
+}
+
+int ObCSFetcher::next_log_()
+{
+  try_register_log_callback_();
+  const uint32_t key_before_arm = log_ready_.get_key();
+  ATOMIC_STORE(&wake_armed_, 1);
+  int ret = OB_SUCCESS;
+  if (has_set_stop()) {
+    ret = OB_CANCELED;
+  } else if (OB_ITER_END == (ret = iter_.next()) && !has_set_stop()) {
+    (void)log_ready_.wait(key_before_arm, CS_FETCHER_ITER_END_SLEEP_US);
+  }
+  ATOMIC_STORE(&wake_armed_, 0);
+  return ret;
+}
+
+int ObCSFetcher::update_end_lsn(const palf::LSN &end_lsn, const SCN &end_scn)
+{
+  UNUSED(end_lsn);
+  UNUSED(end_scn);
+  if (ATOMIC_BCAS(&wake_armed_, 1, 0)) {
+    log_ready_.signal();
+  }
+  return OB_SUCCESS;
 }
 
 int ObCSFetcher::start()
@@ -185,6 +259,7 @@ int ObCSFetcher::start()
 void ObCSFetcher::stop()
 {
   ObThreadPool::stop();
+  log_ready_.signal();
   if (OB_NOT_NULL(schema_publish_signal_)) {
     schema_publish_signal_->wake_waiters();
   }
@@ -200,6 +275,7 @@ void ObCSFetcher::destroy()
   if (is_inited_) {
     stop();
     wait();
+    unbind_log_();
     // Clean up any remaining in-flight transactions.
     for (common::hash::ObHashMap<int64_t, ObCSTxInfo *>::iterator it = tx_info_.begin();
          it != tx_info_.end(); ++it) {
@@ -210,7 +286,7 @@ void ObCSFetcher::destroy()
     }
     tx_info_.destroy();
     dispatcher_ = nullptr;
-    log_storage_ = nullptr;
+    palf_env_ = nullptr;
     schema_publish_signal_ = nullptr;
     observed_schema_publish_epoch_ = 0;
     current_lsn_.reset();
@@ -715,7 +791,8 @@ void ObCSFetcher::run1()
 
   int ret = OB_SUCCESS;
 
-  // Wait until sql_proxy and schema service are ready.
+  // Failed LS creation and recovery can remove PALF before this readiness gate.
+  // After it, runtime teardown keeps PALF alive until the fetcher has joined.
   while (!has_set_stop()) {
     if (OB_ISNULL(GCTX.sql_proxy_) || GCTX.in_bootstrap_ || GCTX.start_service_time_ <= 0
         || OB_ISNULL(GCTX.schema_service_)) {
@@ -762,6 +839,8 @@ void ObCSFetcher::run1()
         RunningMode new_mode = has_async_index_tables_ ? ACTIVE : IDLE;
         if (new_mode != running_mode_) {
           if (ACTIVE == running_mode_ && IDLE == new_mode) {
+            unbind_log_();
+            iter_ready = false;
             // Transitioning ACTIVE -> IDLE: clean up tx_info_ entries that are solely
             // owned by the fetcher (in_dispatch_time_ == 0, i.e. never pushed to dispatcher).
             // This covers two cases:
@@ -834,9 +913,8 @@ void ObCSFetcher::run1()
       }
     }
 
-    if (OB_FAIL(iter_.next())) {
-      if (OB_ITER_END == ret) {
-        usleep(CS_FETCHER_ITER_END_SLEEP_US);
+    if (OB_FAIL(next_log_())) {
+      if (OB_ITER_END == ret || has_set_stop()) {
         continue;
       }
       usleep(CS_FETCHER_ITER_ERR_SLEEP_US);
@@ -992,6 +1070,7 @@ void ObCSFetcher::run1()
     }
   }
 
+  unbind_log_();
   FLOG_INFO("CSFetcher: stopped",
             "mode", running_mode_ == ACTIVE ? "ACTIVE" : "IDLE",
             K(current_lsn_), K(current_scn_), K(total_tx_committed_));

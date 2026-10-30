@@ -41,7 +41,7 @@ ObChangeStreamMgr::~ObChangeStreamMgr()
 
 int ObChangeStreamMgr::server_module_init(
     ObChangeStreamMgr *&mgr,
-    logservice::ObILogStorage &log_storage,
+    palf::PalfEnv &palf_env,
     schema::ObSchemaPublishSignal &schema_publish_signal,
     lib::IRunWrapper *run_wrapper)
 {
@@ -49,7 +49,7 @@ int ObChangeStreamMgr::server_module_init(
   if (OB_ISNULL(mgr)) {
     ret = common::OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(
-      mgr->init(log_storage, schema_publish_signal, run_wrapper))) {
+      mgr->init(palf_env, schema_publish_signal, run_wrapper))) {
   } else {
     LOG_INFO("ObChangeStreamMgr server_module_init success");
   }
@@ -57,7 +57,7 @@ int ObChangeStreamMgr::server_module_init(
 }
 
 int ObChangeStreamMgr::init(
-    logservice::ObILogStorage &log_storage,
+    palf::PalfEnv &palf_env,
     schema::ObSchemaPublishSignal &schema_publish_signal,
     lib::IRunWrapper *run_wrapper)
 {
@@ -66,7 +66,7 @@ int ObChangeStreamMgr::init(
   if (is_inited_) {
     ret = OB_INIT_TWICE;
   } else if (OB_FAIL(fetcher_.init(
-      &dispatcher_, log_storage, schema_publish_signal, run_wrapper))) {
+      &dispatcher_, palf_env, schema_publish_signal, run_wrapper))) {
   } else if (OB_FAIL(dispatcher_.init())) {
   } else if (OB_FAIL(worker_.init(worker_thread_count))) {
   } else {

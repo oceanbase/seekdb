@@ -1,0 +1,26 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("//bazel:defs.bzl", "cc_library")
+
+package(default_testonly = True)
+
+cc_library(
+    name = "change_stream_fetcher_cases",
+    srcs = ["test_change_stream_fetcher.cpp"],
+    alwayslink = True,
+    deps = [
+        "//bazel/third_party:gtest",
+        "//src/observer:change_stream_test_headers",
+    ],
+)
+
+cc_test(
+    name = "test_change_stream_fetcher",
+    size = "small",
+    linkstatic = True,
+    features = ["-static_cpp_runtime", "-static_link_cpp_runtimes"],
+    deps = [
+        ":change_stream_fetcher_cases",
+        "//src/observer:liboceanbase",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+)

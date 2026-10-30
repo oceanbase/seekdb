@@ -209,6 +209,15 @@ cc_library(
     visibility = ["//src/wasm:__pkg__"],
 )
 
+cc_library(
+    name = "change_stream_test_headers",
+    testonly = True,
+    hdrs = ["change_stream/ob_change_stream_fetcher.h"],
+    deps = _OBSERVER_HEADER_NATIVE_DEPS,
+    tags = ["manual"],
+    visibility = ["//unittest/observer/change_stream:__pkg__"],
+)
+
 
 _OBSERVER_RUNTIME_UNITY_GROUPS = OBSERVER_UNITY_GROUPS + singleton_unity_groups(
     OBSERVER_STANDALONE_SOURCES,
