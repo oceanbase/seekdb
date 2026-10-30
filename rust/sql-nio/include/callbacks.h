@@ -44,6 +44,7 @@ void ob_sql_nio_log_reactor_state(int32_t poll_result, uint64_t poll_id,
     uint64_t greeting_flushed, uint64_t admission_register_failed,
     uint64_t dispatch_handoff, uint64_t dispatch_direct,
     uint64_t dispatch_queue_full, uint64_t greeting_close_before_flush,
-    uint32_t listener_event_flags);
+    uint32_t listener_event_flags, uint32_t listener_os_probe_state,
+    uint32_t listener_os_probe_revents, int32_t listener_os_probe_raw_error);
 } // namespace obmysql
 } // namespace oceanbase

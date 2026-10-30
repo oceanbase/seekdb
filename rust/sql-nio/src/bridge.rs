@@ -418,6 +418,9 @@ pub mod ffi {
             dispatch_queue_full: u64,
             greeting_close_before_flush: u64,
             listener_event_flags: u32,
+            listener_os_probe_state: u32,
+            listener_os_probe_revents: u32,
+            listener_os_probe_raw_error: i32,
         );
     }
 
