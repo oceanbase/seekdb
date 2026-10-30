@@ -2211,6 +2211,11 @@ int ObESQueryParser::parse_const(ObIJsonBase &val_node, ObReqConstExpr *&var, co
         } else if (OB_FAIL(ObReqConstExpr::construct_const_numeric_expr(var, alloc_, num_value, ObNumberType))) {
         }
       }
+    } else if (!cover_value_to_str && val_node.json_type() == ObJsonNodeType::J_BOOLEAN) {
+      // Preserve TRUE/FALSE as SQL keywords. Quoting them changes a JSON boolean
+      // predicate into a string predicate; numeric 1/0 would also lose the type.
+      if (OB_FAIL(ObReqConstExpr::construct_const_expr(var, alloc_, expr_name, ObTinyIntType))) {
+      }
     } else if (OB_FAIL(ObReqConstExpr::construct_const_expr(var, alloc_, expr_name, ObVarcharType))) {
     }
   }
