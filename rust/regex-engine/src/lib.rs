@@ -231,6 +231,7 @@ fn compile(pattern: String, flags: u32, stack_limit: i64, time_limit: i64) -> Re
     let mut builder = RegexBuilder::new(&pattern);
     builder
         .icu_octal(true)
+        .icu_posix_unicode(true)
         .case_insensitive(flags & CASE_INSENSITIVE != 0)
         .multi_line(flags & MULTILINE != 0)
         .dot_matches_new_line(flags & DOTALL != 0)
