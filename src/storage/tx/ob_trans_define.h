@@ -413,24 +413,6 @@ private:
 
 typedef common::ObReserveArenaAllocator<1024> ObTxReserveArenaAllocator;
 
-class ObTransTraceLog : public common::ObTraceEventRecorder
-{
-public:
-  ObTransTraceLog()
-      : common::ObTraceEventRecorder::ObTraceEventRecorderBase(
-          true, common::ObLatchIds::TRANS_TRACE_RECORDER_LOCK) {}
-  ~ObTransTraceLog() {}
-  void destroy() {}
-  int64_t to_string(char *buf, const int64_t buf_len) const
-  {
-    int64_t ret = 0;
-    check_lock();
-    ret = ObTraceEventRecorder::to_string(buf, buf_len);
-    check_unlock();
-    return ret;
-  }
-};
-
 class ObStmtInfo  // unreferenced, need remove
 {
   OB_UNIS_VERSION(1);

@@ -88,20 +88,19 @@ class ObTransCtx: public share::ObLightHashLink<ObTransCtx>
 public:
   ObTransCtx()
       : trans_expired_time_(0), ctx_create_time_(0),
-      trans_service_(NULL), tlog_(NULL),
+      trans_service_(NULL),
       ls_tx_ctx_mgr_(NULL),
       session_id_(UINT32_MAX),
       stc_(0), part_trans_action_(ObPartTransAction::UNKNOWN),
       pending_callback_param_(common::OB_SUCCESS), p_mt_ctx_(NULL),
       is_exiting_(false), for_replay_(false),
       has_pending_callback_(false),
-      can_elr_(false),
-      opid_(0) {}
+      can_elr_(false) {}
   virtual ~ObTransCtx() { }
   void reset() { }
 public:
   void get_ctx_guard(CtxLockGuard &guard, uint8_t mode = CtxLockGuard::MODE::ALL);
-  void print_trace_log();
+  void dump_state();
   // ATTENTION! There is no lock protect
   bool is_too_long_transaction() const
   { return ObClockGenerator::getRealClock() >= ctx_create_time_ + OB_TRANS_WARN_USE_TIME; }
@@ -157,10 +156,8 @@ public:
                        K_(ctx_create_time));
 protected:
   void set_exiting_();
-  void print_trace_log_();
-  void print_trace_log_if_necessary_();
+  void dump_state_();
   bool is_trans_expired_() const { return ObClockGenerator::getRealClock() >= trans_expired_time_; }
-  bool is_slow_query_() const;
   void set_stc_(const MonotonicTs stc);
   void set_stc_by_now_();
   MonotonicTs get_stc_();
@@ -220,8 +217,6 @@ protected:
   int64_t ctx_create_time_;
   ObTransService *trans_service_;
   mutable CtxLock lock_;
-  ObTransTraceLog trace_log_;
-  ObTransTraceLog *tlog_;
   ObLSTxCtxMgr *ls_tx_ctx_mgr_;
   uint32_t session_id_;
   // set stc only by set_stc_xxx, and
@@ -239,8 +234,6 @@ protected:
   bool has_pending_callback_;
   // whether the trans can release locks early
   bool can_elr_;
-  // inc opid before ctx unlocked
-  int64_t opid_;
 
   int64_t request_id_;
   int64_t commit_retry_timeout_;

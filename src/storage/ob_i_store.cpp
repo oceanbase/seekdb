@@ -100,10 +100,10 @@ int ObStoreCtx::init_for_read(ObLS *tenant_ls,
 void ObStoreCtx::force_print_trace_log()
 {
   if (NULL != mvcc_acc_ctx_.tx_desc_) {
-    mvcc_acc_ctx_.tx_desc_->print_trace();
+    mvcc_acc_ctx_.tx_desc_->dump_state();
   }
   if (NULL != mvcc_acc_ctx_.tx_ctx_) {
-    mvcc_acc_ctx_.tx_ctx_->print_trace_log();
+    mvcc_acc_ctx_.tx_ctx_->dump_state();
   }
 }
 
