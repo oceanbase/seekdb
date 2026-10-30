@@ -961,7 +961,6 @@ int ObOBJLockMap::get_lock_op_iter(const ObLockID &lock_id,
 int ObOBJLockMap::check_and_clear_obj_lock(const bool force_compact)
 {
   int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
   ObLockIDIterator lock_id_iter;
   ObLockID lock_id;
   ObOBJLock *obj_lock = nullptr;
@@ -985,10 +984,10 @@ int ObOBJLockMap::check_and_clear_obj_lock(const bool force_compact)
           continue;
         }
       } else {
-        if (OB_TMP_FAIL(
-                obj_lock->compact_tablelock(allocator_, is_compacted, force_compact))) {
+        if (OB_FAIL(obj_lock->compact_tablelock(allocator_, is_compacted, force_compact))) {
+        } else {
+          drop_obj_lock_if_empty_(lock_id, obj_lock);
         }
-        drop_obj_lock_if_empty_(lock_id, obj_lock);
         if (OB_NOT_NULL(obj_lock)) {
           lock_map_.revert(obj_lock);
         }
