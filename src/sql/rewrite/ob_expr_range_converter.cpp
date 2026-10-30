@@ -84,6 +84,14 @@ int ObExprRangeConverter::convert_expr_to_range_node(const ObRawExpr *expr,
              ctx_.enable_not_in_range_) {
     if (OB_FAIL(convert_not_in_expr(expr, expr_depth, range_node))) {
     }
+  } else if (0 == expr_depth && T_OP_NOT == expr->get_expr_type() &&
+             OB_NOT_NULL(expr->get_param_expr(0)) &&
+             T_OP_IN == expr->get_param_expr(0)->get_expr_type() &&
+             ctx_.enable_not_in_range_) {
+    // NOT (c IN (...)) is c NOT IN (...), but stays unsimplified when the
+    // expression rewrite rules are skipped, e.g. for approximate vector search.
+    if (OB_FAIL(convert_not_in_expr(expr->get_param_expr(0), expr_depth, range_node))) {
+    }
   } else if (expr->is_spatial_expr()) {
     if (OB_FAIL(convert_geo_expr(expr, expr_depth, range_node))) {
     }

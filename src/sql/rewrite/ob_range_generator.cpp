@@ -39,6 +39,33 @@ namespace sql
 {
 #define GET_RANGE_NODE_DOMAIN_TYPE(n) (static_cast<ObDomainOpType>((n)->domain_extra_.domain_releation_type_))
 
+// The open range between the sorted NOT IN values v[i-1] and v[i] holds no key of
+// an integer column when v[i] <= v[i-1] + 1.
+static bool is_empty_not_in_gap(const ObRangeColumnMeta &meta,
+                                const ObTmpInParam &in_param,
+                                const int64_t not_in_idx)
+{
+  bool bret = false;
+  const ObObj *left = nullptr;
+  const ObObj *right = nullptr;
+  const ObObjTypeClass tc = meta.column_type_.get_type_class();
+  if (not_in_idx <= 0 || not_in_idx >= in_param.in_param_.count() ||
+      (ObIntTC != tc && ObUIntTC != tc)) {
+    // the first and the last range are bounded by NULL and MAX
+  } else if (OB_ISNULL(left = in_param.in_param_.at(not_in_idx - 1)) ||
+             OB_ISNULL(right = in_param.in_param_.at(not_in_idx)) ||
+             tc != left->get_type_class() || tc != right->get_type_class()) {
+    // do nothing
+  } else if (ObIntTC == tc) {
+    bret = left->get_int() == right->get_int() ||
+           (left->get_int() < right->get_int() && right->get_int() - 1 == left->get_int());
+  } else {
+    bret = left->get_uint64() == right->get_uint64() ||
+           (left->get_uint64() < right->get_uint64() && right->get_uint64() - 1 == left->get_uint64());
+  }
+  return bret;
+}
+
 int ObTmpRange::copy(ObTmpRange &other)
 {
   int ret = OB_SUCCESS;
@@ -607,8 +634,10 @@ int ObRangeGenerator::formalize_complex_range(const ObRangeNode *node)
     } else if (cur_node->is_not_in_node_) {
       bool always_false = false;
       ObTmpInParam *tmp_in_param = nullptr;
+      const ObRangeColumnMeta *meta = nullptr;
       if (OB_FAIL(generate_tmp_not_in_param(*cur_node, tmp_in_param))) {
-      } else if (OB_ISNULL(tmp_in_param)) {
+      } else if (OB_ISNULL(tmp_in_param) ||
+                 OB_ISNULL(meta = pre_range_graph_->get_column_meta(cur_node->min_offset_))) {
         ret = OB_ERR_UNEXPECTED;
       } else if (tmp_in_param->always_false_) {
         if (OB_FAIL(generate_one_range(*always_false_tmp_range_))) {
@@ -616,6 +645,11 @@ int ObRangeGenerator::formalize_complex_range(const ObRangeNode *node)
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < tmp_in_param->in_param_.count() + 1; ++i) {
           ObTmpRange *new_range = nullptr;
+          if (is_empty_not_in_gap(*meta, *tmp_in_param, i)) {
+            // no integer key lies between two adjacent excluded values,
+            // e.g. c NOT IN (11, 12, ..., 1000) only needs (NULL, 11) and (1000, MAX)
+            continue;
+          }
           if (pre_node_offset != -1 && add_last) {
             tmp_range_lists_[pre_node_offset].remove_last();
           }
