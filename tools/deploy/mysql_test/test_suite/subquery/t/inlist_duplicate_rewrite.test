@@ -1,0 +1,268 @@
+--disable_query_log
+# Plan assertions exercise ordinary text SQL.
+--disable_ps_protocol
+--source mysql_test/include/create_plan_table.inc
+
+# Retaining the original 3072-item IN filter exceeds VARCHAR(4000).
+ALTER TABLE plan_table MODIFY filter_predicates LONGTEXT;
+
+--disable_warnings
+DROP TABLE IF EXISTS issue1512_inlist_regression;
+--enable_warnings
+
+CREATE TABLE issue1512_inlist_regression (
+  id INT PRIMARY KEY,
+  category5 INT
+);
+INSERT INTO issue1512_inlist_regression VALUES
+(1,1),(2,2),(3,3),(4,4),(5,5);
+
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='issue1512_duplicate_inlist'
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ *
+FROM issue1512_inlist_regression
+WHERE category5 IN (1,2,3,1,2,3)
+ORDER BY id;
+--enable_result_log
+
+SELECT COUNT(*) > 0 AS plan_recorded,
+       SUM(operator = 'VALUES TABLE ACCESS') AS values_table_count
+FROM plan_table
+WHERE statement_id='issue1512_duplicate_inlist';
+
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id, category5
+FROM issue1512_inlist_regression
+WHERE category5 IN (1,2,3,1,2,3)
+ORDER BY id;
+
+# Four distinct values reach the threshold: retain the original rewrite.
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='issue1512_boundary'
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ *
+FROM issue1512_inlist_regression
+WHERE category5 IN (1,2,3,4,1,2)
+ORDER BY id;
+--enable_result_log
+
+SELECT COUNT(*) > 0 AS boundary_plan_recorded,
+       SUM(operator = 'VALUES TABLE ACCESS') AS boundary_values_table_count
+FROM plan_table
+WHERE statement_id='issue1512_boundary';
+
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id, category5
+FROM issue1512_inlist_regression
+WHERE category5 IN (1,2,3,4,1,2)
+ORDER BY id;
+
+--echo # issue1512 ordinary SQL duplicate values
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id, category5
+FROM issue1512_inlist_regression
+WHERE category5 IN (1,2,3,1,2,3)
+ORDER BY id;
+
+--echo # issue1512 ordinary SQL changed values
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id, category5
+FROM issue1512_inlist_regression
+WHERE category5 IN (1,2,3,4,5,6)
+ORDER BY id;
+
+PREPARE issue1512_ps FROM
+'SELECT /*+ OPT_PARAM(''inlist_rewrite_threshold'' 4) */ id, category5 FROM issue1512_inlist_regression WHERE category5 IN (?,?,?,?,?,?) ORDER BY id';
+SET @issue1512_a=1, @issue1512_b=2, @issue1512_c=3,
+    @issue1512_d=1, @issue1512_e=2, @issue1512_f=3;
+--echo # issue1512 prepared duplicate bindings
+EXECUTE issue1512_ps USING
+@issue1512_a, @issue1512_b, @issue1512_c,
+@issue1512_d, @issue1512_e, @issue1512_f;
+
+SET @issue1512_d=4, @issue1512_e=5, @issue1512_f=6;
+--echo # issue1512 prepared changed bindings
+EXECUTE issue1512_ps USING
+@issue1512_a, @issue1512_b, @issue1512_c,
+@issue1512_d, @issue1512_e, @issue1512_f;
+DEALLOCATE PREPARE issue1512_ps;
+SET @issue1512_a=NULL, @issue1512_b=NULL, @issue1512_c=NULL,
+    @issue1512_d=NULL, @issue1512_e=NULL, @issue1512_f=NULL;
+
+--echo # issue1512 NULL IN preserves matching rows
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id, category5
+FROM issue1512_inlist_regression
+WHERE category5 IN (1,2,NULL,1,2,NULL)
+ORDER BY id;
+
+--echo # issue1512 NULL NOT IN preserves unknown filtering
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id, category5
+FROM issue1512_inlist_regression
+WHERE category5 NOT IN (1,2,NULL,1,2,NULL)
+ORDER BY id;
+
+--echo # issue1512 string list preserves matching rows
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id, category5
+FROM issue1512_inlist_regression
+WHERE category5 IN ('1','2','3','1','2','3')
+ORDER BY id;
+
+--echo # issue1512 row list preserves matching rows
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */ id, category5
+FROM issue1512_inlist_regression
+WHERE (id,category5) IN ((1,1),(2,2),(3,3),(1,1),(2,2),(3,3))
+ORDER BY id;
+
+# These checks preserve SQL numeric comparison semantics. They do not by
+# themselves detect a distinct-count key collision: a wrong count may choose
+# another semantically equivalent plan when every original IN item is kept.
+# Derived-table folding may also prevent these checks from traversing the new
+# counting helper. Never claim helper-path or plan coverage from them alone.
+
+--echo # issue1512 signed endpoints match mixed list
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */
+       COUNT(*) AS signed_mixed_hits
+FROM (
+  SELECT CAST(-1 AS SIGNED) AS v
+  UNION ALL
+  SELECT CAST(-9223372036854775808 AS SIGNED)
+) s
+WHERE v IN (-1,-9223372036854775808,
+            18446744073709551615,9223372036854775808,-1);
+
+--echo # issue1512 signed endpoints do not equal unsigned endpoints
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */
+       COUNT(*) AS signed_unsigned_hits
+FROM (
+  SELECT CAST(-1 AS SIGNED) AS v
+  UNION ALL
+  SELECT CAST(-9223372036854775808 AS SIGNED)
+) s
+WHERE v IN (18446744073709551615,9223372036854775808,
+            18446744073709551615,9223372036854775808,
+            18446744073709551615);
+
+--echo # issue1512 unsigned endpoints match mixed list
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */
+       COUNT(*) AS unsigned_mixed_hits
+FROM (
+  SELECT CAST(18446744073709551615 AS UNSIGNED) AS v
+  UNION ALL
+  SELECT CAST(9223372036854775808 AS UNSIGNED)
+) u
+WHERE v IN (-1,-9223372036854775808,
+            18446744073709551615,9223372036854775808,-1);
+
+--echo # issue1512 unsigned endpoints do not equal signed endpoints
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 4) */
+       COUNT(*) AS unsigned_signed_hits
+FROM (
+  SELECT CAST(18446744073709551615 AS UNSIGNED) AS v
+  UNION ALL
+  SELECT CAST(9223372036854775808 AS UNSIGNED)
+) u
+WHERE v IN (-1,-9223372036854775808,-1,-9223372036854775808,-1);
+
+# Six RHS values stay below threshold 7 and use the direct scalar IN path.
+PREPARE issue1512_hash_ps FROM
+'SELECT /*+ OPT_PARAM(''inlist_rewrite_threshold'' 7) */ id, category5 FROM issue1512_inlist_regression WHERE category5 IN (?,?,?,?,?,?) ORDER BY id';
+SET @issue1512_hash_a=1, @issue1512_hash_b=2, @issue1512_hash_c=3,
+    @issue1512_hash_d=1, @issue1512_hash_e=2, @issue1512_hash_f=3;
+--echo # issue1512 direct hash prepared duplicate bindings
+EXECUTE issue1512_hash_ps USING
+@issue1512_hash_a, @issue1512_hash_b, @issue1512_hash_c,
+@issue1512_hash_d, @issue1512_hash_e, @issue1512_hash_f;
+
+SET @issue1512_hash_d=4, @issue1512_hash_e=5, @issue1512_hash_f=6;
+--echo # issue1512 direct hash prepared changed bindings
+EXECUTE issue1512_hash_ps USING
+@issue1512_hash_a, @issue1512_hash_b, @issue1512_hash_c,
+@issue1512_hash_d, @issue1512_hash_e, @issue1512_hash_f;
+DEALLOCATE PREPARE issue1512_hash_ps;
+SET @issue1512_hash_a=NULL, @issue1512_hash_b=NULL, @issue1512_hash_c=NULL,
+    @issue1512_hash_d=NULL, @issue1512_hash_e=NULL, @issue1512_hash_f=NULL;
+
+--echo # issue1512 direct hash first RHS NULL
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 7) */ id,
+       category5 IN (NULL,1,2,3,1,2) AS in_result,
+       category5 NOT IN (NULL,1,2,3,1,2) AS not_in_result
+FROM issue1512_inlist_regression
+ORDER BY id;
+
+--echo # issue1512 direct hash VARCHAR IN
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 7) */ id
+FROM issue1512_inlist_regression
+WHERE CAST(category5 AS CHAR) IN ('1','2','3','1','2','3')
+ORDER BY id;
+
+--echo # issue1512 direct hash VARCHAR NOT IN
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 7) */ id
+FROM issue1512_inlist_regression
+WHERE CAST(category5 AS CHAR) NOT IN ('1','2','3','1','2','3')
+ORDER BY id;
+
+--echo # issue1512 direct hash DECIMAL IN
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 7) */ id
+FROM issue1512_inlist_regression
+WHERE CAST(category5 AS DECIMAL(10,1)) IN (1.0,2.0,3.0,1.0,2.0,3.0)
+ORDER BY id;
+
+--echo # issue1512 direct hash DECIMAL NOT IN
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold' 7) */ id
+FROM issue1512_inlist_regression
+WHERE CAST(category5 AS DECIMAL(10,1)) NOT IN (1.0,2.0,3.0,1.0,2.0,3.0)
+ORDER BY id;
+
+# Exactly 1000 elements: 333 copies of (1,2,3), then one final 1.
+--let $issue1512_inlist_1000 = 1,2,3
+--let $issue1512_groups = 1
+while ($issue1512_groups < 333)
+{
+  --let $issue1512_inlist_1000 = $issue1512_inlist_1000,1,2,3
+  --inc $issue1512_groups
+}
+--let $issue1512_inlist_1000 = $issue1512_inlist_1000,1
+
+--disable_result_log
+eval EXPLAIN INTO plan_table SET statement_id='issue1512_inlist_1000'
+SELECT id, category5
+FROM issue1512_inlist_regression
+WHERE category5 IN ($issue1512_inlist_1000)
+ORDER BY id;
+--enable_result_log
+
+SELECT COUNT(*) > 0 AS plan_recorded,
+       SUM(operator = 'VALUES TABLE ACCESS') AS values_table_count
+FROM plan_table
+WHERE statement_id='issue1512_inlist_1000';
+
+eval SELECT id, category5
+FROM issue1512_inlist_regression
+WHERE category5 IN ($issue1512_inlist_1000)
+ORDER BY id;
+
+# Exactly 3072 elements: 1024 copies of (1,2,3).
+--let $issue1512_inlist_3072 = 1,2,3
+--let $issue1512_groups = 1
+while ($issue1512_groups < 1024)
+{
+  --let $issue1512_inlist_3072 = $issue1512_inlist_3072,1,2,3
+  --inc $issue1512_groups
+}
+
+--disable_result_log
+eval EXPLAIN INTO plan_table SET statement_id='issue1512_inlist_3072'
+SELECT id, category5
+FROM issue1512_inlist_regression
+WHERE category5 IN ($issue1512_inlist_3072)
+ORDER BY id;
+--enable_result_log
+
+SELECT COUNT(*) > 0 AS plan_recorded,
+       SUM(operator = 'VALUES TABLE ACCESS') AS values_table_count
+FROM plan_table
+WHERE statement_id='issue1512_inlist_3072';
+
+eval SELECT id, category5
+FROM issue1512_inlist_regression
+WHERE category5 IN ($issue1512_inlist_3072)
+ORDER BY id;
+
+DROP TABLE issue1512_inlist_regression, plan_table;
+--enable_ps_protocol
+--enable_query_log

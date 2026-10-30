@@ -1,0 +1,114 @@
+plan_recorded	values_table_count
+1	0
+id	category5
+1	1
+2	2
+3	3
+boundary_plan_recorded	boundary_values_table_count
+1	1
+id	category5
+1	1
+2	2
+3	3
+4	4
+# issue1512 ordinary SQL duplicate values
+id	category5
+1	1
+2	2
+3	3
+# issue1512 ordinary SQL changed values
+id	category5
+1	1
+2	2
+3	3
+4	4
+5	5
+# issue1512 prepared duplicate bindings
+id	category5
+1	1
+2	2
+3	3
+# issue1512 prepared changed bindings
+id	category5
+1	1
+2	2
+3	3
+4	4
+5	5
+# issue1512 NULL IN preserves matching rows
+id	category5
+1	1
+2	2
+# issue1512 NULL NOT IN preserves unknown filtering
+id	category5
+# issue1512 string list preserves matching rows
+id	category5
+1	1
+2	2
+3	3
+# issue1512 row list preserves matching rows
+id	category5
+1	1
+2	2
+3	3
+# issue1512 signed endpoints match mixed list
+signed_mixed_hits
+2
+# issue1512 signed endpoints do not equal unsigned endpoints
+signed_unsigned_hits
+0
+# issue1512 unsigned endpoints match mixed list
+unsigned_mixed_hits
+2
+# issue1512 unsigned endpoints do not equal signed endpoints
+unsigned_signed_hits
+0
+# issue1512 direct hash prepared duplicate bindings
+id	category5
+1	1
+2	2
+3	3
+# issue1512 direct hash prepared changed bindings
+id	category5
+1	1
+2	2
+3	3
+4	4
+5	5
+# issue1512 direct hash first RHS NULL
+id	in_result	not_in_result
+1	1	0
+2	1	0
+3	1	0
+4	NULL	NULL
+5	NULL	NULL
+# issue1512 direct hash VARCHAR IN
+id
+1
+2
+3
+# issue1512 direct hash VARCHAR NOT IN
+id
+4
+5
+# issue1512 direct hash DECIMAL IN
+id
+1
+2
+3
+# issue1512 direct hash DECIMAL NOT IN
+id
+4
+5
+plan_recorded	values_table_count
+1	0
+id	category5
+1	1
+2	2
+3	3
+plan_recorded	values_table_count
+1	0
+id	category5
+1	1
+2	2
+3	3
