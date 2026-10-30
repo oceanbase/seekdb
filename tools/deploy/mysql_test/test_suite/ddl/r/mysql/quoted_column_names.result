@@ -1,0 +1,29 @@
+set ob_query_timeout = 10000000;
+drop table if exists ddl_identifier_quoting;
+create table ddl_identifier_quoting (
+  `pk``id` int primary key,
+  `enum``value` enum('alpha', 'beta') not null,
+  `set``value` set('alpha', 'beta') not null,
+  `列``名` varchar(16)
+);
+insert into ddl_identifier_quoting values
+  (1, 'alpha', 'alpha', 'first'), (2, 'beta', 'beta', 'second');
+create unique index uq_quoted_enum on ddl_identifier_quoting (`enum``value`);
+create unique index uq_quoted_set on ddl_identifier_quoting (`set``value`);
+create index idx_quoted_text on ddl_identifier_quoting (`列``名`);
+select `pk``id` as id, `enum``value` as enum_value
+  from ddl_identifier_quoting force index(uq_quoted_enum)
+  where `enum``value` = 'beta';
+id	enum_value
+2	beta
+select `pk``id` as id, `set``value` as set_value
+  from ddl_identifier_quoting force index(uq_quoted_set)
+  where `set``value` = 'alpha';
+id	set_value
+1	alpha
+select `pk``id` as id, `列``名` as text_value
+  from ddl_identifier_quoting force index(idx_quoted_text)
+  where `列``名` = 'first';
+id	text_value
+1	first
+drop table ddl_identifier_quoting;
