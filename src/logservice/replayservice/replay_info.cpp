@@ -26,11 +26,24 @@ using namespace share;
 using namespace palf;
 
 ReplayInfo::ReplayInfo()
-  : status_(nullptr), finished_(false), final_stat_(), final_replayed_lsn_(),
+  : status_(nullptr), enabled_(false), finished_(false), final_stat_(), final_replayed_lsn_(),
     final_min_unreplayed_scn_(), replayable_point_(SCN::min_scn()), pending_size_(0)
 {
   final_stat_.enabled_ = false;
   final_stat_.pending_cnt_ = 0;
+}
+
+bool ReplayInfo::is_enabled() const
+{
+  ObLockGuard<ObSpinLock> guard(lock_);
+  return enabled_;
+}
+
+void ReplayInfo::set_enabled(const bool enabled)
+{
+  ObLockGuard<ObSpinLock> guard(lock_);
+  enabled_ = enabled;
+  final_stat_.enabled_ = enabled;
 }
 
 int ReplayInfo::attach(ObReplayStatus *status)
@@ -44,6 +57,7 @@ int ReplayInfo::attach(ObReplayStatus *status)
   } else {
     // The caller transfers its owning reference to ReplayInfo.
     status_ = status;
+    enabled_ = false;
     finished_ = false;
     ATOMIC_STORE(&pending_size_, 0);
     replayable_point_.atomic_store(SCN::min_scn());
@@ -84,7 +98,7 @@ int ReplayInfo::detach(const bool finished, ObReplayStatus *&status)
       ObLockGuard<ObSpinLock> lock(lock_);
       if (finished) {
         final_stat_ = stat;
-        final_stat_.enabled_ = false;
+        final_stat_.enabled_ = enabled_;
         final_replayed_lsn_ = replayed_lsn;
         final_min_unreplayed_scn_ = min_scn;
       }

@@ -27,6 +27,7 @@ namespace logservice
 {
 class ObReplayStatus;
 class ObLogReplayService;
+class ObLogService;
 class ObReplayStatusGuard;
 
 struct LSReplayStat
@@ -60,6 +61,8 @@ class ReplayInfo
 {
 public:
   ReplayInfo();
+  // Enabling replay is independent of retaining its executor after completion.
+  bool is_enabled() const;
   int is_replay_done(const palf::LSN &end_lsn, bool &done) const;
   int get_max_replayed_scn(share::SCN &scn) const;
   int get_min_unreplayed_scn(share::SCN &scn) const;
@@ -73,11 +76,14 @@ public:
   share::SCN get_replayable_point() const;
 private:
   friend class ObLogReplayService;
+  friend class ObLogService;
+  void set_enabled(bool enabled);
   int attach(ObReplayStatus *status);
   int detach(bool finished, ObReplayStatus *&status);
   int get_replay_status(ObReplayStatusGuard &guard) const;
   mutable common::ObSpinLock lock_;
   ObReplayStatus *status_;
+  bool enabled_;
   bool finished_;
   LSReplayStat final_stat_;
   palf::LSN final_replayed_lsn_;

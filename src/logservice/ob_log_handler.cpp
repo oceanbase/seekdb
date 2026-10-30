@@ -480,10 +480,10 @@ int ObLogHandler::restore_submit_replay_log()
   return ret;
 }
 
-bool ObLogHandler::is_log_enabled() const
+bool ObLogHandler::is_replay_enabled() const
 {
   RLockGuard guard(lock_);
-  return is_inited_ && !is_in_stop_state_ && !is_offline_;
+  return is_inited_ && log_service_->get_replay_info().is_enabled();
 }
 
 int ObLogHandler::get_max_decided_scn(SCN &scn)

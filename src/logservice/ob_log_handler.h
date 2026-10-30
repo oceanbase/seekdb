@@ -94,7 +94,7 @@ public:
   virtual int get_max_decided_scn(share::SCN &scn) = 0;
   virtual int pend_submit_replay_log() = 0;
   virtual int restore_submit_replay_log() = 0;
-  virtual bool is_log_enabled() const = 0;
+  virtual bool is_replay_enabled() const = 0;
   virtual int offline() = 0;
   virtual int online(const palf::LSN &lsn, const share::SCN &scn) = 0;
   virtual bool is_offline() const = 0;
@@ -304,8 +304,8 @@ public:
   // @brief, restore sumbit replay log
   int restore_submit_replay_log() override final;
 
-  // @brief, check whether the log handler is online and running.
-  bool is_log_enabled() const override final;
+  // @brief, check if replay is enabled, including after its executor finishes.
+  bool is_replay_enabled() const override final;
   // @brief, get max decided scn considering both apply and replay.
   // @param[out] int64_t&, max decided scn.
   // @return

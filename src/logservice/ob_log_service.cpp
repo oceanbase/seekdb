@@ -178,6 +178,8 @@ int ObLogService::enable_replay(const LSN &lsn, const SCN &scn)
   }
   if (OB_FAIL(ret)) {
     destroy_replay_();
+  } else {
+    replay_info_.set_enabled(true);
   }
   return ret;
 }
@@ -191,6 +193,7 @@ int ObLogService::disable_replay()
 
 void ObLogService::destroy_replay_()
 {
+  replay_info_.set_enabled(false);
   if (nullptr != replay_service_) {
     replay_service_->stop();
     replay_service_->wait();

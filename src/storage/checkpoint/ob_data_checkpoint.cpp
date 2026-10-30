@@ -395,9 +395,9 @@ void ObDataCheckpoint::ls_frozen_to_active_(int64_t &last_time)
       if (OB_UNLIKELY(ls_->is_stopped())) {
         ret = OB_NOT_RUNNING;
         STORAGE_LOG(WARN, "ls stopped", K(ret), K_(ls_->ls_meta));
-      } else if (OB_UNLIKELY(!(ls_->get_log_handler()->is_log_enabled()))) {
+      } else if (OB_UNLIKELY(!(ls_->get_log_handler()->is_replay_enabled()))) {
         ret = OB_NOT_RUNNING;
-        STORAGE_LOG(WARN, "log handler is offline, should not freeze", K(ret), K_(ls_->ls_meta));
+        STORAGE_LOG(WARN, "log handler not enable replay, should not freeze", K(ret), K_(ls_->ls_meta));
       } else {
         // traversal list once
         WLOCK(LS_FROZEN);
@@ -454,9 +454,9 @@ void ObDataCheckpoint::ls_frozen_to_prepare_(int64_t &last_time)
       if (OB_UNLIKELY(ls_->is_stopped())) {
         ret = OB_NOT_RUNNING;
         STORAGE_LOG(WARN, "ls stopped", K(ret), K_(ls_->ls_meta));
-      } else if (OB_UNLIKELY(!(ls_->get_log_handler()->is_log_enabled()))) {
+      } else if (OB_UNLIKELY(!(ls_->get_log_handler()->is_replay_enabled()))) {
         ret = OB_NOT_RUNNING;
-        STORAGE_LOG(WARN, "log handler is offline, should not freeze", K(ret), K_(ls_->ls_meta));
+        STORAGE_LOG(WARN, "log handler not enable replay, should not freeze", K(ret), K_(ls_->ls_meta));
       } else {
         // traversal list once
         WLOCK(LS_FROZEN);
