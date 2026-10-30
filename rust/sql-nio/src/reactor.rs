@@ -217,6 +217,12 @@ pub(crate) struct EventLoop {
     pub(crate) accepted_total: u64,
     #[cfg(feature = "native-network")]
     pub(crate) reactor_diagnostics: Arc<ReactorDiagnostics>,
+    #[cfg(feature = "native-network")]
+    pub(crate) listener_stall_polls: u32,
+    #[cfg(feature = "native-network")]
+    pub(crate) last_listener_event_count: u64,
+    #[cfg(feature = "native-network")]
+    pub(crate) listener_stall_reported: bool,
     pub(crate) cxx_connect_attempts: Arc<AtomicU64>,
     pub(crate) cxx_connect_returns: Arc<AtomicU64>,
     pub(crate) cxx_connect_rejects: Arc<AtomicU64>,
@@ -272,6 +278,12 @@ const REACTOR_POLL_FAILED: i32 = 2;
 const REACTOR_POLL_SKIPPED: i32 = 3;
 #[cfg(feature = "native-network")]
 const REACTOR_POLL_FINAL: i32 = 4;
+#[cfg(feature = "native-network")]
+const REACTOR_POLL_STALLED_REARMED: i32 = 5;
+#[cfg(feature = "native-network")]
+const REACTOR_POLL_STALLED_REARM_FAILED: i32 = 6;
+#[cfg(feature = "native-network")]
+const LISTENER_STALL_POLL_LIMIT: u32 = 2;
 
 #[cfg(feature = "native-network")]
 struct ReactorDiagnostics {
@@ -405,6 +417,7 @@ impl EventLoop {
                 stopping = true;
             }
             if poll_failed && !stopping {
+                self.observe_listener_stall(poll_id, 0, 0);
                 self.publish_reactor_state(poll_result, poll_id, 0, 0);
                 self.log_reactor_state(poll_result, poll_id, 0, 0);
                 continue;
@@ -469,6 +482,7 @@ impl EventLoop {
                 self.drain_ready();
             }
             self.reap_retired();
+            self.observe_listener_stall(poll_id, event_count, listener_event_flags);
             self.publish_reactor_state(poll_result, poll_id, event_count, listener_event_flags);
             self.log_reactor_state(poll_result, poll_id, event_count, listener_event_flags);
         }
@@ -631,7 +645,13 @@ impl EventLoop {
         event_count: u64,
         listener_event_flags: u32,
     ) {
-        if self.listener.is_none() || !should_log_reactor_sample(poll_id) {
+        let forced_stall_sample = matches!(
+            poll_result,
+            REACTOR_POLL_STALLED_REARMED | REACTOR_POLL_STALLED_REARM_FAILED
+        );
+        if self.listener.is_none()
+            || (!should_log_reactor_sample(poll_id) && !forced_stall_sample)
+        {
             return;
         }
         unsafe {
@@ -648,6 +668,64 @@ impl EventLoop {
                 listener_event_flags,
             );
         }
+    }
+
+    #[cfg(all(windows, feature = "native-network"))]
+    fn observe_listener_stall(
+        &mut self,
+        poll_id: u64,
+        event_count: u64,
+        listener_event_flags: u32,
+    ) {
+        if self.listener.is_none() || self.accepted_total == 0 {
+            self.listener_stall_polls = 0;
+            self.last_listener_event_count = self.listener_event_count;
+            return;
+        }
+
+        if self.listener_event_count != self.last_listener_event_count {
+            self.listener_stall_polls = 0;
+        } else if !self.listener_stall_reported {
+            self.listener_stall_polls = self
+                .listener_stall_polls
+                .saturating_add(1)
+                .min(LISTENER_STALL_POLL_LIMIT);
+        }
+        self.last_listener_event_count = self.listener_event_count;
+
+        if self.listener_stall_polls < LISTENER_STALL_POLL_LIMIT
+            || self.listener_stall_reported
+        {
+            return;
+        }
+
+        self.listener_stall_reported = true;
+        let rearmed = match self.listener.as_mut() {
+            Some(listener) => self
+                .reg
+                .reregister(listener, LISTENER, Interest::READABLE)
+                .is_ok(),
+            None => false,
+        };
+        self.log_reactor_state(
+            if rearmed {
+                REACTOR_POLL_STALLED_REARMED
+            } else {
+                REACTOR_POLL_STALLED_REARM_FAILED
+            },
+            poll_id,
+            event_count,
+            listener_event_flags,
+        );
+    }
+
+    #[cfg(not(all(windows, feature = "native-network")))]
+    fn observe_listener_stall(
+        &mut self,
+        _poll_id: u64,
+        _event_count: u64,
+        _listener_event_flags: u32,
+    ) {
     }
 
     #[cfg(feature = "native-network")]
@@ -1462,6 +1540,12 @@ pub(crate) unsafe fn nio_start_in_dir(
                 accepted_total: 0,
                 #[cfg(feature = "native-network")]
                 reactor_diagnostics: reactor_diagnostics.clone(),
+                #[cfg(feature = "native-network")]
+                listener_stall_polls: 0,
+                #[cfg(feature = "native-network")]
+                last_listener_event_count: 0,
+                #[cfg(feature = "native-network")]
+                listener_stall_reported: false,
                 cxx_connect_attempts: cxx_connect_attempts.clone(),
                 cxx_connect_returns: cxx_connect_returns.clone(),
                 cxx_connect_rejects: cxx_connect_rejects.clone(),
