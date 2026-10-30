@@ -1717,7 +1717,12 @@ int ObPL::generate_pl_function(ObExecContext &ctx,
 
   // do compile
   if (OB_SUCC(ret)) {
-    ObPLBuilder builder(compile_alloc,
+    // The resolved ObPLFunctionAST is retained on the func (non-owning) and is
+    // walked by the interpreter after compile() returns, so it has to live on the
+    // func's persistent allocator -- same as the routine path in
+    // generate_pl_function(proc_id). compile_alloc is a function-local arena that
+    // is destroyed on return, which left the retained AST dangling.
+    ObPLBuilder builder(routine->get_allocator(),
                           *(ctx.get_my_session()),
                           *ctx.get_plan_cache(),
                           ctx.get_pl_sql_runtime(),
