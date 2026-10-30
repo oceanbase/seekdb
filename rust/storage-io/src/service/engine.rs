@@ -45,10 +45,15 @@ struct DeviceState {
     used: [usize; 2],
     closed: bool,
 }
+#[derive(Default)]
+struct CompletedQueue {
+    entries: VecDeque<Completion>,
+    deliverable: usize,
+}
 struct PreparedDevice {
     id: DeviceId,
     state: DeviceState,
-    completed: VecDeque<Completion>,
+    completed: CompletedQueue,
 }
 #[derive(Clone, Copy)]
 struct Permit {
@@ -77,7 +82,7 @@ pub(super) struct Driver {
     pub shared: Arc<Shared>,
     devices: BTreeMap<DeviceId, DeviceState>,
     pub active: HashMap<RequestId, Active>,
-    completed: BTreeMap<DeviceId, VecDeque<Completion>>,
+    completed: BTreeMap<DeviceId, CompletedQueue>,
     submitted: HashMap<SubmissionId, (RequestId, Permit)>,
     queued: VecDeque<RequestId>,
     pub(super) config: Arc<Config>,
@@ -101,14 +106,35 @@ impl Driver {
             health: None,
         }
     }
-    pub(super) fn take_completion(&mut self, device: DeviceId) -> Option<Completion> {
-        let completion = self.completed.get_mut(&device)?.pop_front();
+    pub(super) fn poll_device_completion(&mut self, device: DeviceId) -> (Option<Completion>, bool) {
+        let mut busy = false;
+        if self
+            .completed
+            .get(&device)
+            .is_none_or(|queue| queue.deliverable == 0)
+        {
+            busy = self.progress(Some(device));
+            if let Some(queue) = self.completed.get_mut(&device) {
+                queue.deliverable = queue.entries.len().min(QUANTUM);
+            }
+        }
+        let completion = self.completed.get_mut(&device).and_then(|queue| {
+            if queue.deliverable == 0 {
+                None
+            } else {
+                queue.deliverable -= 1;
+                Some(queue.entries.pop_front().unwrap())
+            }
+        });
         if !self.devices.contains_key(&device)
-            && self.completed.get(&device).is_some_and(VecDeque::is_empty)
+            && self
+                .completed
+                .get(&device)
+                .is_some_and(|queue| queue.entries.is_empty())
         {
             self.completed.remove(&device);
         }
-        completion
+        (completion, busy)
     }
     fn deliver_completion(&mut self, destination: Destination, completion: Completion) {
         match destination {
@@ -119,6 +145,7 @@ impl Driver {
                 .completed
                 .entry(device)
                 .or_default()
+                .entries
                 .push_back(completion),
             Destination::Diagnosis => unreachable!(),
         }
@@ -932,7 +959,8 @@ impl Driver {
             .map_err(io::Error::other)?;
         for completed in self.completed.values_mut() {
             completed
-                .try_reserve(records.saturating_sub(completed.len()))
+                .entries
+                .try_reserve(records.saturating_sub(completed.entries.len()))
                 .map_err(io::Error::other)?;
         }
         Ok(())
@@ -1023,8 +1051,9 @@ impl Driver {
         for lane in &lanes {
             lane.backend.bind_completion_port(Arc::clone(&port))?;
         }
-        let mut completed = VecDeque::new();
+        let mut completed = CompletedQueue::default();
         completed
+            .entries
             .try_reserve(config.admission.max_records)
             .map_err(io::Error::other)?;
         Ok(PreparedDevice {
@@ -1118,7 +1147,11 @@ impl Driver {
         }
         for id in removable {
             self.devices.remove(&id);
-            if self.completed.get(&id).is_some_and(VecDeque::is_empty) {
+            if self
+                .completed
+                .get(&id)
+                .is_some_and(|queue| queue.entries.is_empty())
+            {
                 self.completed.remove(&id);
             }
         }

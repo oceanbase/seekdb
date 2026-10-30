@@ -535,3 +535,201 @@ fn partial_read_late_close_does_not_expose_the_prefix() {
 fn partial_read_late_cancel_does_not_expose_the_prefix() {
     assert_partial_read_is_hidden_after_terminal(CompletionStatus::Cancelled);
 }
+
+fn enqueue_device(driver: &mut Engine, file: &Arc<File>, tag: u64) -> RequestId {
+    let mut request = spec(file, 4096);
+    request.tag = tag;
+    let mut admission = core_prepare(driver, request, Direction::Read, &[]);
+    let admission::Preparation::Prepared(operation) =
+        std::mem::replace(&mut admission.state, admission::Preparation::Published)
+    else {
+        unreachable!()
+    };
+    admission
+        .cell
+        .phase
+        .store(admission::PUBLISHED, Ordering::Release);
+    let id = admission.id();
+    driver.accept(Incoming {
+        operation,
+        cell: Arc::clone(&admission.cell),
+        destination: engine::Destination::Device(DEVICE),
+        owner: engine::WorkOwner::Ordinary,
+    });
+    id
+}
+
+#[cfg_attr(
+    feature = "ownership-test-support",
+    allow(
+        clippy::result_large_err,
+        reason = "the proof-only owner enlarges Operation returned by the dispatch double"
+    )
+)]
+fn enqueue_device_error(driver: &mut Engine, file: &Arc<File>, tag: u64) -> RequestId {
+    let id = enqueue_device(driver, file, tag);
+    driver.dispatch_with(Instant::now(), |_, operation| {
+        Err(file_io::SubmitFailure {
+            operation,
+            error: io::Error::other("submission failed"),
+        })
+    });
+    id
+}
+
+#[test]
+fn replenished_ready_results_do_not_starve_retirement_cancel_or_health() {
+    let directory = Directory::new();
+    let file = directory.file();
+    file_io::write_all_at(&file, &[0x61; 4096], 0).unwrap();
+    let mut cfg = config();
+    cfg.admission.max_records = 300;
+    let mut driver = engine_with(cfg);
+    let mut expected = VecDeque::new();
+    for tag in 0..130 {
+        expected.push_back(enqueue_device_error(&mut driver, &file, tag));
+    }
+    let first = driver.poll_device_completion(DEVICE).0.unwrap();
+    assert_eq!(first.id, expected.pop_front().unwrap());
+
+    let (physical, physical_result) =
+        enqueue(&mut driver, spec(&file, 4096), Direction::Read, &[]);
+    let wake = Arc::clone(&driver.shared.wake);
+    let observed = wake.epoch();
+    dispatch(&mut driver);
+    let until = deadline();
+    while wake.epoch() == observed {
+        let wait = until
+            .checked_duration_since(Instant::now())
+            .expect("physical completion did not arrive");
+        wake.wait(observed, Some(wait));
+    }
+    assert_eq!(driver.snapshot().awaiting_retirement, 1);
+
+    let (cancelled, cancelled_result) =
+        enqueue(&mut driver, spec(&file, 4096), Direction::Read, &[]);
+    assert_eq!(
+        driver.active[&cancelled].cell.cancel(),
+        CancelOutcome::Cancelled
+    );
+    let (options, target) = spec(&file, 4096).split();
+    let admission = Admission::begin(Arc::clone(&driver.shared), options).unwrap();
+    let mut lifetime = admission.lifetime();
+    lifetime.capture(&admission, target, false);
+    lifetime.enable_observer(&driver.shared.health);
+    let observer = lifetime.take_final_observer().unwrap();
+    drop((admission, lifetime));
+    assert_eq!(
+        observer
+            .observe(FinalFacts {
+                io_error: true,
+                raw_os_error: std::num::NonZeroI32::new(5),
+                deadline_exceeded: false,
+                finished_wall_us: 123,
+            })
+            .error,
+        ObservationOutcome::Accepted
+    );
+
+    for tag in 130..194 {
+        let completion = driver.poll_device_completion(DEVICE).0.unwrap();
+        assert_eq!(completion.id, expected.pop_front().unwrap());
+        assert!(matches!(completion.status, CompletionStatus::IoError(_)));
+        drop(completion);
+        expected.push_back(enqueue_device_error(&mut driver, &file, tag));
+    }
+    let result = physical_result
+        .try_recv()
+        .expect("physical result was starved");
+    assert_eq!(result.id, physical);
+    assert_eq!(result.data().unwrap(), &[0x61; 4096]);
+    assert_eq!(driver.snapshot().devices[0].physical_depth[0], 0);
+    let cancelled = cancelled_result.try_recv().unwrap();
+    assert!(matches!(cancelled.status, CompletionStatus::Cancelled));
+    assert!(cancelled.buffer().is_none());
+    let reserved = driver.snapshot().reserved_bytes;
+    drop(cancelled);
+    assert_eq!(driver.snapshot().reserved_bytes, reserved - 4096);
+    let health = driver.snapshot().health;
+    assert_eq!(health.queued, 0);
+    assert!(health.active != 0 || health.successful_passes != 0 || health.failed_passes != 0);
+
+    driver
+        .remove_config(Generation(0), DEVICE, Instant::now())
+        .unwrap();
+    while let Some(id) = expected.pop_front() {
+        let completion = driver.poll_device_completion(DEVICE).0.unwrap();
+        assert_eq!(completion.id, id);
+    }
+    let until = deadline();
+    while !driver.device_drained(DEVICE) {
+        assert!(driver.poll_device_completion(DEVICE).0.is_none());
+        assert!(Instant::now() < until);
+        thread::yield_now();
+    }
+    assert!(driver.poll_device_completion(DEVICE).0.is_none());
+    drop((result, first, observer));
+    driver.progress(None);
+    assert_eq!(driver.snapshot().reserved_bytes, 0);
+}
+
+#[test]
+fn completion_turn_retains_each_buffer_after_device_reaping() {
+    let directory = Directory::new();
+    let file = directory.file();
+    file_io::write_all_at(&file, &[0x72; 4096], 0).unwrap();
+    let mut driver = engine();
+    let mut expected = VecDeque::new();
+    for tag in 0..4 {
+        expected.push_back(enqueue_device(&mut driver, &file, tag));
+        dispatch(&mut driver);
+        retire(&mut driver);
+    }
+    let retained = driver.poll_device_completion(DEVICE).0.unwrap();
+    assert_eq!(retained.id, expected.pop_front().unwrap());
+    driver
+        .remove_config(Generation(0), DEVICE, Instant::now())
+        .unwrap();
+    driver.progress(None);
+    assert!(driver.snapshot().devices.is_empty());
+    while let Some(id) = expected.pop_front() {
+        let completion = driver.poll_device_completion(DEVICE).0.unwrap();
+        assert_eq!(completion.id, id);
+        assert!(matches!(completion.status, CompletionStatus::Complete));
+        assert_eq!(completion.data().unwrap(), &[0x72; 4096]);
+    }
+    assert!(driver.poll_device_completion(DEVICE).0.is_none());
+    assert_eq!(retained.data().unwrap(), &[0x72; 4096]);
+    assert_eq!(driver.snapshot().reserved_bytes, 4096);
+    drop(retained);
+    assert_eq!(driver.snapshot().reserved_bytes, 0);
+}
+
+#[test]
+fn empty_completion_poll_can_wait_for_a_later_publication() {
+    let directory = Directory::new();
+    let file = directory.file();
+    let service = Arc::new(service());
+    assert!(matches!(
+        service.poll_completion(DEVICE, Instant::now()),
+        Err(error) if error.kind() == io::ErrorKind::WouldBlock
+    ));
+    let ready = Arc::new(Barrier::new(2));
+    let consumer_service = Arc::clone(&service);
+    let consumer_ready = Arc::clone(&ready);
+    let consumer = thread::spawn(move || {
+        consumer_ready.wait();
+        consumer_service.poll_completion(DEVICE, deadline()).unwrap()
+    });
+    ready.wait();
+    let mut admission = prepare(&service, spec(&file, 4096), Direction::Write, &[0x39; 4096]);
+    let id = admission
+        .publish(engine::Destination::Device(DEVICE))
+        .unwrap();
+    let result = consumer.join().unwrap();
+    assert_eq!(result.id, id);
+    assert!(matches!(result.status, CompletionStatus::Complete));
+    assert_eq!(result.data().unwrap(), &[0x39; 4096]);
+    drop((result, admission));
+    Arc::try_unwrap(service).ok().unwrap().shutdown().unwrap();
+}

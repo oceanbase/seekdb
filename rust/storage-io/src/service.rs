@@ -612,8 +612,8 @@ impl Service {
         loop {
             let epoch = self.shared.wake.epoch();
             let mut driver = self.driver.lock().unwrap();
-            let busy = driver.progress(Some(device));
-            if let Some(completion) = driver.take_completion(device) {
+            let (completion, busy) = driver.poll_device_completion(device);
+            if let Some(completion) = completion {
                 return Ok(completion);
             }
             let now = Instant::now();
