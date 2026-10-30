@@ -1,0 +1,111 @@
+drop table if exists in_dedup_t;
+create table in_dedup_t(c1 int primary key, c2 int, c3 varchar(32));
+select count(*) from in_dedup_t where c2 in (1,2,3);
+count(*)
+60
+select count(*) from in_dedup_t where c2 in (1,2,1,3,1);
+count(*)
+60
+select count(*) from in_dedup_t where c2 in (1,2,3,4,1);
+count(*)
+80
+select count(*) from in_dedup_t where c2 in (1,1,1,1,1,1,1,1,1,1);
+count(*)
+20
+select c1, c2 from in_dedup_t where c2 in (3,3,7,7) order by c1;
+c1	c2
+2	3
+6	7
+12	3
+16	7
+22	3
+26	7
+32	3
+36	7
+42	3
+46	7
+52	3
+56	7
+62	3
+66	7
+72	3
+76	7
+82	3
+86	7
+92	3
+96	7
+102	3
+106	7
+112	3
+116	7
+122	3
+126	7
+132	3
+136	7
+142	3
+146	7
+152	3
+156	7
+162	3
+166	7
+172	3
+176	7
+182	3
+186	7
+192	3
+196	7
+select count(*) from in_dedup_t where c2 in (1,2,null,2);
+count(*)
+40
+select count(*) from in_dedup_t where c2 not in (1,2,null,2);
+count(*)
+0
+select count(*) from in_dedup_t where c2 not in (1,1,2,2);
+count(*)
+160
+select 1 in (1,1,null), 2 in (1,1,null), 3 in (1,1,null);
+1 in (1,1,null)	2 in (1,1,null)	3 in (1,1,null)
+1	NULL	NULL
+select 1 not in (1,1,null), 3 not in (1,1,null);
+1 not in (1,1,null)	3 not in (1,1,null)
+0	NULL
+select count(*) from in_dedup_t where c3 in ('v1','v2','v1','v2');
+count(*)
+40
+select count(*) from in_dedup_t where c3 in ('v1','v2','v3');
+count(*)
+60
+select count(*) from in_dedup_t where c2 in (1, 2.0e0, 1);
+count(*)
+40
+select count(*) from in_dedup_t where (c1, c2) in ((1,1),(1,1),(5,6),(5,6));
+count(*)
+1
+select count(*) from in_dedup_t where c2 in (1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,1);
+count(*)
+200
+select count(*) from in_dedup_t where c2 in (1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20);
+count(*)
+200
+explain basic select c1 from in_dedup_t where c2 in (1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20);
+Query Plan
+===============================
+|ID|OPERATOR       |NAME      |
+-------------------------------
+|0 |TABLE FULL SCAN|in_dedup_t|
+===============================
+Outputs & filters:
+-------------------------------------
+  0 - output([in_dedup_t.c1]), filter([in_dedup_t.c2 IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20)]), rowset=256
+      access([in_dedup_t.c1], [in_dedup_t.c2]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
+      range_key([in_dedup_t.c1]), range(MIN ; MAX)always true
+alter system set _inlist_rewrite_threshold = 4;
+select count(*) from in_dedup_t where c2 in (1,2,1,3,1);
+count(*)
+60
+select count(*) from in_dedup_t where c2 in (1,2,3);
+count(*)
+60
+alter system set _inlist_rewrite_threshold = 1000;
+drop table if exists in_dedup_t;
