@@ -98,6 +98,7 @@ pub struct HealthSnapshot {
     pub failed_passes: u64,
 }
 pub(crate) struct CapturedTarget {
+    pub(super) device_open: Arc<AtomicBool>,
     pub(crate) target: Target,
     #[cfg(test)]
     pub(super) drop_hook: Option<Box<dyn FnOnce() + Send + Sync>>,
@@ -188,6 +189,7 @@ impl RequestLifetime {
     }
     pub(crate) fn capture(&mut self, admission: &Admission, target: Target, eligible: bool) {
         let target = Arc::new(CapturedTarget {
+            device_open: Arc::clone(&admission.cell.device_open),
             target,
             options: admission.cell.options.clone(),
             #[cfg(test)]
@@ -250,15 +252,11 @@ impl FinalObserver {
         if !facts.io_error && !facts.deadline_exceeded {
             return receipt(NotOffered);
         }
-        let Ok(mut epoch) = self.ingress.wake.epoch.try_lock() else {
-            self.ingress.busy.fetch_add(1, Ordering::Relaxed);
-            return receipt(Busy);
-        };
         let Ok(mut inbox) = self.ingress.inbox.try_lock() else {
             self.ingress.busy.fetch_add(1, Ordering::Relaxed);
             return receipt(Busy);
         };
-        if !inbox.accepting {
+        if !inbox.accepting || !self.target.device_open.load(Ordering::Acquire) {
             inbox.counters.stopped += 1;
             return receipt(Stopped);
         }
@@ -299,8 +297,9 @@ impl FinalObserver {
             }
         }
         if result.error == Accepted || result.timeout == Accepted {
-            *epoch = epoch.wrapping_add(1);
-            self.ingress.wake.changed.notify_all();
+            drop(inbox);
+            self.ingress.pending.store(true, Ordering::Release);
+            self.ingress.wake.notify();
         }
         result
     }
@@ -336,6 +335,7 @@ impl Drop for MetadataReservation {
     }
 }
 pub(super) struct HealthIngress {
+    pending: AtomicBool,
     pub wake: Arc<Wake>,
     inbox: Mutex<Inbox>,
     busy: AtomicU64,
@@ -371,6 +371,7 @@ impl HealthIngress {
         let bytes = owned_payload_bytes_for(HEALTH_QUEUE_CAPACITY + HEALTH_ACTIVE_CAPACITY)?;
         ledger.lock().unwrap().health_payload_bytes += bytes;
         Ok(Self {
+            pending: AtomicBool::new(false),
             wake,
             inbox: Mutex::new(Inbox {
                 accepting: true,
@@ -389,16 +390,50 @@ impl HealthIngress {
             reservation: MetadataReservation { ledger, bytes },
         })
     }
+    pub fn has_work(&self) -> bool {
+        self.pending.load(Ordering::Acquire)
+    }
+    pub fn discard_device(&self, device: DeviceId) {
+        let mut removed = Vec::with_capacity(HEALTH_QUEUE_CAPACITY);
+        {
+            let mut inbox = self.inbox.lock().unwrap();
+            let mut order = [0; HEALTH_QUEUE_CAPACITY];
+            let mut count = 0;
+            for offset in 0..inbox.len {
+                let index = inbox.order[(inbox.head + offset) % HEALTH_QUEUE_CAPACITY];
+                if matches!(&inbox.slots[index], HealthSlot::Queued(trigger) if trigger.target.options.device == device)
+                {
+                    let HealthSlot::Queued(trigger) =
+                        std::mem::replace(&mut inbox.slots[index], HealthSlot::Cleaning)
+                    else {
+                        unreachable!()
+                    };
+                    removed.push((index, trigger));
+                } else {
+                    order[count] = index;
+                    count += 1;
+                }
+            }
+            inbox.order = order;
+            inbox.head = 0;
+            inbox.len = count;
+            if count == 0 {
+                self.pending.store(false, Ordering::Release);
+            }
+        }
+        for (index, trigger) in removed {
+            drop(trigger);
+            self.inbox.lock().unwrap().slots[index] = HealthSlot::Free;
+        }
+    }
     pub fn record_outcome(&self, status: &CompletionStatus) {
         let index = usize::from(!matches!(status, CompletionStatus::Complete));
         let mut inbox = self.inbox.lock().unwrap();
         inbox.passes[index] = inbox.passes[index].saturating_add(1);
     }
     pub fn close(&self) {
-        let mut epoch = self.wake.epoch.lock().unwrap();
         self.inbox.lock().unwrap().accepting = false;
-        *epoch = epoch.wrapping_add(1);
-        self.wake.changed.notify_all();
+        self.wake.notify();
     }
     pub fn configure(&self, config: HealthConfig) {
         self.inbox.lock().unwrap().config = config;
@@ -446,6 +481,9 @@ impl HealthIngress {
     }
     pub fn activate(&self, now: Instant) -> Option<Diagnosis> {
         let mut inbox = self.inbox.lock().unwrap();
+        if inbox.len == 0 {
+            self.pending.store(false, Ordering::Release);
+        }
         if inbox.active || inbox.len == 0 || !inbox.accepting || inbox.warning.is_some() {
             return None;
         }

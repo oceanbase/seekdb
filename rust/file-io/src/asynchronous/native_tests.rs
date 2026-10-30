@@ -56,7 +56,7 @@ fn malformed_events_cannot_remove_a_live_slot() {
             io::ErrorKind::InvalidData
         );
         assert_eq!(context.kernel.pending.len(), 1);
-        assert!(shared.lock().completed.is_empty());
+        assert!(shared.port.lock().unwrap().queue.lock().unwrap().is_empty());
         assert_eq!(Arc::strong_count(&file.file), 2);
     }
     drop(context);
@@ -106,9 +106,9 @@ fn failed_kernel_cancel_retains_pending_until_actual_event() {
             }
         }
     }
-    let mut state = shared.lock();
-    assert_eq!(state.completed.len(), 1);
-    let (returned, retired) = state.completed.pop_front().unwrap();
+    let port = Arc::clone(&shared.port.lock().unwrap());
+    assert_eq!(port.queue.lock().unwrap().len(), 1);
+    let (returned, retired) = port.take_for(&shared).unwrap();
     assert_eq!(returned, id);
     assert_eq!(retired.operation.buffer().as_slice(), b"abc");
 }

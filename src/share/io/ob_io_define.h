@@ -611,11 +611,6 @@ public:
   int64_t to_string(char *buf, const int64_t buf_len) const;
 
 public:
-  struct ModuleGroupMapping {
-    uint64_t module_id_;
-    uint64_t group_id_;
-    TO_STRING_KV(K_(module_id), K_(group_id));
-  };
   struct DeviceResource {
     uint64_t id_;
     int64_t depth_;
@@ -623,7 +618,6 @@ public:
     int64_t max_probe_bytes_;
     TO_STRING_KV(K_(id), K_(depth), K_(probe_depth), K_(max_probe_bytes));
   };
-  ObSEArray<ModuleGroupMapping, SYS_MODULE_CNT> module_groups_;
   ObSEArray<DeviceResource, 4> devices_;
   int64_t request_limit_ = 10000;
   int64_t probe_request_limit_ = 100;

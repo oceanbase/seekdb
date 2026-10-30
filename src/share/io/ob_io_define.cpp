@@ -1414,7 +1414,6 @@ ObIOServiceConfig::~ObIOServiceConfig()
 void ObIOServiceConfig::destroy()
 {
   group_configs_.destroy();
-  module_groups_.destroy();
   devices_.destroy();
 }
 
@@ -1474,29 +1473,6 @@ bool ObIOServiceConfig::is_valid() const
     }
   }
   if (!default_group || weights[0] != 100 || weights[1] != 100 || weights[2] != 100) { return false; }
-  for (int64_t i = 0; i < module_groups_.count(); ++i) {
-    const auto &mapping = module_groups_.at(i);
-    if (mapping.module_id_ < SYS_MODULE_START_ID || mapping.module_id_ >= SYS_MODULE_END_ID) { return false; }
-    for (int64_t j = 0; j < i; ++j) {
-      if (module_groups_.at(j).module_id_ == mapping.module_id_) { return false; }
-    }
-    bool active = false;
-    for (int64_t j = 2; j < group_configs_.count(); j += 3) {
-      const auto &group = group_configs_.at(j);
-      if (static_cast<uint64_t>(group.group_id_) == mapping.group_id_ && !group.deleted_ && !group.cleared_) {
-        active = true;
-      }
-    }
-    if (!active) { return false; }
-  }
-  for (int64_t i = 0; i < devices_.count(); ++i) {
-    const auto &device = devices_.at(i);
-    if (device.depth_ < 2 || device.probe_depth_ <= 0 || device.probe_depth_ >= device.depth_
-        || device.max_probe_bytes_ <= 0) { return false; }
-    for (int64_t j = 0; j < i; ++j) {
-      if (devices_.at(j).id_ == device.id_) { return false; }
-    }
-  }
   return true;
 }
 
@@ -1504,7 +1480,6 @@ int ObIOServiceConfig::deep_copy(const ObIOServiceConfig &other_config)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(group_configs_.assign(other_config.group_configs_))) {
-  } else if (OB_FAIL(module_groups_.assign(other_config.module_groups_))) {
   } else if (OB_FAIL(devices_.assign(other_config.devices_))) {
   }
 

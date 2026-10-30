@@ -33,11 +33,10 @@ pub use header::{encode_block_header, validate_block_header, HEADER_PAGE_SIZE};
 pub use service::{
     AdmissionLimits, CancelOutcome, Completion, CompletionRequirement, CompletionStatus, Config,
     ConfigError, ConfigReceipt, DepthCost, DeviceConfig, DeviceId, DeviceLimits, DeviceSnapshot,
-    ExcessShare, Execution, FinalFacts, FinalObserver, Generation, GroupId, GroupLimits,
-    GroupSnapshot, HealthConfig, HealthSnapshot, ObservationCounters, ObservationOutcome,
-    ObservationReceipt, Rate, RequestClass, RequestControl, RequestId, RequestLifetime,
-    RequestPolicy, RequestSpec, ResourceUsage, Service, ServiceSnapshot, Target, Waiter,
-    HEALTH_ACTIVE_CAPACITY, HEALTH_QUEUE_CAPACITY,
+    Execution, FinalFacts, FinalObserver, Generation, HealthConfig, HealthSnapshot,
+    ObservationCounters, ObservationOutcome, ObservationReceipt, RequestClass, RequestControl,
+    RequestId, RequestLifetime, RequestPolicy, RequestSpec, ResourceUsage, Service,
+    ServiceSnapshot, Target, Waiter, HEALTH_ACTIVE_CAPACITY, HEALTH_QUEUE_CAPACITY,
 };
 
 use std::collections::TryReserveError;
@@ -133,5 +132,3 @@ impl From<TryReserveError> for BlockError {
 
 #[cfg(test)]
 mod tests;
-
-pub mod calibration;

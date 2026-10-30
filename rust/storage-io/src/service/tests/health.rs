@@ -38,16 +38,14 @@ fn capture(
     lifetime.enable_observer(&engine.shared.health);
     let observer = lifetime.take_final_observer().unwrap();
     drop((admission, lifetime));
-    engine.drain_gate();
-    engine.grant_admission();
+    engine.accept_probes_and_close();
     observer
 }
 fn publish_probe(engine: &mut Engine) {
     engine.health_turn(Instant::now());
-    engine.drain_gate();
-    engine.grant_admission();
+    engine.accept_probes_and_close();
     engine.health_turn(Instant::now());
-    engine.drain_gate();
+    engine.accept_probes_and_close();
 }
 fn large_config() -> Config {
     let mut c = config();
@@ -89,13 +87,6 @@ fn two_final_facts_admit_error_first_and_count_every_refusal() {
         }
     );
     let observer = capture(&mut engine, spec(&file, 4096), None);
-    let epoch = engine.shared.wake.epoch.lock().unwrap();
-    assert_eq!(
-        observer.observe(facts(true, false)).error,
-        ObservationOutcome::Busy
-    );
-    drop(epoch);
-    let observer = capture(&mut engine, spec(&file, 4096), None);
     ingress.while_locked(|| {
         assert_eq!(
             observer.observe(facts(false, true)).timeout,
@@ -119,7 +110,7 @@ fn two_final_facts_admit_error_first_and_count_every_refusal() {
             accepted_error: 100,
             accepted_timeout: 0,
             full: 3,
-            busy: 2,
+            busy: 1,
             stopped: 1,
             already_observed: 1
         }
@@ -304,7 +295,6 @@ fn timeout_delivery_keeps_probe_target_record_and_credit_until_retirement() {
     let mut engine = engine();
     let request = RequestSpec::new(
         DEVICE,
-        GROUP,
         Target::Block(owner.region(block, 0..4 * 1024 * 1024).unwrap()),
         4 * 1024 * 1024,
     );
@@ -321,8 +311,8 @@ fn timeout_delivery_keeps_probe_target_record_and_credit_until_retirement() {
     let ingress = Arc::clone(&engine.shared.health);
     ingress.close();
     engine.shared.gate.lock().unwrap().accepting = false;
-    engine.drain_gate();
-    engine.controls(Instant::now());
+    engine.accept_probes_and_close();
+
     engine.health_turn(Instant::now());
     retire(&mut engine);
     engine.health_turn(Instant::now());
@@ -408,7 +398,7 @@ fn aggregate_native_retry_budget_and_deadline_do_not_restart_at_segments() {
     publish_probe(&mut engine);
     dispatch(&mut engine);
     retire(&mut engine);
-    engine.controls(Instant::now() + Duration::from_secs(20));
+    engine.dispatch(Instant::now() + Duration::from_secs(20));
     assert_eq!(engine.snapshot().usage[1], ResourceUsage::default());
     assert_eq!(engine.snapshot().awaiting_retirement, 0);
 }
@@ -447,6 +437,7 @@ fn requested_suffix_eof_succeeds_but_requested_range_eof_aborts() {
 fn diagnosis(file: &Arc<File>, now: Instant) -> Diagnosis {
     let (options, target) = spec(file, 4096).split();
     let target = Arc::new(CapturedTarget {
+        device_open: Arc::new(AtomicBool::new(true)),
         target,
         options,
         drop_hook: None,
@@ -705,8 +696,7 @@ fn fallible_preparation_retains_last_target_and_charge_until_guard_is_released()
             assert!(drop_guard.try_lock().is_ok());
             drop_flag.store(true, Ordering::Release);
         }));
-        engine.drain_gate();
-        engine.grant_admission();
+        engine.accept_probes_and_close();
         admission.wait_capacity().unwrap();
         let control = admission.take_control().unwrap();
         {
@@ -868,8 +858,8 @@ fn wait_cap_is_captured_at_publication_and_survives_reconfiguration() {
         assert_eq!(engine.snapshot().awaiting_retirement, 1);
         engine.shared.gate.lock().unwrap().accepting = false;
         engine.shared.health.close();
-        engine.drain_gate();
-        engine.controls(Instant::now());
+        engine.accept_probes_and_close();
+
         engine.health_turn(Instant::now());
         retire(&mut engine);
         engine.health_turn(Instant::now());
@@ -885,14 +875,11 @@ fn full_probe_progresses_on_native_route_under_normal_saturation() {
     file.set_len(6 * 1024 * 1024).unwrap();
     let mut engine = engine();
     engine
-        .register(
-            DeviceConfig {
-                id: OTHER,
-                worker: backend(),
-                native: Some(Backend::new(BackendKind::NativeAio, 4).unwrap()),
-            },
-            false,
-        )
+        .register(DeviceConfig {
+            id: OTHER,
+            worker: backend(),
+            native: Some(Backend::new(BackendKind::NativeAio, 4).unwrap()),
+        })
         .unwrap();
     let mut normal = spec(&file, 6 * 1024 * 1024);
     normal.device = OTHER;
@@ -1017,7 +1004,7 @@ fn large_block_probe_covers_every_subregion_after_original_owner_closes() {
     let mut engine = engine();
     capture(
         &mut engine,
-        RequestSpec::new(DEVICE, GROUP, Target::Block(region), 4 * 1024 * 1024),
+        RequestSpec::new(DEVICE, Target::Block(region), 4 * 1024 * 1024),
         None,
     )
     .observe(facts(true, false));
@@ -1092,10 +1079,9 @@ fn pending_probe_admission_deadline_wakes_without_an_external_event() {
             other => panic!("publication did not progress: {other:?}"),
         }
     };
-    let limit = Instant::now() + Duration::from_secs(5);
-    while !service.health_status().warning && Instant::now() < limit {
-        thread::yield_now();
-    }
+    assert!(
+        matches!(service.poll_completion(DEVICE, Instant::now()+Duration::from_secs(2)), Err(e) if e.kind()==io::ErrorKind::WouldBlock)
+    );
     assert!(service.health_status().warning);
     drop((probe, retained));
     service.shutdown().unwrap();
@@ -1164,7 +1150,6 @@ fn invalid_probe_geometry_aborts_without_a_physical_event_or_lost_owner() {
     let mut engine = engine();
     let request = RequestSpec::new(
         DEVICE,
-        GROUP,
         Target::File {
             file,
             offset: u64::MAX,
@@ -1186,4 +1171,68 @@ fn invalid_probe_geometry_aborts_without_a_physical_event_or_lost_owner() {
     assert_eq!(engine.snapshot().probe_attempts, 0);
     assert_eq!(engine.snapshot().usage[1], ResourceUsage::default());
     assert_eq!(drops.load(Ordering::Relaxed), 1);
+}
+
+#[test]
+fn closing_device_keeps_internal_probe_progress_until_its_retirement() {
+    let directory = Directory::new();
+    let file = directory.file();
+    file.set_len(4096).unwrap();
+    let mut driver = engine();
+    let observer = capture(&mut driver, spec(&file, 4096), None);
+    let late = capture(&mut driver, spec(&file, 4096), None);
+    assert_eq!(
+        observer.observe(facts(true, false)).error,
+        ObservationOutcome::Accepted
+    );
+    publish_probe(&mut driver);
+    dispatch(&mut driver);
+    assert_eq!(driver.snapshot().awaiting_retirement, 1);
+    driver
+        .remove_config(Generation(0), DEVICE, Instant::now())
+        .unwrap();
+    assert!(!driver.device_drained(DEVICE));
+    assert_eq!(
+        late.observe(facts(true, false)).error,
+        ObservationOutcome::Stopped
+    );
+    retire(&mut driver);
+    driver.health_turn(Instant::now());
+    assert!(driver.device_drained(DEVICE));
+    assert_eq!(driver.snapshot().health.active, 0);
+    assert_eq!(driver.snapshot().usage[1], ResourceUsage::default());
+}
+
+#[test]
+fn closing_one_device_does_not_wait_for_another_devices_probe() {
+    let directory = Directory::new();
+    let file = directory.file();
+    file.set_len(4096).unwrap();
+    let mut driver = engine();
+    driver
+        .register(DeviceConfig {
+            id: OTHER,
+            worker: backend(),
+            native: None,
+        })
+        .unwrap();
+    let mut request = spec(&file, 4096);
+    request.device = OTHER;
+    let observer = capture(&mut driver, request, None);
+    observer.observe(facts(true, false));
+    publish_probe(&mut driver);
+    dispatch(&mut driver);
+    driver
+        .remove_config(Generation(0), DEVICE, Instant::now())
+        .unwrap();
+    assert!(driver.device_drained(DEVICE));
+    assert!(!driver.device_drained(OTHER));
+    let (id, event) = driver
+        .backend(OTHER, 0)
+        .retire(deadline())
+        .unwrap()
+        .unwrap();
+    driver.retired(id, event);
+    driver.health_turn(Instant::now());
+    assert_eq!(driver.snapshot().health.active, 0);
 }

@@ -305,7 +305,6 @@ SHARE_UNITY_GROUPS = [
         srcs = [
             "src/share/io/ob_io_define.cpp",
             "src/share/io/ob_io_struct.cpp",
-            "src/share/io/ob_io_calibration.cpp",
             "src/share/io/ob_io_manager.cpp",
         ],
     ),

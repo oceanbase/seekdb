@@ -396,11 +396,8 @@ int ObDeviceChannel::begin(ObIORequest &req)
   if (req.rust_request_ || req.rust_lifetime_ || req.io_result_->rust_control_) { return OB_INIT_TWICE; }
   storage_io::RequestOptions options{};
   options.mode = req.get_flag().is_read() ? storage_io::RequestMode::Read : storage_io::RequestMode::Write;
-  options.group = req.io_result_->group_id_;
-  options.probe = req.get_flag().is_detect();
-  options.observe_health = req.get_flag().is_read() && !req.get_flag().is_sync() && !options.probe;
+  options.observe_health = req.get_flag().is_read() && !req.get_flag().is_sync();
   options.worker_required = req.get_flag().is_sync();
-  options.rate_exempt = req.get_flag().is_unlimited();
   options.offset = req.get_align_offset();
   options.length = req.get_align_size();
   options.alignment = req.io_result_->aligned_size_;
@@ -410,8 +407,6 @@ int ObDeviceChannel::begin(ObIORequest &req)
   if (options.timeout_us == 0) { return OB_TIMEOUT; }
   const bool native = native_aio_ && !options.worker_required;
   options.worker_fault = native ? 0 : (OB_E(EventTable::EN_IO_HANG_ERROR) OB_SUCCESS);
-  options.retry_alignment = native ? req.io_result_->aligned_size_ : 0;
-  options.max_error_retries = native ? 10 : 0;
   options.full_buffer = nullptr != req.io_result_->io_callback_;
   static std::atomic<uint64_t> next_tag{1};
   options.tag = next_tag.load();
@@ -517,7 +512,7 @@ void ObDeviceChannel::run1()
   while (true) {
     {
       std::lock_guard<std::mutex> guard(mutex_);
-      if (stopping_ && pending_.empty()) { break; }
+      if (stopping_ && pending_.empty() && endpoint.is_drained()) { break; }
     }
     const int error = endpoint.poll_completion(10000, *completion);
     if (error == 0) {

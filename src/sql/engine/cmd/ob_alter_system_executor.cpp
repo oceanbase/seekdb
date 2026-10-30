@@ -23,7 +23,6 @@
 #include "share/ob_tenant_role_transition_service.h"
 #include "share/ob_ex_rpc.h"
 #include "share/io/ob_io_manager.h"
-#include "share/io/ob_io_calibration.h"
 #include "share/ob_server_struct.h"
 #include "data_plane/scheduler/ob_dag_warning_history.h"
 #include "sql/pl/pl_cache/ob_pl_cache_mgr.h"
@@ -235,19 +234,10 @@ int ObAdminMergeExecutor::execute(ObExecContext &ctx, ObAdminMergeStmt &stmt)
 
 int ObRefreshIOCalibraitonExecutor::execute(ObExecContext &ctx, ObRefreshIOCalibraitonStmt &stmt)
 {
-  int ret = OB_SUCCESS;
-  const ObRefreshIOCalibrationParam &param = stmt.get_param();
-  ObSqlExecutorCtx *task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx);
-  if (OB_ISNULL(task_exec_ctx)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get task executor context failed");
-  } else if (OB_UNLIKELY(!param.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-  }
-  if (OB_SUCC(ret) && OB_FAIL(ObIOCalibration::get_instance().refresh(
-                                 param.only_refresh_, param.calibration_list_))) {
-  }
-  return ret;
+  UNUSED(ctx);
+  UNUSED(stmt);
+  LOG_USER_ERROR(OB_NOT_SUPPORTED, "manual I/O calibration");
+  return OB_NOT_SUPPORTED;
 }
 
 int ObSwitchRoleExecutor::execute(ObExecContext &ctx, ObSwitchRoleStmt &stmt)

@@ -12,9 +12,7 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
-ALTER SYSTEM REFRESH IO CALIBRATION CALIBRATION_INFO=('WRITE:32K:17us:50.9','READ:32K:7us:100.8','READ:4K:1us:200.2','WRITE:4K:2us:150.3');
-SELECT storage_name, mode, size, iops, latency FROM oceanbase.__all_virtual_io_benchmark ORDER BY mode, size;
-ALTER SYSTEM REFRESH IO CALIBRATION;
-SELECT COUNT(*), SUM(size), SUM(iops), SUM(latency) FROM oceanbase.__all_virtual_io_benchmark;
-ALTER SYSTEM REFRESH IO CALIBRATION CALIBRATION_INFO=('');
 SELECT COUNT(*) FROM oceanbase.__all_virtual_io_benchmark;
+SELECT is_nullable FROM information_schema.columns WHERE table_schema='oceanbase' AND table_name='__all_virtual_group_io_stat' AND column_name='norm_iops';
+SELECT column_name, is_nullable FROM information_schema.columns WHERE table_schema='oceanbase' AND table_name='__all_virtual_io_quota' AND column_name IN ('min_iops','max_iops','min_mbps','max_mbps') ORDER BY column_name;
+SELECT column_name, is_nullable FROM information_schema.columns WHERE table_schema='oceanbase' AND table_name='__all_virtual_group_io_stat' AND column_name IN ('min_iops','max_iops') ORDER BY column_name;

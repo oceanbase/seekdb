@@ -207,17 +207,16 @@ fn completion_queue_holds_admission_until_consumed() {
     backend
         .submit(operation(&file, Direction::Write, b"a", 0))
         .unwrap();
-    {
-        let mut state = backend.shared.lock();
-        while state.completed.is_empty() {
-            state = backend
-                .shared
-                .completion_available
-                .wait_timeout(state, Duration::from_secs(5))
-                .unwrap()
-                .0;
-            assert!(state.workers > 0);
+    let port = Arc::clone(&backend.shared.port.lock().unwrap());
+    let until = Instant::now() + Duration::from_secs(5);
+    loop {
+        let epoch = port.wake.epoch();
+        if !port.queue.lock().unwrap().is_empty() {
+            break;
         }
+        assert!(Instant::now() < until);
+        port.wake
+            .wait(epoch, Some(until.saturating_duration_since(Instant::now())));
     }
     let rejected = backend
         .submit(operation(&file, Direction::Write, b"b", 1))
@@ -232,7 +231,7 @@ fn completion_queue_holds_admission_until_consumed() {
 }
 
 pub(super) fn test_shared(depth: usize) -> Arc<Shared> {
-    Arc::new(Shared {
+    let shared = Arc::new(Shared {
         depth,
         state: Mutex::new(State {
             accepting: true,
@@ -242,13 +241,16 @@ pub(super) fn test_shared(depth: usize) -> Arc<Shared> {
             admitted: HashSet::with_capacity(depth),
             work: VecDeque::with_capacity(depth),
             cancel: HashSet::with_capacity(depth),
-            completed: VecDeque::with_capacity(depth),
         }),
         work_available: Condvar::new(),
-        completion_available: Condvar::new(),
+        port: Mutex::new(Arc::new(CompletionPort::new(Arc::new(
+            CompletionWake::default(),
+        )))),
         #[cfg(target_os = "linux")]
         wake: None,
-    })
+    });
+    shared.port.lock().unwrap().reserve(depth).unwrap();
+    shared
 }
 
 fn gated_backend(
@@ -369,7 +371,10 @@ fn worker_and_retirement_waiters_receive_notifications_and_stop() {
     });
     assert!(completions.contains(&first));
     assert!(completions.contains(&second));
-    assert!(matches!(stopped.expect("stop notification watchdog"), Ok(None)));
+    assert!(matches!(
+        stopped.expect("stop notification watchdog"),
+        Ok(None)
+    ));
     assert!(remaining.is_empty());
 }
 
@@ -400,7 +405,11 @@ fn dropped_backend_keeps_pending_file_and_buffer_until_worker_finishes() {
         let wait = deadline
             .checked_duration_since(Instant::now())
             .expect("worker retired after backend drop");
-        state = shared.completion_available.wait_timeout(state, wait).unwrap().0;
+        let wake = Arc::clone(&shared.port.lock().unwrap().wake);
+        let epoch = wake.epoch();
+        drop(state);
+        wake.wait(epoch, Some(wait));
+        state = shared.lock();
     }
     drop(state);
     assert!(weak_file.upgrade().is_none());
@@ -485,7 +494,11 @@ fn dropped_native_backend_drains_all_accepted_writes() {
         let wait = deadline
             .checked_duration_since(Instant::now())
             .expect("native backend retired after drop");
-        state = shared.completion_available.wait_timeout(state, wait).unwrap().0;
+        let wake = Arc::clone(&shared.port.lock().unwrap().wake);
+        let epoch = wake.epoch();
+        drop(state);
+        wake.wait(epoch, Some(wait));
+        state = shared.lock();
     }
     assert!(state.failure.is_none(), "{:?}", state.failure);
     drop(state);
@@ -537,4 +550,195 @@ fn native_aio_is_explicitly_unsupported_off_linux() {
     assert!(
         matches!(Backend::new(BackendKind::NativeAio, 1), Err(error) if error.kind() == io::ErrorKind::Unsupported)
     );
+}
+
+#[test]
+fn shared_port_holds_both_backend_capacities_without_growing_on_completion() {
+    let file = TestFile::new();
+    let port = Arc::new(CompletionPort::new(Arc::new(CompletionWake::default())));
+    let first = Backend::new(BackendKind::Worker { threads: 1 }, 2).unwrap();
+    let second = Backend::new(BackendKind::Worker { threads: 1 }, 2).unwrap();
+    first.bind_completion_port(Arc::clone(&port)).unwrap();
+    second.bind_completion_port(Arc::clone(&port)).unwrap();
+    let capacity = port.queue.lock().unwrap().capacity();
+    for (backend, offset) in [(&first, 0), (&second, 2)] {
+        for n in 0..2 {
+            backend
+                .submit(operation(&file, Direction::Write, b"x", offset + n))
+                .unwrap();
+        }
+    }
+    let until = Instant::now() + Duration::from_secs(5);
+    loop {
+        let epoch = port.wake.epoch();
+        if port.queue.lock().unwrap().len() == 4 {
+            break;
+        }
+        assert!(Instant::now() < until);
+        port.wake
+            .wait(epoch, Some(until.saturating_duration_since(Instant::now())));
+    }
+    assert_eq!(port.queue.lock().unwrap().capacity(), capacity);
+    assert!(
+        matches!(first.submit(operation(&file,Direction::Write,b"y",4)),Err(e) if e.error.kind()==io::ErrorKind::WouldBlock)
+    );
+    assert!(
+        matches!(second.submit(operation(&file,Direction::Write,b"y",4)),Err(e) if e.error.kind()==io::ErrorKind::WouldBlock)
+    );
+    for _ in 0..4 {
+        assert_eq!(port.try_retire().unwrap().1.result.unwrap(), 1);
+    }
+    assert!(port.try_retire().is_none());
+    first.shutdown().unwrap();
+    second.shutdown().unwrap();
+}
+
+#[test]
+fn consuming_a_port_envelope_wakes_credit_waiters() {
+    let file = TestFile::new();
+    let backend = Backend::new(BackendKind::Worker { threads: 1 }, 1).unwrap();
+    backend
+        .submit(operation(&file, Direction::Write, b"x", 0))
+        .unwrap();
+    let port = Arc::clone(&backend.shared.port.lock().unwrap());
+    let until = Instant::now() + Duration::from_secs(5);
+    loop {
+        let epoch = port.wake.epoch();
+        if !port.queue.lock().unwrap().is_empty() {
+            break;
+        }
+        assert!(Instant::now() < until);
+        port.wake
+            .wait(epoch, Some(until.saturating_duration_since(Instant::now())));
+    }
+    let epoch = port.wake.epoch();
+    let wake = Arc::clone(&port.wake);
+    let (done, notice) = mpsc::channel();
+    let waiting = thread::spawn(move || {
+        wake.wait(epoch, Some(Duration::from_secs(5)));
+        done.send(()).unwrap();
+    });
+    assert!(port.try_retire().is_some());
+    notice.recv_timeout(Duration::from_secs(2)).unwrap();
+    waiting.join().unwrap();
+    backend.shutdown().unwrap();
+}
+
+#[test]
+fn shutdown_discards_completed_owners_without_holding_port_binding() {
+    struct ReentrantOwner {
+        source: std::sync::Weak<Shared>,
+        notice: mpsc::Sender<bool>,
+    }
+    impl Drop for ReentrantOwner {
+        fn drop(&mut self) {
+            let source = self.source.upgrade().unwrap();
+            let unlocked = source.port.try_lock().is_ok();
+            self.notice.send(unlocked).unwrap();
+        }
+    }
+    let file = TestFile::new();
+    let backend = Backend::new(BackendKind::Worker { threads: 1 }, 1).unwrap();
+    let port = Arc::clone(&backend.shared.port.lock().unwrap());
+    let (notice, observed) = mpsc::channel();
+    backend
+        .submit(
+            operation(&file, Direction::Write, b"x", 0).keep_alive(ReentrantOwner {
+                source: Arc::downgrade(&backend.shared),
+                notice,
+            }),
+        )
+        .unwrap();
+    let until = Instant::now() + Duration::from_secs(5);
+    loop {
+        let epoch = port.wake.epoch();
+        if !port.queue.lock().unwrap().is_empty() {
+            break;
+        }
+        assert!(Instant::now() < until);
+        port.wake
+            .wait(epoch, Some(until.saturating_duration_since(Instant::now())));
+    }
+    backend.shutdown().unwrap();
+    assert!(
+        observed.recv_timeout(Duration::from_secs(1)).unwrap(),
+        "completed resource destructor ran under the port binding lock"
+    );
+}
+
+#[test]
+fn dropping_one_shared_port_backend_preserves_the_other_and_breaks_ownership_cycle() {
+    let file = TestFile::new();
+    let port = Arc::new(CompletionPort::new(Arc::new(CompletionWake::default())));
+    let first = Backend::new(BackendKind::Worker { threads: 1 }, 2).unwrap();
+    let second = Backend::new(BackendKind::Worker { threads: 1 }, 2).unwrap();
+    first.bind_completion_port(Arc::clone(&port)).unwrap();
+    second.bind_completion_port(Arc::clone(&port)).unwrap();
+    let held = Arc::downgrade(&first.shared);
+    first
+        .submit(operation(&file, Direction::Write, b"a", 0))
+        .unwrap();
+    let expected = second
+        .submit(operation(&file, Direction::Write, b"b", 1))
+        .unwrap();
+    drop(first);
+    let (id, retired) = second
+        .retire(Instant::now() + Duration::from_secs(5))
+        .unwrap()
+        .unwrap();
+    assert_eq!(id, expected);
+    assert_eq!(retired.result.unwrap(), 1);
+    let until = Instant::now() + Duration::from_secs(5);
+    while held.upgrade().is_some() && Instant::now() < until {
+        thread::yield_now();
+    }
+    assert!(held.upgrade().is_none());
+    assert!(port.try_retire().is_none());
+    second.shutdown().unwrap();
+}
+
+#[test]
+fn terminal_failure_waits_for_more_than_one_progress_batch_of_successes() {
+    let file = TestFile::new();
+    let shared = test_shared(128);
+    let mut backend = Backend {
+        shared,
+        joins: Vec::new(),
+        native: false,
+    };
+    let gate = Arc::new(std::sync::Barrier::new(2));
+    let entered = Arc::clone(&gate);
+    backend
+        .spawn(move |shared| {
+            entered.wait();
+            for _ in 0..80 {
+                let (id, mut operation) = shared.lock().work.pop_front().unwrap();
+                let result = operation.execute();
+                shared.complete(id, operation, result);
+            }
+            Err(io::Error::other("terminal after completed batch"))
+        })
+        .unwrap();
+    for n in 0..80 {
+        backend
+            .submit(operation(&file, Direction::Write, b"x", n))
+            .unwrap();
+    }
+    gate.wait();
+    let until = Instant::now() + Duration::from_secs(5);
+    while backend.shared.lock().workers != 0 && Instant::now() < until {
+        thread::yield_now();
+    }
+    assert_eq!(backend.shared.lock().workers, 0);
+    let port = Arc::clone(&backend.shared.port.lock().unwrap());
+    assert!(backend.terminal_error().is_none());
+    for _ in 0..64 {
+        assert_eq!(port.try_retire().unwrap().1.result.unwrap(), 1);
+    }
+    assert!(backend.terminal_error().is_none());
+    for _ in 64..80 {
+        assert_eq!(port.try_retire().unwrap().1.result.unwrap(), 1);
+    }
+    assert!(backend.terminal_error().is_some());
+    assert!(backend.shutdown().is_err());
 }

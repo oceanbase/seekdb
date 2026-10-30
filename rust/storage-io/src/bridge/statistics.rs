@@ -18,6 +18,32 @@ use crate::statistics::{
     SuccessSample,
 };
 
+pub fn metric_integer(value: f64) -> ffi::Metric {
+    if value.is_finite() && (-9223372036854775808.0..9223372036854775808.0).contains(&value) {
+        ffi::Metric {
+            error: 0,
+            value: value as i64,
+        }
+    } else {
+        ffi::Metric {
+            error: -4002,
+            value: 0,
+        }
+    }
+}
+pub fn metric_mbps(iops: i64, size: i64) -> ffi::Metric {
+    match iops.checked_mul(size) {
+        Some(bytes) => ffi::Metric {
+            error: 0,
+            value: bytes / 1024 / 1024,
+        },
+        None => ffi::Metric {
+            error: -4002,
+            value: 0,
+        },
+    }
+}
+
 pub struct StatisticsHandle(Option<CompletionStatistics>);
 pub struct StatisticsSnapshot(Vec<CompletionRates>);
 
@@ -144,6 +170,17 @@ impl StatisticsSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn metrics_reject_unrepresentable_values() {
+        assert_eq!(super::metric_integer(-2.5).value, -2);
+        assert_eq!(super::metric_integer(i64::MIN as f64).value, i64::MIN);
+        for value in [f64::NAN, f64::INFINITY, i64::MAX as f64] {
+            assert_ne!(super::metric_integer(value).error, 0);
+        }
+        assert_eq!(super::metric_mbps(256, 4096).value, 1);
+        assert_ne!(super::metric_mbps(i64::MAX, 2).error, 0);
+    }
 
     #[test]
     fn initialization_retries_preserve_existing_completion_windows() {

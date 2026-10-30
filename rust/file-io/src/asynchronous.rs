@@ -101,6 +101,7 @@ pub struct Operation {
     offset: u64,
     keep_alive: Option<Box<dyn Send>>,
     worker_fault: Option<WorkerFault>,
+    control: Option<(Arc<std::sync::atomic::AtomicBool>, Option<Instant>)>,
 }
 
 impl std::fmt::Debug for Operation {
@@ -151,6 +152,7 @@ impl Operation {
             offset,
             keep_alive: None,
             worker_fault: None,
+            control: None,
         })
     }
 
@@ -160,6 +162,25 @@ impl Operation {
         self
     }
 
+    pub fn with_control(
+        mut self,
+        cancelled: Arc<std::sync::atomic::AtomicBool>,
+        deadline: Option<Instant>,
+    ) -> Self {
+        self.control = Some((cancelled, deadline));
+        self
+    }
+    fn check_execution(&self) -> io::Result<()> {
+        if let Some((cancelled, deadline)) = &self.control {
+            if cancelled.load(Ordering::Acquire) {
+                return Err(io::ErrorKind::Interrupted.into());
+            }
+            if deadline.is_some_and(|deadline| deadline <= Instant::now()) {
+                return Err(io::ErrorKind::TimedOut.into());
+            }
+        }
+        Ok(())
+    }
     pub fn with_worker_fault(mut self, fault: WorkerFault) -> Self {
         self.worker_fault = (!fault.delay.is_zero() || fault.fail).then_some(fault);
         self
@@ -199,6 +220,7 @@ impl Operation {
     }
 
     fn execute(&mut self) -> io::Result<usize> {
+        self.check_execution()?;
         if let Some(fault) = self.worker_fault {
             fault.apply()?;
         }
@@ -241,6 +263,106 @@ pub enum BackendKind {
     NativeAio,
 }
 
+#[derive(Default)]
+pub struct CompletionWake {
+    epoch: Mutex<u64>,
+    changed: Condvar,
+}
+impl CompletionWake {
+    pub fn epoch(&self) -> u64 {
+        *self.epoch.lock().unwrap()
+    }
+    pub fn notify(&self) {
+        let mut epoch = self.epoch.lock().unwrap();
+        *epoch = epoch.wrapping_add(1);
+        self.changed.notify_all();
+    }
+    pub fn wait(&self, observed: u64, timeout: Option<std::time::Duration>) {
+        let epoch = self.epoch.lock().unwrap();
+        if *epoch != observed {
+            return;
+        }
+        match timeout {
+            Some(timeout) => {
+                drop(self.changed.wait_timeout(epoch, timeout).unwrap());
+            }
+            None => {
+                drop(self.changed.wait(epoch).unwrap());
+            }
+        }
+    }
+}
+struct Envelope {
+    source: Arc<Shared>,
+    id: SubmissionId,
+    retired: Retired,
+}
+pub struct CompletionPort {
+    queue: Mutex<VecDeque<Envelope>>,
+    wake: Arc<CompletionWake>,
+    capacity: std::sync::atomic::AtomicUsize,
+}
+impl CompletionPort {
+    pub fn new(wake: Arc<CompletionWake>) -> Self {
+        Self {
+            queue: Mutex::new(VecDeque::new()),
+            wake,
+            capacity: std::sync::atomic::AtomicUsize::new(0),
+        }
+    }
+    fn reserve(&self, count: usize) -> io::Result<()> {
+        let mut queue = self.queue.lock().unwrap();
+        let total = self
+            .capacity
+            .load(Ordering::Relaxed)
+            .checked_add(count)
+            .ok_or_else(|| io::Error::other("completion capacity overflow"))?;
+        let additional = total.saturating_sub(queue.len());
+        queue.try_reserve(additional).map_err(io::Error::other)?;
+        self.capacity.store(total, Ordering::Relaxed);
+        Ok(())
+    }
+    pub fn wake(&self) -> &Arc<CompletionWake> {
+        &self.wake
+    }
+    pub fn try_retire(&self) -> Option<(SubmissionId, Retired)> {
+        let envelope = self.queue.lock().unwrap().pop_front()?;
+        Some(Self::consume(envelope))
+    }
+    fn consume(envelope: Envelope) -> (SubmissionId, Retired) {
+        let mut state = envelope.source.lock();
+        state.admitted.remove(&envelope.id);
+        state.cancel.remove(&envelope.id);
+        drop(state);
+        envelope.source.port.lock().unwrap().wake.notify();
+        (envelope.id, envelope.retired)
+    }
+    fn discard(&self, source: &Arc<Shared>) {
+        loop {
+            let mut queue = self.queue.lock().unwrap();
+            let Some(index) = queue
+                .iter()
+                .position(|event| Arc::ptr_eq(&event.source, source))
+            else {
+                break;
+            };
+            let removed = queue.remove(index);
+            drop(queue);
+            drop(removed);
+        }
+        self.wake.notify();
+    }
+    fn take_for(&self, source: &Arc<Shared>) -> Option<(SubmissionId, Retired)> {
+        let mut queue = self.queue.lock().unwrap();
+        let index = queue
+            .iter()
+            .position(|event| Arc::ptr_eq(&event.source, source))?;
+        let envelope = queue.remove(index).unwrap();
+        drop(queue);
+        Some(Self::consume(envelope))
+    }
+}
+
 struct State {
     accepting: bool,
     discard: bool,
@@ -249,14 +371,13 @@ struct State {
     admitted: HashSet<SubmissionId>,
     work: VecDeque<(SubmissionId, Operation)>,
     cancel: HashSet<SubmissionId>,
-    completed: VecDeque<(SubmissionId, Retired)>,
 }
 
 struct Shared {
     depth: usize,
     state: Mutex<State>,
     work_available: Condvar,
-    completion_available: Condvar,
+    port: Mutex<Arc<CompletionPort>>,
     #[cfg(target_os = "linux")]
     wake: Option<Arc<native::EventFd>>,
 }
@@ -268,23 +389,34 @@ impl Shared {
 
     fn wake(&self) {
         self.work_available.notify_all();
-        self.completion_available.notify_all();
+        self.port.lock().unwrap().wake.notify();
         #[cfg(target_os = "linux")]
         if let Some(wake) = &self.wake {
             wake.notify();
         }
     }
 
-    fn complete(&self, id: SubmissionId, operation: Operation, result: io::Result<usize>) {
+    fn complete(
+        self: &Arc<Self>,
+        id: SubmissionId,
+        operation: Operation,
+        result: io::Result<usize>,
+    ) {
         let mut state = self.lock();
         if state.discard {
             state.admitted.remove(&id);
+            drop(state);
+            drop(operation);
         } else {
-            state
-                .completed
-                .push_back((id, Retired { operation, result }));
+            let port = Arc::clone(&self.port.lock().unwrap());
+            port.queue.lock().unwrap().push_back(Envelope {
+                source: Arc::clone(self),
+                id,
+                retired: Retired { operation, result },
+            });
+            drop(state);
+            port.wake.notify();
         }
-        self.completion_available.notify_one();
     }
 
     fn fail(&self, error: &io::Error) {
@@ -292,7 +424,7 @@ impl Shared {
         state.accepting = false;
         state.failure = Some(error.to_string());
         self.work_available.notify_all();
-        self.completion_available.notify_all();
+        self.port.lock().unwrap().wake.notify();
     }
 }
 
@@ -307,7 +439,7 @@ impl Drop for WorkerExit {
             state.failure = Some("I/O retirement thread panicked".into());
         }
         self.0.work_available.notify_all();
-        self.0.completion_available.notify_all();
+        self.0.port.lock().unwrap().wake.notify();
     }
 }
 
@@ -365,10 +497,11 @@ impl Backend {
                 admitted: HashSet::new(),
                 work: VecDeque::new(),
                 cancel: HashSet::new(),
-                completed: VecDeque::new(),
             }),
             work_available: Condvar::new(),
-            completion_available: Condvar::new(),
+            port: Mutex::new(Arc::new(CompletionPort::new(Arc::new(
+                CompletionWake::default(),
+            )))),
             #[cfg(target_os = "linux")]
             wake: context.as_ref().map(|context| context.wake.clone()),
         });
@@ -380,11 +513,8 @@ impl Backend {
                 .map_err(io::Error::other)?;
             state.work.try_reserve(depth).map_err(io::Error::other)?;
             state.cancel.try_reserve(depth).map_err(io::Error::other)?;
-            state
-                .completed
-                .try_reserve(depth)
-                .map_err(io::Error::other)?;
         }
+        shared.port.lock().unwrap().reserve(depth)?;
         let mut backend = Self {
             shared,
             joins: Vec::new(),
@@ -486,29 +616,53 @@ impl Backend {
 
     /// An error is terminal and guarantees that no accepted operation still accesses its file or buffer.
     /// A failed native teardown keeps its retirement thread alive and this call waits until the deadline.
+    pub fn bind_completion_port(&self, port: Arc<CompletionPort>) -> io::Result<()> {
+        let state = self.shared.lock();
+        if !state.admitted.is_empty() {
+            return Err(io::ErrorKind::WouldBlock.into());
+        }
+        port.reserve(self.capacity())?;
+        *self.shared.port.lock().unwrap() = port;
+        Ok(())
+    }
+    pub fn terminal_error(&self) -> Option<io::Error> {
+        let state = self.shared.lock();
+        if state.workers != 0 {
+            return None;
+        }
+        let error = state.failure.as_ref()?;
+        let port = self.shared.port.lock().unwrap();
+        if port
+            .queue
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|event| Arc::ptr_eq(&event.source, &self.shared))
+        {
+            return None;
+        }
+        Some(io::Error::other(error.clone()))
+    }
     pub fn retire(&self, deadline: Instant) -> io::Result<Option<(SubmissionId, Retired)>> {
-        let mut state = self.shared.lock();
+        let port = Arc::clone(&self.shared.port.lock().unwrap());
         loop {
-            if let Some((id, retired)) = state.completed.pop_front() {
-                state.admitted.remove(&id);
-                state.cancel.remove(&id);
-                return Ok(Some((id, retired)));
+            let epoch = port.wake.epoch();
+            if let Some(event) = port.take_for(&self.shared) {
+                return Ok(Some(event));
             }
-            if state.workers == 0 {
-                return match &state.failure {
-                    Some(error) => Err(io::Error::other(error.clone())),
-                    None => Ok(None),
-                };
+            {
+                let state = self.shared.lock();
+                if state.workers == 0 {
+                    return state
+                        .failure
+                        .as_ref()
+                        .map_or(Ok(None), |e| Err(io::Error::other(e.clone())));
+                }
             }
             let Some(wait) = deadline.checked_duration_since(Instant::now()) else {
                 return Ok(None);
             };
-            state = self
-                .shared
-                .completion_available
-                .wait_timeout(state, wait)
-                .unwrap_or_else(|error| error.into_inner())
-                .0;
+            port.wake.wait(epoch, Some(wait));
         }
     }
 
@@ -545,8 +699,9 @@ impl Backend {
         let mut state = self.shared.lock();
         state.accepting = false;
         state.discard = true;
-        state.completed.clear();
         drop(state);
+        let port = Arc::clone(&self.shared.port.lock().unwrap());
+        port.discard(&self.shared);
         self.shared.wake();
     }
 }

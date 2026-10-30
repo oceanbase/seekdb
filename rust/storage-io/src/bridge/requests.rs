@@ -17,29 +17,28 @@ use crate::service::health::CapturedTarget;
 use crate::service::{Admission, RequestOptions};
 use crate::{
     AdmissionLimits, CancelOutcome, Completion, CompletionRequirement, CompletionStatus, Config,
-    ConfigError, DeviceConfig, DeviceId, DeviceLimits, ExcessShare, Execution, Generation, GroupId,
-    GroupLimits, Rate, RequestClass, RequestControl, RequestPolicy, Service, Target,
+    ConfigError, DeviceConfig, DeviceId, DeviceLimits, Execution, Generation, RequestClass,
+    RequestControl, RequestPolicy, Service, Target,
 };
 use crate::{FinalFacts, HealthConfig, RequestLifetime};
 use file_io::bridge::{error_number, FileRegistry};
 use file_io::{Backend, BackendKind, Direction};
 use std::collections::BTreeMap;
 use std::io;
-use std::num::{NonZeroU32, NonZeroUsize};
-use std::sync::{mpsc, Arc, Mutex};
+use std::num::NonZeroUsize;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 pub struct ServiceHandle(pub(super) Option<Arc<Service>>);
 struct Endpoint {
     service: Arc<Service>,
     id: DeviceId,
-    destination: mpsc::Sender<Completion>,
-    completed: Mutex<mpsc::Receiver<Completion>>,
+    native_aio: bool,
 }
 pub struct DeviceHandle(Option<Endpoint>);
 struct Pending {
     admission: Admission,
-    destination: mpsc::Sender<Completion>,
+    device: DeviceId,
     direction: Direction,
     offset: u64,
     length: usize,
@@ -93,23 +92,6 @@ fn decode_worker_fault(value: i32) -> io::Result<Option<file_io::WorkerFault>> {
     }))
 }
 fn config(input: &ffi::ResourceConfig) -> io::Result<Config> {
-    let mut groups = BTreeMap::new();
-    for group in &input.groups {
-        let value = GroupLimits {
-            minimum_iops: group.minimum_iops,
-            maximum_iops: if group.unlimited {
-                Rate::Unlimited
-            } else {
-                Rate::PerSecond(group.maximum_iops)
-            },
-            excess: NonZeroU32::new(group.excess_weight)
-                .map_or(ExcessShare::None, ExcessShare::Weighted),
-            burst: group.burst,
-        };
-        if groups.insert(GroupId(group.id), value).is_some() {
-            return Err(invalid());
-        }
-    }
     let mut devices = BTreeMap::new();
     for device in &input.devices {
         let value = DeviceLimits {
@@ -134,13 +116,6 @@ fn config(input: &ffi::ResourceConfig) -> io::Result<Config> {
             probe_bytes: input.probe_bytes,
         },
         devices,
-        groups,
-        default_group: GroupId(input.default_group),
-        group_capacity_iops: if input.unlimited_capacity {
-            Rate::Unlimited
-        } else {
-            Rate::PerSecond(input.capacity_iops)
-        },
     })
 }
 
@@ -239,12 +214,10 @@ impl ServiceHandle {
                 None
             };
             let id = DeviceId(options.id);
-            let (destination, completed) = mpsc::channel();
             let endpoint = Endpoint {
                 service,
                 id,
-                destination,
-                completed: Mutex::new(completed),
+                native_aio: options.native_aio,
             };
             let receipt = endpoint.service.register_device_with_config(
                 Generation(expected),
@@ -318,17 +291,6 @@ impl ServiceHandle {
                 probe_attempts: value.probe_attempts,
                 admission_debt: value.debt.iter().any(|d| d.records != 0 || d.bytes != 0),
                 physical_debt: value.devices.iter().any(|d| d.depth_debt != [0, 0]),
-                groups: value
-                    .groups
-                    .into_iter()
-                    .map(|g| ffi::GroupStats {
-                        id: g.id.get(),
-                        physical_attempts: g.physical_attempts,
-                        rate_exempt_attempts: g.rate_exempt_attempts,
-                        rate_throttled: g.rate_throttled,
-                        device_blocked: g.device_blocked,
-                    })
-                    .collect(),
                 admitted_requests: value.admitted_requests,
                 reserved_bytes: value.reserved_bytes,
                 queued_requests: value.queued_requests,
@@ -345,6 +307,11 @@ impl DeviceHandle {
                 .as_ref()
                 .map_or(Ok(()), |e| e.service.remove_device(e.id)),
         )
+    }
+    pub fn is_drained(&self) -> bool {
+        self.0
+            .as_ref()
+            .is_none_or(|endpoint| endpoint.service.device_drained(endpoint.id))
     }
     pub fn begin_request(
         &self,
@@ -383,8 +350,14 @@ impl DeviceHandle {
                 } else {
                     Some(deadline(options.timeout_us as u64)?)
                 },
-                retry_alignment: NonZeroUsize::new(options.retry_alignment),
-                max_error_retries: options.max_error_retries,
+                retry_alignment: (endpoint.native_aio && execution == Execution::PreferNative)
+                    .then(|| NonZeroUsize::new(options.alignment))
+                    .flatten(),
+                max_error_retries: if endpoint.native_aio && execution == Execution::PreferNative {
+                    10
+                } else {
+                    0
+                },
                 completion: if options.full_buffer {
                     CompletionRequirement::FullBuffer
                 } else {
@@ -393,14 +366,9 @@ impl DeviceHandle {
             };
             let mut admission = endpoint.service.begin(RequestOptions {
                 device: endpoint.id,
-                group: GroupId(options.group),
-                class: if options.probe {
-                    RequestClass::Probe
-                } else {
-                    RequestClass::Normal
-                },
+
+                class: RequestClass::Normal,
                 execution,
-                rate_exempt: options.rate_exempt,
                 length: options.length,
                 alignment: options.alignment,
                 window: options.window_start..end,
@@ -411,15 +379,13 @@ impl DeviceHandle {
             control.0 = Some(Arc::new(admission.take_control()?));
             slot.0 = Some(Pending {
                 admission,
-                destination: endpoint.destination.clone(),
+                device: endpoint.id,
                 direction,
                 offset: options.offset,
                 length: options.length,
                 fault,
                 target: None,
-                observe_health: options.observe_health
-                    && direction == Direction::Read
-                    && !options.probe,
+                observe_health: options.observe_health && direction == Direction::Read,
             });
             Ok(())
         })())
@@ -430,17 +396,11 @@ impl DeviceHandle {
                 return Err(io::ErrorKind::AlreadyExists.into());
             }
             let endpoint = self.0.as_ref().ok_or(io::ErrorKind::NotConnected)?;
-            slot.0 = Some(
-                endpoint
-                    .completed
-                    .lock()
-                    .unwrap()
-                    .recv_timeout(Duration::from_micros(wait_us))
-                    .map_err(|e| match e {
-                        mpsc::RecvTimeoutError::Timeout => io::ErrorKind::WouldBlock,
-                        mpsc::RecvTimeoutError::Disconnected => io::ErrorKind::BrokenPipe,
-                    })?,
-            );
+            slot.0 =
+                Some(endpoint.service.poll_completion(
+                    endpoint.id,
+                    Instant::now() + Duration::from_micros(wait_us),
+                )?);
             Ok(())
         })())
     }
@@ -511,7 +471,9 @@ impl RequestSlot {
     pub fn publish(&mut self) -> ffi::SubmitResult {
         let result = (|| {
             let pending = self.0.as_mut().ok_or_else(invalid)?;
-            pending.admission.publish(pending.destination.clone())
+            pending
+                .admission
+                .publish(crate::service::Destination::Device(pending.device))
         })();
         match result {
             Ok(id) => {
@@ -579,14 +541,12 @@ impl CompletionSlot {
             error: 0,
             os_error: 0,
             has_buffer: false,
-            group: 0,
             physical_attempts: 0,
             raw_depth: 0,
             effective_depth: 0,
         };
         if let Some(completion) = &self.0 {
             info.id = completion.id.get();
-            info.group = completion.group.get();
             info.physical_attempts = completion.physical_attempts;
             info.raw_depth = completion.depth_cost.raw;
             info.effective_depth = completion.depth_cost.effective;
@@ -661,17 +621,6 @@ mod registration_tests {
             max_bytes: 16 * 1024 * 1024,
             probe_records: 4,
             probe_bytes: 2 * 1024 * 1024,
-            default_group: 1,
-            capacity_iops: 0,
-            unlimited_capacity: true,
-            groups: vec![ffi::GroupPolicy {
-                id: 1,
-                minimum_iops: 0,
-                maximum_iops: 0,
-                unlimited: true,
-                excess_weight: 1,
-                burst: 1,
-            }],
             devices: vec![ffi::DevicePolicy {
                 id: 1,
                 depth: 4,
@@ -719,10 +668,9 @@ mod registration_tests {
             .service
             .begin(RequestOptions {
                 device: DeviceId(1),
-                group: GroupId(1),
+
                 class: RequestClass::Normal,
                 execution: Execution::WorkerRequired,
-                rate_exempt: false,
                 length: 12 * 1024 * 1024,
                 alignment: 4096,
                 window: 0..12 * 1024 * 1024,

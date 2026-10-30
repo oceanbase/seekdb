@@ -32,8 +32,8 @@ pub use stream::{AppendError, Appender, BufferLayout, CreateMode, EffectiveMode,
 
 pub use allocation::{allocate, extend_file, Allocation};
 pub use asynchronous::{
-    toggle_worker_fault_delay, Backend, BackendKind, Direction, FileOwner, Operation, Retired,
-    SubmissionId, SubmitFailure, WorkerFault,
+    toggle_worker_fault_delay, Backend, BackendKind, CompletionPort, CompletionWake, Direction,
+    FileOwner, Operation, Retired, SubmissionId, SubmitFailure, WorkerFault,
 };
 pub use buffer::AlignedBuffer;
 pub use capability::{probe_directory, DirectoryCapabilities};

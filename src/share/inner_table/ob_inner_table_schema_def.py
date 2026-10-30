@@ -3719,11 +3719,11 @@ def_table_schema(
       ('group_id',      'int'),
       ('mode',          'varchar:256'),
       ('size',          'int'),
-      ('min_iops',      'int'),
-      ('max_iops',      'int'),
+      ('min_iops', 'int', 'true'),
+      ('max_iops', 'int', 'true'),
       ('real_iops',     'int'),
-      ('min_mbps',      'int'),
-      ('max_mbps',      'int'),
+      ('min_mbps', 'int', 'true'),
+      ('max_mbps', 'int', 'true'),
       ('real_mbps',     'int'),
       ('schedule_us',   'int'),
       ('io_delay_us',   'int'),
@@ -5888,10 +5888,10 @@ def_table_schema(
   normal_columns = [
     ('group_name', 'varchar:OB_MAX_RESOURCE_PLAN_NAME_LENGTH'),
     ('mode', 'varchar:OB_MAX_RESOURCE_PLAN_NAME_LENGTH'),
-    ('min_iops', 'int'),
-    ('max_iops', 'int'),
+    ('min_iops', 'int', 'true'),
+    ('max_iops', 'int', 'true'),
     ('real_iops', 'int'),
-    ('norm_iops', 'int')
+    ('norm_iops', 'int', 'true')
                    ],  )
 
 # 21485: __all_virtual_storage_io_usage (abandoned)

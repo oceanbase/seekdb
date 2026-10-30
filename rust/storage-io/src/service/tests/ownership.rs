@@ -45,7 +45,6 @@ fn assert_claimed(path: &Path) {
 fn write(owner: &BlockFile, block: BlockIndex) -> RequestSpec {
     RequestSpec::new(
         DEVICE,
-        GROUP,
         Target::Block(owner.region(block, 0..4096).unwrap()),
         4096,
     )
@@ -61,8 +60,7 @@ fn charge_witness_waits_for_the_final_real_owner() {
     let mut lifetime = admission.lifetime();
     lifetime.capture(&admission, target, false);
     let witness = lifetime.watch_final_charge().unwrap();
-    engine.drain_gate();
-    engine.grant_admission();
+    engine.accept_probes_and_close();
     drop(admission);
     assert!(!witness.entered());
     let destructor = thread::spawn(move || drop(lifetime));
@@ -94,13 +92,12 @@ fn lease_witness_observes_a_region_clone_after_lifetime_release() {
     let region = owner.region(block, 0..4096).unwrap();
     let retained = region.subregion(0..4096).unwrap();
     let mut engine = engine();
-    let (options, target) = RequestSpec::new(DEVICE, GROUP, Target::Block(region), 4096).split();
+    let (options, target) = RequestSpec::new(DEVICE, Target::Block(region), 4096).split();
     let admission = Admission::begin(Arc::clone(&engine.shared), options).unwrap();
     let mut lifetime = admission.lifetime();
     lifetime.capture(&admission, target, false);
     let witness = lifetime.watch_final_block_lease().unwrap();
-    engine.drain_gate();
-    engine.grant_admission();
+    engine.accept_probes_and_close();
     drop((admission, lifetime));
     owner.release(block).unwrap();
     assert!(!witness.entered());
@@ -146,8 +143,7 @@ fn witnesses_reject_unbound_and_non_block_lifetimes() {
     );
     drop(witness);
     drop((lifetime, admission));
-    engine.drain_gate();
-    engine.grant_admission();
+    engine.accept_probes_and_close();
 }
 
 #[test]
@@ -309,7 +305,7 @@ fn subregion_and_retained_clone_span_cancelled_physical_retirement() {
         let mut engine = engine();
         let (request_id, results) = enqueue(
             &mut engine,
-            RequestSpec::new(DEVICE, GROUP, Target::Block(target), 4),
+            RequestSpec::new(DEVICE, Target::Block(target), 4),
             Direction::Write,
             b"late",
         );
@@ -379,11 +375,10 @@ fn named_timeout_and_completion_lifetime_retain_unlinked_charge() {
             .unwrap(),
     );
     let binding = owner.bind(file).unwrap();
-    let mut engine = engine();
-    let at = Instant::now() + Duration::from_secs(1);
+    let service = service();
+    let at = Instant::now() + Duration::from_millis(10);
     let mut request = RequestSpec::new(
         DEVICE,
-        GROUP,
         Target::Named {
             file: binding.clone(),
             offset: 0,
@@ -391,33 +386,19 @@ fn named_timeout_and_completion_lifetime_retain_unlinked_charge() {
         4096,
     );
     request.policy.deadline = Some(at);
-    let (options, target) = request.split();
-    let mut admission = Admission::begin(Arc::clone(&engine.shared), options).unwrap();
-    let mut lifetime = admission.lifetime();
-    lifetime.capture(&admission, target.clone(), false);
-    engine.drain_gate();
-    engine.grant_admission();
-    admission.wait_capacity().unwrap();
-    admission
-        .prepare(target, Direction::Write, &[0x57; 4096])
-        .unwrap();
-    let (destination, results) = mpsc::channel();
-    admission.publish(destination).unwrap();
-    drop((admission, binding));
-    engine.drain_gate();
+    let mut waiter = service.write(request, &[0x57; 4096]).unwrap();
+    drop(binding);
     owner.remove(parent, name()).unwrap();
     assert_eq!(owner.snapshot().committed, 0);
     assert_eq!(owner.snapshot().charged, 4096);
-    dispatch(&mut engine);
-    engine.controls(at);
-    let completion = results.recv_timeout(Duration::from_secs(1)).unwrap();
+    thread::sleep(at.saturating_duration_since(Instant::now()) + Duration::from_millis(1));
+    let completion = waiter.wait(deadline()).unwrap();
     assert!(matches!(completion.status, CompletionStatus::TimedOut));
     drop(completion);
     assert_eq!(owner.snapshot().charged, 4096);
-    retire(&mut engine);
-    assert_eq!(owner.snapshot().charged, 4096);
-    drop(lifetime);
+    drop(waiter);
     assert_eq!(owner.snapshot().charged, 0);
+    service.shutdown().unwrap();
 }
 
 #[test]
@@ -446,7 +427,6 @@ fn named_health_probe_holds_the_exact_lease() {
     let mut engine = engine();
     let (options, target) = RequestSpec::new(
         DEVICE,
-        GROUP,
         Target::Named {
             file: binding.clone(),
             offset: 0,
@@ -466,8 +446,7 @@ fn named_health_probe_holds_the_exact_lease() {
     let operation = probe.operation().unwrap();
     owner.remove(parent, name()).unwrap();
     drop((binding, probe, lifetime, admission));
-    engine.drain_gate();
-    engine.grant_admission();
+    engine.accept_probes_and_close();
     assert_eq!(owner.snapshot().charged, 4096);
     drop(operation);
     assert_eq!(owner.snapshot().charged, 0);

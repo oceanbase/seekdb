@@ -1,6 +1,8 @@
-DATA	READ	4096	200	1
-DATA	READ	32768	100	7
-DATA	WRITE	4096	150	2
-DATA	WRITE	32768	50	17
-4	73728	500	27
 0
+YES
+max_iops	YES
+max_mbps	YES
+min_iops	YES
+min_mbps	YES
+max_iops	YES
+min_iops	YES

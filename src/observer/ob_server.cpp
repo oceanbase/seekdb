@@ -2116,9 +2116,6 @@ int ObServer::init_io()
       const int64_t max_io_depth = 256;
       if (OB_FAIL(ObIOManager::get_instance().set_io_config(io_config))) {
       } else {
-        if (OB_FAIL(ObIOCalibration::get_instance().init())) {
-        }
-
         storage_env_.data_dir_ = OB_FILE_SYSTEM_ROUTER.get_data_dir();
         storage_env_.sstable_dir_ = OB_FILE_SYSTEM_ROUTER.get_sstable_dir();
         storage_env_.default_block_size_ = OB_DEFAULT_MACRO_BLOCK_SIZE;  // 2MB

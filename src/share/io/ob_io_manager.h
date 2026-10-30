@@ -84,8 +84,6 @@ public:
   int remove_device_channel(ObIODevice *device_handle);
   int begin_request(ObIORequest &req, std::shared_ptr<ObDeviceChannel> &device_channel);
 
-  int refresh_io_service_config(const ObIOServiceConfig &replacement, uint64_t expected_generation,
-      struct ResourceConfigReceipt &receipt);
   int refresh_io_runtime_config(const ObIOServiceConfig::ResourceConfig &resources,
       const ObIOServiceConfig::ParamConfig &params);
   int refresh_io_resource_config(const ObIOServiceConfig::ResourceConfig &io_resource_config);
@@ -140,8 +138,6 @@ struct IOConfigSnapshot
   int64_t effective_server_memory_ = 0;
   int64_t effective_io_buffer_limit_ = 0;
   int64_t effective_wrapper_limit_ = 0;
-  std::map<uint64_t, uint64_t> group_indices_;
-  std::map<uint64_t, uint64_t> module_groups_;
   std::shared_ptr<ObIOUsage> usage_;
 };
 
@@ -170,8 +166,6 @@ public:
   {
     return io_sys_usage_;
   }
-  int replace_config(const ObIOServiceConfig &replacement, uint64_t expected_generation,
-      ResourceConfigReceipt &receipt);
   int health_status(storage_io::HealthStatus &status) const;
   int update_health_config(const ObIOConfig &conf);
   int update_runtime_config(const ObIOServiceConfig::ResourceConfig *resources,
@@ -180,9 +174,6 @@ public:
       storage_io::DeviceHandle &endpoint);
   int remove_device(uint64_t device_id);
   int resource_stats(storage_io::ServiceStats &stats) const;
-  rust::Box<storage_io::CalibrationView> calibration_snapshot() const;
-  int replace_calibration(rust::Slice<const storage_io::CalibrationSample> samples);
-  int reset_calibration();
   int try_alloc_req_until_timeout(const int64_t timeout_ts, ObIORequest *&req);
   int try_alloc_result_until_timeout(const int64_t timeout_ts, ObIOResult *&result);
   int alloc_io_request(ObIORequest *&req);

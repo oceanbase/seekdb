@@ -14,35 +14,7 @@
 
 use super::*;
 
-#[derive(Default)]
-pub(super) struct Wake {
-    pub(super) epoch: Mutex<u64>,
-    pub(super) changed: Condvar,
-}
-impl Wake {
-    pub fn epoch(&self) -> u64 {
-        *self.epoch.lock().unwrap()
-    }
-    pub fn notify(&self) {
-        let mut epoch = self.epoch.lock().unwrap();
-        *epoch = epoch.wrapping_add(1);
-        self.changed.notify_all();
-    }
-    pub fn wait(&self, epoch: u64, timeout: Option<Duration>) {
-        let current = self.epoch.lock().unwrap();
-        if *current != epoch {
-            return;
-        }
-        match timeout {
-            Some(timeout) => {
-                drop(self.changed.wait_timeout(current, timeout).unwrap());
-            }
-            None => {
-                drop(self.changed.wait(current).unwrap());
-            }
-        }
-    }
-}
+pub(super) use file_io::CompletionWake as Wake;
 pub(super) struct Ledger {
     pub health_payload_bytes: usize,
     pub limits: AdmissionLimits,
@@ -114,12 +86,18 @@ pub(super) const RESERVED: u8 = 1;
 pub(super) const PUBLISHED: u8 = 2;
 pub(super) const FINISHED: u8 = 3;
 pub(super) const ABORTED: u8 = 4;
+pub(super) struct Cancellation {
+    pub id: RequestId,
+    _charge: Arc<Charge>,
+}
 pub(super) struct ControlCell {
     pub id: RequestId,
     pub options: RequestOptions,
     pub charge: Arc<Charge>,
     pub phase: AtomicU8,
-    pub cancelled: AtomicBool,
+    pub cancelled: Arc<AtomicBool>,
+    pub device_open: Arc<AtomicBool>,
+    cancellations: Weak<Mutex<VecDeque<Cancellation>>>,
     pub wake: Weak<Wake>,
 }
 impl ControlCell {
@@ -128,6 +106,9 @@ impl ControlCell {
             return CancelOutcome::NotPending;
         }
         let was_cancelled = self.cancelled.swap(true, Ordering::AcqRel);
+        if !was_cancelled && self.phase.load(Ordering::Acquire) == PUBLISHED {
+            self.enqueue_cancellation();
+        }
         if let Some(wake) = self.wake.upgrade() {
             wake.notify();
         }
@@ -137,7 +118,18 @@ impl ControlCell {
             CancelOutcome::Cancelled
         }
     }
+    pub(super) fn enqueue_cancellation(&self) {
+        if let Some(cancellations) = self.cancellations.upgrade() {
+            cancellations.lock().unwrap().push_back(Cancellation {
+                id: self.id,
+                _charge: Arc::clone(&self.charge),
+            });
+        }
+    }
     pub fn check(&self) -> io::Result<()> {
+        if !self.device_open.load(Ordering::Acquire) {
+            return Err(io::ErrorKind::BrokenPipe.into());
+        }
         if self.cancelled.load(Ordering::Acquire) {
             return Err(io::ErrorKind::Interrupted.into());
         }
@@ -162,7 +154,7 @@ pub(super) enum Preparation {
 pub(crate) struct Admission {
     pub(super) shared: Arc<Shared>,
     pub(super) cell: Arc<ControlCell>,
-    state: Preparation,
+    pub(super) state: Preparation,
     control_taken: bool,
 }
 impl Admission {
@@ -175,7 +167,12 @@ impl Admission {
             return Err(invalid("invalid request allocation or byte window"));
         }
         let mut gate = shared.gate.lock().unwrap();
-        if !gate.accepting || gate.devices.get(&options.device) != Some(&true) {
+        if !gate.accepting
+            || !gate
+                .devices
+                .get(&options.device)
+                .is_some_and(|open| open.load(Ordering::Acquire))
+        {
             return Err(io::ErrorKind::BrokenPipe.into());
         }
         let limits = gate
@@ -205,6 +202,8 @@ impl Admission {
         ledger.usage[class.index()].records += 1;
         let cell = Arc::new(ControlCell {
             id,
+            device_open: Arc::clone(&gate.devices[&options.device]),
+            cancellations: Arc::downgrade(&shared.cancellations),
             options,
             charge: Arc::new(Charge {
                 ledger: Arc::clone(&shared.ledger),
@@ -215,7 +214,7 @@ impl Admission {
                 drop_witness: crate::drop_witness::DropRegistration::default(),
             }),
             phase: AtomicU8::new(WAITING),
-            cancelled: AtomicBool::new(false),
+            cancelled: Arc::new(AtomicBool::new(false)),
             wake: Arc::downgrade(&shared.wake),
         });
         let reserved = gate.waiting.iter().all(BTreeMap::is_empty) && ledger.reserve_bytes(&cell);
@@ -239,6 +238,7 @@ impl Admission {
     }
     pub(super) fn ready(&mut self) -> io::Result<bool> {
         self.check_open()?;
+        self.reserve_capacity();
         if self.cell.phase.load(Ordering::Acquire) == RESERVED {
             self.state = Preparation::Reserved;
             return Ok(true);
@@ -265,9 +265,18 @@ impl Admission {
         loop {
             let epoch = self.shared.wake.epoch();
             self.check_open()?;
+            self.reserve_capacity();
             if self.cell.phase.load(Ordering::Acquire) == RESERVED {
                 self.state = Preparation::Reserved;
                 return Ok(());
+            }
+            if let Some(driver) = self.shared.driver.lock().unwrap().upgrade() {
+                driver.lock().unwrap().progress(None);
+                self.reserve_capacity();
+                if self.cell.phase.load(Ordering::Acquire) == RESERVED {
+                    self.state = Preparation::Reserved;
+                    return Ok(());
+                }
             }
             let wait = self
                 .cell
@@ -278,10 +287,36 @@ impl Admission {
             self.shared.wake.wait(epoch, wait);
         }
     }
+    fn reserve_capacity(&self) {
+        let wake_next = {
+            let mut gate = self.shared.gate.lock().unwrap();
+            let class = self.cell.options.class.index();
+            let first = gate.waiting[class].first_key_value().map(|(&id, _)| id);
+            if first == Some(self.cell.id) {
+                let mut ledger = self.shared.ledger.lock().unwrap();
+                if ledger.reserve_bytes(&self.cell) {
+                    gate.waiting[class].remove(&self.cell.id);
+                    !gate.waiting[class].is_empty()
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        };
+        if wake_next {
+            self.shared.wake.notify();
+        }
+    }
     fn check_open(&self) -> io::Result<()> {
         self.cell.check()?;
         let gate = self.shared.gate.lock().unwrap();
-        if !gate.accepting || gate.devices.get(&self.cell.options.device) != Some(&true) {
+        if !gate.accepting
+            || !gate
+                .devices
+                .get(&self.cell.options.device)
+                .is_some_and(|open| open.load(Ordering::Acquire))
+        {
             return Err(io::ErrorKind::BrokenPipe.into());
         }
         Ok(())
@@ -347,7 +382,10 @@ impl Admission {
                 operation.keep_alive(region)
             }
         };
-        self.state = Preparation::Prepared(operation);
+        self.state = Preparation::Prepared(operation.with_control(
+            Arc::clone(&self.cell.cancelled),
+            self.cell.options.policy.deadline,
+        ));
         Ok(())
     }
     #[cfg(feature = "cxx")]
@@ -372,12 +410,17 @@ impl Admission {
     ) -> io::Result<RequestId> {
         let mut gate = self.shared.gate.lock().unwrap();
         self.cell.check()?;
-        if !gate.accepting || gate.devices.get(&self.cell.options.device) != Some(&true) {
+        if !gate.accepting
+            || !gate
+                .devices
+                .get(&self.cell.options.device)
+                .is_some_and(|open| open.load(Ordering::Acquire))
+        {
             return Err(io::ErrorKind::BrokenPipe.into());
         }
         self.state = Preparation::Published;
         self.cell.phase.store(PUBLISHED, Ordering::Release);
-        gate.published.push_back(Incoming {
+        gate.pending_probes.push_back(Incoming {
             operation,
             cell: Arc::clone(&self.cell),
             destination: engine::Destination::Diagnosis,
@@ -387,17 +430,28 @@ impl Admission {
         self.shared.wake.notify();
         Ok(self.id())
     }
-    pub(crate) fn publish(
-        &mut self,
-        destination: mpsc::Sender<Completion>,
-    ) -> io::Result<RequestId> {
-        let mut gate = self.shared.gate.lock().unwrap();
+    pub(crate) fn publish(&mut self, destination: engine::Destination) -> io::Result<RequestId> {
         self.cell.check()?;
-        if !gate.accepting || gate.devices.get(&self.cell.options.device) != Some(&true) {
-            return Err(io::ErrorKind::BrokenPipe.into());
-        }
         if !matches!(self.state, Preparation::Prepared(_)) {
             return Err(invalid("request is not prepared"));
+        }
+        let driver = self
+            .shared
+            .driver
+            .lock()
+            .unwrap()
+            .upgrade()
+            .ok_or(io::ErrorKind::BrokenPipe)?;
+        let mut driver = driver.lock().unwrap();
+        let gate = self.shared.gate.lock().unwrap();
+        self.cell.check()?;
+        if !gate.accepting
+            || !gate
+                .devices
+                .get(&self.cell.options.device)
+                .is_some_and(|open| open.load(Ordering::Acquire))
+        {
+            return Err(io::ErrorKind::BrokenPipe.into());
         }
         let Preparation::Prepared(operation) =
             std::mem::replace(&mut self.state, Preparation::Published)
@@ -405,14 +459,15 @@ impl Admission {
             unreachable!()
         };
         self.cell.phase.store(PUBLISHED, Ordering::Release);
-        gate.published.push_back(Incoming {
+        driver.accept(Incoming {
             operation,
             cell: Arc::clone(&self.cell),
-            destination: engine::Destination::Caller(destination),
+            destination,
             owner: engine::WorkOwner::Ordinary,
         });
+        driver.dispatch(Instant::now());
         drop(gate);
-        self.shared.wake.notify();
+        drop(driver);
         Ok(self.id())
     }
 }
@@ -420,6 +475,9 @@ impl Drop for Admission {
     fn drop(&mut self) {
         if !matches!(self.state, Preparation::Published) {
             self.cell.phase.store(ABORTED, Ordering::Release);
+            let removed = self.shared.gate.lock().unwrap().waiting[self.cell.options.class.index()]
+                .remove(&self.cell.id);
+            drop(removed);
             self.shared.wake.notify();
         }
     }

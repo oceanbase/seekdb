@@ -445,13 +445,11 @@ _IO_UNITY_GROUP = select_unity_sources(
     [
         "src/share/io/ob_io_define.cpp",
         "src/share/io/ob_io_struct.cpp",
-        "src/share/io/ob_io_calibration.cpp",
         "src/share/io/ob_io_manager.cpp",
     ],
 )
 
 _IO_PUBLIC_HEADERS = [
-    "io/ob_io_calibration.h",
     "io/ob_io_define.h",
     "io/ob_io_manager.h",
     "io/ob_io_struct.h",

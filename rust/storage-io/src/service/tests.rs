@@ -12,21 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::engine::Stage;
+use super::engine::{Driver as Engine, Stage};
 use super::*;
 use crate::{BlockConfig, SpaceBudget, UnmarkedBlockFile};
 use file_io::{BackendKind, Retired, SubmissionId};
 use std::fs::{self, OpenOptions};
 use std::path::PathBuf;
 use std::sync::Barrier;
+use std::thread;
+mod direct;
 mod health;
 mod ownership;
-mod registration;
-mod resources;
 
 const DEVICE: DeviceId = DeviceId(1);
 const OTHER: DeviceId = DeviceId(2);
-const GROUP: GroupId = GroupId(1);
 struct Directory(PathBuf);
 impl Directory {
     fn new() -> Self {
@@ -80,9 +79,6 @@ fn config() -> Config {
                 )
             })
             .collect(),
-        groups: [(GROUP, GroupLimits::default())].into(),
-        default_group: GROUP,
-        group_capacity_iops: Rate::Unlimited,
     }
 }
 fn backend() -> Backend {
@@ -106,7 +102,7 @@ fn target(file: &Arc<File>) -> Target {
     }
 }
 fn spec(file: &Arc<File>, length: usize) -> RequestSpec {
-    RequestSpec::new(DEVICE, GROUP, target(file), length)
+    RequestSpec::new(DEVICE, target(file), length)
 }
 fn read(file: &Arc<File>, size: usize, window: Range<usize>, policy: RequestPolicy) -> RequestSpec {
     let mut spec = spec(file, size);
@@ -121,15 +117,26 @@ fn prepare(service: &Service, spec: RequestSpec, direction: Direction, bytes: &[
     admission.prepare(target, direction, bytes).unwrap();
     admission
 }
+fn receive_driven(service: &Service, receiver: &mpsc::Receiver<Completion>) -> Completion {
+    let until = deadline();
+    loop {
+        service.driver.lock().unwrap().progress(Some(DEVICE));
+        if let Ok(result) = receiver.try_recv() {
+            return result;
+        }
+        assert!(Instant::now() < until);
+        thread::yield_now();
+    }
+}
 fn shared_read(service: &Service, spec: RequestSpec) -> (RequestId, mpsc::Receiver<Completion>) {
     let mut admission = prepare(service, spec, Direction::Read, &[]);
     let (destination, completed) = mpsc::channel();
-    let id = admission.publish(destination).unwrap();
+    let id = admission
+        .publish(engine::Destination::Caller(destination))
+        .unwrap();
     (id, completed)
 }
 fn engine_with(config: Config) -> Engine {
-    let (management, _) = mpsc::sync_channel(32);
-    let (retirement, _) = mpsc::channel();
     let config = Arc::new(config);
     let wake = Arc::new(Wake::default());
     let metadata_ledger = Arc::new(Mutex::new(Ledger {
@@ -146,31 +153,26 @@ fn engine_with(config: Config) -> Engine {
             )
             .unwrap(),
         ),
-        calibration: Arc::new(crate::calibration::Calibration::default()),
         ledger: metadata_ledger,
         wake,
         gate: Mutex::new(Gate {
             accepting: true,
             devices: BTreeMap::new(),
-            removals: BTreeMap::new(),
             config,
             generation: Generation(0),
             waiting: std::array::from_fn(|_| BTreeMap::new()),
-            published: VecDeque::new(),
+            pending_probes: VecDeque::new(),
         }),
-        management,
-        retirement,
+        cancellations: Arc::new(Mutex::new(VecDeque::new())),
+        driver: Mutex::new(Weak::new()),
     });
     let mut engine = Engine::new(shared);
     engine
-        .register(
-            DeviceConfig {
-                id: DEVICE,
-                worker: backend(),
-                native: None,
-            },
-            false,
-        )
+        .register(DeviceConfig {
+            id: DEVICE,
+            worker: backend(),
+            native: None,
+        })
         .unwrap();
     engine
 }
@@ -185,8 +187,7 @@ fn core_prepare(
 ) -> Admission {
     let (options, target) = spec.split();
     let mut admission = Admission::begin(Arc::clone(&engine.shared), options).unwrap();
-    engine.drain_gate();
-    engine.grant_admission();
+    engine.accept_probes_and_close();
     admission.wait_capacity().unwrap();
     admission.prepare(target, direction, bytes).unwrap();
     admission
@@ -199,9 +200,23 @@ fn enqueue(
 ) -> (RequestId, mpsc::Receiver<Completion>) {
     let mut admission = core_prepare(engine, spec, direction, bytes);
     let (destination, completed) = mpsc::channel();
-    let id = admission.publish(destination).unwrap();
+    let id = admission.id();
+    let admission::Preparation::Prepared(operation) =
+        std::mem::replace(&mut admission.state, admission::Preparation::Published)
+    else {
+        unreachable!()
+    };
+    admission
+        .cell
+        .phase
+        .store(admission::PUBLISHED, Ordering::Release);
+    engine.accept(Incoming {
+        operation,
+        cell: Arc::clone(&admission.cell),
+        destination: engine::Destination::Caller(destination),
+        owner: engine::WorkOwner::Ordinary,
+    });
     drop(admission);
-    engine.drain_gate();
     (id, completed)
 }
 fn retired(engine: &Engine) -> (SubmissionId, Retired) {
@@ -220,31 +235,6 @@ fn dispatch(engine: &mut Engine) {
 }
 
 #[test]
-fn timeout_retains_physical_ownership_until_retirement() {
-    let directory = Directory::new();
-    let file = directory.file();
-    let mut engine = engine();
-    let at = Instant::now() + Duration::from_secs(1);
-    let mut request = spec(&file, 4);
-    request.policy.deadline = Some(at);
-    let (id, results) = enqueue(&mut engine, request, Direction::Write, b"late");
-    dispatch(&mut engine);
-    engine.controls(at);
-    let completion = results.recv().unwrap();
-    assert_eq!(completion.id, id);
-    assert!(matches!(completion.status, CompletionStatus::TimedOut));
-    assert!(completion.buffer().is_none());
-    drop(completion);
-    assert_eq!(engine.snapshot().awaiting_retirement, 1);
-    assert_eq!(engine.snapshot().reserved_bytes, 4);
-    retire(&mut engine);
-    assert_eq!(engine.snapshot().reserved_bytes, 0);
-    let mut bytes = [0; 4];
-    file_io::read_exact_at(&file, &mut bytes, 0).unwrap();
-    assert_eq!(&bytes, b"late");
-    assert!(results.try_recv().is_err());
-}
-#[test]
 fn addressed_completions_cannot_be_stolen_by_shared_consumer() {
     let directory = Directory::new();
     let file = directory.file();
@@ -256,7 +246,7 @@ fn addressed_completions_cannot_be_stolen_by_shared_consumer() {
     let mut waiter = service
         .read(read(&file, 8, 0..3, RequestPolicy::default()))
         .unwrap();
-    let completion = receiver.recv_timeout(Duration::from_secs(5)).unwrap();
+    let completion = receive_driven(&service, &receiver);
     assert_eq!(completion.id, shared);
     assert_eq!(completion.tag, 19);
     assert!(matches!(completion.status, CompletionStatus::Complete));
@@ -300,7 +290,6 @@ fn native_service_retires_block_lease_before_consumed_buffer_is_released() {
         .write(
             RequestSpec::new(
                 DEVICE,
-                GROUP,
                 Target::Block(owner.region(block, 0..4096).unwrap()),
                 4096,
             ),
@@ -315,7 +304,6 @@ fn native_service_retires_block_lease_before_consumed_buffer_is_released() {
     owner.sync().unwrap();
     let mut request = RequestSpec::new(
         DEVICE,
-        GROUP,
         Target::Block(owner.region(block, 0..4096).unwrap()),
         4096,
     );
@@ -416,7 +404,6 @@ fn timeout_before_dispatch_does_not_write_and_completes_once() {
     let mut request = spec(&file, 4);
     request.policy.deadline = Some(at);
     let (id, results) = enqueue(&mut engine, request, Direction::Write, b"late");
-    engine.controls(at);
     engine.dispatch(at);
     let completion = results.recv().unwrap();
     assert!(matches!(completion.status, CompletionStatus::TimedOut));
@@ -455,7 +442,6 @@ fn cancellation_keeps_region_and_budget_until_physical_retirement() {
     let mut engine = engine();
     let request = RequestSpec::new(
         DEVICE,
-        GROUP,
         Target::Block(owner.region(block, 0..4096).unwrap()),
         4096,
     );
@@ -478,33 +464,6 @@ fn cancellation_keeps_region_and_budget_until_physical_retirement() {
     assert_eq!(engine.snapshot().reserved_bytes, 0);
     assert_eq!(owner.allocate().unwrap(), block);
     assert!(result.try_recv().is_err());
-}
-#[test]
-fn lost_actor_does_not_drop_the_physical_region_or_memory_charge() {
-    let directory = Directory::new();
-    let owner = block_owner(&directory);
-    let block = owner.allocate().unwrap();
-    let mut engine = engine();
-    let backend = engine.backend(DEVICE, 0);
-    let ledger = Arc::clone(&engine.shared.ledger);
-    let request = RequestSpec::new(
-        DEVICE,
-        GROUP,
-        Target::Block(owner.region(block, 0..4096).unwrap()),
-        4096,
-    );
-    let (_, _result) = enqueue(&mut engine, request, Direction::Write, &[0; 4096]);
-    dispatch(&mut engine);
-    drop(engine);
-    owner.release(block).unwrap();
-    assert!(matches!(
-        owner.allocate(),
-        Err(crate::BlockError::Exhausted)
-    ));
-    assert_eq!(ledger.lock().unwrap().usage[0].bytes, 4096);
-    drop(backend.retire(deadline()).unwrap().unwrap());
-    assert_eq!(ledger.lock().unwrap().usage[0].bytes, 0);
-    assert_eq!(owner.allocate().unwrap(), block);
 }
 #[test]
 fn partial_prefix_survives_retryable_submission_error() {
@@ -547,39 +506,6 @@ fn partial_prefix_survives_retryable_submission_error() {
     assert_eq!(completion.data().unwrap(), b"abcdefgh");
     assert_eq!(completion.physical_attempts, 4);
     assert!(matches!(completion.status, CompletionStatus::ShortIo));
-}
-#[test]
-fn dropping_public_service_still_delivers_logical_shutdown() {
-    let directory = Directory::new();
-    let file = directory.file();
-    let service = service();
-    let mut waiter = service.read(spec(&file, 8)).unwrap();
-    drop(service);
-    let completion = waiter.wait(deadline()).unwrap();
-    assert!(matches!(
-        completion.status,
-        CompletionStatus::Shutdown | CompletionStatus::ShortIo
-    ));
-}
-#[test]
-fn terminal_backend_failure_completes_submissions_already_in_the_mailbox() {
-    let directory = Directory::new();
-    let file = directory.file();
-    let mut engine = engine();
-    let mut admission = core_prepare(&mut engine, spec(&file, 8), Direction::Read, &[]);
-    let (destination, completed) = mpsc::channel();
-    let id = admission.publish(destination).unwrap();
-    drop(admission);
-    engine.backend_failed(DEVICE, 0, io::ErrorKind::PermissionDenied.into());
-    engine.drain_gate();
-    let completion = completed.recv().unwrap();
-    assert_eq!(completion.id, id);
-    assert!(
-        matches!(completion.status, CompletionStatus::IoError(ref e) if e.kind() == io::ErrorKind::PermissionDenied)
-    );
-    drop(completion);
-    assert_eq!(engine.snapshot().reserved_bytes, 0);
-    assert!(completed.try_recv().is_err());
 }
 #[test]
 #[cfg_attr(
@@ -685,9 +611,11 @@ fn prepared_request_retains_charge_across_submission_and_shrink() {
     let receipt = service.reconfigure(Generation(0), config).unwrap();
     assert_eq!(receipt.debt[0].bytes, 4095);
     let (destination, completed) = mpsc::channel();
-    admission.publish(destination).unwrap();
+    admission
+        .publish(engine::Destination::Caller(destination))
+        .unwrap();
     drop(admission);
-    let completion = completed.recv_timeout(Duration::from_secs(5)).unwrap();
+    let completion = receive_driven(&service, &completed);
     assert_eq!(service.snapshot().unwrap().reserved_bytes, 4096);
     drop(completion);
     assert_eq!(service.snapshot().unwrap().reserved_bytes, 0);
@@ -703,7 +631,10 @@ fn stopped_service_preserves_prepared_reservation_on_rejection() {
     let (destination, completed) = mpsc::channel();
     service.stop();
     assert_eq!(
-        admission.publish(destination).unwrap_err().kind(),
+        admission
+            .publish(engine::Destination::Caller(destination))
+            .unwrap_err()
+            .kind(),
         io::ErrorKind::BrokenPipe
     );
     service.shutdown().unwrap();

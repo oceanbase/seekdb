@@ -20,17 +20,17 @@ use std::io;
 use std::num::NonZeroUsize;
 use std::ops::Range;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, AtomicUsize, Ordering};
-use std::sync::{mpsc, Arc, Condvar, Mutex, Weak};
-use std::thread::{self, JoinHandle};
+use std::sync::{mpsc, Arc, Mutex, Weak};
+
 use std::time::{Duration, Instant};
 
 mod admission;
 mod engine;
 pub(crate) mod health;
-mod scheduler;
 pub(crate) use admission::Admission;
 use admission::{Charge, ControlCell, Ledger, Wake};
-use engine::{Engine, Incoming, Management, Retirement};
+pub(crate) use engine::Destination;
+use engine::{Driver, Incoming};
 use health::{Diagnosis, DiagnosisStage, HealthIngress, ProbePass};
 pub use health::{
     FinalFacts, FinalObserver, HealthConfig, HealthSnapshot, ObservationCounters,
@@ -51,7 +51,6 @@ macro_rules! identifier {
 }
 identifier!(RequestId);
 identifier!(DeviceId);
-identifier!(GroupId);
 identifier!(Generation);
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -110,10 +109,8 @@ pub enum Target {
 }
 pub struct RequestSpec {
     pub device: DeviceId,
-    pub group: GroupId,
     pub class: RequestClass,
     pub execution: Execution,
-    pub rate_exempt: bool,
     pub target: Target,
     pub length: usize,
     pub alignment: usize,
@@ -122,15 +119,13 @@ pub struct RequestSpec {
     pub tag: u64,
 }
 impl RequestSpec {
-    pub fn new(device: DeviceId, group: GroupId, target: Target, length: usize) -> Self {
+    pub fn new(device: DeviceId, target: Target, length: usize) -> Self {
         Self {
             device,
-            group,
             class: RequestClass::Normal,
             execution: Execution::PreferNative,
             target,
             length,
-            rate_exempt: false,
             alignment: 4096,
             window: 0..length,
             policy: RequestPolicy::default(),
@@ -141,10 +136,8 @@ impl RequestSpec {
         (
             RequestOptions {
                 device: self.device,
-                group: self.group,
                 class: self.class,
                 execution: self.execution,
-                rate_exempt: self.rate_exempt,
                 length: self.length,
                 alignment: self.alignment,
                 window: self.window,
@@ -159,10 +152,8 @@ impl RequestSpec {
 #[derive(Clone, Debug)]
 pub(crate) struct RequestOptions {
     pub device: DeviceId,
-    pub group: GroupId,
     pub class: RequestClass,
     pub execution: Execution,
-    pub rate_exempt: bool,
     pub length: usize,
     pub alignment: usize,
     pub window: Range<usize>,
@@ -217,41 +208,11 @@ pub struct DepthCost {
     pub raw: usize,
     pub effective: usize,
 }
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Rate {
-    Unlimited,
-    PerSecond(u64),
-}
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ExcessShare {
-    None,
-    Weighted(std::num::NonZeroU32),
-}
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct GroupLimits {
-    pub minimum_iops: u64,
-    pub maximum_iops: Rate,
-    pub excess: ExcessShare,
-    pub burst: u64,
-}
-impl Default for GroupLimits {
-    fn default() -> Self {
-        Self {
-            minimum_iops: 0,
-            maximum_iops: Rate::Unlimited,
-            excess: ExcessShare::Weighted(std::num::NonZeroU32::new(1).unwrap()),
-            burst: 1,
-        }
-    }
-}
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Config {
     pub health: HealthConfig,
     pub admission: AdmissionLimits,
     pub devices: BTreeMap<DeviceId, DeviceLimits>,
-    pub groups: BTreeMap<GroupId, GroupLimits>,
-    pub default_group: GroupId,
-    pub group_capacity_iops: Rate,
 }
 impl Config {
     pub fn effective_admission(&self) -> AdmissionLimits {
@@ -268,7 +229,6 @@ impl Config {
             || a.probe_records >= a.max_records
             || self.admission.probe_bytes == 0
             || a.probe_bytes >= a.max_bytes
-            || !self.groups.contains_key(&self.default_group)
         {
             return Err(invalid(
                 "invalid server resource partitions or default group",
@@ -282,18 +242,6 @@ impl Config {
             {
                 return Err(invalid("invalid device partitions or Probe byte reserve"));
             }
-        }
-        let mut minimum = 0u64;
-        for g in self.groups.values() {
-            minimum = minimum
-                .checked_add(g.minimum_iops)
-                .ok_or_else(|| invalid("minimum rates overflow"))?;
-            if g.burst == 0 || matches!(g.maximum_iops, Rate::PerSecond(n) if n < g.minimum_iops) {
-                return Err(invalid("invalid group rate, weight or burst"));
-            }
-        }
-        if matches!(self.group_capacity_iops, Rate::PerSecond(n) if minimum > n) {
-            return Err(invalid("infeasible aggregate minimum rates"));
         }
         Ok(())
     }
@@ -318,14 +266,6 @@ pub struct DeviceSnapshot {
     pub closed: bool,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GroupSnapshot {
-    pub id: GroupId,
-    pub physical_attempts: u64,
-    pub rate_exempt_attempts: u64,
-    pub rate_throttled: bool,
-    pub device_blocked: bool,
-}
-#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ServiceSnapshot {
     pub health: HealthSnapshot,
     pub generation: Generation,
@@ -338,7 +278,6 @@ pub struct ServiceSnapshot {
     pub awaiting_retirement: usize,
     pub probe_attempts: u64,
     pub devices: Vec<DeviceSnapshot>,
-    pub groups: Vec<GroupSnapshot>,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ConfigReceipt {
@@ -370,7 +309,6 @@ pub struct Completion {
     pub transferred: usize,
     pub depth_cost: DepthCost,
     pub physical_attempts: u64,
-    pub group: GroupId,
     operation: Option<Operation>,
     window: Range<usize>,
     _charge: Arc<Charge>,
@@ -414,6 +352,7 @@ pub struct Waiter {
     control: Option<RequestControl>,
     completed: mpsc::Receiver<Completion>,
     id: RequestId,
+    shared: Arc<Shared>,
 }
 impl Waiter {
     pub fn take_final_observer(&mut self) -> Option<FinalObserver> {
@@ -428,7 +367,84 @@ impl Waiter {
             .map_or(CancelOutcome::NotPending, RequestControl::request_cancel)
     }
     pub fn wait_until(&mut self, deadline: Instant) -> io::Result<Option<Completion>> {
-        let result = receive(&self.completed, deadline)?;
+        let result = loop {
+            if self
+                .control
+                .as_ref()
+                .is_some_and(|control| control.cell.cancelled.load(Ordering::Acquire))
+            {
+                if let Some(driver) = self.shared.driver.lock().unwrap().upgrade() {
+                    driver
+                        .lock()
+                        .unwrap()
+                        .progress(self.control.as_ref().map(|c| c.cell.options.device));
+                }
+                drop(self.completed.try_recv());
+                return Err(io::ErrorKind::Interrupted.into());
+            }
+            match self.completed.try_recv() {
+                Ok(result) => break Some(result),
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    return Err(io::ErrorKind::BrokenPipe.into())
+                }
+                Err(mpsc::TryRecvError::Empty) => (),
+            }
+            let epoch = self.shared.wake.epoch();
+            let driver = self
+                .shared
+                .driver
+                .lock()
+                .unwrap()
+                .upgrade()
+                .ok_or(io::ErrorKind::BrokenPipe)?;
+            let mut driver = driver.lock().unwrap();
+            let busy = driver.progress(self.control.as_ref().map(|c| c.cell.options.device));
+            let health_delay = driver.health_delay(Instant::now());
+            drop(driver);
+            if self
+                .control
+                .as_ref()
+                .is_some_and(|control| control.cell.cancelled.load(Ordering::Acquire))
+            {
+                drop(self.completed.try_recv());
+                return Err(io::ErrorKind::Interrupted.into());
+            }
+            match self.completed.try_recv() {
+                Ok(result) => break Some(result),
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    return Err(io::ErrorKind::BrokenPipe.into())
+                }
+                Err(mpsc::TryRecvError::Empty) => (),
+            }
+            if let Some(control) = &self.control {
+                if control.cell.cancelled.load(Ordering::Acquire) {
+                    return Err(io::ErrorKind::Interrupted.into());
+                }
+                if control
+                    .cell
+                    .options
+                    .policy
+                    .deadline
+                    .is_some_and(|until| until <= Instant::now())
+                {
+                    return Err(io::ErrorKind::TimedOut.into());
+                }
+            }
+            let now = Instant::now();
+            if now >= deadline {
+                break None;
+            }
+            let until = self
+                .control
+                .as_ref()
+                .and_then(|c| c.cell.options.policy.deadline)
+                .map_or(deadline, |until| until.min(deadline));
+            let remaining = until.saturating_duration_since(now);
+            let delay = health_delay.map_or(remaining, |delay| delay.min(remaining));
+            if !busy {
+                self.shared.wake.wait(epoch, Some(delay));
+            }
+        };
         if result.is_some() {
             if let Some(mut control) = self.control.take() {
                 control.armed = false;
@@ -442,44 +458,29 @@ impl Waiter {
     }
 }
 
-enum Removal {
-    Close,
-    Transaction {
-        expected: Generation,
-        reply: mpsc::Sender<Result<Generation, ConfigError>>,
-        close_requested: bool,
-    },
-}
 struct Gate {
     accepting: bool,
-    devices: BTreeMap<DeviceId, bool>,
-    removals: BTreeMap<DeviceId, Removal>,
+    devices: BTreeMap<DeviceId, Arc<AtomicBool>>,
     config: Arc<Config>,
     generation: Generation,
     waiting: [BTreeMap<RequestId, Arc<ControlCell>>; 2],
-    published: VecDeque<Incoming>,
+    pending_probes: VecDeque<Incoming>,
 }
 struct Shared {
     health: Arc<HealthIngress>,
-    calibration: Arc<crate::calibration::Calibration>,
     gate: Mutex<Gate>,
     ledger: Arc<Mutex<Ledger>>,
     wake: Arc<Wake>,
-    management: mpsc::SyncSender<Management>,
-    retirement: mpsc::Sender<Retirement>,
+    cancellations: Arc<Mutex<VecDeque<admission::Cancellation>>>,
+    driver: Mutex<Weak<Mutex<Driver>>>,
 }
 pub struct Service {
     shared: Arc<Shared>,
-    join: Option<JoinHandle<io::Result<()>>>,
+    driver: Arc<Mutex<Driver>>,
 }
 impl Service {
-    pub fn calibration(&self) -> &Arc<crate::calibration::Calibration> {
-        &self.shared.calibration
-    }
     pub fn start(config: Config) -> io::Result<Self> {
         config.validate()?;
-        let (management, commands) = mpsc::sync_channel(32);
-        let (retirement, retired) = mpsc::channel();
         let config = Arc::new(config);
         let wake = Arc::new(Wake::default());
         let ledger = Arc::new(Mutex::new(Ledger {
@@ -492,121 +493,61 @@ impl Service {
             Arc::clone(&ledger),
             config.health,
         )?);
+        let mut cancellations = VecDeque::new();
+        cancellations
+            .try_reserve(config.admission.max_records)
+            .map_err(io::Error::other)?;
         let shared = Arc::new(Shared {
+            cancellations: Arc::new(Mutex::new(cancellations)),
             health,
-            calibration: Arc::new(crate::calibration::Calibration::default()),
             ledger,
             wake,
             gate: Mutex::new(Gate {
                 accepting: true,
                 devices: BTreeMap::new(),
-                removals: BTreeMap::new(),
                 config,
                 generation: Generation(0),
                 waiting: std::array::from_fn(|_| BTreeMap::new()),
-                published: VecDeque::new(),
+                pending_probes: VecDeque::new(),
             }),
-            management,
-            retirement,
+            driver: Mutex::new(Weak::new()),
         });
-        let actor = Arc::clone(&shared);
-        let join = thread::Builder::new()
-            .name("storage-io".into())
-            .spawn(move || Engine::new(actor).run(commands, retired))?;
-        Ok(Self {
-            shared,
-            join: Some(join),
-        })
+        let driver = Arc::new(Mutex::new(Driver::new(Arc::clone(&shared))));
+        *shared.driver.lock().unwrap() = Arc::downgrade(&driver);
+        Ok(Self { shared, driver })
     }
     pub fn register_device(&self, device: DeviceConfig) -> io::Result<()> {
-        let (reply, result) = mpsc::channel();
-        self.command(Management::Register(device, reply))?;
-        result.recv().map_err(|_| io::ErrorKind::BrokenPipe)?
+        self.driver.lock().unwrap().register(device)
     }
-    /// Publishes the device and its complete policy in one actor transition.
-    /// Ordinary rejection leaves both unchanged. Actor termination after commit
-    /// but before replying can produce an ambiguous transport error.
-    pub fn register_device_with_config(
+    pub(crate) fn register_device_with_config(
         &self,
         expected: Generation,
         config: Config,
         device: DeviceConfig,
     ) -> Result<ConfigReceipt, ConfigError> {
-        config.validate().map_err(ConfigError::Invalid)?;
-        let (reply, result) = mpsc::channel();
-        self.command(Management::RegisterWithConfig(
-            expected, config, device, reply,
-        ))
-        .map_err(ConfigError::Unavailable)?;
-        result
-            .recv()
-            .map_err(|_| ConfigError::Unavailable(io::ErrorKind::BrokenPipe.into()))?
+        self.driver
+            .lock()
+            .unwrap()
+            .register_with_config(expected, config, device, Instant::now())
     }
-    /// Closes admission immediately. The actor prunes policy asynchronously;
-    /// a subsequent snapshot observes the committed removal.
     pub fn remove_device(&self, device: DeviceId) -> io::Result<()> {
-        let mut gate = self.shared.gate.lock().unwrap();
-        let accepting = gate
-            .devices
-            .get_mut(&device)
-            .ok_or(io::ErrorKind::NotFound)?;
-        *accepting = false;
-        if !gate.accepting || !gate.config.devices.contains_key(&device) {
-            return Ok(());
-        }
-        gate.removals
-            .entry(device)
-            .and_modify(|removal| {
-                if let Removal::Transaction {
-                    close_requested, ..
-                } = removal
-                {
-                    *close_requested = true;
-                }
+        let generation = self.shared.gate.lock().unwrap().generation;
+        self.remove_device_at(generation, device)
+            .map(|_| ())
+            .map_err(|e| match e {
+                ConfigError::Invalid(e) | ConfigError::Unavailable(e) => e,
+                ConfigError::Stale(_) => io::ErrorKind::WouldBlock.into(),
             })
-            .or_insert(Removal::Close);
-        drop(gate);
-        self.shared.wake.notify();
-        Ok(())
     }
-    /// Atomically closes admission and prunes policy without waiting for physical retirement.
-    /// Repeating a committed removal does not advance the configuration generation.
-    /// Actor loss after commit but before reply can produce an ambiguous transport error.
-    pub fn remove_device_at(
+    pub(crate) fn remove_device_at(
         &self,
         expected: Generation,
         device: DeviceId,
     ) -> Result<Generation, ConfigError> {
-        let (reply, result) = mpsc::channel();
-        let mut gate = self.shared.gate.lock().unwrap();
-        if !gate.accepting {
-            return Err(ConfigError::Unavailable(io::ErrorKind::BrokenPipe.into()));
-        }
-        if expected != gate.generation {
-            return Err(ConfigError::Stale(gate.generation));
-        }
-        if !gate.devices.contains_key(&device) {
-            return Err(ConfigError::Invalid(io::ErrorKind::NotFound.into()));
-        }
-        if !gate.config.devices.contains_key(&device) {
-            return Ok(gate.generation);
-        }
-        if gate.removals.contains_key(&device) {
-            return Err(ConfigError::Unavailable(io::ErrorKind::WouldBlock.into()));
-        }
-        gate.removals.insert(
-            device,
-            Removal::Transaction {
-                expected,
-                reply,
-                close_requested: false,
-            },
-        );
-        drop(gate);
-        self.shared.wake.notify();
-        result
-            .recv()
-            .map_err(|_| ConfigError::Unavailable(io::ErrorKind::BrokenPipe.into()))?
+        self.driver
+            .lock()
+            .unwrap()
+            .remove_config(expected, device, Instant::now())
     }
     pub fn read(&self, spec: RequestSpec) -> io::Result<Waiter> {
         self.submit(spec, Direction::Read, &[])
@@ -629,49 +570,65 @@ impl Service {
             bytes,
         )?;
         let (destination, completed) = mpsc::channel();
-        let id = admission.publish(destination)?;
+        let id = admission.publish(engine::Destination::Caller(destination))?;
         Ok(Waiter {
             lifetime,
             control: Some(control),
             completed,
             id,
+            shared: Arc::clone(&self.shared),
         })
     }
     pub(crate) fn begin(&self, options: RequestOptions) -> io::Result<Admission> {
-        Admission::begin(Arc::clone(&self.shared), options)
-    }
-    fn command(&self, command: Management) -> io::Result<()> {
-        let gate = self.shared.gate.lock().unwrap();
-        if !gate.accepting {
-            return Err(io::ErrorKind::BrokenPipe.into());
+        match Admission::begin(Arc::clone(&self.shared), options.clone()) {
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                self.driver.lock().unwrap().progress(None);
+                Admission::begin(Arc::clone(&self.shared), options)
+            }
+            result => result,
         }
-        self.shared
-            .management
-            .try_send(command)
-            .map_err(|e| match e {
-                mpsc::TrySendError::Full(_) => io::ErrorKind::WouldBlock,
-                mpsc::TrySendError::Disconnected(_) => io::ErrorKind::BrokenPipe,
-            })?;
-        self.shared.wake.notify();
-        Ok(())
     }
-    pub fn reconfigure(
+    pub(crate) fn reconfigure(
         &self,
         expected: Generation,
         config: Config,
     ) -> Result<ConfigReceipt, ConfigError> {
-        config.validate().map_err(ConfigError::Invalid)?;
-        let (reply, result) = mpsc::channel();
-        self.command(Management::Reconfigure(expected, config, reply))
-            .map_err(ConfigError::Unavailable)?;
-        result
-            .recv()
-            .map_err(|_| ConfigError::Unavailable(io::ErrorKind::BrokenPipe.into()))?
+        self.driver
+            .lock()
+            .unwrap()
+            .reconfigure(expected, config, Instant::now())
     }
     pub fn snapshot(&self) -> io::Result<ServiceSnapshot> {
-        let (reply, result) = mpsc::channel();
-        self.command(Management::Snapshot(reply))?;
-        result.recv().map_err(|_| io::ErrorKind::BrokenPipe.into())
+        Ok(self.driver.lock().unwrap().snapshot())
+    }
+    pub(crate) fn device_drained(&self, device: DeviceId) -> bool {
+        self.driver.lock().unwrap().device_drained(device)
+    }
+    pub(crate) fn poll_completion(
+        &self,
+        device: DeviceId,
+        until: Instant,
+    ) -> io::Result<Completion> {
+        loop {
+            let epoch = self.shared.wake.epoch();
+            let mut driver = self.driver.lock().unwrap();
+            let busy = driver.progress(Some(device));
+            if let Some(completion) = driver.take_completion(device) {
+                return Ok(completion);
+            }
+            let now = Instant::now();
+            if now >= until {
+                return Err(io::ErrorKind::WouldBlock.into());
+            }
+            let delay = driver
+                .health_delay(now)
+                .unwrap_or(until - now)
+                .min(until - now);
+            drop(driver);
+            if !busy {
+                self.shared.wake.wait(epoch, Some(delay));
+            }
+        }
     }
     pub fn health_status(&self) -> HealthSnapshot {
         self.shared.health.snapshot(true, Instant::now())
@@ -681,13 +638,21 @@ impl Service {
         self.shared.health.close();
         self.shared.wake.notify();
     }
-    pub fn shutdown(mut self) -> io::Result<()> {
+    pub fn shutdown(self) -> io::Result<()> {
         self.stop();
-        self.join
-            .take()
-            .unwrap()
-            .join()
-            .unwrap_or_else(|_| Err(io::Error::other("storage actor panicked")))
+        loop {
+            let epoch = self.shared.wake.epoch();
+            let mut driver = self.driver.lock().unwrap();
+            let busy = driver.progress(None);
+            if driver.quiescent() {
+                return driver.shutdown_backends();
+            }
+            let delay = driver.health_delay(Instant::now());
+            drop(driver);
+            if !busy {
+                self.shared.wake.wait(epoch, delay);
+            }
+        }
     }
 }
 impl Drop for Service {
@@ -697,13 +662,6 @@ impl Drop for Service {
 }
 fn invalid(message: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, message)
-}
-fn receive<T>(receiver: &mpsc::Receiver<T>, deadline: Instant) -> io::Result<Option<T>> {
-    match receiver.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
-        Ok(value) => Ok(Some(value)),
-        Err(mpsc::RecvTimeoutError::Timeout) => Ok(None),
-        Err(mpsc::RecvTimeoutError::Disconnected) => Err(io::ErrorKind::BrokenPipe.into()),
-    }
 }
 #[cfg(test)]
 mod tests;

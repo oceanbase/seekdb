@@ -33,7 +33,7 @@ namespace common
 {
 static int64_t checked_metric(double value)
 {
-  const auto result = storage_io::calibration_integer(value);
+  const auto result = storage_io::metric_integer(value);
   if (result.error != OB_SUCCESS) { LOG_WARN_RET(result.error, "invalid io metric conversion", K(value)); }
   return result.value;
 }
@@ -404,16 +404,6 @@ int ObIOManager::begin_request(ObIORequest &req, std::shared_ptr<ObDeviceChannel
 }
 
 
-int ObIOManager::refresh_io_service_config(const ObIOServiceConfig &replacement,
-    uint64_t expected_generation, ResourceConfigReceipt &receipt)
-{
-  int ret = OB_SUCCESS;
-  ObRefHolder<ObIOService> service;
-  if (OB_FAIL(get_io_service(service))) { return ret; }
-  ret = service.get_ptr()->replace_config(replacement, expected_generation, receipt);
-  return ret;
-}
-
 int ObIOManager::refresh_io_runtime_config(const ObIOServiceConfig::ResourceConfig &resources,
     const ObIOServiceConfig::ParamConfig &params)
 {
@@ -691,10 +681,8 @@ int ObIOService::submit_request(ObIORequest &req)
         ret = OB_STATE_NOT_MATCH;
       } else {
         result.config_snapshot_ = accepted_config_;
-        const auto mapped = accepted_config_->module_groups_.find(result.get_sys_module_id());
-        result.group_id_ = result.is_sys_module() && mapped != accepted_config_->module_groups_.end()
-            ? mapped->second : 0;
-        result.group_index_ = accepted_config_->group_indices_.at(result.group_id_);
+        result.group_id_ = 0;
+        result.group_index_ = static_cast<uint64_t>(ObIOMode::MAX_MODE);
         result.time_log_.enqueue_ts_ = ObTimeUtility::fast_current_time();
         ret = OB_IO_MANAGER.begin_request(req, channel);
       }
@@ -802,28 +790,6 @@ int ObIOService::prepare_config(const ObIOServiceConfig &replacement, int64_t se
     native.max_bytes = candidate->effective_io_buffer_limit_;
     native.probe_records = replacement.probe_request_limit_;
     native.probe_bytes = replacement.probe_buffer_limit_;
-    native.default_group = 0;
-    native.unlimited_capacity = replacement.resource_config_.max_iops_ == INT64_MAX;
-    native.capacity_iops = native.unlimited_capacity ? 0 : replacement.resource_config_.max_iops_;
-    const auto &base = replacement.resource_config_;
-    for (int64_t i = 0; i < replacement.group_configs_.count(); ++i) {
-      const auto &group = replacement.group_configs_.at(i);
-      if (group.mode_ != ObIOMode::MAX_MODE || group.deleted_ || group.cleared_) { continue; }
-      candidate->group_indices_.emplace(group.group_id_, i);
-      storage_io::GroupPolicy policy{};
-      policy.id = group.group_id_;
-      policy.minimum_iops = base.min_iops_ == INT64_MAX ? 0
-          : static_cast<uint64_t>(base.min_iops_ / 100 * group.min_percent_ + base.min_iops_ % 100 * group.min_percent_ / 100);
-      policy.unlimited = base.max_iops_ == INT64_MAX;
-      policy.maximum_iops = policy.unlimited ? 0
-          : static_cast<uint64_t>(base.max_iops_ / 100 * group.max_percent_ + base.max_iops_ % 100 * group.max_percent_ / 100);
-      policy.excess_weight = group.weight_percent_;
-      policy.burst = 1;
-      native.groups.push_back(policy);
-    }
-    for (const auto &mapping : replacement.module_groups_) {
-      candidate->module_groups_.emplace(mapping.module_id_, mapping.group_id_);
-    }
     for (const auto &device : replacement.devices_) {
       if (accepted_config_) {
         for (const auto &previous : accepted_config_->config_.devices_) {
@@ -906,14 +872,6 @@ void ObIOService::publish_config(std::shared_ptr<IOConfigSnapshot> candidate,
   receipt.physical_reserve_debt_ = applied.physical_debt;
   receipt.admission_debt_ = applied.normal_record_debt != 0 || applied.normal_byte_debt != 0
       || applied.probe_record_debt != 0 || applied.probe_byte_debt != 0;
-}
-
-int ObIOService::replace_config(const ObIOServiceConfig &replacement, uint64_t expected_generation,
-    ResourceConfigReceipt &receipt)
-{
-  std::lock_guard<std::mutex> guard(config_mutex_);
-  if (!is_working()) { return OB_STATE_NOT_MATCH; }
-  return replace_config_locked(replacement, expected_generation, replacement.param_config_.memory_limit_, receipt);
 }
 
 int ObIOService::health_status(storage_io::HealthStatus &status) const
@@ -1106,29 +1064,6 @@ int64_t ObIOService::get_group_num()
 
 int ObIOService::print_io_status()
 {
-  auto calibration = calibration_snapshot();
-  const bool calibration_initialized = ObIOCalibration::get_instance().is_initialized();
-  auto metric_iops = [&](double size, double iops, ObIOMode mode) {
-    const auto bytes = storage_io::calibration_integer(size);
-    if (bytes.error != OB_SUCCESS) { LOG_WARN_RET(bytes.error, "invalid io size", K(size)); return int64_t{0}; }
-    auto result = calibration->normalized_iops(static_cast<int32_t>(mode), bytes.value,
-        iops, calibration_initialized);
-    if (result.error != OB_SUCCESS) { LOG_WARN_RET(result.error, "invalid normalized io metric", K(size), K(iops)); }
-    return result.value;
-  };
-  auto metric_scale = [&](ObIOMode mode, double size, double &scale, bool &valid) {
-    const auto bytes = storage_io::calibration_integer(size);
-    if (bytes.error != OB_SUCCESS) {
-      LOG_WARN_RET(bytes.error, "invalid io scale size", K(size));
-      scale = 0; valid = false; return;
-    }
-    auto result = calibration->calibration_scale(static_cast<int32_t>(mode), bytes.value,
-        calibration_initialized);
-    scale = result.value;
-    valid = result.calibrated;
-    if (result.error != OB_SUCCESS) { LOG_WARN_RET(result.error, "invalid io calibration scale", K(size)); }
-  };
-
   int ret = OB_SUCCESS;
   const auto snapshot = config_snapshot();
   if (!snapshot) { return OB_NOT_INIT; }
@@ -1143,14 +1078,12 @@ int ObIOService::print_io_status()
         || OB_FAIL(io_sys_usage_.snapshot(sys_info, storage_io::StatisticsSampleMode::Advance))) {
       return ret;
     }
-    const int64_t MODE_COUNT = static_cast<int64_t>(ObIOMode::MAX_MODE) + 1;
     const int64_t GROUP_MODE_CNT = static_cast<int64_t>(ObIOGroupMode::MODECNT);
     int64_t ips = 0;
     int64_t ops = 0;
     double failed_ips = 0;
     double failed_ops = 0;
     uint64_t group_config_index = 0;
-    ObIOMode mode = ObIOMode::MAX_MODE;
     ObIOGroupMode group_mode = ObIOGroupMode::MODECNT;
     int tmp_ret = OB_SUCCESS;
     for (int64_t i = 0; i < info.count(); ++i) {
@@ -1159,7 +1092,6 @@ int ObIOService::print_io_status()
       } else if (group_config_index >= io_config_.group_configs_.count()) {
         continue;
       }
-      mode = static_cast<ObIOMode>(group_config_index % MODE_COUNT);
       group_mode = static_cast<ObIOGroupMode>(i % GROUP_MODE_CNT);
       const ObIOServiceConfig::GroupConfig &group_config = io_config_.group_configs_.at(group_config_index);
       if (group_config.deleted_) {
@@ -1176,15 +1108,6 @@ int ObIOService::print_io_status()
       int64_t failed_avg_submit_delay = 0;
       int64_t failed_avg_device_delay = 0;
       int64_t failed_avg_total_delay = 0;
-      double iops_scale = 1.0;
-      double failed_iops_scale = 1.0;
-      bool is_io_ability_valid = false;  // unused
-      int64_t norm_iops = 0;
-      if (group_mode == ObIOGroupMode::LOCALREAD) {
-        norm_iops = metric_iops(info.at(i).avg_byte_, info.at(i).avg_iops_, ObIOMode::READ);
-      } else {
-        norm_iops = metric_iops(info.at(i).avg_byte_, info.at(i).avg_iops_, ObIOMode::WRITE);
-      }
       const auto failed = io_usage_.sample_failure(i);
       failed_avg_size = failed.average_bytes;
       failed_req_iops = failed.iops;
@@ -1198,25 +1121,15 @@ int ObIOService::print_io_status()
       } else if ((info.at(i).avg_byte_ + failed_avg_size) < std::numeric_limits<double>::epsilon()) {
       } else {
         group_bw = checked_metric(info.at(i).avg_byte_ * info.at(i).avg_iops_);
-        metric_scale(mode, failed_avg_size, failed_iops_scale, is_io_ability_valid);
-        metric_scale(mode, info.at(i).avg_byte_, iops_scale, is_io_ability_valid);
         switch (group_mode) {
           case ObIOGroupMode::LOCALREAD: {
-            if (iops_scale > std::numeric_limits<double>::epsilon()) {
-              ips += info.at(i).avg_iops_ / iops_scale;
-            }
-            if (failed_iops_scale > std::numeric_limits<double>::epsilon()) {
-              failed_ips += failed_req_iops / failed_iops_scale;
-            }
+            ips += checked_metric(info.at(i).avg_iops_);
+            failed_ips += failed_req_iops;
             break;
           }
           case ObIOGroupMode::LOCALWRITE: {
-            if (iops_scale > std::numeric_limits<double>::epsilon()) {
-              ops += info.at(i).avg_iops_ / iops_scale;
-            }
-            if (failed_iops_scale > std::numeric_limits<double>::epsilon()) {
-              failed_ops += failed_req_iops / failed_iops_scale;
-            }
+            ops += checked_metric(info.at(i).avg_iops_);
+            failed_ops += failed_req_iops;
             break;
           }
           default:
@@ -1224,7 +1137,7 @@ int ObIOService::print_io_status()
         }
         snprintf(io_status, sizeof(io_status),"group_id:%ld, group_name:%s, mode:%s "
             "[FAILED]:fail_size:%ld, fail_iops:%ld, fail_bw:%ld, [delay/us]:prepare:%ld, schedule:%ld, submit:%ld, rt:%ld, total:%ld, "
-            "[SUCC]:size:%ld, iops:%ld, norm_iops:%ld, bw:%ld, [delay/us]:prepare:%ld, schedule:%ld, submit:%ld, rt:%ld, total:%ld",
+            "[SUCC]:size:%ld, iops:%ld, bw:%ld, [delay/us]:prepare:%ld, schedule:%ld, submit:%ld, rt:%ld, total:%ld",
             group_config.group_id_,
             group_name,
             mode_str,
@@ -1238,7 +1151,6 @@ int ObIOService::print_io_status()
             failed_avg_total_delay,
             checked_metric(info.at(i).avg_byte_),
             checked_metric(info.at(i).avg_iops_ + 0.5),
-            norm_iops,
             static_cast<int64_t>(group_bw),
             info.at(i).avg_prepare_delay_us_,
             info.at(i).avg_schedule_delay_us_,
@@ -1255,7 +1167,6 @@ int ObIOService::print_io_status()
       if (OB_TMP_FAIL(transform_usage_index_to_group_config_index(i, group_config_index))) {
         continue;
       }
-      mode = static_cast<ObIOMode>(group_config_index % MODE_COUNT);
       group_mode = static_cast<ObIOGroupMode>(i % GROUP_MODE_CNT);
       ObIOModule module = static_cast<ObIOModule>(SYS_MODULE_START_ID + i / GROUP_MODE_CNT);
       const char *mode_str = get_io_mode_string(group_mode);
@@ -1263,16 +1174,11 @@ int ObIOService::print_io_status()
       double failed_avg_size = 0;
       double failed_req_iops = 0;
       int64_t failed_req_bw = 0;
-      double iops_scale = 1.0;
-      bool is_io_ability_valid = false;  // unused
-      double failed_iops_scale = 1.0;
       int64_t failed_avg_prepare_delay = 0;
       int64_t failed_avg_schedule_delay = 0;
       int64_t failed_avg_submit_delay = 0;
       int64_t failed_avg_device_delay = 0;
       int64_t failed_avg_total_delay = 0;
-      int64_t norm_iops = 0;
-      int64_t norm_failed_iops = 0;
       const auto failed = io_sys_usage_.sample_failure(i);
       failed_avg_size = failed.average_bytes;
       failed_req_iops = failed.iops;
@@ -1287,17 +1193,13 @@ int ObIOService::print_io_status()
       } else {
         switch (group_mode) {
           case ObIOGroupMode::LOCALREAD: {
-            norm_iops = metric_iops(sys_info.at(i).avg_byte_, sys_info.at(i).avg_iops_, ObIOMode::READ);
-            norm_failed_iops = metric_iops(failed_avg_size, failed_req_iops, ObIOMode::READ);
-            ips += norm_iops;
-            failed_ips += norm_failed_iops;
+            ips += checked_metric(sys_info.at(i).avg_iops_);
+            failed_ips += failed_req_iops;
             break;
           }
           case ObIOGroupMode::LOCALWRITE: {
-            norm_iops = metric_iops(sys_info.at(i).avg_byte_, sys_info.at(i).avg_iops_, ObIOMode::WRITE);
-            norm_failed_iops = metric_iops(failed_avg_size, failed_req_iops, ObIOMode::WRITE);
-            ops += norm_iops;
-            failed_ops += norm_failed_iops;
+            ops += checked_metric(sys_info.at(i).avg_iops_);
+            failed_ops += failed_req_iops;
             break;
           }
           default:
@@ -1307,7 +1209,7 @@ int ObIOService::print_io_status()
         snprintf(io_status, sizeof(io_status),
                 "sys_group_name:%s, mode:%s "
                 "[FAILED]: fail_size:%ld, fail_iops:%ld, fail_bw:%ld, [delay/us]:prepare:%ld, schedule:%ld, submit:%ld, rt:%ld, total:%ld, "
-                "[SUCC]: size:%ld, iops:%ld, norm_iops:%ld, bw:%ld, [delay/us]:prepare:%ld, schedule:%ld, submit:%ld, rt:%ld, total:%ld",
+                "[SUCC]: size:%ld, iops:%ld, bw:%ld, [delay/us]:prepare:%ld, schedule:%ld, submit:%ld, rt:%ld, total:%ld",
                  get_io_sys_group_name(module),
                  mode_str,
                  checked_metric(failed_avg_size),
@@ -1320,7 +1222,6 @@ int ObIOService::print_io_status()
                  failed_avg_total_delay,
                  checked_metric(sys_info.at(i).avg_byte_),
                  checked_metric(sys_info.at(i).avg_iops_ + 0.5),
-                 norm_iops,
                  static_cast<int64_t>(group_bw),
                  sys_info.at(i).avg_prepare_delay_us_,
                  sys_info.at(i).avg_schedule_delay_us_,
@@ -1385,31 +1286,6 @@ void ObIOManager::print_service_status()
 {
   ObRefHolder<ObIOService> holder;
   if (OB_SUCCESS == get_io_service(holder)) { holder.get_ptr()->print_io_status(); }
-}
-
-}
-}
-
-namespace oceanbase
-{
-namespace common
-{
-rust::Box<storage_io::CalibrationView> ObIOService::calibration_snapshot() const
-{
-  std::lock_guard<std::mutex> guard(config_mutex_);
-  return rust_service_ ? (*rust_service_)->calibration_snapshot() : storage_io::empty_calibration_view();
-}
-
-int ObIOService::replace_calibration(rust::Slice<const storage_io::CalibrationSample> samples)
-{
-  std::lock_guard<std::mutex> guard(config_mutex_);
-  return rust_service_ ? (*rust_service_)->replace_calibration(samples) : OB_NOT_INIT;
-}
-
-int ObIOService::reset_calibration()
-{
-  std::lock_guard<std::mutex> guard(config_mutex_);
-  return rust_service_ ? (*rust_service_)->reset_calibration() : OB_NOT_INIT;
 }
 
 }

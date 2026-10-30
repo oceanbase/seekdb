@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::admission::{FINISHED, WAITING};
-use super::scheduler::Scheduler;
+use super::admission::FINISHED;
 use super::*;
 use file_io::{Retired, SubmissionId};
 use std::collections::{BTreeSet, HashMap};
 const QUANTUM: usize = 64;
 
-pub(super) enum Destination {
+pub(crate) enum Destination {
     Caller(mpsc::Sender<Completion>),
+    Device(DeviceId),
     Diagnosis,
 }
 pub(super) enum WorkOwner {
@@ -33,109 +33,6 @@ pub(super) struct Incoming {
     pub cell: Arc<ControlCell>,
     pub destination: Destination,
 }
-pub(super) enum Management {
-    Register(DeviceConfig, mpsc::Sender<io::Result<()>>),
-    RegisterWithConfig(
-        Generation,
-        Config,
-        DeviceConfig,
-        mpsc::Sender<Result<ConfigReceipt, ConfigError>>,
-    ),
-    Reconfigure(
-        Generation,
-        Config,
-        mpsc::Sender<Result<ConfigReceipt, ConfigError>>,
-    ),
-    Snapshot(mpsc::Sender<ServiceSnapshot>),
-}
-pub(super) enum Retirement {
-    Complete(DeviceId, usize, SubmissionId, Retired),
-    Failed(DeviceId, usize, io::Error),
-}
-struct ActorLifetime(Arc<Shared>);
-impl Drop for ActorLifetime {
-    fn drop(&mut self) {
-        let mut gate = self
-            .0
-            .gate
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        gate.accepting = false;
-        gate.removals.clear();
-        let waiting = std::mem::take(&mut gate.waiting);
-        drop(gate);
-        drop(waiting);
-        self.0.health.close();
-        self.0.wake.notify();
-    }
-}
-struct RetirementReader {
-    device: DeviceId,
-    stop: Arc<AtomicBool>,
-    join: Option<JoinHandle<()>>,
-    activate: Option<mpsc::Sender<()>>,
-}
-impl RetirementReader {
-    fn start(
-        shared: &Shared,
-        id: DeviceId,
-        lane: usize,
-        backend: Arc<Backend>,
-    ) -> io::Result<Self> {
-        let (activate, activated) = mpsc::channel();
-        let stop = Arc::new(AtomicBool::new(false));
-        let stopping = Arc::clone(&stop);
-        let retirement = shared.retirement.clone();
-        let wake = Arc::clone(&shared.wake);
-        let join = thread::Builder::new()
-            .name("storage-retire".into())
-            .spawn(move || {
-                if activated.recv().is_err() {
-                    return;
-                }
-                while !stopping.load(Ordering::Acquire) {
-                    let event = match backend.retire(Instant::now() + Duration::from_millis(25)) {
-                        Ok(Some((submission, retired))) => {
-                            Retirement::Complete(id, lane, submission, retired)
-                        }
-                        Ok(None) => continue,
-                        Err(error) => {
-                            let _ = retirement.send(Retirement::Failed(id, lane, error));
-                            wake.notify();
-                            return;
-                        }
-                    };
-                    if retirement.send(event).is_err() {
-                        return;
-                    }
-                    wake.notify();
-                }
-            })?;
-        Ok(Self {
-            device: id,
-            stop,
-            join: Some(join),
-            activate: Some(activate),
-        })
-    }
-    fn activate(&mut self) {
-        let _ = self.activate.take().unwrap().send(());
-    }
-    fn stop_and_detach(mut self) {
-        drop(self.activate.take());
-        self.stop.store(true, Ordering::Release);
-        drop(self.join.take());
-    }
-}
-impl Drop for RetirementReader {
-    fn drop(&mut self) {
-        drop(self.activate.take());
-        self.stop.store(true, Ordering::Release);
-        if let Some(join) = self.join.take() {
-            let _ = join.join();
-        }
-    }
-}
 struct BackendState {
     backend: Arc<Backend>,
     used: [usize; 2],
@@ -143,6 +40,7 @@ struct BackendState {
 }
 struct DeviceState {
     limits: DeviceLimits,
+    port: Arc<file_io::CompletionPort>,
     lanes: Vec<BackendState>,
     used: [usize; 2],
     closed: bool,
@@ -150,7 +48,7 @@ struct DeviceState {
 struct PreparedDevice {
     id: DeviceId,
     state: DeviceState,
-    readers: Vec<RetirementReader>,
+    completed: VecDeque<Completion>,
 }
 #[derive(Clone, Copy)]
 struct Permit {
@@ -163,15 +61,6 @@ pub(super) enum Stage {
     Queued(Operation),
     Submitted(SubmissionId),
 }
-#[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
-struct LaneKey {
-    device: DeviceId,
-    group: GroupId,
-    class: RequestClass,
-    execution: Execution,
-    rate_exempt: bool,
-    retry_route: Option<usize>,
-}
 pub(super) struct Active {
     pub stage: Stage,
     pub transferred: usize,
@@ -180,128 +69,117 @@ pub(super) struct Active {
     pub(super) owner: WorkOwner,
     window: Range<usize>,
     pub(super) cell: Arc<ControlCell>,
-    group: GroupId,
     route: Option<usize>,
     last_cost: DepthCost,
     attempts: u64,
 }
-pub(super) struct Engine {
+pub(super) struct Driver {
     pub shared: Arc<Shared>,
     devices: BTreeMap<DeviceId, DeviceState>,
-    readers: Vec<RetirementReader>,
-    pub active: BTreeMap<RequestId, Active>,
+    pub active: HashMap<RequestId, Active>,
+    completed: BTreeMap<DeviceId, VecDeque<Completion>>,
     submitted: HashMap<SubmissionId, (RequestId, Permit)>,
     queued: VecDeque<RequestId>,
-    deadlines: BTreeSet<(Instant, RequestId)>,
     pub(super) config: Arc<Config>,
-    scheduler: Scheduler,
     stopping: bool,
-    prefer_probe: bool,
-    control_cursor: Option<RequestId>,
-    scan_epoch: u64,
-    admission_cursors: [Option<RequestId>; 2],
-    admission_scan_epochs: [u64; 2],
     probe_attempts: u64,
     health: Option<Diagnosis>,
-    #[cfg(test)]
-    pub(super) reader_start_failure: Option<usize>,
-    #[cfg(test)]
-    pub(super) registration_precommit: Option<Box<dyn FnOnce() + Send>>,
 }
-impl Engine {
+impl Driver {
     pub fn new(shared: Arc<Shared>) -> Self {
         let config = Arc::clone(&shared.gate.lock().unwrap().config);
-        let scheduler = Scheduler::new(&config, Instant::now());
         Self {
             shared,
             devices: BTreeMap::new(),
-            readers: Vec::new(),
-            active: BTreeMap::new(),
+            active: HashMap::new(),
+            completed: BTreeMap::new(),
             submitted: HashMap::new(),
             queued: VecDeque::new(),
-            deadlines: BTreeSet::new(),
             config,
-            scheduler,
             stopping: false,
-            prefer_probe: true,
-            control_cursor: None,
-            scan_epoch: 0,
-            admission_cursors: [None; 2],
-            admission_scan_epochs: [0; 2],
             probe_attempts: 0,
             health: None,
-            #[cfg(test)]
-            reader_start_failure: None,
-            #[cfg(test)]
-            registration_precommit: None,
         }
     }
-    pub fn run(
-        mut self,
-        commands: mpsc::Receiver<Management>,
-        retired: mpsc::Receiver<Retirement>,
-    ) -> io::Result<()> {
-        let _lifetime = ActorLifetime(Arc::clone(&self.shared));
-        loop {
-            let epoch = self.shared.wake.epoch();
-            let mut busy = false;
-            for n in 0..QUANTUM {
-                let Ok(event) = retired.try_recv() else {
-                    break;
-                };
-                self.retirement(event);
-                busy |= n + 1 == QUANTUM;
+    pub(super) fn take_completion(&mut self, device: DeviceId) -> Option<Completion> {
+        let completion = self.completed.get_mut(&device)?.pop_front();
+        if !self.devices.contains_key(&device)
+            && self.completed.get(&device).is_some_and(VecDeque::is_empty)
+        {
+            self.completed.remove(&device);
+        }
+        completion
+    }
+    fn deliver_completion(&mut self, destination: Destination, completion: Completion) {
+        match destination {
+            Destination::Caller(sender) => {
+                let _ = sender.send(completion);
             }
-            busy |= self.drain_gate();
-            busy |= self.controls(Instant::now());
-            busy |= self.grant_admission();
-            for n in 0..8 {
-                let Ok(command) = commands.try_recv() else {
-                    break;
-                };
-                self.manage(command);
-                busy |= n == 7;
-            }
-            busy |= self.health_turn(Instant::now());
-            busy |= self.dispatch(Instant::now());
-            self.reap_devices();
-            if self.stopping
-                && !busy
-                && self.active.is_empty()
-                && self.health.is_none()
-                && self.shared.health.closed_and_empty()
+            Destination::Device(device) => self
+                .completed
+                .entry(device)
+                .or_default()
+                .push_back(completion),
+            Destination::Diagnosis => unreachable!(),
+        }
+        self.shared.wake.notify();
+    }
+    pub(super) fn progress(&mut self, selected: Option<DeviceId>) -> bool {
+        let mut busy = self.accept_probes_and_close();
+        for _ in 0..QUANTUM {
+            let cancellation = self.shared.cancellations.lock().unwrap().pop_front();
+            let Some(cancellation) = cancellation else {
+                break;
+            };
+            let id = cancellation.id;
+            if self
+                .active
+                .get(&id)
+                .is_some_and(|active| matches!(active.stage, Stage::Queued(_)))
             {
-                let gate = self.shared.gate.lock().unwrap();
-                if gate.published.is_empty()
-                    && gate.waiting.iter().all(BTreeMap::is_empty)
-                    && gate.removals.is_empty()
-                {
+                self.cancel(id, CompletionStatus::Cancelled);
+            }
+            busy = true;
+        }
+        let one = [selected.unwrap_or(DeviceId(0))];
+        let devices = match selected {
+            Some(_) => std::borrow::Cow::Borrowed(&one[..]),
+            None => std::borrow::Cow::Owned(self.devices.keys().copied().collect::<Vec<_>>()),
+        };
+        for &device in devices.iter() {
+            let Some(state) = self.devices.get(&device) else {
+                continue;
+            };
+            let port = Arc::clone(&state.port);
+            for _ in 0..QUANTUM {
+                let Some((id, retired)) = port.try_retire() else {
                     break;
+                };
+                self.retired(id, retired);
+                busy = true;
+            }
+            for lane in 0..self.devices[&device].lanes.len() {
+                let state = &self.devices[&device].lanes[lane];
+                if state.failure.is_none() {
+                    if let Some(error) = state.backend.terminal_error() {
+                        self.backend_failed(device, lane, error);
+                    }
                 }
             }
-            if busy {
-                continue;
-            }
-            let deadline = self
-                .deadlines
-                .first()
-                .map(|(d, _)| d.saturating_duration_since(Instant::now()));
-            let delay = match (deadline, self.scheduler.delay()) {
-                (Some(a), Some(b)) => Some(a.min(b)),
-                (a, b) => a.or(b),
-            };
-            let delay = match (delay, self.health_delay(Instant::now())) {
-                (Some(a), Some(b)) => Some(a.min(b)),
-                (a, b) => a.or(b),
-            };
-            self.shared.wake.wait(epoch, delay);
         }
-        drop(self.readers);
+        if self.health.is_some() || self.shared.health.has_work() {
+            busy |= self.health_turn(Instant::now());
+        }
+        busy |= self.dispatch(Instant::now());
+        self.reap_devices();
+        busy
+    }
+    pub(super) fn shutdown_backends(&mut self) -> io::Result<()> {
         let mut result = Ok(());
-        for device in self.devices.into_values() {
+        for device in std::mem::take(&mut self.devices).into_values() {
             for lane in device.lanes {
                 let stopped = Arc::try_unwrap(lane.backend)
-                    .map_err(|_| io::Error::other("retirement reader retained backend"))?
+                    .map_err(|_| io::Error::other("backend still has a live owner"))?
                     .shutdown();
                 if result.is_ok() {
                     result = stopped;
@@ -310,7 +188,14 @@ impl Engine {
         }
         result
     }
-    fn health_delay(&self, now: Instant) -> Option<Duration> {
+    pub(super) fn quiescent(&self) -> bool {
+        self.active.is_empty()
+            && self.shared.cancellations.lock().unwrap().is_empty()
+            && self.health.is_none()
+            && self.shared.health.closed_and_empty()
+            && self.shared.gate.lock().unwrap().pending_probes.is_empty()
+    }
+    pub(super) fn health_delay(&self, now: Instant) -> Option<Duration> {
         let health = self.health.as_ref()?;
         match health.stage {
             DiagnosisStage::Backoff { until, .. } => Some(until.saturating_duration_since(now)),
@@ -507,7 +392,6 @@ impl Engine {
         };
         let mut options = target.options.clone();
         options.class = RequestClass::Probe;
-        options.rate_exempt = true;
         options.length = pass.length;
         options.window = pass.window();
         options.policy.deadline = Some(now + timeout);
@@ -515,20 +399,41 @@ impl Engine {
         let admission = Admission::begin(Arc::clone(&self.shared), options)?;
         Ok((admission, pass))
     }
-    pub(super) fn drain_gate(&mut self) -> bool {
-        self.drain_removals();
+    pub(super) fn accept_probes_and_close(&mut self) -> bool {
         let (published, stopping, busy) = {
             let mut gate = self.shared.gate.lock().unwrap();
             for (id, device) in &mut self.devices {
-                device.closed |= gate.devices.get(id) == Some(&false);
+                device.closed |= gate
+                    .devices
+                    .get(id)
+                    .is_some_and(|open| !open.load(Ordering::Acquire));
             }
-            let count = QUANTUM.min(gate.published.len());
-            let published: Vec<_> = gate.published.drain(..count).collect();
-            (published, !gate.accepting, !gate.published.is_empty())
+            let count = QUANTUM.min(gate.pending_probes.len());
+            let published: Vec<_> = gate.pending_probes.drain(..count).collect();
+            (published, !gate.accepting, !gate.pending_probes.is_empty())
         };
         if stopping && !self.stopping {
             self.stopping = true;
             self.shared.health.close();
+        }
+        let closed: Vec<_> = self
+            .queued
+            .iter()
+            .copied()
+            .filter(|id| {
+                let active = &self.active[id];
+                self.stopping
+                    || self
+                        .devices
+                        .get(&active.cell.options.device)
+                        .is_none_or(|device| device.closed)
+            })
+            .collect();
+        for id in closed {
+            self.queued.retain(|queued| *queued != id);
+            if let Some(active) = self.active.remove(&id) {
+                self.finish(active, None, CompletionStatus::Shutdown);
+            }
         }
         for incoming in published {
             self.accept(incoming);
@@ -544,11 +449,6 @@ impl Engine {
         } = incoming;
         let id = cell.id;
         let options = &cell.options;
-        let group = if self.config.groups.contains_key(&options.group) {
-            options.group
-        } else {
-            self.config.default_group
-        };
         let cost = self.devices[&options.device]
             .limits
             .cost(options.class, options.length);
@@ -559,7 +459,6 @@ impl Engine {
             destination: Some(destination),
             owner,
             window: options.window.clone(),
-            group,
             route: None,
             last_cost: cost,
             attempts: 0,
@@ -581,132 +480,8 @@ impl Engine {
             self.finish(active, None, status);
             return;
         }
-        if let Some(deadline) = active.cell.options.policy.deadline {
-            self.deadlines.insert((deadline, id));
-        }
         self.active.insert(id, active);
         self.queued.push_back(id);
-    }
-    pub(super) fn grant_admission(&mut self) -> bool {
-        let mut busy = false;
-        for class in [RequestClass::Probe, RequestClass::Normal] {
-            for n in 0..QUANTUM {
-                busy |= n + 1 == QUANTUM;
-                let mut gate = self.shared.gate.lock().unwrap();
-                let Some((_, cell)) = gate.waiting[class.index()].first_key_value() else {
-                    break;
-                };
-                let cell = Arc::clone(cell);
-                if !gate.accepting
-                    || cell.phase.load(Ordering::Acquire) != WAITING
-                    || cell.check().is_err()
-                    || gate.devices.get(&cell.options.device) != Some(&true)
-                    || self
-                        .devices
-                        .get(&cell.options.device)
-                        .is_none_or(|d| d.closed)
-                {
-                    let removed = gate.waiting[class.index()].remove(&cell.id);
-                    drop(gate);
-                    drop(removed);
-                    continue;
-                }
-                let mut ledger = self.shared.ledger.lock().unwrap();
-                if !ledger.reserve_bytes(&cell) && cell.phase.load(Ordering::Acquire) == WAITING {
-                    break;
-                }
-                drop(ledger);
-                let removed = gate.waiting[class.index()].remove(&cell.id);
-                drop(gate);
-                drop(removed);
-                self.shared.wake.notify();
-            }
-        }
-        busy
-    }
-    pub(super) fn controls(&mut self, now: Instant) -> bool {
-        if self.control_cursor.is_none() {
-            self.scan_epoch = self.shared.wake.epoch();
-        }
-        let ids: Vec<_> = self
-            .active
-            .range((
-                self.control_cursor
-                    .map_or(std::ops::Bound::Unbounded, std::ops::Bound::Excluded),
-                std::ops::Bound::Unbounded,
-            ))
-            .take(QUANTUM + 1)
-            .map(|(&id, _)| id)
-            .collect();
-        let more = ids.len() > QUANTUM;
-        for id in ids.into_iter().take(QUANTUM) {
-            self.control_cursor = Some(id);
-            let active = &self.active[&id];
-            let options = &active.cell.options;
-            let status =
-                if self.stopping || self.devices.get(&options.device).is_none_or(|d| d.closed) {
-                    Some(CompletionStatus::Shutdown)
-                } else if active.cell.cancelled.load(Ordering::Acquire) {
-                    Some(CompletionStatus::Cancelled)
-                } else if options
-                    .policy
-                    .deadline
-                    .is_some_and(|deadline| deadline <= now)
-                {
-                    Some(CompletionStatus::TimedOut)
-                } else {
-                    None
-                };
-            if let Some(status) = status {
-                self.cancel(id, status);
-            }
-        }
-        if !more {
-            self.control_cursor = None;
-        }
-        more | self.prune_admissions() | (self.scan_epoch != self.shared.wake.epoch())
-    }
-    fn prune_admissions(&mut self) -> bool {
-        let mut busy = false;
-        for class in 0..2 {
-            if self.admission_cursors[class].is_none() {
-                self.admission_scan_epochs[class] = self.shared.wake.epoch();
-            }
-            let mut gate = self.shared.gate.lock().unwrap();
-            let ids: Vec<_> = gate.waiting[class]
-                .range((
-                    self.admission_cursors[class]
-                        .map_or(std::ops::Bound::Unbounded, std::ops::Bound::Excluded),
-                    std::ops::Bound::Unbounded,
-                ))
-                .take(QUANTUM + 1)
-                .map(|(&id, _)| id)
-                .collect();
-            let more = ids.len() > QUANTUM;
-            let mut removed = Vec::new();
-            for id in ids.into_iter().take(QUANTUM) {
-                self.admission_cursors[class] = Some(id);
-                let cell = &gate.waiting[class][&id];
-                if !gate.accepting
-                    || cell.phase.load(Ordering::Acquire) != WAITING
-                    || cell.check().is_err()
-                    || gate.devices.get(&cell.options.device) != Some(&true)
-                    || self
-                        .devices
-                        .get(&cell.options.device)
-                        .is_none_or(|d| d.closed)
-                {
-                    removed.push(gate.waiting[class].remove(&id));
-                }
-            }
-            drop(gate);
-            drop(removed);
-            if !more {
-                self.admission_cursors[class] = None;
-            }
-            busy |= more || self.admission_scan_epochs[class] != self.shared.wake.epoch();
-        }
-        busy
     }
     fn route(&self, active: &Active, operation: &Operation) -> Option<Permit> {
         let options = &active.cell.options;
@@ -748,41 +523,6 @@ impl Engine {
         }
         None
     }
-    fn candidates(
-        &self,
-        refused: &BTreeSet<(DeviceId, usize)>,
-    ) -> (Vec<(RequestId, Permit)>, BTreeSet<GroupId>) {
-        let mut candidates = Vec::new();
-        let mut groups = BTreeSet::new();
-        let mut heads = BTreeSet::new();
-        for &id in &self.queued {
-            let active = &self.active[&id];
-            let options = &active.cell.options;
-            let key = LaneKey {
-                device: options.device,
-                group: active.group,
-                class: options.class,
-                execution: options.execution,
-                rate_exempt: options.rate_exempt,
-                retry_route: active.route,
-            };
-            if !heads.insert(key) {
-                continue;
-            }
-            if let Stage::Queued(operation) = &active.stage {
-                if let Some(permit) = self.route(active, operation) {
-                    if refused.contains(&(permit.device, permit.lane)) {
-                        continue;
-                    }
-                    candidates.push((id, permit));
-                    if options.class == RequestClass::Normal && !options.rate_exempt {
-                        groups.insert(active.group);
-                    }
-                }
-            }
-        }
-        (candidates, groups)
-    }
     pub fn dispatch(&mut self, now: Instant) -> bool {
         self.dispatch_with(now, Backend::submit)
     }
@@ -796,33 +536,32 @@ impl Engine {
         }
         let mut refused = BTreeSet::new();
         for n in 0..QUANTUM {
-            let (candidates, eligible) = self.candidates(&refused);
-            self.scheduler.tick(now, &eligible);
-            let normal_group = self.scheduler.choose(&eligible);
-            let probe = candidates
-                .iter()
-                .find(|(_, p)| p.class == RequestClass::Probe)
-                .copied();
-            let normal = candidates
-                .iter()
-                .find(|(id, p)| {
-                    p.class == RequestClass::Normal
-                        && (self.active[id].cell.options.rate_exempt
-                            || Some(self.active[id].group) == normal_group)
-                })
-                .copied();
-            let selected = if self.prefer_probe {
-                probe.or(normal)
-            } else {
-                normal.or(probe)
-            };
+            let selected = self.queued.iter().find_map(|&id| {
+                let active = &self.active[&id];
+                let Stage::Queued(operation) = &active.stage else {
+                    return None;
+                };
+                if active.cell.cancelled.load(Ordering::Acquire)
+                    || !active.cell.device_open.load(Ordering::Acquire)
+                    || active
+                        .cell
+                        .options
+                        .policy
+                        .deadline
+                        .is_some_and(|until| until <= now)
+                {
+                    return Some((id, None));
+                }
+                let permit = self.route(active, operation)?;
+                (!refused.contains(&(permit.device, permit.lane))).then_some((id, Some(permit)))
+            });
             let Some((id, permit)) = selected else {
                 return false;
             };
-            self.prefer_probe = permit.class != RequestClass::Probe;
             let mut active = self.active.remove(&id).unwrap();
             self.queued.retain(|queued| *queued != id);
             if active.cell.cancelled.load(Ordering::Acquire)
+                || !active.cell.device_open.load(Ordering::Acquire)
                 || active
                     .cell
                     .options
@@ -830,8 +569,9 @@ impl Engine {
                     .deadline
                     .is_some_and(|d| d <= now)
             {
-                self.remove_deadline(&active);
-                let status = if active.cell.cancelled.load(Ordering::Acquire) {
+                let status = if !active.cell.device_open.load(Ordering::Acquire) {
+                    CompletionStatus::Shutdown
+                } else if active.cell.cancelled.load(Ordering::Acquire) {
                     CompletionStatus::Cancelled
                 } else {
                     CompletionStatus::TimedOut
@@ -839,6 +579,7 @@ impl Engine {
                 self.finish(active, None, status);
                 continue;
             }
+            let permit = permit.expect("nonterminal dispatch candidate has a permit");
             let Stage::Queued(operation) = active.stage else {
                 unreachable!()
             };
@@ -850,13 +591,7 @@ impl Engine {
                     let device = self.devices.get_mut(&permit.device).unwrap();
                     device.used[permit.class.index()] += permit.cost.effective;
                     device.lanes[permit.lane].used[permit.class.index()] += 1;
-                    if permit.class == RequestClass::Normal {
-                        if active.cell.options.rate_exempt {
-                            self.scheduler.exempt_attempt(active.group);
-                        } else {
-                            self.scheduler.charge(active.group);
-                        }
-                    } else {
+                    if permit.class == RequestClass::Probe {
                         self.probe_attempts = self.probe_attempts.saturating_add(1);
                     }
                     active.attempts = active.attempts.saturating_add(1);
@@ -873,7 +608,6 @@ impl Engine {
                         self.active.insert(id, active);
                         self.queued.push_front(id);
                     } else {
-                        self.remove_deadline(&active);
                         self.finish(active, None, CompletionStatus::IoError(failure.error));
                     }
                 }
@@ -898,6 +632,24 @@ impl Engine {
         if active.destination.is_none() {
             drop(retired);
             self.finish(active, None, CompletionStatus::Shutdown);
+            return;
+        }
+        if self.stopping
+            || self
+                .devices
+                .get(&active.cell.options.device)
+                .is_none_or(|d| d.closed)
+        {
+            self.finish(active, Some(retired.operation), CompletionStatus::Shutdown);
+            return;
+        }
+        if let Err(error) = active.cell.check() {
+            let status = if error.kind() == io::ErrorKind::TimedOut {
+                CompletionStatus::TimedOut
+            } else {
+                CompletionStatus::Cancelled
+            };
+            self.finish(active, Some(retired.operation), status);
             return;
         }
         let Retired { operation, result } = retired;
@@ -965,7 +717,6 @@ impl Engine {
                             return;
                         }
                         Err(error) => {
-                            self.remove_deadline(&active);
                             self.finish(active, None, CompletionStatus::IoError(error));
                             return;
                         }
@@ -973,7 +724,6 @@ impl Engine {
                 }
             }
         }
-        self.remove_deadline(&active);
         self.finish(active, Some(operation), status);
     }
     fn finish(&mut self, active: Active, operation: Option<Operation>, status: CompletionStatus) {
@@ -984,7 +734,6 @@ impl Engine {
             transferred,
             last_cost,
             attempts,
-            group,
             owner,
             window,
             ..
@@ -996,21 +745,29 @@ impl Engine {
         if let Some(operation) = &mut operation {
             operation.release_keep_alive();
         }
+        if matches!(
+            status,
+            CompletionStatus::Cancelled | CompletionStatus::TimedOut | CompletionStatus::Shutdown
+        ) {
+            operation = None;
+        }
         cell.phase.store(FINISHED, Ordering::Release);
         match destination {
-            Some(Destination::Caller(destination)) => {
-                let _ = destination.send(Completion {
-                    id: cell.id,
-                    tag: cell.options.tag,
-                    status,
-                    transferred,
-                    depth_cost: last_cost,
-                    physical_attempts: attempts,
-                    group,
-                    operation,
-                    window,
-                    _charge: Arc::clone(&cell.charge),
-                });
+            Some(destination @ (Destination::Caller(_) | Destination::Device(_))) => {
+                self.deliver_completion(
+                    destination,
+                    Completion {
+                        id: cell.id,
+                        tag: cell.options.tag,
+                        status,
+                        transferred,
+                        depth_cost: last_cost,
+                        physical_attempts: attempts,
+                        operation,
+                        window,
+                        _charge: Arc::clone(&cell.charge),
+                    },
+                );
             }
             Some(Destination::Diagnosis) => {
                 self.shared.health.record_outcome(&status);
@@ -1040,20 +797,22 @@ impl Engine {
     ) {
         active.cell.phase.store(FINISHED, Ordering::Release);
         match active.destination.take() {
-            Some(Destination::Caller(destination)) => {
+            Some(destination @ (Destination::Caller(_) | Destination::Device(_))) => {
                 let options = &active.cell.options;
-                let _ = destination.send(Completion {
-                    id: active.cell.id,
-                    tag: options.tag,
-                    status,
-                    transferred: active.transferred,
-                    depth_cost: active.last_cost,
-                    physical_attempts: active.attempts,
-                    group: active.group,
-                    operation,
-                    window: active.window.clone(),
-                    _charge: Arc::clone(&active.cell.charge),
-                });
+                self.deliver_completion(
+                    destination,
+                    Completion {
+                        id: active.cell.id,
+                        tag: options.tag,
+                        status,
+                        transferred: active.transferred,
+                        depth_cost: active.last_cost,
+                        physical_attempts: active.attempts,
+                        operation,
+                        window: active.window.clone(),
+                        _charge: Arc::clone(&active.cell.charge),
+                    },
+                );
             }
             Some(Destination::Diagnosis) => {
                 self.shared.health.record_outcome(&status);
@@ -1071,11 +830,6 @@ impl Engine {
             None => drop(operation),
         }
     }
-    fn remove_deadline(&mut self, active: &Active) {
-        if let Some(deadline) = active.cell.options.policy.deadline {
-            self.deadlines.remove(&(deadline, active.cell.id));
-        }
-    }
     pub fn cancel(&mut self, id: RequestId, status: CompletionStatus) -> CancelOutcome {
         let Some(mut active) = self.active.remove(&id) else {
             return CancelOutcome::NotPending;
@@ -1084,7 +838,6 @@ impl Engine {
             self.active.insert(id, active);
             return CancelOutcome::NotPending;
         }
-        self.remove_deadline(&active);
         self.deliver(&mut active, None, status, false);
         match active.stage {
             Stage::Queued(_) => {
@@ -1101,23 +854,16 @@ impl Engine {
         }
         CancelOutcome::Cancelled
     }
-    fn retirement(&mut self, event: Retirement) {
-        match event {
-            Retirement::Complete(device, lane, submission, retired) => {
-                if self
-                    .submitted
-                    .get(&submission)
-                    .is_some_and(|(_, p)| p.device == device && p.lane == lane)
-                {
-                    self.retired(submission, retired);
-                }
-            }
-            Retirement::Failed(device, lane, error) => self.backend_failed(device, lane, error),
-        }
-    }
     pub(super) fn backend_failed(&mut self, device: DeviceId, lane: usize, error: io::Error) {
         if !self.devices.contains_key(&device)
-            && self.shared.gate.lock().unwrap().devices.get(&device) == Some(&false)
+            && self
+                .shared
+                .gate
+                .lock()
+                .unwrap()
+                .devices
+                .get(&device)
+                .is_some_and(|open| !open.load(Ordering::Acquire))
         {
             return;
         }
@@ -1131,7 +877,6 @@ impl Engine {
             let (id, permit) = self.submitted.remove(&submission).unwrap();
             self.release(permit);
             let active = self.active.remove(&id).unwrap();
-            self.remove_deadline(&active);
             self.finish(active, None, CompletionStatus::IoError(copy_error(&error)));
         }
         let state = self.devices.get_mut(&device).unwrap();
@@ -1144,7 +889,9 @@ impl Engine {
                 .lock()
                 .unwrap()
                 .devices
-                .insert(device, false);
+                .get(&device)
+                .unwrap()
+                .store(false, Ordering::Release);
         }
         let affected: Vec<_> = self
             .queued
@@ -1161,17 +908,83 @@ impl Engine {
         for id in affected {
             let active = self.active.remove(&id).unwrap();
             self.queued.retain(|queued| *queued != id);
-            self.remove_deadline(&active);
             self.finish(active, None, CompletionStatus::IoError(copy_error(&error)));
         }
         self.shared.wake.notify();
     }
-    fn prepare_device(
-        &self,
-        device: DeviceConfig,
-        config: &Config,
-        readers: bool,
-    ) -> io::Result<PreparedDevice> {
+    fn prepare_capacity(&mut self, config: &Config) -> io::Result<()> {
+        let records = config.admission.max_records;
+        {
+            let mut cancellations = self.shared.cancellations.lock().unwrap();
+            let additional = records.saturating_sub(cancellations.len());
+            cancellations
+                .try_reserve(additional)
+                .map_err(io::Error::other)?;
+        }
+        self.active
+            .try_reserve(records.saturating_sub(self.active.len()))
+            .map_err(io::Error::other)?;
+        self.submitted
+            .try_reserve(records.saturating_sub(self.submitted.len()))
+            .map_err(io::Error::other)?;
+        self.queued
+            .try_reserve(records.saturating_sub(self.queued.len()))
+            .map_err(io::Error::other)?;
+        for completed in self.completed.values_mut() {
+            completed
+                .try_reserve(records.saturating_sub(completed.len()))
+                .map_err(io::Error::other)?;
+        }
+        Ok(())
+    }
+    pub(super) fn device_drained(&self, device: DeviceId) -> bool {
+        !self
+            .active
+            .values()
+            .any(|active| active.cell.options.device == device)
+            && !self
+                .shared
+                .gate
+                .lock()
+                .unwrap()
+                .pending_probes
+                .iter()
+                .any(|incoming| incoming.cell.options.device == device)
+            && self
+                .health
+                .as_ref()
+                .is_none_or(|health| health.target.options.device != device)
+    }
+    fn close_diagnosis(&mut self, device: DeviceId) {
+        if self
+            .health
+            .as_ref()
+            .is_none_or(|health| health.target.options.device != device)
+        {
+            return;
+        }
+        let mut health = self.health.take().unwrap();
+        let pending = match &health.stage {
+            DiagnosisStage::Running { id, .. } | DiagnosisStage::Draining { id } => Some(*id),
+            DiagnosisStage::Backoff { pending, .. } | DiagnosisStage::Done { pending } => *pending,
+            _ => None,
+        };
+        let submitted = pending.filter(|id| {
+            self.active
+                .get(id)
+                .is_some_and(|active| matches!(active.stage, Stage::Submitted(_)))
+        });
+        if let Some(id) = pending {
+            self.cancel(id, CompletionStatus::Shutdown);
+        }
+        health.stage = DiagnosisStage::Done { pending: submitted };
+        if submitted.is_some() {
+            self.health = Some(health);
+        } else {
+            self.shared.health.finish(health);
+        }
+    }
+    fn prepare_device(&self, device: DeviceConfig, config: &Config) -> io::Result<PreparedDevice> {
         if !config.devices.contains_key(&device.id)
             || self
                 .shared
@@ -1206,44 +1019,37 @@ impl Engine {
                 failure: None,
             });
         }
-        let mut started = Vec::new();
-        if readers {
-            for (index, lane) in lanes.iter().enumerate() {
-                #[cfg(test)]
-                if self.reader_start_failure == Some(index) {
-                    return Err(io::Error::other("injected retirement reader start failure"));
-                }
-                started.push(RetirementReader::start(
-                    &self.shared,
-                    device.id,
-                    index,
-                    Arc::clone(&lane.backend),
-                )?);
-            }
+        let port = Arc::new(file_io::CompletionPort::new(Arc::clone(&self.shared.wake)));
+        for lane in &lanes {
+            lane.backend.bind_completion_port(Arc::clone(&port))?;
         }
+        let mut completed = VecDeque::new();
+        completed
+            .try_reserve(config.admission.max_records)
+            .map_err(io::Error::other)?;
         Ok(PreparedDevice {
             id: device.id,
+            completed,
             state: DeviceState {
                 limits: config.devices[&device.id],
+                port,
                 lanes,
                 used: [0; 2],
                 closed: false,
             },
-            readers: started,
         })
     }
-    pub(super) fn register(&mut self, device: DeviceConfig, readers: bool) -> io::Result<()> {
-        let mut prepared = self.prepare_device(device, &self.config, readers)?;
+    pub(super) fn register(&mut self, device: DeviceConfig) -> io::Result<()> {
+        let prepared = self.prepare_device(device, &self.config)?;
+        self.prepare_capacity(&self.config.clone())?;
         let mut gate = self.shared.gate.lock().unwrap();
         if !gate.accepting {
             return Err(io::ErrorKind::BrokenPipe.into());
         }
+        self.completed.insert(prepared.id, prepared.completed);
         self.devices.insert(prepared.id, prepared.state);
-        gate.devices.insert(prepared.id, true);
-        for reader in &mut prepared.readers {
-            reader.activate();
-        }
-        self.readers.extend(prepared.readers);
+        gate.devices
+            .insert(prepared.id, Arc::new(AtomicBool::new(true)));
         Ok(())
     }
     pub(super) fn register_with_config(
@@ -1255,35 +1061,11 @@ impl Engine {
     ) -> Result<ConfigReceipt, ConfigError> {
         self.validate_config(expected, &config)?;
         let prepared = self
-            .prepare_device(device, &config, true)
+            .prepare_device(device, &config)
             .map_err(ConfigError::Invalid)?;
-        #[cfg(test)]
-        if let Some(hook) = self.registration_precommit.take() {
-            hook();
-        }
+        self.prepare_capacity(&config)
+            .map_err(ConfigError::Invalid)?;
         self.commit_config(expected, config, Some(prepared), None, now)
-    }
-    fn drain_removals(&mut self) {
-        let pending = std::mem::take(&mut self.shared.gate.lock().unwrap().removals);
-        for (id, removal) in pending {
-            let close = match removal {
-                Removal::Close => true,
-                Removal::Transaction {
-                    expected,
-                    reply,
-                    close_requested,
-                } => {
-                    let result = self.remove_config(expected, id, Instant::now());
-                    let close = close_requested && result.is_err();
-                    let _ = reply.send(result);
-                    close
-                }
-            };
-            if close {
-                let generation = self.shared.gate.lock().unwrap().generation;
-                let _ = self.remove_config(generation, id, Instant::now());
-            }
-        }
     }
     pub(super) fn remove_config(
         &mut self,
@@ -1309,8 +1091,10 @@ impl Engine {
         let mut config = (*self.config).clone();
         config.devices.remove(&device);
         config.validate().map_err(ConfigError::Invalid)?;
-        self.commit_config(expected, config, None, Some(device), now)
-            .map(|receipt| receipt.generation)
+        let receipt = self.commit_config(expected, config, None, Some(device), now)?;
+        self.shared.health.discard_device(device);
+        self.close_diagnosis(device);
+        Ok(receipt.generation)
     }
     fn reap_devices(&mut self) {
         let gate = self.shared.gate.lock().unwrap();
@@ -1321,7 +1105,10 @@ impl Engine {
                 device.closed
                     && device.used == [0, 0]
                     && !self.active.values().any(|a| a.cell.options.device == **id)
-                    && !gate.published.iter().any(|a| a.cell.options.device == **id)
+                    && !gate
+                        .pending_probes
+                        .iter()
+                        .any(|a| a.cell.options.device == **id)
             })
             .map(|(&id, _)| id)
             .collect();
@@ -1329,14 +1116,11 @@ impl Engine {
         if removable.is_empty() {
             return;
         }
-        for reader in self
-            .readers
-            .extract_if(.., |reader| removable.contains(&reader.device))
-        {
-            reader.stop_and_detach();
-        }
         for id in removable {
             self.devices.remove(&id);
+            if self.completed.get(&id).is_some_and(VecDeque::is_empty) {
+                self.completed.remove(&id);
+            }
         }
     }
     pub(super) fn reconfigure(
@@ -1346,6 +1130,8 @@ impl Engine {
         now: Instant,
     ) -> Result<ConfigReceipt, ConfigError> {
         self.validate_config(expected, &config)?;
+        self.prepare_capacity(&config)
+            .map_err(ConfigError::Invalid)?;
         self.commit_config(expected, config, None, None, now)
     }
     fn validate_config(&self, expected: Generation, config: &Config) -> Result<(), ConfigError> {
@@ -1379,7 +1165,7 @@ impl Engine {
         config: Config,
         device: Option<PreparedDevice>,
         closing: Option<DeviceId>,
-        now: Instant,
+        _now: Instant,
     ) -> Result<ConfigReceipt, ConfigError> {
         let config = Arc::new(config);
         let mut gate = self.shared.gate.lock().unwrap();
@@ -1401,29 +1187,21 @@ impl Engine {
         gate.generation = generation;
         self.config = config;
         self.shared.health.configure(self.config.health);
-        self.scheduler.reconfigure(&self.config, now);
         for (id, device) in &mut self.devices {
             if let Some(limits) = self.config.devices.get(id) {
                 device.limits = *limits;
             }
         }
-        for active in self.active.values_mut() {
-            if !self.config.groups.contains_key(&active.group) {
-                active.group = self.config.default_group;
-            }
-        }
-        // Collection allocation and
-        // scheduler updates can only fail through process abort or panic.
-        if let Some(mut prepared) = device {
+        if let Some(prepared) = device {
+            self.completed.insert(prepared.id, prepared.completed);
             self.devices.insert(prepared.id, prepared.state);
-            gate.devices.insert(prepared.id, true);
-            for reader in &mut prepared.readers {
-                reader.activate();
-            }
-            self.readers.extend(prepared.readers);
+            gate.devices
+                .insert(prepared.id, Arc::new(AtomicBool::new(true)));
         }
         if let Some(id) = closing {
-            gate.devices.insert(id, false);
+            if let Some(open) = gate.devices.get(&id) {
+                open.store(false, Ordering::Release);
+            }
             if let Some(device) = self.devices.get_mut(&id) {
                 device.closed = true;
             }
@@ -1444,24 +1222,6 @@ impl Engine {
             physical_debt,
         })
     }
-    pub(super) fn manage(&mut self, command: Management) {
-        self.drain_removals();
-        match command {
-            Management::Register(device, reply) => {
-                let _ = reply.send(self.register(device, true));
-            }
-            Management::RegisterWithConfig(expected, config, device, reply) => {
-                let _ =
-                    reply.send(self.register_with_config(expected, config, device, Instant::now()));
-            }
-            Management::Reconfigure(expected, config, reply) => {
-                let _ = reply.send(self.reconfigure(expected, config, Instant::now()));
-            }
-            Management::Snapshot(reply) => {
-                let _ = reply.send(self.snapshot());
-            }
-        }
-    }
     #[cfg(test)]
     pub fn backend(&self, device: DeviceId, lane: usize) -> Arc<Backend> {
         Arc::clone(&self.devices[&device].lanes[lane].backend)
@@ -1469,7 +1229,6 @@ impl Engine {
     pub fn snapshot(&self) -> ServiceSnapshot {
         let gate = self.shared.gate.lock().unwrap();
         let ledger = self.shared.ledger.lock().unwrap();
-        let backlogged = self.queued.iter().map(|id| self.active[id].group).collect();
         ServiceSnapshot {
             health: self.shared.health.snapshot(false, Instant::now()),
             generation: gate.generation,
@@ -1495,7 +1254,6 @@ impl Engine {
                     closed: state.closed,
                 })
                 .collect(),
-            groups: self.scheduler.snapshots(&backlogged),
         }
     }
 }

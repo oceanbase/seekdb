@@ -18,11 +18,10 @@ use named::{
     bind_named_target, new_named_bindings, new_named_owner, NamedBindings, NamedOwnerHandle,
 };
 mod blocks;
-mod calibration;
-use calibration::{calibration_integer, calibration_mbps, empty_calibration_view, CalibrationView};
 mod statistics;
 use statistics::{
-    new_statistics_handle, new_statistics_snapshot, StatisticsHandle, StatisticsSnapshot,
+    metric_integer, metric_mbps, new_statistics_handle, new_statistics_snapshot, StatisticsHandle,
+    StatisticsSnapshot,
 };
 mod requests;
 use blocks::{bind_block_target, new_block_owner, read_block, write_block, BlockOwner};
@@ -73,18 +72,7 @@ mod ffi {
         total_us: i64,
     }
 
-    struct CalibrationSample {
-        mode: i32,
-        size: i64,
-        iops: f64,
-        latency_us: f64,
-    }
-    struct CalibrationScale {
-        error: i32,
-        value: f64,
-        calibrated: bool,
-    }
-    struct CalibrationMetric {
+    struct Metric {
         error: i32,
         value: i64,
     }
@@ -94,15 +82,6 @@ mod ffi {
         InvalidArgument,
         InvalidData,
         ChecksumMismatch,
-    }
-
-    struct GroupPolicy {
-        id: u64,
-        minimum_iops: u64,
-        maximum_iops: u64,
-        unlimited: bool,
-        excess_weight: u32,
-        burst: u64,
     }
 
     struct DevicePolicy {
@@ -156,10 +135,6 @@ mod ffi {
         max_bytes: usize,
         probe_records: usize,
         probe_bytes: usize,
-        default_group: u64,
-        capacity_iops: u64,
-        unlimited_capacity: bool,
-        groups: Vec<GroupPolicy>,
         devices: Vec<DevicePolicy>,
     }
 
@@ -246,10 +221,7 @@ mod ffi {
     }
 
     struct RequestOptions {
-        group: u64,
-        probe: bool,
         worker_required: bool,
-        rate_exempt: bool,
         mode: RequestMode,
         offset: u64,
         length: usize,
@@ -257,8 +229,6 @@ mod ffi {
         window_start: usize,
         window_length: usize,
         timeout_us: i64,
-        retry_alignment: usize,
-        max_error_retries: usize,
         full_buffer: bool,
         tag: u64,
         worker_fault: i32,
@@ -289,18 +259,9 @@ mod ffi {
         error: i32,
         os_error: i32,
         has_buffer: bool,
-        group: u64,
         physical_attempts: u64,
         raw_depth: usize,
         effective_depth: usize,
-    }
-
-    struct GroupStats {
-        id: u64,
-        physical_attempts: u64,
-        rate_exempt_attempts: u64,
-        rate_throttled: bool,
-        device_blocked: bool,
     }
 
     struct ServiceStats {
@@ -308,7 +269,6 @@ mod ffi {
         probe_attempts: u64,
         admission_debt: bool,
         physical_debt: bool,
-        groups: Vec<GroupStats>,
         admitted_requests: usize,
         reserved_bytes: usize,
         queued_requests: usize,
@@ -467,34 +427,8 @@ mod ffi {
             lifetime: &mut RequestLifetime,
         ) -> i32;
 
-        type CalibrationView;
-        fn empty_calibration_view() -> Box<CalibrationView>;
-        fn calibration_snapshot(self: &ServiceHandle) -> Box<CalibrationView>;
-        fn replace_calibration(self: &ServiceHandle, samples: &[CalibrationSample]) -> i32;
-        fn reset_calibration(self: &ServiceHandle) -> i32;
-        fn calibrated(self: &CalibrationView) -> bool;
-        fn calibration_generation(self: &CalibrationView) -> u64;
-        fn calibration_sample(
-            self: &CalibrationView,
-            mode: i32,
-            index: usize,
-            output: &mut CalibrationSample,
-        ) -> bool;
-        fn calibration_scale(
-            self: &CalibrationView,
-            mode: i32,
-            size: i64,
-            initialized: bool,
-        ) -> CalibrationScale;
-        fn normalized_iops(
-            self: &CalibrationView,
-            mode: i32,
-            size: i64,
-            iops: f64,
-            initialized: bool,
-        ) -> CalibrationMetric;
-        fn calibration_integer(value: f64) -> CalibrationMetric;
-        fn calibration_mbps(iops: i64, size: i64) -> CalibrationMetric;
+        fn metric_integer(value: f64) -> Metric;
+        fn metric_mbps(iops: i64, size: i64) -> Metric;
         type ServiceHandle;
         type DeviceHandle;
         type RequestSlot;
@@ -524,6 +458,7 @@ mod ffi {
         ) -> ConfigReceipt;
         fn remove_device(self: &ServiceHandle, expected: u64, device: u64) -> DeviceRemovalReceipt;
         fn close_device(self: &DeviceHandle) -> i32;
+        fn is_drained(self: &DeviceHandle) -> bool;
         fn new_request_slot() -> Box<RequestSlot>;
         fn new_cancel_handle() -> Box<CancelHandle>;
         fn clone_cancel_handle(self: &CancelHandle) -> Box<CancelHandle>;

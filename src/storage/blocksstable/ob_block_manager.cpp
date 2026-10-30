@@ -28,7 +28,6 @@
 #include "storage/meta_store/storage_meta_service.h"
 #include "storage/meta_store/ob_local_storage_meta_service.h"
 #include "storage/tablet/ob_tablet_macro_info_iterator.h"
-#include "share/io/ob_io_calibration.h"
 #include "share/io/ob_io_struct.h"
 
 using namespace oceanbase::common;

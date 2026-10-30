@@ -20,7 +20,6 @@
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "sql/ob_scanner.h"
 #include "common/row/ob_row.h"
-#include "share/io/ob_io_calibration.h"
 #include "share/io/ob_io_struct.h"
 namespace oceanbase
 {
@@ -34,9 +33,6 @@ public:
   int init_addr(const common::ObAddr &addr);
   virtual void reset() override;
 protected:
-  rust::Box<storage_io::CalibrationView> calibration_ = storage_io::empty_calibration_view();
-  int64_t normalized_iops(double size, double iops, common::ObIOMode mode, int &ret);
-  bool calibration_initialized_ = false;
   bool is_inited_;
   common::ObAddr addr_;
   char ip_buf_[common::MAX_IP_ADDR_LENGTH];
@@ -88,8 +84,6 @@ private:
   };
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualIOBenchmark);
 private:
-  int64_t mode_pos_;
-  int64_t size_pos_;
 };
 
 class ObAllVirtualIOQuota : public ObAllVirtualIOStatusIterator
@@ -123,14 +117,12 @@ private:
   public:
     QuotaInfo();
     ~QuotaInfo();
-    TO_STRING_KV(K(group_id_), K(group_mode_), K(size_), K(real_iops_), K(min_iops_), K(max_iops_), K(schedule_us_), K(io_delay_us_), K(total_us_));
+    TO_STRING_KV(K(group_id_), K(group_mode_), K(size_), K(real_iops_), K(schedule_us_), K(io_delay_us_), K(total_us_));
   public:
     uint64_t group_id_;
     common::ObIOGroupMode group_mode_;
     int64_t size_;
     int64_t real_iops_;
-    int64_t min_iops_;
-    int64_t max_iops_;
     int64_t schedule_us_;
     int64_t io_delay_us_;
     int64_t total_us_;
@@ -177,19 +169,17 @@ private:
       mode_ = common::ObIOMode::MAX_MODE;
       min_iops_ = 0;
       max_iops_ = 0;
-      norm_iops_ = 0;
       real_iops_ = 0;
       memset(group_name_, 0, sizeof(group_name_));
     }
     TO_STRING_KV(K(group_id_), K(mode_), K_(group_name),
-                 K(min_iops_), K(max_iops_), K_(norm_iops), K_(real_iops));
+                 K(min_iops_), K(max_iops_), K_(real_iops));
   public:
     uint64_t group_id_;
     common::ObIOMode mode_;
     char group_name_[GroupIoStatusStringLength];
     int64_t min_iops_;
     int64_t max_iops_;
-    int64_t norm_iops_;
     int64_t real_iops_;
   };
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualGroupIOStat);

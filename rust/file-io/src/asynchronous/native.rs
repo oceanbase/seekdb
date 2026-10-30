@@ -169,7 +169,7 @@ impl Context {
         result
     }
 
-    fn drive(&mut self, shared: &Shared) -> io::Result<()> {
+    fn drive(&mut self, shared: &Arc<Shared>) -> io::Result<()> {
         loop {
             self.wake.drain()?;
             loop {
@@ -206,8 +206,12 @@ impl Context {
         &mut self,
         id: SubmissionId,
         operation: Operation,
-        shared: &Shared,
+        shared: &Arc<Shared>,
     ) -> io::Result<()> {
+        if let Err(error) = operation.check_execution() {
+            shared.complete(id, operation, Err(error));
+            return Ok(());
+        }
         if let Some(retired) = self
             .kernel
             .submit(id, operation, Some(self.wake.0.as_raw_fd()))?
@@ -217,7 +221,7 @@ impl Context {
         Ok(())
     }
 
-    fn cancel(&mut self, id: SubmissionId, shared: &Shared) -> io::Result<()> {
+    fn cancel(&mut self, id: SubmissionId, shared: &Arc<Shared>) -> io::Result<()> {
         let Some(pending) = self.kernel.pending.get_mut(&id) else {
             return Ok(());
         };
@@ -241,7 +245,7 @@ impl Context {
         Ok(())
     }
 
-    fn reap(&mut self, shared: &Shared) -> io::Result<()> {
+    fn reap(&mut self, shared: &Arc<Shared>) -> io::Result<()> {
         let mut events = [IoEvent::default(); 64];
         loop {
             let count = self.kernel.events(&mut events, false)?;
@@ -254,7 +258,7 @@ impl Context {
         }
     }
 
-    fn finish(&mut self, event: IoEvent, shared: &Shared) -> io::Result<()> {
+    fn finish(&mut self, event: IoEvent, shared: &Arc<Shared>) -> io::Result<()> {
         let (id, retired) = self.kernel.finish(event)?;
         shared.complete(id, retired.operation, retired.result);
         Ok(())
