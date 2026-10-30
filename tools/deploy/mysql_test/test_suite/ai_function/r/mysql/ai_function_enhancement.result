@@ -1,0 +1,166 @@
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_openai_endpoint');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_openai_embed_endpoint');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_ollama_endpoint');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_ollama_embed_endpoint');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_rerank_endpoint');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_complete_model');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_embed_model');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_ollama_model');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_ollama_embed_model');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_rerank_model');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('enh_complete_model', '{"type": "COMPLETION", "model_name": "mock-completion"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('enh_embed_model', '{"type": "DENSE_EMBEDDING", "model_name": "mock-embedding"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('enh_ollama_model', '{"type": "COMPLETION", "model_name": "mock-completion"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('enh_ollama_embed_model', '{"type": "DENSE_EMBEDDING", "model_name": "mock-embedding"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('enh_rerank_model', '{"type": "RERANK", "model_name": "mock-rerank"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('enh_openai_endpoint', '{"ai_model_name": "enh_complete_model", "url": "http://0.0.0.0:8000/v1", "access_key": "mock-key", "provider": "openai"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('enh_openai_embed_endpoint', '{"ai_model_name": "enh_embed_model", "url": "http://0.0.0.0:8000/v1", "access_key": "mock-key", "provider": "openai"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('enh_ollama_endpoint', '{"ai_model_name": "enh_ollama_model", "url": "http://0.0.0.0:8000/api", "provider": "ollama"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('enh_ollama_embed_endpoint', '{"ai_model_name": "enh_ollama_embed_model", "url": "http://0.0.0.0:8000/api", "provider": "OLLAMA"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('enh_rerank_endpoint', '{"ai_model_name": "enh_rerank_model", "url": "http://0.0.0.0:8000/v1", "access_key": "mock-key", "provider": "siliconflow"}');
+select ENDPOINT_NAME, AI_MODEL_NAME, URL, PROVIDER, ACCESS_KEY = '' AS no_key from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME in ('enh_openai_endpoint', 'enh_openai_embed_endpoint', 'enh_ollama_endpoint', 'enh_ollama_embed_endpoint', 'enh_rerank_endpoint') order by ENDPOINT_NAME;
+ENDPOINT_NAME	AI_MODEL_NAME	URL	PROVIDER	no_key
+enh_ollama_embed_endpoint	enh_ollama_embed_model	http://0.0.0.0:8000/api	OLLAMA	1
+enh_ollama_endpoint	enh_ollama_model	http://0.0.0.0:8000/api	ollama	1
+enh_openai_embed_endpoint	enh_embed_model	http://0.0.0.0:8000/v1	openai	0
+enh_openai_endpoint	enh_complete_model	http://0.0.0.0:8000/v1	openai	0
+enh_rerank_endpoint	enh_rerank_model	http://0.0.0.0:8000/v1	siliconflow	0
+select ai_prompt('{0} {0} {0}', 'ab');
+ai_prompt('{0} {0} {0}', 'ab')
+{"args": ["ab"], "template": "{0} {0} {0}"}
+select ai_prompt('B={1}, A={0}, A again={0}', 'x', 'y');
+ai_prompt('B={1}, A={0}, A again={0}', 'x', 'y')
+{"args": ["x", "y"], "template": "B={1}, A={0}, A again={0}"}
+select ai_prompt('cfg={0}', json_object('k', 'v'));
+ai_prompt('cfg={0}', json_object('k', 'v'))
+{"args": [{"k": "v"}], "template": "cfg={0}"}
+select ai_prompt('v={0}', json_array(1, 2, 3));
+ai_prompt('v={0}', json_array(1, 2, 3))
+{"args": [[1, 2, 3]], "template": "v={0}"}
+select ai_prompt('v={0}', json_object('n', 1));
+ai_prompt('v={0}', json_object('n', 1))
+{"args": [{"n": 1}], "template": "v={0}"}
+select ai_prompt('Q: {0}', ai_prompt('{0}?', 'why'));
+ai_prompt('Q: {0}', ai_prompt('{0}?', 'why'))
+{"args": [{"args": ["why"], "template": "{0}?"}], "template": "Q: {0}"}
+select ai_prompt('中文{0}结束', '世界');
+ai_prompt('中文{0}结束', '世界')
+{"args": ["世界"], "template": "中文{0}结束"}
+select ai_prompt('{}|{a}|{-1}|{ 0}|{1', 'v');
+ai_prompt('{}|{a}|{-1}|{ 0}|{1', 'v')
+{"args": ["v"], "template": "{}|{a}|{-1}|{ 0}|{1"}
+select ai_prompt('{1}', 'only-one');
+ERROR HY000: Invalid argument
+select ai_prompt('a={0}b', '');
+ai_prompt('a={0}b', '')
+{"args": [""], "template": "a={0}b"}
+drop table if exists t_enh;
+create table t_enh (nr int primary key, a tinyblob, b text, c mediumblob, d longtext);
+insert into t_enh values(1, 'aa', '模板 {0}', 'cc', '长模板 {0}');
+insert into t_enh values(2, 'AA', '模板2 {0}', 'CC', '长模板2 {0}');
+select ai_prompt(b, 'x') from t_enh order by nr;
+ai_prompt(b, 'x')
+{"args": ["x"], "template": "模板 {0}"}
+{"args": ["x"], "template": "模板2 {0}"}
+select ai_prompt(d, 'x') from t_enh order by nr;
+ai_prompt(d, 'x')
+{"args": ["x"], "template": "长模板 {0}"}
+{"args": ["x"], "template": "长模板2 {0}"}
+select ai_prompt(a) from t_enh;
+ERROR 22000: Invalid data type for the operation
+select ai_prompt(c) from t_enh;
+ERROR 22000: Invalid data type for the operation
+select ai_embed('enh_embed_model', 'hello world');
+ai_embed('enh_embed_model', 'hello world')
+[1, 2]
+select ai_embed('enh_embed_model', 'hello world', 2);
+ai_embed('enh_embed_model', 'hello world', 2)
+[1, 2]
+select ai_embed('enh_embed_model', 'hello world', 0);
+ERROR HY000: Invalid argument
+select ai_embed('enh_embed_model', 'hello world', -3);
+ERROR HY000: Invalid argument
+select ai_embed('enh_embed_model', 'hello world', 128);
+ERROR HY000: Invalid argument
+select ai_embed('enh_embed_model', null);
+ai_embed('enh_embed_model', null)
+NULL
+select ai_embed('enh_embed_model', 'hello world', null);
+ai_embed('enh_embed_model', 'hello world', null)
+[1, 2]
+select ai_embed('enh_embed_model', '');
+ERROR HY000: Invalid argument
+select ai_embed('enh_no_such_model', 'hello world');
+select ai_complete('enh_complete_model', 'say something');
+ai_complete('enh_complete_model', 'say something')
+mock answer
+select ai_complete('enh_complete_model', ai_prompt('translate this: {0}', 'hello'));
+ai_complete('enh_complete_model', ai_prompt('translate this: {0}', 'hello'))
+mock answer
+select ai_complete('enh_complete_model', 'say something', json_object('temperature', 0.5, 'max_tokens', 64));
+ai_complete('enh_complete_model', 'say something', json_object('temperature', 0.5, 'max_tokens', 64))
+mock answer
+select ai_complete('enh_complete_model', 'say something', json_object('temperature', 5));
+ERROR HY000: Invalid argument
+select ai_complete('enh_complete_model', 'say something', json_object('temperature', 'hot'));
+ERROR HY000: Invalid argument
+select ai_complete('enh_complete_model', 'say something', json_object('max_tokens', 0));
+ERROR HY000: Invalid argument
+select ai_complete('enh_complete_model', 'say something', json_object('max_tokens', 12.5));
+ERROR HY000: Invalid argument
+select ai_complete('enh_complete_model', 'say something', json_object('max_tokens', '64'));
+ERROR HY000: Invalid argument
+select ai_complete('enh_ollama_model', 'say something ollama');
+ai_complete('enh_ollama_model', 'say something ollama')
+mock ollama answer
+select ai_embed('enh_ollama_embed_model', 'hello world');
+ai_embed('enh_ollama_embed_model', 'hello world')
+[1, 2]
+select ai_rerank('enh_rerank_model', 'what is the capital', json_array('paris is the capital of france', 'the elephant is large', 'berlin is a city'));
+ai_rerank('enh_rerank_model', 'what is the capital', json_array('paris is the capital of france', 'the elephant is large', 'berlin is a city'))
+[{"index": 1, "relevance_score": 0.9}, {"index": 0, "relevance_score": 0.2}]
+select ai_rerank('enh_rerank_model', 'what is the capital', json_array(json_object('id', 1, 'text', 'paris is the capital of france'), json_object('id', 2, 'text', 'the elephant is large')), 'text');
+ai_rerank('enh_rerank_model', 'what is the capital', json_array(json_object('id', 1, 'text', 'paris is the capital of france'), json_object('id', 2, 'text', 'the elephant is large')), 'text')
+[{"id": 1, "text": "paris is the capital of france", "_model_score": 0.9}, {"id": 2, "text": "the elephant is large", "_model_score": 0.2}]
+select ai_rerank('enh_rerank_model', 'what is the capital', json_array('doc0', 'doc1'));
+ai_rerank('enh_rerank_model', 'what is the capital', json_array('doc0', 'doc1'))
+[{"index": 1, "relevance_score": 0.9}, {"index": 0, "relevance_score": 0.2}]
+select ai_rerank('enh_rerank_model', '', json_array('doc0'));
+ERROR HY000: Invalid argument
+select ai_rerank('enh_rerank_model', 'query', json_array('doc0', 1));
+ERROR HY000: Invalid argument
+select ai_rerank('enh_rerank_model', 'query', json_array());
+ERROR HY000: Invalid argument
+select ai_rerank('enh_rerank_model', 'query', json_object('id', 1, 'text', 'paris is the capital of france'), 'text');
+ERROR HY000: Invalid argument
+select ai_rerank('enh_rerank_model', 'query', null);
+ai_rerank('enh_rerank_model', 'query', null)
+NULL
+drop table if exists t_enh_embed;
+create table t_enh_embed (nr int primary key, content varchar(64));
+insert into t_enh_embed values(1, 'first row');
+insert into t_enh_embed values(2, null);
+insert into t_enh_embed values(3, 'third row');
+insert into t_enh_embed values(4, 'fourth row');
+select nr, ai_embed('enh_embed_model', content) as embedding from t_enh_embed order by nr;
+nr	embedding
+1	[1, 2]
+2	NULL
+3	[1, 2]
+4	[3, 4]
+select nr, ai_embed('enh_embed_model', content) as embedding from t_enh_embed order by nr limit 2;
+nr	embedding
+1	[1, 2]
+2	NULL
+drop table t_enh_embed;
+drop table t_enh;
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_openai_endpoint');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_openai_embed_endpoint');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_ollama_endpoint');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_ollama_embed_endpoint');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_rerank_endpoint');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_complete_model');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_embed_model');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_ollama_model');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_ollama_embed_model');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_rerank_model');

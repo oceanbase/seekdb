@@ -237,6 +237,10 @@ public:
   virtual ~ObAIFuncJsonUtils() {}
   static bool ob_is_json_array_all_str(ObJsonArray* json_array);
   static int transform_array_to_json_array(ObIAllocator &allocator, ObArray<ObString> &contents, ObJsonArray *&array);
+  // Restore the original request order of an embedding response. Some
+  // providers answer out of order and mark each element with an index field
+  // ("index" for the openai protocol, "text_index" for dashscope).
+  static int reorder_embedding_array(ObIAllocator &allocator, ObJsonArray *data_array, ObJsonArray *result_array);
   static int get_json_object(ObIAllocator &allocator, ObJsonObject *&obj_node);
   static int get_json_array(ObIAllocator &allocator, ObJsonArray *&array_node);
   static int get_json_string(ObIAllocator &allocator, ObString &str, ObJsonString *&str_node);
@@ -287,6 +291,8 @@ public:
   static int check_info_type_completion(const ObAIFuncExprInfo *info);
   static int check_info_type_dense_embedding(const ObAIFuncExprInfo *info);
   static int check_info_type_rerank(const ObAIFuncExprInfo *info);
+  // Validate the optional completion parameters carried by the json config.
+  static int check_completion_config(ObJsonObject *config);
   static bool ob_provider_check(const ObString &provider, const char *str_const) { return provider.case_compare(str_const) == 0; }
   static int get_complete_provider(ObIAllocator &allocator, const ObString &provider, ObAIFuncIComplete *&complete_provider);
   static int get_embed_provider(ObIAllocator &allocator, const ObString &provider, ObAIFuncIEmbed *&embed_provider);

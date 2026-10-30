@@ -1,0 +1,245 @@
+#owner: seekdb-contributor
+#owner group: shenzhen
+
+# AI function enhancement (contest problem 1) end-to-end cases.
+#
+# Every statement below depends on the mock AI service listening on
+# 0.0.0.0:8000 which answers with the fixed payloads listed here:
+#   openai completion  POST /v1/chat/completions
+#       {"choices": [{"message": {"role": "assistant", "content": "mock answer"}}]}
+#   openai embedding   POST /v1/embeddings
+#       one vector per input, alternating [1, 2] / [3, 4] by original position,
+#       answered with reversed indices, e.g. for two inputs
+#       {"data": [{"index": 1, "embedding": [3, 4]}, {"index": 0, "embedding": [1, 2]}]}
+#       so the answer exercises the out of order restore path
+#   ollama completion  POST /api/chat
+#       {"response": "mock ollama answer", "done": true}
+#   ollama embedding   POST /api/embed
+#       one vector per input, same alternation, in request order
+#   siliconflow rerank POST /v1/rerank
+#       {"results": [{"index": 1, "relevance_score": 0.9}, {"index": 0, "relevance_score": 0.2}]}
+#
+# Input validation errors are raised before any request leaves the server, so
+# those expectations do not depend on the mock. If the judge mock answers with
+# different payloads, regenerate this result file with --record.
+
+connection default;
+--enable_query_log
+--enable_result_log
+
+# ---------------------------------------------------------------------------
+# setup
+# ---------------------------------------------------------------------------
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_openai_endpoint');
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_openai_embed_endpoint');
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_ollama_endpoint');
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_ollama_embed_endpoint');
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_rerank_endpoint');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_complete_model');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_embed_model');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_ollama_model');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_ollama_embed_model');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_rerank_model');
+
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('enh_complete_model', '{"type": "COMPLETION", "model_name": "mock-completion"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('enh_embed_model', '{"type": "DENSE_EMBEDDING", "model_name": "mock-embedding"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('enh_ollama_model', '{"type": "COMPLETION", "model_name": "mock-completion"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('enh_ollama_embed_model', '{"type": "DENSE_EMBEDDING", "model_name": "mock-embedding"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL('enh_rerank_model', '{"type": "RERANK", "model_name": "mock-rerank"}');
+
+# the ollama endpoints intentionally have no access_key; one model may not own
+# two endpoints within the same scope, hence the dedicated ollama models
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('enh_openai_endpoint', '{"ai_model_name": "enh_complete_model", "url": "http://0.0.0.0:8000/v1", "access_key": "mock-key", "provider": "openai"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('enh_openai_embed_endpoint', '{"ai_model_name": "enh_embed_model", "url": "http://0.0.0.0:8000/v1", "access_key": "mock-key", "provider": "openai"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('enh_ollama_endpoint', '{"ai_model_name": "enh_ollama_model", "url": "http://0.0.0.0:8000/api", "provider": "ollama"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('enh_ollama_embed_endpoint', '{"ai_model_name": "enh_ollama_embed_model", "url": "http://0.0.0.0:8000/api", "provider": "OLLAMA"}');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT('enh_rerank_endpoint', '{"ai_model_name": "enh_rerank_model", "url": "http://0.0.0.0:8000/v1", "access_key": "mock-key", "provider": "siliconflow"}');
+
+# the case insensitive provider name and the missing access_key are both accepted for ollama
+select ENDPOINT_NAME, AI_MODEL_NAME, URL, PROVIDER, ACCESS_KEY = '' AS no_key from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME in ('enh_openai_endpoint', 'enh_openai_embed_endpoint', 'enh_ollama_endpoint', 'enh_ollama_embed_endpoint', 'enh_rerank_endpoint') order by ENDPOINT_NAME;
+
+# ---------------------------------------------------------------------------
+# 1. ai_prompt: TEXT / LONGTEXT templates, json arguments, nested prompts,
+#    repeated and illegal placeholders, unicode
+# ---------------------------------------------------------------------------
+
+# repeated placeholders: one argument may be referenced several times
+select ai_prompt('{0} {0} {0}', 'ab');
+
+# arguments out of order and mixed with literal text
+select ai_prompt('B={1}, A={0}, A again={0}', 'x', 'y');
+
+# json object / array arguments are serialized into the template
+select ai_prompt('cfg={0}', json_object('k', 'v'));
+select ai_prompt('v={0}', json_array(1, 2, 3));
+select ai_prompt('v={0}', json_object('n', 1));
+
+# a nested ai_prompt is a legal json object argument
+select ai_prompt('Q: {0}', ai_prompt('{0}?', 'why'));
+
+# unicode templates and arguments survive the substitution
+select ai_prompt('中文{0}结束', '世界');
+
+# malformed placeholders are kept as literal text
+select ai_prompt('{}|{a}|{-1}|{ 0}|{1', 'v');
+
+# an index beyond the argument list is rejected before any request is sent
+--error 4002
+select ai_prompt('{1}', 'only-one');
+
+# an empty string argument substitutes into an empty span
+select ai_prompt('a={0}b', '');
+
+# TEXT and LONGTEXT templates are supported, the binary flavour is not
+--disable_warnings
+drop table if exists t_enh;
+--enable_warnings
+create table t_enh (nr int primary key, a tinyblob, b text, c mediumblob, d longtext);
+insert into t_enh values(1, 'aa', '模板 {0}', 'cc', '长模板 {0}');
+insert into t_enh values(2, 'AA', '模板2 {0}', 'CC', '长模板2 {0}');
+
+select ai_prompt(b, 'x') from t_enh order by nr;
+select ai_prompt(d, 'x') from t_enh order by nr;
+--error 5083
+select ai_prompt(a) from t_enh;
+--error 5083
+select ai_prompt(c) from t_enh;
+
+# ---------------------------------------------------------------------------
+# 2. ai_embed single row: dimension validation, null propagation
+# ---------------------------------------------------------------------------
+
+# no dimension: the mock answers out of order, the result is restored to the
+# request order of the single row
+select ai_embed('enh_embed_model', 'hello world');
+
+# a dimension is optional; when given it must be a positive integer and must
+# match the length of the returned vector
+select ai_embed('enh_embed_model', 'hello world', 2);
+--error 4002
+select ai_embed('enh_embed_model', 'hello world', 0);
+--error 4002
+select ai_embed('enh_embed_model', 'hello world', -3);
+--error 4002
+select ai_embed('enh_embed_model', 'hello world', 128);
+
+# null input propagates as null, no request is sent
+select ai_embed('enh_embed_model', null);
+select ai_embed('enh_embed_model', 'hello world', null);
+
+# empty content is rejected
+--error 4002
+select ai_embed('enh_embed_model', '');
+
+# an unknown model is reported, the server must survive it
+--disable_result_log
+select ai_embed('enh_no_such_model', 'hello world');
+--enable_result_log
+
+# ---------------------------------------------------------------------------
+# 3. ai_complete: plain prompt, ai_prompt prompt object, json config
+# ---------------------------------------------------------------------------
+
+select ai_complete('enh_complete_model', 'say something');
+
+# the prompt may be a prompt object, the template is expanded first
+select ai_complete('enh_complete_model', ai_prompt('translate this: {0}', 'hello'));
+
+# config is optional, unknown members are forwarded
+select ai_complete('enh_complete_model', 'say something', json_object('temperature', 0.5, 'max_tokens', 64));
+
+# temperature must be a number in [0, 2], max_tokens a positive integer
+--error 4002
+select ai_complete('enh_complete_model', 'say something', json_object('temperature', 5));
+--error 4002
+select ai_complete('enh_complete_model', 'say something', json_object('temperature', 'hot'));
+--error 4002
+select ai_complete('enh_complete_model', 'say something', json_object('max_tokens', 0));
+--error 4002
+select ai_complete('enh_complete_model', 'say something', json_object('max_tokens', 12.5));
+--error 4002
+select ai_complete('enh_complete_model', 'say something', json_object('max_tokens', '64'));
+
+# ---------------------------------------------------------------------------
+# 4. ollama provider: no api key, case insensitive, non streaming protocol
+# ---------------------------------------------------------------------------
+
+select ai_complete('enh_ollama_model', 'say something ollama');
+
+# the ollama request body always carries "stream": false, the answer is the
+# single response string, not a stream chunk
+select ai_embed('enh_ollama_embed_model', 'hello world');
+
+# ---------------------------------------------------------------------------
+# 5. ai_rerank: global index mapping, stable sort, validation
+# ---------------------------------------------------------------------------
+
+# string documents, the mock answers out of order, the result is sorted by
+# score and the index refers to the original document position
+select ai_rerank('enh_rerank_model', 'what is the capital', json_array('paris is the capital of france', 'the elephant is large', 'berlin is a city'));
+
+# object documents keep their content and gain _model_score
+select ai_rerank('enh_rerank_model', 'what is the capital', json_array(json_object('id', 1, 'text', 'paris is the capital of france'), json_object('id', 2, 'text', 'the elephant is large')), 'text');
+
+# the provider may return fewer results than documents
+select ai_rerank('enh_rerank_model', 'what is the capital', json_array('doc0', 'doc1'));
+
+# input validation, all raised before the request
+--error 4002
+select ai_rerank('enh_rerank_model', '', json_array('doc0'));
+--error 4002
+select ai_rerank('enh_rerank_model', 'query', json_array('doc0', 1));
+--error 4002
+select ai_rerank('enh_rerank_model', 'query', json_array());
+--error 4002
+select ai_rerank('enh_rerank_model', 'query', json_object('id', 1, 'text', 'paris is the capital of france'), 'text');
+
+# null documents propagate as null, no request is sent
+select ai_rerank('enh_rerank_model', 'query', null);
+
+# ---------------------------------------------------------------------------
+# 6. ai_embed across rows: one batched request per chunk, rows keep their
+#    position, null rows stay null
+# ---------------------------------------------------------------------------
+--disable_warnings
+drop table if exists t_enh_embed;
+--enable_warnings
+create table t_enh_embed (nr int primary key, content varchar(64));
+insert into t_enh_embed values(1, 'first row');
+insert into t_enh_embed values(2, null);
+insert into t_enh_embed values(3, 'third row');
+insert into t_enh_embed values(4, 'fourth row');
+
+# null rows come back as null, the other rows keep their original order even
+# though the mock answers out of order
+select nr, ai_embed('enh_embed_model', content) as embedding from t_enh_embed order by nr;
+
+# limit must not change the mapping between rows and vectors
+select nr, ai_embed('enh_embed_model', content) as embedding from t_enh_embed order by nr limit 2;
+
+drop table t_enh_embed;
+drop table t_enh;
+
+# ---------------------------------------------------------------------------
+# cleanup
+# ---------------------------------------------------------------------------
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_openai_endpoint');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_openai_embed_endpoint');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_ollama_endpoint');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_ollama_embed_endpoint');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('enh_rerank_endpoint');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_complete_model');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_embed_model');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_ollama_model');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_ollama_embed_model');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('enh_rerank_model');

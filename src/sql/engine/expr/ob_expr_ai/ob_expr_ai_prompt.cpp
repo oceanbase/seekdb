@@ -50,24 +50,43 @@ int ObExprAIPrompt::calc_result_typeN(ObExprResType &type,
                                     common::ObExprTypeCtx &type_ctx) const 
 {
   int ret = OB_SUCCESS;
-  bool is_null_res = false;
-  ObExprResType template_type = types_stack[0];
-  if (!ob_is_string_tc(template_type.get_type())) {
-    ret = OB_ERR_INVALID_TYPE_FOR_OP;
+  UNUSED(type_ctx);
+  if (OB_UNLIKELY(param_num < 1)) {
+    ObString func_name_(get_name());
+    ret = OB_ERR_PARAM_SIZE;
+    LOG_USER_ERROR(OB_ERR_PARAM_SIZE, func_name_.length(), func_name_.ptr());
   } else {
-    types_stack[0].set_calc_type(ObVarcharType);
-    types_stack[0].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
-  }
-
-  for (int64_t i = 1; i < param_num && OB_SUCC(ret); i++) {
-    if (ob_is_string_tc(types_stack[i].get_type())) {
-      types_stack[i].set_calc_type(ObVarcharType);
-      types_stack[i].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
-    } else if (ob_is_json(types_stack[i].get_type())) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "json type is not supported");
-    } else {
+    // The template accepts any character type, including TEXT / LONGTEXT,
+    // but not the binary flavour of the text storage class (BLOB).
+    ObObjType template_type = types_stack[0].get_type();
+    if (!ob_is_string_type(template_type)
+        || (ob_is_text_tc(template_type) && CS_TYPE_BINARY == types_stack[0].get_collation_type())) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
+    } else if (ob_is_string_tc(template_type)) {
+      types_stack[0].set_calc_type(ObVarcharType);
+      types_stack[0].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
+    } else {
+      // keep the original text type so that a LOB template can be read back
+      types_stack[0].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
+    }
+
+    for (int64_t i = 1; i < param_num && OB_SUCC(ret); i++) {
+      ObObjType arg_type = types_stack[i].get_type();
+      if (ob_is_json(arg_type)) {
+        // json arguments are kept as json nodes and substituted as their
+        // serialized form, this is what makes nested prompt possible.
+        types_stack[i].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
+      } else if (ob_is_text_tc(arg_type) && CS_TYPE_BINARY == types_stack[i].get_collation_type()) {
+        // blob is not a textual value, refuse it
+        ret = OB_ERR_INVALID_TYPE_FOR_OP;
+      } else if (ob_is_string_tc(arg_type)) {
+        types_stack[i].set_calc_type(ObVarcharType);
+        types_stack[i].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
+      } else if (ob_is_string_type(arg_type)) {
+        types_stack[i].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
+      } else {
+        ret = OB_ERR_INVALID_TYPE_FOR_OP;
+      }
     }
   }
 
@@ -94,6 +113,15 @@ int ObExprAIPrompt::eval_ai_prompt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   if (OB_FAIL(tmp_allocator.eval_arg(arg0, ctx, template_datum))) {
   } else if (template_datum->is_null()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_prompt, template is null");
+  } else if (ob_is_text_tc(arg0->datum_meta_.type_)) {
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_,
+                                                          tmp_allocator,
+                                                          *template_datum,
+                                                          arg0->datum_meta_,
+                                                          arg0->obj_meta_.has_lob_header(),
+                                                          template_str))) {
+    }
   } else {
     template_str = template_datum->get_string();
   }
@@ -104,19 +132,37 @@ int ObExprAIPrompt::eval_ai_prompt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     for (int64_t i = 1; i < expr.arg_cnt_ && OB_SUCC(ret); i++) {
       ObDatum *datum = NULL;
       ObExpr *arg = expr.args_[i];
-      ObString arg_str;
-      ObJsonString *arg_json_str = NULL;
-      if (OB_FAIL(tmp_allocator.eval_arg(arg, ctx, datum))) {
-      } else if (ob_is_string_tc(arg->datum_meta_.type_)) {
-        arg_str = datum->get_string();
-        if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(tmp_allocator, arg_str, arg_json_str))) {
+      if (ob_is_json(arg->datum_meta_.type_)) {
+        ObIJsonBase *j_base = NULL;
+        bool is_null = false;
+        if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, tmp_allocator, i, j_base, is_null))) {
+        } else if (is_null || OB_ISNULL(j_base)) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_prompt, argument is null");
+        } else if (OB_FAIL(args_array->append(static_cast<ObJsonNode *>(j_base)))) {
+        }
+      } else if (OB_FAIL(tmp_allocator.eval_arg(arg, ctx, datum))) {
+      } else if (datum->is_null()) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_prompt, argument is null");
+      } else {
+        ObString arg_str;
+        ObJsonString *arg_json_str = NULL;
+        if (ob_is_text_tc(arg->datum_meta_.type_)) {
+          if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_,
+                                                                tmp_allocator,
+                                                                *datum,
+                                                                arg->datum_meta_,
+                                                                arg->obj_meta_.has_lob_header(),
+                                                                arg_str))) {
+          }
+        } else {
+          arg_str = datum->get_string();
+        }
+        if (OB_FAIL(ret)) {
+        } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(tmp_allocator, arg_str, arg_json_str))) {
         } else if (OB_FAIL(args_array->append(arg_json_str))) {
         }
-      } else if (ob_is_json(arg->datum_meta_.type_)) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "json type is not supported");
-      } else if (datum->is_null()) {
-        ret = OB_ERR_INVALID_TYPE_FOR_OP;
       }
     }
   }
