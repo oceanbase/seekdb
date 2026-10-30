@@ -41,6 +41,7 @@ int ObSRMergeCmp::init(
     iter_ids_ = iter_ids;
     common::ObDatumBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(id_meta.type_, id_meta.cs_type_);
     cmp_func_ = basic_funcs->null_first_cmp_;
+    binary_cmp_ = (common::CS_TYPE_UTF8MB4_BIN == id_meta.cs_type_ || common::CS_TYPE_BINARY == id_meta.cs_type_);
     if (OB_ISNULL(cmp_func_)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
@@ -60,8 +61,11 @@ int ObSRMergeCmp::cmp(
     ret = OB_NOT_INIT;
   } else {
     int tmp_ret = 0;
-    if (OB_FAIL(cmp_func_(
-            get_id_datum(l.iter_idx_), get_id_datum(r.iter_idx_), tmp_ret, nullptr))) {
+    const ObDatum &lhs = get_id_datum(l.iter_idx_);
+    const ObDatum &rhs = get_id_datum(r.iter_idx_);
+    if (binary_cmp_ && !lhs.is_null() && !rhs.is_null() && lhs.len_ == rhs.len_) {
+      cmp_ret = MEMCMP(lhs.ptr_, rhs.ptr_, lhs.len_);
+    } else if (OB_FAIL(cmp_func_(lhs, rhs, tmp_ret, nullptr))) {
     } else {
       cmp_ret = tmp_ret;
     }
