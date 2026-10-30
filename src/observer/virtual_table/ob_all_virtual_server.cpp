@@ -145,9 +145,9 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
       logservice::ObLogService *log_service =
           share::server_service<logservice::ObLogService>();
       share::SCN replay_scn;
-      if (OB_ISNULL(log_service) || OB_ISNULL(log_service->get_log_replay_service())) {
+      if (OB_ISNULL(log_service)) {
         ret = OB_NOT_INIT;
-      } else if (OB_FAIL(log_service->get_log_replay_service()->get_max_replayed_scn(replay_scn))) {
+      } else if (OB_FAIL(log_service->get_replay_info().get_max_replayed_scn(replay_scn))) {
       } else {
         const share::SCN readable_scn = share::SCN::min(
             replay_scn, ls->get_ls_wrs_handler()->get_ls_weak_read_ts());

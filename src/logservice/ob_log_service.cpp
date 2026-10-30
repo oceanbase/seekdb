@@ -40,7 +40,10 @@ ObLogService::ObLogService() :
   palf_env_(NULL),
   alloc_mgr_(NULL),
   apply_service_(),
-  replay_service_(),
+  replay_lock_(),
+  replay_info_(),
+  replay_service_(nullptr),
+  replay_thread_quota_(1),
   log_storage_(NULL),
   runtime_config_(),
   monitor_(),
@@ -107,7 +110,6 @@ int ObLogService::start()
   int ret = OB_SUCCESS;
   if (OB_FAIL(palf_env_->start())) {
   } else if (OB_FAIL(apply_service_.start())) {
-  } else if (OB_FAIL(replay_service_.start())) {
   } else {
     is_running_ = true;
     FLOG_INFO("ObLogService is started");
@@ -120,14 +122,24 @@ void ObLogService::stop()
   is_running_ = false;
   CLOG_LOG(INFO, "begin to stop ObLogService");
   (void)apply_service_.stop();
-  (void)replay_service_.stop();
+  {
+    lib::ObMutexGuard guard(replay_lock_);
+    if (nullptr != replay_service_) {
+      replay_service_->stop();
+    }
+  }
   FLOG_INFO("ObLogService is stopped");
 }
 
 void ObLogService::wait()
 {
   apply_service_.wait();
-  replay_service_.wait();
+  {
+    lib::ObMutexGuard guard(replay_lock_);
+    if (nullptr != replay_service_) {
+      replay_service_->wait();
+    }
+  }
 }
 
 void ObLogService::destroy()
@@ -135,7 +147,7 @@ void ObLogService::destroy()
   is_inited_ = false;
   self_.reset();
   apply_service_.destroy();
-  replay_service_.destroy();
+  (void)disable_replay();
   log_storage_ = NULL;
   if (NULL != palf_env_) {
     PalfEnv::destroy_palf_env(palf_env_);
@@ -143,6 +155,83 @@ void ObLogService::destroy()
   }
   alloc_mgr_ = NULL;
   FLOG_INFO("ObLogService is destroyed");
+}
+
+int ObLogService::enable_replay(const LSN &lsn, const SCN &scn)
+{
+  lib::ObMutexGuard guard(replay_lock_);
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (nullptr == replay_service_) {
+    replay_service_ = OB_NEW(ObLogReplayService, "ReplayService");
+    if (nullptr == replay_service_) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_FAIL(replay_service_->init(&replay_info_, palf_env_, log_storage_,
+                                            alloc_mgr_, replay_thread_quota_))) {
+    } else if (OB_FAIL(replay_service_->start())) {
+    } else if (OB_FAIL(replay_service_->create_status())) {
+    }
+  }
+  if (OB_SUCC(ret)) {
+    ret = replay_service_->enable(lsn, scn);
+  }
+  if (OB_FAIL(ret)) {
+    destroy_replay_();
+  } else {
+    replay_info_.set_enabled(true);
+  }
+  return ret;
+}
+
+int ObLogService::disable_replay()
+{
+  lib::ObMutexGuard guard(replay_lock_);
+  destroy_replay_();
+  return OB_SUCCESS;
+}
+
+void ObLogService::destroy_replay_()
+{
+  replay_info_.set_enabled(false);
+  if (nullptr != replay_service_) {
+    replay_service_->stop();
+    replay_service_->wait();
+    OB_DELETE(ObLogReplayService, "ReplayService", replay_service_);
+    replay_service_ = nullptr;
+  }
+}
+
+int ObLogService::finish_replay(const int64_t deadline_us)
+{
+  lib::ObMutexGuard guard(replay_lock_);
+  int ret = OB_SUCCESS;
+  if (nullptr != replay_service_) {
+    if (OB_FAIL(replay_service_->finish(deadline_us))) {
+    } else {
+      OB_DELETE(ObLogReplayService, "ReplayService", replay_service_);
+      replay_service_ = nullptr;
+      CLOG_LOG(INFO, "replay executor released", "replay_info_bytes", sizeof(replay_info_));
+    }
+  }
+  return ret;
+}
+
+int ObLogService::is_replay_done(const LSN &lsn, bool &done)
+{
+  return replay_info_.is_replay_done(lsn, done);
+}
+
+int ObLogService::block_submit_replay()
+{
+  lib::ObMutexGuard guard(replay_lock_);
+  return nullptr == replay_service_ ? OB_SUCCESS : replay_service_->block_submit_log();
+}
+
+int ObLogService::unblock_submit_replay()
+{
+  lib::ObMutexGuard guard(replay_lock_);
+  return nullptr == replay_service_ ? OB_SUCCESS : replay_service_->unblock_submit_log();
 }
 
 int check_and_prepare_dir(const char *dir)
@@ -194,9 +283,8 @@ int ObLogService::init(const PalfOptions &options,
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(ERROR, "palf_env_ is NULL", K(ret));
   } else if (OB_FAIL(apply_service_.init(palf_env_, log_storage))) {
-  } else if (OB_FAIL(replay_service_.init(
-      palf_env_, log_storage, alloc_mgr, replay_thread_quota))) {
   } else {
+    replay_thread_quota_ = replay_thread_quota;
     alloc_mgr_ = alloc_mgr;
     log_storage_ = log_storage;
     runtime_config_ = runtime_config;
@@ -237,7 +325,7 @@ int ObLogService::remove_ls(ObLogHandler &log_handler)
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "log_service is not inited", K(ret));
   } else if (OB_FAIL(apply_service_.remove_status())) {
-  } else if (OB_FAIL(replay_service_.remove_status())) {
+  } else if (OB_FAIL(disable_replay())) {
   } else {
     // NB: can not execute destroy, otherwise, each interface in log_handler or restore_handler
     // may return OB_NOT_INIT.
@@ -285,8 +373,7 @@ int ObLogService::add_ls(ObLogHandler &log_handler)
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "log_service is not inited", K(ret));
   } else if (OB_FAIL(apply_service_.create_status())) {
-  } else if (OB_FAIL(replay_service_.create_status())) {
-  } else if (OB_FAIL(log_handler.init(self_, &apply_service_, &replay_service_, palf_env_))) {
+  } else if (OB_FAIL(log_handler.init(self_, &apply_service_, this, palf_env_))) {
   } else {
     FLOG_INFO("add_ls success", K(ret), KP(this));
   }
@@ -317,11 +404,15 @@ int ObLogService::open_palf(palf::PalfHandleGuard &palf_handle_guard)
 
 int ObLogService::update_replayable_point(const SCN &replayable_point)
 {
+  lib::ObMutexGuard guard(replay_lock_);
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "log_service is not inited", K(ret));
-  } else if (OB_FAIL(replay_service_.update_replayable_point(replayable_point))) {
+  } else if (nullptr != replay_service_) {
+    ret = replay_service_->update_replayable_point(replayable_point);
+  } else {
+    replay_info_.update_replayable_point(replayable_point);
   }
   return ret;
 }
@@ -332,7 +423,8 @@ int ObLogService::get_replayable_point(SCN &replayable_point)
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "log_service is not inited", K(ret));
-  } else if (OB_FAIL(replay_service_.get_replayable_point(replayable_point))) {
+  } else {
+    replayable_point = replay_info_.get_replayable_point();
   }
   return ret;
 }
@@ -445,7 +537,12 @@ int ObLogService::stat_replay(LSReplayStat &replay_stat)
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else {
-    ret = replay_service_.stat(replay_stat);
+    palf::PalfHandleGuard handle;
+    if (OB_FAIL(replay_info_.stat(replay_stat))) {
+    } else if (OB_FAIL(open_palf(handle))) {
+    } else {
+      ret = handle.get_palf_handle()->get_end_lsn(replay_stat.end_lsn_);
+    }
   }
   return ret;
 }
@@ -466,8 +563,7 @@ int ObLogService::create_ls_(const palf::PalfBaseInfo &palf_base_info,
   } else {
     if (OB_FAIL(palf_env_->create(palf::AccessMode::APPEND, palf_base_info, palf_handle))) {
     } else if (OB_FAIL(apply_service_.create_status())) {
-    } else if (OB_FAIL(replay_service_.create_status())) {
-    } else if (OB_FAIL(log_handler.init(self_, &apply_service_, &replay_service_, palf_env_))) {
+    } else if (OB_FAIL(log_handler.init(self_, &apply_service_, this, palf_env_))) {
     } else {
       CLOG_LOG(INFO, "ObLogService create_ls success", K(ret), K(log_handler));
     }
@@ -476,7 +572,7 @@ int ObLogService::create_ls_(const palf::PalfBaseInfo &palf_base_info,
     }
     if (OB_FAIL(ret)) {
       CLOG_LOG(ERROR, "create_ls failed!!!", KR(ret));
-      replay_service_.remove_status();
+      disable_replay();
       apply_service_.remove_status();
       log_handler.destroy();
       palf_env_->close(palf_handle);
@@ -492,7 +588,7 @@ int ObLogService::diagnose_replay(ReplayDiagnoseInfo &diagnose_info)
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "log_service is not inited", K(ret));
-  } else if (OB_FAIL(replay_service_.diagnose(diagnose_info))) {
+  } else if (OB_FAIL(replay_info_.diagnose(diagnose_info))) {
   } else {
     // do nothing
   }

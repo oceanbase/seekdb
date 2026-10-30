@@ -163,7 +163,13 @@ public:
   int check_disk_space_enough(bool &is_disk_enough);
 
   palf::PalfEnv *get_palf_env() { return palf_env_; }
-  ObLogReplayService *get_log_replay_service()  { return &replay_service_; }
+  const ReplayInfo &get_replay_info() const { return replay_info_; }
+  int enable_replay(const palf::LSN &lsn, const share::SCN &scn);
+  int disable_replay();
+  int finish_replay(int64_t deadline_us);
+  int is_replay_done(const palf::LSN &lsn, bool &done);
+  int block_submit_replay();
+  int unblock_submit_replay();
   ObLogApplyService *get_log_apply_service()  { return &apply_service_; }
   // Get restore net driver for standby log sync
   // Returns the net driver from restore service if available
@@ -177,6 +183,7 @@ public:
   }
 
 private:
+  void destroy_replay_();
   int create_ls_(const palf::PalfBaseInfo &palf_base_info,
                  ObLogHandler &log_handler);
   int get_unrecyclable_log_disk_size(int64_t &unrecyclable_log_disk_size);
@@ -190,7 +197,10 @@ private:
   common::ObILogAllocator *alloc_mgr_;
 
   ObLogApplyService apply_service_;
-  ObLogReplayService replay_service_;
+  lib::ObMutex replay_lock_;
+  ReplayInfo replay_info_;
+  ObLogReplayService *replay_service_;
+  int64_t replay_thread_quota_;
   ObILogStorage *log_storage_;
   ObLogRuntimeConfig runtime_config_;
   ObLogMonitor monitor_;

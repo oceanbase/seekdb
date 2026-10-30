@@ -79,6 +79,7 @@ _PUBLIC_HDRS = [
     "replayservice/ob_log_replay_service.h",
     "replayservice/ob_replay_handler.h",
     "replayservice/ob_replay_status.h",
+    "replayservice/replay_info.h",
 ]
 
 # New headers are private by default. Promoting one to the module interface is
