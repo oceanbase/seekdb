@@ -20,7 +20,6 @@ SDK_HEADERS = {
     "curl_headers": _headers("curl"),
     "fast_float_headers": _headers("fast_float", ["include", "include/fast_float"]),
     "libaio_headers": {"hdrs": ["include/libaio.h"], "includes": ["include"]},
-    "libunwind_headers": {"hdrs": ["include/libunwind*.h", "include/unwind.h"], "includes": ["include"]},
     "libxml2_headers": _headers("libxml2", ["include/libxml2"]),
     "mariadb_headers": _headers("mariadb", ["include", "include/mariadb"]),
     "openssl_headers": _headers("openssl"),
@@ -43,7 +42,6 @@ SDK_IMPORTS = {
         "includes": ["include"],
     },
     "libssl": {"static_library": "lib/libssl.a"},
-    "libunwind": {"static_library": "lib/libunwind.a"},
     "zlib": {"static_library": "lib/libz.a"},
 }
 

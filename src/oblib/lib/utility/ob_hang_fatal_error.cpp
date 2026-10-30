@@ -30,21 +30,9 @@ namespace oceanbase
 {
 namespace common
 {
-int64_t g_fatal_error_thread_id = -1;
-
-int64_t get_fatal_error_thread_id()
-{
-  return g_fatal_error_thread_id;
-}
-void set_fatal_error_thread_id(int64_t thread_id)
-{
-  g_fatal_error_thread_id = thread_id;
-}
-
 void right_to_die_or_duty_to_live()
 {
   const ObFatalErrExtraInfoGuard *extra_info = ObFatalErrExtraInfoGuard::get_thd_local_val_ptr();
-  set_fatal_error_thread_id(GETTID());
   ObCStringHelper helper;
   const char *info = (NULL == extra_info) ? NULL : helper.convert(*extra_info);
   LOG_DBA_ERROR_V2(OB_SERVER_THREAD_PANIC, OB_ERR_THREAD_PANIC,

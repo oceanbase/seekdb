@@ -359,22 +359,6 @@ OBLIB_UNITY_GROUPS = {
             ],
         ),
         struct(
-            name = "oblib_lib_signal_0",
-            language = "c++",
-            srcs = [
-                "src/oblib/lib/signal/ob_signal_handlers.cpp",
-                "src/oblib/lib/signal/ob_signal_struct.cpp",
-                "src/oblib/lib/signal/ob_signal_utils.cpp",
-            ],
-        ),
-        struct(
-            name = "oblib_lib_signal_0",
-            language = "c",
-            srcs = [
-                "src/oblib/lib/signal/ob_libunwind.c",
-            ],
-        ),
-        struct(
             name = "oblib_lib_thread_0",
             language = "c++",
             srcs = [

@@ -26,7 +26,6 @@
 #include <windows.h>
 #include <psapi.h>
 #endif
-#include "lib/signal/ob_signal_struct.h"
 #include "lib/utility/ob_tracepoint.h"
 #include "lib/utility/ob_platform_utils.h"
 #include "lib/alloc/malloc_hook.h"

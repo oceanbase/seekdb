@@ -206,8 +206,6 @@ cc_library(
         "lib/rc/ob_rc.h",
         "lib/resource/ob_cache_washer.h",
         "lib/runtime.h",
-        "lib/signal/ob_signal_struct.h",
-        "lib/signal/ob_signal_utils.h",
         "lib/stat/ob_di_tls.h",
         "lib/stat/ob_diagnose_info.h",
         "lib/stat/ob_diagnostic_info_guard.h",
@@ -759,7 +757,6 @@ _OBLIB_PRIVATE_HEADERS = [
     "lib/oblog/ob_log_module.ipp",
     "lib/queue/ob_co_seq_queue.h",
     "lib/queue/ob_ms_queue.h",
-    "lib/signal/ob_libunwind.h",
     "lib/stat/ob_di_list.h",
     "lib/string/ob_sensitive_string.h",
     "lib/thread/ob_map_queue.h",
@@ -846,14 +843,12 @@ _FOUNDATION_CXX_GROUP_NAMES = [
     "oblib_lib_downsink_qt_0",
     "oblib_lib_lock_0",
     "oblib_lib_oblog_0",
-    "oblib_lib_signal_0",
     "oblib_lib_thread_0",
     "oblib_lib_utility_0",
 ]
 
 _FOUNDATION_C_GROUP_NAMES = [
     "oblib_lib_common_mixed_0",
-    "oblib_lib_signal_0",
 ]
 
 _RPC_GROUP_NAMES = [
@@ -895,7 +890,6 @@ grouped_unity_cc_library(
         ":_oblib_implementation_headers",
         ":oblib_foundation",
         "//src/oblib/easy:easy",
-        "//bazel/third_party:libunwind_headers",
     ],
     copts = OBLIB_C_COPTS + openmp_copts(),
     local_defines = OBLIB_LOCAL_DEFINES,
@@ -1248,7 +1242,6 @@ cc_library(
         "//bazel/third_party:libaio",
         "//bazel/third_party:libcrypto",
         "//bazel/third_party:libssl",
-        "//bazel/third_party:libunwind",
         "//bazel/third_party:zlib",
     ] + select({
         "@platforms//os:linux": ["//deps/external:jemalloc_library"],
