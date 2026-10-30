@@ -131,6 +131,7 @@ static const char *nio_reactor_poll_result_name(const int32_t poll_result)
     case 1: return "events"; // REACTOR_POLL_EVENTS
     case 2: return "failed"; // REACTOR_POLL_FAILED
     case 3: return "skipped"; // REACTOR_POLL_SKIPPED
+    case 4: return "final"; // REACTOR_POLL_FINAL
     default: return "unknown";
   }
 }

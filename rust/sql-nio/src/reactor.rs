@@ -57,6 +57,8 @@ pub struct NioReactor {
     pub(crate) wakers: Vec<Arc<Waker>>,
     pub(crate) stop: Arc<AtomicBool>,
     pub(crate) joins: Vec<JoinHandle<()>>,
+    #[cfg(feature = "native-network")]
+    reactor_diagnostics: Arc<ReactorDiagnostics>,
     local_endpoint: Option<LocalEndpointGuard>,
     keepalive: Arc<TcpKeepaliveState>,
     bound_tcp_port: u32,
@@ -213,6 +215,8 @@ pub(crate) struct EventLoop {
     pub(crate) accept_calls: u64,
     #[cfg(feature = "native-network")]
     pub(crate) accepted_total: u64,
+    #[cfg(feature = "native-network")]
+    pub(crate) reactor_diagnostics: Arc<ReactorDiagnostics>,
     pub(crate) cxx_connect_attempts: Arc<AtomicU64>,
     pub(crate) cxx_connect_returns: Arc<AtomicU64>,
     pub(crate) cxx_connect_rejects: Arc<AtomicU64>,
@@ -266,6 +270,38 @@ const REACTOR_POLL_TIMEOUT: i32 = 0;
 const REACTOR_POLL_EVENTS: i32 = 1;
 const REACTOR_POLL_FAILED: i32 = 2;
 const REACTOR_POLL_SKIPPED: i32 = 3;
+#[cfg(feature = "native-network")]
+const REACTOR_POLL_FINAL: i32 = 4;
+
+#[cfg(feature = "native-network")]
+struct ReactorDiagnostics {
+    poll_id: AtomicU64,
+    event_count: AtomicU64,
+    listener_events: AtomicU64,
+    accept_calls: AtomicU64,
+    accepted: AtomicU64,
+    cxx_connect_attempts: AtomicU64,
+    cxx_connect_returns: AtomicU64,
+    cxx_connect_rejects: AtomicU64,
+    listener_event_flags: AtomicU32,
+}
+
+#[cfg(feature = "native-network")]
+impl ReactorDiagnostics {
+    fn new() -> Self {
+        Self {
+            poll_id: AtomicU64::new(0),
+            event_count: AtomicU64::new(0),
+            listener_events: AtomicU64::new(0),
+            accept_calls: AtomicU64::new(0),
+            accepted: AtomicU64::new(0),
+            cxx_connect_attempts: AtomicU64::new(0),
+            cxx_connect_returns: AtomicU64::new(0),
+            cxx_connect_rejects: AtomicU64::new(0),
+            listener_event_flags: AtomicU32::new(0),
+        }
+    }
+}
 
 fn accept_error_kind_code(kind: std::io::ErrorKind) -> i32 {
     match kind {
@@ -369,6 +405,7 @@ impl EventLoop {
                 stopping = true;
             }
             if poll_failed && !stopping {
+                self.publish_reactor_state(poll_result, poll_id, 0, 0);
                 self.log_reactor_state(poll_result, poll_id, 0, 0);
                 continue;
             }
@@ -432,6 +469,7 @@ impl EventLoop {
                 self.drain_ready();
             }
             self.reap_retired();
+            self.publish_reactor_state(poll_result, poll_id, event_count, listener_event_flags);
             self.log_reactor_state(poll_result, poll_id, event_count, listener_event_flags);
         }
     }
@@ -610,6 +648,56 @@ impl EventLoop {
                 listener_event_flags,
             );
         }
+    }
+
+    #[cfg(feature = "native-network")]
+    fn publish_reactor_state(
+        &self,
+        _poll_result: i32,
+        poll_id: u64,
+        event_count: u64,
+        listener_event_flags: u32,
+    ) {
+        if self.listener.is_none() {
+            return;
+        }
+        self.reactor_diagnostics
+            .poll_id
+            .store(poll_id, Ordering::Release);
+        self.reactor_diagnostics
+            .event_count
+            .store(event_count, Ordering::Release);
+        self.reactor_diagnostics
+            .listener_events
+            .store(self.listener_event_count, Ordering::Release);
+        self.reactor_diagnostics
+            .accept_calls
+            .store(self.accept_calls, Ordering::Release);
+        self.reactor_diagnostics
+            .accepted
+            .store(self.accepted_total, Ordering::Release);
+        self.reactor_diagnostics
+            .cxx_connect_attempts
+            .store(self.cxx_connect_attempts.load(Ordering::Acquire), Ordering::Release);
+        self.reactor_diagnostics
+            .cxx_connect_returns
+            .store(self.cxx_connect_returns.load(Ordering::Acquire), Ordering::Release);
+        self.reactor_diagnostics
+            .cxx_connect_rejects
+            .store(self.cxx_connect_rejects.load(Ordering::Acquire), Ordering::Release);
+        self.reactor_diagnostics
+            .listener_event_flags
+            .store(listener_event_flags, Ordering::Release);
+    }
+
+    #[cfg(not(feature = "native-network"))]
+    fn publish_reactor_state(
+        &self,
+        _poll_result: i32,
+        _poll_id: u64,
+        _event_count: u64,
+        _listener_event_flags: u32,
+    ) {
     }
 
     #[cfg(not(feature = "native-network"))]
@@ -1259,6 +1347,8 @@ pub(crate) unsafe fn nio_start_in_dir(
     let cxx_connect_attempts = Arc::new(AtomicU64::new(0));
     let cxx_connect_returns = Arc::new(AtomicU64::new(0));
     let cxx_connect_rejects = Arc::new(AtomicU64::new(0));
+    #[cfg(feature = "native-network")]
+    let reactor_diagnostics = Arc::new(ReactorDiagnostics::new());
 
     let started = (|| -> std::io::Result<NioReactor> {
         let stop = Arc::new(AtomicBool::new(false));
@@ -1370,6 +1460,8 @@ pub(crate) unsafe fn nio_start_in_dir(
                 accept_calls: 0,
                 #[cfg(feature = "native-network")]
                 accepted_total: 0,
+                #[cfg(feature = "native-network")]
+                reactor_diagnostics: reactor_diagnostics.clone(),
                 cxx_connect_attempts: cxx_connect_attempts.clone(),
                 cxx_connect_returns: cxx_connect_returns.clone(),
                 cxx_connect_rejects: cxx_connect_rejects.clone(),
@@ -1497,6 +1589,8 @@ pub(crate) unsafe fn nio_start_in_dir(
             wakers,
             stop,
             joins,
+            #[cfg(feature = "native-network")]
+            reactor_diagnostics,
             local_endpoint,
             keepalive,
             bound_tcp_port,
@@ -1517,6 +1611,41 @@ pub(crate) unsafe fn nio_start_in_dir(
             std::ptr::null_mut()
         }
     }
+}
+
+impl NioReactor {
+    #[cfg(feature = "native-network")]
+    fn log_final_diagnostics(&self) {
+        unsafe {
+            ob_sql_nio_log_reactor_state(
+                REACTOR_POLL_FINAL,
+                self.reactor_diagnostics.poll_id.load(Ordering::Acquire),
+                self.reactor_diagnostics.event_count.load(Ordering::Acquire),
+                self.reactor_diagnostics
+                    .listener_events
+                    .load(Ordering::Acquire),
+                self.reactor_diagnostics
+                    .accept_calls
+                    .load(Ordering::Acquire),
+                self.reactor_diagnostics.accepted.load(Ordering::Acquire),
+                self.reactor_diagnostics
+                    .cxx_connect_attempts
+                    .load(Ordering::Acquire),
+                self.reactor_diagnostics
+                    .cxx_connect_returns
+                    .load(Ordering::Acquire),
+                self.reactor_diagnostics
+                    .cxx_connect_rejects
+                    .load(Ordering::Acquire),
+                self.reactor_diagnostics
+                    .listener_event_flags
+                    .load(Ordering::Acquire),
+            );
+        }
+    }
+
+    #[cfg(not(feature = "native-network"))]
+    fn log_final_diagnostics(&self) {}
 }
 
 /// # Safety
@@ -1582,4 +1711,5 @@ pub unsafe fn nio_wait_destroy(reactor: *mut NioReactor) {
     for join in e.joins.drain(..) {
         let _ = join.join();
     }
+    e.log_final_diagnostics();
 }
