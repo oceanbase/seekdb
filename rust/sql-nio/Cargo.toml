@@ -25,6 +25,7 @@ memory-transport = []
 
 [dependencies]
 cxx = "1"
+log = "0.4"
 # mio = epoll (Linux) / kqueue (macOS) / IOCP (Windows), no async runtime.
 # os-ext: mio::windows::NamedPipe for the per-reactor pending-pipe acceptor.
 mio = { version = "1", optional = true, features = ["os-poll", "net", "os-ext"] }
