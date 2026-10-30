@@ -377,6 +377,22 @@ docker run -d \
   -v ./data:/var/lib/oceanbase \
   oceanbase/seekdb:latest
 ```
+
+**Verify the deployment**
+
+- Wait for readiness: `docker logs seekdb` until you see `SeekDB SQL ready` (first boot takes about 1-2 minutes).
+- Run a smoke query. The image ships a `mysql` client (not `obclient`); root has an empty password by default:
+
+  ```bash
+  docker exec seekdb mysql -h127.0.0.1 -uroot -P2881 -e "SELECT 1"
+  ```
+
+- Check the telemetry file. `content.id` is the deployment UUID:
+
+  ```bash
+  docker exec seekdb cat /var/lib/seekdb/run/telemetry.json
+  ```
+
 Please refer to the [document](https://github.com/oceanbase/docker-images/blob/main/seekdb/README.md) of this docker image for details.
 
 </details>
@@ -593,3 +609,5 @@ If seekdb is useful to you, **a star helps others find it.** ⭐
 ## 📄 License
 
 seekdb is built by the [OceanBase](https://en.oceanbase.com/) team — the same database engine running in production at Alipay, Taobao, DiDi, Xiaomi, and more. Fully open-source under the [Apache License, Version 2.0](LICENSE).
+
+OB-P:P3nV0lyA8UGtddDAIJwbzA
