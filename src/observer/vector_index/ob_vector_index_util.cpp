@@ -5871,17 +5871,25 @@ int ObVectorIndexUtil::set_adaptive_try_path(ObVecIdxExtraInfo& vc_info, const b
       }
     }
   } else if (vc_info.adaptive_try_path_ == ObVecIdxAdaTryPath::VEC_PATH_UNCHOSEN) {
-    if (output_row_count <= ObVecIdxExtraInfo::MAX_HNSW_BRUTE_FORCE_SIZE) {
-      vc_info.adaptive_try_path_ = ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER;
-    } else if (is_primary_idx) {
-      vc_info.adaptive_try_path_ = (output_row_count < ObVecIdxExtraInfo::MAX_HNSW_PRE_ROW_CNT_WITH_ROWKEY
-                                    && vc_info.selectivity_ <= ObVecIdxExtraInfo::DEFAULT_PRE_RATE_FILTER_WITH_ROWKEY) ?
-                                    ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER : ObVecIdxAdaTryPath::VEC_INDEX_ITERATIVE_FILTER;
-    } else {
-      vc_info.adaptive_try_path_ = (output_row_count < ObVecIdxExtraInfo::MAX_HNSW_PRE_ROW_CNT_WITH_IDX
-                                    && vc_info.selectivity_ <= ObVecIdxExtraInfo::DEFAULT_PRE_RATE_FILTER_WITH_IDX) ?
-                                    ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER : ObVecIdxAdaTryPath::VEC_INDEX_ITERATIVE_FILTER;
-    }
+    // A pre-filter has to materialize every row that passes the filter before the
+    // vector search starts. It only pays off when the filter is selective enough;
+    // otherwise the pre-filter just scans the whole table and the vector search
+    // still sees almost all rows. Do not use the small-output shortcut for such a
+    // filter: a small estimated output can be produced by a filter that removes
+    // nothing. When the row count is unknown (for example index merge), keep the
+    // old small-candidate-set rule because selectivity cannot be turned into rows.
+    const double pre_filter_rate = is_primary_idx
+        ? ObVecIdxExtraInfo::DEFAULT_PRE_RATE_FILTER_WITH_ROWKEY
+        : ObVecIdxExtraInfo::DEFAULT_PRE_RATE_FILTER_WITH_IDX;
+    const uint64_t max_pre_row_cnt = is_primary_idx
+        ? ObVecIdxExtraInfo::MAX_HNSW_PRE_ROW_CNT_WITH_ROWKEY
+        : ObVecIdxExtraInfo::MAX_HNSW_PRE_ROW_CNT_WITH_IDX;
+    const bool prefer_pre_filter = vc_info.row_count_ <= 0
+        ? output_row_count <= ObVecIdxExtraInfo::MAX_HNSW_BRUTE_FORCE_SIZE
+        : (vc_info.selectivity_ <= pre_filter_rate && output_row_count < max_pre_row_cnt);
+    vc_info.adaptive_try_path_ = prefer_pre_filter
+        ? ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER
+        : ObVecIdxAdaTryPath::VEC_INDEX_ITERATIVE_FILTER;
   } else if (vc_info.adaptive_try_path_ == ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER) {
     // means hint choose pre-filter, only check can/can't go in-filter
     if (vc_info.with_extra_info_ && vc_info.can_use_vec_pri_opt_) {
