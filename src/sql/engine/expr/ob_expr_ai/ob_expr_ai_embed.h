@@ -37,6 +37,12 @@ public:
                                 int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx) const override;
   static int eval_ai_embed(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  // The batch evaluation of the function: the rows of one batch are sent to
+  // the model in as few requests as possible, the answers are written back to
+  // the rows they belong to.
+  static int eval_ai_embed_batch(const ObExpr &expr, ObEvalCtx &ctx,
+                                 const common::ObBitVector &skip,
+                                 const int64_t size);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, 
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
@@ -45,6 +51,9 @@ private:
   static constexpr int MODEL_IDX = 0;
   static constexpr int CONTENT_IDX = 1;
   static constexpr int DIM_IDX = 2;
+  // The maximum number of the inputs that are sent to the model in one
+  // request of the batch evaluation.
+  static constexpr int64_t MAX_BATCH_CONTENT_CNT = 32;
   DISALLOW_COPY_AND_ASSIGN(ObExprAIEmbed);
 };
 

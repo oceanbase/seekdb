@@ -40,29 +40,75 @@ public:
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
   virtual bool need_rt_ctx() const override { return true; }
- 
+
 private:
-  static int inner_eval_ai_rerank(common::ObIAllocator &allocator, 
-                                  const common::ObAIFuncExprInfo &info, 
+  static int inner_eval_ai_rerank(common::ObIAllocator &allocator,
+                                  const common::ObAIFuncExprInfo &info,
                                   const share::ObAiModelEndpointInfo &endpoint_info,
-                                  common::ObArray<common::ObString> &header_array, 
-                                  common::ObString &query, 
-                                  common::ObJsonArray *document_array, 
+                                  common::ObArray<common::ObString> &header_array,
+                                  common::ObString &query,
+                                  common::ObJsonArray *document_array,
                                   common::ObJsonArray *&result_array);
-  
-  static int eval_ai_rerank_with_doc_key(const ObExpr &expr, ObEvalCtx &ctx, common::ObIAllocator &allocator,
-                                         common::ObString &model_id, common::ObString &query, common::ObJsonArray *document_array,
-                                         common::ObString &doc_key, const common::ObAIFuncExprInfo &info, const share::ObAiModelEndpointInfo &endpoint_info, ObDatum &res);
+  /**
+   * @brief Send the documents of one ai_rerank call to the model. The
+   *        documents are split into batches of RERANK_BATCH_SIZE. The answer
+   *        of every batch is checked, the index of a result is turned into the
+   *        index of the document in the whole array, and the merged answer is
+   *        sorted by the score: the bigger score comes first, the smaller
+   *        document index comes first when the scores are equal.
+   */
+  static int call_rerank_in_batches(common::ObIAllocator &allocator,
+                                    const common::ObAIFuncExprInfo &info,
+                                    const share::ObAiModelEndpointInfo &endpoint_info,
+                                    common::ObArray<common::ObString> &header_array,
+                                    common::ObString &query,
+                                    common::ObJsonArray *document_array,
+                                    common::ObJsonArray *&result_array);
+  static int eval_ai_rerank_with_doc_key(common::ObIAllocator &allocator,
+                                         const common::ObAIFuncExprInfo &info,
+                                         const share::ObAiModelEndpointInfo &endpoint_info,
+                                         common::ObArray<common::ObString> &header_array,
+                                         common::ObString &query,
+                                         common::ObJsonArray *document_array,
+                                         common::ObString &doc_key,
+                                         common::ObJsonArray *&sorted_document_array);
   static int get_doc_array_from_documents_array_with_key(ObIAllocator &allocator, ObJsonArray *document_object_array, ObString &doc_key, ObJsonArray *&doc_array);
   static int sort_document_array_by_model_result(common::ObIAllocator &allocator, common::ObJsonArray *document_array, common::ObJsonArray *model_result_array, common::ObJsonArray *&sorted_document_array);
   static int construct_config_json(common::ObIAllocator &allocator, int64_t top_k, int64_t return_doc, common::ObJsonObject *&config_json);
   static int construct_batch_document_array(common::ObIAllocator &allocator, common::ObJsonArray *document_array, int64_t start_idx, int64_t end_idx, common::ObJsonArray *&batch_document_array);
-  static int batch_result_add_base(common::ObIAllocator &allocator, common::ObJsonArray *array, int64_t start_idx);
-  static int compact_json_array_by_key(common::ObIAllocator &allocator, common::ObJsonArray *array1, common::ObJsonArray *array2, common::ObString &score_key, common::ObJsonArray *&compact_array);
+  /**
+   * @brief Get the index and the score of one result of the model. The index
+   *        must be an integer and the score must be a number.
+   */
+  static int get_rerank_score_and_index(common::ObJsonObject *result_obj, int64_t &index, double &score);
+  /**
+   * @brief Check the answer of one batch, the index of the answer is turned
+   *        into the index of the document in the whole array, and the answer
+   *        is sorted by the score.
+   */
+  static int build_rerank_batch_result(common::ObIAllocator &allocator,
+                                       common::ObJsonArray *batch_result,
+                                       int64_t start_idx,
+                                       int64_t batch_count,
+                                       common::ObJsonArray *&sorted_batch);
+  /**
+   * @brief Merge the results of two batches, both of them are sorted by the
+   *        score. The bigger score comes first, the smaller index comes first
+   *        when the scores are equal.
+   */
+  static int merge_rerank_result_by_score(common::ObIAllocator &allocator,
+                                          common::ObJsonArray *array1,
+                                          common::ObJsonArray *array2,
+                                          common::ObJsonArray *&merged_array);
+  /**
+   * @brief Check that the answer holds every document exactly once.
+   */
+  static int validate_rerank_result(common::ObJsonArray *result_array, int64_t doc_count);
   static constexpr int MODEL_IDX = 0;
   static constexpr int QUERY_IDX = 1;
   static constexpr int DOCUMENTS_IDX = 2;
   static constexpr int DOC_KEY_IDX = 3;
+  static constexpr int64_t RERANK_BATCH_SIZE = 20;
   static constexpr char MODEL_SCORE_KEY[20] = "_model_score";
   static constexpr char INDEX_KEY[20] = "index";
   static constexpr char SCORE_KEY[20] = "relevance_score";
@@ -72,4 +118,4 @@ private:
 } // namespace sql
 } // namespace oceanbase
 #endif // OCEANBASE_SQL_OB_EXPR_AI_RERANK_H_
-  
+

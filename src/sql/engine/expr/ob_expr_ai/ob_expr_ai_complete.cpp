@@ -104,38 +104,59 @@ int ObExprAIComplete::eval_ai_complete(const ObExpr &expr,
     ObString model_id = arg_model_id->get_string();
     ObString prompt;
     ObJsonObject *config = nullptr;
-    ObString config_str;
     share::ObAiModelEndpointInfo resolved_endpoint;
     const share::ObAiModelEndpointInfo *endpoint_info = &resolved_endpoint;
     query::ObIAiEndpointResolver *endpoint_resolver =
         ::oceanbase::share::server_service<::oceanbase::query::ObIAiEndpointResolver>();
     ObExpr *arg_expr_prompt = expr.args_[1];
-    if ( OB_ISNULL(arg_expr_prompt) ) {
+    if (OB_ISNULL(arg_expr_prompt)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (arg_expr_prompt->datum_meta_.type_ == ObJsonType) {
       ObIJsonBase *j_base = nullptr;
       ObJsonObject *prompt_object = nullptr;
       bool is_null = false;
       if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, PROMPT_IDX, j_base, is_null))) {
+        LOG_WARN("failed to get the json prompt", K(ret));
+      } else if (is_null || OB_ISNULL(j_base)) {
+        // A json null prompt is refused, a dereference of the null json value
+        // would crash the server.
+        ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_complete, the prompt is null");
+        res.set_null();
       } else if (j_base->json_type() != ObJsonNodeType::J_OBJECT) {
         ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_complete, the prompt is not a json object");
+        res.set_null();
       } else if (OB_FALSE_IT(prompt_object = static_cast<ObJsonObject *>(j_base))) {
       } else if (!ObAIFuncPromptObjectUtils::is_valid_prompt_object(prompt_object)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "prompt is not valid");
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_complete, the prompt object is not valid");
         res.set_null();
-      } else if (!ObAIFuncJsonUtils::ob_is_json_array_all_str(static_cast<ObJsonArray *>(prompt_object->get_value(ObAIFuncPromptObjectUtils::prompt_args_key)))) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "prompt object is not support");
       } else if (OB_FAIL(ObAIFuncPromptObjectUtils::replace_all_str_args_in_template(temp_allocator, prompt_object, prompt))) {
+        LOG_WARN("failed to render the prompt object", K(ret));
       }
     } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *arg_prompt, expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), prompt))) {
     }
 
     if (OB_FAIL(ret)) {
-    } else if (OB_NOT_NULL(arg_config)) {
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *arg_config, expr.args_[2]->datum_meta_, expr.args_[2]->obj_meta_.has_lob_header(), config_str))) {
-      } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_object_form_str(temp_allocator, config_str, config))) {
+    } else if (OB_NOT_NULL(arg_config) && !arg_config->is_null()) {
+      // The config may be a json object or the json text of an object: only a
+      // json object is accepted, both the SQL null and the json null mean that
+      // the model is called with the default config.
+      ObIJsonBase *j_base = nullptr;
+      bool is_null = false;
+      if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator,
+                                                 CONFIG_IDX, j_base, is_null))) {
+        LOG_WARN("failed to get the json config", K(ret));
+      } else if (is_null || OB_ISNULL(j_base)
+                 || j_base->json_type() == ObJsonNodeType::J_NULL) {
+        // use the default config
+      } else if (j_base->json_type() != ObJsonNodeType::J_OBJECT) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_complete, the config is not a json object");
+        res.set_null();
+      } else {
+        config = static_cast<ObJsonObject *>(j_base);
       }
     }
 

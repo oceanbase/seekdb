@@ -50,22 +50,29 @@ int ObExprAIPrompt::calc_result_typeN(ObExprResType &type,
                                     common::ObExprTypeCtx &type_ctx) const 
 {
   int ret = OB_SUCCESS;
-  bool is_null_res = false;
   ObExprResType template_type = types_stack[0];
-  if (!ob_is_string_tc(template_type.get_type())) {
-    ret = OB_ERR_INVALID_TYPE_FOR_OP;
-  } else {
+  if (ob_is_string_tc(template_type.get_type())) {
     types_stack[0].set_calc_type(ObVarcharType);
     types_stack[0].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
+  } else if (ob_is_text_tc(template_type.get_type())) {
+    // A text/longtext (or blob) template keeps its own type: its content is
+    // read from the lob when the function is evaluated.
+    types_stack[0].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
+  } else {
+    ret = OB_ERR_INVALID_TYPE_FOR_OP;
   }
 
   for (int64_t i = 1; i < param_num && OB_SUCC(ret); i++) {
-    if (ob_is_string_tc(types_stack[i].get_type())) {
+    const ObObjType arg_type = types_stack[i].get_type();
+    if (ob_is_string_tc(arg_type)) {
       types_stack[i].set_calc_type(ObVarcharType);
       types_stack[i].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
-    } else if (ob_is_json(types_stack[i].get_type())) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "json type is not supported");
+    } else if (ob_is_text_tc(arg_type)) {
+      // A text/longtext (or blob) argument is read from the lob as well.
+      types_stack[i].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
+    } else if (ob_is_json(arg_type)) {
+      // A json argument keeps its structure, it is appended to the argument
+      // array of the prompt object as it is.
     } else {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
     }
@@ -94,8 +101,10 @@ int ObExprAIPrompt::eval_ai_prompt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   if (OB_FAIL(tmp_allocator.eval_arg(arg0, ctx, template_datum))) {
   } else if (template_datum->is_null()) {
     ret = OB_INVALID_ARGUMENT;
-  } else {
-    template_str = template_datum->get_string();
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, tmp_allocator,
+                    *template_datum, arg0->datum_meta_, arg0->obj_meta_.has_lob_header(),
+                    template_str))) {
+    LOG_WARN("failed to read the template string", K(ret), K(arg0->datum_meta_));
   }
 
   if (OB_FAIL(ret)) {
@@ -107,15 +116,33 @@ int ObExprAIPrompt::eval_ai_prompt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
       ObString arg_str;
       ObJsonString *arg_json_str = NULL;
       if (OB_FAIL(tmp_allocator.eval_arg(arg, ctx, datum))) {
-      } else if (ob_is_string_tc(arg->datum_meta_.type_)) {
-        arg_str = datum->get_string();
-        if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(tmp_allocator, arg_str, arg_json_str))) {
+      } else if (datum->is_null()) {
+        // A null argument must not be rendered into the prompt object.
+        ret = OB_ERR_INVALID_TYPE_FOR_OP;
+      } else if (ob_is_string_tc(arg->datum_meta_.type_)
+                 || ob_is_text_tc(arg->datum_meta_.type_)) {
+        if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, tmp_allocator,
+                    *datum, arg->datum_meta_, arg->obj_meta_.has_lob_header(), arg_str))) {
+          LOG_WARN("failed to read the argument string", K(ret), K(i), K(arg->datum_meta_));
+        } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(tmp_allocator, arg_str, arg_json_str))) {
         } else if (OB_FAIL(args_array->append(arg_json_str))) {
         }
       } else if (ob_is_json(arg->datum_meta_.type_)) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "json type is not supported");
-      } else if (datum->is_null()) {
+        // The json argument keeps its structure: a json array, a json object
+        // or any other json value is appended to the argument array as it is.
+        ObIJsonBase *j_base = NULL;
+        bool is_null = false;
+        if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, tmp_allocator,
+                    static_cast<uint16_t>(i), j_base, is_null))) {
+          LOG_WARN("failed to get the json argument", K(ret), K(i));
+        } else if (is_null || OB_ISNULL(j_base)) {
+          ret = OB_ERR_INVALID_TYPE_FOR_OP;
+        } else if (OB_UNLIKELY(!j_base->is_tree())) {
+          ret = OB_INVALID_DATA;
+          LOG_WARN("the json argument is not a json tree", K(ret), K(i));
+        } else if (OB_FAIL(args_array->append(static_cast<ObJsonNode *>(j_base)))) {
+        }
+      } else {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
       }
     }

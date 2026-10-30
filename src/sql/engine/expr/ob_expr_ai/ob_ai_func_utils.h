@@ -334,6 +334,41 @@ public:
                                            const int64_t dimension, float *&vector);
   static int decode_float_embedding_array(const ObIJsonBase &embedding_jbase, ObIAllocator &allocator,
                                           share::ObJsonReaderHelper &json_reader, const int64_t dimension, float *&vector);
+  /**
+   * @brief Validate the embeddings that a model answered.
+   *        The result must be a json array of the embeddings, every embedding
+   *        must be a not empty json array of finite numbers and all of the
+   *        embeddings must have the same length.
+   * @param allocator the allocator of the temporary data
+   * @param result the embeddings answered by the model
+   * @param dimension the expected length of every embedding, the length is
+   *        not checked when it is not greater than zero
+   * @return OB_SUCCESS when the result is valid, OB_INVALID_DATA when the
+   *         structure or the type of the result is invalid and
+   *         OB_INVALID_ARGUMENT when the length of an embedding is not the
+   *         expected dimension
+   */
+  static int validate_embedding_result(ObIAllocator &allocator,
+                                       ObIJsonBase *result,
+                                       const int64_t dimension = 0);
+  /**
+   * @brief Normalize the results of a rerank answer.
+   *        Every result must carry the integer index of the document of the
+   *        request and the score of the document. The index must cover every
+   *        document exactly once. The results are sorted by the score with the
+   *        bigger score first and the results of the same score keep the order
+   *        of the index.
+   * @param allocator the allocator of the normalized result
+   * @param results the results answered by the model
+   * @param expected_count the number of the documents of the request
+   * @param result the normalized results
+   * @return OB_SUCCESS, OB_INVALID_ARGUMENT when the expected count is not
+   *         positive and OB_INVALID_DATA when the answer is invalid
+   */
+  static int normalize_rerank_result(ObIAllocator &allocator,
+                                     ObIJsonBase *results,
+                                     const int64_t expected_count,
+                                     ObJsonArray *&result);
   static int get_ai_func_info(ObIAllocator &allocator, const ObString &model_id,
                               share::schema::ObSchemaGetterGuard &guard, ObAIFuncExprInfo *&info);
   static int get_ai_func_info(ObIAllocator &allocator, const ObString &model_id, ObAIFuncExprInfo *&info);
@@ -379,6 +414,17 @@ public:
   static bool is_valid_prompt_object(ObJsonObject* prompt_object);
   static int replace_all_str_args_in_template(ObIAllocator &allocator, ObJsonObject* prompt_object, ObString& replaced_prompt_str);
   static int construct_prompt_object(ObIAllocator &allocator, ObString &template_str, ObJsonArray *args_array, ObJsonObject *&prompt_object);
+  /**
+   * @brief Check whether a json value can be an argument of a prompt object.
+   *        Every json value is accepted but the json null.
+   */
+  static bool is_valid_prompt_arg(const ObIJsonBase *arg_node);
+  /**
+   * @brief Get the text that replaces an argument in the template: a string is
+   *        replaced by its content, a nested prompt object is rendered with its
+   *        own arguments and any other json value is replaced by its json text.
+   */
+  static int get_prompt_arg_text(ObIAllocator &allocator, ObJsonNode *arg_node, ObString &arg_text);
   static constexpr char prompt_template_key[20] = "template";
   static constexpr char prompt_args_key[20] = "args";
 private:
