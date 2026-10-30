@@ -105,6 +105,10 @@ impl Schema {
         Ok(())
     }
 
+    fn uses_index(&self, order: Option<usize>) -> bool {
+        order.is_some_and(|column| column != self.primary[0] && self.indexes.contains(&column))
+    }
+
     fn prefix(&self, order: Option<usize>) -> Result<Vec<u8>> {
         match order {
             None => Ok(vec![b'r', self.namespace_id]),
@@ -128,7 +132,7 @@ impl Schema {
         Ok(key)
     }
     fn index_key(&self, column: usize, row: &[Cell], primary: &[u8]) -> Result<Vec<u8>> {
-        let mut key = self.prefix(Some(column))?;
+        let mut key = vec![b'i', self.namespace_id, column as u8];
         if let Cell::Integer(n) = row[column] {
             key.extend(ordered(n));
         } else {
@@ -290,11 +294,7 @@ impl Query {
                 break;
             };
             range.start = std::ops::Bound::Excluded(key);
-            let bytes = if self
-                .table
-                .indexes
-                .contains(&self.order.unwrap_or(usize::MAX))
-            {
+            let bytes = if self.table.uses_index(self.order) {
                 tx.get(&value)?.ok_or_else(corrupt)?
             } else {
                 value
@@ -393,12 +393,11 @@ impl Query {
                 .iter()
                 .any(|p| p.column == column && p.compare == LocalCompare::Equal)
         });
-        let effective_order =
-            if full_key && !schema.indexes.contains(&self.order.unwrap_or(usize::MAX)) {
-                None
-            } else {
-                self.order
-            };
+        let effective_order = if full_key && !schema.uses_index(self.order) {
+            None
+        } else {
+            self.order
+        };
         let mut prefix = self.table.prefix(effective_order)?;
         let mut range_column = effective_order.or(Some(schema.primary[0]));
         if effective_order.is_none() || effective_order == Some(schema.primary[0]) {
@@ -562,10 +561,7 @@ impl RowCursor {
         }
     }
     fn range_is_index(&self) -> bool {
-        self.query
-            .table
-            .indexes
-            .contains(&self.query.order.unwrap_or(usize::MAX))
+        self.query.table.uses_index(self.query.order)
     }
     pub fn next_row(&mut self) -> Result<Option<Vec<Cell>>> {
         if self.done {
@@ -721,9 +717,7 @@ impl Mutation {
                 break;
             };
             range.start = std::ops::Bound::Excluded(key);
-            let index = table
-                .indexes
-                .contains(&self.query.order.unwrap_or(usize::MAX));
+            let index = table.uses_index(self.query.order);
             let bytes = if index {
                 tx.get(&value)?.ok_or_else(corrupt)?
             } else {
