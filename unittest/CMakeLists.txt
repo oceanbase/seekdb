@@ -1,0 +1,82 @@
+# Copyright (c) 2026 OceanBase.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+find_package(Threads REQUIRED)
+
+set(SEEKDB_PRETEST_GTEST "${DEP_DIR}/lib/libgtest.a")
+set(SEEKDB_PRETEST_GMOCK "${DEP_DIR}/lib/libgmock.a")
+foreach(SEEKDB_PRETEST_LIBRARY "${SEEKDB_PRETEST_GTEST}" "${SEEKDB_PRETEST_GMOCK}")
+  if(NOT EXISTS "${SEEKDB_PRETEST_LIBRARY}")
+    message(FATAL_ERROR "Missing pretest dependency: ${SEEKDB_PRETEST_LIBRARY}")
+  endif()
+endforeach()
+
+configure_file(run_tests_cmake.sh.in run_tests.sh @ONLY)
+
+get_filename_component(SEEKDB_PRETEST_TEST_SRCDIR "${CMAKE_BINARY_DIR}" DIRECTORY)
+get_filename_component(SEEKDB_PRETEST_TEST_WORKSPACE "${CMAKE_BINARY_DIR}" NAME)
+
+set(SEEKDB_PRETEST_TARGETS "")
+foreach(SEEKDB_PRETEST_MODULE IN LISTS SEEKDB_PRETEST_MODULES)
+  string(TOUPPER "${SEEKDB_PRETEST_MODULE}" SEEKDB_PRETEST_MODULE_UPPER)
+  set(SEEKDB_PRETEST_PREFIX "SEEKDB_PRETEST_${SEEKDB_PRETEST_MODULE_UPPER}")
+  set(SEEKDB_PRETEST_TARGET "${${SEEKDB_PRETEST_PREFIX}_TARGET}")
+  set(SEEKDB_PRETEST_MODULE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/${SEEKDB_PRETEST_MODULE}")
+  set(SEEKDB_PRETEST_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/${SEEKDB_PRETEST_MODULE}")
+
+  file(GLOB_RECURSE SEEKDB_PRETEST_SOURCES CONFIGURE_DEPENDS
+    "${SEEKDB_PRETEST_MODULE_DIR}/*.cpp")
+  if(NOT SEEKDB_PRETEST_SOURCES)
+    message(FATAL_ERROR "Pretest module ${SEEKDB_PRETEST_MODULE} has no sources")
+  endif()
+
+  add_executable(${SEEKDB_PRETEST_TARGET}
+    "${CMAKE_CURRENT_SOURCE_DIR}/all_tests_main.cpp"
+    ${SEEKDB_PRETEST_SOURCES})
+  set_target_properties(${SEEKDB_PRETEST_TARGET} PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${SEEKDB_PRETEST_OUTPUT_DIR}"
+    BUILD_RPATH "${CMAKE_BINARY_DIR}/src/observer")
+  target_include_directories(${SEEKDB_PRETEST_TARGET} PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}" "${SEEKDB_PRETEST_MODULE_DIR}")
+  target_link_libraries(${SEEKDB_PRETEST_TARGET} PRIVATE
+    oceanbase "${SEEKDB_PRETEST_GMOCK}" "${SEEKDB_PRETEST_GTEST}"
+    Threads::Threads ${CMAKE_DL_LIBS})
+
+  math(EXPR SEEKDB_PRETEST_LAST_SHARD "${${SEEKDB_PRETEST_PREFIX}_SHARD_COUNT} - 1")
+  foreach(SEEKDB_PRETEST_SHARD RANGE 0 ${SEEKDB_PRETEST_LAST_SHARD})
+    set(SEEKDB_PRETEST_CTEST_NAME
+      "${SEEKDB_PRETEST_TARGET}_shard_${SEEKDB_PRETEST_SHARD}")
+    set(SEEKDB_PRETEST_TMPDIR
+      "${CMAKE_CURRENT_BINARY_DIR}/tmp/${SEEKDB_PRETEST_CTEST_NAME}")
+    file(MAKE_DIRECTORY "${SEEKDB_PRETEST_TMPDIR}")
+    set(SEEKDB_PRETEST_ENVIRONMENT
+      "GTEST_TOTAL_SHARDS=${${SEEKDB_PRETEST_PREFIX}_SHARD_COUNT}"
+      "GTEST_SHARD_INDEX=${SEEKDB_PRETEST_SHARD}"
+      "TEST_TOTAL_SHARDS=${${SEEKDB_PRETEST_PREFIX}_SHARD_COUNT}"
+      "TEST_SHARD_INDEX=${SEEKDB_PRETEST_SHARD}"
+      "TEST_SRCDIR=${SEEKDB_PRETEST_TEST_SRCDIR}"
+      "TEST_WORKSPACE=${SEEKDB_PRETEST_TEST_WORKSPACE}"
+      "TEST_TMPDIR=${SEEKDB_PRETEST_TMPDIR}")
+    add_test(NAME "${SEEKDB_PRETEST_CTEST_NAME}"
+      COMMAND "$<TARGET_FILE:${SEEKDB_PRETEST_TARGET}>")
+    set_tests_properties("${SEEKDB_PRETEST_CTEST_NAME}" PROPERTIES
+      WORKING_DIRECTORY "${SEEKDB_PRETEST_TMPDIR}"
+      TIMEOUT 1200
+      ENVIRONMENT "${SEEKDB_PRETEST_ENVIRONMENT}")
+  endforeach()
+
+  list(APPEND SEEKDB_PRETEST_TARGETS "${SEEKDB_PRETEST_TARGET}")
+endforeach()
+
+add_custom_target(pretest DEPENDS ${SEEKDB_PRETEST_TARGETS})
