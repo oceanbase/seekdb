@@ -1,0 +1,9 @@
+DROP TABLE IF EXISTS ddl_quoted_enum;
+CREATE TABLE ddl_quoted_enum (id INT PRIMARY KEY, `e``n` ENUM('red', 'blue') NOT NULL);
+INSERT INTO ddl_quoted_enum VALUES (1, 'red'), (2, 'blue');
+CREATE UNIQUE INDEX ddl_quoted_enum_idx ON ddl_quoted_enum (`e``n`);
+SELECT id, `e``n` FROM ddl_quoted_enum ORDER BY id;
+id	e`n
+1	red
+2	blue
+DROP TABLE ddl_quoted_enum;

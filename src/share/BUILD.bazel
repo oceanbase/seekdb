@@ -34,6 +34,17 @@ load(
 
 declare_share_semantic_header_targets()
 
+cc_library(
+    name = "ddl_identifier",
+    hdrs = ["ob_ddl_identifier.h"],
+    deps = ["//src/oblib:oblib_foundation"],
+    features = ["layering_check"],
+    visibility = [
+        "//src/share:__pkg__",
+        "//unittest/share:__pkg__",
+    ],
+)
+
 _VECTOR_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "vector",
@@ -1798,6 +1809,7 @@ grouped_unity_cc_library(
     split_unity_groups = True,
     implementation_deps = [
         ":_share_implementation_headers",
+        ":ddl_identifier",
         "//rust:config_headers",
     ] + _SHARE_RUNTIME_COMPILE_DEPS + [
         "//src/oblib:common_sql_mode",
