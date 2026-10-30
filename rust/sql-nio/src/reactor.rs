@@ -224,7 +224,7 @@ pub(crate) struct EventLoop {
     #[cfg(feature = "native-network")]
     pub(crate) listener_stall_probe_done: bool,
     #[cfg(feature = "native-network")]
-    pub(crate) listener_rearm_attempts: u32,
+    pub(crate) listener_stall_probe_attempts: u32,
     pub(crate) cxx_connect_attempts: Arc<AtomicU64>,
     pub(crate) cxx_connect_returns: Arc<AtomicU64>,
     pub(crate) cxx_connect_rejects: Arc<AtomicU64>,
@@ -290,11 +290,19 @@ const REACTOR_POLL_STALL_PROBE_REARMED: i32 = 7;
 const REACTOR_POLL_STALL_PROBE_REARM_FAILED: i32 = 8;
 #[cfg(feature = "native-network")]
 const LISTENER_STALL_POLL_LIMIT: u32 = 2;
-// A quiet listener probe is tied to two consecutive no-event polls and a
-// WouldBlock accept drain. Keep recovery finite for one stall episode so a
-// broken registration cannot turn the reactor into a busy retry loop.
+// A quiet listener probe is tied to two consecutive no-event polls. Keep the
+// independent readiness fallback finite for the reactor lifetime so a broken
+// registration cannot turn the reactor into a busy retry loop.
 #[cfg(all(windows, feature = "native-network"))]
-const LISTENER_STALL_REARM_LIMIT: u32 = 64;
+const LISTENER_STALL_PROBE_LIMIT: u32 = 64;
+#[cfg(all(windows, feature = "native-network"))]
+const LISTENER_OS_PROBE_NOT_ATTEMPTED: u32 = 0;
+#[cfg(all(windows, feature = "native-network"))]
+const LISTENER_OS_PROBE_NOT_READY: u32 = 1;
+#[cfg(all(windows, feature = "native-network"))]
+const LISTENER_OS_PROBE_READY: u32 = 2;
+#[cfg(all(windows, feature = "native-network"))]
+const LISTENER_OS_PROBE_ERROR: u32 = 3;
 
 #[cfg(feature = "native-network")]
 struct ReactorDiagnostics {
@@ -315,6 +323,9 @@ struct ReactorDiagnostics {
     dispatch_direct: AtomicU64,
     dispatch_queue_full: AtomicU64,
     greeting_close_before_flush: AtomicU64,
+    listener_os_probe_state: AtomicU32,
+    listener_os_probe_revents: AtomicU32,
+    listener_os_probe_raw_error: AtomicI32,
     listener_event_flags: AtomicU32,
 }
 
@@ -339,6 +350,9 @@ impl ReactorDiagnostics {
             dispatch_direct: AtomicU64::new(0),
             dispatch_queue_full: AtomicU64::new(0),
             greeting_close_before_flush: AtomicU64::new(0),
+            listener_os_probe_state: AtomicU32::new(LISTENER_OS_PROBE_NOT_ATTEMPTED),
+            listener_os_probe_revents: AtomicU32::new(0),
+            listener_os_probe_raw_error: AtomicI32::new(-1),
             listener_event_flags: AtomicU32::new(0),
         }
     }
@@ -393,6 +407,49 @@ fn is_transient_tcp_accept_error(error: &std::io::Error) -> bool {
 #[cfg(not(windows))]
 fn is_transient_tcp_accept_error(error: &std::io::Error) -> bool {
     error.kind() == std::io::ErrorKind::Interrupted
+}
+
+#[cfg(all(windows, feature = "native-network"))]
+#[derive(Clone, Copy)]
+struct ListenerOsProbe {
+    state: u32,
+    revents: u32,
+    raw_error: i32,
+}
+
+#[cfg(all(windows, feature = "native-network"))]
+fn probe_listener_os_readiness(listener: &TcpListener) -> ListenerOsProbe {
+    use std::os::windows::io::AsRawSocket;
+    use windows_sys::Win32::Networking::WinSock::{
+        WSAGetLastError, WSAPoll, WSAPOLLFD, POLLERR, POLLHUP, POLLNVAL, POLLRDNORM,
+        SOCKET_ERROR,
+    };
+
+    let mut descriptor = WSAPOLLFD {
+        fd: listener.as_raw_socket(),
+        events: POLLRDNORM,
+        revents: 0,
+    };
+    let result = unsafe { WSAPoll(&mut descriptor, 1, 0) };
+    if result == SOCKET_ERROR {
+        return ListenerOsProbe {
+            state: LISTENER_OS_PROBE_ERROR,
+            revents: descriptor.revents as u32,
+            raw_error: unsafe { WSAGetLastError() },
+        };
+    }
+    let revents = descriptor.revents as u32;
+    ListenerOsProbe {
+        state: if revents & (POLLERR | POLLHUP | POLLNVAL) as u32 != 0 {
+            LISTENER_OS_PROBE_ERROR
+        } else if revents & POLLRDNORM as u32 != 0 {
+            LISTENER_OS_PROBE_READY
+        } else {
+            LISTENER_OS_PROBE_NOT_READY
+        },
+        revents,
+        raw_error: -1,
+    }
 }
 
 impl EventLoop {
@@ -750,6 +807,15 @@ impl EventLoop {
                     .greeting_close_before_flush
                     .load(Ordering::Acquire),
                 listener_event_flags,
+                self.reactor_diagnostics
+                    .listener_os_probe_state
+                    .load(Ordering::Acquire),
+                self.reactor_diagnostics
+                    .listener_os_probe_revents
+                    .load(Ordering::Acquire),
+                self.reactor_diagnostics
+                    .listener_os_probe_raw_error
+                    .load(Ordering::Acquire),
             );
         }
     }
@@ -770,7 +836,6 @@ impl EventLoop {
         if self.listener_event_count != self.last_listener_event_count {
             self.listener_stall_polls = 0;
             self.listener_stall_probe_done = false;
-            self.listener_rearm_attempts = 0;
         } else if !self.listener_stall_probe_done {
             self.listener_stall_polls = self
                 .listener_stall_polls
@@ -786,33 +851,33 @@ impl EventLoop {
         }
 
         self.listener_stall_probe_done = true;
+        if self.listener_stall_probe_attempts >= LISTENER_STALL_PROBE_LIMIT {
+            return;
+        }
+        self.listener_stall_probe_attempts += 1;
+        let os_probe = match self.listener.as_ref() {
+            Some(listener) => probe_listener_os_readiness(listener),
+            None => ListenerOsProbe {
+                state: LISTENER_OS_PROBE_ERROR,
+                revents: 0,
+                raw_error: -1,
+            },
+        };
+        self.reactor_diagnostics
+            .listener_os_probe_state
+            .store(os_probe.state, Ordering::Release);
+        self.reactor_diagnostics
+            .listener_os_probe_revents
+            .store(os_probe.revents, Ordering::Release);
+        self.reactor_diagnostics
+            .listener_os_probe_raw_error
+            .store(os_probe.raw_error, Ordering::Release);
         self.accept_calls += 1;
         let accepted_before_probe = self.accepted_total;
         self.accept_all();
         if self.accepted_total == accepted_before_probe {
             self.log_reactor_state(
                 REACTOR_POLL_STALL_PROBE_WOULD_BLOCK,
-                poll_id,
-                event_count,
-                listener_event_flags,
-            );
-            if self.listener_rearm_attempts >= LISTENER_STALL_REARM_LIMIT {
-                return;
-            }
-            self.listener_rearm_attempts += 1;
-            let rearmed = match self.listener.as_mut() {
-                Some(listener) => self
-                    .reg
-                    .reregister(listener, LISTENER, Interest::READABLE)
-                    .is_ok(),
-                None => false,
-            };
-            self.log_reactor_state(
-                if rearmed {
-                    REACTOR_POLL_STALL_PROBE_REARMED
-                } else {
-                    REACTOR_POLL_STALL_PROBE_REARM_FAILED
-                },
                 poll_id,
                 event_count,
                 listener_event_flags,
@@ -1682,7 +1747,7 @@ pub(crate) unsafe fn nio_start_in_dir(
                 #[cfg(feature = "native-network")]
                 listener_stall_probe_done: false,
                 #[cfg(feature = "native-network")]
-                listener_rearm_attempts: 0,
+                listener_stall_probe_attempts: 0,
                 cxx_connect_attempts: cxx_connect_attempts.clone(),
                 cxx_connect_returns: cxx_connect_returns.clone(),
                 cxx_connect_rejects: cxx_connect_rejects.clone(),
@@ -1879,6 +1944,15 @@ impl NioReactor {
                     .load(Ordering::Acquire),
                 self.reactor_diagnostics
                     .listener_event_flags
+                    .load(Ordering::Acquire),
+                self.reactor_diagnostics
+                    .listener_os_probe_state
+                    .load(Ordering::Acquire),
+                self.reactor_diagnostics
+                    .listener_os_probe_revents
+                    .load(Ordering::Acquire),
+                self.reactor_diagnostics
+                    .listener_os_probe_raw_error
                     .load(Ordering::Acquire),
             );
         }

@@ -140,6 +140,17 @@ static const char *nio_reactor_poll_result_name(const int32_t poll_result)
   }
 }
 
+static const char *nio_listener_os_probe_state_name(const uint32_t state)
+{
+  switch (state) {
+    case 0: return "not_attempted";
+    case 1: return "not_ready";
+    case 2: return "ready";
+    case 3: return "error";
+    default: return "unknown";
+  }
+}
+
 void ob_sql_nio_log_reactor_state(int32_t poll_result, uint64_t poll_id,
                                   uint64_t event_count, uint64_t listener_events,
                                   uint64_t accept_calls, uint64_t accepted,
@@ -155,16 +166,24 @@ void ob_sql_nio_log_reactor_state(int32_t poll_result, uint64_t poll_id,
                                   uint64_t dispatch_direct,
                                   uint64_t dispatch_queue_full,
                                   uint64_t greeting_close_before_flush,
-                                  uint32_t listener_event_flags) {
+                                  uint32_t listener_event_flags,
+                                  uint32_t listener_os_probe_state,
+                                  uint32_t listener_os_probe_revents,
+                                  int32_t listener_os_probe_raw_error) {
   const char *poll_result_name = nio_reactor_poll_result_name(poll_result);
-  const int ret = (2 == poll_result || 8 == poll_result) ? OB_ERR_UNEXPECTED : OB_SUCCESS;
+  const char *listener_os_probe_state_name =
+      nio_listener_os_probe_state_name(listener_os_probe_state);
+  const int ret = (2 == poll_result || 8 == poll_result || 3 == listener_os_probe_state)
+                      ? OB_ERR_UNEXPECTED : OB_SUCCESS;
   LOG_ERROR("Rust SQL-NIO reactor poll state", KCSTRING(poll_result_name), K(poll_id),
             K(event_count), K(listener_events), K(accept_calls), K(accepted),
             K(cxx_connect_attempts), K(cxx_connect_returns), K(cxx_connect_rejects),
             K(greeting_sent), K(greeting_deferred), K(greeting_failed), K(greeting_flushed),
             K(admission_register_failed), K(dispatch_handoff), K(dispatch_direct),
             K(dispatch_queue_full), K(greeting_close_before_flush),
-            K(listener_event_flags));
+            K(listener_event_flags), KCSTRING(listener_os_probe_state_name),
+            K(listener_os_probe_state), K(listener_os_probe_revents),
+            K(listener_os_probe_raw_error));
 }
 
 static uint8_t nio_tls_min_version(const char *value)
