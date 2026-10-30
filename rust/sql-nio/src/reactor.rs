@@ -295,7 +295,7 @@ const LISTENER_STALL_POLL_LIMIT: u32 = 2;
 // registration cannot turn the reactor into a busy retry loop.
 #[cfg(all(windows, feature = "native-network"))]
 const LISTENER_STALL_PROBE_LIMIT: u32 = 64;
-#[cfg(all(windows, feature = "native-network"))]
+#[cfg(feature = "native-network")]
 const LISTENER_OS_PROBE_NOT_ATTEMPTED: u32 = 0;
 #[cfg(all(windows, feature = "native-network"))]
 const LISTENER_OS_PROBE_NOT_READY: u32 = 1;
