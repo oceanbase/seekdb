@@ -6649,6 +6649,37 @@ int ObTransformUtils::build_case_when_expr(ObTransformerCtx *ctx,
 }
 
 
+// A constant string value cast to a string or text type keeps its bytes unless
+// the target has a different character set (a real conversion) or is shorter
+// than the value (a truncation). When both are excluded the cast only relabels
+// the value, so it cannot raise a conversion warning or error and must not make
+// a rewrite guarded by check_error_free_expr() bail out. Every other cast keeps
+// the conservative result.
+static bool is_relabel_only_string_cast(const ObRawExpr &cast_expr)
+{
+  bool bret = false;
+  const ObRawExpr *src_expr = NULL;
+  if (T_FUN_SYS_CAST != cast_expr.get_expr_type()
+      || !cast_expr.is_const_expr()
+      || 1 > cast_expr.get_param_count()
+      || OB_ISNULL(src_expr = cast_expr.get_param_expr(0))) {
+    // keep the conservative result
+  } else {
+    const ObRawExprResType &src_type = src_expr->get_result_type();
+    const ObRawExprResType &dst_type = cast_expr.get_result_type();
+    const ObObjTypeClass src_tc = src_type.get_type_class();
+    const ObObjTypeClass dst_tc = dst_type.get_type_class();
+    if ((ObStringTC == src_tc || ObTextTC == src_tc)
+        && (ObStringTC == dst_tc || ObTextTC == dst_tc)
+        && src_type.get_collation_type() == dst_type.get_collation_type()
+        && src_type.get_charset_type() == dst_type.get_charset_type()
+        && dst_type.get_accuracy().get_length() >= src_type.get_accuracy().get_length()) {
+      bret = true;
+    }
+  }
+  return bret;
+}
+
 int ObTransformUtils::check_error_free_expr(ObRawExpr *expr, bool &is_error_free)
 {
   int ret = OB_SUCCESS;
@@ -6670,12 +6701,17 @@ int ObTransformUtils::check_error_free_expr(ObRawExpr *expr, bool &is_error_free
   } else if (expr->get_expr_type() == T_FUN_SYS_CAST) {
     // case-by-case determination
     if (OB_FAIL(ObOptimizerUtil::get_expr_without_lossless_cast(expr, expr))) {
-    } else if (expr->get_expr_type() == T_FUN_SYS_CAST) {
-      is_error_free = false;
-    } else if (OB_FAIL(check_error_free_expr(expr, temp_flag))) {
+    } else if (expr->get_expr_type() != T_FUN_SYS_CAST) {
+      if (OB_FAIL(check_error_free_expr(expr, temp_flag))) {
+      } else {
+        is_error_free &= temp_flag;
+        need_check_child = false; // all child exprs have been checked
+      }
+    } else if (is_relabel_only_string_cast(*expr)) {
+      // The cast only relabels a constant string value; the children are still
+      // checked by the recursive walk below.
     } else {
-      is_error_free &= temp_flag;
-      need_check_child = false; // all child exprs have been checked
+      is_error_free = false;
     }
   } else if (expr->is_column_ref_expr()) {
     ObColumnRefRawExpr *col = static_cast<ObColumnRefRawExpr *>(expr);
