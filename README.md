@@ -586,6 +586,8 @@ We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) to get s
   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=oceanbase/seekdb&type=Date" width="720" />
 </a>
 
+OB-P:5GRYMUu1cbOkbN1A246iuQ
+
 If seekdb is useful to you, **a star helps others find it.** ⭐
 
 ---
