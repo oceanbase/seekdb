@@ -129,6 +129,39 @@ void ob_sql_nio_log_accept_state(int32_t kind, int32_t raw_error, uint64_t drain
   }
 }
 
+static const char *nio_reactor_poll_result_name(const int32_t poll_result)
+{
+  switch (poll_result) {
+    case 0: return "timeout"; // REACTOR_POLL_TIMEOUT
+    case 1: return "events"; // REACTOR_POLL_EVENTS
+    case 2: return "failed"; // REACTOR_POLL_FAILED
+    case 3: return "skipped"; // REACTOR_POLL_SKIPPED
+    default: return "unknown";
+  }
+}
+
+void ob_sql_nio_log_reactor_state(int32_t poll_result, uint64_t poll_id,
+                                  uint64_t event_count, uint64_t listener_events,
+                                  uint64_t accept_calls, uint64_t accepted,
+                                  uint64_t cxx_connect_attempts,
+                                  uint64_t cxx_connect_returns,
+                                  uint64_t cxx_connect_rejects,
+                                  uint32_t listener_event_flags) {
+  const char *poll_result_name = nio_reactor_poll_result_name(poll_result);
+  const int ret = (2 == poll_result) ? OB_ERR_UNEXPECTED : OB_SUCCESS;
+  if (2 == poll_result) {
+    LOG_ERROR("Rust SQL-NIO reactor poll state", KCSTRING(poll_result_name), K(poll_id),
+              K(event_count), K(listener_events), K(accept_calls), K(accepted),
+              K(cxx_connect_attempts), K(cxx_connect_returns), K(cxx_connect_rejects),
+              K(listener_event_flags));
+  } else {
+    LOG_WARN("Rust SQL-NIO reactor poll state", KCSTRING(poll_result_name), K(poll_id),
+             K(event_count), K(listener_events), K(accept_calls), K(accepted),
+             K(cxx_connect_attempts), K(cxx_connect_returns), K(cxx_connect_rejects),
+             K(listener_event_flags));
+  }
+}
+
 static uint8_t nio_tls_min_version(const char *value)
 {
   const ObString version(NULL == value ? "none" : value);

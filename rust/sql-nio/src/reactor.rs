@@ -206,6 +206,16 @@ pub(crate) struct EventLoop {
     pub(crate) next_accept_target: usize,
     #[cfg(feature = "native-network")]
     pub(crate) accept_drain_id: u64,
+    pub(crate) poll_id: u64,
+    #[cfg(feature = "native-network")]
+    pub(crate) listener_event_count: u64,
+    #[cfg(feature = "native-network")]
+    pub(crate) accept_calls: u64,
+    #[cfg(feature = "native-network")]
+    pub(crate) accepted_total: u64,
+    pub(crate) cxx_connect_attempts: Arc<AtomicU64>,
+    pub(crate) cxx_connect_returns: Arc<AtomicU64>,
+    pub(crate) cxx_connect_rejects: Arc<AtomicU64>,
     pub(crate) reg: Arc<Registry>,
     pub(crate) waker: Arc<Waker>,
     pub(crate) reactor_polling: Arc<AtomicBool>,
@@ -252,6 +262,14 @@ const ACCEPT_OUTCOME_WOULD_BLOCK: i32 = 0;
 const ACCEPT_OUTCOME_FATAL: i32 = 1;
 const ACCEPT_OUTCOME_REARMED: i32 = 2;
 const ACCEPT_OUTCOME_REARM_FAILED: i32 = 3;
+#[cfg(feature = "native-network")]
+const REACTOR_POLL_TIMEOUT: i32 = 0;
+#[cfg(feature = "native-network")]
+const REACTOR_POLL_EVENTS: i32 = 1;
+#[cfg(feature = "native-network")]
+const REACTOR_POLL_FAILED: i32 = 2;
+#[cfg(feature = "native-network")]
+const REACTOR_POLL_SKIPPED: i32 = 3;
 
 fn accept_error_kind_code(kind: std::io::ErrorKind) -> i32 {
     match kind {
@@ -284,6 +302,11 @@ fn should_log_accept_sample(drain_id: u64) -> bool {
     drain_id < 16 || drain_id.is_power_of_two()
 }
 
+#[cfg(feature = "native-network")]
+fn should_log_reactor_sample(poll_id: u64) -> bool {
+    poll_id < 16 || poll_id.is_power_of_two()
+}
+
 #[cfg(windows)]
 fn is_transient_tcp_accept_error(error: &std::io::Error) -> bool {
     matches!(
@@ -304,6 +327,8 @@ impl EventLoop {
         let mut events = Events::with_capacity(512);
         let mut stopping = false;
         loop {
+            let poll_id = self.poll_id;
+            self.poll_id = self.poll_id.wrapping_add(1);
             if !stopping && self.stop.load(Ordering::Acquire) {
                 self.begin_shutdown();
                 stopping = true;
@@ -330,6 +355,16 @@ impl EventLoop {
                     .poll(&mut events, Some(Duration::from_millis(1000)))
                     .is_err()
             };
+            #[cfg(feature = "native-network")]
+            let poll_result = if skip_poll {
+                REACTOR_POLL_SKIPPED
+            } else if poll_failed {
+                REACTOR_POLL_FAILED
+            } else if events.iter().next().is_some() {
+                REACTOR_POLL_EVENTS
+            } else {
+                REACTOR_POLL_TIMEOUT
+            };
             self.reactor_polling.store(false, Ordering::Release);
             if !stopping {
                 self.refresh_tcp_keepalive();
@@ -339,17 +374,44 @@ impl EventLoop {
                 stopping = true;
             }
             if poll_failed && !stopping {
+                #[cfg(feature = "native-network")]
+                self.log_reactor_state(poll_result, poll_id, 0, 0);
                 continue;
             }
+            #[cfg(feature = "native-network")]
+            let mut event_count: u64 = 0;
+            #[cfg(feature = "native-network")]
+            let mut listener_event_flags: u32 = 0;
             if !skip_poll {
                 for event in events.iter() {
+                    #[cfg(feature = "native-network")]
+                    event_count += 1;
                     if stopping {
                         continue;
                     }
                     match event.token() {
                         WAKER => {}
                         #[cfg(feature = "native-network")]
-                        LISTENER => self.accept_all(),
+                        LISTENER => {
+                            self.listener_event_count += 1;
+                            self.accept_calls += 1;
+                            if event.is_readable() {
+                                listener_event_flags |= 1;
+                            }
+                            if event.is_writable() {
+                                listener_event_flags |= 1 << 1;
+                            }
+                            if event.is_error() {
+                                listener_event_flags |= 1 << 2;
+                            }
+                            if event.is_read_closed() {
+                                listener_event_flags |= 1 << 3;
+                            }
+                            if event.is_write_closed() {
+                                listener_event_flags |= 1 << 4;
+                            }
+                            self.accept_all();
+                        }
                         #[cfg(all(any(unix, windows), feature = "native-network"))]
                         LOCAL_LISTENER => self.accept_local(),
                         token => {
@@ -379,6 +441,8 @@ impl EventLoop {
                 self.drain_ready();
             }
             self.reap_retired();
+            #[cfg(feature = "native-network")]
+            self.log_reactor_state(poll_result, poll_id, event_count, listener_event_flags);
         }
     }
 
@@ -484,9 +548,14 @@ impl EventLoop {
         let sess = conn.sess();
         insert_conn_mapping(conn);
         let mut greeting = NioGreetingInfo::zeroed();
+        self.cxx_connect_attempts.fetch_add(1, Ordering::Relaxed);
         let rc = unsafe {
             ob_sql_sock_handler_on_connect(self.handler.0, sess, fd, is_unix, &mut greeting)
         };
+        self.cxx_connect_returns.fetch_add(1, Ordering::Relaxed);
+        if rc != 0 {
+            self.cxx_connect_rejects.fetch_add(1, Ordering::Relaxed);
+        }
         conn.session_constructed.store(true, Ordering::Release);
         let rejected = rc != 0;
         if rejected || conn.err.load(Ordering::Acquire) || !send_greeting(conn, &greeting) {
@@ -527,6 +596,33 @@ impl EventLoop {
     }
 
     #[cfg(feature = "native-network")]
+    fn log_reactor_state(
+        &self,
+        poll_result: i32,
+        poll_id: u64,
+        event_count: u64,
+        listener_event_flags: u32,
+    ) {
+        if self.listener.is_none() || !should_log_reactor_sample(poll_id) {
+            return;
+        }
+        unsafe {
+            ob_sql_nio_log_reactor_state(
+                poll_result,
+                poll_id,
+                event_count,
+                self.listener_event_count,
+                self.accept_calls,
+                self.accepted_total,
+                self.cxx_connect_attempts.load(Ordering::Acquire),
+                self.cxx_connect_returns.load(Ordering::Acquire),
+                self.cxx_connect_rejects.load(Ordering::Acquire),
+                listener_event_flags,
+            );
+        }
+    }
+
+    #[cfg(feature = "native-network")]
     pub(crate) fn accept_all(&mut self) {
         let drain_id = self.accept_drain_id;
         self.accept_drain_id = self.accept_drain_id.wrapping_add(1);
@@ -543,6 +639,7 @@ impl EventLoop {
             let (sock, _addr) = match listener.accept() {
                 Ok(v) => {
                     accepted += 1;
+                    self.accepted_total += 1;
                     consecutive_errors = 0;
                     v
                 }
@@ -1159,6 +1256,9 @@ pub(crate) unsafe fn nio_start_in_dir(
         return std::ptr::null_mut();
     }
     let handler = Handler(handler);
+    let cxx_connect_attempts = Arc::new(AtomicU64::new(0));
+    let cxx_connect_returns = Arc::new(AtomicU64::new(0));
+    let cxx_connect_rejects = Arc::new(AtomicU64::new(0));
 
     let started = (|| -> std::io::Result<NioReactor> {
         let stop = Arc::new(AtomicBool::new(false));
@@ -1263,6 +1363,16 @@ pub(crate) unsafe fn nio_start_in_dir(
                 next_accept_target: 0,
                 #[cfg(feature = "native-network")]
                 accept_drain_id: 0,
+                poll_id: 0,
+                #[cfg(feature = "native-network")]
+                listener_event_count: 0,
+                #[cfg(feature = "native-network")]
+                accept_calls: 0,
+                #[cfg(feature = "native-network")]
+                accepted_total: 0,
+                cxx_connect_attempts: cxx_connect_attempts.clone(),
+                cxx_connect_returns: cxx_connect_returns.clone(),
+                cxx_connect_rejects: cxx_connect_rejects.clone(),
                 reg,
                 waker: waker.clone(),
                 reactor_polling,

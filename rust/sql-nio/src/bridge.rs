@@ -398,6 +398,18 @@ pub mod ffi {
             consecutive_errors: u32,
             outcome: i32,
         );
+        unsafe fn ob_sql_nio_log_reactor_state(
+            poll_result: i32,
+            poll_id: u64,
+            event_count: u64,
+            listener_events: u64,
+            accept_calls: u64,
+            accepted: u64,
+            cxx_connect_attempts: u64,
+            cxx_connect_returns: u64,
+            cxx_connect_rejects: u64,
+            listener_event_flags: u32,
+        );
     }
 
     extern "Rust" {
