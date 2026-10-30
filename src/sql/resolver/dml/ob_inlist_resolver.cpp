@@ -20,6 +20,7 @@
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
+#include "lib/hash/ob_hashset.h"
 
 namespace oceanbase
 {
@@ -350,6 +351,55 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+      // Duplicate members must not by themselves make the list reach the rewrite
+      // threshold, so use the distinct value count when every member is a plain
+      // integer or NULL. Other forms keep the old row count rule, and no member or
+      // parameter is dropped, so cached executions of the same plan stay valid.
+      if (OB_SUCC(ret) && is_enable && 1 == column_cnt && threshold > 1 && !is_prepare_stmt
+          && (ObIntType == rewrite_info.param_types_.at(0).obj_type_
+              || ObNullType == rewrite_info.param_types_.at(0).obj_type_)) {
+        hash::ObHashSet<int64_t, hash::NoPthreadDefendMode> distinct_values;
+        const int64_t bucket_cnt = row_cnt < threshold ? row_cnt : threshold;
+        bool has_null = false;
+        bool supported = true;
+        if (OB_FAIL(distinct_values.create(bucket_cnt, ObMemAttr("InListDistinct")))) {
+          supported = false;
+        }
+        for (int64_t i = 0; supported && i < row_cnt
+             && distinct_values.size() + has_null < threshold; ++i) {
+          const ParseNode *node = in_list.children_[i];
+          int64_t value = 0;
+          bool is_null_value = false;
+          bool is_int_value = false;
+          if (OB_ISNULL(node)) {
+            supported = false;
+          } else if (T_NULL == node->type_) {
+            is_null_value = true;
+          } else if (T_INT == node->type_) {
+            is_int_value = true;
+            value = node->value_;
+          } else if (T_QUESTIONMARK == node->type_ && NULL != param_store
+                     && node->value_ >= 0 && node->value_ < param_store->count()) {
+            const ObObjParam &param = param_store->at(node->value_);
+            if (param.is_null()) {
+              is_null_value = true;
+            } else if (param.is_int()) {
+              is_int_value = true;
+              value = param.get_int();
+            }
+          }
+          if (!is_null_value && !is_int_value) {
+            supported = false;
+          } else if (is_null_value) {
+            has_null = true;
+          } else if (OB_FAIL(distinct_values.set_refactored(value))) {
+            supported = false;
+          }
+        }
+        if (supported) {
+          is_enable = distinct_values.size() + has_null >= threshold;
+        }
+      }
     }
   }
   return ret;

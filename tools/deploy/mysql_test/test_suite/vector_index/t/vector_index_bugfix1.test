@@ -662,4 +662,104 @@ order by p.cardinality, p.plan_id;
 
 drop table t_issue1439_or_selectivity;
 
+# issue #1512: duplicate IN entries must not change exact or ANN results.
+# The low threshold straddles raw/distinct list sizes; 100 is the no-rewrite control.
+--disable_warnings
+drop table if exists t_issue1512_inlist;
+--enable_warnings
+create table t_issue1512_inlist(
+  id int primary key,
+  category bigint,
+  unsigned_category bigint unsigned,
+  label varchar(20) collate utf8mb4_general_ci,
+  embedding vector(3) not null,
+  vector key idx_embedding(embedding)
+    with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128, ef_search=64));
+insert into t_issue1512_inlist values
+  (1,1,1,'Alpha','[1,0,0]'),
+  (2,2,2,'alpha','[2,0,0]'),
+  (3,3,3,'Beta','[3,0,0]'),
+  (4,4,4,'Gamma','[4,0,0]'),
+  (5,NULL,NULL,NULL,'[5,0,0]'),
+  (6,-9223372036854775808,9223372036854775808,'Min','[6,0,0]'),
+  (7,9223372036854775807,18446744073709551615,'Max','[7,0,0]'),
+  (8,-1,8,'Minus','[8,0,0]'),
+  (9,0,9,'Zero','[9,0,0]');
+
+set @issue1512_saved_plan_cache = @@ob_enable_plan_cache;
+set ob_enable_plan_cache = 1;
+
+# Two distinct integers: compact, duplicate-heavy, and high-threshold control.
+# Nonmatching rows are nearer than the second match; distances have no ties.
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id from t_issue1512_inlist where category in (2,4) order by l2_distance(embedding, '[0,0,0]') limit 2;
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id from t_issue1512_inlist where category in (2,4,2,4,2,4) order by l2_distance(embedding, '[0,0,0]') limit 2;
+select /*+ opt_param('inlist_rewrite_threshold', 100) */ id from t_issue1512_inlist where category in (2,4,2,4,2,4) order by l2_distance(embedding, '[0,0,0]') limit 2;
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id from t_issue1512_inlist where category in (2,4) order by l2_distance(embedding, '[0,0,0]') approximate limit 2;
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id from t_issue1512_inlist where category in (2,4,2,4,2,4) order by l2_distance(embedding, '[0,0,0]') approximate limit 2;
+select /*+ opt_param('inlist_rewrite_threshold', 100) */ id from t_issue1512_inlist where category in (2,4,2,4,2,4) order by l2_distance(embedding, '[0,0,0]') approximate limit 2;
+
+# Distinct count exactly at, then above, threshold; neither may lose entries.
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id from t_issue1512_inlist where category in (1,2,3,1,2,3) order by l2_distance(embedding, '[0,0,0]') limit 10;
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id from t_issue1512_inlist where category in (1,2,3,1,2,3) order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id from t_issue1512_inlist where category in (1,2,3,4,1,2,3,4) order by l2_distance(embedding, '[0,0,0]') limit 10;
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id from t_issue1512_inlist where category in (1,2,3,4,1,2,3,4) order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+
+# NULL membership, NULL on the left, and NOT IN three-valued logic.
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id from t_issue1512_inlist where category in (NULL,1,1,NULL) order by id;
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id from t_issue1512_inlist where category in (NULL,1,1,NULL) order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id from t_issue1512_inlist where category not in (NULL,1,1,NULL) order by id;
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id from t_issue1512_inlist where category not in (1,2,1,2) order by id;
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id from t_issue1512_inlist where category not in (1,2,1,2) order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id from t_issue1512_inlist where category in (NULL,NULL,NULL) order by id;
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id from t_issue1512_inlist where category not in (NULL,NULL,NULL) order by id;
+
+# Signed endpoints must remain distinct from each other, zero, and minus one.
+select /*+ opt_param('inlist_rewrite_threshold', 5) */ id from t_issue1512_inlist where category in (-9223372036854775808,9223372036854775807,-9223372036854775808,9223372036854775807,0,0,-1,-1) order by id;
+select /*+ opt_param('inlist_rewrite_threshold', 5) */ id from t_issue1512_inlist where category in (-9223372036854775808,9223372036854775807,-9223372036854775808,9223372036854775807,0,0,-1,-1) order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+
+# Also exercise literals without the plan cache, then restore parameterization.
+set ob_enable_plan_cache = 0;
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id from t_issue1512_inlist where category in (2,4,2,4,2,4) order by l2_distance(embedding, '[0,0,0]') limit 2;
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id from t_issue1512_inlist where category in (2,4,2,4,2,4) order by l2_distance(embedding, '[0,0,0]') approximate limit 2;
+select /*+ opt_param('inlist_rewrite_threshold', 5) */ id from t_issue1512_inlist where category in (-9223372036854775808,9223372036854775807,-9223372036854775808,9223372036854775807,0,0,-1,-1) order by id;
+set ob_enable_plan_cache = 1;
+
+# Thresholds <= 1 retain their existing behavior.
+select /*+ opt_param('inlist_rewrite_threshold', 0) */ id from t_issue1512_inlist where category in (1,1,1) order by id;
+select /*+ opt_param('inlist_rewrite_threshold', 1) */ id from t_issue1512_inlist where category in (1,1,1) order by id;
+
+# Unsupported unsigned, collation-sensitive strings, and row lists stay correct.
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id from t_issue1512_inlist where unsigned_category in (9223372036854775808,18446744073709551615,9223372036854775808,18446744073709551615) order by id;
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id from t_issue1512_inlist where label in ('ALPHA','alpha','ALPHA','alpha') order by id;
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id from t_issue1512_inlist where (category,id) in ((1,1),(2,2),(1,1),(2,2)) order by id;
+
+# Text-protocol auto-parameters: change a formerly equal position on cache reuse.
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id from t_issue1512_inlist where category in (1,1,2,2) and id <= 9 order by id;
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id from t_issue1512_inlist where category in (1,3,2,2) and id <= 9 order by id;
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id from t_issue1512_inlist where category in (1,3,2,4) and id <= 9 order by id;
+select /*+ opt_param('inlist_rewrite_threshold', 3) */ id from t_issue1512_inlist where category in (1,1,2,2) and id <= 1 order by id;
+
+# PREPARE has unknown values. Keep every RHS parameter and following parameter.
+prepare issue1512_exact from 'select /*+ opt_param(''inlist_rewrite_threshold'', 3) */ ? as marker, id from t_issue1512_inlist where category in (?,?,?,?) and id <= ? order by id';
+prepare issue1512_ann from 'select /*+ opt_param(''inlist_rewrite_threshold'', 3) */ ? as marker, id from t_issue1512_inlist where category in (?,?,?,?) and id <= ? order by l2_distance(embedding, ''[0,0,0]'') approximate limit 10';
+set @issue1512_marker=11, @issue1512_a=1, @issue1512_b=1, @issue1512_c=2, @issue1512_d=2, @issue1512_max=9;
+execute issue1512_exact using @issue1512_marker, @issue1512_a, @issue1512_b, @issue1512_c, @issue1512_d, @issue1512_max;
+execute issue1512_ann using @issue1512_marker, @issue1512_a, @issue1512_b, @issue1512_c, @issue1512_d, @issue1512_max;
+set @issue1512_marker=22, @issue1512_b=3;
+execute issue1512_exact using @issue1512_marker, @issue1512_a, @issue1512_b, @issue1512_c, @issue1512_d, @issue1512_max;
+execute issue1512_ann using @issue1512_marker, @issue1512_a, @issue1512_b, @issue1512_c, @issue1512_d, @issue1512_max;
+set @issue1512_marker=33, @issue1512_d=4;
+execute issue1512_exact using @issue1512_marker, @issue1512_a, @issue1512_b, @issue1512_c, @issue1512_d, @issue1512_max;
+execute issue1512_ann using @issue1512_marker, @issue1512_a, @issue1512_b, @issue1512_c, @issue1512_d, @issue1512_max;
+set @issue1512_marker=44, @issue1512_b=1, @issue1512_d=2, @issue1512_max=1;
+execute issue1512_exact using @issue1512_marker, @issue1512_a, @issue1512_b, @issue1512_c, @issue1512_d, @issue1512_max;
+execute issue1512_ann using @issue1512_marker, @issue1512_a, @issue1512_b, @issue1512_c, @issue1512_d, @issue1512_max;
+set @issue1512_marker=55, @issue1512_b=NULL, @issue1512_d=4, @issue1512_max=9;
+execute issue1512_exact using @issue1512_marker, @issue1512_a, @issue1512_b, @issue1512_c, @issue1512_d, @issue1512_max;
+execute issue1512_ann using @issue1512_marker, @issue1512_a, @issue1512_b, @issue1512_c, @issue1512_d, @issue1512_max;
+deallocate prepare issue1512_exact;
+deallocate prepare issue1512_ann;
+set ob_enable_plan_cache = @issue1512_saved_plan_cache;
+drop table t_issue1512_inlist;
+
 alter system set vector_memory_limit = 0;
