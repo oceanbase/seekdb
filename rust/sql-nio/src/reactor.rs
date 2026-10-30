@@ -500,9 +500,32 @@ impl EventLoop {
                     if transient_errors >= MAX_TRANSIENT_TCP_ACCEPT_ERRORS {
                         log::error!(
                             target: "SQL.ENG",
-                            "sql nio TCP accept stopped after {} consecutive transient errors",
+                            "sql nio TCP accept rearming after {} consecutive transient errors",
                             transient_errors
                         );
+                        let rearmed = match self.listener.as_mut() {
+                            Some(listener) => self
+                                .reg
+                                .reregister(listener, LISTENER, Interest::READABLE)
+                                .map(|_| true)
+                                .unwrap_or_else(|error| {
+                                    log::error!(
+                                        target: "SQL.ENG",
+                                        "sql nio TCP accept rearm failed: kind={:?}, raw_os_error={:?}, error={}",
+                                        error.kind(),
+                                        error.raw_os_error(),
+                                        error
+                                    );
+                                    false
+                                }),
+                            None => false,
+                        };
+                        if !rearmed {
+                            log::error!(
+                                target: "SQL.ENG",
+                                "sql nio TCP accept drain stopped because listener rearm failed"
+                            );
+                        }
                         break;
                     }
                     continue;
