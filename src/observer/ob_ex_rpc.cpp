@@ -26,6 +26,7 @@
 #include "lib/worker.h"
 #include "lib/lock/ob_futex.h"
 #include "lib/time/ob_clock_generator.h"
+#include "lib/time/ob_time_utility.h"
 #include "lib/profile/ob_trace_id.h"
 
 namespace oceanbase {
@@ -83,10 +84,15 @@ static int dispatch_(int64_t timeout_us, std::function<int()> fn, SyncCtx *sync_
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     task->proc_.fn_ = std::move(fn);
-    task->proc_.timeout_ts_ = ObClockGenerator::getClock() + timeout_us;
+    // Build this deadline from the wall clock, like the other 72 producers and
+    // like the Worker comparison. The cached ObClockGenerator clock retains its
+    // pre-step value after a backward step, which pushed this deadline a whole
+    // step into the wall-clock future: the task silently got timeout_us + step
+    // instead of timeout_us. A forward step shortened it by the same amount.
+    task->proc_.timeout_ts_ = ObTimeUtility::current_time() + timeout_us;
     task->proc_.sync_ctx_ = sync_ctx;
     task->proc_.trace_id_.set(*ObCurTraceId::get_trace_id());
-    task->set_receive_timestamp(ObClockGenerator::getClock());
+    task->set_receive_timestamp(ObTimeUtility::current_time());
     task->proc_.set_ob_request(*task);
     if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::omt::ObServerRuntimeController>())) {
       ret = OB_ERR_UNEXPECTED;

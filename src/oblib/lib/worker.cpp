@@ -100,5 +100,10 @@ int64_t Worker::get_timeout_remain() const
 
 bool Worker::is_timeout() const
 {
-  return common::ObClockGenerator::getClock() >= timeout_ts_;
+  // timeout_ts_ is built from the wall clock by 72 of the 73 producers, so
+  // compare in that same domain. Comparing against the cached
+  // ObClockGenerator clock mixed domains: after a backward step the cache
+  // keeps its pre-step value, so a deadline created after the step (wall
+  // clock, i.e. a lower value) falls below the cache and expires at once.
+  return ObTimeUtility::current_time() >= timeout_ts_;
 }
