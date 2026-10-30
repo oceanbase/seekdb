@@ -51,7 +51,7 @@ def verify(binary, exports, revision, platform):
     return minimum_os, dependencies, sorted(actual)
 
 
-def package_licenses(destination, licenses, cargo_sources):
+def package_licenses(destination, licenses, rust_licenses):
     with tarfile.open(destination, "w") as archive:
         for path in sorted(licenses):
             content = path.read_bytes()
@@ -59,19 +59,17 @@ def package_licenses(destination, licenses, cargo_sources):
             entry.size = len(content)
             entry.mode = 0o644
             archive.addfile(entry, io.BytesIO(content))
-        with tarfile.open(cargo_sources) as source:
-            for member in source:
-                if member.isfile() and re.match(r"(?i)^(license|copying|copyright|notice)", Path(member.name).name):
-                    content = source.extractfile(member).read()
-                    entry = tarfile.TarInfo("rust/" + member.name)
-                    entry.size = len(content)
-                    entry.mode = 0o644
-                    archive.addfile(entry, io.BytesIO(content))
+        for notice in json.loads(rust_licenses.read_text()):
+            content = Path(notice["source"]).read_bytes()
+            entry = tarfile.TarInfo(notice["destination"])
+            entry.size = len(content)
+            entry.mode = 0o644
+            archive.addfile(entry, io.BytesIO(content))
 
 
 def main():
     parser = argparse.ArgumentParser(description="Verify and package an iOS framework")
-    for name in ("binary", "config", "header", "output", "exports", "link-inputs", "rust-lock", "cargo-sources"):
+    for name in ("binary", "config", "header", "output", "exports", "link-inputs", "rust-lock", "rust-licenses"):
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--platform", choices=["IOS", "IOSSIMULATOR"], required=True)
     parser.add_argument("--source-metadata", type=Path, nargs="+", required=True)
@@ -102,7 +100,7 @@ def main():
     }
     (destination / "build-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     shutil.copyfile(args.rust_lock, destination / "rust-Cargo.lock")
-    package_licenses(destination / "Licenses.tar", args.licenses, args.cargo_sources)
+    package_licenses(destination / "Licenses.tar", args.licenses, args.rust_licenses)
 
 
 if __name__ == "__main__":

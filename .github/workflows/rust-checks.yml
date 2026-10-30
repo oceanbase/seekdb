@@ -18,12 +18,20 @@ name: rust-checks
 on:
   pull_request:
     paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
       - 'rust/**'
-      - 'bazel/cargo*'
+      - 'bazel/rust*'
+      - 'package/ios/**'
+      - 'bazel/cxx_runtime.BUILD.bazel'
+      - 'deps/external/**'
       - 'bazel/cxx.bzl'
       - 'build.py'
       - 'deps/init/**'
       - 'MODULE.bazel'
+      - 'MODULE.bazel.lock'
+      - '.bazelrc'
       - '.github/workflows/rust-checks.yml'
 
 concurrency:
@@ -51,13 +59,13 @@ jobs:
             ${{ env.CARGO_HOME }}/registry/index
             ${{ env.CARGO_HOME }}/registry/cache
             ${{ env.CARGO_HOME }}/bin
-          key: cargo-${{ runner.os }}-${{ hashFiles('rust/Cargo.lock', 'rust/rust-toolchain.toml') }}
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
           restore-keys: cargo-${{ runner.os }}-
 
       - name: Prepare generated Rust configuration
         run: |
           ./build.py init
-          ./build.py build //rust:config/generated_config.rs
+          ./build.py build --lockfile_mode=error //rust/config:generated_config.rs
           echo "CONFIG_RS=$PWD/build/bin/rust/config/generated_config.rs" >> "$GITHUB_ENV"
 
       - name: clippy (deny warnings)
@@ -72,11 +80,11 @@ jobs:
       - name: check windows target
         working-directory: rust
         run: |
+          rustup target add x86_64-pc-windows-gnu
           sudo apt-get update -qq && sudo apt-get install -y -qq gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
           cargo check --locked --workspace --target x86_64-pc-windows-gnu
 
       - name: cargo audit
-        working-directory: rust
         run: |
           command -v cargo-audit >/dev/null 2>&1 || cargo install cargo-audit --locked
           cargo audit

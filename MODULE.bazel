@@ -10,7 +10,109 @@ module(
 bazel_dep(name = "rules_cc", version = "0.2.25")
 # Use public-mirror releases for the rules_cc toolchain dependencies too.
 bazel_dep(name = "apple_support", version = "2.8.4")
-bazel_dep(name = "platforms", version = "1.0.0")
+bazel_dep(name = "platforms", version = "1.1.0")
+bazel_dep(name = "rules_rust", version = "0.75.0")
+
+rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
+# SDK installation belongs to build.py init.
+rust.toolchain(versions = [])
+
+installed_rust_repository = use_repo_rule("//bazel:rust_toolchain.bzl", "installed_rust_repository")
+installed_rust_repository(name = "rust_native")
+register_toolchains("@rust_native//:all")
+installed_rust_repository(name = "rust_wasm", kind = "wasm")
+register_toolchains("@rust_wasm//:all")
+wasm_std_repository = use_repo_rule("//bazel:rust_toolchain.bzl", "wasm_std_repository")
+wasm_std_repository(name = "rust_wasm_std")
+cxxbridge_repository = use_repo_rule("//bazel:rust_repositories.bzl", "cxxbridge_repository")
+cxxbridge_repository(name = "cxxbridge_source")
+
+crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
+crate.annotation(
+    crate = "*",
+    repositories = ["rust_crates", "external_crates"],
+    build_script_env = {"DEBUG": "true", "PROFILE": "release"},
+)
+crate.annotation(
+    crate = "cxx",
+    repositories = ["rust_crates"],
+    additive_build_file = "//bazel:cxx_runtime.BUILD.bazel",
+)
+crate.annotation(
+    crate = "spdlog-rs",
+    version = "0.5.3",
+    repositories = ["rust_crates"],
+    patches = ["//bazel:spdlog-rs-emscripten.diff"],
+    patch_args = ["-p1"],
+)
+_RUST_PLATFORMS = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+    "aarch64-pc-windows-msvc",
+    "aarch64-linux-android",
+    "aarch64-apple-ios",
+    "aarch64-apple-ios-sim",
+    "wasm32-unknown-emscripten",
+]
+crate.from_cargo(
+    name = "rust_crates",
+    manifests = ["//:Cargo.toml"],
+    cargo_lockfile = "//:Cargo.lock",
+    cargo_config = "//bazel:rust_cargo_config.toml",
+    host_tools = "@rust_native//:BUILD.bazel",
+    isolated = False,
+    skip_cargo_lockfile_overwrite = True,
+    supported_platform_triples = _RUST_PLATFORMS,
+)
+crate.from_cargo(
+    name = "cxxbridge_deps",
+    manifests = ["@cxxbridge_source//:Cargo.toml"],
+    cargo_lockfile = "@cxxbridge_source//:Cargo.lock",
+    cargo_config = "//bazel:rust_cargo_config.toml",
+    host_tools = "@rust_native//:BUILD.bazel",
+    skip_cargo_lockfile_overwrite = True,
+    isolated = False,
+    supported_platform_triples = _RUST_PLATFORMS,
+)
+crate.annotation(
+    crate = "seekdb-jemalloc-sys",
+    repositories = ["external_crates"],
+    build_script_env = {
+        "JEMALLOC_SYS_CONFIGURE_ENV": "CPPFLAGS=\nLDFLAGS=",
+        "CFLAGS": "-O2 -fPIC",
+        "MAKEFLAGS": "",
+        "NUM_JOBS": "4",
+    },
+    extra_aliased_targets = {"jemalloc_build": "build_script_build"},
+)
+crate.annotation_select(
+    crate = "seekdb-jemalloc-sys",
+    repositories = ["external_crates"],
+    triples = [target for target in _RUST_PLATFORMS if target not in ["aarch64-apple-ios", "aarch64-apple-ios-sim"]],
+    build_script_env = {"JEMALLOC_SYS_CONFIGURE_ARGS": "--with-jemalloc-prefix=je_"},
+)
+crate.annotation_select(
+    crate = "seekdb-jemalloc-sys",
+    repositories = ["external_crates"],
+    triples = ["aarch64-apple-ios", "aarch64-apple-ios-sim"],
+    build_script_env = {
+        "JEMALLOC_SYS_CONFIGURE_ARGS": "--with-jemalloc-prefix=je_\n--host=aarch64-apple-ios\n--with-lg-page=14\n--disable-zone-allocator",
+    },
+)
+crate.from_cargo(
+    name = "external_crates",
+    manifests = ["//deps/external:Cargo.toml"],
+    cargo_lockfile = "//deps/external:Cargo.lock",
+    cargo_config = "//bazel:rust_cargo_config.toml",
+    host_tools = "@rust_native//:BUILD.bazel",
+    skip_cargo_lockfile_overwrite = True,
+    isolated = False,
+    supported_platform_triples = _RUST_PLATFORMS,
+)
+use_repo(crate, "rust_crates", "cxxbridge_deps", "external_crates")
 
 host_tools_repository = use_repo_rule("//bazel:parser.bzl", "host_tools_repository")
 host_tools_repository(name = "host_tools")
@@ -65,21 +167,6 @@ use_repo(
 )
 
 register_toolchains("@local_config_cc_toolchains//:all")
-
-local_cargo_repository = use_repo_rule("//bazel:cargo_toolchain.bzl", "local_cargo_repository")
-local_cargo_repository(name = "cargo")
-register_toolchains("@cargo//:all")
-
-cargo_sources_repository = use_repo_rule("//bazel:cargo_toolchain.bzl", "cargo_sources_repository")
-_CARGO_MANIFESTS = [
-    "//rust:Cargo.toml", "//rust:config/Cargo.toml", "//rust:kv/Cargo.toml",
-    "//rust:local/Cargo.toml", "//rust:sql-nio/Cargo.toml", "//rust:logger/Cargo.toml",
-    "//rust:uuid-generator/Cargo.toml", "//rust:in-process/Cargo.toml", "//rust:seekdb-rust/Cargo.toml",
-    "//rust:regex-engine/Cargo.toml", "//deps/external:Cargo.toml",
-]
-_CARGO_LOCKS = ["//rust:Cargo.lock", "//deps/external:Cargo.lock"]
-cargo_sources_repository(name = "cargo_native_sources", kind = "native", manifests = _CARGO_MANIFESTS, locks = _CARGO_LOCKS)
-cargo_sources_repository(name = "cargo_wasm_sources", kind = "wasm", manifests = _CARGO_MANIFESTS, locks = _CARGO_LOCKS)
 
 sdk_sources = use_extension("//bazel/sdk_sources:repositories.bzl", "sdk_sources")
 

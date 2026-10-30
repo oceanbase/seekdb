@@ -1109,56 +1109,30 @@ int ObIORequest::alloc_aligned_io_buf(char *&io_buf)
 int ObIORequest::prepare(char *next_buffer, int64_t next_size, int64_t next_offset)
 {
   int ret = OB_SUCCESS;
-  ObTimeGuard tg("prepare", 100000); //100ms
-  int64_t io_offset = 0;
-  int64_t io_size = 0;
-  if (next_size != 0 || next_offset != 0) {
-    io_offset = next_offset;
-    io_size = next_size;
-  } else {
-    io_offset = this->get_align_offset();
-    io_size = this->get_align_size();
-  }
   char *io_buf = next_buffer != nullptr ? next_buffer : calc_io_buf();
-
-  if (OB_ISNULL(fd_.device_handle_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(control_block_) && OB_ISNULL(control_block_ = fd_.device_handle_->alloc_iocb())) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (FALSE_IT(tg.click("alloc_iocb"))) {
-  } else if (OB_ISNULL(io_buf) && OB_FAIL(alloc_io_buf(io_buf))) {
-    // delayed alloc buffer for read request here to reduce memory usage when io request enqueue
-  } else if (FALSE_IT(tg.click("alloc_buf"))) {
-  } else if (OB_ISNULL(io_result_)) {
+  if (OB_ISNULL(fd_.device_handle_) || OB_ISNULL(io_result_)) {
     ret = OB_INVALID_ARGUMENT;
-  } else {
-    if (io_result_->flag_.is_read()) {
-      if (OB_FAIL(fd_.device_handle_->io_prepare_pread(
-              fd_,
-              io_buf,
-              io_size,
-              io_offset,
-              control_block_,
-              this/*data*/))) {
-      }
-      tg.click("prepare_read");
-    } else if (io_result_->flag_.is_write()) {
-      if (OB_FAIL(fd_.device_handle_->io_prepare_pwrite(
-              fd_,
-              io_buf,
-              io_size,
-              io_offset,
-              control_block_,
-              this/*data*/))) {
-      }
-      tg.click("prepare_write");
-    } else {
-      ret = OB_NOT_SUPPORTED;
-    }
+  } else if (OB_ISNULL(io_buf) && OB_FAIL(alloc_io_buf(io_buf))) {
+    // Delay read-buffer allocation until the request is ready to submit.
+  } else if (!io_result_->flag_.is_sync() && fd_.device_handle_->supports_native_aio()) {
+    const bool retry = next_size != 0 || next_offset != 0;
+    ret = prepare_native_io(io_buf, retry ? next_size : get_align_size(),
+                            retry ? next_offset : get_align_offset());
   }
-  if (OB_UNLIKELY(tg.get_diff() > 100000)) {// 100ms
-    //print req
-    LOG_INFO("prepare_request cost too much time", K(ret), K(tg), K(*this));
+  return ret;
+}
+
+int ObIORequest::prepare_native_io(char *buffer, int64_t size, int64_t offset)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(control_block_) && OB_ISNULL(control_block_ = fd_.device_handle_->alloc_iocb())) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (io_result_->flag_.is_read()) {
+    ret = fd_.device_handle_->io_prepare_pread(fd_, buffer, size, offset, control_block_, this);
+  } else if (io_result_->flag_.is_write()) {
+    ret = fd_.device_handle_->io_prepare_pwrite(fd_, buffer, size, offset, control_block_, this);
+  } else {
+    ret = OB_NOT_SUPPORTED;
   }
   return ret;
 }

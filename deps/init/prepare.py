@@ -182,7 +182,7 @@ def install(profile, destination, cache_directory=None):
     print("Dependencies ready: " + str(destination), flush=True)
 
 
-def prepare_rust():
+def prepare_rust(target=None):
     if not shutil.which("rustup") or not shutil.which("cargo"):
         with tempfile.TemporaryDirectory(prefix="rustup-init.") as directory:
             if os.name == "nt":
@@ -198,10 +198,12 @@ def prepare_rust():
             download(os.environ.get("RUSTUP_INIT_URL", url), installer)
             subprocess.run(command + ["-y", "--profile", "minimal", "--default-toolchain", "none",
                                       "--no-modify-path"], check=True)
-    print("Preparing Rust toolchain from rust/rust-toolchain.toml", flush=True)
+    print("Preparing Rust toolchain from rust-toolchain.toml", flush=True)
     environment = dict(os.environ, RUSTUP_AUTO_INSTALL="1")
     environment.pop("RUSTUP_TOOLCHAIN", None)
-    subprocess.run(["rustup", "show", "active-toolchain"], cwd=ROOT / "rust", env=environment, check=True)
+    subprocess.run(["rustup", "show", "active-toolchain"], cwd=ROOT, env=environment, check=True)
+    if target:
+        subprocess.run(["rustup", "target", "add", target], cwd=ROOT, env=environment, check=True)
 
 
 def main(arguments):
@@ -225,17 +227,18 @@ def main(arguments):
             raise ValueError("iOS SDK unavailable; install Xcode and set DEVELOPER_DIR to its Contents/Developer directory")
 
     profile = host_profile()
-    prepare_rust()
+    rust_target = None
+    if options.android:
+        rust_target = "aarch64-linux-android"
+    elif options.ios:
+        rust_target = "aarch64-apple-ios-sim" if options.simulator else "aarch64-apple-ios"
+    prepare_rust(rust_target)
     cache = os.environ.get("DEP_CACHE_DIR") if os.name != "nt" else None
     install(profile, ROOT / "deps/3rd", Path(cache).expanduser().resolve() if cache else None)
     if options.wasm:
         subprocess.run([sys.executable, str(PROFILES / "wasm/build.py")], cwd=ROOT, check=True)
     if options.android:
         install(PROFILES / "oceanbase.android.arm64.deps", ROOT / "deps/android")
-    if options.ios or options.android:
-        target = "aarch64-linux-android" if options.android else (
-            "aarch64-apple-ios-sim" if options.simulator else "aarch64-apple-ios")
-        subprocess.run(["rustup", "target", "add", target], cwd=ROOT / "rust", check=True)
     if options.ios:
         subprocess.run([
             sys.executable, str(PROFILES / "ios/build.py"), "--reuse", "--jobs", str(os.cpu_count() or 1),

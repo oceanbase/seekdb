@@ -1030,7 +1030,7 @@ grouped_unity_cc_library(
         ":_oblib_implementation_headers",
         ":oblib_foundation",
         "//src/oblib/easy:easy",
-        "//rust:sql_nio_headers",
+        "//rust:sql_nio",
     ],
     copts = OBLIB_CXX_COPTS,
     local_defines = OBLIB_LOCAL_DEFINES,

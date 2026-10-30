@@ -1,8 +1,8 @@
 # Cargo workspace for the Rust components that link into the seekdb
-# (OceanBase-lite) C++ server. Add new crates under `members`.
+# (OceanBase-lite) C++ server. In-tree path dependencies are members automatically.
 [workspace]
 resolver = "2"
-members = ["config", "kv", "local", "sql-nio", "logger", "in-process", "regex-engine", "seekdb-rust", "uuid-generator"]
+members = ["rust/seekdb-rust"]
 
 [profile.release]
 opt-level = 3

@@ -383,9 +383,9 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
     "redo_log_storage": struct(
         hdrs = [
             "ob_local_device.h",
-            "wasm_aio.h",
         ],
         deps = [
+            ":local_io_config",
             ":io_device_interface",
             ":local_device_space_interface",
             "//src/oblib:oblib_foundation",

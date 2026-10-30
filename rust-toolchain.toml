@@ -1,0 +1,11 @@
+# Pin the toolchain so the staticlib is built the same way everywhere.
+# An exact version, not a channel: `stable` floats to whatever is newest at
+# install time, so two runners weeks apart would compile the network engine
+# with different compilers. Bump deliberately, in its own reviewed commit.
+[toolchain]
+channel = "1.98.1"
+profile = "minimal"
+# Cross-compilation targets are installed by the corresponding init or CI step.
+# clippy gates CI (`cargo clippy -- -D warnings`); ship it with the toolchain
+# so the minimal-profile CI install has it too.
+components = ["clippy"]

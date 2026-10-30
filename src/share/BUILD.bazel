@@ -388,6 +388,19 @@ cc_library(
 )
 
 cc_library(
+    name = "local_io_config",
+    srcs = ["local_io_config.cpp"],
+    hdrs = ["local_io_config.h"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "startup_result",
+    hdrs = ["startup_result.h"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
     name = "io_device_interface",
     hdrs = ["ob_io_device_helper.h"],
     deps = [
@@ -1589,6 +1602,7 @@ _SHARE_RUNTIME_GENERATED_DEPS = [
 ]
 
 _SHARE_RUNTIME_DEPS = _SHARE_RUNTIME_GENERATED_DEPS + [
+    ":local_io_config",
     ":cache",
     ":config",
     ":config_parser_interface",

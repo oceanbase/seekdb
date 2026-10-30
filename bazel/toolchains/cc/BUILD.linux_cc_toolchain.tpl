@@ -49,6 +49,11 @@ filegroup(
 )
 
 filegroup(
+    name = "dynamic_cpp_runtime",
+    srcs = glob(["devtools/lib64/libstdc++.so", "devtools/lib64/libstdc++.so.*"], exclude = ["**/*-gdb.py"], allow_empty = True),
+)
+
+filegroup(
     name = "objcopy_files",
     srcs = ["devtools/bin/llvm-objcopy"],
 )
@@ -164,6 +169,7 @@ cc_toolchain(
     module_map = ":module.modulemap",
     objcopy_files = ":objcopy_files",
     static_runtime_lib = ":static_cpp_runtime",
+    dynamic_runtime_lib = ":dynamic_cpp_runtime",
     strip_files = ":strip_files",
     supports_param_files = 1,
     toolchain_config = ":local_compile_config",

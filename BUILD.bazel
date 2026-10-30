@@ -1,4 +1,4 @@
-exports_files(["LICENSE"], visibility = ["//src/observer:__pkg__"])
+exports_files(["LICENSE", "Cargo.lock"], visibility = ["//src/observer:__pkg__"])
 
 alias(
     name = "seekdb",

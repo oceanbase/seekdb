@@ -162,6 +162,21 @@
     "sha256": "99be336cdb15dfc5827efe34e5ac9aaa962e2485db547dd254d2a122a7d23102",
     "source_directory": "protobuf-c-1.4.1"
   },
+  "rust_std_build": {
+    "target": "wasm32-unknown-emscripten",
+    "profile": {
+      "opt-level": 3,
+      "lto": "thin",
+      "codegen-units": 1,
+      "debug": true,
+      "panic": "abort"
+    },
+    "rustflags": [
+      "-Ctarget-feature=+atomics,+bulk-memory,+mutable-globals",
+      "-Cpanic=abort",
+      "-Cembed-bitcode=yes"
+    ]
+  },
   "rust_std_tls_patch": {
     "toolchain": "nightly-2026-09-07",
     "rustc": "rustc 1.100.0-nightly (5a2be9f5f 2026-09-06)",

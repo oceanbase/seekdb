@@ -1,0 +1,19 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@cxxbridge_deps//:crates.bzl", "aliases", "all_crate_deps", "crate_edition")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["Cargo.toml", "Cargo.lock"])
+
+rust_binary(
+    name = "cxxbridge",
+    crate_root = "src/main.rs",
+    srcs = glob(["src/**/*.rs"]),
+    compile_data = glob(["src/bridge/**"], exclude = ["**/*.rs"]),
+    edition = crate_edition(),
+    version = "{version}",
+    deps = all_crate_deps(normal = True),
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    aliases = aliases(),
+    tags = ["no-remote"],
+)

@@ -1,5 +1,5 @@
 # Shared settings for the seekdb Bazel build.
-common --lockfile_mode=error
+common --lockfile_mode=update
 common --http_max_parallel_downloads=32
 build --verbose_failures
 build --aspects=//bazel/architecture:module_dependency_aspect.bzl%module_dependency_aspect
@@ -11,6 +11,8 @@ build --force_pic
 # configuration; the explicit copt also makes O1 portable to the native macOS
 # toolchain, whose fastbuild flags are not repository-owned.
 build --compilation_mode=opt
+build --@rules_rust//rust/settings:lto=thin
+build --@rules_rust//rust/settings:codegen_units=1
 # SLP spends most of this generated parser's compile time on location copies.
 build:linux --per_file_copt=sql_parser_mysql_mode_tab[.]c$@-fno-slp-vectorize
 build:macos --per_file_copt=sql_parser_mysql_mode_tab[.]c$@-fno-slp-vectorize
@@ -39,6 +41,8 @@ build:ios --//src/standby:enable_standby=false
 build:ios-simulator --config=ios
 build:ios-simulator --platforms=@apple_support//platforms:ios_sim_arm64
 build:wasm --platforms=//bazel/platforms:wasm32
+build:wasm --@rules_rust//rust/toolchain/channel=nightly
+build:wasm --@rules_rust//cargo/settings:use_default_shell_env=true
 build:wasm --//src/standby:enable_standby=false
 build:wasm --action_env=EM_CONFIG
 build:wasm --action_env=EMSDK_PYTHON
@@ -46,7 +50,7 @@ build:wasm --action_env=EMSDK_PYTHON
 # Native shorthand for the orthogonal custom memory-safety build setting.
 build --flag_alias=sanity=//bazel:enable_sanity
 
-# Only C++ compilation uses REAPI. Cargo and generators run locally.
+# Only C++ compilation uses REAPI. Rust and generators run locally.
 build --spawn_strategy=worker,sandboxed,local
 build --strategy=CppCompile=remote,worker,sandboxed,local
 build:windows --spawn_strategy=worker,local

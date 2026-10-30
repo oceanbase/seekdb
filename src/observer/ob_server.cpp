@@ -703,7 +703,7 @@ ObServer::ObServer()
     is_log_dir_empty_(false),
     conn_res_mgr_(),
     disk_usage_report_task_(),
-    log_block_mgr_()
+    log_block_mgr_(startup_result_)
 {
 }
 
@@ -1166,6 +1166,7 @@ void ObServer::destroy()
 
     FLOG_INFO("begin to destroy io device");
     ObIODeviceWrapper::get_instance().destroy();
+    log_device_.destroy();
     FLOG_INFO("io device destroyed");
 
     // Release local storage after all metadata users and their timers stop.
@@ -1366,6 +1367,9 @@ int ObServer::start()
       FLOG_INFO("server metadata is ready");
     }
 
+    if (OB_SUCC(ret) && !stop_ && OB_FAIL(startup_result_.finish())) {
+      LOG_ERROR("background log allocation failed during startup", KR(ret));
+    }
     if (FAILEDx(net_frame_.start())) {
       LOG_ERROR("fail to start net frame", KR(ret));
     } else {
@@ -1378,6 +1382,7 @@ int ObServer::start()
 
   int64_t start_service_time = ObTimeUtility::current_time();
   if (OB_FAIL(ret)) {
+    startup_result_.report_failure(ret);
     LOG_ERROR("failure occurs, stop observer startup", KR(ret));
     LOG_DBA_FORCE_PRINT(DBA_ERROR, OB_SERVER_START_FAIL, ret,
                         DBA_STEP_INC_INFO(server_start),
@@ -1451,6 +1456,10 @@ int ObServer::wait_for_server_runtime()
                   DBA_STEP_INC_INFO(server_start),
                   "wait for server runtime begin.");
   while (OB_SUCC(ret) && !stop_ && (!synced || !timestamp_ready)) {
+    if (OB_FAIL(startup_result_.error())) {
+      LOG_ERROR("log allocation failed while waiting for server runtime", KR(ret));
+      break;
+    }
     synced = server_runtime_controller_.has_synced();
     if (synced && !timestamp_ready) {
       SCN gts;
@@ -1472,7 +1481,7 @@ int ObServer::wait_for_server_runtime()
     LOG_WARN("standby startup replay did not become ready", KR(ret));
   }
   FLOG_INFO("wait for server runtime", KR(ret), K(stop_), K(synced), K(timestamp_ready));
-  if (!stop_ && synced && timestamp_ready) {
+  if (OB_SUCC(ret) && !stop_ && synced && timestamp_ready) {
     LOG_DBA_INFO_V2(OB_SERVER_WAIT_RUNTIME_READY_SUCCESS,
                     DBA_STEP_INC_INFO(server_start),
                     "wait for server runtime success.");
@@ -1561,6 +1570,7 @@ bool ObServer::is_stopped()
 
 void ObServer::set_stop()
 {
+  log_block_mgr_.stop();
   net_frame_.sql_nio_stop();
   stop_ = true;
   ob_service_.set_stop();
@@ -2118,9 +2128,23 @@ int ObServer::init_io()
         int64_t data_disk_percentage = 0;
         int64_t log_disk_percentage = 0;
 
-        if (OB_SUCC(ret) && OB_FAIL(log_block_mgr_.init(
+        share::LocalIOConfig data_io_config;
+        share::LocalIOConfig log_io_config;
+        int io_error = 0;
+        if (OB_FAIL(ret)) {
+        } else if (0 != (io_error = share::probe_local_io(storage_env_.sstable_dir_, data_io_config))) {
+          ret = ObIODeviceLocalFileOp::convert_sys_errno(io_error);
+          LOG_ERROR("data directory I/O probe failed", KR(ret), K(io_error), "directory", storage_env_.sstable_dir_);
+        } else if (0 != (io_error = share::probe_local_io(storage_env_.clog_dir_, log_io_config))) {
+          ret = ObIODeviceLocalFileOp::convert_sys_errno(io_error);
+          LOG_ERROR("log directory I/O probe failed", KR(ret), K(io_error), "directory", storage_env_.clog_dir_);
+        } else if (OB_FAIL(log_device_.init(storage_env_.clog_dir_,
+                       io_config.disk_io_thread_count_, max_io_depth,
+                       &ObIOManager::get_instance(), &ObDeviceManager::get_instance(), log_io_config))) {
+          LOG_ERROR("log device init failed", KR(ret));
+        } else if (OB_FAIL(log_block_mgr_.init(
             storage_env_.clog_dir_,
-            ObServerUtils::get_log_disk_info_in_config))) {
+            ObServerUtils::get_log_disk_info_in_config, log_io_config))) {
           LOG_ERROR("log block mgr init failed", KR(ret));
         } else if (OB_FAIL(ObServerUtils::cal_all_part_disk_size(config::datafile_size(),
                                                   config::log_disk_size(),
@@ -2145,7 +2169,7 @@ int ObServer::init_io()
                 storage_env_.default_block_size_,
                 storage_env_.data_disk_percentage_,
                 storage_env_.data_disk_size_,
-                STORAGE_META_SERVICE))) {
+                STORAGE_META_SERVICE, data_io_config))) {
           } else if (OB_FAIL(ObIOManager::get_instance().add_device_channel(&LOCAL_DEVICE_INSTANCE,
                                                                             io_config.disk_io_thread_count_,
                                                                             io_config.sync_io_thread_count_,
