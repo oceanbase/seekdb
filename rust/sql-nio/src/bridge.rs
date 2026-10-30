@@ -408,6 +408,15 @@ pub mod ffi {
             cxx_connect_attempts: u64,
             cxx_connect_returns: u64,
             cxx_connect_rejects: u64,
+            greeting_sent: u64,
+            greeting_deferred: u64,
+            greeting_failed: u64,
+            greeting_flushed: u64,
+            admission_register_failed: u64,
+            dispatch_handoff: u64,
+            dispatch_direct: u64,
+            dispatch_queue_full: u64,
+            greeting_close_before_flush: u64,
             listener_event_flags: u32,
         );
     }
