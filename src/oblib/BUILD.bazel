@@ -216,6 +216,7 @@ cc_library(
         "lib/statistic_event/ob_stat_class.h",
         "lib/statistic_event/ob_stat_event.h",
         "lib/string/ob_fixed_length_string.h",
+        "lib/string/ob_sql_identifier.h",
         "lib/string/ob_sql_string.h",
         "lib/string/ob_string.h",
         "lib/string/ob_string_buffer.h",
