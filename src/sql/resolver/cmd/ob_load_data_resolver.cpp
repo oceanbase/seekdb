@@ -22,6 +22,17 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <shlwapi.h>
+static char *full_path_utf8(char *output, const char *path, const size_t capacity) {
+  wchar_t input[4096];
+  wchar_t full[4096];
+  if (0 == MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, input, 4096)
+      || NULL == _wfullpath(full, input, 4096)
+      || 0 == WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, full, -1,
+                                 output, static_cast<int>(capacity), NULL, NULL)) {
+    return NULL;
+  }
+  return output;
+}
 struct glob_t {
   size_t gl_pathc;
   char **gl_pathv;
@@ -651,7 +662,7 @@ int ObLoadDataResolver::resolve_filename(ObLoadDataStmt *load_stmt, ParseNode *n
               //security check for mysql mode
               ObString secure_file_priv;
 #ifdef _WIN32
-              if (OB_ISNULL(actual_path = _fullpath(full_path_buf, match_array[i].ptr(), PATH_MAX))) {
+              if (OB_ISNULL(actual_path = full_path_utf8(full_path_buf, match_array[i].ptr(), PATH_MAX))) {
 #else
               if (OB_ISNULL(actual_path = realpath(match_array[i].ptr(), full_path_buf))) {
 #endif
