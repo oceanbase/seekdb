@@ -541,6 +541,48 @@ int ObDDLUtil::generate_column_name_str(
   return ret;
 }
 
+namespace
+{
+// Escape a MySQL identifier for DDL statements by doubling every embedded backtick
+// (e.g. "key`id" becomes "key``id"), so that wrapping the result in backquotes keeps
+// the identifier intact. The helper deliberately stays inside the share module instead
+// of calling sql::ObSQLUtils, because share is a terminal module and must not depend
+// on the upper sql module (issue #1469).
+int escape_ddl_identifier(
+    const ObString &identifier,
+    char *buf,
+    const int64_t buf_size,
+    ObString &escaped)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(identifier.length() < 0)
+      || (identifier.length() > 0 && OB_ISNULL(identifier.ptr()))
+      || OB_ISNULL(buf) || OB_UNLIKELY(buf_size <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    int64_t pos = 0;
+    for (int64_t i = 0; OB_SUCC(ret) && i < identifier.length(); ++i) {
+      const char ch = identifier.ptr()[i];
+      const int64_t writable = ('`' == ch) ? 2 : 1;
+      // reserve one byte for the trailing '\0'
+      if (OB_UNLIKELY(pos + writable + 1 > buf_size)) {
+        ret = OB_SIZE_OVERFLOW;
+      } else {
+        buf[pos++] = ch;
+        if ('`' == ch) {
+          buf[pos++] = ch;
+        }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      buf[pos] = '\0';
+      escaped.assign_ptr(buf, static_cast<int32_t>(pos));
+    }
+  }
+  return ret;
+}
+} // anonymous namespace
+
 int ObDDLUtil::generate_column_name_str(
     const ObColumnNameInfo &column_name_info,
     const bool with_origin_name,
@@ -550,18 +592,30 @@ int ObDDLUtil::generate_column_name_str(
 {
   int ret = OB_SUCCESS;
   const char *split_char = "`";
+  // a column name is at most OB_MAX_COLUMN_NAME_BINARY_LENGTH bytes; every byte may
+  // double when escaped, plus one byte for the trailing '\0'
+  char escaped_name_buf[2 * OB_MAX_COLUMN_NAME_BINARY_LENGTH + 1];
+  ObString escaped_name;
   // append comma
   if (with_comma) {
     if (OB_FAIL(sql_string.append_fmt(", "))) {
+    }
+  }
+  // escape the column name once: embedded backticks must be doubled so that the
+  // backquote quoting below cannot be terminated early (issue #1469)
+  if (OB_SUCC(ret) && (with_origin_name || with_alias_name)) {
+    if (OB_FAIL(escape_ddl_identifier(column_name_info.column_name_,
+                                      escaped_name_buf, sizeof(escaped_name_buf), escaped_name))) {
+      LOG_WARN("failed to escape ddl column name", K(ret), K(column_name_info.column_name_));
     }
   }
   // append original column name
   if (OB_SUCC(ret) && with_origin_name) {
     if (column_name_info.is_enum_set_need_cast_) {
       // Enum and set values are cast to unsigned before being appended to a macro block.
-      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, escaped_name.length(), escaped_name.ptr(), split_char))) {
       }
-    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, escaped_name.length(), escaped_name.ptr(), split_char))) {
     }
   }
   // append AS
@@ -572,7 +626,7 @@ int ObDDLUtil::generate_column_name_str(
   // append alias column name
   if (OB_SUCC(ret) && with_alias_name) {
     if (OB_FAIL(sql_string.append_fmt("%s%s%.*s%s", split_char, column_name_info.is_shadow_column_ ? "__SHADOW_" : "",
-        column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+        escaped_name.length(), escaped_name.ptr(), split_char))) {
     }
   }
   return ret;

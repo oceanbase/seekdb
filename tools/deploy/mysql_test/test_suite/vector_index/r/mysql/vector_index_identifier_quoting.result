@@ -325,3 +325,23 @@ id	v
 2	[0,1,0]
 3	[0,0,1]
 USE `seekdb_identifier_quoting`;
+CREATE TABLE `c1_unique_backtick` (`id` INT PRIMARY KEY, `key``id` INT, v VECTOR(3),
+  VECTOR INDEX `idx`(v) WITH (distance=l2,type=hnsw,lib=vsag));
+INSERT INTO `c1_unique_backtick` VALUES (1,10,'[1,0,0]'),(2,20,'[0,1,0]'),(3,30,'[0,0,1]');
+CREATE UNIQUE INDEX `uk_backtick` ON `c1_unique_backtick` (`key``id`);
+SELECT `key``id` AS k FROM `c1_unique_backtick` ORDER BY `key``id`;
+k
+10
+20
+30
+USE `seekdb_identifier_quoting`;
+CREATE TABLE `c1_unique_enum` (`id` INT PRIMARY KEY, `key``id` ENUM('a','b','c'), v VECTOR(3),
+  VECTOR INDEX `idx`(v) WITH (distance=l2,type=hnsw,lib=vsag));
+INSERT INTO `c1_unique_enum` VALUES (1,'a','[1,0,0]'),(2,'b','[0,1,0]'),(3,'c','[0,0,1]');
+CREATE UNIQUE INDEX `uk_enum` ON `c1_unique_enum` (`key``id`);
+SELECT `key``id` AS k FROM `c1_unique_enum` ORDER BY `key``id`;
+k
+a
+b
+c
+USE `seekdb_identifier_quoting`;
