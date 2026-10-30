@@ -181,7 +181,9 @@ void ob_sql_nio_log_reactor_state(int32_t poll_result, uint64_t poll_id,
             K(greeting_sent), K(greeting_deferred), K(greeting_failed), K(greeting_flushed),
             K(admission_register_failed), K(dispatch_handoff), K(dispatch_direct),
             K(dispatch_queue_full), K(greeting_close_before_flush),
-            K(listener_event_flags), KCSTRING(listener_os_probe_state_name),
+            K(listener_event_flags));
+  LOG_ERROR("Rust SQL-NIO listener probe state", KCSTRING(poll_result_name),
+            K(poll_id), K(listener_event_flags), KCSTRING(listener_os_probe_state_name),
             K(listener_os_probe_state), K(listener_os_probe_revents),
             K(listener_os_probe_raw_error));
 }
