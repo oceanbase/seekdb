@@ -505,6 +505,7 @@ END_P SET_VAR DELIMITER
 %type <node> json_table_expr unnest_expr mock_jt_on_error_on_empty jt_column_list json_table_column_def
 %type <node> file_table_expr file_table_arg_list file_table_arg
 %type <node> copy_to_stmt copy_option_list copy_option
+%type <node> ai_column_attribute ai_column_with_option_list ai_column_with_option
 %type <node> json_table_ordinality_column_def json_table_exists_column_def json_table_value_column_def json_table_nested_column_def
 %type <node> opt_value_on_empty_or_error_or_mismatch opt_on_mismatch
 %type <node> table_values_clause table_values_clause_with_order_by_and_limit values_row_list row_value
@@ -6288,6 +6289,51 @@ not NULLX
 | INVISIBLE
 {
   malloc_terminal_node($$, result->malloc_pool_, T_INVISIBLE);
+}
+| ai_column_attribute
+{
+  $$ = $1;
+}
+;
+
+ai_column_attribute:
+AI COLUMN '(' expr ')'
+{
+  // $4 is the AI function call that produces the column value.
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_COLUMN_ATTRIBUTE, 2, $4, NULL);
+}
+| AI COLUMN '(' expr ')' WITH '(' ai_column_with_option_list ')'
+{
+  // The WITH clause carries sync_mode and max_retries. It is a separate
+  // alternative rather than an optional tail: an empty tail production is
+  // reduced before WITH can be shifted, so `WITH (` would never be parsed.
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_COLUMN_ATTRIBUTE, 2, $4, $8);
+}
+;
+
+ai_column_with_option_list:
+ai_column_with_option
+{
+  $$ = $1;
+}
+| ai_column_with_option_list ',' ai_column_with_option
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
+}
+;
+
+ai_column_with_option:
+relation_name COMP_EQ expr
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_COLUMN_WITH_OPTION, 2, $1, $3);
+}
+| relation_name STRING_VALUE
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_COLUMN_WITH_OPTION, 2, $1, $2);
+}
+| relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_COLUMN_WITH_OPTION, 2, $1, NULL);
 }
 ;
 

@@ -1136,6 +1136,9 @@ typedef enum ObItemType
   T_COPY_TABLE_STMT = 9002,        // COPY ... TO
   T_COPY_OPTION = 9004,            // one option of COPY ... TO (...)
   T_DESCRIBE_SELECT_STMT = 9003,   // DESCRIBE SELECT ...
+  T_AI_COLUMN_ATTRIBUTE = 9005,    // AI COLUMN (expr) WITH (...)
+  T_AI_COLUMN_WITH_OPTION = 9006,  // one option of the AI COLUMN WITH clause
+  T_AI_COLUMN_RETRY_STMT = 9007,   // ALTER TABLE ... RETRY AI COLUMN ...
   T_JSON_TABLE_COLUMN = 3463,
   //pseudo_column
   T_PSEUDO_COLUMN = 3464,
