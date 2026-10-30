@@ -350,6 +350,34 @@ int ObFTParseHelper::init(
   return ret;
 }
 
+int ObFTParseHelper::init(
+    common::ObIAllocator *allocator,
+    const ObFTParser &parser,
+    const ObFTParserProperty &parser_property)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(is_inited_)) {
+    ret = OB_INIT_TWICE;
+  } else if (OB_ISNULL(allocator) || OB_UNLIKELY(!parser.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    parser_name_ = parser;
+    parser_property_ = parser_property;
+    if (OB_FAIL(parser_name_.get_desc(parser_desc_))) {
+    } else if (OB_ISNULL(parser_desc_)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(set_add_word_flag(*parser_desc_))) {
+    } else {
+      allocator_ = allocator;
+      is_inited_ = true;
+    }
+  }
+  if (OB_FAIL(ret) && OB_UNLIKELY(!is_inited_)) {
+    reset();
+  }
+  return ret;
+}
+
 void ObFTParseHelper::reset()
 {
   parser_desc_ = nullptr;
@@ -377,7 +405,10 @@ int ObFTParseHelper::segment(
   } else if (OB_ISNULL(cs = common::ObCharset::get_charset(type))) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    words.reuse();
+    if (!words.empty()) {
+      // reuse() locks every bucket; a freshly created map has nothing to clear.
+      words.reuse();
+    }
     ObAddWord add_word(parser_property_, meta, add_word_flag_, *allocator_, words);
     if (OB_FAIL(segment(
                     parser_property_,

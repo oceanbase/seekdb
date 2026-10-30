@@ -3040,7 +3040,9 @@ int ObTscCgService::generate_text_ir_spec_exprs(const ObTextRetrievalInfo &tr_in
     }
   }
 
-  if (OB_SUCC(ret) && nullptr != tr_info.pushdown_match_filter_) {
+  // Without relevance every retrieved document satisfies the match filter, see
+  // ObLogPlan::check_need_calc_match_score().
+  if (OB_SUCC(ret) && nullptr != tr_info.pushdown_match_filter_ && tr_info.need_calc_relevance_) {
     if (OB_FAIL(cg_.generate_rt_expr(*tr_info.pushdown_match_filter_, text_ir_scan_ctdef.match_filter_))) {
     }
   }

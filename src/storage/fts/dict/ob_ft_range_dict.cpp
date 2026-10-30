@@ -378,21 +378,68 @@ int ObFTRangeDict::match_with_hit(const ObString &single_word,
   return last_hit.dict_->match_with_hit(single_word, last_hit, hit);
 }
 
+namespace
+{
+// Byte-wise order is the code point order for valid UTF-8, which is what
+// utf8mb4_bin strnncollsp compares; only trailing pad spaces are ignored.
+int ft_bin_compare(const ObString &lhs, const ObString &rhs)
+{
+  const int64_t min_len = MIN(lhs.length(), rhs.length());
+  int cmp = min_len > 0 ? MEMCMP(lhs.ptr(), rhs.ptr(), min_len) : 0;
+  if (0 != cmp) {
+    return cmp < 0 ? -1 : 1;
+  }
+  const ObString &longer = lhs.length() > rhs.length() ? lhs : rhs;
+  for (int64_t i = min_len; i < longer.length(); ++i) {
+    if (' ' != longer.ptr()[i]) {
+      return lhs.length() > rhs.length() ? 1 : -1;
+    }
+  }
+  return 0;
+}
+} // namespace
+
 int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict *&dict) const
 {
   int ret = OB_SUCCESS;
   bool found = false;
-  for (int i = 0; OB_SUCC(ret) && !found && i < range_dicts_.size(); ++i) {
-    if (ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                          range_dicts_[i].start_.get_word(),
-                          single_word)
-            <= 0
-        && ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                             range_dicts_[i].end_.get_word(),
-                             single_word)
-               >= 0) {
-      dict = range_dicts_[i].dict_;
-      found = true;
+  const int64_t range_cnt = range_dicts_.size();
+  if (OB_LIKELY(range_sorted_) && range_cnt > 0) {
+    // Ranges are ordered and disjoint: find the last range whose start word is <= the word,
+    // then verify that the word is not past its end.
+    int64_t left = 0;
+    int64_t right = range_cnt - 1;
+    int64_t candidate = -1;
+    while (left <= right) {
+      const int64_t mid = left + ((right - left) >> 1);
+      const ObString mid_start = range_dicts_[mid].start_.get_word();
+      if (ft_bin_compare(mid_start, single_word) <= 0) {
+        candidate = mid;
+        left = mid + 1;
+      } else {
+        right = mid - 1;
+      }
+    }
+    if (candidate >= 0) {
+      const ObString candidate_end = range_dicts_[candidate].end_.get_word();
+      if (ft_bin_compare(candidate_end, single_word) >= 0) {
+        dict = range_dicts_[candidate].dict_;
+        found = true;
+      }
+    }
+  } else {
+    for (int i = 0; OB_SUCC(ret) && !found && i < range_cnt; ++i) {
+      if (ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
+                            range_dicts_[i].start_.get_word(),
+                            single_word)
+              <= 0
+          && ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
+                               range_dicts_[i].end_.get_word(),
+                               single_word)
+                 >= 0) {
+        dict = range_dicts_[i].dict_;
+        found = true;
+      }
     }
   }
   if (!found) {
@@ -405,6 +452,7 @@ int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict 
 int ObFTRangeDict::build_dict_from_cache(const ObFTCacheRangeContainer &range_container)
 {
   int ret = OB_SUCCESS;
+  range_sorted_ = true;
   for (ObList<ObFTCacheRangeHandle *, ObIAllocator>::const_iterator iter = range_container.get_handles().begin();
        OB_SUCC(ret) && iter != range_container.get_handles().end();
        iter++) {
@@ -418,6 +466,12 @@ int ObFTRangeDict::build_dict_from_cache(const ObFTCacheRangeContainer &range_co
       range.start_ = dat->start_word_;
       range.end_ = dat->end_word_;
       range.dict_ = dict;
+      if (range_dicts_.size() > 0) {
+        const ObString prev_start = range_dicts_.at(range_dicts_.size() - 1).start_.get_word();
+        if (ft_bin_compare(prev_start, range.start_.get_word()) > 0) {
+          range_sorted_ = false;
+        }
+      }
       if (OB_FAIL(range_dicts_.push_back(range))) {
       }
     }

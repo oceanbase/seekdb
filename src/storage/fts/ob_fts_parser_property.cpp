@@ -1016,52 +1016,53 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
 int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const ObString &json_str)
 {
   int ret = OB_SUCCESS;
-  ObFTParserJsonProps props;
-  if (OB_FAIL(props.init())) {
-  } else if (OB_FAIL(props.parse_from_valid_str(json_str))) {
-  } else {
+  if (json_str.empty()) {
+    // An empty property string round trips through the DDL rebuild step into exactly the
+    // constructor defaults (and the IK table markers), so skip building and parsing JSON.
+    *this = ObFTParserProperty();
     if (parser.is_ik()) {
-      // set dict tables and copy dict name
       dict_table_ = ObString(ObFTSLiteral::CONFIG_NAME_DICT_TABLE);
       stopword_table_ = ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE);
       quantifier_table_ = ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE);
-      ObString ik_smart;
-      if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
-      } else {
-        if (0 == ik_smart.case_compare(ObString(ObFTSLiteral::FT_IK_MODE_SMART))) {
-          ik_mode_smart_ = true;
-        } else if (0 == ik_smart.case_compare(ObString(ObFTSLiteral::FT_IK_MODE_MAX_WORD))) {
-          ik_mode_smart_ = false;
-        } else {
-          ret = OB_INVALID_ARGUMENT;
-        }
-      }
-    } else if (parser.is_space()) {
-      if (json_str.empty()) {
-        min_token_size_ = ObFTSLiteral::FT_DEFAULT_MIN_TOKEN_SIZE;
-        max_token_size_ = ObFTSLiteral::FT_DEFAULT_MAX_TOKEN_SIZE;
-      } else if (OB_FAIL(props.config_get_min_token_size(min_token_size_))) {
-      } else if (OB_FAIL(props.config_get_max_token_size(max_token_size_))) {
-      }
-    } else if (parser.is_ngram()) {
-      if (json_str.empty()) {
-        ngram_token_size_ = ObFTSLiteral::FT_DEFAULT_NGRAM_TOKEN_SIZE;
-      } else if (OB_FAIL(props.config_get_ngram_token_size(ngram_token_size_))) {
-      }
-    } else if (parser.is_beng()) {
-      if (json_str.empty()) {
-        min_token_size_ = ObFTSLiteral::FT_DEFAULT_MIN_TOKEN_SIZE;
-        max_token_size_ = ObFTSLiteral::FT_DEFAULT_MAX_TOKEN_SIZE;
-      } else if (OB_FAIL(props.config_get_min_token_size(min_token_size_))) {
-      } else if (OB_FAIL(props.config_get_max_token_size(max_token_size_))) {
-      }
-    } else if (parser.is_ngram2()) {
-      if (json_str.empty()) {
-        min_ngram_token_size_ = ObFTSLiteral::FT_DEFAULT_MIN_NGRAM_SIZE;
-        max_ngram_token_size_ = ObFTSLiteral::FT_DEFAULT_MAX_NGRAM_SIZE;
-      } else if (OB_FAIL(props.config_get_min_ngram_token_size(min_ngram_token_size_))) {
-      } else if (OB_FAIL(props.config_get_max_ngram_token_size(max_ngram_token_size_))) {
-      }
+    }
+  } else {
+    ObFTParserJsonProps props;
+    if (OB_FAIL(props.init())) {
+    } else if (OB_FAIL(props.parse_from_valid_str(json_str))) {
+    } else if (OB_FAIL(parse_for_parser_helper(parser, props))) {
+    }
+  }
+  return ret;
+}
+
+int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser,
+                                                const ObFTParserJsonProps &props)
+{
+  int ret = OB_SUCCESS;
+  if (parser.is_ik()) {
+    // set dict tables and copy dict name
+    dict_table_ = ObString(ObFTSLiteral::CONFIG_NAME_DICT_TABLE);
+    stopword_table_ = ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE);
+    quantifier_table_ = ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE);
+    ObString ik_smart;
+    if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
+    } else if (0 == ik_smart.case_compare(ObString(ObFTSLiteral::FT_IK_MODE_SMART))) {
+      ik_mode_smart_ = true;
+    } else if (0 == ik_smart.case_compare(ObString(ObFTSLiteral::FT_IK_MODE_MAX_WORD))) {
+      ik_mode_smart_ = false;
+    } else {
+      ret = OB_INVALID_ARGUMENT;
+    }
+  } else if (parser.is_space() || parser.is_beng()) {
+    if (OB_FAIL(props.config_get_min_token_size(min_token_size_))) {
+    } else if (OB_FAIL(props.config_get_max_token_size(max_token_size_))) {
+    }
+  } else if (parser.is_ngram()) {
+    if (OB_FAIL(props.config_get_ngram_token_size(ngram_token_size_))) {
+    }
+  } else if (parser.is_ngram2()) {
+    if (OB_FAIL(props.config_get_min_ngram_token_size(min_ngram_token_size_))) {
+    } else if (OB_FAIL(props.config_get_max_ngram_token_size(max_ngram_token_size_))) {
     }
   }
   return ret;

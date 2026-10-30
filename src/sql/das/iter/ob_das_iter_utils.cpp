@@ -1537,7 +1537,7 @@ int ObDASIterUtils::create_text_retrieval_sub_tree(
   }
 
   if (OB_FAIL(ret)) {
-  } else if (size > 0 && !ir_scan_ctdef->need_estimate_total_doc_cnt()) {
+  } else if (size > 0 && ir_scan_ctdef->need_calc_relevance() && !ir_scan_ctdef->need_estimate_total_doc_cnt()) {
     ObDASScanIterParam doc_cnt_agg_param;
     ObDASScanIter *doc_cnt_agg_iter = nullptr;
     init_scan_iter_param(doc_cnt_agg_param, ir_scan_ctdef->get_doc_agg_ctdef(), ir_scan_rtdef);

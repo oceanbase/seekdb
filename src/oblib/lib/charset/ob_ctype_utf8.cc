@@ -381,6 +381,21 @@ static int ob_strnncollsp_utf8mb4(const ObCharsetInfo *cs,
   ob_wc_t src_wc = 0, dst_wc = 0;
   const unsigned char *se= src + srclen, *te= dst + dstlen;
   ObUnicaseInfo *uni_plane= cs->caseinfo;
+  // ASCII bytes decode to themselves; compare their sort weights directly instead of
+  // running the UTF-8 decoder for every byte pair.
+  while (src < se && dst < te && *src < 0x80 && *dst < 0x80) {
+    if (*src != *dst) {
+      src_wc = *src;
+      dst_wc = *dst;
+      ob_tosort_unicode(uni_plane, &src_wc, cs->state);
+      ob_tosort_unicode(uni_plane, &dst_wc, cs->state);
+      if (src_wc != dst_wc) {
+        return src_wc > dst_wc ? 1 : -1;
+      }
+    }
+    ++src;
+    ++dst;
+  }
   while ( src < se && dst < te ) {
     int s_res= ob_mb_wc_utf8mb4(cs, &src_wc, src, se);
     int t_res= ob_mb_wc_utf8mb4(cs, &dst_wc, dst, te);

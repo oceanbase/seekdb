@@ -30,10 +30,21 @@ int ObTextDaaTIter::init(const ObTextDaaTParam &param)
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(ObSRDaaTIterImpl::init(*param.base_param_, *param.dim_iters_,
                                             *param.allocator_, *param.relevance_collector_))) {
-  } else if (OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
+  } else if (nullptr != param.base_param_->relevance_expr_
+             && OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
   } else {
     mode_flag_ = param.mode_flag_;
     function_lookup_mode_ = param.function_lookup_mode_;
+    score_free_ = sql::ObMatchAgainstMode::NATURAL_LANGUAGE_MODE == mode_flag_
+        && !function_lookup_mode_
+        && nullptr == iter_param_->relevance_expr_
+        && !iter_param_->need_pushdown_topk();
+    // Boolean evaluation and minimum_should_match may reject a matched document.
+    // Only bypass the collector when every merged id is valid and no score is consumed.
+    skip_relevance_ = score_free_
+        && !iter_param_->need_project_relevance()
+        && !iter_param_->need_filter()
+        && relevance_collector_->can_skip_collection();
   }
   return ret;
 }
@@ -48,6 +59,7 @@ void ObTextDaaTIter::reset()
     }
   }
   ObSRDaaTIterImpl::reset();
+  score_free_ = false;
 }
 
 void ObTextDaaTIter::reuse(const bool switch_tablet)
@@ -70,8 +82,45 @@ int ObTextDaaTIter::pre_process()
   int ret = OB_SUCCESS;
   if (dim_iters_->count() == 0) {
     ret = OB_ITER_END;
-  } else if (iter_param_->need_project_relevance()) {
+  } else if (iter_param_->need_project_relevance() && nullptr != iter_param_->relevance_expr_) {
     if (OB_FAIL(bm25_param_estimator_.do_estimation(*iter_param_->eval_ctx_))) {
+    }
+  }
+  return ret;
+}
+
+int ObTextDaaTIter::fill_merge_heap()
+{
+  int ret = OB_SUCCESS;
+  if (!score_free_) {
+    ret = ObSRDaaTIterImpl::fill_merge_heap();
+  } else {
+    ObSRMergeItem item;
+    for (int64_t i = 0; OB_SUCC(ret) && i < next_round_cnt_; ++i) {
+      const int64_t iter_idx = next_round_iter_idxes_[i];
+      ObTextRetrievalDaaTTokenIter *dim_iter =
+          static_cast<ObTextRetrievalDaaTTokenIter *>(dim_iters_->at(iter_idx));
+      if (OB_ISNULL(dim_iter)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(dim_iter->get_next_doc_id(iter_domain_ids_[iter_idx]))) {
+        if (OB_UNLIKELY(OB_ITER_END != ret)) {
+          LOG_WARN("fail to try load next batch dimension data", K(ret));
+        } else {
+          ret = OB_SUCCESS;
+        }
+      } else if (!skip_relevance_ && OB_NOT_NULL(iter_param_->dim_weights_)
+                 && FALSE_IT(item.relevance_ = item.relevance_ * iter_param_->field_boost_
+                             * iter_param_->dim_weights_->at(iter_idx))) {
+      } else if (FALSE_IT(item.iter_idx_ = iter_idx)) {
+      } else if (OB_FAIL(merge_heap_->push(item))) {
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (merge_heap_->empty()) {
+      ret = OB_ITER_END;
+    } else if (0 != next_round_cnt_ && OB_FAIL(merge_heap_->rebuild())) {
+    } else {
+      next_round_cnt_ = 0;
     }
   }
   return ret;

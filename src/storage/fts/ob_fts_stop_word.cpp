@@ -18,6 +18,8 @@
 #define USING_LOG_PREFIX STORAGE_FTS
 
 #include "share/rc/ob_server_runtime.h"
+#include "lib/charset/ob_charset.h"
+#include "lib/utility/ob_macro_utils.h"
 #include "storage/fts/ob_fts_stop_word.h"
 #include "storage/fts/ob_fts_parser_helper.h"
 #include "storage/fts/ob_fts_parser_property.h"
@@ -74,16 +76,19 @@ void ObStopWordChecker::destroy()
 int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
 {
   int ret = OB_SUCCESS;
-  
-  
-  common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(word.empty())) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (common::ObCharset::is_valid_collation(word.get_collation_type())
+             && common::ObCharset::charset_type_by_coll(word.get_collation_type())
+                    == common::ObCharset::charset_type_by_coll(stopword_type_.get_collation_type())) {
+    // Same character set: charset_convert is an identity copy (even for invalid bytes with the
+    // default conversion flags), so the bytes can be looked up directly without an allocator.
+    ret = lookup_stopword(word.get_word().get_string(), is_stopword);
   } else {
+    common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
     common::ObString cmp_str;
-    // do nothing set out with in if type is the same.
     if (OB_FAIL(common::ObCharset::charset_convert(
                                        allocator,
                                        word.get_word().get_string(),
@@ -91,19 +96,26 @@ int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
                                        stopword_type_.get_collation_type(),
                                        cmp_str))) {
     } else {
-      ObFTWord converted(cmp_str.length(), cmp_str.ptr(), stopword_type_);
-      ret = stopword_set_.exist_refactored(converted);
-      if (OB_HASH_NOT_EXIST == ret) {
-        is_stopword = false;
-        ret = OB_SUCCESS;
-      } else if (OB_HASH_EXIST == ret) {
-        is_stopword = true;
-        ret = OB_SUCCESS;
-      } else if (OB_SUCC(ret)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-      }
+      ret = lookup_stopword(cmp_str, is_stopword);
     }
+  }
+  return ret;
+}
+
+int ObStopWordChecker::lookup_stopword(const common::ObString &word, bool &is_stopword)
+{
+  int ret = OB_SUCCESS;
+  ObFTWord converted(word.length(), word.ptr(), stopword_type_);
+  ret = stopword_set_.exist_refactored(converted);
+  if (OB_HASH_NOT_EXIST == ret) {
+    is_stopword = false;
+    ret = OB_SUCCESS;
+  } else if (OB_HASH_EXIST == ret) {
+    is_stopword = true;
+    ret = OB_SUCCESS;
+  } else if (OB_SUCC(ret)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
   }
   return ret;
 }
@@ -163,19 +175,45 @@ int ObAddWord::casedown_word(const ObFTWord &src, ObFTWord &dst)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(src.empty())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (flag_.casedown()) {
-    ObString dst_str;
-    if (OB_FAIL(ObCharset::tolower(
-                    word_meta_.get_collation_type(),
-                    src.get_word().get_string(),
-                    dst_str,
-                    allocator_))) {
-    } else {
-      ObFTWord tmp(dst_str.length(), dst_str.ptr(), word_meta_);
-      dst = tmp;
-    }
-  } else {
+  } else if (!flag_.casedown()) {
     dst = src;
+  } else {
+    // Case folding that leaves the bytes unchanged is common (CJK words, lowercase ASCII).
+    // Fold into a stack buffer first and reuse the source bytes when nothing changed, so the
+    // hot path does not allocate a copy. The fallback is byte-for-byte the previous behavior.
+    const ObString src_str = src.get_word().get_string();
+    const ObCollationType coll_type = word_meta_.get_collation_type();
+    const int64_t src_len = src_str.length();
+    char stack_buf[256];
+    bool handled = false;
+    if (src_len > 0 && src_len <= static_cast<int64_t>(sizeof(stack_buf))) {
+      MEMCPY(stack_buf, src_str.ptr(), src_len);
+      const size_t folded_len =
+          ObCharset::casedn(coll_type, stack_buf, src_len, stack_buf, sizeof(stack_buf));
+      if (folded_len == static_cast<size_t>(src_len)) {
+        handled = true;
+        if (0 == MEMCMP(stack_buf, src_str.ptr(), src_len)) {
+          dst = src;
+        } else {
+          char *buf = static_cast<char *>(allocator_.alloc(src_len));
+          if (OB_ISNULL(buf)) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+          } else {
+            MEMCPY(buf, stack_buf, src_len);
+            ObFTWord tmp(src_len, buf, word_meta_);
+            dst = tmp;
+          }
+        }
+      }
+    }
+    if (OB_SUCC(ret) && !handled) {
+      ObString dst_str;
+      if (OB_FAIL(ObCharset::tolower(coll_type, src_str, dst_str, allocator_))) {
+      } else {
+        ObFTWord tmp(dst_str.length(), dst_str.ptr(), word_meta_);
+        dst = tmp;
+      }
+    }
   }
   return ret;
 }
@@ -198,21 +236,16 @@ int ObAddWord::check_stopword(const ObFTWord &ft_word, bool &is_stopword)
 int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
 {
   int ret = OB_SUCCESS;
-  int64_t word_count = 0;
   if (OB_UNLIKELY(word.empty() || word_freq <= 0)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (!flag_.groupby_word()) {
     if (OB_FAIL(word_map_.set_refactored(word, 1/*word count*/))) {
     }
-  } else if (OB_FAIL(word_map_.get_refactored(word, word_count)) && OB_HASH_NOT_EXIST != ret) {
-  } else {
-    if (OB_HASH_NOT_EXIST == ret) {
-      word_count = 1;
-    } else {
-      word_count += word_freq;
-    }
-    if (OB_FAIL(word_map_.set_refactored(word, word_count, 1/*overwrite*/))) {
-    }
+  } else if (int64_t *existing_count = word_map_.get(word)) {
+    // The map is local to this tokenization, so accumulating in place is safe and
+    // avoids re-hashing and re-inserting an existing key.
+    *existing_count += word_freq;
+  } else if (OB_FAIL(word_map_.set_refactored(word, word_freq))) {
   }
   return ret;
 }

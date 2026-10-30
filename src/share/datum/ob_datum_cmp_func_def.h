@@ -387,7 +387,20 @@ struct ObDatumStrCmp : public ObDefined<SupportedCollection<CS_TYPE>::defined_>
 {
   inline static int cmp(const ObDatum &l, const ObDatum &r, int &cmp_ret)
   {
-    return ObDatumStrCmpImpl::cmp(l, r, cmp_ret, CS_TYPE, WITH_END_SPACE);
+    if (OB_LIKELY(CS_TYPE_BINARY != CS_TYPE)) {
+      return ObDatumStrCmpImpl::cmp(l, r, cmp_ret, CS_TYPE, WITH_END_SPACE);
+    }
+    // Binary collation is a plain byte comparison, ObCharset::strcmpsp only adds the
+    // charset dispatch on top of it. Fulltext document ids are binary strings and are
+    // compared on every sort step of an index build and on every merge-heap operation
+    // of a MATCH query, so keep this path branch free.
+    const int64_t cmp_len = MIN(l.len_, r.len_);
+    int cmp_val = cmp_len > 0 ? ::memcmp(l.ptr_, r.ptr_, cmp_len) : 0;
+    if (0 == cmp_val) {
+      cmp_val = l.len_ == r.len_ ? 0 : (l.len_ < r.len_ ? -1 : 1);
+    }
+    cmp_ret = cmp_val > 0 ? 1 : (cmp_val < 0 ? -1 : 0);
+    return OB_SUCCESS;
   }
 };
 

@@ -22,6 +22,11 @@
 #include "data_plane/fts/dict/ob_gen_dic_loader.h"
 #include "data_plane/fts/dict/ob_dic_lock_service.h"
 #include "share/ob_server_struct.h"
+#include "lib/cpu/ob_cpu_topology.h"
+#include <sched.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include "data_plane/fts/ob_fts_parser_helper.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/schema/ob_schema_utils.h"
@@ -1031,6 +1036,66 @@ int ObFtsIndexBuilderUtil::generate_doc_id_column(
   return ret;
 }
 
+// sysconf() reports the CPU count of the host even when the process runs inside a
+// cgroup, so both the affinity mask and the cgroup CPU quota are taken into account.
+static int64_t read_cgroup_cpu_limit()
+{
+  int64_t cpu_limit = 0;
+  FILE *fp = fopen("/sys/fs/cgroup/cpu.max", "r");
+  if (NULL != fp) {
+    char quota_buf[32] = {0};
+    long long period = 0;
+    if (2 == fscanf(fp, "%31s %lld", quota_buf, &period)
+        && period > 0
+        && 0 != strcmp(quota_buf, "max")) {
+      const long long quota = atoll(quota_buf);
+      if (quota > 0) {
+        cpu_limit = MAX(static_cast<int64_t>(quota / period), 1L);
+      }
+    }
+    fclose(fp);
+  }
+  if (0 == cpu_limit) {
+    long long quota = 0;
+    long long period = 0;
+    FILE *quota_fp = fopen("/sys/fs/cgroup/cpu/cpu.cfs_quota_us", "r");
+    FILE *period_fp = fopen("/sys/fs/cgroup/cpu/cpu.cfs_period_us", "r");
+    if (NULL != quota_fp && NULL != period_fp
+        && 1 == fscanf(quota_fp, "%lld", &quota)
+        && 1 == fscanf(period_fp, "%lld", &period)
+        && quota > 0 && period > 0) {
+      cpu_limit = MAX(static_cast<int64_t>(quota / period), 1L);
+    }
+    if (NULL != quota_fp) {
+      fclose(quota_fp);
+    }
+    if (NULL != period_fp) {
+      fclose(period_fp);
+    }
+  }
+  return cpu_limit;
+}
+
+static int64_t get_effective_cpu_count()
+{
+  int64_t cpu_cnt = get_cpu_count();
+  const int64_t cgroup_limit = read_cgroup_cpu_limit();
+  if (cgroup_limit > 0) {
+    cpu_cnt = MIN(cpu_cnt, cgroup_limit);
+  }
+#if defined(__linux__)
+  cpu_set_t cpu_set;
+  CPU_ZERO(&cpu_set);
+  if (0 == sched_getaffinity(0, sizeof(cpu_set), &cpu_set)) {
+    const int64_t affinity_cnt = CPU_COUNT(&cpu_set);
+    if (affinity_cnt > 0) {
+      cpu_cnt = MIN(cpu_cnt, affinity_cnt);
+    }
+  }
+#endif
+  return MAX(cpu_cnt, 1L);
+}
+
 int ObFtsIndexBuilderUtil::decide_parallelism(
     const share::schema::ObIndexType index_type,
     const int64_t original_parallelism,
@@ -1047,7 +1112,12 @@ int ObFtsIndexBuilderUtil::decide_parallelism(
       case share::schema::ObIndexType::INDEX_TYPE_DOC_ID_ROWKEY_LOCAL:
       case share::schema::ObIndexType::INDEX_TYPE_FTS_INDEX_LOCAL:
       case share::schema::ObIndexType::INDEX_TYPE_FTS_DOC_WORD_LOCAL:
-        decided_parallelism = MAX(original_parallelism / 3, 1L);
+        // A user supplied degree of parallelism keeps the historical scaling; with the
+        // default (1) the fulltext aux tables used to be built by a single worker, so scale
+        // with the CPU count instead.
+        decided_parallelism = original_parallelism > 1
+            ? MAX(original_parallelism / 3, 1L)
+            : get_fts_auto_parallelism();
         break;
       case share::schema::ObIndexType::INDEX_TYPE_NORMAL_MULTIVALUE_LOCAL:
       case share::schema::ObIndexType::INDEX_TYPE_UNIQUE_MULTIVALUE_LOCAL:
@@ -1062,6 +1132,14 @@ int ObFtsIndexBuilderUtil::decide_parallelism(
     }
   }
   return ret;
+}
+
+int64_t ObFtsIndexBuilderUtil::get_fts_auto_parallelism()
+{
+  // The aux tables are built by two concurrent tasks, so half of the usable CPUs is
+  // enough to keep every core busy without oversubscribing the machine.
+  const int64_t cpu_cnt = get_effective_cpu_count();
+  return MIN(MAX(cpu_cnt / FTS_CONCURRENT_AUX_BUILD_CNT, 1L), FTS_MAX_AUTO_PARALLELISM);
 }
 
 int ObFtsIndexBuilderUtil::generate_word_segment_column(

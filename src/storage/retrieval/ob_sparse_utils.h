@@ -37,6 +37,8 @@ struct ObSRDaaTRelevanceCollector
   virtual void reuse() = 0;
   virtual int collect_one_dim(const int64_t dim_idx, const double relevance) = 0;
   virtual int get_result(double &relevance, bool &is_valid) = 0;
+  // Whether every nonempty group of matching dimensions is valid without collecting scores.
+  virtual bool can_skip_collection() const { return false; }
 };
 
 struct ObSRDaaTInnerProductRelevanceCollector : ObSRDaaTRelevanceCollector
@@ -52,6 +54,7 @@ struct ObSRDaaTInnerProductRelevanceCollector : ObSRDaaTRelevanceCollector
   virtual void reuse() override;
   virtual int collect_one_dim(const int64_t dim_idx, const double) override;
   virtual int get_result(double &relevance, bool &is_valid) override;
+  virtual bool can_skip_collection() const override { return should_match_ <= 1; }
 private:
   double total_relevance_;
   int64_t matched_cnt_;
