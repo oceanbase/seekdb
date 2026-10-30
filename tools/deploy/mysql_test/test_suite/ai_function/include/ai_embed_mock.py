@@ -54,6 +54,8 @@ def serve():
                 data.reverse()
             elif mode == 'duplicate':
                 data.append(data[0])
+            elif mode == 'duplicate-index' and len(data) > 1:
+                data[1]['text_index' if dashscope else 'index'] = 0
             elif mode == 'missing':
                 data.pop()
             elif mode == 'out-of-range':
@@ -66,10 +68,14 @@ def serve():
                 data[0]['embedding'][0] = 'invalid'
             elif mode == 'null-element':
                 data[0]['embedding'][0] = None
+            elif mode == 'bool-element':
+                data[0]['embedding'][0] = True
             elif mode == 'overflow-element':
                 data[0]['embedding'][0] = 1e100
             elif mode == 'wrong-dimension':
                 data[0]['embedding'].append(0.0)
+            elif mode == 'inconsistent-dimension' and len(data) > 1:
+                data[-1]['embedding'].pop()
             elif mode == 'object-vector':
                 data[0]['embedding'] = {}
             response = {'output': {'embeddings': data}} if dashscope else {'data': data}

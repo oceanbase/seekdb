@@ -46,6 +46,15 @@ id	original_row
 43	43.0
 44	44.0
 45	45.0
+select /*+ OPT_PARAM('rowsets_max_rows',64) */ id, ai_embed('embed_batch',content,2) as direct_vector
+from embed_batch_rows where id<=6 order by id;
+id	direct_vector
+1	[1.0, 1.25]
+2	[2.0, 1.25]
+3	[3.0, 1.25]
+4	[4.0, 1.25]
+5	NULL
+6	[6.0, 1.25]
 select /*+ OPT_PARAM('rowsets_max_rows',16) */ id, json_length(ai_embed('embed_batch',content,d)) as requested_dimension
 from embed_batch_rows order by id;
 id	requested_dimension
@@ -189,6 +198,14 @@ id	dashscope_row
 43	43.0
 44	44.0
 45	45.0
+select id, ai_embed('embed_batch',content,2) as duplicate_index from embed_batch_rows where id<=3 order by id;
+ERROR HY000: ai_embed: invalid embedding response (index, count, dimension or numeric element)
+select id, ai_embed('embed_batch',content,2) as duplicate_index from embed_batch_rows where id<=3 order by id;
+ERROR HY000: ai_embed: invalid embedding response (index, count, dimension or numeric element)
+select id, ai_embed('embed_batch',content) as inconsistent_dimension from embed_batch_rows where id<=3 order by id;
+ERROR HY000: ai_embed: invalid embedding response (index, count, dimension or numeric element)
+select id, ai_embed('embed_batch',content,2) as boolean_element from embed_batch_rows where id<=3 order by id;
+ERROR HY000: ai_embed: invalid embedding response (index, count, dimension or numeric element)
 select ai_embed('embed_batch',content,case when id=2 then 0 else 2 end)
 from embed_batch_rows where id <= 3 order by id;
 ERROR HY000: Incorrect arguments to ai_embed, dimension parameter must be a positive integer

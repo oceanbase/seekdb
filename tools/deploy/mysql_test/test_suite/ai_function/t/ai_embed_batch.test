@@ -25,6 +25,12 @@ select /*+ OPT_PARAM('rowsets_max_rows',64) */ id, json_extract(ai_embed('embed_
 --exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py assert-batch 43
 --exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py assert-requests 4
 --exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py clear
+# Verify the direct SQL return value without a JSON wrapper, including a NULL row.
+select /*+ OPT_PARAM('rowsets_max_rows',64) */ id, ai_embed('embed_batch',content,2) as direct_vector
+  from embed_batch_rows where id<=6 order by id;
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py assert-batch 5 1,2,3,4,6
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py assert-requests 1
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py clear
 select /*+ OPT_PARAM('rowsets_max_rows',16) */ id, json_length(ai_embed('embed_batch',content,d)) as requested_dimension
   from embed_batch_rows order by id;
 --exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py assert-batch 43
@@ -64,6 +70,27 @@ call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_batch_ep', '{"url":"http://1
 select id, json_extract(ai_embed('embed_batch',content,2),'$[0]') as dashscope_row
   from embed_batch_rows order by id;
 --exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py assert-batch 43
+--exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py clear
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_batch_ep', '{"url":"http://127.0.0.1:18082/dashscope/duplicate-index"}');
+--enable_query_log
+--error 4070
+select id, ai_embed('embed_batch',content,2) as duplicate_index from embed_batch_rows where id<=3 order by id;
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_batch_ep', '{"url":"http://127.0.0.1:18082/openai/duplicate-index","provider":"openai"}');
+--enable_query_log
+--error 4070
+select id, ai_embed('embed_batch',content,2) as duplicate_index from embed_batch_rows where id<=3 order by id;
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_batch_ep', '{"url":"http://127.0.0.1:18082/openai/inconsistent-dimension"}');
+--enable_query_log
+--error 4070
+select id, ai_embed('embed_batch',content) as inconsistent_dimension from embed_batch_rows where id<=3 order by id;
+--disable_query_log
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_batch_ep', '{"url":"http://127.0.0.1:18082/openai/bool-element"}');
+--enable_query_log
+--error 4070
+select id, ai_embed('embed_batch',content,2) as boolean_element from embed_batch_rows where id<=3 order by id;
 --exec python3 mysql_test/test_suite/ai_function/include/ai_embed_mock.py clear
 --disable_query_log
 call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT('embed_batch_ep', '{"url":"http://127.0.0.1:18082/openai/shuffle","provider":"openai"}');
