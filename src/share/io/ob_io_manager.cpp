@@ -403,15 +403,6 @@ int ObIOManager::begin_request(ObIORequest &req, std::shared_ptr<ObDeviceChannel
   return channel->begin(req);
 }
 
-int ObIOManager::benchmark_device(ObIODevice *device, std::shared_ptr<ObDeviceChannel> &channel)
-{
-  ObMutexGuard guard(mutex_);
-  if (!ATOMIC_LOAD(&is_working_)) { return OB_NOT_INIT; }
-  const auto found = channel_map_.find(reinterpret_cast<int64_t>(device));
-  if (found == channel_map_.end()) { return OB_HASH_NOT_EXIST; }
-  channel = found->second;
-  return OB_SUCCESS;
-}
 
 int ObIOManager::refresh_io_service_config(const ObIOServiceConfig &replacement,
     uint64_t expected_generation, ResourceConfigReceipt &receipt)
@@ -1423,24 +1414,3 @@ int ObIOService::reset_calibration()
 
 }
 }
-
-namespace oceanbase { namespace common {
-storage_io::BeginBenchmarkDto ObIOService::begin_benchmark(
-    const storage_io::BenchmarkShapeDto &shape, storage_io::BenchmarkPreparationSlot &preparation,
-    storage_io::BenchmarkRunSlot &run)
-{
-  if (!rust_service_) { return {OB_NOT_INIT, false}; }
-  return (*rust_service_)->benchmark_begin(shape, preparation, run);
-}
-
-void ObIOService::stop_benchmarks()
-{
-  if (rust_service_) { (*rust_service_)->stop_benchmarks(); }
-}
-
-storage_io::BenchmarkStatusDto ObIOService::benchmark_status() const
-{
-  if (!rust_service_) { return {}; }
-  return (*rust_service_)->benchmark_status();
-}
-}}

@@ -123,20 +123,6 @@ cc_library(
     ],
 )
 
-cc_library(
-    name = "benchmark_session_headers",
-    hdrs = ["blocksstable/benchmark_session.h"],
-    deps = [
-        ":storage_runtime_interface",
-        "//rust:storage_io_headers",
-    ],
-    features = ["layering_check"],
-    tags = ["manual"],
-    visibility = [
-        "//src/observer:__pkg__",
-        "//src/storage:__subpackages__",
-    ],
-)
 
 cc_library(
     name = "ls_runtime_adapter_interface",
@@ -379,7 +365,6 @@ _STORAGE_HEADER_NON_SHARE_DEPS = [
 _STORAGE_EXACT_HEADER_DEPS = [
     ":_textual_ob_keybtree",
     ":data_validation_service_internal",
-    ":benchmark_session_headers",
     ":ls_runtime_adapter_interface",
     ":multi_source_data_unit_interface",
     ":storage_meta_object_interface",

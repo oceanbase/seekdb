@@ -44,7 +44,6 @@ impl Wake {
     }
 }
 pub(super) struct Ledger {
-    pub benchmark: BenchmarkMetadata,
     pub health_payload_bytes: usize,
     pub limits: AdmissionLimits,
     pub usage: [ResourceUsage; 2],
@@ -350,68 +349,6 @@ impl Admission {
         };
         self.state = Preparation::Prepared(operation);
         Ok(())
-    }
-    pub(super) fn prepare_benchmark_with(
-        &mut self,
-        target: Target,
-        direction: Direction,
-        allocate: impl FnOnce(usize, usize) -> io::Result<AlignedBuffer>,
-    ) -> io::Result<()> {
-        if !matches!(self.state, Preparation::Reserved) {
-            return Err(invalid("benchmark admission is not reserved"));
-        }
-        self.check_open()?;
-        let options = &self.cell.options;
-        let mut buffer = allocate(options.length, options.alignment)?;
-        if direction == Direction::Write {
-            for (i, byte) in buffer.as_mut_slice().iter_mut().enumerate() {
-                *byte = (i % 251 + 1) as u8;
-            }
-        }
-        self.prepare_buffer(target, direction, buffer)
-    }
-    pub(super) fn publish_benchmark(
-        &mut self,
-        child: benchmark::BenchChild,
-    ) -> Result<RequestId, (io::Error, benchmark::BenchChild)> {
-        let mut gate = self.shared.gate.lock().unwrap();
-        let check = self.cell.check().and_then(|()| {
-            if !gate.accepting || gate.devices.get(&self.cell.options.device) != Some(&true) {
-                Err(io::ErrorKind::BrokenPipe.into())
-            } else if !matches!(self.state, Preparation::Prepared(_)) {
-                Err(invalid("benchmark child is not prepared"))
-            } else {
-                Ok(())
-            }
-        });
-        if let Err(error) = check {
-            return Err((error, child));
-        }
-        let Preparation::Prepared(operation) =
-            std::mem::replace(&mut self.state, Preparation::Published)
-        else {
-            unreachable!()
-        };
-        #[cfg(feature = "ownership-test-support")]
-        let operation = if let Some(hold) = child
-            .proof
-            .as_ref()
-            .and_then(|proof| proof.claim(child.identity().1, self.id().0))
-        {
-            operation.with_benchmark_hold(hold)
-        } else {
-            operation
-        };
-        self.cell.phase.store(PUBLISHED, Ordering::Release);
-        gate.published.push_back(Incoming {
-            operation,
-            cell: Arc::clone(&self.cell),
-            destination: engine::Destination::Benchmark,
-            owner: engine::WorkOwner::Benchmark(child),
-        });
-        drop(gate);
-        self.shared.wake.notify();
-        Ok(self.id())
     }
     #[cfg(feature = "cxx")]
     pub(crate) fn set_worker_fault(&mut self, fault: file_io::WorkerFault) -> io::Result<()> {

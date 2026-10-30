@@ -22,12 +22,10 @@ const QUANTUM: usize = 64;
 pub(super) enum Destination {
     Caller(mpsc::Sender<Completion>),
     Diagnosis,
-    Benchmark,
 }
 pub(super) enum WorkOwner {
     Ordinary,
     Probe(ProbePass),
-    Benchmark(benchmark::BenchChild),
 }
 pub(super) struct Incoming {
     pub owner: WorkOwner,
@@ -68,7 +66,6 @@ impl Drop for ActorLifetime {
         drop(gate);
         drop(waiting);
         self.0.health.close();
-        self.0.benchmark.close();
         self.0.wake.notify();
     }
 }
@@ -206,7 +203,6 @@ pub(super) struct Engine {
     admission_scan_epochs: [u64; 2],
     probe_attempts: u64,
     health: Option<Diagnosis>,
-    pub(super) benchmark: Option<benchmark::BenchmarkJob>,
     #[cfg(test)]
     pub(super) reader_start_failure: Option<usize>,
     #[cfg(test)]
@@ -234,7 +230,6 @@ impl Engine {
             admission_scan_epochs: [0; 2],
             probe_attempts: 0,
             health: None,
-            benchmark: None,
             #[cfg(test)]
             reader_start_failure: None,
             #[cfg(test)]
@@ -268,30 +263,21 @@ impl Engine {
                 busy |= n == 7;
             }
             busy |= self.health_turn(Instant::now());
-            busy |= self.benchmark_turn(Instant::now(), self.stopping);
             busy |= self.dispatch(Instant::now());
             self.reap_devices();
             if self.stopping
                 && !busy
                 && self.active.is_empty()
                 && self.health.is_none()
-                && self.benchmark.is_none()
                 && self.shared.health.closed_and_empty()
             {
-                #[cfg(feature = "ownership-test-support")]
-                let cleanup = self.shared.benchmark.cleanup_proof();
                 let gate = self.shared.gate.lock().unwrap();
-                let ordinary_quiescent = gate.published.is_empty()
+                if gate.published.is_empty()
                     && gate.waiting.iter().all(BTreeMap::is_empty)
-                    && gate.removals.is_empty();
-                let can_exit = ordinary_quiescent && self.shared.benchmark.idle();
-                #[cfg(feature = "ownership-test-support")]
-                if ordinary_quiescent {
-                    if let Some((run, proof)) = cleanup {
-                        proof.observe_shutdown(run, can_exit);
-                    }
+                    && gate.removals.is_empty()
+                {
+                    break;
                 }
-                if can_exit { break; }
             }
             if busy {
                 continue;
@@ -305,10 +291,6 @@ impl Engine {
                 (a, b) => a.or(b),
             };
             let delay = match (delay, self.health_delay(Instant::now())) {
-                (Some(a), Some(b)) => Some(a.min(b)),
-                (a, b) => a.or(b),
-            };
-            let delay = match (delay, self.benchmark_delay(Instant::now())) {
                 (Some(a), Some(b)) => Some(a.min(b)),
                 (a, b) => a.or(b),
             };
@@ -547,7 +529,6 @@ impl Engine {
         if stopping && !self.stopping {
             self.stopping = true;
             self.shared.health.close();
-            self.shared.benchmark.close();
         }
         for incoming in published {
             self.accept(incoming);
@@ -1004,7 +985,7 @@ impl Engine {
             last_cost,
             attempts,
             group,
-            mut owner,
+            owner,
             window,
             ..
         } = active;
@@ -1038,25 +1019,12 @@ impl Engine {
                 }
                 drop(operation);
             }
-            Some(Destination::Benchmark) => {
-                if let WorkOwner::Benchmark(child) = &mut owner {
-                    self.benchmark_outcome(child, &status, Instant::now());
-                }
-                drop(operation);
-            }
             None => drop(operation),
         }
-        let benchmark = match &owner {
-            WorkOwner::Benchmark(child) => Some(child.identity()),
-            _ => None,
-        };
         let probe = matches!(owner, WorkOwner::Probe(_));
         let id = cell.id;
         drop(owner);
         drop(cell);
-        if let Some((run, worker)) = benchmark {
-            self.benchmark_retired(run, worker);
-        }
         if probe {
             if let Some(health) = &mut self.health {
                 health.retired(id);
@@ -1100,24 +1068,8 @@ impl Engine {
                 }
                 drop(operation);
             }
-            Some(Destination::Benchmark) => {
-                if let WorkOwner::Benchmark(child) = &mut active.owner {
-                    self.benchmark_outcome(child, &status, Instant::now());
-                }
-                drop(operation);
-            }
             None => drop(operation),
         }
-    }
-    pub(super) fn discard_benchmark_admission(&mut self, id: RequestId) {
-        let removed = self.shared.gate.lock().unwrap().waiting[RequestClass::Normal.index()]
-            .remove(&id);
-        drop(removed);
-    }
-    pub(super) fn native_enabled(&self, id: DeviceId) -> bool {
-        self.devices
-            .get(&id)
-            .is_some_and(|device| device.lanes.len() > 1)
     }
     fn remove_deadline(&mut self, active: &Active) {
         if let Some(deadline) = active.cell.options.policy.deadline {
@@ -1519,7 +1471,6 @@ impl Engine {
         let ledger = self.shared.ledger.lock().unwrap();
         let backlogged = self.queued.iter().map(|id| self.active[id].group).collect();
         ServiceSnapshot {
-            benchmark: ledger.benchmark.with_limits(gate.config.benchmark),
             health: self.shared.health.snapshot(false, Instant::now()),
             generation: gate.generation,
             config: (*gate.config).clone(),

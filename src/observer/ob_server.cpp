@@ -75,7 +75,6 @@ int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share:
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "storage/multi_data_source/ob_mds_event_buffer.h"
 #include "storage/tmp_file/ob_tmp_file_cache.h"
-#include "storage/blocksstable/benchmark_session.h"
 #include "storage/meta_store/storage_meta_service.h"
 #include "storage/meta_store/ob_local_storage_meta_service.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
@@ -996,7 +995,6 @@ void ObServer::destroy()
   FLOG_INFO("destroy config manager success");
 
   if (!has_destroy_ && has_stopped_) {
-    storage::BenchmarkSession::get_instance().shutdown();
 
     FLOG_INFO("begin to destroy net frame");
     net_frame_.destroy();
@@ -1605,7 +1603,6 @@ int ObServer::stop()
   FLOG_INFO("[OBSERVER_NOTICE] stop observer begin");
   LOG_DBA_INFO_V2(OB_SERVER_STOP_BEGIN, "observer stop begin.");
 
-  storage::BenchmarkSession::get_instance().shutdown();
 
   stop_package_ddl(mods_ddl_service_launcher_, mods_system_package_load_service_);
 
@@ -2120,7 +2117,6 @@ int ObServer::init_io()
       if (OB_FAIL(ObIOManager::get_instance().set_io_config(io_config))) {
       } else {
         if (OB_FAIL(ObIOCalibration::get_instance().init())) {
-        } else if (OB_FAIL(storage::BenchmarkSession::get_instance().bind())) {
         }
 
         storage_env_.data_dir_ = OB_FILE_SYSTEM_ROUTER.get_data_dir();

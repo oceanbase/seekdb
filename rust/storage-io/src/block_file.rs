@@ -670,10 +670,6 @@ impl Inner {
 }
 
 impl BlockRegion {
-    #[cfg(feature = "ownership-test-support")]
-    pub(crate) fn proof_identity(&self) -> (usize, u64, u64) {
-        (Arc::as_ptr(&self.lease) as usize, self.start, self.length)
-    }
 
     #[cfg(any(test, feature = "ownership-test-support"))]
     pub(crate) fn watch_final_lease(&self) -> io::Result<crate::DropWitness> {

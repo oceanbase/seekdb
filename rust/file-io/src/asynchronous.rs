@@ -21,9 +21,6 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread::{self, JoinHandle};
 use std::time::Instant;
 
-#[cfg(feature = "ownership-test-support")]
-pub mod benchmark_hold;
-
 #[cfg(target_os = "linux")]
 pub(crate) mod native;
 #[cfg(test)]
@@ -104,8 +101,6 @@ pub struct Operation {
     offset: u64,
     keep_alive: Option<Box<dyn Send>>,
     worker_fault: Option<WorkerFault>,
-    #[cfg(feature = "ownership-test-support")]
-    benchmark_hold: Option<Arc<benchmark_hold::BenchmarkHold>>,
 }
 
 impl std::fmt::Debug for Operation {
@@ -156,20 +151,12 @@ impl Operation {
             offset,
             keep_alive: None,
             worker_fault: None,
-            #[cfg(feature = "ownership-test-support")]
-            benchmark_hold: None,
         })
     }
 
     /// Moves an additional owner with the physical operation, including through backend failure.
     pub fn keep_alive<T: Send + 'static>(mut self, resource: T) -> Self {
         self.keep_alive = Some(Box::new((self.keep_alive.take(), resource)));
-        self
-    }
-
-    #[cfg(feature = "ownership-test-support")]
-    pub fn with_benchmark_hold(mut self, hold: Arc<benchmark_hold::BenchmarkHold>) -> Self {
-        self.benchmark_hold = Some(hold);
         self
     }
 
@@ -589,10 +576,6 @@ fn worker(
                 .unwrap_or_else(|error| error.into_inner());
         };
         drop(state);
-        #[cfg(feature = "ownership-test-support")]
-        if let Some(hold) = operation.benchmark_hold.take() {
-            hold.before_execute();
-        }
         let result = execute(&mut operation);
         shared.complete(id, operation, result);
     }

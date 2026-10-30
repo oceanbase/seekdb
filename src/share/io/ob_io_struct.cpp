@@ -386,14 +386,6 @@ void ObDeviceChannel::destroy()
   device_handle_ = nullptr;
 }
 
-int ObDeviceChannel::add_benchmark_target(const ObIOFd &fd,
-    storage_io::BenchmarkPreparationSlot &preparation, int64_t length)
-{
-  if (!is_inited_ || stopping_.load()) { return OB_NOT_INIT; }
-  if (fd.device_handle_ != device_handle_) { return OB_INVALID_ARGUMENT; }
-  return static_cast<share::ObLocalDevice *>(device_handle_)->add_benchmark_target(
-      fd, device_id_, length, preparation);
-}
 
 int ObDeviceChannel::begin(ObIORequest &req)
 {

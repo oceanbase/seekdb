@@ -36,10 +36,6 @@ pub struct DropWitness {
 }
 
 impl DropWitness {
-    #[cfg(feature = "ownership-test-support")]
-    pub(crate) fn facts(&self) -> std::sync::MutexGuard<'_, Facts> {
-        self.state.facts.lock().unwrap()
-    }
 
     pub fn entered(&self) -> bool {
         self.state.facts.lock().unwrap().entered

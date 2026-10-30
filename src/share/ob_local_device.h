@@ -103,8 +103,6 @@ public:
 
   int attach_named_owner(const storage_io::NamedOwnerHandle &owner);
   int bind_request_target(const common::ObIOFd &fd, storage_io::RequestSlot &request, storage_io::RequestLifetime &lifetime);
-  int add_benchmark_target(const common::ObIOFd &fd, uint64_t device, int64_t length,
-      storage_io::BenchmarkPreparationSlot &preparation);
   int64_t get_block_size() const { return block_size_; }
 
   // space management interface

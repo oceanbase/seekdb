@@ -145,7 +145,6 @@ _OBSERVER_NATIVE_DEPS = [
     "//src/sql:sql_runtime_interface",
     "//src/storage:_textual_ob_keybtree",
     "//src/storage:data_validation_service_internal",
-    "//src/storage:benchmark_session_headers",
     "//src/storage:ls_runtime_adapter_interface",
     "//src/storage:log_storage_adapter_internal",
     "//src/storage:storage_runtime_internal_headers",

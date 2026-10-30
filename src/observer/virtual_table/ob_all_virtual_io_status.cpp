@@ -15,7 +15,6 @@
  */
 
 #define USING_LOG_PREFIX SERVER
-#include "storage/blocksstable/benchmark_session.h"
 #include "observer/virtual_table/ob_all_virtual_io_status.h"
 #include "src/share/ob_server_struct.h"
 #include "share/io/ob_io_manager.h"
@@ -108,7 +107,6 @@ int ObAllVirtualIOCalibrationStatus::init(const common::ObAddr &addr)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_addr(addr))) {
-  } else if (OB_FAIL(storage::BenchmarkSession::get_instance().status(start_ts_, finish_ts_, ret_code_))) {
   } else {
     is_inited_ = true;
   }

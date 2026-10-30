@@ -14,8 +14,6 @@
 
 mod allocation;
 mod asynchronous;
-#[cfg(feature = "ownership-test-support")]
-pub use asynchronous::benchmark_hold::BenchmarkHold;
 #[cfg(feature = "cxx")]
 pub mod bridge;
 mod buffer;
@@ -49,9 +47,9 @@ pub use durability::{
     UnconfirmedDirectorySync,
 };
 pub use filesystem::{
-    canonical_existing, create_dir, create_dir_all, create_new_read_write, exists, lexical_absolute,
-    metadata, open_read_write, publish_file, remove_dir, remove_file, rename, symlink_file,
-    symlink_metadata, truncate_path,
+    canonical_existing, create_dir, create_dir_all, create_new_read_write, exists,
+    lexical_absolute, metadata, open_read_write, publish_file, remove_dir, remove_file, rename,
+    symlink_file, symlink_metadata, truncate_path,
 };
 pub use identity::FileIdentity;
 pub use ownership::{close_file, ExclusiveFile};

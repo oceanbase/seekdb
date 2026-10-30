@@ -30,18 +30,14 @@ pub use block_file::{
     UnmarkedBlockFile,
 };
 pub use header::{encode_block_header, validate_block_header, HEADER_PAGE_SIZE};
-pub use service::benchmark;
 pub use service::{
-    AdmissionLimits, BeginBenchmark, BenchmarkError, BenchmarkLimits, BenchmarkMetadata,
-    BenchmarkPreparation, BenchmarkReport, BenchmarkRun, BenchmarkShape, BenchmarkStatus,
-    BenchmarkTarget, CancelOutcome, CheckedWorkloads, Completion, CompletionRequirement,
-    CompletionStatus, Config, ConfigError, ConfigReceipt, DepthCost, DeviceConfig, DeviceId,
-    DeviceLimits, DeviceSnapshot, ExcessShare, Execution, FinalFacts, FinalObserver, Generation,
-    GroupId, GroupLimits, GroupSnapshot, HealthConfig, HealthSnapshot, NativeFinalPolicy,
-    ObservationCounters, ObservationOutcome, ObservationReceipt, OperationPolicy, Rate,
-    RequestClass, RequestControl, RequestId, RequestLifetime, RequestPolicy, RequestSpec,
-    ResourceUsage, SamplePolicy, Service, ServiceSnapshot, Target, WaitPolicy, Waiter, Workload,
-    WorkloadMeasurement, HEALTH_ACTIVE_CAPACITY, HEALTH_QUEUE_CAPACITY,
+    AdmissionLimits, CancelOutcome, Completion, CompletionRequirement, CompletionStatus, Config,
+    ConfigError, ConfigReceipt, DepthCost, DeviceConfig, DeviceId, DeviceLimits, DeviceSnapshot,
+    ExcessShare, Execution, FinalFacts, FinalObserver, Generation, GroupId, GroupLimits,
+    GroupSnapshot, HealthConfig, HealthSnapshot, ObservationCounters, ObservationOutcome,
+    ObservationReceipt, Rate, RequestClass, RequestControl, RequestId, RequestLifetime,
+    RequestPolicy, RequestSpec, ResourceUsage, Service, ServiceSnapshot, Target, Waiter,
+    HEALTH_ACTIVE_CAPACITY, HEALTH_QUEUE_CAPACITY,
 };
 
 use std::collections::TryReserveError;

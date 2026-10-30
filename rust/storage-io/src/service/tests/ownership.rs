@@ -421,7 +421,7 @@ fn named_timeout_and_completion_lifetime_retain_unlinked_charge() {
 }
 
 #[test]
-fn named_health_probe_and_benchmark_hold_the_exact_lease() {
+fn named_health_probe_holds_the_exact_lease() {
     let directory = Directory::new();
     let parent = Arc::new(
         file_io::Directory::open_with(
@@ -464,35 +464,11 @@ fn named_health_probe_and_benchmark_hold_the_exact_lease() {
         chunk: 512,
     };
     let operation = probe.operation().unwrap();
-    let benchmark = BenchmarkTarget::new(
-        Target::Named {
-            file: binding.clone(),
-            offset: 512,
-        },
-        DEVICE,
-        Execution::PreferNative,
-        512,
-        512,
-    )
-    .unwrap();
-    assert!(BenchmarkTarget::new(
-        Target::Named {
-            file: binding.clone(),
-            offset: 4096
-        },
-        DEVICE,
-        Execution::PreferNative,
-        512,
-        512
-    )
-    .is_err());
     owner.remove(parent, name()).unwrap();
     drop((binding, probe, lifetime, admission));
     engine.drain_gate();
     engine.grant_admission();
     assert_eq!(owner.snapshot().charged, 4096);
     drop(operation);
-    assert_eq!(owner.snapshot().charged, 4096);
-    drop(benchmark);
     assert_eq!(owner.snapshot().charged, 0);
 }

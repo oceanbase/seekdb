@@ -122,7 +122,6 @@ fn config(input: &ffi::ResourceConfig) -> io::Result<Config> {
         }
     }
     Ok(Config {
-        benchmark: crate::BenchmarkLimits::default(),
         health: HealthConfig {
             warning_tolerance: Duration::from_micros(input.health_warning_tolerance_us),
             blacklist_interval: Duration::from_micros(input.health_blacklist_interval_us),
@@ -315,19 +314,6 @@ impl ServiceHandle {
         status((|| {
             let value = self.service()?.snapshot()?;
             *stats = ffi::ServiceStats {
-                benchmark: ffi::BenchmarkMetadataDto {
-                    targets: value.benchmark.targets,
-                    workloads: value.benchmark.workloads,
-                    workers: value.benchmark.workers,
-                    target_limit: value.config.benchmark.targets,
-                    workload_limit: value.config.benchmark.workloads,
-                    worker_limit: value.config.benchmark.workers,
-                    target_debt: value.benchmark.target_debt,
-                    workload_debt: value.benchmark.workload_debt,
-                    worker_debt: value.benchmark.worker_debt,
-                    run_reserved: value.benchmark.run_reserved,
-                    owned_payload_bytes: value.benchmark.owned_payload_bytes,
-                },
                 generation: value.generation.get(),
                 probe_attempts: value.probe_attempts,
                 admission_debt: value.debt.iter().any(|d| d.records != 0 || d.bytes != 0),

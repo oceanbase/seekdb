@@ -783,22 +783,6 @@ int ObLocalDevice::write(
 }
 
 
-int ObLocalDevice::add_benchmark_target(const ObIOFd &fd, uint64_t device, int64_t length,
-    storage_io::BenchmarkPreparationSlot &preparation)
-{
-  std::shared_lock<std::shared_mutex> guard(file_session_lock_);
-  if (!is_inited_) { return OB_NOT_INIT; }
-  if (length <= 0) { return OB_INVALID_ARGUMENT; }
-  if (fd.is_normal_file()) {
-    if (fd.device_handle_ != nullptr && fd.device_handle_ != this) return OB_INVALID_ARGUMENT;
-    return named_->named_enabled()
-        ? storage_io::benchmark_add_named(preparation, *named_, device, fd.second_id_, 0, length, DIO_READ_ALIGN_SIZE)
-        : storage_io::benchmark_add_file(preparation, *files_, device, fd.second_id_, 0, length, DIO_READ_ALIGN_SIZE);
-  }
-  if (!fd.is_valid() || fd.second_id_ < RESERVED_BLOCK_INDEX
-      || (fd.device_handle_ != nullptr && fd.device_handle_ != this)) { return OB_INVALID_ARGUMENT; }
-  return storage_io::benchmark_add_block(preparation, *blocks_, device, fd.second_id_, 0, length, DIO_READ_ALIGN_SIZE);
-}
 
 int ObLocalDevice::attach_named_owner(const storage_io::NamedOwnerHandle &owner)
 {

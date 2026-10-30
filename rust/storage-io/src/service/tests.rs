@@ -19,7 +19,6 @@ use file_io::{BackendKind, Retired, SubmissionId};
 use std::fs::{self, OpenOptions};
 use std::path::PathBuf;
 use std::sync::Barrier;
-mod benchmark;
 mod health;
 mod ownership;
 mod registration;
@@ -62,7 +61,6 @@ fn deadline() -> Instant {
 fn config() -> Config {
     Config {
         health: crate::HealthConfig::default(),
-        benchmark: BenchmarkLimits::default(),
         admission: AdmissionLimits {
             max_records: 32,
             max_bytes: 8 * 1024 * 1024,
@@ -138,10 +136,8 @@ fn engine_with(config: Config) -> Engine {
         limits: config.effective_admission(),
         usage: [ResourceUsage::default(); 2],
         health_payload_bytes: 0,
-        benchmark: BenchmarkMetadata::default(),
     }));
     let shared = Arc::new(Shared {
-        benchmark: Arc::new(BenchmarkIngress::new(Arc::clone(&wake))),
         health: Arc::new(
             HealthIngress::new(
                 Arc::clone(&wake),

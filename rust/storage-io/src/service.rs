@@ -25,14 +25,6 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 mod admission;
-pub mod benchmark;
-use benchmark::BenchmarkIngress;
-pub use benchmark::{
-    BeginBenchmark, BenchmarkError, BenchmarkLimits, BenchmarkMetadata, BenchmarkPreparation,
-    BenchmarkReport, BenchmarkRun, BenchmarkShape, BenchmarkStatus, BenchmarkTarget,
-    CheckedWorkloads, NativeFinalPolicy, OperationPolicy, SamplePolicy, WaitPolicy, Workload,
-    WorkloadMeasurement,
-};
 mod engine;
 pub(crate) mod health;
 mod scheduler;
@@ -254,7 +246,6 @@ impl Default for GroupLimits {
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Config {
-    pub benchmark: BenchmarkLimits,
     pub health: HealthConfig,
     pub admission: AdmissionLimits,
     pub devices: BTreeMap<DeviceId, DeviceLimits>,
@@ -272,7 +263,6 @@ impl Config {
     }
     fn validate(&self) -> io::Result<()> {
         self.health.validate()?;
-        self.benchmark.validate()?;
         let a = self.effective_admission();
         if a.probe_records == 0
             || a.probe_records >= a.max_records
@@ -337,7 +327,6 @@ pub struct GroupSnapshot {
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ServiceSnapshot {
-    pub benchmark: BenchmarkMetadata,
     pub health: HealthSnapshot,
     pub generation: Generation,
     pub config: Config,
@@ -471,7 +460,6 @@ struct Gate {
     published: VecDeque<Incoming>,
 }
 struct Shared {
-    benchmark: Arc<BenchmarkIngress>,
     health: Arc<HealthIngress>,
     calibration: Arc<crate::calibration::Calibration>,
     gate: Mutex<Gate>,
@@ -498,7 +486,6 @@ impl Service {
             limits: config.effective_admission(),
             usage: [ResourceUsage::default(); 2],
             health_payload_bytes: 0,
-            benchmark: BenchmarkMetadata::default(),
         }));
         let health = Arc::new(HealthIngress::new(
             Arc::clone(&wake),
@@ -506,7 +493,6 @@ impl Service {
             config.health,
         )?);
         let shared = Arc::new(Shared {
-            benchmark: Arc::new(BenchmarkIngress::new(Arc::clone(&wake))),
             health,
             calibration: Arc::new(crate::calibration::Calibration::default()),
             ledger,
@@ -693,7 +679,6 @@ impl Service {
     pub fn stop(&self) {
         self.shared.gate.lock().unwrap().accepting = false;
         self.shared.health.close();
-        self.shared.benchmark.close();
         self.shared.wake.notify();
     }
     pub fn shutdown(mut self) -> io::Result<()> {

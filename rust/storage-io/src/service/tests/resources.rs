@@ -601,10 +601,8 @@ fn full_management_queue_cannot_block_retirement_cancellation_or_stop() {
         limits: config.effective_admission(),
         usage: [ResourceUsage::default(); 2],
         health_payload_bytes: 0,
-        benchmark: BenchmarkMetadata::default(),
     }));
     let shared = Arc::new(Shared {
-        benchmark: Arc::new(BenchmarkIngress::new(Arc::clone(&wake))),
         health: Arc::new(
             HealthIngress::new(
                 Arc::clone(&wake),
@@ -896,8 +894,7 @@ fn smaller_admission_cannot_bypass_an_older_blocked_head() {
     config.admission.max_bytes = config.admission.probe_bytes + 8;
     let mut engine = engine_with(config);
     let held = core_prepare(&mut engine, spec(&file, 4), Direction::Read, &[]);
-    let mut head =
-        Admission::begin(Arc::clone(&engine.shared), spec(&file, 8).split().0).unwrap();
+    let mut head = Admission::begin(Arc::clone(&engine.shared), spec(&file, 8).split().0).unwrap();
     engine.drain_gate();
     engine.grant_admission();
     assert!(!head.ready().unwrap());

@@ -83,7 +83,6 @@ public:
       const int64_t max_io_depth);
   int remove_device_channel(ObIODevice *device_handle);
   int begin_request(ObIORequest &req, std::shared_ptr<ObDeviceChannel> &device_channel);
-  int benchmark_device(ObIODevice *device, std::shared_ptr<ObDeviceChannel> &channel);
 
   int refresh_io_service_config(const ObIOServiceConfig &replacement, uint64_t expected_generation,
       struct ResourceConfigReceipt &receipt);
@@ -184,10 +183,6 @@ public:
   rust::Box<storage_io::CalibrationView> calibration_snapshot() const;
   int replace_calibration(rust::Slice<const storage_io::CalibrationSample> samples);
   int reset_calibration();
-  storage_io::BeginBenchmarkDto begin_benchmark(const storage_io::BenchmarkShapeDto &shape,
-      storage_io::BenchmarkPreparationSlot &preparation, storage_io::BenchmarkRunSlot &run);
-  storage_io::BenchmarkStatusDto benchmark_status() const;
-  void stop_benchmarks();
   int try_alloc_req_until_timeout(const int64_t timeout_ts, ObIORequest *&req);
   int try_alloc_result_until_timeout(const int64_t timeout_ts, ObIOResult *&result);
   int alloc_io_request(ObIORequest *&req);

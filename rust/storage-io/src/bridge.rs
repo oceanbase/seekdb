@@ -17,16 +17,13 @@ mod named;
 use named::{
     bind_named_target, new_named_bindings, new_named_owner, NamedBindings, NamedOwnerHandle,
 };
-mod benchmark;
 mod blocks;
-use benchmark::{
-    benchmark_add_block, benchmark_add_file, benchmark_add_named, new_benchmark_preparation_slot,
-    new_benchmark_run_slot, production_benchmark_plan, BenchmarkPreparationSlot, BenchmarkRunSlot,
-};
 mod calibration;
 use calibration::{calibration_integer, calibration_mbps, empty_calibration_view, CalibrationView};
 mod statistics;
-use statistics::{new_statistics_handle, new_statistics_snapshot, StatisticsHandle, StatisticsSnapshot};
+use statistics::{
+    new_statistics_handle, new_statistics_snapshot, StatisticsHandle, StatisticsSnapshot,
+};
 mod requests;
 use blocks::{bind_block_target, new_block_owner, read_block, write_block, BlockOwner};
 use file_io::toggle_worker_fault_delay;
@@ -76,45 +73,6 @@ mod ffi {
         total_us: i64,
     }
 
-    struct BenchmarkShapeDto {
-        targets: usize,
-        workloads: usize,
-        workers: usize,
-    }
-    struct BenchmarkWorkloadDto {
-        mode: i32,
-        size: usize,
-        duration_us: u64,
-    }
-    struct BenchmarkPlanDto {
-        workloads: Vec<BenchmarkWorkloadDto>,
-        timeout_us: u64,
-        live_wait_cap: bool,
-        observe_reads: bool,
-        full_buffer: bool,
-        integer_sample_seconds: u64,
-        production: bool,
-    }
-    struct BeginBenchmarkDto {
-        error: i32,
-        preparing: bool,
-    }
-    struct BenchmarkMeasurementDto {
-        mode: u8,
-        size: usize,
-        elapsed_us: u64,
-        successful_count: u64,
-        successful_latency_us: u64,
-    }
-    struct BenchmarkStatusDto {
-        state: u8,
-        started_wall_us: i64,
-        finished_wall_us: i64,
-        ret_code: i32,
-        workload: usize,
-        completed: usize,
-        elapsed_us: u64,
-    }
     struct CalibrationSample {
         mode: i32,
         size: i64,
@@ -345,24 +303,7 @@ mod ffi {
         device_blocked: bool,
     }
 
-    struct BenchmarkMetadataDto {
-        targets: usize,
-        workloads: usize,
-        workers: usize,
-        target_limit: usize,
-        workload_limit: usize,
-        worker_limit: usize,
-        target_debt: usize,
-        workload_debt: usize,
-        worker_debt: usize,
-        run_reserved: bool,
-        /// Reserved typed payload and actual backing capacity. Shared allowances may overlap.
-        /// Excludes opaque allocation headers, allocator overhead, retained database owners
-        /// and separately charged I/O buffers. This is not heap usage or RSS.
-        owned_payload_bytes: usize,
-    }
     struct ServiceStats {
-        benchmark: BenchmarkMetadataDto,
         generation: u64,
         probe_attempts: u64,
         admission_debt: bool,
@@ -505,15 +446,6 @@ mod ffi {
             slot: &mut RequestSlot,
             lifetime: &mut RequestLifetime,
         ) -> i32;
-        fn benchmark_add_named(
-            preparation: &mut BenchmarkPreparationSlot,
-            bindings: &NamedBindings,
-            device: u64,
-            token: u64,
-            start: u64,
-            length: usize,
-            alignment: usize,
-        ) -> i32;
         type BlockOwner;
         fn new_block_owner() -> Box<BlockOwner>;
         fn open_blocks(self: &BlockOwner, path: &[u8], options: &BlockOptions) -> BlockOpenResult;
@@ -534,58 +466,6 @@ mod ffi {
             slot: &mut RequestSlot,
             lifetime: &mut RequestLifetime,
         ) -> i32;
-
-        type BenchmarkPreparationSlot;
-        type BenchmarkRunSlot;
-        fn new_benchmark_preparation_slot() -> Box<BenchmarkPreparationSlot>;
-        fn new_benchmark_run_slot() -> Box<BenchmarkRunSlot>;
-        fn production_benchmark_plan() -> BenchmarkPlanDto;
-        fn benchmark_begin(
-            self: &ServiceHandle,
-            shape: BenchmarkShapeDto,
-            preparation: &mut BenchmarkPreparationSlot,
-            run: &mut BenchmarkRunSlot,
-        ) -> BeginBenchmarkDto;
-        fn stop_benchmarks(self: &ServiceHandle);
-        fn benchmark_status(self: &ServiceHandle) -> BenchmarkStatusDto;
-        fn benchmark_add_block(
-            preparation: &mut BenchmarkPreparationSlot,
-            owner: &BlockOwner,
-            device: u64,
-            index: u64,
-            start: u64,
-            length: usize,
-            alignment: usize,
-        ) -> i32;
-        fn benchmark_add_file(
-            preparation: &mut BenchmarkPreparationSlot,
-            files: &FileRegistry,
-            device: u64,
-            file: u64,
-            start: u64,
-            length: usize,
-            alignment: usize,
-        ) -> i32;
-        fn benchmark_commit(
-            self: &mut BenchmarkPreparationSlot,
-            plan: &BenchmarkPlanDto,
-            run: &mut BenchmarkRunSlot,
-        ) -> i32;
-        fn benchmark_discard_targets(self: &mut BenchmarkPreparationSlot);
-        fn benchmark_abort(
-            self: &mut BenchmarkPreparationSlot,
-            error: i32,
-            run: &mut BenchmarkRunSlot,
-        ) -> i32;
-        fn benchmark_run_status(self: &BenchmarkRunSlot) -> BenchmarkStatusDto;
-        fn benchmark_measurement_count(self: &BenchmarkRunSlot) -> usize;
-        fn benchmark_measurement(
-            self: &BenchmarkRunSlot,
-            index: usize,
-            output: &mut BenchmarkMeasurementDto,
-        ) -> bool;
-        fn benchmark_stop(self: &BenchmarkRunSlot);
-        fn benchmark_wait_retired(self: &BenchmarkRunSlot) -> BenchmarkStatusDto;
 
         type CalibrationView;
         fn empty_calibration_view() -> Box<CalibrationView>;

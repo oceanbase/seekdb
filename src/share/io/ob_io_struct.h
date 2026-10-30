@@ -168,8 +168,6 @@ public:
   void destroy();
   void stop() override;
   uint64_t device_id() const { return device_id_; }
-  int add_benchmark_target(const ObIOFd &fd, storage_io::BenchmarkPreparationSlot &preparation,
-      int64_t length = OB_DEFAULT_MACRO_BLOCK_SIZE);
   int begin(ObIORequest &req);
   int prepare_reserved(ObIORequest &req);
   int register_pending(ObIORequest &req);
