@@ -4122,6 +4122,10 @@ int ObOptSelectivity::calc_expr_min_max(const OptTableMetas &table_metas,
         }
       }
     }
+  } else if (T_OP_ADD == expr->get_expr_type() || T_OP_MINUS == expr->get_expr_type() ||
+             T_OP_MUL == expr->get_expr_type() || T_OP_DIV == expr->get_expr_type()) {
+    if (OB_FAIL(calc_arith_expr_min_max(table_metas, ctx, expr, min_value, max_value))) {
+    }
   }
   if (OB_SUCC(ret)) {
     int cmp_result = 0;
@@ -4137,6 +4141,110 @@ int ObOptSelectivity::calc_expr_min_max(const OptTableMetas &table_metas,
                min_value.is_null() || max_value.is_null()) {
       min_value.set_min_value();
       max_value.set_max_value();
+    }
+  }
+  return ret;
+}
+
+/*
+ * var + c, var - c, c - var, var * c and var / c are monotonic in var for numeric types,
+ * so their bounds follow from the bounds of var. This lets predicates such as
+ * `age + 2 > 12` use the statistics of `age` instead of a default selectivity.
+ * c / var is skipped because it is not monotonic when var crosses zero,
+ * and var * 0 is skipped because it collapses every value of var into one.
+ */
+int ObOptSelectivity::calc_arith_expr_min_max(const OptTableMetas &table_metas,
+                                              const OptSelectivityCtx &ctx,
+                                              const ObRawExpr *expr,
+                                              ObObj &min_value,
+                                              ObObj &max_value)
+{
+  int ret = OB_SUCCESS;
+  const ObRawExpr *var_expr = NULL;
+  const ObRawExpr *const_expr = NULL;
+  bool is_const_left = false;
+  bool got_const = false;
+  double const_value = 0.0;
+  ObObj var_min;
+  ObObj var_max;
+  double var_min_scalar = 0.0;
+  double var_max_scalar = 0.0;
+  min_value.set_min_value();
+  max_value.set_max_value();
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (2 != expr->get_param_count() ||
+             OB_ISNULL(expr->get_param_expr(0)) ||
+             OB_ISNULL(expr->get_param_expr(1)) ||
+             !ob_is_numeric_type(expr->get_data_type()) ||
+             ObBitType == expr->get_data_type()) {
+    // do nothing
+  } else if (expr->get_param_expr(1)->is_static_scalar_const_expr()) {
+    var_expr = expr->get_param_expr(0);
+    const_expr = expr->get_param_expr(1);
+  } else if (expr->get_param_expr(0)->is_static_scalar_const_expr() &&
+             T_OP_DIV != expr->get_expr_type()) {
+    var_expr = expr->get_param_expr(1);
+    const_expr = expr->get_param_expr(0);
+    is_const_left = true;
+  }
+  if (OB_FAIL(ret) || NULL == var_expr) {
+  } else if (!ob_is_numeric_type(var_expr->get_data_type()) ||
+             ObBitType == var_expr->get_data_type()) {
+    // do nothing
+  } else if (OB_FAIL(calc_const_numeric_value(ctx, const_expr, const_value, got_const))) {
+  } else if (!got_const) {
+    // do nothing
+  } else if (OB_FAIL(SMART_CALL(calc_expr_min_max(table_metas, ctx, var_expr, var_min, var_max)))) {
+  } else if (var_min.is_min_value() || var_min.is_max_value() || var_min.is_null() ||
+             var_max.is_min_value() || var_max.is_max_value() || var_max.is_null() ||
+             !ob_is_numeric_type(var_min.get_type()) || ObBitType == var_min.get_type() ||
+             !ob_is_numeric_type(var_max.get_type()) || ObBitType == var_max.get_type()) {
+    // do nothing
+  } else if (OB_FAIL(ObOptEstObjToScalar::convert_obj_to_double(&var_min, var_min_scalar)) ||
+             OB_FAIL(ObOptEstObjToScalar::convert_obj_to_double(&var_max, var_max_scalar))) {
+  } else {
+    bool is_valid = true;
+    double lower = 0.0;
+    double upper = 0.0;
+    switch (expr->get_expr_type()) {
+      case T_OP_ADD:
+        lower = var_min_scalar + const_value;
+        upper = var_max_scalar + const_value;
+        break;
+      case T_OP_MINUS:
+        lower = is_const_left ? const_value - var_max_scalar : var_min_scalar - const_value;
+        upper = is_const_left ? const_value - var_min_scalar : var_max_scalar - const_value;
+        break;
+      case T_OP_MUL:
+        is_valid = 0.0 != const_value;
+        lower = var_min_scalar * const_value;
+        upper = var_max_scalar * const_value;
+        break;
+      case T_OP_DIV:
+        is_valid = 0.0 != const_value;
+        lower = var_min_scalar / const_value;
+        upper = var_max_scalar / const_value;
+        break;
+      default:
+        is_valid = false;
+        break;
+    }
+    if (lower > upper) {
+      std::swap(lower, upper);
+    }
+    if (!is_valid || !std::isfinite(lower) || !std::isfinite(upper)) {
+      // do nothing
+    } else {
+      min_value.set_double(lower);
+      max_value.set_double(upper);
+      if (OB_FAIL(convert_obj_to_expr_type(ctx, expr, CM_NONE, min_value)) ||
+          OB_FAIL(convert_obj_to_expr_type(ctx, expr, CM_NONE, max_value))) {
+        // e.g. a negative bound of an unsigned result, fall back to unknown bounds
+        ret = OB_SUCCESS;
+        min_value.set_min_value();
+        max_value.set_max_value();
+      }
     }
   }
   return ret;
