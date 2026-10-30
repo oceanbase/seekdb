@@ -225,7 +225,7 @@ pub(crate) struct EventLoop {
     pub(crate) retired: HashMap<Token, Arc<Conn>>,
 }
 
-const MAX_TRANSIENT_TCP_ACCEPT_ERRORS: usize = 64;
+const MAX_TRANSIENT_TCP_ACCEPT_ERRORS: u32 = 64;
 const ACCEPT_ERROR_KIND_OTHER: i32 = 0;
 const ACCEPT_ERROR_KIND_NOT_FOUND: i32 = 1;
 const ACCEPT_ERROR_KIND_PERMISSION_DENIED: i32 = 2;
