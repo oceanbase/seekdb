@@ -16,6 +16,9 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/dml/ob_update_resolver.h"
+#include "sql/resolver/expr/ob_raw_expr_util.h"
+#include "sql/engine/expr/ob_expr_ai/ob_ai_column_utils.h"
+#include "lib/allocator/page_arena.h"
 
 namespace oceanbase
 {
@@ -331,6 +334,152 @@ int ObUpdateResolver::resolve_table_list(const ParseNode &parse_tree)
   return ret;
 }
 
+int ObUpdateResolver::add_ai_column_invalidation_assignments(
+    const ObTableSchema &table_schema,
+    const TableItem &table_item,
+    ObIArray<ObAssignment> &assignments)
+{
+  int ret = OB_SUCCESS;
+  ObArenaAllocator allocator("AiUpdateSpec");
+  ObSEArray<ObAiColumnSpec, 4> specs;
+  if (OB_FAIL(ObAiColumnUtils::load_table_ai_columns(table_schema, allocator, specs))) {
+    if (is_inner_table(table_schema.get_table_id())) {
+      // System tables are updated during bootstrap before the runtime schema
+      // is ready; they never have AI columns.
+      ret = OB_SUCCESS;
+    } else {
+      LOG_WARN("failed to load ai column definition", K(ret));
+    }
+  } else if (specs.empty()) {
+  } else {
+    bool pk_changed = false;
+    for (int64_t i = 0; !pk_changed && i < assignments.count(); ++i) {
+      const ObColumnSchemaV2 *column = NULL;
+      if (OB_NOT_NULL(assignments.at(i).column_expr_)) {
+        column = table_schema.get_column_schema(
+            assignments.at(i).column_expr_->get_column_id());
+        pk_changed = OB_NOT_NULL(column) && column->is_rowkey_column();
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < specs.count(); ++i) {
+      const ObAiColumnSpec &spec = specs.at(i);
+      bool affected = pk_changed;
+      for (int64_t j = 0; !affected && j < assignments.count(); ++j) {
+        const uint64_t cid = OB_NOT_NULL(assignments.at(j).column_expr_)
+            ? assignments.at(j).column_expr_->get_column_id() : OB_INVALID_ID;
+        for (int64_t k = 0; !affected && k < spec.dependency_column_ids_.count(); ++k) {
+          affected = cid == spec.dependency_column_ids_.at(k);
+        }
+      }
+      if (!affected) {
+        continue;
+      }
+      // result column = NULL
+      bool result_assigned = false;
+      for (int64_t j = 0; !result_assigned && j < assignments.count(); ++j) {
+        result_assigned = OB_NOT_NULL(assignments.at(j).column_expr_)
+            && assignments.at(j).column_expr_->get_column_id() == spec.result_column_id_;
+      }
+      if (OB_SUCC(ret) && !result_assigned) {
+        ObColumnRefRawExpr *column_expr = NULL;
+        ObConstRawExpr *value_expr = NULL;
+        const ObColumnSchemaV2 *column =
+            table_schema.get_column_schema(spec.result_column_id_);
+        ObObj value;
+        value.set_null();
+        if (OB_ISNULL(column)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(ObRawExprUtils::build_column_expr(
+                       *params_.expr_factory_, *column, session_info_, column_expr))) {
+        } else if (OB_FAIL(ObRawExprUtils::build_const_obj_expr(
+                       *params_.expr_factory_, value, value_expr))) {
+        } else {
+          column_expr->set_column_attr(table_item.get_table_name(),
+                                       column->get_column_name_str());
+          column_expr->set_database_name(table_item.database_name_);
+          column_expr->set_ref_id(table_item.table_id_, column->get_column_id());
+          ColumnItem *column_item_ptr = get_update_stmt()->get_column_item_by_id(
+              table_item.table_id_, column->get_column_id());
+          if (NULL == column_item_ptr) {
+            ColumnItem column_item;
+            column_item.table_id_ = table_item.table_id_;
+            column_item.column_id_ = column->get_column_id();
+            column_item.base_tid_ = table_item.ref_id_;
+            column_item.base_cid_ = column->get_column_id();
+            column_item.column_name_ = column->get_column_name_str();
+            column_item.expr_ = column_expr;
+            if (OB_FAIL(get_update_stmt()->add_column_item(column_item))) {
+            } else {
+              column_item_ptr = get_update_stmt()->get_column_item_by_id(
+                  table_item.table_id_, column->get_column_id());
+            }
+          }
+          if (OB_SUCC(ret) && OB_NOT_NULL(column_item_ptr)) {
+            column_expr = column_item_ptr->expr_;
+          }
+          ObAssignment assignment;
+          assignment.column_expr_ = column_expr;
+          assignment.expr_ = value_expr;
+          assignment.is_implicit_ = true;
+          if (OB_SUCC(ret) && OB_FAIL(assignments.push_back(assignment))) {
+          }
+        }
+      }
+      // hidden state column = PENDING
+      bool state_assigned = false;
+      for (int64_t j = 0; !state_assigned && j < assignments.count(); ++j) {
+        state_assigned = OB_NOT_NULL(assignments.at(j).column_expr_)
+            && assignments.at(j).column_expr_->get_column_id() == spec.state_column_id_;
+      }
+      if (OB_SUCC(ret) && !state_assigned) {        ObColumnRefRawExpr *column_expr = NULL;
+        ObConstRawExpr *value_expr = NULL;
+        const ObColumnSchemaV2 *column =
+            table_schema.get_column_schema(spec.state_column_id_);
+        ObObj value;
+        value.set_int(0);
+        if (OB_ISNULL(column)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(ObRawExprUtils::build_column_expr(
+                       *params_.expr_factory_, *column, session_info_, column_expr))) {
+        } else if (OB_FAIL(ObRawExprUtils::build_const_obj_expr(
+                       *params_.expr_factory_, value, value_expr))) {
+        } else {
+          column_expr->set_column_attr(table_item.get_table_name(),
+                                       column->get_column_name_str());
+          column_expr->set_database_name(table_item.database_name_);
+          column_expr->set_ref_id(table_item.table_id_, column->get_column_id());
+          ColumnItem *column_item_ptr = get_update_stmt()->get_column_item_by_id(
+              table_item.table_id_, column->get_column_id());
+          if (NULL == column_item_ptr) {
+            ColumnItem column_item;
+            column_item.table_id_ = table_item.table_id_;
+            column_item.column_id_ = column->get_column_id();
+            column_item.base_tid_ = table_item.ref_id_;
+            column_item.base_cid_ = column->get_column_id();
+            column_item.column_name_ = column->get_column_name_str();
+            column_item.expr_ = column_expr;
+            if (OB_FAIL(get_update_stmt()->add_column_item(column_item))) {
+            } else {
+              column_item_ptr = get_update_stmt()->get_column_item_by_id(
+                  table_item.table_id_, column->get_column_id());
+            }
+          }
+          if (OB_SUCC(ret) && OB_NOT_NULL(column_item_ptr)) {
+            column_expr = column_item_ptr->expr_;
+          }
+          ObAssignment assignment;
+          assignment.column_expr_ = column_expr;
+          assignment.expr_ = value_expr;
+          assignment.is_implicit_ = true;
+          if (OB_SUCC(ret) && OB_FAIL(assignments.push_back(assignment))) {
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 int ObUpdateResolver::generate_update_table_info(ObTableAssignment &table_assign)
 {
   int ret = OB_SUCCESS;
@@ -359,7 +508,9 @@ int ObUpdateResolver::generate_update_table_info(ObTableAssignment &table_assign
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     table_info = new(ptr) ObUpdateTableInfo();
-    if (OB_FAIL(table_info->assignments_.assign(table_assign.assignments_))) {
+    if (OB_FAIL(add_ai_column_invalidation_assignments(
+            *table_schema, *table_item, table_assign.assignments_))) {
+    } else if (OB_FAIL(table_info->assignments_.assign(table_assign.assignments_))) {
     } else if (OB_FAIL(table_info->part_ids_.assign(table_item->get_base_table_item().part_ids_))) {
     } else {
       if (OB_FAIL(add_all_rowkey_columns_to_stmt(*table_item, table_info->column_exprs_))) {

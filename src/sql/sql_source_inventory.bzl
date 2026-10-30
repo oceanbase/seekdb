@@ -606,6 +606,7 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/expr/ob_expr_ai/ob_ai_func.cpp",
             "src/sql/engine/expr/ob_expr_ai/ob_ai_func_client.cpp",
             "src/sql/engine/expr/ob_expr_ai/ob_ai_func_utils.cpp",
+            "src/sql/engine/expr/ob_expr_ai/ob_ai_column_utils.cpp",
             "src/sql/engine/expr/ob_expr_ai/ob_expr_ai_complete.cpp",
             "src/sql/engine/expr/ob_expr_ai/ob_expr_ai_embed.cpp",
             "src/sql/engine/expr/ob_expr_ai/ob_expr_ai_rerank.cpp",

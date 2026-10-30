@@ -1362,6 +1362,19 @@ int ObAIFuncModel::call_completion(ObString &prompt, ObJsonObject *config, ObStr
   ObAIFuncClient client;
   ObString unencrypted_access_key;
   ObString request_model_name = get_request_model_name();
+  if (OB_SUCC(ret) && OB_NOT_NULL(config)) {
+    // AI columns carry the instruction that shapes the answer ("return a JSON
+    // value", "return an integer") as a dedicated system message rather than
+    // as part of the user prompt.
+    ObJsonNode *system_node = config->get_value("ob_system_prompt");
+    if (OB_NOT_NULL(system_node)
+        && ObJsonNodeType::J_STRING == system_node->json_type()) {
+      prompt_str.assign_ptr(system_node->get_data(),
+                            static_cast<int32_t>(system_node->get_data_length()));
+      if (OB_FAIL(config->remove("ob_system_prompt"))) {
+      }
+    }
+  }
   if (!is_completion_type()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_complete, info type is not completion");

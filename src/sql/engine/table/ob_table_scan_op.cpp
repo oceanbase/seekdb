@@ -30,6 +30,7 @@
 #include "sql/das/iter/ob_das_iter_utils.h"
 #include "sql/engine/px/ob_granule_iterator_op.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
+#include "sql/engine/expr/ob_expr_ai/ob_ai_column_utils.h"
 
 namespace oceanbase
 {
@@ -1453,6 +1454,14 @@ int ObTableScanOp::inner_open()
   if (OB_SUCC(ret)) {
     if (OB_FAIL(init_ddl_column_checksum())) {
     } else if (OB_FAIL(set_need_check_outrow_lob())) {
+    }
+  }
+  if (OB_SUCC(ret)) {
+    const uint64_t strict_read_table_id = OB_NOT_NULL(MY_CTDEF.lookup_ctdef_)
+        ? MY_CTDEF.lookup_ctdef_->ref_table_id_
+        : MY_CTDEF.scan_ctdef_.ref_table_id_;
+    if (OB_FAIL(ObAiColumnUtils::check_strict_read(
+            ctx_, strict_read_table_id, MY_CTDEF.get_full_acccess_cids()))) {
     }
   }
   if (OB_SUCC(ret)) {
