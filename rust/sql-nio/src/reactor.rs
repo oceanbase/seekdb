@@ -425,8 +425,18 @@ fn probe_listener_os_readiness(listener: &TcpListener) -> ListenerOsProbe {
         SOCKET_ERROR,
     };
 
+    let socket = match usize::try_from(listener.as_raw_socket()) {
+        Ok(socket) => socket,
+        Err(_) => {
+            return ListenerOsProbe {
+                state: LISTENER_OS_PROBE_ERROR,
+                revents: 0,
+                raw_error: -1,
+            }
+        }
+    };
     let mut descriptor = WSAPOLLFD {
-        fd: listener.as_raw_socket(),
+        fd: socket,
         events: POLLRDNORM,
         revents: 0,
     };
