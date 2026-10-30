@@ -1,0 +1,36 @@
+# Regression for #1512: duplicate-heavy integer IN lists stay as predicates.
+--disable_warnings
+drop table if exists inlist_duplicate_rewrite;
+--enable_warnings
+create table inlist_duplicate_rewrite(id int primary key, c int);
+insert into inlist_duplicate_rewrite values (1,1),(2,2),(3,3),(4,4),(5,NULL);
+
+# Compact below the threshold, including a singleton and NOT IN.
+--replace_regex /, $/,/
+explain basic select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from inlist_duplicate_rewrite where c in (1,2,1,2,1,2);
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from inlist_duplicate_rewrite where c in (1,2,1,2,1,2) order by id;
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from inlist_duplicate_rewrite where c in (2,2,2,2) order by id;
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from inlist_duplicate_rewrite where c not in (1,2,1,2,1,2) order by id;
+
+# Same parameterized SQL shape, with previously equal parameters now unequal.
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from inlist_duplicate_rewrite where c in (1,2,3,4,1,2) order by id;
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from inlist_duplicate_rewrite where c in (1,2,1,2,1,2) order by id;
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from inlist_duplicate_rewrite where c in (2,3,2,3,2,3) order by id;
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from inlist_duplicate_rewrite where c not in (1,2,3,4,1,2) order by id;
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from inlist_duplicate_rewrite where c not in (1,2,1,2,1,2) order by id;
+
+# Preserve NULL, mixed-type and row-valued comparison behavior.
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from inlist_duplicate_rewrite where c in (1,2,NULL,1,2,NULL) order by id;
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from inlist_duplicate_rewrite where c not in (1,2,NULL,1,2,NULL) order by id;
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from inlist_duplicate_rewrite where c in (1,'2',1,'2',1,'2') order by id;
+select /*+ opt_param('inlist_rewrite_threshold', 4) */ id from inlist_duplicate_rewrite where (id,c) in ((1,1),(2,2),(1,1),(2,2)) order by id;
+
+# Explicit bind parameters may change independently between executions.
+prepare inlist_stmt from 'select /*+ opt_param("inlist_rewrite_threshold", 4) */ id from inlist_duplicate_rewrite where c in (?,?,?,?,?,?) order by id';
+set @a=1, @b=2, @c=1, @d=2, @e=1, @f=2;
+execute inlist_stmt using @a,@b,@c,@d,@e,@f;
+set @c=3, @d=4;
+execute inlist_stmt using @a,@b,@c,@d,@e,@f;
+deallocate prepare inlist_stmt;
+
+drop table inlist_duplicate_rewrite;
