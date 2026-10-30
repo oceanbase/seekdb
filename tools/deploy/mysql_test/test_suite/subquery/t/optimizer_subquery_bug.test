@@ -510,3 +510,68 @@ WHERE JOIN_A.pk in (
     );
 
 drop table case_partition_10_parent, case_partition_10_set_null_parent, case6_grandparent1;
+
+# issue #1512: IN-list rewrite decisions use the number of distinct integers.
+--disable_warnings
+drop table if exists t_inlist_1512;
+--enable_warnings
+create table t_inlist_1512 (id bigint primary key, category5 int);
+insert into t_inlist_1512 values (1,1),(2,2),(3,3),(4,4),(5,5),(6,6),(7,NULL);
+
+# Compact and repeated lists must both stay below a threshold of four.
+--replace_regex /rowset=[0-9]+/rowset=N/
+explain basic select /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ id from t_inlist_1512 where category5 in (1,2,3);
+--replace_regex /rowset=[0-9]+/rowset=N/
+explain basic select /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ id from t_inlist_1512 where category5 in (1,2,3,1,2,3);
+--replace_regex /rowset=[0-9]+/rowset=N/
+explain basic select /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ id from t_inlist_1512 where category5 in (1,2,3,3);
+# Exactly four distinct values must still enable the existing VALUES rewrite.
+--replace_regex /rowset=[0-9]+/rowset=N/
+explain basic select /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ id from t_inlist_1512 where category5 in (1,2,3,4);
+select /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ group_concat(id order by id) as compact_ids from t_inlist_1512 where category5 in (1,2,3);
+select /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ group_concat(id order by id) as duplicate_ids from t_inlist_1512 where category5 in (1,2,3,1,2,3);
+select /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ group_concat(id order by id) as boundary_ids from t_inlist_1512 where category5 in (1,2,3,4);
+select /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ group_concat(id order by id) as not_in_ids from t_inlist_1512 where category5 not in (1,2,3,1,2,3);
+
+# Exercise the default threshold with 3 * 2^10 = 3072 entries and 3 values.
+# Keep plan operators and results visible without logging the long SQL/filter.
+let $inlist_1512_values = 1,2,3;
+let $inlist_1512_doublings = 10;
+while ($inlist_1512_doublings)
+{
+  let $inlist_1512_values = $inlist_1512_values,$inlist_1512_values;
+  dec $inlist_1512_doublings;
+}
+--disable_query_log
+--replace_regex /rowset=[0-9]+/rowset=N/ /IN [(][^)]*[)]/IN (duplicate list)/
+eval explain basic select id from t_inlist_1512 where category5 in ($inlist_1512_values);
+eval select group_concat(id order by id) as repeated_3072_ids from t_inlist_1512 where category5 in ($inlist_1512_values);
+eval select group_concat(id order by id) as repeated_3072_not_in_ids from t_inlist_1512 where category5 not in ($inlist_1512_values);
+--enable_query_log
+
+# Preserve NULL, coercion and row-comparison semantics on conservative fallback.
+select /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ group_concat(id order by id) as null_in_ids from t_inlist_1512 where category5 in (1,NULL,1,NULL);
+select /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ group_concat(id order by id) as null_not_in_ids from t_inlist_1512 where category5 not in (1,NULL,1,NULL);
+select /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ group_concat(id order by id) as mixed_type_ids from t_inlist_1512 where category5 in (1,'2',1,'2');
+select /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ group_concat(id order by id) as tuple_ids from t_inlist_1512 where (category5,id) in ((1,1),(2,2),(1,1),(2,2));
+prepare inlist_1512_stmt from 'select /*+ OPT_PARAM(''inlist_rewrite_threshold'',4) */ group_concat(id order by id) as prepared_ids from t_inlist_1512 where category5 in (?,?,?,?,?,?)';
+set @inlist_p1=1,@inlist_p2=2,@inlist_p3=1,@inlist_p4=2,@inlist_p5=1,@inlist_p6=2;
+execute inlist_1512_stmt using @inlist_p1,@inlist_p2,@inlist_p3,@inlist_p4,@inlist_p5,@inlist_p6;
+set @inlist_p1=1,@inlist_p2=2,@inlist_p3=3,@inlist_p4=4,@inlist_p5=5,@inlist_p6=6;
+execute inlist_1512_stmt using @inlist_p1,@inlist_p2,@inlist_p3,@inlist_p4,@inlist_p5,@inlist_p6;
+deallocate prepare inlist_1512_stmt;
+
+# Reuse one six-parameter template while changing duplicate positions/values.
+# Distinct aliases give the two warm-up orders independent cache entries.
+set ob_enable_plan_cache = true;
+select /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ group_concat(id order by id) as cache_inlist_1512_forward from t_inlist_1512 where category5 in (1,2,1,2,1,2);
+select /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ group_concat(id order by id) as cache_inlist_1512_forward from t_inlist_1512 where category5 in (1,2,3,4,5,6);
+select /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ group_concat(id order by id) as cache_inlist_1512_forward from t_inlist_1512 where category5 in (3,4,3,4,3,4);
+select /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ group_concat(id order by id) as cache_inlist_1512_reverse from t_inlist_1512 where category5 in (1,2,3,4,5,6);
+select /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ group_concat(id order by id) as cache_inlist_1512_reverse from t_inlist_1512 where category5 in (1,2,1,2,1,2);
+select /*+ OPT_PARAM('inlist_rewrite_threshold',4) */ group_concat(id order by id) as cache_inlist_1512_reverse from t_inlist_1512 where category5 in (2,3,4,5,6,6);
+select count(*) > 0 as forward_cache_hit from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` where query_sql like 'select /*+ OPT_PARAM%as cache_inlist_1512_forward from t_inlist_1512%' and hit_count > 0;
+select count(*) > 0 as reverse_cache_hit from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` where query_sql like 'select /*+ OPT_PARAM%as cache_inlist_1512_reverse from t_inlist_1512%' and hit_count > 0;
+select count(*) > 0 as fast_parameterized_direct_in from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` where query_sql like 'select /*+ OPT_PARAM%as cache_inlist_1512_forward from t_inlist_1512%in (1,2,1,2,1,2)' and outline_data not like '%USE_HASH_DISTINCT%';
+
+drop table t_inlist_1512;
