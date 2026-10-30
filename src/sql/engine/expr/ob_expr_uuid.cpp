@@ -28,11 +28,13 @@
 #ifdef __APPLE__
 #include <ifaddrs.h>
 #include <net/if_dl.h>
-#elif defined(__ANDROID__)
-#include <ifaddrs.h>
-#include <linux/if_packet.h>
+#else
 #include <fcntl.h>
 #include <unistd.h>
+#ifdef __ANDROID__
+#include <ifaddrs.h>
+#include <linux/if_packet.h>
+#endif
 #endif
 #endif
 #include "sql/engine/expr/ob_expr_uuid.h"
@@ -79,6 +81,43 @@ ObUUIDNode::ObUUIDNode()
   (void)init();
 }
 
+
+#if !defined(_WIN32) && !defined(__APPLE__)
+/*
+ * Get a random node ID from the system CSPRNG.
+ *
+ * RFC 9562 section 6.10 requires the multicast bit to be set for a random node ID,
+ * so that it can never be mistaken for a real IEEE 802 MAC address.
+ */
+static int get_random_uuid_node(unsigned char *node)
+{
+  int ret = OB_SUCCESS;
+  int fd = open("/dev/urandom", O_RDONLY);
+  if (fd < 0) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("open /dev/urandom failed", K(ret), K(errno));
+  } else {
+    int64_t read_bytes = 0;
+    while (read_bytes < 6) {
+      ssize_t len = read(fd, node + read_bytes, 6 - read_bytes);
+      if (len <= 0) {
+        if (len < 0 && EINTR == errno) {
+          continue;
+        }
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("read /dev/urandom failed", K(ret), K(read_bytes), K(errno));
+        break;
+      }
+      read_bytes += len;
+    }
+    close(fd);
+    if (OB_SUCC(ret)) {
+      node[0] |= 0x01;  // set multicast bit
+    }
+  }
+  return ret;
+}
+#endif
 
 /*
  * get and set mac address
@@ -167,18 +206,13 @@ int ObUUIDNode::init()
       freeifaddrs(ifaddr);
     }
     if (OB_SUCC(ret) && !mac_addr_found) {
-      // RFC 4122 section 4.5: when MAC address is unavailable (Android sandbox),
+      // RFC 9562 section 6.10: when MAC address is unavailable (Android sandbox),
       // use random bytes with the multicast bit set as the node ID.
-      int fd = open("/dev/urandom", O_RDONLY);
-      if (fd >= 0 && read(fd, mac_addr_, 6) == 6) {
-        mac_addr_[0] |= 0x01;  // set multicast bit
+      if (OB_SUCC(get_random_uuid_node(mac_addr_))) {
         mac_addr_found = true;
         LOG_INFO("using random UUID node ID (no MAC available on Android)");
       } else {
         ret = OB_ERR_UNEXPECTED;
-      }
-      if (fd >= 0) {
-        close(fd);
       }
     }
     if (OB_SUCC(ret) && mac_addr_found) {
@@ -190,20 +224,20 @@ int ObUUIDNode::init()
   struct ifreq ifr;
   struct ifconf ifc;
   char buf[1024];
+  bool mac_addr_found = false;
   int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
   if (sock == -1) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("socket failed", K(ret), K(errno));
+    LOG_WARN("socket failed", K(errno));
   } else {
     ifc.ifc_len = sizeof(buf);
     ifc.ifc_buf = buf;
     if (ioctl(sock, SIOCGIFCONF, &ifc) < 0) {
-      ret = OB_ERR_UNEXPECTED;
+      // The interface list may not be readable at all, e.g. in a restricted sandbox.
+      LOG_WARN("ioctl failed, SIOCGIFCONF", K(errno));
     } else {
       ifreq *it = ifc.ifc_req;
       ifreq *end = it + (ifc.ifc_len / sizeof(ifreq));
-      bool mac_addr_found = false;
-      for (; it != end && OB_SUCC(ret); ++it) {
+      for (; it != end; ++it) {
         if (OB_ISNULL(it) || OB_ISNULL(it->ifr_name) || OB_ISNULL(ifr.ifr_name)) {
           continue;
         } else {
@@ -223,14 +257,22 @@ int ObUUIDNode::init()
           }
         }
       }//end for
-      if (OB_FAIL(ret)) {
-      } else if (!mac_addr_found) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        is_inited_ = true;
-      }
     }
     close(sock);
+  }
+  if (!mac_addr_found) {
+    // RFC 9562 section 6.10: no usable MAC address, e.g. in a restricted sandbox
+    // that forbids reading the interface list. Fall back to a random node ID
+    // instead of failing the UUID initialization and blocking the server startup.
+    if (OB_SUCC(get_random_uuid_node(mac_addr_))) {
+      mac_addr_found = true;
+      LOG_WARN("can not get mac address, use random UUID node ID instead");
+    } else {
+      ret = OB_ERR_UNEXPECTED;
+    }
+  }
+  if (OB_SUCC(ret) && mac_addr_found) {
+    is_inited_ = true;
   }
 #endif
   return ret;
