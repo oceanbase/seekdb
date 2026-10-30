@@ -204,6 +204,8 @@ pub(crate) struct EventLoop {
     pub(crate) peers: Vec<PeerHandoff>,
     #[cfg(feature = "native-network")]
     pub(crate) next_accept_target: usize,
+    #[cfg(feature = "native-network")]
+    pub(crate) accept_drain_id: u64,
     pub(crate) reg: Arc<Registry>,
     pub(crate) waker: Arc<Waker>,
     pub(crate) reactor_polling: Arc<AtomicBool>,
@@ -224,6 +226,38 @@ pub(crate) struct EventLoop {
 }
 
 const MAX_TRANSIENT_TCP_ACCEPT_ERRORS: usize = 64;
+
+fn accept_error_kind_name(kind: std::io::ErrorKind) -> &'static str {
+    match kind {
+        std::io::ErrorKind::NotFound => "NotFound",
+        std::io::ErrorKind::PermissionDenied => "PermissionDenied",
+        std::io::ErrorKind::ConnectionRefused => "ConnectionRefused",
+        std::io::ErrorKind::ConnectionReset => "ConnectionReset",
+        std::io::ErrorKind::HostUnreachable => "HostUnreachable",
+        std::io::ErrorKind::NetworkUnreachable => "NetworkUnreachable",
+        std::io::ErrorKind::ConnectionAborted => "ConnectionAborted",
+        std::io::ErrorKind::NotConnected => "NotConnected",
+        std::io::ErrorKind::AddrInUse => "AddrInUse",
+        std::io::ErrorKind::AddrNotAvailable => "AddrNotAvailable",
+        std::io::ErrorKind::BrokenPipe => "BrokenPipe",
+        std::io::ErrorKind::AlreadyExists => "AlreadyExists",
+        std::io::ErrorKind::WouldBlock => "WouldBlock",
+        std::io::ErrorKind::InvalidInput => "InvalidInput",
+        std::io::ErrorKind::InvalidData => "InvalidData",
+        std::io::ErrorKind::TimedOut => "TimedOut",
+        std::io::ErrorKind::WriteZero => "WriteZero",
+        std::io::ErrorKind::Interrupted => "Interrupted",
+        std::io::ErrorKind::Unsupported => "Unsupported",
+        std::io::ErrorKind::UnexpectedEof => "UnexpectedEof",
+        std::io::ErrorKind::OutOfMemory => "OutOfMemory",
+        std::io::ErrorKind::Other => "Other",
+        _ => "Other",
+    }
+}
+
+fn should_log_accept_sample(drain_id: u64) -> bool {
+    drain_id < 16 || drain_id.is_power_of_two()
+}
 
 #[cfg(windows)]
 fn is_transient_tcp_accept_error(error: &std::io::Error) -> bool {
@@ -469,7 +503,13 @@ impl EventLoop {
 
     #[cfg(feature = "native-network")]
     pub(crate) fn accept_all(&mut self) {
+        let drain_id = self.accept_drain_id;
+        self.accept_drain_id = self.accept_drain_id.wrapping_add(1);
+        let mut accepted = 0;
+        let mut first_error_kind = None;
+        let mut first_error_raw = -1;
         let mut transient_errors = 0;
+        let mut consecutive_errors = 0;
         loop {
             let listener = match self.listener.as_ref() {
                 Some(listener) => listener,
@@ -477,53 +517,71 @@ impl EventLoop {
             };
             let (sock, _addr) = match listener.accept() {
                 Ok(v) => {
-                    transient_errors = 0;
+                    accepted += 1;
+                    consecutive_errors = 0;
                     v
                 }
-                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    if first_error_kind.is_some() || should_log_accept_sample(drain_id) {
+                        unsafe {
+                            ob_sql_nio_log_accept_state(
+                                first_error_kind
+                                    .unwrap_or("none")
+                                    .as_ptr()
+                                    .cast(),
+                                first_error_raw,
+                                drain_id,
+                                accepted,
+                                transient_errors,
+                                consecutive_errors,
+                                c"would_block".as_ptr(),
+                            );
+                        }
+                    }
+                    break;
+                }
                 Err(e) => {
-                    log::warn!(
-                        target: "SQL.ENG",
-                        "sql nio TCP accept failed: kind={:?}, raw_os_error={:?}, error={}",
-                        e.kind(),
-                        e.raw_os_error(),
-                        e
-                    );
+                    if first_error_kind.is_none() {
+                        first_error_kind = Some(accept_error_kind_name(e.kind()));
+                        first_error_raw = e.raw_os_error().unwrap_or(-1);
+                    }
                     if !is_transient_tcp_accept_error(&e) {
-                        log::error!(
-                            target: "SQL.ENG",
-                            "sql nio TCP accept stopped on non-retryable error"
-                        );
+                        unsafe {
+                            ob_sql_nio_log_accept_state(
+                                first_error_kind.unwrap(),
+                                first_error_raw,
+                                drain_id,
+                                accepted,
+                                transient_errors,
+                                consecutive_errors,
+                                c"fatal".as_ptr(),
+                            );
+                        }
                         break;
                     }
                     transient_errors += 1;
-                    if transient_errors >= MAX_TRANSIENT_TCP_ACCEPT_ERRORS {
-                        log::error!(
-                            target: "SQL.ENG",
-                            "sql nio TCP accept rearming after {} consecutive transient errors",
-                            transient_errors
-                        );
+                    consecutive_errors += 1;
+                    if consecutive_errors >= MAX_TRANSIENT_TCP_ACCEPT_ERRORS {
                         let rearmed = match self.listener.as_mut() {
                             Some(listener) => self
                                 .reg
                                 .reregister(listener, LISTENER, Interest::READABLE)
-                                .map(|_| true)
-                                .unwrap_or_else(|error| {
-                                    log::error!(
-                                        target: "SQL.ENG",
-                                        "sql nio TCP accept rearm failed: kind={:?}, raw_os_error={:?}, error={}",
-                                        error.kind(),
-                                        error.raw_os_error(),
-                                        error
-                                    );
-                                    false
-                                }),
+                                .is_ok(),
                             None => false,
                         };
-                        if !rearmed {
-                            log::error!(
-                                target: "SQL.ENG",
-                                "sql nio TCP accept drain stopped because listener rearm failed"
+                        unsafe {
+                            ob_sql_nio_log_accept_state(
+                                first_error_kind.unwrap(),
+                                first_error_raw,
+                                drain_id,
+                                accepted,
+                                transient_errors,
+                                consecutive_errors,
+                                if rearmed {
+                                    c"rearmed".as_ptr()
+                                } else {
+                                    c"rearm_failed".as_ptr()
+                                },
                             );
                         }
                         break;
@@ -1181,6 +1239,8 @@ pub(crate) unsafe fn nio_start_in_dir(
                 peers: Vec::new(),
                 #[cfg(feature = "native-network")]
                 next_accept_target: 0,
+                #[cfg(feature = "native-network")]
+                accept_drain_id: 0,
                 reg,
                 waker: waker.clone(),
                 reactor_polling,
