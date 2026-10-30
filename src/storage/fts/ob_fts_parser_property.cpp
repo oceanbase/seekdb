@@ -1026,7 +1026,11 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
       stopword_table_ = ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE);
       quantifier_table_ = ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE);
       ObString ik_smart;
-      if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
+      if (json_str.empty()) {
+        // No properties were given to the parser (or the caller skipped the
+        // default-json round trip).  Keep the documented default: smart mode.
+        ik_mode_smart_ = true;
+      } else if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
       } else {
         if (0 == ik_smart.case_compare(ObString(ObFTSLiteral::FT_IK_MODE_SMART))) {
           ik_mode_smart_ = true;

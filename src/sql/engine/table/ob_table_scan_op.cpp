@@ -955,6 +955,14 @@ int ObTableScanOp::init_attach_scan_rtdef(const ObDASBaseCtDef *attach_ctdef,
     attach_rtdef->ctdef_ = attach_ctdef;
     attach_rtdef->children_cnt_ = attach_ctdef->children_cnt_;
     attach_rtdef->eval_ctx_ = &eval_ctx_;
+    if (OB_SUCC(ret) && DAS_OP_IR_SCAN == attach_ctdef->op_type_
+        && MY_SPEC.output_.empty() && MY_SPEC.filters_.empty()
+        && nullptr == MY_SPEC.limit_ && !MY_SPEC.is_index_back()
+        && MY_CTDEF.scan_ctdef_.pd_expr_spec_.pushdown_filters_.empty()) {
+      // the scan only contributes a row count, so the text retrieval iterator
+      // does not need to project the row values at all.
+      static_cast<ObDASIRScanRtDef *>(attach_rtdef)->set_count_only(true);
+    }
     if (attach_ctdef->children_cnt_ > 0) {
       if (OB_ISNULL(attach_rtdef->children_ = OB_NEW_ARRAY(ObDASBaseRtDef*,
                                                            &ctx_.get_allocator(),

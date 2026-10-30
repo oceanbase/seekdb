@@ -40,6 +40,53 @@ namespace oceanbase
 {
 namespace storage
 {
+
+namespace
+{
+
+// One snapshot of the built IK dictionaries per thread. The objects are kept in the
+// arena and the cache range containers keep the kv cache handles of the dictionary
+// ranges pinned, so the snapshot stays valid until it is rebuilt explicitly.
+struct ObIKDictSnapshot
+{
+  ObIKDictSnapshot() : valid_(false), arena_(ObMemAttr("IKDictSnapshot"))
+  {
+    for (int64_t i = 0; i < DICT_SLOT_CNT; ++i) {
+      conts_[i] = nullptr;
+      dicts_[i] = nullptr;
+      probes_[i] = nullptr;
+    }
+  }
+  // No destructor on purpose: the snapshot is a thread_local of long living threads and
+  // tearing it down while the kv cache is being destroyed would be unsafe.
+  void clear()
+  {
+    for (int64_t i = 0; i < DICT_SLOT_CNT; ++i) {
+      if (OB_NOT_NULL(dicts_[i])) {
+        dicts_[i]->~ObFTRangeDict();
+        dicts_[i] = nullptr;
+      }
+      if (OB_NOT_NULL(conts_[i])) {
+        conts_[i]->~ObFTCacheRangeContainer();
+        conts_[i] = nullptr;
+      }
+      probes_[i] = nullptr;
+    }
+    arena_.reset();
+    valid_ = false;
+  }
+  static const int64_t DICT_SLOT_CNT = 3;
+  bool valid_;
+  ObArenaAllocator arena_;
+  ObFTCacheRangeContainer *conts_[DICT_SLOT_CNT];
+  ObFTRangeDict *dicts_[DICT_SLOT_CNT];
+  const ObDictCacheValue *probes_[DICT_SLOT_CNT];
+};
+
+thread_local ObIKDictSnapshot g_ik_dict_snapshot;
+
+} // anonymous namespace
+
 int ObIKFTParser::init(const ObFTParserParam &param)
 {
   int ret = OB_SUCCESS;
@@ -256,19 +303,78 @@ int ObIKFTParser::init_dict(const ObFTParserParam &param)
   if (should_read_newest_table()) {
     // clear dict cache, always false now
   } else {
-    if (OB_FAIL(init_single_dict(main_dict_desc, cache_main_))) {
-    } else if (OB_FAIL(init_single_dict(quan_dict_desc, cache_quan_))) {
-    } else if (OB_FAIL(init_single_dict(stopword_dict_desc, cache_stop_))) {
+    const ObFTDictDesc *descs[3] = {&main_dict_desc, &quan_dict_desc, &stopword_dict_desc};
+    bool hit = false;
+    if (OB_FAIL(check_dict_snapshot(descs, hit))) {
+    } else if (!hit && OB_FAIL(build_dict_snapshot(descs))) {
+    } else {
+      dict_main_ = g_ik_dict_snapshot.dicts_[0];
+      dict_quan_ = g_ik_dict_snapshot.dicts_[1];
+      dict_stop_ = g_ik_dict_snapshot.dicts_[2];
+      borrowed_dicts_ = true;
     }
   }
 
-  if (OB_FAIL(ret)) {
-    // already logged.
-  } else if (OB_FAIL(build_dict_from_cache(main_dict_desc, cache_main_, dict_main_))) {
-  } else if (OB_FAIL(build_dict_from_cache(quan_dict_desc, cache_quan_, dict_quan_))) {
-  } else if (OB_FAIL(build_dict_from_cache(stopword_dict_desc, cache_stop_, dict_stop_))) {
-  }
+  return ret;
+}
 
+int ObIKFTParser::probe_dict(const ObFTDictDesc &desc, const ObDictCacheValue *&probe)
+{
+  int ret = OB_SUCCESS;
+  common::ObKVCacheHandle handle;
+  const uint64_t name = static_cast<uint64_t>(desc.type_);
+  ObDictCacheKey key(name, desc.type_, 0);
+  probe = nullptr;
+  if (OB_FAIL(ObDictCache::get_instance().get_dict(key, probe, handle))) {
+    STORAGE_FTS_LOG(WARN, "failed to probe the dict cache", K(ret));
+  }
+  return ret;
+}
+
+int ObIKFTParser::check_dict_snapshot(const ObFTDictDesc *descs[3], bool &hit)
+{
+  int ret = OB_SUCCESS;
+  ObIKDictSnapshot &snapshot = g_ik_dict_snapshot;
+  hit = snapshot.valid_;
+  for (int64_t i = 0; OB_SUCC(ret) && hit && i < ObIKDictSnapshot::DICT_SLOT_CNT; ++i) {
+    const ObDictCacheValue *probe = nullptr;
+    if (OB_FAIL(probe_dict(*descs[i], probe))) {
+      // a missing range means that the dictionary has to be fetched again
+      hit = false;
+      ret = OB_SUCCESS;
+    } else if (probe != snapshot.probes_[i]) {
+      // the dictionary was rebuilt, the cached range dicts are stale
+      hit = false;
+    }
+  }
+  return ret;
+}
+
+int ObIKFTParser::build_dict_snapshot(const ObFTDictDesc *descs[3])
+{
+  int ret = OB_SUCCESS;
+  ObIKDictSnapshot &snapshot = g_ik_dict_snapshot;
+  snapshot.clear();
+  for (int64_t i = 0; OB_SUCC(ret) && i < ObIKDictSnapshot::DICT_SLOT_CNT; ++i) {
+    ObFTCacheRangeContainer *container = nullptr;
+    if (OB_ISNULL(container = OB_NEWx(ObFTCacheRangeContainer, &snapshot.arena_, snapshot.arena_))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      STORAGE_FTS_LOG(WARN, "failed to allocate the dict cache container", K(ret));
+    } else if (FALSE_IT(snapshot.conts_[i] = container)) {
+    } else if (OB_FAIL(init_single_dict(*descs[i], *container))) {
+    } else if (OB_ISNULL(snapshot.dicts_[i] = OB_NEWx(ObFTRangeDict, &snapshot.arena_,
+                                                     snapshot.arena_, container, *descs[i]))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      STORAGE_FTS_LOG(WARN, "failed to allocate the range dict", K(ret));
+    } else if (OB_FAIL(snapshot.dicts_[i]->init())) {
+    } else if (OB_FAIL(probe_dict(*descs[i], snapshot.probes_[i]))) {
+    }
+  }
+  if (OB_SUCC(ret)) {
+    snapshot.valid_ = true;
+  } else {
+    snapshot.clear();
+  }
   return ret;
 }
 
@@ -366,18 +472,24 @@ void ObIKFTParser::reset()
   cache_quan_.reset();
   cache_stop_.reset();
 
-  if (!OB_ISNULL(dict_main_)) {
-    dict_main_->~ObIFTDict();
-    allocator_.free(dict_main_);
+  if (!borrowed_dicts_) {
+    if (!OB_ISNULL(dict_main_)) {
+      dict_main_->~ObIFTDict();
+      allocator_.free(dict_main_);
+    }
+    if (!OB_ISNULL(dict_quan_)) {
+      dict_quan_->~ObIFTDict();
+      allocator_.free(dict_quan_);
+    }
+    if (!OB_ISNULL(dict_stop_)) {
+      dict_stop_->~ObIFTDict();
+      allocator_.free(dict_stop_);
+    }
   }
-  if (!OB_ISNULL(dict_quan_)) {
-    dict_quan_->~ObIFTDict();
-    allocator_.free(dict_quan_);
-  }
-  if (!OB_ISNULL(dict_stop_)) {
-    dict_stop_->~ObIFTDict();
-    allocator_.free(dict_stop_);
-  }
+  dict_main_ = nullptr;
+  dict_quan_ = nullptr;
+  dict_stop_ = nullptr;
+  borrowed_dicts_ = false;
 
   is_inited_ = false;
 }

@@ -240,7 +240,7 @@ int ObSRDaaTIterImpl::get_next_rows(const int64_t capacity, int64_t &count)
     }
 
     if (OB_SUCC(ret) || OB_ITER_END == ret) {
-      if (count > 0 && OB_FAIL(project_results(count))) {
+      if (count > 0 && !iter_param_->count_only_ && OB_FAIL(project_results(count))) {
       }
     }
 
@@ -263,6 +263,16 @@ int ObSRDaaTIterImpl::do_one_merge_round(int64_t &count)
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
     }
   } else if (OB_FAIL(collect_dims_by_id(id_datum, relevance, need_project))) {
+  } else if (need_project && iter_param_->count_only_) {
+    // the caller only wants the number of matched rows: the pushed down match
+    // filter is implied by the scan itself and no column is projected.
+    ++input_row_cnt_;
+    ++output_row_cnt_;
+    ++count;
+    if (iter_param_->limit_param_->is_valid()
+        && output_row_cnt_ >= iter_param_->limit_param_->limit_) {
+      ret = OB_ITER_END;
+    }
   } else if (need_project && OB_FAIL(filter_on_demand(count, relevance, need_project))) {
   } else if (need_project && OB_FAIL(cache_result(count, *id_datum, relevance))) {
     if (OB_ITER_END != ret) {

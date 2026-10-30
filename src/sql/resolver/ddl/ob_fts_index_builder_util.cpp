@@ -1045,10 +1045,20 @@ int ObFtsIndexBuilderUtil::decide_parallelism(
         decided_parallelism = MAX(original_parallelism, 1L);
         break;
       case share::schema::ObIndexType::INDEX_TYPE_DOC_ID_ROWKEY_LOCAL:
-      case share::schema::ObIndexType::INDEX_TYPE_FTS_INDEX_LOCAL:
-      case share::schema::ObIndexType::INDEX_TYPE_FTS_DOC_WORD_LOCAL:
         decided_parallelism = MAX(original_parallelism / 3, 1L);
         break;
+      case share::schema::ObIndexType::INDEX_TYPE_FTS_INDEX_LOCAL:
+      case share::schema::ObIndexType::INDEX_TYPE_FTS_DOC_WORD_LOCAL: {
+        // These two aux builds tokenize every document of every indexed column,
+        // which is the CPU bound stage of the whole FTS DDL, and the token set
+        // produced for a document does not depend on the worker count. They used
+        // to be throttled down (original_parallelism / 3); scale the degree up
+        // instead, bounded by the cpu number so the build stays within budget.
+        const int64_t cpu_cnt = MAX(common::get_cpu_num(), 1L);
+        const int64_t max_degree = MIN(cpu_cnt, 16L);
+        decided_parallelism = MAX(MIN(original_parallelism * 8, max_degree), 1L);
+        break;
+      }
       case share::schema::ObIndexType::INDEX_TYPE_NORMAL_MULTIVALUE_LOCAL:
       case share::schema::ObIndexType::INDEX_TYPE_UNIQUE_MULTIVALUE_LOCAL:
         decided_parallelism = MAX(original_parallelism / 2, 1L);

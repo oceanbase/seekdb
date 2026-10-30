@@ -204,7 +204,11 @@ public:
   ObDASIRScanRtDef()
     : ObDASAttachRtDef(DAS_OP_IR_SCAN),
       fts_idx_(OB_INVALID_INDEX),
-      minimum_should_match_(0) {}
+      minimum_should_match_(0),
+      count_only_(false) {}
+
+  bool is_count_only() const { return count_only_; }
+  void set_count_only(const bool count_only) { count_only_ = count_only; }
 
   virtual ~ObDASIRScanRtDef() {}
 
@@ -255,6 +259,9 @@ public:
   // fts_idx_ is dynamically generated during execution based on the rtdef tree and does not need to be serialized.
   int64_t fts_idx_;
   int64_t minimum_should_match_;
+  // runtime only: the scan result is consumed as a row count, no column is
+  // projected, so the text retrieval iterator may skip the row materialisation.
+  bool count_only_;
 };
 
 struct ObDASIRAuxLookupCtDef : ObDASAttachCtDef

@@ -44,6 +44,7 @@ public:
         cache_main_(allocator),
         cache_quan_(allocator),
         cache_stop_(allocator),
+        borrowed_dicts_(false),
         dict_main_(nullptr),
         dict_quan_(nullptr),
         dict_stop_(nullptr)
@@ -88,6 +89,15 @@ private:
                             ObFTCacheRangeContainer &container,
                             ObIFTDict *&dict);
 
+  // The built dictionaries are immutable and are reused across the parsers of one
+  // thread (see the snapshot in ob_ik_ft_parser.cpp), in which case this parser only
+  // borrows them and must not free them.
+  int check_dict_snapshot(const ObFTDictDesc *descs[3], bool &hit);
+
+  int build_dict_snapshot(const ObFTDictDesc *descs[3]);
+
+  int probe_dict(const ObFTDictDesc &desc, const ObDictCacheValue *&probe);
+
 private:
   static constexpr int SEGMENT_LIMIT = 1000;
   ObIAllocator &allocator_;
@@ -103,6 +113,7 @@ private:
   ObFTCacheRangeContainer cache_quan_;
   ObFTCacheRangeContainer cache_stop_;
 
+  bool borrowed_dicts_;
   ObIFTDict *dict_main_;
   ObIFTDict *dict_quan_;
   ObIFTDict *dict_stop_;
