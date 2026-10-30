@@ -12263,6 +12263,40 @@ int ObLogPlan::prepare_text_retrieval_info(const uint64_t ref_table_id,
       LOG_WARN("failed to append array no dup", K(ret));
     }
     */
+
+    // Avoid score calculation only when the scalar aggregate cannot
+    // observe MATCH relevance and MATCH is the sole WHERE predicate.
+    if (NATURAL_LANGUAGE_MODE == match_against->get_mode_flag()
+        && get_stmt()->is_select_stmt()) {
+      const ObSelectStmt *s =
+          static_cast<const ObSelectStmt *>(get_stmt());
+      const ObIArray<ObRawExpr *> &conds = s->get_condition_exprs();
+      if (s->get_select_item_size() == 1
+          && s->get_aggr_item_size() == 1
+          && s->get_group_exprs().empty()
+          && s->get_having_exprs().empty()
+          && s->get_order_items().empty()
+          && s->get_window_func_count() == 0
+          && conds.count() == 1) {
+        ObRawExpr *predicate = conds.at(0);
+        const bool only_match =
+            predicate == match_against
+            || (nullptr != predicate
+                && predicate->get_expr_type() == T_OP_BOOL
+                && predicate->get_param_count() == 1
+                && predicate->get_param_expr(0) == match_against);
+        bool observed = false;
+        if (only_match
+            && OB_FAIL(ObRawExprUtils::find_expr(
+                s->get_select_item(0).expr_, match_against, observed))) {
+        } else if (only_match && !observed
+                   && OB_FAIL(ObRawExprUtils::find_expr(
+                       s->get_aggr_item(0), match_against, observed))) {
+        } else if (only_match && !observed) {
+          need_calc_relevance = false;
+        }
+      }
+    }
     tr_info.match_expr_ = match_against;
     tr_info.inv_idx_tid_ = inv_idx_tid;
     tr_info.fwd_idx_tid_ = fwd_idx_tid;
