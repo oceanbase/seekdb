@@ -448,7 +448,12 @@ int ob_file_sql_resolve_paths(common::ObIAllocator &allocator,
             if (0 == strcmp(ent->d_name, ".") || 0 == strcmp(ent->d_name, "..")) {
               continue;
             }
-            if (0 != fnmatch(base, ent->d_name, 0)) {
+            // FNM_PERIOD keeps a wildcard from matching a leading dot. Hidden
+            // files are not part of a `*` expansion: a tarball or archive that
+            // was produced on macOS leaves a `._name` sidecar next to every
+            // file, and those sidecars must not show up as query results. An
+            // explicit pattern that starts with a dot still matches.
+            if (0 != fnmatch(base, ent->d_name, FNM_PERIOD)) {
               continue;
             }
             const int64_t full_len = dir.length() + 1 + static_cast<int64_t>(strlen(ent->d_name));
