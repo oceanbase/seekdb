@@ -58,9 +58,52 @@ int ObTransformSimplifyExpr::transform_one_stmt(common::ObIArray<ObParentDMLStmt
                                                 bool &trans_happened)
 {
   int ret = OB_SUCCESS;
-  bool is_happened = false;
   UNUSED(parent_stmts);
-  if (OB_ISNULL(stmt) || OB_ISNULL(stmt->get_query_ctx())) {
+  if (OB_ISNULL(stmt) || OB_ISNULL(stmt->get_query_ctx()) || OB_ISNULL(ctx_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (ctx_->vec_approx_push_not_only_) {
+    if (OB_FAIL(push_not_for_vec_approx(stmt, trans_happened))) {
+    }
+  } else if (OB_FAIL(simplify_stmt_exprs(stmt, trans_happened))) {
+  }
+  if (OB_SUCC(ret) && trans_happened) {
+    if (OB_FAIL(add_transform_hint(*stmt))) {
+    }
+  }
+  return ret;
+}
+
+/*
+ * Approximate vector search disables query transformation, so a filter like
+ * NOT (c1 IN (...)) is kept as a residual filter and no query range can be
+ * extracted from it, while the equivalent c1 NOT IN (...) can be used by the
+ * pre-filter of the vector index scan. Only push NOT down into where
+ * conditions for these statements.
+ */
+int ObTransformSimplifyExpr::push_not_for_vec_approx(ObDMLStmt *stmt, bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  if (OB_ISNULL(stmt) || OB_ISNULL(ctx_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(push_not(stmt->get_condition_exprs(), trans_happened))) {
+  } else if (trans_happened) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_condition_size(); ++i) {
+      if (OB_ISNULL(stmt->get_condition_expr(i))) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(stmt->get_condition_expr(i)->formalize(ctx_->session_info_))) {
+      }
+    }
+    OPT_TRACE("push not for approximate vector search:", trans_happened);
+  }
+  return ret;
+}
+
+int ObTransformSimplifyExpr::simplify_stmt_exprs(ObDMLStmt *stmt, bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  bool is_happened = false;
+  if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
   }
   if (OB_SUCC(ret)) {
@@ -130,10 +173,6 @@ int ObTransformSimplifyExpr::transform_one_stmt(common::ObIArray<ObParentDMLStmt
     } else {
       trans_happened |= is_happened;
       OPT_TRACE("canonicalize condition:", is_happened);
-    }
-  }
-  if (OB_SUCC(ret) && trans_happened) {
-    if (OB_FAIL(add_transform_hint(*stmt))) {
     }
   }
   return ret;

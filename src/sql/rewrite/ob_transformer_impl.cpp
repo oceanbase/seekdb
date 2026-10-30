@@ -536,8 +536,17 @@ int ObTransformerImpl::choose_rewrite_rules(ObDMLStmt *stmt, uint64_t &need_type
   } else if (OB_FAIL(check_stmt_functions(stmt, func))) {
   } else if (OB_FAIL(check_temp_table_functions(stmt, func))) {
   } else {
+    ctx_->vec_approx_push_not_only_ = false;
     if (func.contain_geometry_values_ || func.contain_fulltext_search_ || func.contain_vec_index_approx_) {
       disable_list = ObTransformRule::ALL_TRANSFORM_RULES;
+    }
+    if (func.contain_vec_index_approx_ && !func.contain_geometry_values_ && !func.contain_fulltext_search_) {
+      // Keep the NOT push-down of SIMPLIFY_EXPR for approximate vector search.
+      // Without it, NOT (c IN (...)) stays a residual filter over a full scan,
+      // while the equivalent c IN (...) or c NOT IN (...) can use index ranges
+      // for the pre-filter.
+      disable_list &= ~(1ULL << SIMPLIFY_EXPR);
+      ctx_->vec_approx_push_not_only_ = true;
     }
     if (func.contain_enum_set_values_) {
       uint64_t enum_set_enable_list = 0;
