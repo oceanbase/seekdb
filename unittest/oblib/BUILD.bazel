@@ -142,9 +142,10 @@ cc_library(
 )
 cc_test(
     name = "test_native_rowkey",
-    data = ["data/native_rowkey.golden"],
+    data = ["data/native_rowkey.golden", "//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
     linkstatic = True,
-    deps = [":native_rowkey_cases", "//src/oblib:oblib_test_runtime"],
+    deps = [":native_rowkey_cases", "//src/observer:liboceanbase"],
 )
 
 cc_library(

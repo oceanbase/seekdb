@@ -60,6 +60,7 @@ TEST(NativeRowkey, actual_legacy_compare_prefix_equality_hash_checksum_and_wire)
       if(rwire.empty()){right=left;}else{ASSERT_EQ(OB_SUCCESS,decode(rwire,right,right_values,owner,actual));}
       int cmp=19;bool equal=false;int64_t prefix=0;
       int ret=left.compare(right,cmp);actual<<"compare\t"<<ret<<'\t'<<cmp<<'\n';
+      EXPECT_EQ(cmp, left.fast_compare(right));
       ret=left.compare_prefix(right,cmp);actual<<"prefix-compare\t"<<ret<<'\t'<<cmp<<'\n';
       ret=left.equal(right,equal);actual<<"equal\t"<<ret<<'\t'<<equal<<'\t'<<(mode!="key-no-simple"?left.simple_equal(right):false)<<'\n';
       ret=ObRowkey::get_common_prefix_length(left,right,prefix);actual<<"common-prefix\t"<<ret<<'\t'<<prefix<<'\n';
@@ -71,6 +72,87 @@ TEST(NativeRowkey, actual_legacy_compare_prefix_equality_hash_checksum_and_wire)
     for(const auto &line:c.lines)if(line.rfind("print-",0)!=0)expected<<line<<'\n';
     EXPECT_EQ(expected.str(),actual.str());
   }
+}
+TEST(NativeRowkey, integer_fast_path_matches_checked_comparator) {
+  const int64_t values[] = {INT64_MIN, INT32_MIN, -1, 0, 1, INT32_MAX, INT64_MAX};
+  const SqlValueType types[] = {ObInt32Type, ObIntType};
+  ObArenaAllocator owner;
+  for (const SqlValueType left_type : types) {
+    for (const SqlValueType right_type : types) {
+      for (const int64_t left_value : values) {
+        for (const int64_t right_value : values) {
+          DatumValue left_cell, right_cell;
+          ASSERT_EQ(OB_SUCCESS, left_cell.set_int(left_value, owner));
+          ASSERT_EQ(OB_SUCCESS, right_cell.set_int(right_value, owner));
+          left_cell.set_type(left_type);
+          right_cell.set_type(right_type);
+          int expected = 0;
+          ASSERT_EQ(OB_SUCCESS, compare_key_value(left_cell, right_cell, expected));
+          const ObRowkey left(&left_cell, 1), right(&right_cell, 1);
+          EXPECT_EQ(expected, left.compare(right));
+          EXPECT_EQ(expected, left.fast_compare(right));
+        }
+      }
+    }
+  }
+}
+TEST(NativeRowkey, integer_fast_path_preserves_prefix_and_later_column_order) {
+  ObArenaAllocator owner;
+  for (int64_t differing_column = 0; differing_column < 3; ++differing_column) {
+    DatumValue left_cells[3], right_cells[3];
+    for (int64_t i = 0; i < 3; ++i) {
+      ASSERT_EQ(OB_SUCCESS, left_cells[i].set_int(1, owner));
+      ASSERT_EQ(OB_SUCCESS, right_cells[i].set_int(i == differing_column ? 2 : 1, owner));
+    }
+    const ObRowkey left(left_cells, 3), right(right_cells, 3);
+    EXPECT_EQ(-1, left.compare(right));
+    EXPECT_EQ(1, right.compare(left));
+    EXPECT_EQ(0, left.compare(left));
+  }
+  DatumValue left_cells[3], right_cells[3];
+  for (int64_t i = 0; i < 3; ++i) {
+    ASSERT_EQ(OB_SUCCESS, left_cells[i].set_int(i, owner));
+    ASSERT_EQ(OB_SUCCESS, right_cells[i].set_int(i, owner));
+  }
+  const ObRowkey shorter(left_cells, 2), longer(right_cells, 3), empty;
+  EXPECT_EQ(-1, shorter.compare(longer));
+  EXPECT_EQ(1, longer.compare(shorter));
+  EXPECT_EQ(-1, empty.compare(longer));
+  EXPECT_EQ(1, longer.compare(empty));
+  EXPECT_EQ(-1, shorter.compare(ObRowkey(left_cells, 3)));
+  EXPECT_EQ(2, ObRowkey(left_cells, 3).compare(ObRowkey(left_cells, 1)));
+  EXPECT_EQ(-2, ObRowkey(left_cells, 1).compare(ObRowkey(left_cells, 3)));
+}
+TEST(NativeRowkey, integer_prefix_continues_with_checked_suffix) {
+  ObArenaAllocator owner;
+  DatumValue left_cells[2], right_cells[2];
+  ASSERT_EQ(OB_SUCCESS, left_cells[0].set_int(1, owner));
+  ASSERT_EQ(OB_SUCCESS, right_cells[0].set_int(1, owner));
+  ASSERT_EQ(OB_SUCCESS, left_cells[1].set_varchar(ObString("a"), owner));
+  ASSERT_EQ(OB_SUCCESS, right_cells[1].set_varchar(ObString("b"), owner));
+  left_cells[1].set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  right_cells[1].set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  const ObRowkey left(left_cells, 2), right(right_cells, 2);
+  EXPECT_EQ(-1, left.compare(right));
+  left_cells[1].set_null();
+  ASSERT_EQ(OB_SUCCESS, right_cells[1].set_int(1, owner));
+  EXPECT_EQ(-1, left.compare(right));
+  ASSERT_EQ(OB_SUCCESS, left_cells[1].set_uint64(INT64_MAX, owner));
+  ASSERT_EQ(OB_SUCCESS, right_cells[1].set_uint64(static_cast<uint64_t>(INT64_MAX) + 1, owner));
+  int result = 0;
+  ASSERT_EQ(OB_SUCCESS, left.compare(right, result));
+  EXPECT_EQ(-1, result);
+}
+TEST(NativeRowkey, integer_fast_path_rejects_invalid_payloads) {
+  ObArenaAllocator owner;
+  DatumValue left, right;
+  ASSERT_EQ(OB_SUCCESS, left.set_int(1, owner));
+  ASSERT_EQ(OB_SUCCESS, right.set_int(2, owner));
+  left.datum_.len_ = sizeof(int32_t);
+  EXPECT_DEATH((void)ObRowkey(&left, 1).compare(ObRowkey(&right, 1)), "");
+  left.datum_.len_ = sizeof(int64_t);
+  left.datum_.ptr_ = nullptr;
+  EXPECT_DEATH((void)ObRowkey(&left, 1).compare(ObRowkey(&right, 1)), "");
 }
 TEST(NativeRowkey, actual_legacy_diagnostic_printers) {
   for(const auto &c:fixture()){

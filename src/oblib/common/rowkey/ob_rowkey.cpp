@@ -102,24 +102,18 @@ int ObRowkey::deserialize_datums(const char *buffer,int64_t size,int64_t &pos)
   if(ret==OB_SUCCESS){for(int64_t i=0;i<count();++i)get_cell(i)=staged.at(i);pos=next;}
   return ret;
 }
-int ObRowkey::compare(const ObRowkey &other,int &cmp) const
+int ObRowkey::compare_from(const ObRowkey &other, int64_t index) const
 {
-  cmp=compare(other);
-  return OB_SUCCESS;
-}
-int ObRowkey::compare(const ObRowkey &other) const
-{
-  int cmp=0;
-  if(get_values()==other.get_values())cmp=static_cast<int32_t>(count()-other.count());
-  else {
-    for(int64_t i=0;cmp==0&&i<MIN(count(),other.count());++i){
-      const int ret=compare_key_value(get_cell(i),other.get_cell(i),cmp);
-      if(ret!=OB_SUCCESS){
-        COMMON_LOG_RET(ERROR,ret,"native rowkey comparison failed",K(*this),K(other));
-        right_to_die_or_duty_to_live();
-      }
+  int cmp = 0;
+  for (int64_t i = index; cmp == 0 && i < MIN(count(), other.count()); ++i) {
+    const int ret = compare_key_value(get_cell(i), other.get_cell(i), cmp);
+    if (ret != OB_SUCCESS) {
+      COMMON_LOG_RET(ERROR, ret, "native rowkey comparison failed", K(*this), K(other));
+      right_to_die_or_duty_to_live();
     }
-    if(cmp==0)cmp=(count()>other.count())-(count()<other.count());
+  }
+  if (cmp == 0) {
+    cmp = (count() > other.count()) - (count() < other.count());
   }
   return cmp;
 }

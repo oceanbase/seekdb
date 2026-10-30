@@ -94,8 +94,41 @@ public:
   static int get_common_prefix_length(const ObRowkey &left,const ObRowkey &right,int64_t &length);
   int equal(const ObRowkey &right,bool &equal) const;
   bool simple_equal(const ObRowkey &right) const;
-  int compare(const ObRowkey &right,int &result) const;
-  int compare(const ObRowkey &right) const;
+  OB_INLINE int compare(const ObRowkey &right, int &result) const
+  {
+    result = compare(right);
+    return OB_SUCCESS;
+  }
+  OB_INLINE int compare(const ObRowkey &right) const
+  {
+    if (get_values() == right.get_values()) {
+      return static_cast<int32_t>(count() - right.count());
+    }
+    const int64_t compare_count = MIN(count(), right.count());
+    for (int64_t i = 0; i < compare_count; ++i) {
+      const DatumValue &left_cell = get_cell(i);
+      const DatumValue &right_cell = right.get_cell(i);
+      const SqlValueType type = left_cell.get_type();
+      // Integer Datums, including INT32, carry eight bytes. Keep malformed
+      // payloads and all other types on the checked comparison path.
+      if (type == right_cell.get_type()
+          && (type == ObInt32Type || type == ObIntType)
+          && !left_cell.datum_.is_null() && !right_cell.datum_.is_null()
+          && !left_cell.datum_.is_ext() && !right_cell.datum_.is_ext()
+          && left_cell.datum_.len_ == sizeof(int64_t)
+          && right_cell.datum_.len_ == sizeof(int64_t)
+          && left_cell.datum_.ptr_ != nullptr && right_cell.datum_.ptr_ != nullptr) {
+        const int64_t left_value = left_cell.get_int();
+        const int64_t right_value = right_cell.get_int();
+        if (left_value != right_value) {
+          return left_value < right_value ? -1 : 1;
+        }
+      } else {
+        return compare_from(right, i);
+      }
+    }
+    return (count() > right.count()) - (count() < right.count());
+  }
   int compare_prefix(const ObRowkey &right,int &result) const;
   int compare_prefix(const ObRowkey &right) const;
   int32_t fast_compare(const ObRowkey &right) const { return compare(right); }
@@ -110,6 +143,7 @@ public:
   static ObRowkey MIN_ROWKEY;
   static ObRowkey MAX_ROWKEY;
 private:
+  int compare_from(const ObRowkey &right, int64_t index) const;
   int decode(ObIAllocator &owner,const char *buffer,int64_t size,int64_t &pos,bool check_zero);
   PartitionBoundRow values_;
 };
