@@ -101,7 +101,7 @@ _GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION_(HELPER_CLASS, BUFFER_CTX_TYPE, ID, ENU
 // GENERATE_MDS_UNIT(KEY_TYPE, VALUE_TYPE, NEED_MULTI_VERSION) is an
 // interface MACRO to transfer necessary information to MDS FRAME to generate codes on MdsTable.
 // 1. There are some requirements about class type KEY_TYPE and VALUE_TYPE, if your type is not
-//    satisfied with below requirments, COMPILE ERROR will occured.
+//    satisfied with below requirements, COMPILE ERROR will occur.
 // 2. Register tablet metadata in the GENERATE_NORMAL_MDS_TABLE block.
 //
 // @param KEY_TYPE if you do not need multi row specfied by key, use DummyKey, otherwise, your Key

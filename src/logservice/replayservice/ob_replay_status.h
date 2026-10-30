@@ -425,8 +425,8 @@ public:
     share::SCN scn_;
     ObLogBaseType log_type_;
     int64_t replay_hint_;
-    bool is_submit_err_;  //is submit log task error occured
-    int64_t err_ts_;  //the timestamp that partition encounts fatal error
+    bool is_submit_err_;  //is submit log task error occurred
+    int64_t err_ts_;  //the timestamp that partition encounters fatal error
     int err_ret_;  //the ret code of fatal error
   };
 public:
