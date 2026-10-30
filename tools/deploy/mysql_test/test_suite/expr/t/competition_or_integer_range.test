@@ -1,0 +1,34 @@
+#owner: OceanBase database competition
+# Regression for issue #1440: a dense OR of integer equalities must be
+# eligible for a compact range filter without changing SQL truth values.
+--disable_warnings
+DROP TABLE IF EXISTS t_competition_or_range;
+--enable_warnings
+CREATE TABLE t_competition_or_range (id INT PRIMARY KEY, age INT);
+INSERT INTO t_competition_or_range VALUES
+  (1, NULL), (2, 0), (3, 1), (4, 6), (5, 12), (6, 13);
+
+SELECT id FROM t_competition_or_range
+WHERE age = 1 OR age = 2 OR age = 3 OR age = 4 OR age = 5 OR age = 6
+   OR age = 7 OR age = 8 OR age = 9 OR age = 10 OR age = 11 OR age = 12
+ORDER BY id;
+SELECT id FROM t_competition_or_range WHERE age >= 1 AND age <= 12 ORDER BY id;
+
+# The constants can arrive out of order.
+SELECT id FROM t_competition_or_range
+WHERE age = 12 OR age = 9 OR age = 6 OR age = 3 OR age = 1 OR age = 4
+   OR age = 7 OR age = 10 OR age = 11 OR age = 8 OR age = 5 OR age = 2
+ORDER BY id;
+
+# A gap must not turn the predicate into an inclusive range.
+SELECT id FROM t_competition_or_range
+WHERE age = 1 OR age = 2 OR age = 3 OR age = 4 OR age = 5 OR age = 6
+   OR age = 7 OR age = 8 OR age = 9 OR age = 10 OR age = 11 OR age = 13
+ORDER BY id;
+
+# Preserve the NULL result of the original OR expression.
+SELECT id FROM t_competition_or_range
+WHERE (age = 1 OR age = 2 OR age = 3 OR age = 4 OR age = 5 OR age = 6
+    OR age = 7 OR age = 8 OR age = 9 OR age = 10 OR age = 11 OR age = 12) IS NULL
+ORDER BY id;
+DROP TABLE t_competition_or_range;

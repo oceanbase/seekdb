@@ -21,6 +21,7 @@
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/resolver/expr/ob_shared_expr_resolver.h"
 #include "sql/engine/ob_physical_plan.h"
+#include <algorithm>
 
 using namespace oceanbase::sql;
 
@@ -65,6 +66,12 @@ int ObTransformSimplifyExpr::transform_one_stmt(common::ObIArray<ObParentDMLStmt
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(flatten_stmt_exprs(stmt, is_happened))) {
+    } else {
+      trans_happened |= is_happened;
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(compact_contiguous_integer_ors(stmt, is_happened))) {
     } else {
       trans_happened |= is_happened;
     }
@@ -206,6 +213,141 @@ int ObTransformSimplifyExpr::flatten_exprs(common::ObIArray<ObRawExpr*> &exprs, 
     }
     if (OB_SUCC(ret)) {
       trans_happened = temp_exprs.count() != exprs.count();
+    }
+  }
+  return ret;
+}
+
+// A long OR of consecutive integer equalities is equivalent to a pair of
+// bounds.  Keeping the original OR makes vector-index filtering evaluate
+// every equality for each candidate (see competition issue #1440).
+int ObTransformSimplifyExpr::compact_contiguous_integer_ors(ObDMLStmt *stmt,
+                                                             bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  if (OB_ISNULL(stmt)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ObIArray<ObRawExpr *> &conditions = stmt->get_condition_exprs();
+    for (int64_t i = 0; OB_SUCC(ret) && i < conditions.count(); ++i) {
+      bool changed = false;
+      if (OB_FAIL(SMART_CALL(compact_contiguous_integer_or(conditions.at(i), changed)))) {
+      } else {
+        trans_happened |= changed;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTransformSimplifyExpr::compact_contiguous_integer_or(ObRawExpr *&expr,
+                                                            bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  if (OB_ISNULL(expr) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_) ||
+      OB_ISNULL(ctx_->session_info_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (T_OP_OR == expr->get_expr_type()) {
+    ObSEArray<ObRawExpr *, 16> pending;
+    ObSEArray<int64_t, 16> values;
+    ObRawExpr *column = NULL;
+    ObRawExpr *min_expr = NULL;
+    ObRawExpr *max_expr = NULL;
+    int64_t min_value = INT64_MAX;
+    int64_t max_value = INT64_MIN;
+    bool eligible = true;
+    if (OB_FAIL(pending.push_back(expr))) {
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && eligible && i < pending.count(); ++i) {
+      ObRawExpr *term = pending.at(i);
+      if (OB_ISNULL(term)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (T_OP_OR == term->get_expr_type()) {
+        if (pending.count() + term->get_param_count() > 1024) {
+          eligible = false;
+        } else {
+          for (int64_t j = 0; OB_SUCC(ret) && j < term->get_param_count(); ++j) {
+            if (OB_FAIL(pending.push_back(term->get_param_expr(j)))) {
+            }
+          }
+        }
+      } else if (T_OP_EQ != term->get_expr_type() || 2 != term->get_param_count()) {
+        eligible = false;
+      } else {
+        ObRawExpr *left = term->get_param_expr(0);
+        ObRawExpr *right = term->get_param_expr(1);
+        ObRawExpr *term_column = NULL;
+        ObConstRawExpr *term_value = NULL;
+        if (OB_ISNULL(left) || OB_ISNULL(right)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (T_REF_COLUMN == left->get_expr_type() && T_INT == right->get_expr_type()) {
+          term_column = left;
+          term_value = static_cast<ObConstRawExpr *>(right);
+        } else if (T_REF_COLUMN == right->get_expr_type() && T_INT == left->get_expr_type()) {
+          term_column = right;
+          term_value = static_cast<ObConstRawExpr *>(left);
+        } else {
+          eligible = false;
+        }
+        if (OB_SUCC(ret) && eligible) {
+          const ObObj &obj = term_value->get_value();
+          const auto col_type = term_column->get_result_type().get_type();
+          if (!obj.is_int() || (ObIntType != col_type && ObInt32Type != col_type) ||
+              (NULL != column && !column->same_as(*term_column))) {
+            eligible = false;
+          } else {
+            const int64_t value = obj.get_int();
+            if (NULL == column) {
+              column = term_column;
+            }
+            if (value < min_value) {
+              min_value = value;
+              min_expr = term_value;
+            }
+            if (value > max_value) {
+              max_value = value;
+              max_expr = term_value;
+            }
+            if (OB_FAIL(values.push_back(value))) {
+            }
+          }
+        }
+      }
+    }
+    if (OB_SUCC(ret) && eligible && values.count() >= 8) {
+      std::sort(values.begin(), values.end());
+      for (int64_t i = 1; eligible && i < values.count(); ++i) {
+        if (INT64_MAX == values.at(i - 1) || values.at(i) != values.at(i - 1) + 1) {
+          eligible = false;
+        }
+      }
+      if (eligible) {
+        ObRawExpr *lower = NULL;
+        ObRawExpr *upper = NULL;
+        ObRawExpr *range = NULL;
+        if (OB_FAIL(ObRawExprUtils::create_double_op_expr(*ctx_->expr_factory_,
+                ctx_->session_info_, T_OP_GE, lower, column, min_expr))) {
+        } else if (OB_FAIL(ObRawExprUtils::create_double_op_expr(*ctx_->expr_factory_,
+                ctx_->session_info_, T_OP_LE, upper, column, max_expr))) {
+        } else if (OB_FAIL(ObRawExprUtils::create_double_op_expr(*ctx_->expr_factory_,
+                ctx_->session_info_, T_OP_AND, range, lower, upper))) {
+        } else {
+          expr = range;
+          trans_happened = true;
+        }
+      }
+    }
+  }
+  // Do not rescan every suffix of a long OR tree when it is not eligible.
+  if (OB_SUCC(ret) && !trans_happened && T_OP_OR != expr->get_expr_type()) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
+      bool child_changed = false;
+      if (OB_FAIL(SMART_CALL(compact_contiguous_integer_or(expr->get_param_expr(i), child_changed)))) {
+      } else {
+        trans_happened |= child_changed;
+      }
     }
   }
   return ret;

@@ -1,0 +1,40 @@
+DROP TABLE IF EXISTS t_competition_or_range;
+CREATE TABLE t_competition_or_range (id INT PRIMARY KEY, age INT);
+INSERT INTO t_competition_or_range VALUES
+  (1, NULL), (2, 0), (3, 1), (4, 6), (5, 12), (6, 13);
+SELECT id FROM t_competition_or_range
+WHERE age = 1 OR age = 2 OR age = 3 OR age = 4 OR age = 5 OR age = 6
+   OR age = 7 OR age = 8 OR age = 9 OR age = 10 OR age = 11 OR age = 12
+ORDER BY id;
+id
+3
+4
+5
+SELECT id FROM t_competition_or_range WHERE age >= 1 AND age <= 12 ORDER BY id;
+id
+3
+4
+5
+SELECT id FROM t_competition_or_range
+WHERE age = 12 OR age = 9 OR age = 6 OR age = 3 OR age = 1 OR age = 4
+   OR age = 7 OR age = 10 OR age = 11 OR age = 8 OR age = 5 OR age = 2
+ORDER BY id;
+id
+3
+4
+5
+SELECT id FROM t_competition_or_range
+WHERE age = 1 OR age = 2 OR age = 3 OR age = 4 OR age = 5 OR age = 6
+   OR age = 7 OR age = 8 OR age = 9 OR age = 10 OR age = 11 OR age = 13
+ORDER BY id;
+id
+3
+4
+6
+SELECT id FROM t_competition_or_range
+WHERE (age = 1 OR age = 2 OR age = 3 OR age = 4 OR age = 5 OR age = 6
+    OR age = 7 OR age = 8 OR age = 9 OR age = 10 OR age = 11 OR age = 12) IS NULL
+ORDER BY id;
+id
+1
+DROP TABLE t_competition_or_range;
