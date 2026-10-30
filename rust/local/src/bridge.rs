@@ -115,6 +115,11 @@ pub mod ffi {
 
     unsafe extern "C++" {
         include!("rust/local/include/callbacks.h");
+        include!("rust/file_io.h");
+        #[namespace = "oceanbase::file_io"]
+        type DirectorySyncResult = file_io::bridge::ffi::DirectorySyncResult;
+        #[namespace = "oceanbase::file_io"]
+        type DirectorySyncSummary = file_io::bridge::ffi::DirectorySyncSummary;
         type WriteCallback;
         type RowCallback;
         fn run<'a>(self: &WriteCallback, transaction: &Transaction<'a>) -> i32;
@@ -124,6 +129,9 @@ pub mod ffi {
         type Store;
         fn open_storage(path: &str) -> Box<Store>;
         fn status(self: &Store) -> i32;
+        fn directory_summary(self: &Store) -> DirectorySyncSummary;
+        fn open_sync_error(self: &Store) -> DirectorySyncResult;
+        fn open_error(self: &Store) -> String;
         fn write(self: &Store, callback: &WriteCallback) -> i32;
         type Transaction<'a>;
         fn execute(self: &Transaction<'_>, mutation: &Mutation) -> WriteResult;
@@ -148,7 +156,7 @@ fn code(error: records::Error) -> i32 {
 }
 fn storage_code(error: &kv::Error) -> i32 {
     (match error {
-        kv::Error::Io(_) => ffi::Code::Io,
+        kv::Error::Io(_) | kv::Error::DirectorySync { .. } => ffi::Code::Io,
         kv::Error::Corrupt(_) => ffi::Code::Corrupt,
         kv::Error::Busy => ffi::Code::Busy,
         kv::Error::Poisoned => ffi::Code::Poisoned,
@@ -218,6 +226,7 @@ fn query(input: &ffi::Query) -> records::Result<records::Query> {
 thread_local! { static WRITING: Flag<bool> = const { Flag::new(false) }; }
 pub struct Store {
     inner: kv::Result<kv::Store>,
+    directory_summary: file_io::DirectorySyncSummary,
 }
 
 // Other bridges borrow this same opaque Rust type through its CXX declaration.
@@ -227,18 +236,38 @@ unsafe impl cxx::ExternType for Store {
 }
 
 pub fn open_storage(path: &str) -> Box<Store> {
+    let mut directory_summary = file_io::DirectorySyncSummary::default();
+    let inner = kv::Store::open_with_options(
+        Path::new(path),
+        kv::Options {
+            max_transaction_pages: 16384,
+        },
+        file_io::bridge::application_durability(),
+        &mut directory_summary,
+    );
     Box::new(Store {
-        inner: kv::Store::open_with_options(
-            Path::new(path),
-            kv::Options {
-                // Cover a full tablet queue batch, including both table indexes.
-                max_transaction_pages: 16384,
-            },
-        ),
+        inner,
+        directory_summary,
     })
 }
 
 impl Store {
+    pub fn directory_summary(&self) -> file_io::bridge::ffi::DirectorySyncSummary {
+        file_io::bridge::directory_summary(&self.directory_summary)
+    }
+    pub fn open_error(&self) -> String {
+        self.inner
+            .as_ref()
+            .err()
+            .map(ToString::to_string)
+            .unwrap_or_default()
+    }
+    pub fn open_sync_error(&self) -> file_io::bridge::ffi::DirectorySyncResult {
+        file_io::bridge::sync_result(match &self.inner {
+            Err(kv::Error::DirectorySync { source, .. }) => Some(source),
+            _ => None,
+        })
+    }
     pub fn kv(&self) -> Result<&kv::Store, &kv::Error> {
         self.inner.as_ref()
     }

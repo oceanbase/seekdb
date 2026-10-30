@@ -28,6 +28,9 @@
 #include "lib/thread/ob_link_task.h"
 #include "lib/worker.h"
 #include "share/ob_define.h"
+#include "rust/storage_io.h"
+#include <optional>
+#include <memory>
 
 namespace oceanbase
 {
@@ -42,13 +45,10 @@ namespace common
 constexpr int64_t OB_DEFAULT_ETHERNET_SPEED = 10000 / 8 * 1024 * 1024;
 class ObIOCallbackManager;
 
-// the timestamp adjustment will not adjust until the queue is idle for more than this time
-static constexpr int64_t CLOCK_IDLE_THRESHOLD_US = 100 * 1000L;  // 100ms
 static constexpr int64_t DEFAULT_IO_WAIT_TIME_MS = 5000L;        // 5s
 static constexpr int64_t MAX_IO_WAIT_TIME_MS = 300L * 1000L;     // 5min
 static constexpr int64_t GROUP_START_NUM = 1L;
 static constexpr int64_t DEFAULT_IO_WAIT_TIME_US = 5000L * 1000L;  // 5s
-static constexpr int64_t MAX_DETECT_READ_WARN_TIMES = 10L;
 
 enum class ObIOMode : uint8_t { READ = 0, WRITE = 1, MAX_MODE };
 
@@ -120,9 +120,8 @@ public:
   void set_sync();
   bool is_sync() const;
   void set_unlimited(const bool is_unlimited = true);
+  bool is_unlimited() const { return is_unlimited_; }
   void set_detect(const bool is_detect = true);
-  void set_time_detect(const bool is_time_detect = true);
-  bool is_time_detect() const;
   bool is_detect() const;
   void set_priority(const ObIOPriority priority);
   ObIOPriority get_priority() const;
@@ -137,14 +136,14 @@ public:
   bool is_dirty() const;
   TO_STRING_KV("mode", common::get_io_mode_string(static_cast<ObIOMode>(mode_)),
       K(wait_event_id_), K(is_sync_), K(is_unlimited_), K(is_detect_), K(is_write_through_), K(is_sealed_),
-      K(is_time_detect_), K(reserved_));
+      K(reserved_));
 
 private:
   friend struct ObIOResult;
   static constexpr int64_t IO_MODE_BIT = 4; // read, write, append
   static constexpr int64_t IO_WAIT_EVENT_BIT = 32; // for performance monitor
   static constexpr int64_t IO_SYNC_FLAG_BIT = 1; // indicate if the caller is waiting io finished
-  static constexpr int64_t IO_DETECT_FLAG_BIT = 1; // notify a retry task
+  static constexpr int64_t IO_DETECT_FLAG_BIT = 1;
   static constexpr int64_t IO_UNLIMITED_FLAG_BIT = 1; // indicate if the io is unlimited
   static constexpr int64_t IO_WRITE_THROUGH_BIT = 1; // indicate write mode of the io
   // indicate if the block io is sealed. only sealed blocks can be flushed by the IO layer.
@@ -152,15 +151,13 @@ private:
   // last write should set is_sealed to true. only after the last write set is_sealed to true,
   // the block can be flushed by the IO layer.
   static constexpr int64_t IO_SEALED_FLAG_BIT = 1;
-  static constexpr int64_t IO_TIME_DETECT_FLAG_BIT = 1; // indicate if the io is unlimited
   static constexpr int64_t IO_RESERVED_BIT = 64 - IO_MODE_BIT
                                                 - IO_WAIT_EVENT_BIT
                                                 - IO_SYNC_FLAG_BIT
                                                 - IO_DETECT_FLAG_BIT
                                                 - IO_UNLIMITED_FLAG_BIT
                                                 - IO_WRITE_THROUGH_BIT
-                                                - IO_SEALED_FLAG_BIT
-                                                - IO_TIME_DETECT_FLAG_BIT;
+                                                - IO_SEALED_FLAG_BIT;
 
   union { // FARM COMPAT WHITELIST
     int64_t flag_;
@@ -172,7 +169,6 @@ private:
       int64_t is_detect_ : IO_DETECT_FLAG_BIT;
       int64_t is_write_through_ : IO_WRITE_THROUGH_BIT;
       int64_t is_sealed_ : IO_SEALED_FLAG_BIT;
-      int64_t is_time_detect_ : IO_TIME_DETECT_FLAG_BIT;
       int64_t reserved_ : IO_RESERVED_BIT;
     };
   };
@@ -383,6 +379,9 @@ struct ObIOGroupKey
   TO_STRING_KV(K(group_id_), K(mode_));
 };
 
+struct IOConfigSnapshot;
+class ObIOAllocator;
+
 class ObIOResult final
 {
 public:
@@ -419,15 +418,19 @@ public:
 private:
   friend class ObIORequest;
   friend class ObIOHandle;
-  friend class ObIOFaultDetector;
   friend class ObIOService;
-  friend class ObAsyncIOChannel;
-  friend class ObSyncIOChannel;
+  friend class ObDeviceChannel;
   friend class ObIOCallbackManager;
   bool is_inited_;
   bool is_finished_;
   bool is_canceled_;
   bool has_estimated_;
+  enum class CallbackOwnership { Borrowed, Adopted, Detached };
+  CallbackOwnership callback_ownership_ = CallbackOwnership::Borrowed;
+  std::optional<rust::Box<storage_io::CancelHandle>> rust_control_;
+  std::shared_ptr<const IOConfigSnapshot> config_snapshot_;
+  uint64_t group_id_ = 0;
+  uint64_t group_index_ = 0;
   volatile int32_t result_ref_cnt_; //for io_result and io_handle
   volatile int32_t out_ref_cnt_; //for io_handle
   int64_t complete_size_;
@@ -437,6 +440,7 @@ private:
   
   int64_t aligned_size_;
   ObIOService *io_service_;
+  std::shared_ptr<ObIOAllocator> allocation_owner_;
   const char *buf_;
   char *user_data_buf_; //actual data buf without cb, allocated by thpe calling layer
   ObIOCallback *io_callback_;
@@ -464,18 +468,13 @@ public:
   int64_t get_data_size() const;
   ObIOGroupKey get_group_key() const;
   bool is_sys_module() const;
-  char *calc_io_buf();  // calc the aligned io_buf of raw_buf_, which interact with the operating system
   const ObIOFlag &get_flag() const;
   ObIOMode get_mode() const; // 2 mode
   ObIOGroupMode get_group_mode() const;
   ObIOCallback *get_callback() const;
-  int alloc_io_buf(char *&io_buf);
-  int get_buf_size() const;
   int64_t get_align_size() const;
   int64_t get_align_offset() const;
-  int prepare(char *next_buffer = nullptr, int64_t next_size = 0, int64_t next_offset = 0);
   int recycle_buffer();
-  int try_alloc_buf_until_timeout(char *&io_buf);
   bool can_callback() const;
   void free_io_buffer();
   void inc_ref();
@@ -483,74 +482,35 @@ public:
 
   int64_t get_remained_io_timeout_us();
 
-  TO_STRING_KV(K(is_inited_), KP(control_block_), K(ref_cnt_), KP(raw_buf_), K(fd_),
-               K(trace_id_), K(retry_count_), KP(io_service_), KPC(io_result_));
+  TO_STRING_KV(K(is_inited_), K(ref_cnt_), K(registration_tag_), K(rust_id_), K(fd_),
+               K(trace_id_), KP(io_service_), KPC(io_result_));
 private:
-  friend class ObIOScheduler;
   friend class ObDeviceChannel;
   friend class ObIOManager;
   friend class ObIOResult;
   friend class ObIOCallbackManager;
-  friend class ObMClockQueue;
-  friend class ObAsyncIOChannel;
-  friend class ObSyncIOChannel;
-  friend class ObIOFaultDetector;
   friend class ObIOService;
   friend class ObIOUsage;
   const char *get_io_data_buf();  // get data buf for MEMCPY before io_buf recycle
-  int alloc_aligned_io_buf(char *&io_buf);
-  virtual int set_block_handle(const ObIOInfo &info);
-  virtual int set_fd_cache_handle(const ObIOInfo &io_info);
   int calc_io_offset_and_size_();
-  int prepare_native_io(char *buffer, int64_t size, int64_t offset);
 public:
   common::LinkTask req_node_;
   ObIOResult *io_result_;
 protected:
   bool is_inited_;
-  int8_t retry_count_;
   volatile int32_t ref_cnt_;
-  void *raw_buf_; //actual allocated io buf
-  int buf_size_;  //raw buf size
+  std::optional<rust::Box<storage_io::RequestSlot>> rust_request_;
+  std::optional<rust::Box<storage_io::RequestLifetime>> rust_lifetime_;
+  std::optional<rust::Box<storage_io::CompletionSlot>> rust_completion_;
+  uint64_t registration_tag_ = 0;
+  uint64_t rust_id_ = 0;
   int64_t align_size_; // align io size, use this and don't use calc_io_offset_and_size_()
   int64_t align_offset_;
-  ObIOCB *control_block_;
   
   ObIOService *io_service_;
+  std::shared_ptr<ObIOAllocator> allocation_owner_;
   ObIOFd fd_;
   ObCurTraceId::TraceId trace_id_;
-};
-
-typedef common::ObDList<ObIORequest> IOReqList;
-class ObPhyQueue final
-{
-public:
-  ObPhyQueue();
-  ~ObPhyQueue();
-  bool is_stop_accept()
-  {
-    return stop_accept_;
-  }
-  int init(const int64_t index);
-  void destroy();
-  void set_stop_accept()
-  {
-    stop_accept_ = true;
-  }
-
-public:
-  TO_STRING_KV(K_(reservation_ts), K_(limitation_ts), K_(stop_accept), K_(last_empty_ts));
-  bool is_inited_;
-  bool stop_accept_;
-  int64_t reservation_ts_;
-  int64_t limitation_ts_;
-  int64_t proportion_ts_;
-  int64_t last_empty_ts_;
-  int64_t queue_index_;  // index in array, INT64_MAX means other
-  int64_t reservation_pos_;
-  int64_t limitation_pos_;
-  int64_t proportion_pos_;
-  IOReqList req_list_;
 };
 
 class ObIOHandle final
@@ -635,6 +595,7 @@ public:
   public:
     int64_t memory_limit_;
     int64_t callback_thread_count_;
+    int64_t io_buffer_limit_;
   };
 
 public:
@@ -646,90 +607,36 @@ public:
   int deep_copy(const ObIOServiceConfig &other_config);
   int calc_group_config(const uint64_t index, int64_t &min, int64_t &max, int64_t &weight) const;
   int64_t get_callback_thread_count() const;
+  int64_t effective_probe_buffer_limit() const;
   int64_t to_string(char *buf, const int64_t buf_len) const;
 
 public:
+  struct ModuleGroupMapping {
+    uint64_t module_id_;
+    uint64_t group_id_;
+    TO_STRING_KV(K_(module_id), K_(group_id));
+  };
+  struct DeviceResource {
+    uint64_t id_;
+    int64_t depth_;
+    int64_t probe_depth_;
+    int64_t max_probe_bytes_;
+    TO_STRING_KV(K_(id), K_(depth), K_(probe_depth), K_(max_probe_bytes));
+  };
+  ObSEArray<ModuleGroupMapping, SYS_MODULE_CNT> module_groups_;
+  ObSEArray<DeviceResource, 4> devices_;
+  int64_t request_limit_ = 10000;
+  int64_t probe_request_limit_ = 100;
+  // Configured floor; registered device requirements can raise the effective reserve.
+  int64_t probe_buffer_limit_ = 2L * 1024L * 1024L;
+  int64_t health_warning_tolerance_us_ = 5L * 1000L * 1000L;
+  int64_t health_blacklist_interval_us_ = 60L * 1000L * 1000L;
+  int64_t health_wait_cap_us_ = 120L * 1000L * 1000L;
   ResourceConfig resource_config_;
   typedef ObSEArray<GroupConfig, GROUP_START_NUM * (static_cast<uint64_t>(ObIOMode::MAX_MODE) + 1)> ObIOGroupConfigArray;
   ObIOGroupConfigArray group_configs_;
   bool group_config_change_;
   ParamConfig param_config_;
-};
-
-struct ObAtomIOClock final
-{
-  ObAtomIOClock() : iops_(0), last_ns_(0)
-  {}
-  void atom_update_reserve(const int64_t current_ts, const double iops_scale, int64_t &deadline_ts);
-  void atom_update(const int64_t current_ts, const double iops_scale, int64_t &deadline_ts);
-  void compare_and_update(const int64_t current_ts, const double iops_scale, int64_t &deadline_ts);
-  void reset();
-  TO_STRING_KV(K_(iops), K_(last_ns));
-  int64_t iops_;
-  int64_t last_ns_;  // nanosecond timestamp; supports max IOPS up to one billion
-};
-
-class ObIOQueue
-{
-public:
-  ObIOQueue()
-  {}
-  virtual ~ObIOQueue()
-  {}
-  virtual int init() = 0;
-  virtual void destroy() = 0;
-  DECLARE_PURE_VIRTUAL_TO_STRING;
-};
-
-class ObMClockQueue : public ObIOQueue
-{
-public:
-  ObMClockQueue();
-  virtual ~ObMClockQueue();
-  virtual int init() override;
-  virtual void destroy() override;
-  int get_time_info(int64_t &reservation_ts, int64_t &limitation_ts, int64_t &proportion_ts);
-  int push_phyqueue(ObPhyQueue *phy_queue);
-  int pop_phyqueue(ObIORequest *&req, int64_t &deadline_ts);
-  TO_STRING_KV(K(is_inited_), K(r_heap_.count()), K(l_heap_.count()), K(ready_heap_.count()));
-
-  int remove_from_heap(ObPhyQueue *phy_queue);
-
-private:
-  int pop_with_ready_queue(const int64_t current_ts, ObIORequest *&req, int64_t &deadline_ts);
-
-  template <typename T, int64_t T::*member_ts, IOReqList T::*list>
-  struct HeapCompare
-  {
-    int get_error_code()
-    {
-      return OB_SUCCESS;
-    }
-    bool operator()(const T *left, const T *right) const
-    {
-      return left->*member_ts != right->*member_ts ? left->*member_ts > right->*member_ts
-             : (left->*list).get_size() != (right->*list).get_size()
-                 ? (left->*list).get_size() < (right->*list).get_size()
-                 : (int64_t)left > (int64_t)right;
-    }
-  };
-
-private:
-  static const int64_t POP_MORE_PHY_QUEUE_USEC = 1000;  // 1ms
-private:
-  bool is_inited_;
-  HeapCompare<ObPhyQueue, &ObPhyQueue::reservation_ts_, &ObPhyQueue::req_list_> r_cmp_;
-  HeapCompare<ObPhyQueue, &ObPhyQueue::limitation_ts_, &ObPhyQueue::req_list_> l_cmp_;
-  HeapCompare<ObPhyQueue, &ObPhyQueue::proportion_ts_, &ObPhyQueue::req_list_> p_cmp_;
-  ObRemovableHeap<ObPhyQueue *, HeapCompare<ObPhyQueue, &ObPhyQueue::reservation_ts_, &ObPhyQueue::req_list_>,
-      &ObPhyQueue::reservation_pos_>
-      r_heap_;
-  ObRemovableHeap<ObPhyQueue *, HeapCompare<ObPhyQueue, &ObPhyQueue::limitation_ts_, &ObPhyQueue::req_list_>,
-      &ObPhyQueue::limitation_pos_>
-      l_heap_;
-  ObRemovableHeap<ObPhyQueue *, HeapCompare<ObPhyQueue, &ObPhyQueue::proportion_ts_, &ObPhyQueue::req_list_>,
-      &ObPhyQueue::proportion_pos_>
-      ready_heap_;
 };
 
 }  // namespace common

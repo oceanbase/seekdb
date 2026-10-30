@@ -15,6 +15,9 @@
  */
 
 #include "log_meta.h"
+#include "rust/file_io.h"
+#include <cerrno>
+#include <cstring>
 #include "share/storage/local_store.h"
 #include "share/inner_table/local_table_schema.h"
 
@@ -174,6 +177,41 @@ int write_meta(LocalStore &store, const LogMeta &meta, bool create)
   }
   return ret;
 }
+}
+
+int check_directory(LocalStore &store, const char *log_dir, bool &directory_exists)
+{
+  int ret = OB_SUCCESS;
+  directory_exists = false;
+  if (OB_ISNULL(log_dir) || '\0' == log_dir[0] || !store.is_inited()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    const auto observed = file_io::inspect_path(
+        {reinterpret_cast<const uint8_t *>(log_dir), strlen(log_dir)}, false);
+    if (0 != observed.error && ENOENT != observed.error) {
+      ret = OB_IO_ERROR;
+      PALF_LOG(ERROR, "cannot inspect PALF directory", K(ret), KCSTRING(log_dir),
+          "path_error", observed.error);
+    } else if (0 == observed.error && (!observed.directory || observed.symlink)) {
+      ret = OB_INVALID_DATA;
+      PALF_LOG(ERROR, "PALF path is not a directory", K(ret), KCSTRING(log_dir));
+    } else {
+      directory_exists = 0 == observed.error;
+      LogMeta meta;
+      block_id_t expected_next_block_id = LOG_INVALID_BLOCK_ID;
+      ret = load(store, meta, expected_next_block_id);
+      if (OB_ENTRY_NOT_EXIST == ret) {
+        ret = directory_exists ? OB_ERR_UNEXPECTED : OB_SUCCESS;
+      } else if (OB_SUCC(ret) && !directory_exists) {
+        ret = OB_ERR_UNEXPECTED;
+      }
+      if (OB_FAIL(ret)) {
+        PALF_LOG(ERROR, "PALF directory and local metadata are inconsistent",
+            K(ret), KCSTRING(log_dir), K(directory_exists));
+      }
+    }
+  }
+  return ret;
 }
 
 int create(LocalStore &store, const LogMeta &meta)

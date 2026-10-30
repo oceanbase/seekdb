@@ -53,7 +53,6 @@ _RESOLVER_PREPARE_SHARE_DEPS = [
     "//src/share:inner_table_schema_io",
     "//src/share:interrupt_runtime",
     "//src/share:io",
-    "//src/share:io_bench_controller_interface",
     "//src/share:lib_cache_namespace",
     "//src/share:log_protocol",
     "//src/share:ls_restore_status",

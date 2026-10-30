@@ -50,10 +50,19 @@ int PalfEnv::create_palf_env(
     PalfEnv *&palf_env)
 {
   int ret = OB_SUCCESS;
-  palf_env = SERVER_NEW(PalfEnv, "PalfEnv");
-  if (NULL == palf_env) {
+  char log_dir[common::MAX_PATH_SIZE] = {'\0'};
+  bool directory_exists = false;
+  int length = 0;
+  palf_env = nullptr;
+  if (OB_ISNULL(base_dir)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if ((length = snprintf(log_dir, sizeof(log_dir), "%s/log_stream", base_dir)) < 0
+      || length >= sizeof(log_dir)) {
+    ret = OB_BUF_NOT_ENOUGH;
+  } else if (OB_FAIL(meta_store::check_directory(store, log_dir, directory_exists))) {
+  } else if (NULL == (palf_env = SERVER_NEW(PalfEnv, "PalfEnv"))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(FileDirectoryUtils::delete_tmp_file_or_directory_at(base_dir))) {
+  } else if (OB_FAIL(delete_tmp_file_or_directory_at(base_dir))) {
   } else if (OB_FAIL(palf_env->palf_env_impl_.init(options, store, base_dir, self,
                                                    log_alloc_mgr, log_block_pool, monitor, 
                                                    log_local_device, io_manager))) {

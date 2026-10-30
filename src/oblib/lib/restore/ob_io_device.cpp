@@ -44,7 +44,7 @@ bool ObIOFd::is_valid() const
   if (is_block_file()) {
     is_valid = first_id_ >= 0 && second_id_ >= 0;
   } else {
-    is_valid = first_id_ == NORMAL_FILE_ID && second_id_ >= 0;
+    is_valid = first_id_ == NORMAL_FILE_ID && second_id_ > 0;
   }
   return is_valid;
 }

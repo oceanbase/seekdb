@@ -52,6 +52,10 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
 pub enum Error {
     Io(io::Error),
+    DirectorySync {
+        path: std::path::PathBuf,
+        source: file_io::DirectorySyncError,
+    },
     Corrupt(&'static str),
     Busy,
     KeyTooLarge,
@@ -66,6 +70,9 @@ impl fmt::Display for Error {
     fn fmt(&self, output: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Io(error) => write!(output, "KV I/O error: {error}"),
+            Self::DirectorySync { path, source } => {
+                write!(output, "KV directory sync {}: {source}", path.display())
+            }
             Self::Corrupt(message) => write!(output, "corrupt KV storage: {message}"),
             Self::Busy => output.write_str("KV storage is already open"),
             Self::KeyTooLarge => output.write_str("KV key exceeds the size limit"),
@@ -82,6 +89,7 @@ impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Io(error) => Some(error),
+            Self::DirectorySync { source, .. } => Some(source),
             _ => None,
         }
     }
@@ -208,14 +216,25 @@ struct Visible {
 
 impl Store {
     pub fn open(directory: impl AsRef<Path>) -> Result<Self> {
-        Self::open_with_options(directory, Options::default())
+        Self::open_with_options(
+            directory,
+            Options::default(),
+            file_io::DirectoryDurability::Required,
+            &mut file_io::DirectorySyncSummary::default(),
+        )
     }
 
-    pub fn open_with_options(directory: impl AsRef<Path>, options: Options) -> Result<Self> {
+    pub fn open_with_options(
+        directory: impl AsRef<Path>,
+        options: Options,
+        durability: file_io::DirectoryDurability,
+        summary: &mut file_io::DirectorySyncSummary,
+    ) -> Result<Self> {
+        summary.clear();
         if options.max_transaction_pages == 0 {
             return Err(Error::InvalidOptions);
         }
-        let files = file::open(directory.as_ref())?;
+        let files = file::open(directory.as_ref(), durability, summary)?;
         let root = files.roots[files.slot].unwrap();
         let store = Self {
             shared: Arc::new(Shared {

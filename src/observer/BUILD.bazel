@@ -145,7 +145,7 @@ _OBSERVER_NATIVE_DEPS = [
     "//src/sql:sql_runtime_interface",
     "//src/storage:_textual_ob_keybtree",
     "//src/storage:data_validation_service_internal",
-    "//src/storage:io_bench_controller_adapter",
+    "//src/storage:benchmark_session_headers",
     "//src/storage:ls_runtime_adapter_interface",
     "//src/storage:log_storage_adapter_internal",
     "//src/storage:storage_runtime_internal_headers",
@@ -155,7 +155,6 @@ _OBSERVER_NATIVE_DEPS = [
     "//src/storage:tablet_autoincrement_service_internal",
     "//bazel/third_party:absl_headers",
     "//bazel/third_party:curl_headers",
-    "//bazel/third_party:libaio_headers",
     "//bazel/third_party:libxml2_headers",
     "//bazel/third_party:mariadb_headers",
     "//bazel/third_party:openssl_headers",
@@ -570,3 +569,5 @@ cc_import(
     testonly = True,
     visibility = ["//unittest:__subpackages__"],
 )
+
+

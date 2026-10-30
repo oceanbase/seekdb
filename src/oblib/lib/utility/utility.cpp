@@ -39,7 +39,7 @@
 #include <process.h>
 #endif
 #include "lib/utility/ob_platform_utils.h"  // Platform compatibility layer
-#include "lib/file/file_directory_utils.h"
+#include "lib/file/path_operations.h"
 #include "lib/string/ob_sql_string.h"
 
 namespace oceanbase
@@ -929,7 +929,7 @@ int get_ethernet_speed(const ObString &devname, int64_t &speed)
     _OB_LOG(WARN, "empty devname");
   } else {
     IGNORE_RETURN snprintf(path, sizeof(path), "/sys/class/net/%.*s", devname.length(), devname.ptr());
-    if (OB_SUCCESS != (ret = FileDirectoryUtils::is_exists(path, exist)) || !exist) {
+    if (OB_SUCCESS != (ret = path_operations::is_exists(path, exist)) || !exist) {
       if (dev_file_exist) {
       _OB_LOG(WARN, "path %s not exist", path);
        dev_file_exist = 0;
@@ -944,7 +944,7 @@ int get_ethernet_speed(const ObString &devname, int64_t &speed)
     ObString str;
     IGNORE_RETURN snprintf(path, sizeof(path), "/sys/class/net/%.*s/bonding/",
                            devname.length(), devname.ptr());
-    if (OB_SUCCESS != (ret = FileDirectoryUtils::is_exists(path, exist))) {
+    if (OB_SUCCESS != (ret = path_operations::is_exists(path, exist))) {
     } else if (exist) {
       IGNORE_RETURN snprintf(path, sizeof(path), "/sys/class/net/%.*s/bonding/slaves",
                              devname.length(), devname.ptr());

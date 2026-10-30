@@ -2,7 +2,7 @@
 # (OceanBase-lite) C++ server. Add new crates under `members`.
 [workspace]
 resolver = "2"
-members = ["config", "kv", "local", "sql-nio", "logger", "in-process", "regex-engine", "seekdb-rust", "uuid-generator"]
+members = ["config", "file-io", "storage-io", "kv", "local", "sql-nio", "logger", "in-process", "regex-engine", "seekdb-rust", "uuid-generator"]
 
 [profile.release]
 opt-level = 3

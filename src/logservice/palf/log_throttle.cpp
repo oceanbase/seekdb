@@ -17,6 +17,7 @@
 
 #include "log_throttle.h"
 #include "share/ob_throttling_utils.h"                //ObThrottlingUtils
+#include "lib/thread/thread.h"
 #include "palf_env_impl.h"                            // PalfEnvImpl
 
 namespace oceanbase
@@ -89,6 +90,10 @@ int LogWritingThrottle::throttling(const int64_t throttling_size,
       // in following code block.
       lock_.unlock();
       while (OB_SUCC(ret) && remain_interval_us > 0) {
+        if (lib::Thread::current().has_set_stop()) {
+          ret = OB_IN_STOP_STATE;
+          break;
+        }
         const int64_t real_interval = MIN(remain_interval_us, DETECT_INTERVAL_US);
         ob_usleep<ObWaitEventIds::PALF_THROTTLING>(real_interval);
         remain_interval_us -= real_interval;

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 
+#include "lib/file/path_operations.h"
 #include "rust/config.h"
 #include "share/config/ob_config_helper.h"
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
@@ -6062,19 +6063,14 @@ int ObResolverUtils::check_secure_path(const common::ObString &secure_file_priv,
     char buf[DEFAULT_BUF_LENGTH] = { 0 };
     MEMCPY(buf, secure_file_priv.ptr(), secure_file_priv.length());
 
-    struct stat path_stat;
-    if (0 != stat(buf, &path_stat) || 0 == S_ISDIR(path_stat.st_mode)) {
+    bool is_directory = false;
+    if (OB_SUCCESS != path_operations::is_directory(buf, is_directory) || !is_directory) {
       ret = OB_ERR_NO_PRIVILEGE;
     } else {
       MEMSET(buf, 0, sizeof(buf));
-      char *real_secure_file = nullptr;
-#ifdef _WIN32
+      const char *real_secure_file = buf;
       ObCStringHelper helper;
-      if (NULL == (real_secure_file = ::_fullpath(buf, helper.convert(secure_file_priv), sizeof(buf)))) {
-#else
-      ObCStringHelper helper;
-      if (NULL == (real_secure_file = ::realpath(helper.convert(secure_file_priv), buf))) {
-#endif
+      if (OB_SUCCESS != path_operations::resolve_path(helper.convert(secure_file_priv), buf, sizeof(buf))) {
         ret = OB_ERR_NO_PRIVILEGE;
       } else {
         ObString secure_file_priv_tmp(real_secure_file);
@@ -6116,18 +6112,13 @@ int ObResolverUtils::check_secure_path(const common::ObString &secure_file_priv,
     const int list_size = ARRAYSIZEOF(server_secure_path_allowlist);
     for (int i = 0; OB_ERR_NO_PRIVILEGE == ret && i < list_size; i++) {
       const char * const secure_file_path = server_secure_path_allowlist[i];
-      struct stat path_stat;
-      stat(secure_file_path, &path_stat);
-      if (0 == S_ISDIR(path_stat.st_mode)) {
+      bool is_directory = false;
+      if (OB_SUCCESS != path_operations::is_directory(secure_file_path, is_directory) || !is_directory) {
         // continue
       } else {
         MEMSET(buf, 0, sizeof(buf));
-        char *real_secure_file = nullptr;
-#ifdef _WIN32
-        if (NULL == (real_secure_file = ::_fullpath(buf, secure_file_path, sizeof(buf)))) {
-#else
-        if (NULL == (real_secure_file = ::realpath(secure_file_path, buf))) {
-#endif
+        const char *real_secure_file = buf;
+        if (OB_SUCCESS != path_operations::resolve_path(secure_file_path, buf, sizeof(buf))) {
           // continue
         } else {
           ObString secure_file_path_tmp(real_secure_file);

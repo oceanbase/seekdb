@@ -12,6 +12,8 @@ default = ["native-network"]
 native-network = ["sql-nio/native-network"]
 
 [dependencies]
+file-io = { path = "../file-io", features = ["cxx"] }
+storage-io = { path = "../storage-io", features = ["cxx"] }
 sql-nio = { path = "../sql-nio", default-features = false }
 logger = { path = "../logger" }
 config = { path = "../config" }

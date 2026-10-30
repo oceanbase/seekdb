@@ -82,8 +82,7 @@ public:
            LogGroupEntryHeader &entry_header,
            const int64_t palf_epoch,
            const int64_t log_storage_size,
-           LogIOAdapter *io_adapter,
-           bool &is_integrity);
+           LogIOAdapter *io_adapter);
 
   // ==================== Submit async task start ================
   //
@@ -101,7 +100,7 @@ public:
 
   // ====================== LogStorage start =====================
   int append_log(const LSN &lsn, const LogWriteBuf &write_buf, const share::SCN &scn);
-  int append_log(const LSNArray &lsn, const LogWriteBufArray &write_buf, const SCNArray &scn_array);
+  int append_log(const LSNArray &lsn, const LogWriteBufArray &write_buf, const SCNArray &scn_array, int64_t &completed_count);
   int read_log(const LSN &lsn,
                const int64_t in_read_size,
                ReadBuf &read_buf,
@@ -168,9 +167,6 @@ private:
                                   const block_id_t min_block_id,
                                   const share::SCN &min_block_max_scn);
 
-  int integrity_verify_(bool meta_exists,
-                        const LSN &last_group_entry_header_lsn,
-                        bool &is_integrity);
 private:
   DISALLOW_COPY_AND_ASSIGN(LogEngine);
 

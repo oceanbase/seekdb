@@ -15,55 +15,9 @@
  */
 
 #define USING_LOG_PREFIX CLOG
+#include "lib/file/path_operations.h"
 #include "ob_server_log_block_mgr.h"
 #include <regex>
-#ifdef __EMSCRIPTEN__
-#include "lib/file/wasm_file.h"
-#elif defined(__APPLE__)
-#include <fcntl.h>                              // For fcntl, F_PREALLOCATE on macOS
-#include <unistd.h>                             // For ftruncate
-#elif defined(_WIN32)
-#include <io.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <direct.h>
-#include <windows.h>
-static bool ob_resolve_path_at2(int dir_fd, const char *rel_path, char *out, size_t out_size) {
-  if (rel_path && (rel_path[0] == '/' || rel_path[0] == '\\' ||
-      (rel_path[0] != '\0' && rel_path[1] == ':'))) {
-    return false;
-  }
-  HANDLE h = (HANDLE)_get_osfhandle(dir_fd);
-  if (h == INVALID_HANDLE_VALUE) return false;
-  char dir_path[1024];
-  DWORD len = GetFinalPathNameByHandleA(h, dir_path, sizeof(dir_path), FILE_NAME_NORMALIZED);
-  if (len == 0 || len >= sizeof(dir_path)) return false;
-  const char *clean = dir_path;
-  if (len > 4 && strncmp(dir_path, "\\\\?\\", 4) == 0) clean = dir_path + 4;
-  int written = snprintf(out, out_size, "%s\\%s", clean, rel_path);
-  return written > 0 && (size_t)written < out_size;
-}
-static int openat(int dir_fd, const char *path, int flags, ...) {
-  int mode = 0;
-  if (flags & _O_CREAT) { mode = _S_IREAD | _S_IWRITE; }
-  char abs[1024];
-  const char *p = path;
-  if (ob_resolve_path_at2(dir_fd, path, abs, sizeof(abs))) p = abs;
-  return ::_open(p, flags | _O_BINARY, mode);
-}
-static int unlinkat(int dir_fd, const char *path, int flag) {
-  char abs[1024];
-  const char *p = path;
-  if (ob_resolve_path_at2(dir_fd, path, abs, sizeof(abs))) p = abs;
-  if (flag) { return ::_rmdir(p); }
-  return ::_unlink(p);
-}
-// MSVCRT typedefs `off_t` as 32-bit `long`. Use int64_t explicitly so log
-// block file sizes can exceed 2 GiB on Windows.
-static int fallocate(int fd, int, int64_t, int64_t len) {
-  return ::_chsize_s(fd, len);
-}
-#endif
 #include "logservice/ob_log_service.h"          // ObLogService
 
 #define BYTE_TO_MB(byte) (byte+1024*1024-1)/1024/1024
@@ -77,84 +31,33 @@ namespace logservice
 
 int ObServerLogBlockMgr::check_clog_directory_is_empty(const char *clog_dir, bool &result)
 {
-  int ret = OB_SUCCESS;
+  result = false;
+  if (clog_dir == nullptr) return OB_INVALID_ARGUMENT;
+  auto directory = file_io::new_directory_handle();
+  if (directory->open_directory({reinterpret_cast<const uint8_t *>(clog_dir), strlen(clog_dir)}).domain != file_io::ErrorDomain::None) {
 #ifdef _WIN32
-  result = false;
-  ObSqlString pattern;
-  if (OB_ISNULL(clog_dir)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    const DWORD attributes = GetFileAttributesA(clog_dir);
-    if (INVALID_FILE_ATTRIBUTES == attributes
-        || 0 == (attributes & FILE_ATTRIBUTE_DIRECTORY)
-        || 0 != (attributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
-      ret = OB_IO_ERROR;
-    } else if (OB_FAIL(pattern.assign_fmt("%s/*", clog_dir))) {
-    } else {
-      WIN32_FIND_DATAA entry;
-      HANDLE find = FindFirstFileA(pattern.ptr(), &entry);
-      if (INVALID_HANDLE_VALUE == find) {
-        if (ERROR_FILE_NOT_FOUND == GetLastError()) {
-          result = true;
-        } else {
-          ret = OB_IO_ERROR;
-        }
-      } else {
-        result = true;
-        do {
-          if (0 != strcmp(entry.cFileName, ".") && 0 != strcmp(entry.cFileName, "..")) {
-            bool exists = false;
-            if (OB_FAIL(check_log_directory_entry(clog_dir, entry.cFileName, exists))) {
-              result = false;
-              break;
-            } else if (exists) {
-              result = false;
-            }
-          }
-        } while (FindNextFileA(find, &entry));
-        // Only the documented end-of-enumeration code proves a complete scan.
-        if (ERROR_NO_MORE_FILES != GetLastError()) {
-          result = false;
-          ret = OB_IO_ERROR;
-        }
-        if (!FindClose(find)) {
-          result = false;
-          ret = OB_IO_ERROR;
-        }
-      }
-    }
-  }
+    return OB_IO_ERROR;
 #else
-  DIR *dir = NULL;
-  struct dirent *entry = NULL;
-  result = false;
-  if (NULL == clog_dir) {
-    ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "directory path is NULL, ", K(ret));
-  } else if (NULL == (dir = opendir(clog_dir))) {
-    ret = OB_ERR_SYS;
-    CLOG_LOG(WARN, "Fail to open dir, ", K(ret), K(errno), K(clog_dir));
-  } else {
-    result = true;
-    while (NULL != (entry = readdir(dir))) {
-      if (0 != strcmp(entry->d_name, ".") && 0 != strcmp(entry->d_name, "..")) {
-        result = false;
-      }
-    }
-  }
-
-  if (NULL != dir) {
-    closedir(dir);
-  }
+    return OB_ERR_SYS;
 #endif
-  return ret;
+  }
+  auto cursor = file_io::directory_entries(*directory);
+  file_io::DirectoryStep entry;
+  file_io::ObservationResult observation;
+  bool empty = true;
+  for (;;) {
+    const int ret = next_directory_entry(*directory, clog_dir, *cursor, entry, observation);
+    if (ret != OB_SUCCESS) return ret;
+    if (entry.code == file_io::DirectoryStepCode::End) { result = empty; return OB_SUCCESS; }
+    empty = false;
+  }
 }
 
 ObServerLogBlockMgr::ObServerLogBlockMgr(share::StartupResult &startup_result)
     : startup_result_(startup_result),
       get_log_disk_info_in_config_func_(NULL),
       log_service_(NULL),
-      block_cnt_in_use_(0),
+      owner_(storage_io::new_named_owner()),
       is_started_(false),
       is_inited_(false)
 {
@@ -165,39 +68,33 @@ ObServerLogBlockMgr::~ObServerLogBlockMgr()
   destroy();
 }
 
-int ObServerLogBlockMgr::init(
-    const char *log_disk_base_path,
-    GetLogDiskInfoInConfig get_log_disk_info_in_config,
+int ObServerLogBlockMgr::init(const char *path, GetLogDiskInfoInConfig get_config,
     const share::LocalIOConfig &io_config)
 {
+  if (is_inited_) return OB_INIT_TWICE;
+  if (path == nullptr || get_config == nullptr) return OB_INVALID_ARGUMENT;
+  if (!owner_->named_owner_replaceable()) return OB_STATE_NOT_MATCH;
+  io_config_ = io_config;
+  stopped_.store(false);
   int ret = OB_SUCCESS;
-  if (IS_INIT) {
-    ret = OB_INIT_TWICE;
-    CLOG_LOG(ERROR, "ObServerLogBlockMgr inited twice", K(ret), KPC(this));
-  } else if (OB_ISNULL(log_disk_base_path)
-             || OB_ISNULL(get_log_disk_info_in_config)) {
-    ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(ERROR, "Invalid argument", K(ret), KPC(this), KP(log_disk_base_path));
-  } else if (OB_FAIL(do_load_(log_disk_base_path))) {
-  } else {
-    io_config_ = io_config;
-    get_log_disk_info_in_config_func_ = get_log_disk_info_in_config;
-    is_inited_ = true;
-    CLOG_LOG(INFO, "ObServerLogBlockMgr init success", KPC(this));
-  }
-  if (OB_FAIL(ret)) {
-    destroy();
-  }
+  const int error = owner_->begin_named_inventory(0);
+  if (error != 0) { errno = error; ret = convert_sys_errno(); }
+  else if (OB_FAIL(do_load_(path))) {}
+  else { get_log_disk_info_in_config_func_ = get_config; is_inited_ = true; }
+  if (OB_FAIL(ret)) destroy();
   return ret;
 }
 
 void ObServerLogBlockMgr::destroy()
 {
-  CLOG_LOG_RET(WARN, OB_SUCCESS, "ObServerLogBlockMgr  destroy", KPC(this));
+  owner_->close_named_owner();
+  const auto state = owner_->named_stats();
+  CLOG_LOG_RET(WARN, OB_SUCCESS, "log physical owner closed", "phase", state.phase,
+      "pending", state.pending, "active", state.active, "leases", state.leases,
+      "charged", state.charged, "native_error", state.error);
   is_inited_ = false;
   is_started_ = false;
-  block_cnt_in_use_ = 0;
-  get_log_disk_info_in_config_func_ = NULL;
+  get_log_disk_info_in_config_func_ = nullptr;
 }
 
 int ObServerLogBlockMgr::start(const int64_t new_size_byte)
@@ -210,6 +107,7 @@ int ObServerLogBlockMgr::start(const int64_t new_size_byte)
     ret = OB_MACHINE_RESOURCE_NOT_ENOUGH;
     CLOG_LOG(WARN, "server log disk is too small for the local runtime",
              K(ret), KPC(this), K(new_size_byte));
+  } else if (OB_FAIL(set_capacity(new_size_byte))) {
   } else {
     ATOMIC_STORE(&is_started_, true);
     CLOG_LOG(INFO, "ObServerLogBlockMGR start success", K(ret), KPC(this), K(new_size_byte));
@@ -252,85 +150,89 @@ int64_t ObServerLogBlockMgr::get_log_disk_size()
   return log_disk_size;
 }
 
-int ObServerLogBlockMgr::create_block_at(const FileDesc &dest_dir_fd,
-                                         const char *dest_block_path,
-                                         const int64_t block_size)
+int ObServerLogBlockMgr::create_and_publish_block_at(const file_io::DirectoryHandle &directory,
+    const char *temporary_name, const char *name, const int64_t block_size)
 {
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    CLOG_LOG(ERROR, "ObServerLogBlockMgr has not inited", K(ret), KPC(this));
-  } else if (false == is_valid_file_desc(dest_dir_fd)
-             || NULL == dest_block_path || BLOCK_SIZE != block_size) {
-    ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(ERROR, "Invalid argument", K(ret), KPC(this), K(dest_dir_fd),
-             K(dest_block_path), K(block_size));
-  }
-  if (OB_SUCC(ret)) {
-    while (true) {
-      if (OB_FAIL(startup_result_.error())) {
-        break;
-      } else if (stopped_.load()) {
-        ret = OB_CANCELED;
-        break;
-      } else if (OB_SUCCESS == (ret = allocate_block_at_(dest_dir_fd, dest_block_path, block_size))) {
-        break;
-      } else {
-        CLOG_LOG(WARN, "allocate_block_at_ failed", K(ret), KPC(this),
-                 K(dest_dir_fd), K(dest_block_path));
-        const int startup_error = startup_result_.report_failure(ret);
-        if (OB_SUCCESS != startup_error) {
-          ret = startup_error;
-          break;
-        }
-#ifdef __EMSCRIPTEN__
-        // After startup, browser quota errors still return to the host.
-        break;
-#else
-        ob_usleep(10 * 1000); // 10ms
-#endif
-      }
-    }
-  }
-  // make sure the meta info of both directory has been flushed.
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(fsync_until_success_(dest_dir_fd))) {
-    if (-1 == ::unlinkat(dest_dir_fd, dest_block_path, 0)) {
-      CLOG_LOG(ERROR, "remove log block after directory fsync failed", K(ret),
-               K(dest_dir_fd), K(dest_block_path), K(errno));
-    }
-  } else {
-    ATOMIC_INC(&block_cnt_in_use_);
-    CLOG_LOG(INFO, "create_new_block_at success", K(ret), KPC(this), K(dest_dir_fd),
-             K(dest_block_path));
-  }
+  if (!is_inited_) return OB_NOT_INIT;
+  if (temporary_name == nullptr || name == nullptr || block_size != BLOCK_SIZE) return OB_INVALID_ARGUMENT;
+  if (stopped_.load()) return OB_CANCELED;
+  const int error = owner_->create_and_publish_named_file(directory,
+      {reinterpret_cast<const uint8_t *>(temporary_name), strlen(temporary_name)},
+      {reinterpret_cast<const uint8_t *>(name), strlen(name)}, block_size, true);
+  if (error == 0) return OB_SUCCESS;
+  errno = error;
+  const int ret = convert_sys_errno();
+  (void)startup_result_.report_failure(ret);
   return ret;
 }
 
-int ObServerLogBlockMgr::remove_block_at(const FileDesc &src_dir_fd,
-                                         const char *src_block_path)
+int ObServerLogBlockMgr::remove_block_at(const file_io::DirectoryHandle &directory,
+    const char *name, bool required)
 {
-  int ret = OB_SUCCESS;
-  block_id_t dest_block_id = LOG_INVALID_BLOCK_ID;
-  char dest_block_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-  bool result = true;
-  if (OB_FAIL(is_block_used_for_palf(src_dir_fd, src_block_path, result))) {
-  } else if (false == result) {
-    CLOG_LOG(ERROR, "this block is not used for palf", K(ret), K(src_block_path));
-    ::unlinkat(src_dir_fd, src_block_path, 0);
-  } else {
-    if (IS_NOT_INIT) {
-      ret = OB_NOT_INIT;
-      CLOG_LOG(ERROR, "ObServerLogBlockMGR has not inited", K(ret), KPC(this));
-    } else if (OB_FAIL(free_block_at_(src_dir_fd, src_block_path))) {
-    } else if (OB_FAIL(fsync_until_success_(src_dir_fd))) {
-    } else {
-      ATOMIC_DEC(&block_cnt_in_use_);
-      CLOG_LOG(INFO, "delete_block_at success", K(ret), KPC(this), K(src_dir_fd),
-               K(src_block_path));
-    }
-  }
-  return ret;
+  if (name == nullptr) return OB_INVALID_ARGUMENT;
+  const int error = owner_->remove_named_file(directory,
+      {reinterpret_cast<const uint8_t *>(name), strlen(name)}, required);
+  if (error == 0) return OB_SUCCESS;
+  errno = error;
+  return convert_sys_errno();
+}
+
+int ObServerLogBlockMgr::rename_block_at(const file_io::DirectoryHandle &directory,
+    const char *old_name, const char *new_name)
+{
+  if (!is_inited_) return OB_NOT_INIT;
+  if (old_name == nullptr || new_name == nullptr) return OB_INVALID_ARGUMENT;
+  const int error = owner_->rename_named_file(directory,
+      {reinterpret_cast<const uint8_t *>(old_name), strlen(old_name)},
+      {reinterpret_cast<const uint8_t *>(new_name), strlen(new_name)}, true);
+  if (error == 0) return OB_SUCCESS;
+  errno = error;
+  return convert_sys_errno();
+}
+
+int ObServerLogBlockMgr::create_directory_at(const file_io::DirectoryHandle &directory,
+    const char *name, uint32_t mode)
+{
+  if (!is_inited_) return OB_NOT_INIT;
+  if (name == nullptr) return OB_INVALID_ARGUMENT;
+  const int error = owner_->create_named_directory(directory,
+      {reinterpret_cast<const uint8_t *>(name), strlen(name)}, mode);
+  if (error == 0) return OB_SUCCESS;
+  errno = error;
+  return convert_sys_errno();
+}
+
+int ObServerLogBlockMgr::rename_directory_at(const file_io::DirectoryHandle &directory,
+    const char *old_name, const char *new_name)
+{
+  if (!is_inited_) return OB_NOT_INIT;
+  if (old_name == nullptr || new_name == nullptr) return OB_INVALID_ARGUMENT;
+  const int error = owner_->rename_named_directory(directory,
+      {reinterpret_cast<const uint8_t *>(old_name), strlen(old_name)},
+      {reinterpret_cast<const uint8_t *>(new_name), strlen(new_name)}, true);
+  if (error == 0) return OB_SUCCESS;
+  errno = error;
+  return convert_sys_errno();
+}
+
+int ObServerLogBlockMgr::remove_directory_at(const file_io::DirectoryHandle &directory,
+    const char *name)
+{
+  if (name == nullptr) return OB_INVALID_ARGUMENT;
+  const int error = owner_->remove_named_directory(directory,
+      {reinterpret_cast<const uint8_t *>(name), strlen(name)});
+  if (error == 0) return OB_SUCCESS;
+  errno = error;
+  return convert_sys_errno();
+}
+
+int ObServerLogBlockMgr::set_capacity(int64_t bytes)
+{
+  if (bytes < 0) return OB_INVALID_ARGUMENT;
+  const int error = owner_->set_named_capacity(bytes);
+  if (error == 0) return OB_SUCCESS;
+  errno = error;
+  return convert_sys_errno();
 }
 
 int ObServerLogBlockMgr::update_log_disk_size(const int64_t old_log_disk_size,
@@ -354,26 +256,20 @@ int ObServerLogBlockMgr::update_log_disk_size(const int64_t old_log_disk_size,
 }
 
 // Clean temporary files, then restore the allocated block count of the single log stream.
-int ObServerLogBlockMgr::do_load_(const char *log_disk_path)
+int ObServerLogBlockMgr::do_load_(const char *path)
 {
   int ret = OB_SUCCESS;
-  int64_t has_allocated_block_cnt = 0;
-  ObTimeGuard time_guard("RestartServerBlockMgr", 1 * 1000 * 1000);
-  if (OB_FAIL(remove_tmp_file_or_directory_for_runtime_(log_disk_path))) {
-  } else if (OB_FAIL(scan_log_disk_dir_(log_disk_path, has_allocated_block_cnt))) {
-  } else {
-    time_guard.click("scan_log_disk_");
-    ATOMIC_STORE(&block_cnt_in_use_, has_allocated_block_cnt);
-    CLOG_LOG(INFO, "do_load_ success", K(ret), KPC(this), K(time_guard));
+  int64_t selected = 0;
+  if (OB_FAIL(remove_tmp_file_or_directory_for_runtime_(path))) {}
+  else if (OB_FAIL(get_has_allocated_blocks_cnt_in_(path, selected))) {}
+  else {
+    const int error = owner_->finish_named_inventory();
+    if (error != 0) { errno = error; ret = convert_sys_errno(); }
   }
   return ret;
 }
 
-int ObServerLogBlockMgr::scan_log_disk_dir_(const char *log_disk_path,
-                                            int64_t &has_allocated_block_cnt)
-{
-  return get_has_allocated_blocks_cnt_in_(log_disk_path, has_allocated_block_cnt);
-}
+
 
 bool ObServerLogBlockMgr::check_space_is_enough_(const int64_t log_disk_size) const
 {
@@ -405,300 +301,192 @@ int ObServerLogBlockMgr::get_runtime_log_disk_size_(int64_t &runtime_log_disk_si
 
 int64_t ObServerLogBlockMgr::get_in_use_size_()
 {
-  return ATOMIC_LOAD(&block_cnt_in_use_) * BLOCK_SIZE;
+  return static_cast<int64_t>(owner_->named_stats().charged);
 }
 
-int ObServerLogBlockMgr::allocate_block_at_(const FileDesc &dir_fd,
-                                            const char *block_path,
-                                            const int64_t block_size)
-{
-  int ret = OB_SUCCESS;
-  FileDesc fd = -1;
-  if (-1 == (fd = ::openat(dir_fd, block_path, io_config_.file_flags(CREATE_FILE_FLAG), CREATE_FILE_MODE))) {
-    ret = convert_sys_errno();
-    CLOG_LOG(ERROR, "::openat failed", K(ret), KPC(this), K(dir_fd), K(block_path));
-#ifdef __EMSCRIPTEN__
-  // O_EXCL above gives this allocation exclusive ownership of the new file.
-  } else if (-1 == common::wasm::extend_file_with_zeros(fd, block_size)) {
-    ret = convert_sys_errno();
-    CLOG_LOG(ERROR, "write log block allocation failed", K(ret), K(block_path), K(block_size), K(errno));
-#elif defined(__APPLE__)
-  } else if (-1 == ftruncate(fd, block_size)) {
-    ret = convert_sys_errno();
-    CLOG_LOG(ERROR, "::ftruncate failed (macOS fallocate replacement)", K(ret), KPC(this), K(dir_fd), K(block_path),
-             K(errno));
-#else
-  } else if (-1 == ::fallocate(fd, 0, 0, block_size)) {
-    ret = convert_sys_errno();
-    CLOG_LOG(ERROR, "::fallocate failed", K(ret), KPC(this), K(dir_fd), K(block_path),
-             K(errno));
-#endif
-  } else {
-    if (REACH_TIME_INTERVAL(PRINT_INTERVAL)) {
-      CLOG_LOG(INFO, "allocate_block_at_ success", K(ret), KPC(this), K(dir_fd),
-               K(block_path));
-    }
-  }
-  if (-1 != fd && -1 == ::close(fd)) {
-    int tmp_ret = convert_sys_errno();
-    CLOG_LOG(ERROR, "::close failed", K(ret), K(tmp_ret), KPC(this), K(dir_fd), K(block_path));
-    ret = (OB_SUCCESS == ret ? tmp_ret : ret);
-  }
-  if (OB_SUCCESS != ret && -1 != fd) {
-    // Only unlink a file created by our O_EXCL open. Otherwise a failed write
-    // leaves a partial block that makes every subsequent attempt hit EEXIST.
-    if (-1 == ::unlinkat(dir_fd, block_path, 0)) {
-      CLOG_LOG(ERROR, "remove failed log block allocation failed", K(ret), K(block_path), K(errno));
-    }
-  }
-  return ret;
-}
 
-int ObServerLogBlockMgr::free_block_at_(const FileDesc &src_dir_fd,
-                                        const char *block_path)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(unlinkat_until_success_(src_dir_fd, block_path, 0))) {
-  } else {
-    if (REACH_TIME_INTERVAL(PRINT_INTERVAL)) {
-      CLOG_LOG(INFO, "free_block_at_ success", K(ret), KPC(this), K(src_dir_fd),
-               K(block_path));
-    }
-  }
-  return ret;
-}
 
-int ObServerLogBlockMgr::get_has_allocated_blocks_cnt_in_(
-    const char *log_disk_path, int64_t &has_allocated_block_cnt)
+
+
+int ObServerLogBlockMgr::get_has_allocated_blocks_cnt_in_(const char *log_disk_path, int64_t &has_allocated_block_cnt)
 {
   int ret = OB_SUCCESS;
-  DIR *dir = NULL;
+  int64_t total = 0;
   std::regex pattern_runtime(".*/sys");
   std::regex pattern_log_pool(".*/log_pool/*");
-  struct dirent *entry = NULL;
-  if (NULL == (dir = opendir(log_disk_path))) {
-    ret = OB_ERR_SYS;
-    CLOG_LOG(WARN, "opendir failed", K(log_disk_path));
-  } else {
-    char current_file_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-    while ((entry = readdir(dir)) != NULL && OB_SUCC(ret)) {
-      bool is_dir = false;
-      bool exists = false;
-      MEMSET(current_file_path, '\0', OB_MAX_FILE_NAME_LENGTH);
-      if (0 == strcmp(entry->d_name, ".") || 0 == strcmp(entry->d_name, "..")) {
-        // do nothing
-      } else if (OB_FAIL(check_log_directory_entry(log_disk_path, entry->d_name, exists))) {
-      } else if (!exists) {
-      } else if (0 >= snprintf(current_file_path, OB_MAX_FILE_NAME_LENGTH, "%s/%s",
-                               log_disk_path, entry->d_name)) {
-        ret = OB_ERR_UNEXPECTED;
-        CLOG_LOG(WARN, "snprintf failed", K(ret), K(current_file_path), K(log_disk_path),
-                K(entry->d_name));
-      } else if (OB_FAIL(FileDirectoryUtils::is_directory(current_file_path, is_dir))) {
-      } else if (false == is_dir) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_DBA_ERROR_V2(OB_LOG_EXTERNAL_FILE_EXIST, ret, "Attention!!!", "There are several files in the log directory that are not generated by "
-                         "OceanBase.", "[suggestion] Please confirm whether manual deletion is required",
-                         ", unexpected file path is ", current_file_path);
-      } else if (true == std::regex_match(current_file_path, pattern_runtime)) {
-        ret = scan_runtime_dir_(current_file_path, has_allocated_block_cnt);
-      } else if (true == std::regex_match(current_file_path, pattern_log_pool)) {
-        CLOG_LOG(INFO, "ignore log_pool path", K(current_file_path), KPC(this));
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_DBA_ERROR_V2(OB_LOG_EXTERNAL_FILE_EXIST, ret, "Attention!!!", "There are several files in the log directory that are not generated by "
-                         "OceanBase.", "[suggestion] Please confirm whether manual deletion is required",
-                         ", unexpected directory is ", current_file_path);
-      }
+  if (log_disk_path == nullptr) return OB_INVALID_ARGUMENT;
+  auto owner = file_io::new_directory_handle();
+  if (owner->open_directory({reinterpret_cast<const uint8_t *>(log_disk_path), strlen(log_disk_path)}).domain != file_io::ErrorDomain::None) return OB_ERR_SYS;
+  const auto &directory = *owner;
+  auto cursor = file_io::directory_entries(directory);
+  file_io::DirectoryStep entry;
+  file_io::ObservationResult observed;
+  while (OB_SUCC(ret)) {
+    if (OB_FAIL(next_directory_entry(directory, log_disk_path, *cursor, entry, observed))) break;
+    if (entry.code == file_io::DirectoryStepCode::End) break;
+    const ObString name(static_cast<int32_t>(entry.name.size()), reinterpret_cast<const char *>(entry.name.data()));
+    char current_file_path[OB_MAX_FILE_NAME_LENGTH] = {};
+    if (OB_FAIL(entry_path(log_disk_path, name, current_file_path, sizeof(current_file_path)))) break;
+    if (observed.kind != file_io::EntryKind::Directory) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_DBA_ERROR_V2(OB_LOG_EXTERNAL_FILE_EXIST, ret, "Attention!!!", "There are several files in the log directory that are not generated by "
+                       "OceanBase.", "[suggestion] Please confirm whether manual deletion is required",
+                       ", unexpected file path is ", current_file_path);
+    } else if (std::regex_match(current_file_path, pattern_runtime)) {
+      auto child = file_io::new_directory_handle();
+      const auto opened = file_io::open_child_directory(directory, {entry.name.data(), entry.name.size()}, *child);
+      if (opened.domain != file_io::ErrorDomain::None) { ret = OB_ERR_SYS; break; }
+      ret = scan_runtime_dir_(*child, current_file_path, total);
+    } else if (!std::regex_match(current_file_path, pattern_log_pool)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_DBA_ERROR_V2(OB_LOG_EXTERNAL_FILE_EXIST, ret, "Attention!!!", "There are several files in the log directory that are not generated by "
+                       "OceanBase.", "[suggestion] Please confirm whether manual deletion is required",
+                       ", unexpected directory is ", current_file_path);
     }
   }
-  if (NULL != dir) {
-    closedir(dir);
-  }
+  if (OB_SUCC(ret)) has_allocated_block_cnt += total;
   return ret;
 }
 
 int ObServerLogBlockMgr::remove_tmp_file_or_directory_for_runtime_(const char *log_disk_path)
 {
   int ret = OB_SUCCESS;
-  DIR *dir = NULL;
   std::regex pattern_runtime(".*/sys");
-  struct dirent *entry = NULL;
-  if (NULL == (dir = opendir(log_disk_path))) {
-    ret = OB_ERR_SYS;
-    CLOG_LOG(WARN, "opendir failed", K(log_disk_path));
-  } else {
-    char current_file_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-    while ((entry = readdir(dir)) != NULL && OB_SUCC(ret)) {
-      bool is_dir = false;
-      bool exists = false;
-      MEMSET(current_file_path, '\0', OB_MAX_FILE_NAME_LENGTH);
-      if (0 == strcmp(entry->d_name, ".") || 0 == strcmp(entry->d_name, "..")) {
-        // do nothing
-      } else if (OB_FAIL(check_log_directory_entry(log_disk_path, entry->d_name, exists))) {
-      } else if (!exists) {
-      } else if (0 >= snprintf(current_file_path, OB_MAX_FILE_NAME_LENGTH, "%s/%s",
-                               log_disk_path, entry->d_name)) {
-        ret = OB_ERR_UNEXPECTED;
-        CLOG_LOG(WARN, "snprintf failed", K(ret), K(current_file_path), K(log_disk_path),
-                K(entry->d_name));
-      } else if (OB_FAIL(FileDirectoryUtils::is_directory(current_file_path, is_dir))) {
-      } else if (false == is_dir) {
-        CLOG_LOG(ERROR, "is not diectory, unexpected", K(ret), K(log_disk_path), K(current_file_path));
-      } else if (true == std::regex_match(current_file_path, pattern_runtime)) {
-        if (OB_FAIL(remove_tmp_file_or_directory_at(current_file_path, this))) {
-        } else {
-          CLOG_LOG(INFO, "this dir is runtime, remove_tmp_file_or_directory_at success", K(ret), K(current_file_path));
-        }
-      }
-    }
-  }
-  if (NULL != dir) {
-    closedir(dir);
-  }
-  return ret;
-}
-
-int ObServerLogBlockMgr::unlinkat_until_success_(const palf::FileDesc &src_dir_fd,
-                                                 const char *block_path, const int flag)
-{
-  int ret = OB_SUCCESS;
-  do {
-    if (-1 == ::unlinkat(src_dir_fd, block_path, flag)) {
-      ret = convert_sys_errno();
-      CLOG_LOG(ERROR, "::unlink failed", K(ret), KPC(this), K(src_dir_fd), K(block_path),
-               K(flag));
-      ob_usleep(SLEEP_TS_US);
-    } else {
-      ret = OB_SUCCESS;
-      break;
-    }
-  } while (OB_FAIL(ret));
-  return ret;
-}
-
-int ObServerLogBlockMgr::fsync_until_success_(const FileDesc &dest_dir_fd)
-{
-  int ret = OB_SUCCESS;
+  if (log_disk_path == nullptr) return OB_INVALID_ARGUMENT;
+  auto owner = file_io::new_directory_handle();
+  if (owner->open_directory({reinterpret_cast<const uint8_t *>(log_disk_path), strlen(log_disk_path)}).domain != file_io::ErrorDomain::None) return OB_ERR_SYS;
+  const auto &directory = *owner;
+  auto cursor = file_io::directory_entries(directory);
+  file_io::DirectoryStep entry;
+  file_io::ObservationResult observed;
   while (OB_SUCC(ret)) {
-    if (OB_FAIL(startup_result_.error())) {
-    } else if (stopped_.load()) {
-      ret = OB_CANCELED;
-    } else if (0 == ::fsync(dest_dir_fd)) {
-      break;
-    } else {
-      const int io_error = convert_sys_errno();
-      CLOG_LOG(ERROR, "fsync log directory failed", K(io_error), K(dest_dir_fd));
-      ret = startup_result_.report_failure(io_error);
-      if (OB_SUCC(ret)) {
-        ob_usleep(SLEEP_TS_US);
-      }
+    if (OB_FAIL(next_directory_entry(directory, log_disk_path, *cursor, entry, observed))) break;
+    if (entry.code == file_io::DirectoryStepCode::End) break;
+    const ObString name(static_cast<int32_t>(entry.name.size()), reinterpret_cast<const char *>(entry.name.data()));
+    char current_file_path[OB_MAX_FILE_NAME_LENGTH] = {};
+    if (OB_FAIL(entry_path(log_disk_path, name, current_file_path, sizeof(current_file_path)))) break;
+    if (observed.kind != file_io::EntryKind::Directory) {
+      CLOG_LOG(ERROR, "unexpected non-directory in log disk", K(current_file_path));
+    } else if (std::regex_match(current_file_path, pattern_runtime)) {
+      auto child = file_io::new_directory_handle();
+      const auto opened = file_io::open_child_directory(directory, {entry.name.data(), entry.name.size()}, *child);
+      if (opened.domain != file_io::ErrorDomain::None) { ret = OB_ERR_SYS; break; }
+      ret = remove_tmp_file_or_directory_at(*child, current_file_path, this);
     }
   }
   return ret;
 }
+
+
+
+
 // Scan the local runtime log-stream directories under the fixed sys path.
-int ObServerLogBlockMgr::scan_runtime_dir_(const char *runtime_dir,
-                                          int64_t &has_allocated_block_cnt)
+int ObServerLogBlockMgr::scan_runtime_dir_(const file_io::DirectoryHandle &directory, const char *runtime_dir, int64_t &has_allocated_block_cnt)
 {
   int ret = OB_SUCCESS;
-  DIR *dir = NULL;
-  struct dirent *entry = NULL;
-  if (NULL == (dir = opendir(runtime_dir))) {
-    ret = OB_ERR_SYS;
-    CLOG_LOG(WARN, "opendir failed", K(runtime_dir));
-  } else {
-    char current_file_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-    while ((entry = readdir(dir)) != NULL && OB_SUCC(ret)) {
-      bool is_dir = false;
-      bool exists = false;
-      MEMSET(current_file_path, '\0', OB_MAX_FILE_NAME_LENGTH);
-      if (0 == strcmp(entry->d_name, ".") || 0 == strcmp(entry->d_name, "..")) {
-        // do nothing
-      } else if (OB_FAIL(check_log_directory_entry(runtime_dir, entry->d_name, exists))) {
-      } else if (!exists) {
-      } else if (0 >= snprintf(current_file_path, OB_MAX_FILE_NAME_LENGTH, "%s/%s",
-                               runtime_dir, entry->d_name)) {
-        ret = OB_ERR_UNEXPECTED;
-        CLOG_LOG(WARN, "snprintf failed", K(ret), K(current_file_path), K(runtime_dir),
-                K(entry->d_name));
-      } else if (OB_FAIL(FileDirectoryUtils::is_directory(current_file_path, is_dir))) {
-      } else if (false == is_dir) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_DBA_ERROR_V2(OB_LOG_EXTERNAL_FILE_EXIST, ret, "Attention!!!", "There are several files in the log directory that are not generated by "
-                         "OceanBase.", "[suggestion] Please confirm whether manual deletion is required",
-                         ", unexpected file is ", current_file_path);
-      } else if (0 == strcmp(entry->d_name, "log_stream")) {
-        ret = scan_ls_dir_(current_file_path, has_allocated_block_cnt);
-      } else if (0 == strcmp(entry->d_name, "tmp_dir")) {
-        CLOG_LOG(INFO, "ignore tmp_dir", K(current_file_path), K(has_allocated_block_cnt), KPC(this));
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_DBA_ERROR_V2(OB_LOG_EXTERNAL_FILE_EXIST, ret, "Attention!!!", "There are several files in the log directory that are not generated by "
-                         "OceanBase.", "[suggestion] Please confirm whether manual deletion is required",
-                         ", unexpected directory is ", current_file_path);
-      }
+  int64_t total = 0;
+  auto cursor = file_io::directory_entries(directory);
+  file_io::DirectoryStep entry;
+  file_io::ObservationResult observed;
+  while (OB_SUCC(ret)) {
+    if (OB_FAIL(next_directory_entry(directory, runtime_dir, *cursor, entry, observed))) break;
+    if (entry.code == file_io::DirectoryStepCode::End) break;
+    const ObString name(static_cast<int32_t>(entry.name.size()), reinterpret_cast<const char *>(entry.name.data()));
+    char current_file_path[OB_MAX_FILE_NAME_LENGTH] = {};
+    if (OB_FAIL(entry_path(runtime_dir, name, current_file_path, sizeof(current_file_path)))) break;
+    if (observed.kind != file_io::EntryKind::Directory) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_DBA_ERROR_V2(OB_LOG_EXTERNAL_FILE_EXIST, ret, "Attention!!!", "There are several files in the log directory that are not generated by "
+                       "OceanBase.", "[suggestion] Please confirm whether manual deletion is required",
+                       ", unexpected file is ", current_file_path);
+    } else if (name == "log_stream") {
+      auto child = file_io::new_directory_handle();
+      const auto opened = file_io::open_child_directory(directory, {entry.name.data(), entry.name.size()}, *child);
+      if (opened.domain != file_io::ErrorDomain::None) { ret = OB_ERR_SYS; break; }
+      ret = scan_ls_dir_(*child, current_file_path, total);
+    } else if (name != "tmp_dir") {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_DBA_ERROR_V2(OB_LOG_EXTERNAL_FILE_EXIST, ret, "Attention!!!", "There are several files in the log directory that are not generated by "
+                       "OceanBase.", "[suggestion] Please confirm whether manual deletion is required",
+                       ", unexpected directory is ", current_file_path);
     }
   }
-  if (NULL != dir) {
-    closedir(dir);
-  }
+  if (OB_SUCC(ret)) has_allocated_block_cnt += total;
   return ret;
 }
 
 // Scan one log-stream directory.
-int ObServerLogBlockMgr::scan_ls_dir_(const char *ls_dir,
-                                      int64_t &has_allocated_block_cnt)
+int ObServerLogBlockMgr::scan_ls_dir_(const file_io::DirectoryHandle &directory, const char *ls_dir, int64_t &has_allocated_block_cnt)
 {
   int ret = OB_SUCCESS;
-  DIR *dir = NULL;
-  struct dirent *entry = NULL;
-  if (NULL == (dir = opendir(ls_dir))) {
-    ret = OB_ERR_SYS;
-    CLOG_LOG(WARN, "opendir failed", K(ls_dir));
-  } else {
-    char current_file_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-    while ((entry = readdir(dir)) != NULL && OB_SUCC(ret)) {
-      bool is_dir = false;
-      bool exists = false;
-      MEMSET(current_file_path, '\0', OB_MAX_FILE_NAME_LENGTH);
-      if (0 == strcmp(entry->d_name, ".") || 0 == strcmp(entry->d_name, "..")) {
-        // do nothing
-      } else if (OB_FAIL(check_log_directory_entry(ls_dir, entry->d_name, exists))) {
-      } else if (!exists) {
-      } else if (0 >= snprintf(current_file_path, OB_MAX_FILE_NAME_LENGTH, "%s/%s",
-                               ls_dir, entry->d_name)) {
-        ret = OB_ERR_UNEXPECTED;
-        CLOG_LOG(WARN, "snprintf failed", K(ret), K(current_file_path), K(ls_dir),
-                K(entry->d_name));
-      } else if (OB_FAIL(FileDirectoryUtils::is_directory(current_file_path, is_dir))) {
-      } else if (false == is_dir) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_DBA_ERROR_V2(OB_LOG_EXTERNAL_FILE_EXIST, ret, "Attention!!!", "There are several files in the log directory that are not generated by "
-                         "OceanBase.", "[suggestion] Please confirm whether manual deletion is required",
-                         ", unexpected file is ", current_file_path);
-      } else if (0 == strcmp(entry->d_name, "log")) {
-        GetBlockCountFunctor functor(current_file_path);
-        if (OB_FAIL(palf::scan_dir(current_file_path, functor))) {
-          LOG_DBA_ERROR_V2(OB_LOG_EXTERNAL_FILE_EXIST, ret, "Attention!!!", "There are several files in the log directory that are not generated by "
-                           "OceanBase.", "[suggestion] Please confirm whether manual deletion is required",
-                           ", unexpected directory is ", current_file_path);
-        } else {
-          has_allocated_block_cnt += functor.get_block_count();
-          CLOG_LOG(INFO, "get_has_allocated_blocks_cnt_in_ success", K(ret),
-                   K(current_file_path), "block_cnt", functor.get_block_count());
+  int64_t total = 0;
+  auto cursor = file_io::directory_entries(directory);
+  file_io::DirectoryStep entry;
+  file_io::ObservationResult observed;
+  while (OB_SUCC(ret)) {
+    if (OB_FAIL(next_directory_entry(directory, ls_dir, *cursor, entry, observed))) break;
+    if (entry.code == file_io::DirectoryStepCode::End) break;
+    const ObString name(static_cast<int32_t>(entry.name.size()), reinterpret_cast<const char *>(entry.name.data()));
+    char current_file_path[OB_MAX_FILE_NAME_LENGTH] = {};
+    if (OB_FAIL(entry_path(ls_dir, name, current_file_path, sizeof(current_file_path)))) break;
+    if (observed.kind != file_io::EntryKind::Directory) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_DBA_ERROR_V2(OB_LOG_EXTERNAL_FILE_EXIST, ret, "Attention!!!", "There are several files in the log directory that are not generated by "
+                       "OceanBase.", "[suggestion] Please confirm whether manual deletion is required",
+                       ", unexpected file is ", current_file_path);
+    } else if (name != "log") {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_DBA_ERROR_V2(OB_LOG_EXTERNAL_FILE_EXIST, ret, "Attention!!!", "There are several files in the log directory that are not generated by "
+                       "OceanBase.", "[suggestion] Please confirm whether manual deletion is required",
+                       ", unexpected directory is ", current_file_path);
+    } else {
+      auto child = file_io::new_directory_handle();
+      const auto opened = file_io::open_child_directory(directory, {entry.name.data(), entry.name.size()}, *child);
+      if (opened.domain != file_io::ErrorDomain::None) {
+        ret = opened.error == ENOENT ? OB_NO_SUCH_FILE_OR_DIRECTORY : OB_FILE_NOT_OPENED;
+        break;
+      }
+      auto files = file_io::directory_entries(*child);
+      uint64_t maximum = 0;
+      uint64_t maximum_candidate = 0;
+      uint64_t maximum_length = 0;
+      bool has_maximum = false;
+      // Candidates pin the opened file before C++ chooses the maximum-name repair.
+      for (;;) {
+        const auto file = files->next_entry();
+        if (file.code == file_io::DirectoryStepCode::End) break;
+        if (file.code != file_io::DirectoryStepCode::Entry) { ret = directory_error(file.detail, current_file_path); break; }
+        block_id_t number = LOG_INVALID_BLOCK_ID;
+        const ObString block_name(static_cast<int32_t>(file.name.size()), reinterpret_cast<const char *>(file.name.data()));
+        if (OB_FAIL(parse_block_name(block_name, number))) {
+          LOG_WARN("invalid numeric log block name", K(ret), K(block_name), KCSTRING(current_file_path));
+          break;
         }
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_DBA_ERROR_V2(OB_LOG_EXTERNAL_FILE_EXIST, ret, "Attention!!!", "There are several files in the log directory that are not generated by "
-                         "OceanBase.", "[suggestion] Please confirm whether manual deletion is required",
-                         ", unexpected directory is ", current_file_path);
+        uint64_t candidate = 0;
+        uint64_t length = 0;
+        int error = owner_->select_named_candidate(*child, {file.name.data(), file.name.size()}, BLOCK_SIZE, candidate, length);
+        if (error != 0) { errno = error; ret = convert_sys_errno(); break; }
+        if (has_maximum && number == maximum) { ret = OB_ERR_UNEXPECTED; break; }
+        if (!has_maximum || number > maximum) {
+          if (has_maximum && maximum_length != BLOCK_SIZE) { ret = OB_ERR_UNEXPECTED; break; }
+          maximum = number;
+          maximum_candidate = candidate;
+          maximum_length = length;
+          has_maximum = true;
+        } else if (length != BLOCK_SIZE) {
+          ret = OB_ERR_UNEXPECTED;
+          break;
+        }
+        if (0 != (error = owner_->admit_named_candidate(candidate))) { errno = error; ret = convert_sys_errno(); break; }
+        ++total;
+      }
+      if (OB_SUCC(ret) && has_maximum && maximum_length != BLOCK_SIZE) {
+        const int error = owner_->repair_named_candidate(maximum_candidate);
+        if (error != 0) { errno = error; ret = convert_sys_errno(); }
       }
     }
   }
-  if (NULL != dir) {
-    closedir(dir);
-  }
+  if (OB_SUCC(ret)) has_allocated_block_cnt += total;
   return ret;
 }
 } // namespace logservice

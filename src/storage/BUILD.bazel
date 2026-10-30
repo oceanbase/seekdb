@@ -1,3 +1,4 @@
+load("//bazel:compile_config.bzl", "RELEASE_LOCAL_DEFINES")
 load(
     "//bazel:defs.bzl",
     "MODULE_CXX_COPTS",
@@ -123,11 +124,11 @@ cc_library(
 )
 
 cc_library(
-    name = "io_bench_controller_adapter",
-    hdrs = ["blocksstable/ob_io_bench_controller.h"],
+    name = "benchmark_session_headers",
+    hdrs = ["blocksstable/benchmark_session.h"],
     deps = [
-        "//src/oblib:oblib_foundation",
-        "//src/share:io_bench_controller_interface",
+        ":storage_runtime_interface",
+        "//rust:storage_io_headers",
     ],
     features = ["layering_check"],
     tags = ["manual"],
@@ -265,7 +266,6 @@ _STORAGE_RUNTIME_NATIVE_DEPS = [
     "//src/share:worker_runtime",
     "//bazel/third_party:absl_headers",
     "//bazel/third_party:curl_headers",
-    "//bazel/third_party:libaio_headers",
     "//bazel/third_party:mariadb_headers",
     "//bazel/third_party:openssl_headers",
     "//bazel/third_party:rapidjson_headers",
@@ -379,7 +379,7 @@ _STORAGE_HEADER_NON_SHARE_DEPS = [
 _STORAGE_EXACT_HEADER_DEPS = [
     ":_textual_ob_keybtree",
     ":data_validation_service_internal",
-    ":io_bench_controller_adapter",
+    ":benchmark_session_headers",
     ":ls_runtime_adapter_interface",
     ":multi_source_data_unit_interface",
     ":storage_meta_object_interface",
@@ -490,7 +490,6 @@ grouped_unity_cc_library(
         "//src/share:geo_cast_interface",
         "//src/share:interrupt_runtime",
         "//src/share:io",
-        "//src/share:io_bench_controller_interface",
         "//src/share:io_device_interface",
         "//src/share:lob_diff_interface",
         "//src/share:lob_read_context",
@@ -576,6 +575,7 @@ cc_library(
     tags = ["manual"],
     visibility = ["//src/observer:__pkg__"],
 )
+
 
 cc_library(
     name = "memtable_mutator_test_headers",

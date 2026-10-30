@@ -77,7 +77,7 @@ public:
   int load_block_handler(const block_id_t block_id,
                          const offset_t offset);
 
-  TO_STRING_KV(K_(log_dir), K_(dir_fd), K_(min_block_id), K_(max_block_id), K_(curr_writable_block_id));
+  TO_STRING_KV(K_(log_dir), K_(min_block_id), K_(max_block_id), K_(curr_writable_block_id));
 private:
   // @brief this function used to reconstruct 'blocks_'
   // Firstly, scan the directory, get the name of all blocks;
@@ -92,7 +92,6 @@ private:
   int do_scan_dir_(const char *dir, const block_id_t initial_block_id, ILogBlockPool *log_block_pool);
   int do_rename_and_fsync_(const char *block_path, const char *tmp_block_path);
   bool empty_() const;
-  int try_recovery_last_block_(const char *log_dir, const int64_t log_block_size);
   
   int check_after_truncate_(const char *block_path, const offset_t offset);
   const int64_t SLEEP_TS_US = 1 * 1000;
@@ -122,7 +121,7 @@ private:
   mutable block_id_t min_block_id_;
   mutable block_id_t max_block_id_;
   ILogBlockPool *log_block_pool_;
-  int dir_fd_;
+  rust::Box<file_io::DirectoryHandle> directory_;
   int64_t align_size_;
   int64_t align_buf_size_;
   LogIOAdapter *io_adapter_;

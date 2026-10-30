@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_LOGSERVICE_LOG_BLOCK_POOL_INTERFACE_
 #define OCEANBASE_LOGSERVICE_LOG_BLOCK_POOL_INTERFACE_
 #include <stdint.h>
-#include "lib/file/file_directory_utils.h"        // FileDirectoryUtils
+#include "rust/file_io.h"
 #include "share/log/palf/log_define.h"                           // block_id_t
 #include "log_block_header.h"                     // LogBlockHeader
 namespace oceanbase
@@ -28,17 +28,24 @@ namespace palf
 class ILogBlockPool
 {
 public:
-  virtual int create_block_at(const palf::FileDesc &dir_fd,
-                              const char *block_path,
+  virtual int create_and_publish_block_at(const file_io::DirectoryHandle &directory,
+                              const char *temporary_name, const char *block_path,
                               const int64_t block_size) = 0;
-  virtual int remove_block_at(const palf::FileDesc &dir_fd,
-                              const char *block_path) = 0;
+  virtual int remove_block_at(const file_io::DirectoryHandle &directory,
+                              const char *block_path, bool required = false) = 0;
+  virtual int rename_block_at(const file_io::DirectoryHandle &directory, const char *old_name, const char *new_name) = 0;
+  virtual int create_directory_at(const file_io::DirectoryHandle &directory, const char *name, uint32_t mode) = 0;
+  virtual int rename_directory_at(const file_io::DirectoryHandle &directory, const char *old_name, const char *new_name) = 0;
+  virtual int remove_directory_at(const file_io::DirectoryHandle &directory, const char *name) = 0;
+  virtual int get_disk_usage(int64_t &bytes) = 0;
+  virtual int set_capacity(int64_t bytes) = 0;
 };
 
-int is_block_used_for_palf(const int fd, const char *path, bool &result);
-int remove_file_at(const char *dir, const char *path, ILogBlockPool *log_block_pool);
 int remove_directory_rec(const char *path, ILogBlockPool *log_block_pool);
 int remove_tmp_file_or_directory_at(const char *path, ILogBlockPool *log_block_pool);
+int remove_tmp_file_or_directory_at(const file_io::DirectoryHandle &directory, const char *path, ILogBlockPool *log_block_pool);
+int delete_directory_rec(const char *path);
+int delete_tmp_file_or_directory_at(const char *path);
 } // namespace palf
 } // namespace oceanbase
 #endif

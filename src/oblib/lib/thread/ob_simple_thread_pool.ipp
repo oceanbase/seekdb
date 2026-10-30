@@ -60,11 +60,11 @@ int ObSimpleThreadPoolBase<T>::init(
     stop_ = false;
     name_ = name;
     
-    if (max_thread_cnt_ < 0) {
-      max_thread_cnt_ = thread_num;
+    if (max_thread_count() < 0) {
+      ATOMIC_STORE(&max_thread_cnt_, thread_num);
     }
-    if (min_thread_cnt_ < 0) {
-      min_thread_cnt_ = 0;
+    if (min_thread_count() < 0) {
+      ATOMIC_STORE(&min_thread_cnt_, 0);
     }
     if (OB_FAIL(ObSimpleThreadPoolDynamicMgr::get_instance().bind(this))) {
     }
@@ -121,7 +121,7 @@ int ObSimpleThreadPoolBase<T>::push(TaskType *task)
       ret = OB_EAGAIN;
     }
     if (this->idle_count() == 0) {
-      this->try_expand_one(max_thread_cnt_);
+      this->try_expand_one(max_thread_count());
     }
   }
   return ret;
@@ -176,9 +176,10 @@ int ObSimpleThreadPoolBase<T>::set_adaptive_thread(
     COMMON_LOG(WARN, "set_adaptive_thread failed",
                KP(this), K(min_thread_num), K(max_thread_num));
   } else {
-    min_thread_cnt_ = min_thread_num;
-    max_thread_cnt_ = max_thread_num;
     if (OB_FAIL(ObSimpleThreadPoolDynamicMgr::get_instance().bind(this))) {
+    } else {
+      ATOMIC_STORE(&min_thread_cnt_, min_thread_num);
+      ATOMIC_STORE(&max_thread_cnt_, max_thread_num);
     }
     COMMON_LOG(INFO, "set adaptive thread success",
                KP(this), K(min_thread_num), K(max_thread_num));
@@ -192,15 +193,18 @@ int ObSimpleThreadPoolBase<T>::set_thread_count(int64_t n_threads)
   int ret = OB_SUCCESS;
   if (n_threads <= 0) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(ObSimpleThreadPoolDynamicMgr::get_instance().bind(this))) {
   } else {
-    max_thread_cnt_ = n_threads;
-    if (min_thread_cnt_ > max_thread_cnt_) {
-      min_thread_cnt_ = max_thread_cnt_;
-    }
-    if (OB_FAIL(ObSimpleThreadPoolDynamicMgr::get_instance().bind(this))) {
-    }
+    commit_bound_thread_count(n_threads);
   }
   return ret;
+}
+
+template <class T>
+void ObSimpleThreadPoolBase<T>::commit_bound_thread_count(int64_t n_threads)
+{
+  if (min_thread_count() > n_threads) { ATOMIC_STORE(&min_thread_cnt_, n_threads); }
+  ATOMIC_STORE(&max_thread_cnt_, n_threads);
 }
 
 template <class T>
@@ -266,7 +270,7 @@ void ObSimpleThreadPoolBase<T>::run1()
       if (OB_NOT_NULL(task)) {
         idle_since = 0;
         if (expand) {
-          this->try_expand_one(max_thread_cnt_);
+          this->try_expand_one(max_thread_count());
         }
         handle(static_cast<TaskType *>(task));
       }
@@ -275,7 +279,7 @@ void ObSimpleThreadPoolBase<T>::run1()
       if (idle_since == 0) {
         idle_since = now;
       } else if (now - idle_since >= SHRINK_TIMEOUT_US) {
-        if (this->try_shrink_one(min_thread_cnt_)) {
+        if (this->try_shrink_one(min_thread_count())) {
           return;  // Worker::run1 will set has_set_stop
         }
         idle_since = 0;

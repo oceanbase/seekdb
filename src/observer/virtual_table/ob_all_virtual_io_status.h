@@ -34,6 +34,9 @@ public:
   int init_addr(const common::ObAddr &addr);
   virtual void reset() override;
 protected:
+  rust::Box<storage_io::CalibrationView> calibration_ = storage_io::empty_calibration_view();
+  int64_t normalized_iops(double size, double iops, common::ObIOMode mode, int &ret);
+  bool calibration_initialized_ = false;
   bool is_inited_;
   common::ObAddr addr_;
   char ip_buf_[common::MAX_IP_ADDR_LENGTH];
@@ -85,7 +88,6 @@ private:
   };
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualIOBenchmark);
 private:
-  common::ObIOAbility io_ability_;
   int64_t mode_pos_;
   int64_t size_pos_;
 };

@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SERVER
+#include "storage/blocksstable/benchmark_session.h"
 #include "observer/virtual_table/ob_all_virtual_io_status.h"
 #include "src/share/ob_server_struct.h"
 #include "share/io/ob_io_manager.h"
@@ -26,6 +27,32 @@ using namespace share;
 
 namespace observer
 {
+
+namespace {
+int64_t calibration_integer(double value, int &ret)
+{
+  const auto converted = storage_io::calibration_integer(value);
+  if (OB_SUCC(ret)) { ret = converted.error; }
+  return converted.value;
+}
+int64_t calibration_mbps(int64_t iops, int64_t size, int &ret)
+{
+  const auto converted = storage_io::calibration_mbps(iops, size);
+  if (OB_SUCC(ret)) { ret = converted.error; }
+  return converted.value;
+}
+
+}
+
+int64_t ObAllVirtualIOStatusIterator::normalized_iops(double size, double iops, ObIOMode mode, int &ret)
+{
+  const int64_t bytes = calibration_integer(size, ret);
+  if (OB_FAIL(ret)) { return 0; }
+  const auto value = calibration_->normalized_iops(static_cast<int32_t>(mode), bytes,
+      iops, calibration_initialized_);
+  ret = value.error;
+  return value.value;
+}
 
 ObAllVirtualIOStatusIterator::ObAllVirtualIOStatusIterator()
   : is_inited_(false), addr_()
@@ -44,6 +71,8 @@ int ObAllVirtualIOStatusIterator::init_addr(const common::ObAddr &addr)
   if (!addr.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
   } else {
+    calibration_ = ObIOCalibration::get_instance().snapshot();
+    calibration_initialized_ = ObIOCalibration::get_instance().is_initialized();
     addr_ = addr;
     MEMSET(ip_buf_, 0, sizeof(ip_buf_));
     if (!addr_.ip_to_string(ip_buf_, sizeof(ip_buf_))) {
@@ -56,6 +85,7 @@ int ObAllVirtualIOStatusIterator::init_addr(const common::ObAddr &addr)
 void ObAllVirtualIOStatusIterator::reset()
 {
   ObVirtualTableScannerIterator::reset();
+  calibration_ = storage_io::empty_calibration_view();
   is_inited_ = false;
   addr_.reset();
   MEMSET(ip_buf_, 0, sizeof(ip_buf_));
@@ -78,7 +108,7 @@ int ObAllVirtualIOCalibrationStatus::init(const common::ObAddr &addr)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_addr(addr))) {
-  } else if (OB_FAIL(ObIOCalibration::get_instance().get_benchmark_status(start_ts_, finish_ts_, ret_code_))) {
+  } else if (OB_FAIL(storage::BenchmarkSession::get_instance().status(start_ts_, finish_ts_, ret_code_))) {
   } else {
     is_inited_ = true;
   }
@@ -161,7 +191,7 @@ int ObAllVirtualIOCalibrationStatus::inner_get_next_row(common::ObNewRow *&row)
 /******************               IOBenchmark                *******************/
 
 ObAllVirtualIOBenchmark::ObAllVirtualIOBenchmark()
-  : io_ability_(), mode_pos_(0), size_pos_(0)
+  : mode_pos_(0), size_pos_(0)
 {
 
 }
@@ -175,7 +205,7 @@ int ObAllVirtualIOBenchmark::init(const common::ObAddr &addr)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_addr(addr))) {
-  } else if (OB_FAIL(ObIOCalibration::get_instance().get_io_ability(io_ability_))) {
+
   } else {
     is_inited_ = true;
   }
@@ -185,7 +215,6 @@ int ObAllVirtualIOBenchmark::init(const common::ObAddr &addr)
 void ObAllVirtualIOBenchmark::reset()
 {
   ObAllVirtualIOStatusIterator::reset();
-  io_ability_.reset();
   mode_pos_ = 0;
   size_pos_ = 0;
 }
@@ -197,15 +226,18 @@ int ObAllVirtualIOBenchmark::inner_get_next_row(common::ObNewRow *&row)
   ObObj *cells = cur_row_.cells_;
   if (OB_UNLIKELY(!is_inited_ || nullptr == cells)) {
     ret = OB_NOT_INIT;
-  } else if (!io_ability_.is_valid()) {
+  } else if (!calibration_->calibrated()) {
     row = nullptr;
     ret = OB_ITER_END;
   } else {
     ObIOBenchResult item;
     while (mode_pos_ < static_cast<int64_t>(ObIOMode::MAX_MODE)) {
-      const ObIArray<ObIOBenchResult> &bench_items = io_ability_.get_measure_items(static_cast<ObIOMode>(mode_pos_));
-      if (size_pos_ < bench_items.count()) {
-        item = bench_items.at(size_pos_);
+      storage_io::CalibrationSample sample{};
+      if (calibration_->calibration_sample(static_cast<int32_t>(mode_pos_), size_pos_, sample)) {
+        item.mode_ = static_cast<ObIOMode>(sample.mode);
+        item.size_ = sample.size;
+        item.iops_ = sample.iops;
+        item.rt_us_ = sample.latency_us;
         ++size_pos_;
         break;
       } else {
@@ -236,7 +268,7 @@ int ObAllVirtualIOBenchmark::inner_get_next_row(common::ObNewRow *&row)
           break;
         }
         case IOPS: {
-          cells[i].set_int(static_cast<int64_t>(item.iops_));
+          cells[i].set_int(calibration_integer(item.iops_, ret));
           break;
         }
         case MBPS: {
@@ -245,7 +277,7 @@ int ObAllVirtualIOBenchmark::inner_get_next_row(common::ObNewRow *&row)
           break;
         }
         case LATENCY: {
-          cells[i].set_int(static_cast<int64_t>(item.rt_us_));
+          cells[i].set_int(calibration_integer(item.rt_us_, ret));
           break;
         }
         default: {
@@ -305,8 +337,12 @@ int ObAllVirtualIOQuota::init(const common::ObAddr &addr)
         } else {
           ret = OB_ENTRY_NOT_EXIST;
         }
-      } else if (OB_FAIL(record_user_group( service_holder.get_ptr()->get_io_usage(), service_holder.get_ptr()->get_io_config()))) {
-      } else if (OB_FAIL(record_sys_group( service_holder.get_ptr()->get_sys_io_usage()))) {
+      } else {
+        const auto snapshot = service_holder.get_ptr()->config_snapshot();
+        if (!snapshot) { ret = OB_NOT_INIT; }
+        else if (OB_FAIL(record_user_group(*snapshot->usage_, snapshot->config_))) {
+        } else if (OB_FAIL(record_sys_group(service_holder.get_ptr()->get_sys_io_usage()))) {
+        }
       }
     }
     if (OB_SUCC(ret)) {
@@ -321,8 +357,8 @@ int ObAllVirtualIOQuota::record_user_group(ObIOUsage &io_usage, const ObIOServic
   int ret = OB_SUCCESS;
   {
     const int64_t GROUP_MODE_CNT = static_cast<int64_t>(ObIOGroupMode::MODECNT);
-    io_usage.calculate_io_usage();
-    const ObIOUsageInfoArray &info = io_usage.get_io_usage();
+    ObIOUsageInfoArray info;
+    if (OB_FAIL(io_usage.snapshot(info, storage_io::StatisticsSampleMode::Advance))) { return ret; }
     uint64_t group_config_index = 0;
     int tmp_ret = OB_SUCCESS;
     for (int64_t i = 0; i < info.count(); ++i) {
@@ -334,14 +370,14 @@ int ObAllVirtualIOQuota::record_user_group(ObIOUsage &io_usage, const ObIOServic
         
         item.group_mode_ = static_cast<ObIOGroupMode>(i % GROUP_MODE_CNT);
         item.group_id_ = io_config.group_configs_.at(group_config_index).group_id_;
-        item.size_ = static_cast<int64_t>(info.at(i).avg_byte_);
-        item.real_iops_ = static_cast<int64_t>(info.at(i).avg_iops_);
+        item.size_ = calibration_integer(info.at(i).avg_byte_, ret);
+        item.real_iops_ = calibration_integer(info.at(i).avg_iops_, ret);
         item.schedule_us_ = info.at(i).avg_schedule_delay_us_;
         item.io_delay_us_ = info.at(i).avg_device_delay_us_;
         item.total_us_ = info.at(i).avg_total_delay_us_;
         int64_t group_min = 0, group_max = 0, group_weight = 0;
         double iops_scale = 0;
-        if (OB_FAIL(io_config.calc_group_config(group_config_index,
+        if (OB_SUCC(ret) && OB_FAIL(io_config.calc_group_config(group_config_index,
                                                group_min,
                                                group_max,
                                                group_weight))) {
@@ -351,19 +387,20 @@ int ObAllVirtualIOQuota::record_user_group(ObIOUsage &io_usage, const ObIOServic
         if (OB_SUCC(ret)) {
           const ObIOMode access_mode = (ObIOGroupMode::LOCALREAD == item.group_mode_ ? ObIOMode::READ : ObIOMode::WRITE);
           bool is_io_ability_valid = false; // useless
-          ObIOCalibration::get_instance().get_iops_scale(access_mode,
-                                                         info.at(i).avg_byte_,
-                                                         iops_scale,
-                                                         is_io_ability_valid);
+          const auto scale = calibration_->calibration_scale(static_cast<int32_t>(access_mode),
+              item.size_, calibration_initialized_);
+          ret = scale.error;
+          iops_scale = scale.value;
+          is_io_ability_valid = scale.calibrated;
           if (!is_io_ability_valid) {
             group_min = group_max = INT64_MAX;
             LOG_INFO("invalid io ability", K(ret), K(item), K(access_mode), K(info), K(iops_scale));
           }
         }
         if (OB_SUCC(ret)) {
-          item.min_iops_ = group_min == INT64_MAX ? INT64_MAX : static_cast<int64_t>((double)group_min * iops_scale);
-          item.max_iops_ = group_max == INT64_MAX ? INT64_MAX : static_cast<int64_t>((double)group_max * iops_scale);
-          if (OB_FAIL(quota_infos_.push_back(item))) {
+          item.min_iops_ = group_min == INT64_MAX ? INT64_MAX : calibration_integer((double)group_min * iops_scale, ret);
+          item.max_iops_ = group_max == INT64_MAX ? INT64_MAX : calibration_integer((double)group_max * iops_scale, ret);
+          if (OB_SUCC(ret) && OB_FAIL(quota_infos_.push_back(item))) {
           } else {
             LOG_INFO("push back item", K(ret), K(item));
           }
@@ -379,8 +416,8 @@ int ObAllVirtualIOQuota::record_sys_group(ObIOUsage &sys_io_usage)
   int ret = OB_SUCCESS;
   {
     const int64_t GROUP_MODE_CNT = static_cast<int64_t>(ObIOGroupMode::MODECNT);
-    sys_io_usage.calculate_io_usage();
-    const ObIOUsageInfoArray &info = sys_io_usage.get_io_usage();
+    ObIOUsageInfoArray info;
+    if (OB_FAIL(sys_io_usage.snapshot(info, storage_io::StatisticsSampleMode::Advance))) { return ret; }
     int tmp_ret = OB_SUCCESS;
     uint64_t group_config_index = 0;
     for (uint64_t i = 0; i < info.count(); ++i) {
@@ -391,14 +428,14 @@ int ObAllVirtualIOQuota::record_sys_group(ObIOUsage &sys_io_usage)
         
         item.group_mode_ = static_cast<ObIOGroupMode>(i % GROUP_MODE_CNT);
         item.group_id_ = SYS_MODULE_START_ID + i / GROUP_MODE_CNT;
-        item.size_ = static_cast<int64_t>(info.at(i).avg_byte_);
-        item.real_iops_ = static_cast<int64_t>(info.at(i).avg_iops_);
+        item.size_ = calibration_integer(info.at(i).avg_byte_, ret);
+        item.real_iops_ = calibration_integer(info.at(i).avg_iops_, ret);
         item.min_iops_ = 0;
         item.max_iops_ = 0;
         item.schedule_us_ = info.at(i).avg_schedule_delay_us_;
         item.io_delay_us_ = info.at(i).avg_device_delay_us_;
         item.total_us_ = info.at(i).avg_total_delay_us_;
-        if (OB_FAIL(quota_infos_.push_back(item))) {
+        if (OB_SUCC(ret) && OB_FAIL(quota_infos_.push_back(item))) {
         }
       }
     }
@@ -458,7 +495,7 @@ int ObAllVirtualIOQuota::inner_get_next_row(common::ObNewRow *&row)
           if (item.min_iops_ == INT64_MAX) {
             cells[i].set_int(INT64_MAX);
           } else {
-            cells[i].set_int(static_cast<int64_t>(item.min_iops_ * item.size_ / 1024L / 1024L));
+            cells[i].set_int(calibration_mbps(item.min_iops_, item.size_, ret));
           }
           break;
         }
@@ -466,12 +503,12 @@ int ObAllVirtualIOQuota::inner_get_next_row(common::ObNewRow *&row)
           if (item.max_iops_ == INT64_MAX){
             cells[i].set_int(INT64_MAX);
           } else {
-            cells[i].set_int(static_cast<int64_t>(item.max_iops_ * item.size_ / 1024L / 1024L));
+            cells[i].set_int(calibration_mbps(item.max_iops_, item.size_, ret));
           }
           break;
         }
         case REAL_MBPS: {
-          cells[i].set_int(static_cast<int64_t>(item.real_iops_ * item.size_ / 1024L / 1024L));
+          cells[i].set_int(calibration_mbps(item.real_iops_, item.size_, ret));
           break;
         }
         case SCHEDULE_US: {
@@ -549,13 +586,13 @@ int ObAllVirtualGroupIOStat::record_user_group_io_status(ObIOService *io_manager
   if (OB_ISNULL(io_manager)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    ObIOUsage io_usage;
-    if (OB_FAIL(io_usage.init(2))) {
-    } else if (OB_FAIL(io_usage.assign(io_manager->get_io_usage()))) {
+    ObIOUsageInfoArray info;
+    const auto snapshot = io_manager->config_snapshot();
+    if (!snapshot) { ret = OB_NOT_INIT;
+    } else if (OB_FAIL(snapshot->usage_->snapshot(info))) {
     } else {
       int tmp_ret = OB_SUCCESS;
-      const ObIOServiceConfig io_config = io_manager->get_io_config();
-      const ObIOUsageInfoArray &info = io_usage.get_io_usage();
+      const ObIOServiceConfig &io_config = snapshot->config_;
       const int64_t GROUP_MODE_CNT = static_cast<int64_t>(ObIOGroupMode::MODECNT);
       uint64_t group_config_index = 0;
 
@@ -573,7 +610,7 @@ int ObAllVirtualGroupIOStat::record_user_group_io_status(ObIOService *io_manager
           } else if (io_config.group_configs_.at(group_config_index).cleared_ ||
                      io_config.group_configs_.at(group_config_index).deleted_) {
             // do nothing
-          } else if (OB_FAIL(io_config.calc_group_config(group_config_index,
+          } else if (OB_SUCC(ret) && OB_FAIL(io_config.calc_group_config(group_config_index,
                                                       group_min_iops,
                                                       group_max_iops,
                                                       group_iops_weight))) {
@@ -588,9 +625,9 @@ int ObAllVirtualGroupIOStat::record_user_group_io_status(ObIOService *io_manager
             read_item.min_iops_ = group_min_iops;
             read_item.max_iops_ = group_max_iops;
             read_item.real_iops_ = info.at(local_read_index).avg_iops_;
-            read_item.norm_iops_ = oceanbase::common::get_norm_iops(
-                info.at(local_read_index).avg_byte_, info.at(local_read_index).avg_iops_, ObIOMode::READ);
-            if (OB_FAIL(group_io_stats_.push_back(read_item))) {
+            read_item.norm_iops_ = normalized_iops(
+                info.at(local_read_index).avg_byte_, info.at(local_read_index).avg_iops_, ObIOMode::READ, ret);
+            if (OB_SUCC(ret) && OB_FAIL(group_io_stats_.push_back(read_item))) {
             }
             if (OB_FAIL(ret)) {
             } else {
@@ -604,9 +641,9 @@ int ObAllVirtualGroupIOStat::record_user_group_io_status(ObIOService *io_manager
               write_item.min_iops_ = group_min_iops;
               write_item.max_iops_ = group_max_iops;
               write_item.real_iops_ = info.at(local_write_index).avg_iops_;
-              write_item.norm_iops_ = oceanbase::common::get_norm_iops(
-                  info.at(local_write_index).avg_byte_, info.at(local_write_index).avg_iops_, ObIOMode::WRITE);
-              if (OB_FAIL(group_io_stats_.push_back(write_item))) {
+              write_item.norm_iops_ = normalized_iops(
+                  info.at(local_write_index).avg_byte_, info.at(local_write_index).avg_iops_, ObIOMode::WRITE, ret);
+              if (OB_SUCC(ret) && OB_FAIL(group_io_stats_.push_back(write_item))) {
               }
             }
           }
@@ -626,13 +663,9 @@ int ObAllVirtualGroupIOStat::record_sys_group_io_status(ObIOService *io_manager)
     ret = OB_INVALID_ARGUMENT;
   } else {
     const int64_t GROUP_MODE_CNT = static_cast<int64_t>(ObIOGroupMode::MODECNT);
-    ObIOUsage sys_io_usage;
-    if (OB_FAIL(sys_io_usage.init(2))) {
-    } else if (OB_FAIL(sys_io_usage.assign(io_manager->get_sys_io_usage()))) {
+    ObIOUsageInfoArray info;
+    if (OB_FAIL(io_manager->get_sys_io_usage().snapshot(info, storage_io::StatisticsSampleMode::Preview))) {
     } else {
-      sys_io_usage.calculate_io_usage();
-      const ObIOUsageInfoArray &info = sys_io_usage.get_io_usage();
-
       if (info.count() % GROUP_MODE_CNT != 0 ) {
       } else {
         for (int64_t left = 0; left < info.count() && OB_SUCC(ret); left += GROUP_MODE_CNT) {
@@ -647,10 +680,10 @@ int ObAllVirtualGroupIOStat::record_sys_group_io_status(ObIOService *io_manager)
           snprintf(read_item.group_name_, sizeof(read_item.group_name_), "%s", group_name);
           read_item.min_iops_ = 0;
           read_item.max_iops_ = INT64_MAX;
-          read_item.real_iops_ = static_cast<int64_t>(info.at(local_read_index).avg_iops_);
-          read_item.norm_iops_ = oceanbase::common::get_norm_iops(
-              info.at(local_read_index).avg_byte_, info.at(local_read_index).avg_iops_, ObIOMode::READ);
-          if (OB_FAIL(group_io_stats_.push_back(read_item))) {
+          read_item.real_iops_ = calibration_integer(info.at(local_read_index).avg_iops_, ret);
+          read_item.norm_iops_ = normalized_iops(
+              info.at(local_read_index).avg_byte_, info.at(local_read_index).avg_iops_, ObIOMode::READ, ret);
+          if (OB_SUCC(ret) && OB_FAIL(group_io_stats_.push_back(read_item))) {
           } else {
             GroupIoStat write_item;
             write_item.mode_ = ObIOMode::WRITE;
@@ -658,10 +691,10 @@ int ObAllVirtualGroupIOStat::record_sys_group_io_status(ObIOService *io_manager)
             snprintf(write_item.group_name_, sizeof(write_item.group_name_), "%s", group_name);
             write_item.min_iops_ = 0;
             write_item.max_iops_ = INT64_MAX;
-            write_item.real_iops_ = static_cast<int64_t>(info.at(local_write_index).avg_iops_);
-            write_item.norm_iops_ = oceanbase::common::get_norm_iops(
-                info.at(local_write_index).avg_byte_, info.at(local_write_index).avg_iops_, ObIOMode::WRITE);
-            if (OB_FAIL(group_io_stats_.push_back(write_item))) {
+            write_item.real_iops_ = calibration_integer(info.at(local_write_index).avg_iops_, ret);
+            write_item.norm_iops_ = normalized_iops(
+                info.at(local_write_index).avg_byte_, info.at(local_write_index).avg_iops_, ObIOMode::WRITE, ret);
+            if (OB_SUCC(ret) && OB_FAIL(group_io_stats_.push_back(write_item))) {
             }
           }
         }

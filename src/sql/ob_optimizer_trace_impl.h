@@ -72,7 +72,7 @@ inline ObOptimizerTraceImpl** get_local_tracer()
 #define KV(x) #x, "(", x , ")"
 #define KV_(x) #x, "(", x##_, ")"
 
-#define BEGIN_OPT_TRACE(session, sql_id)                                  \
+#define BEGIN_OPT_TRACE(session, sql_id, result)                                  \
   ObOptimizerTraceImpl *copy_tracer = NULL;                               \
   do {                                                                    \
     ObOptimizerTraceImpl** local_tracer = sql::get_local_tracer();        \
@@ -81,20 +81,22 @@ inline ObOptimizerTraceImpl** get_local_tracer()
       copy_tracer = *local_tracer;                                        \
       if (session->is_user_session() &&                                   \
           session->get_optimizer_tracer().enable(sql_id)) {               \
-        session->get_optimizer_tracer().open();                           \
+        const int trace_ret = session->get_optimizer_tracer().open();    \
+        if (OB_SUCCESS == result) { result = trace_ret; }                 \
       }                                                                   \
       *local_tracer = &(session->get_optimizer_tracer());                 \
     }                                                                     \
   } while (0);                                                            \
 
-#define END_OPT_TRACE(session)                                            \
+#define END_OPT_TRACE(session, result)                                            \
   do {                                                                    \
     ObOptimizerTraceImpl** local_tracer = sql::get_local_tracer();        \
     if (OB_ISNULL(local_tracer) || OB_ISNULL(session)) {                  \
     } else {                                                              \
       if (session->is_user_session() &&                                   \
           session->get_optimizer_tracer().enable()) {                     \
-        session->get_optimizer_tracer().close();                          \
+        const int trace_ret = session->get_optimizer_tracer().close();   \
+        if (OB_SUCCESS == result) { result = trace_ret; }                 \
       }                                                                   \
       *local_tracer = copy_tracer;                                        \
     }                                                                     \
@@ -266,7 +268,7 @@ class LogFileAppender {
 public:
   LogFileAppender();
   int open();
-  void close();
+  int close();
   int set_identifier(const common::ObString &identifier);
   int append(const char* buf, int64_t buf_len);
 private:
@@ -295,7 +297,7 @@ public:
                     const int trace_level);
   void reset();
   int open();
-  void close();
+  int close();
   inline bool enable() const { return enable_; }
   bool enable(const common::ObString &sql_id);
 

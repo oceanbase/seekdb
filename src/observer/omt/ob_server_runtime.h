@@ -35,6 +35,7 @@
 #include "share/rc/ob_context.h"
 #include "observer/omt/ob_th_worker.h"
 #include "ob_retry_queue.h"
+#include "request_admission.h"
 #include "storage/meta_store/ob_server_runtime_meta.h"
 #include "lib/thread/ob_adaptive_worker_pool.h"
 #include "lib/lock/ob_tc_rwlock.h"      // TCRWLock
@@ -190,11 +191,19 @@ public:
   ObServerRuntime &operator=(const ObServerRuntime &) = delete;
 
   int init(const ObServerRuntimeMeta &meta);
-  void stop() { ATOMIC_STORE(&stopped_, ObTimeUtility::current_time()); }
-  void start() { ATOMIC_STORE(&stopped_, 0); }
+  void stop()
+  {
+    ATOMIC_STORE(&stopped_, ObTimeUtility::current_time());
+    request_admission_.close();
+  }
+  void start()
+  {
+    ATOMIC_STORE(&stopped_, 0);
+    request_admission_.open();
+  }
   int try_wait();
   void destroy();
-  bool has_stopped() const { return stopped_ != 0; }
+  bool has_stopped() const { return request_admission_.is_closed(); }
 
   bool is_hidden();
 
@@ -239,7 +248,7 @@ public:
                "idle_worker_cnt", idle_count(),
                "min_worker_cnt", min_worker_cnt(),
                "max_worker_cnt", max_worker_cnt(),
-               K_(stopped),
+               "stopped", ATOMIC_LOAD(&stopped_),
                K_(recv_mysql_cnt), K_(recv_task_cnt),
                "workers", workers_.get_size(),
                K_(req_queue),
@@ -278,6 +287,7 @@ protected:
   void *gc_thread_;
   bool has_created_;
   int64_t stopped_;
+  RequestAdmission request_admission_;
   bool modules_stopped_;
 
   /// runtime task queue,

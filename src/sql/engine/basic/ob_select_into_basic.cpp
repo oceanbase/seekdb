@@ -32,7 +32,11 @@ const int64_t ObCompressStreamWriter::MIN_COMPRESSED_BUFFER_SIZE = 4 * 1024; // 
 int ObCompressStreamWriter::write(const char *src, size_t length, bool is_file_end)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(compressor_)) {
+  if (write_error_ != OB_SUCCESS) {
+    ret = write_error_;
+  } else if (compress_stream_finished_) {
+    ret = OB_STATE_NOT_MATCH;
+  } else if (OB_ISNULL(compressor_)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     bool compress_ended = false;
@@ -53,13 +57,14 @@ int ObCompressStreamWriter::write(const char *src, size_t length, bool is_file_e
       }
     } while (OB_SUCC(ret) && !compress_ended);
   }
+  if (OB_FAIL(ret)) { write_error_ = ret; }
   return ret;
 }
 
 int ObCompressStreamWriter::flush_to_storage(const char *data, size_t length)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(file_appender_->append(data, length, false))) {
+  if (OB_FAIL(file_appender_->append(data, length))) {
   }
   return ret;
 }
@@ -67,7 +72,9 @@ int ObCompressStreamWriter::flush_to_storage(const char *data, size_t length)
 int ObCompressStreamWriter::finish_file_compress()
 {
   int ret = OB_SUCCESS;
-  if (compress_stream_finished_) {
+  if (write_error_ != OB_SUCCESS) {
+    ret = write_error_;
+  } else if (compress_stream_finished_) {
   } else if (OB_FAIL(finish_compress_stream())) {
   } else {
     if (curr_pos_ > 0) {
@@ -75,9 +82,11 @@ int ObCompressStreamWriter::finish_file_compress()
       }
     }
     if (OB_SUCC(ret)) {
+      curr_pos_ = 0;
       compress_stream_finished_ = true;
     }
   }
+  if (OB_FAIL(ret)) { write_error_ = ret; }
   return ret;
 }
 
@@ -93,6 +102,7 @@ int ObCompressStreamWriter::finish_compress_stream()
 
 void ObCompressStreamWriter::reuse()
 {
+  if (write_error_ != OB_SUCCESS || !compress_stream_finished_) { return; }
   if (OB_NOT_NULL(compressor_)) {
     compressor_->reuse();
   }
@@ -110,6 +120,7 @@ int ObCompressStreamWriter::init(ObFileAppender *file_appender,
   compress_type_ = compress_type;
   allocator_ = &allocator;
   compress_stream_finished_ = false;
+  write_error_ = OB_SUCCESS;
   // buffer_size used for stream compression is limited to between MIN_COMPRESSED_BUFFER_SIZE
   // and DEFAULT_COMPRESSED_BUFFER_SIZE, which ensures streaming compression works properly
   // and avoiding the memory usage of too many partitions when export outfile by partition.

@@ -128,7 +128,7 @@ For example, the include order of "ob_schema.cpp" is as follows:
 #include "common/ob_obj_type.h"
 #include "common/ob_schema_helper.h"
 #include "common/ob_define.h"
-#include "common/file_directory_utils.h"
+#include "lib/file/path_operations.h"
 ```
 
 ## 2.8 Summary

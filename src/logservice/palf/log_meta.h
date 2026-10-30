@@ -61,6 +61,7 @@ private:
 };
 
 namespace meta_store {
+int check_directory(share::LocalStore &store, const char *log_dir, bool &directory_exists);
 int create(share::LocalStore &store, const LogMeta &meta);
 int load(share::LocalStore &store, LogMeta &meta, block_id_t &expected_next_block_id);
 int save(share::LocalStore &store, const LogMeta &meta);

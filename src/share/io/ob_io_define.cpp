@@ -261,17 +261,6 @@ void ObIOFlag::set_detect(const bool is_detect)
   is_detect_ = is_detect;
 }
 
-void ObIOFlag::set_time_detect(const bool is_time_detect)
-{
-  is_time_detect_ = is_time_detect;
-}
-
-bool ObIOFlag::is_time_detect() const
-{
-  return is_time_detect_;
-}
-
-
 bool ObIOFlag::is_detect() const
 {
   return is_detect_;
@@ -528,12 +517,7 @@ int ObIOResult::init(const ObIOInfo &info)
   } else if (OB_ISNULL(info.fd_.device_handle_)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    if (info.flag_.is_sync()) {
-      if (OB_FAIL(info.fd_.device_handle_->get_io_aligned_size(aligned_size_))) {
-      }
-    } else {
-      aligned_size_ = DIO_ALIGN_SIZE;
-    }
+    aligned_size_ = DIO_ALIGN_SIZE;
   }
   if (OB_SUCC(ret)) {
     //init info and check valid
@@ -574,6 +558,11 @@ void ObIOResult::reset()
   buf_ = nullptr;
   user_data_buf_ = nullptr;
   io_callback_ = nullptr;
+  callback_ownership_ = CallbackOwnership::Detached;
+  rust_control_.reset();
+  config_snapshot_.reset();
+  group_id_ = 0;
+  group_index_ = 0;
   flag_.reset();
   ret_code_.reset();
   time_log_.reset();
@@ -596,6 +585,11 @@ void ObIOResult::destroy()
   buf_ = nullptr;
   user_data_buf_ = nullptr;
   io_callback_ = nullptr;
+  callback_ownership_ = CallbackOwnership::Detached;
+  rust_control_.reset();
+  config_snapshot_.reset();
+  group_id_ = 0;
+  group_index_ = 0;
   flag_.reset();
   ret_code_.reset();
   time_log_.reset();
@@ -619,7 +613,7 @@ ObIOMode ObIOResult::get_mode() const
 
 ObIOGroupKey ObIOResult::get_group_key() const
 {
-  return ObIOGroupKey(0, ObIOMode::MAX_MODE);
+  return ObIOGroupKey(group_id_, ObIOMode::MAX_MODE);
 }
 
 uint64_t ObIOResult::get_sys_module_id() const
@@ -642,20 +636,18 @@ uint64_t ObIOResult::get_io_usage_index()
 
 void ObIOResult::cancel()
 {
-  int ret = OB_SUCCESS;
-  if (is_inited_ && !is_finished_) {
-    { // must check finished and set cancel in guard
-      ObThreadCondGuard guard(cond_);
-      if (OB_FAIL(guard.get_ret())) {
-      } else if (is_finished_) {
-        // do nothing
-      } else {
-        is_canceled_ = true;
-        //note: not support channel cancel now
-      }
+  std::optional<rust::Box<storage_io::CancelHandle>> control;
+  bool cancelled = false;
+  {
+    ObThreadCondGuard guard(cond_);
+    if (OB_SUCCESS == guard.get_ret() && is_inited_ && !is_finished_) {
+      is_canceled_ = true;
+      cancelled = true;
+      if (rust_control_) { control.emplace((*rust_control_)->clone_cancel_handle()); }
     }
-    finish(OB_CANCELED);
   }
+  if (control) { (*control)->request_cancel(); }
+  if (cancelled) { finish(OB_CANCELED); }
 }
 
 int ObIOResult::wait(int64_t wait_ms)
@@ -693,18 +685,20 @@ void ObIOResult::dec_ref(const char *msg)
     LOG_ERROR("bug: result_ref_cnt < 0", K(ret), K(tmp_ref), KCSTRING(lbt()));
     abort();
   } else if (0 == tmp_ref) {
-    if (OB_ISNULL(io_service_)) {
+    if (!allocation_owner_) {
       ret = OB_ERR_SYS;
       LOG_ERROR("io service is null, memory leak", K(ret));
     } else {
       // destroy will be called when free
-      io_service_->io_allocator_.free(this);
+      auto allocation_owner = allocation_owner_;
+      allocation_owner->free(this);
     }
   }
 }
 
 void ObIOResult::finish(const ObIORetCode &ret_code, ObIORequest *req)
 {
+  std::optional<rust::Box<storage_io::CancelHandle>> control;
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
@@ -713,21 +707,22 @@ void ObIOResult::finish(const ObIORetCode &ret_code, ObIORequest *req)
     if (OB_LIKELY(!is_finished_)) {
       ret_code_ = ret_code;
       ATOMIC_STORE(&is_finished_, true);
+      control.swap(rust_control_);
       if (OB_NOT_NULL(io_service_) && OB_NOT_NULL(req)) {
         if (is_sys_module()) {
           // sys group accumulate
           io_service_->io_sys_usage_.accumulate(*req);
         } else {
-          io_service_->io_usage_.accumulate(*req);
+          if (config_snapshot_) { config_snapshot_->usage_->accumulate(*req); }
         }
         time_log_.end_ts_ = ObTimeUtility::fast_current_time();
-        // record io error
-        if (OB_UNLIKELY(OB_IO_ERROR == ret_code_.io_ret_)) {
-          OB_IO_MANAGER.get_device_health_detector().record_io_error(*this, *req);
-        }
-        // record timeout
-        if (OB_UNLIKELY(ObTimeUtility::current_time() > req->timeout_ts())) {
-          OB_IO_MANAGER.get_device_health_detector().record_io_timeout(*this, *req);
+        if (req->rust_lifetime_) {
+          storage_io::FinalFacts facts{};
+          facts.io_error = OB_IO_ERROR == ret_code_.io_ret_;
+          facts.os_error = ret_code_.fs_errno_;
+          facts.deadline_exceeded = ObTimeUtility::current_time() > req->timeout_ts();
+          facts.finished_wall_us = time_log_.end_ts_;
+          (*req->rust_lifetime_)->observe_final(facts);
         }
       }
       if (OB_FAIL(guard.get_ret())) {
@@ -744,21 +739,28 @@ void ObIOResult::inc_out_ref()
 
 void ObIOResult::dec_out_ref()
 {
-  int ret =OB_SUCCESS;
   if (0 == ATOMIC_SAF(&out_ref_cnt_, 1)) {
     cancel();
-
-    if (OB_NOT_NULL(io_callback_) && OB_NOT_NULL(io_callback_->get_allocator())) {
-      ObIAllocator *tmp_allocator = io_callback_->get_allocator();
-      io_callback_->~ObIOCallback(); //allocator will set null
-      tmp_allocator->free(io_callback_);
-      io_callback_ = nullptr;
+    ObIOCallback *callback = nullptr;
+    {
+      ObThreadCondGuard guard(cond_);
+      if (OB_SUCCESS == guard.get_ret() && callback_ownership_ == CallbackOwnership::Adopted) {
+        callback = io_callback_;
+        io_callback_ = nullptr;
+        callback_ownership_ = CallbackOwnership::Detached;
+      }
+    }
+    if (nullptr != callback && nullptr != callback->get_allocator()) {
+      ObIAllocator *allocator = callback->get_allocator();
+      callback->~ObIOCallback();
+      allocator->free(callback);
     }
   }
 }
 
 void ObIOResult::finish_without_accumulate(const ObIORetCode &ret_code)
 {
+  std::optional<rust::Box<storage_io::CancelHandle>> control;
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
@@ -767,6 +769,7 @@ void ObIOResult::finish_without_accumulate(const ObIORetCode &ret_code)
     if (OB_LIKELY(!is_finished_)) {
       ret_code_ = ret_code;
       ATOMIC_STORE(&is_finished_, true);
+      control.swap(rust_control_);
       time_log_.end_ts_ = ObTimeUtility::fast_current_time();
       if (OB_FAIL(guard.get_ret())) {
       } else if (OB_FAIL(cond_.signal())) {
@@ -787,9 +790,7 @@ int ObIOResult::transform_group_config_index_to_usage_index(const ObIOGroupKey &
     tmp_index = get_sys_module_id() - SYS_MODULE_START_ID;
     usage_index = tmp_index * GROUP_MODE_CNT + offset;
   } else {
-    if (OB_SUCCESS !=  io_service_->get_group_index(key, tmp_index)) {
-      tmp_index = 0;
-    }
+    tmp_index = group_index_;
     uint64_t quot = tmp_index / MODE_CNT;
     usage_index = quot * GROUP_MODE_CNT + static_cast<uint64_t>(get_mode());
   }
@@ -812,10 +813,9 @@ int ObIOResult::cal_delay_us(int64_t &prepare_delay, int64_t &schedule_delay, in
 ObIORequest::ObIORequest()
   : io_result_(nullptr),
     is_inited_(false),
-    retry_count_(0),
     ref_cnt_(0),
-    raw_buf_(nullptr),
-    control_block_(nullptr),
+    align_size_(0),
+    align_offset_(0),
     io_service_(),
     fd_(),
     trace_id_()
@@ -854,17 +854,11 @@ int ObIORequest::init(const ObIOInfo &info, ObIOResult *result)
     //init info and check valid
 
     fd_ = info.fd_;
-    char *io_buf = nullptr;
-    buf_size_ = 0;
-    if (OB_FAIL(set_block_handle(info))) {
-    } else if (OB_FAIL(set_fd_cache_handle(info))) {
-    } else if (OB_FAIL(calc_io_offset_and_size_())) {
+    if (OB_FAIL(calc_io_offset_and_size_())) {
     } else if (OB_ISNULL(fd_.device_handle_)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_UNLIKELY(!is_valid())) {
       ret = OB_INVALID_ARGUMENT;
-    } else if (info.flag_.is_write() && OB_FAIL(alloc_io_buf(io_buf))) {
-      // alloc buffer for write request when ObIORequest init
     }
   }
   if (OB_SUCC(ret)) {
@@ -882,27 +876,22 @@ void ObIORequest::set_result(ObIOResult &io_result)
 void ObIORequest::free()
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(io_service_)) {
+  if (!allocation_owner_) {
     //not set yet, do nothing
   } else {
     // destroy will be called when free
-    io_service_->io_allocator_.free(this);
+    auto allocation_owner = allocation_owner_;
+    allocation_owner->free(this);
   }
 }
 
 void ObIORequest::reset() //only for test, not dec resut_ref
 {
   int ret = OB_SUCCESS;
-  retry_count_ = 0;
-  // only read need destroy here
-  // TODO(yanfeng): works now, need refactor
-  if (nullptr != control_block_ && nullptr != fd_.device_handle_) {
-    fd_.device_handle_->free_iocb(control_block_);
-    control_block_ = nullptr;
-  }
-
-
+  registration_tag_ = 0;
+  rust_id_ = 0;
   free_io_buffer();
+  rust_lifetime_.reset();
   ref_cnt_ = 0;
   trace_id_.reset();
   io_result_ = nullptr;
@@ -914,15 +903,12 @@ void ObIORequest::reset() //only for test, not dec resut_ref
 void ObIORequest::destroy()
 {
   int ret = OB_SUCCESS;
-  retry_count_ = 0;
-  if (nullptr != control_block_ && nullptr != fd_.device_handle_) {
-    fd_.device_handle_->free_iocb(control_block_);
-    control_block_ = nullptr;
-  }
-
+  registration_tag_ = 0;
+  rust_id_ = 0;
   fd_.reset();
 
   free_io_buffer();
+  rust_lifetime_.reset();
   ref_cnt_ = 0;
   trace_id_.reset();
   if (nullptr != io_result_) {
@@ -966,16 +952,6 @@ bool ObIORequest::is_sys_module() const
   return nullptr == io_result_ ? false : io_result_->flag_.is_sys_module();
 }
 
-char *ObIORequest::calc_io_buf()
-{
-  int ret = OB_SUCCESS;
-  char *ret_buf = nullptr;
-  if (OB_NOT_NULL(io_result_)) {
-    ret_buf = reinterpret_cast<char *>(upper_align(reinterpret_cast<int64_t>(raw_buf_), io_result_->aligned_size_));
-  }
-  return ret_buf;
-}
-
 int ObIORequest::calc_io_offset_and_size_()
 {
   int ret = OB_SUCCESS;
@@ -983,6 +959,9 @@ int ObIORequest::calc_io_offset_and_size_()
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_ISNULL(fd_.device_handle_)) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (io_result_->offset_ > INT64_MAX - io_result_->size_
+      || io_result_->offset_ + io_result_->size_ > INT64_MAX - (io_result_->aligned_size_ - 1)) {
+    ret = OB_SIZE_OVERFLOW;
   } else {
     align_offset_size(io_result_->offset_, io_result_->size_, io_result_->aligned_size_, align_offset_, align_size_);
   }
@@ -992,17 +971,10 @@ int ObIORequest::calc_io_offset_and_size_()
 const char *ObIORequest::get_io_data_buf()
 {
   const char *buf = nullptr;
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(nullptr == raw_buf_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("raw buf is null, maybe has been recycle", K(ret));
-  } else if (OB_ISNULL(io_result_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    // re-calculate with const parameters, in case of partial return change aligned_buf and so on.
-    const int64_t aligned_offset = lower_align(io_result_->offset_, io_result_->aligned_size_);
-    char *aligned_buf = reinterpret_cast<char *>(upper_align(reinterpret_cast<int64_t>(raw_buf_), io_result_->aligned_size_));
-    buf = aligned_buf + io_result_->offset_ - aligned_offset;
+  if (rust_completion_.has_value()
+      && rust_completion_.value()->completion_info().has_buffer) {
+    const auto data = rust_completion_.value()->completion_data();
+    buf = reinterpret_cast<const char *>(data.data());
   }
   return buf;
 }
@@ -1046,97 +1018,6 @@ ObIOCallback *ObIORequest::get_callback() const
   return io_result_->io_callback_;
 }
 
-int ObIORequest::get_buf_size() const
-{
-  return buf_size_;
-}
-
-int ObIORequest::alloc_io_buf(char *&io_buf)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (nullptr != io_result_) {
-    ret = alloc_aligned_io_buf(io_buf);
-  }
-  return ret;
-}
-
-int ObIORequest::alloc_aligned_io_buf(char *&io_buf)
-{
-  int ret = OB_SUCCESS;
-  int64_t io_offset = 0;
-  int64_t io_size = 0;
-  int64_t aligned_size = 0;
-  if (OB_ISNULL(io_result_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(!io_result_->flag_.is_read() && !io_result_->flag_.is_write())) { // only for read and write
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(fd_.device_handle_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (FALSE_IT(aligned_size = io_result_->aligned_size_)) {
-  } else if (io_result_->flag_.is_write() // write io must aligned
-      && OB_UNLIKELY(!is_io_aligned(io_result_->offset_, aligned_size)
-                     || !is_io_aligned(io_result_->size_, aligned_size))) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    align_offset_size(io_result_->offset_, io_result_->size_, aligned_size, io_offset, io_size);
-    const int64_t io_buffer_size = ((1 == aligned_size) ? io_size : (io_size + aligned_size));
-    if (OB_ISNULL(io_service_)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_ISNULL(raw_buf_ = io_service_->io_allocator_.alloc(io_buffer_size))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      io_buf = reinterpret_cast<char *>(upper_align(reinterpret_cast<int64_t>(raw_buf_), aligned_size));
-      buf_size_ = io_buffer_size;
-      io_service_->io_mem_stats_.inc(*this);
-    }
-  }
-  if (OB_SUCC(ret)) {
-    if (OB_ISNULL(raw_buf_)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (!is_io_aligned((int64_t)io_buf, aligned_size)
-        || !is_io_aligned(io_size, aligned_size)
-        || !is_io_aligned(io_offset, aligned_size)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (io_result_->flag_.is_write()) {
-      MEMCPY(io_buf, io_result_->buf_, io_result_->size_);
-    }
-  }
-  return ret;
-}
-
-int ObIORequest::prepare(char *next_buffer, int64_t next_size, int64_t next_offset)
-{
-  int ret = OB_SUCCESS;
-  char *io_buf = next_buffer != nullptr ? next_buffer : calc_io_buf();
-  if (OB_ISNULL(fd_.device_handle_) || OB_ISNULL(io_result_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(io_buf) && OB_FAIL(alloc_io_buf(io_buf))) {
-    // Delay read-buffer allocation until the request is ready to submit.
-  } else if (!io_result_->flag_.is_sync() && fd_.device_handle_->supports_native_aio()) {
-    const bool retry = next_size != 0 || next_offset != 0;
-    ret = prepare_native_io(io_buf, retry ? next_size : get_align_size(),
-                            retry ? next_offset : get_align_offset());
-  }
-  return ret;
-}
-
-int ObIORequest::prepare_native_io(char *buffer, int64_t size, int64_t offset)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(control_block_) && OB_ISNULL(control_block_ = fd_.device_handle_->alloc_iocb())) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (io_result_->flag_.is_read()) {
-    ret = fd_.device_handle_->io_prepare_pread(fd_, buffer, size, offset, control_block_, this);
-  } else if (io_result_->flag_.is_write()) {
-    ret = fd_.device_handle_->io_prepare_pwrite(fd_, buffer, size, offset, control_block_, this);
-  } else {
-    ret = OB_NOT_SUPPORTED;
-  }
-  return ret;
-}
-
 int ObIORequest::recycle_buffer()
 {
   int ret = OB_SUCCESS;
@@ -1160,47 +1041,17 @@ int ObIORequest::recycle_buffer()
 }
 
 
-int ObIORequest::try_alloc_buf_until_timeout(char *&io_buf)
-{
-  int ret = OB_SUCCESS;
-  int64_t retry_alloc_count = 0;
-  while (OB_SUCC(ret)) {
-    const int64_t current_ts = ObTimeUtility::current_time();
-    ++retry_alloc_count;
-    if (current_ts > timeout_ts()) {
-      ret = OB_TIMEOUT;
-      LOG_WARN("current time is larger than the timeout timestamp", K(ret), K(current_ts), K(timeout_ts()), K(retry_alloc_count));
-    } else if (OB_FAIL(alloc_io_buf(io_buf))) {
-      if (OB_ALLOCATE_MEMORY_FAILED == ret) {
-        const int64_t remain_time = timeout_ts() - current_ts;
-        const int64_t sleep_time = min(remain_time, static_cast<int64_t>(1000L));
-        if (TC_REACH_TIME_INTERVAL(1000L * 1000L)) {
-          LOG_INFO("alloc memory failed, retry later", K(ret), K(remain_time), K(sleep_time), K(retry_alloc_count));
-        }
-        ob_usleep((useconds_t)sleep_time);
-        ret = OB_SUCCESS;
-      }
-    } else {
-      LOG_INFO("retry alloc io_buf success", K(retry_alloc_count));
-      break;
-    }
-  }
-  return ret;
-}
-
 bool ObIORequest::can_callback() const
 {
-  // both async_io and sync_io can callback
-  return nullptr != io_result_ && nullptr != get_callback() && nullptr != raw_buf_;
+  return nullptr != io_result_ && nullptr != get_callback()
+      && rust_completion_.has_value()
+      && rust_completion_.value()->completion_info().has_buffer;
 }
 
 void ObIORequest::free_io_buffer()
 {
-  if (nullptr != raw_buf_ && nullptr != io_service_) {
-    io_service_->io_mem_stats_.dec(*this);
-    io_service_->io_allocator_.free(raw_buf_);
-    raw_buf_ = nullptr;
-  }
+  rust_completion_.reset();
+  rust_request_.reset();
 }
 
 void ObIORequest::inc_ref()
@@ -1218,12 +1069,13 @@ void ObIORequest::dec_ref()
     abort();
   }
   if (0 == tmp_ref) {
-    if (OB_ISNULL(io_service_)) {
+    if (!allocation_owner_) {
       ret = OB_ERR_SYS;
       LOG_ERROR("io service is null, memory leak", K(ret), KCSTRING(lbt()), K(*this));
     } else {
       // destroy will be called when free
-      io_service_->io_allocator_.free(this);
+      auto allocation_owner = allocation_owner_;
+      allocation_owner->free(this);
     }
   }
 }
@@ -1237,76 +1089,6 @@ int64_t ObIORequest::get_remained_io_timeout_us()
   }
   return MAX(0, cur_remained_timeout_us);
 }
-
-int ObIORequest::set_block_handle(const ObIOInfo &info)
-{
-  // do nothing
-  return OB_SUCCESS;
-}
-
-int ObIORequest::set_fd_cache_handle(const ObIOInfo &info)
-{
-  // do nothing
-  return OB_SUCCESS;
-}
-
-/******************             IOPhyQueue              **********************/
-
-ObPhyQueue::ObPhyQueue()
-  : is_inited_(false),
-    stop_accept_(false),
-    reservation_ts_(INT64_MAX),
-    limitation_ts_(INT64_MAX),
-    proportion_ts_(INT64_MAX),
-    last_empty_ts_(INT64_MAX),
-    queue_index_(-1),
-    reservation_pos_(-1),
-    limitation_pos_(-1),
-    proportion_pos_(-1),
-    req_list_()
-{
-
-}
-
-ObPhyQueue::~ObPhyQueue()
-{
-  destroy();
-}
-
-int ObPhyQueue::init(const int64_t index)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(is_inited_)) {
-    ret = OB_INIT_TWICE;
-  } else if (index < 0 || index > INT64_MAX){
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    queue_index_ = index;
-    last_empty_ts_ = ObTimeUtility::fast_current_time();
-    is_inited_ = true;
-  }
-  if (OB_UNLIKELY(!is_inited_)) {
-    destroy();
-  }
-  return ret;
-}
-
-void ObPhyQueue::destroy()
-{
-  is_inited_ = false;
-  stop_accept_ = true;
-  reservation_ts_ = INT64_MAX;
-  limitation_ts_ = INT64_MAX;
-  proportion_ts_ = INT64_MAX;
-  last_empty_ts_ = INT64_MAX;
-  reservation_pos_ = -1;
-  limitation_pos_ = -1;
-  proportion_pos_ = -1;
-  queue_index_ = -1;
-}
-
-
-
 
 /******************             IOHandle              **********************/
 
@@ -1521,7 +1303,11 @@ void ObIOHandle::reset()
 void ObIOHandle::clear_io_callback()
 {
   if (OB_NOT_NULL(result_)) {
-    result_->io_callback_ = nullptr;
+    ObThreadCondGuard guard(result_->cond_);
+    if (OB_SUCCESS == guard.get_ret()) {
+      result_->io_callback_ = nullptr;
+      result_->callback_ownership_ = ObIOResult::CallbackOwnership::Detached;
+    }
   }
 }
 
@@ -1582,7 +1368,8 @@ bool ObIOServiceConfig::GroupConfig::is_valid() const
 
 ObIOServiceConfig::ParamConfig::ParamConfig()
     : memory_limit_(0),
-      callback_thread_count_(0)
+      callback_thread_count_(0),
+      io_buffer_limit_(0)
 {
 
 }
@@ -1595,7 +1382,8 @@ ObIOServiceConfig::ParamConfig::~ParamConfig()
 bool ObIOServiceConfig::ParamConfig::is_valid() const
 {
   return memory_limit_ > 0
-          && callback_thread_count_ >= 0;
+          && callback_thread_count_ >= 0
+          && io_buffer_limit_ >= 0;
 }
 
 ObIOServiceConfig::ObIOServiceConfig()
@@ -1626,51 +1414,107 @@ ObIOServiceConfig::~ObIOServiceConfig()
 void ObIOServiceConfig::destroy()
 {
   group_configs_.destroy();
+  module_groups_.destroy();
+  devices_.destroy();
 }
 
 const ObIOServiceConfig &ObIOServiceConfig::default_instance()
 {
   static ObIOServiceConfig instance;
-  instance.param_config_.memory_limit_ = 512L * 1024L * 1024L; // minimum memory: 512M
-  instance.param_config_.callback_thread_count_ = 0;
-  instance.resource_config_.min_iops_ = 10000;
-  instance.resource_config_.max_iops_ = 50000;
-  instance.resource_config_.weight_ = 10000;
-  instance.resource_config_.max_net_bandwidth_ = INT64_MAX;
-  instance.resource_config_.net_bandwidth_weight_ = 100;
-  instance.group_config_change_ = false;
+  static const bool initialized = [] {
+    instance.param_config_.memory_limit_ = 512L * 1024L * 1024L;
+    instance.param_config_.callback_thread_count_ = 0;
+    instance.resource_config_.min_iops_ = 10000;
+    instance.resource_config_.max_iops_ = 50000;
+    instance.resource_config_.weight_ = 10000;
+    instance.resource_config_.max_net_bandwidth_ = INT64_MAX;
+    instance.resource_config_.net_bandwidth_weight_ = 100;
+    instance.group_config_change_ = false;
+    return true;
+  }();
+  (void)initialized;
   return instance;
+}
+
+int64_t ObIOServiceConfig::effective_probe_buffer_limit() const
+{
+  int64_t reserve = probe_buffer_limit_;
+  for (const auto &device : devices_) { reserve = std::max(reserve, device.max_probe_bytes_); }
+  return reserve;
 }
 
 bool ObIOServiceConfig::is_valid() const
 {
-  bool bret = param_config_.is_valid()
-              && resource_config_.is_valid();
-  for (uint8_t i = (uint8_t)ObIOMode::READ; i <= (uint8_t)ObIOMode::MAX_MODE; ++i) {
-    int64_t sum_min_percent = 0;
-    int64_t sum_weight_percent = 0;
-    ObIOMode mode = (ObIOMode)i;
-    for (int64_t j = 0; j < group_configs_.count(); ++j) {
-      if (group_configs_.at(j).is_valid()
-          && !group_configs_.at(j).deleted_
-          && !group_configs_.at(j).cleared_
-          && group_configs_.at(j).mode_ == mode) {
-        sum_min_percent += group_configs_.at(j).min_percent_;
-        sum_weight_percent += group_configs_.at(j).weight_percent_;
+  if (!param_config_.is_valid() || !resource_config_.is_valid()
+      || health_warning_tolerance_us_ < 1000000 || health_warning_tolerance_us_ > 300000000
+      || health_blacklist_interval_us_ <= 0 || health_wait_cap_us_ <= 0
+      || request_limit_ <= 1 || probe_request_limit_ <= 0 || probe_request_limit_ >= request_limit_
+      || probe_buffer_limit_ <= 0 || group_configs_.empty() || group_configs_.count() % 3 != 0) {
+    return false;
+  }
+  int64_t minimum[3] = {};
+  int64_t weights[3] = {};
+  bool default_group = false;
+  for (int64_t i = 0; i < group_configs_.count(); i += 3) {
+    const int64_t id = group_configs_.at(i).group_id_;
+    if (id < 0) { return false; }
+    for (int64_t previous = 0; previous < i; previous += 3) {
+      if (group_configs_.at(previous).group_id_ == id) { return false; }
+    }
+    for (int64_t mode = 0; mode < 3; ++mode) {
+      const auto &group = group_configs_.at(i + mode);
+      if (group.group_id_ != id || static_cast<int64_t>(group.mode_) != mode) { return false; }
+      if (!group.deleted_ && !group.cleared_) {
+        if (!group.is_valid()) { return false; }
+        minimum[mode] += group.min_percent_;
+        weights[mode] += group.weight_percent_;
+        if (minimum[mode] > 100 || weights[mode] > 100) { return false; }
+        if (id == 0 && mode == 2) { default_group = true; }
       }
     }
-    bret = bret && 100 >= sum_min_percent && 100 == sum_weight_percent;
   }
-  return bret;
+  if (!default_group || weights[0] != 100 || weights[1] != 100 || weights[2] != 100) { return false; }
+  for (int64_t i = 0; i < module_groups_.count(); ++i) {
+    const auto &mapping = module_groups_.at(i);
+    if (mapping.module_id_ < SYS_MODULE_START_ID || mapping.module_id_ >= SYS_MODULE_END_ID) { return false; }
+    for (int64_t j = 0; j < i; ++j) {
+      if (module_groups_.at(j).module_id_ == mapping.module_id_) { return false; }
+    }
+    bool active = false;
+    for (int64_t j = 2; j < group_configs_.count(); j += 3) {
+      const auto &group = group_configs_.at(j);
+      if (static_cast<uint64_t>(group.group_id_) == mapping.group_id_ && !group.deleted_ && !group.cleared_) {
+        active = true;
+      }
+    }
+    if (!active) { return false; }
+  }
+  for (int64_t i = 0; i < devices_.count(); ++i) {
+    const auto &device = devices_.at(i);
+    if (device.depth_ < 2 || device.probe_depth_ <= 0 || device.probe_depth_ >= device.depth_
+        || device.max_probe_bytes_ <= 0) { return false; }
+    for (int64_t j = 0; j < i; ++j) {
+      if (devices_.at(j).id_ == device.id_) { return false; }
+    }
+  }
+  return true;
 }
 
 int ObIOServiceConfig::deep_copy(const ObIOServiceConfig &other_config)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(group_configs_.assign(other_config.group_configs_))) {
+  } else if (OB_FAIL(module_groups_.assign(other_config.module_groups_))) {
+  } else if (OB_FAIL(devices_.assign(other_config.devices_))) {
   }
 
   if (OB_SUCC(ret)) {
+    health_warning_tolerance_us_ = other_config.health_warning_tolerance_us_;
+    health_blacklist_interval_us_ = other_config.health_blacklist_interval_us_;
+    health_wait_cap_us_ = other_config.health_wait_cap_us_;
+    request_limit_ = other_config.request_limit_;
+    probe_request_limit_ = other_config.probe_request_limit_;
+    probe_buffer_limit_ = other_config.probe_buffer_limit_;
     resource_config_ = other_config.resource_config_;
     group_config_change_ = other_config.group_config_change_;
     param_config_ = other_config.param_config_;
@@ -1689,13 +1533,13 @@ int ObIOServiceConfig::calc_group_config(const uint64_t index, int64_t &min, int
   } else {
     const GroupConfig &group_config = group_configs_.at(index);
     if (group_config.mode_ == ObIOMode::MAX_MODE) {
-      min = resource_config_.min_iops_ == INT64_MAX ? INT64_MAX : resource_config_.min_iops_ * group_config.min_percent_ / 100;
-      max = resource_config_.max_iops_ == INT64_MAX ? INT64_MAX : resource_config_.max_iops_ * group_config.max_percent_ / 100;
-      weight = resource_config_.weight_ * group_config.weight_percent_ / 100;
+      min = resource_config_.min_iops_ == INT64_MAX ? INT64_MAX : (resource_config_.min_iops_ / 100 * group_config.min_percent_ + resource_config_.min_iops_ % 100 * group_config.min_percent_ / 100);
+      max = resource_config_.max_iops_ == INT64_MAX ? INT64_MAX : (resource_config_.max_iops_ / 100 * group_config.max_percent_ + resource_config_.max_iops_ % 100 * group_config.max_percent_ / 100);
+      weight = (resource_config_.weight_ / 100 * group_config.weight_percent_ + resource_config_.weight_ % 100 * group_config.weight_percent_ / 100);
     } else {
       min = 0;
-      max = resource_config_.max_net_bandwidth_ == INT64_MAX ? INT64_MAX : resource_config_.max_net_bandwidth_ * group_config.max_percent_ / 100;
-      weight = resource_config_.net_bandwidth_weight_ * group_config.weight_percent_ / 100;
+      max = resource_config_.max_net_bandwidth_ == INT64_MAX ? INT64_MAX : (resource_config_.max_net_bandwidth_ / 100 * group_config.max_percent_ + resource_config_.max_net_bandwidth_ % 100 * group_config.max_percent_ / 100);
+      weight = (resource_config_.net_bandwidth_weight_ / 100 * group_config.weight_percent_ + resource_config_.net_bandwidth_weight_ % 100 * group_config.weight_percent_ / 100);
     }
   }
   return ret;

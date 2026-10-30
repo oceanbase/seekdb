@@ -57,119 +57,6 @@ struct ObIOFd
   ObIODevice *device_handle_; // no need to serialize
 };
 
-template<typename T>
-class ObIOCBPool final
-{
-public:
-  ObIOCBPool()
-    : allocator_(nullptr),
-      is_inited_(false)
-  {
-  }
-  ~ObIOCBPool()
-  {
-    reset();
-  }
-  int init(common::ObIAllocator &allocator)
-  {
-    int ret = OB_SUCCESS;
-    if (OB_UNLIKELY(is_inited_)) {
-      ret = OB_INIT_TWICE;
-      STORAGE_LOG(WARN, "cannot initialize twice", K(ret));
-    } else {
-      allocator_ = &allocator;
-      is_inited_ = true;
-    }
-    if (OB_UNLIKELY(!is_inited_)) {
-      reset();
-    }
-    return ret;
-  }
-  void reset()
-  {
-    allocator_ = nullptr;
-    is_inited_ = false;
-  }
-  T *alloc()
-  {
-    int ret = OB_SUCCESS;
-    T *t = nullptr;
-    if (OB_UNLIKELY(!is_inited_)) {
-      ret = OB_NOT_INIT;
-      STORAGE_LOG(WARN, "IOCBPreAllocatedPool isn't initialized", K(ret));
-    } else if (OB_ISNULL(t = static_cast<T *>(allocator_->alloc(sizeof(T))))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      STORAGE_LOG(WARN, "fail to allocate iocb", K(ret));
-    } else {
-      ret = OB_SUCCESS;
-    }
-    return t;
-  }
-  void free(T *ptr)
-  {
-    if (OB_ISNULL(ptr)) {
-    } else if (OB_ISNULL(allocator_)) {
-      STORAGE_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "allocator is nullptr!!!", K_(is_inited), KP_(allocator), KP(ptr));
-    } else {
-      allocator_->free(ptr);
-    }
-  }
-private:
-  ObIAllocator *allocator_;
-  bool is_inited_;
-  DISALLOW_COPY_AND_ASSIGN(ObIOCBPool);
-};
-
-enum ObIOCBType : uint8_t
-{
-  IOCB_TYPE_LOCAL = 0,
-  IOCB_TYPE_LOCAL_CACHE = 1
-};
-
-class ObIOCB
-{
-public:
-  ObIOCB() = default;
-  virtual ~ObIOCB() = default;
-  virtual ObIOCBType get_type() const = 0;
-  virtual void set_is_retry(const bool is_retry) { UNUSED(is_retry); }
-  virtual void get_is_retry(bool &is_retry) { UNUSED(is_retry); }
-};
-
-enum ObIOContextType : uint8_t
-{
-  IO_CONTEXT_TYPE_LOCAL = 0,
-  IO_CONTEXT_TYPE_LOCAL_CACHE = 1
-};
-
-class ObIOContext
-{
-public:
-  ObIOContext() = default;
-  virtual ~ObIOContext() = default;
-  virtual ObIOContextType get_type() const = 0;
-};
-
-enum ObIOEventsType : uint8_t
-{
-  IO_EVENTS_TYPE_LOCAL = 0,
-  IO_EVENTS_TYPE_LOCAL_CACHE = 1
-};
-
-class ObIOEvents
-{
-public:
-  ObIOEvents() : max_event_cnt_(0) {}
-  virtual ~ObIOEvents() {}
-  virtual ObIOEventsType get_type() const = 0;
-  virtual int64_t get_complete_cnt() const = 0;
-  virtual int get_ith_ret_code(const int64_t i) const = 0;
-  virtual int get_ith_ret_bytes(const int64_t i) const = 0;
-  virtual void *get_ith_data(const int64_t i) const = 0;
-protected:
-  int64_t max_event_cnt_;
-};
-
 union ObOptValue {
   ObOptValue() : value_str (NULL) {}
   void reset() {value_str = NULL;}
@@ -312,6 +199,8 @@ public:
   virtual int fallocate(const ObIOFd &fd, mode_t mode, const int64_t offset, const int64_t len) = 0;
   virtual int lseek(const ObIOFd &fd, const int64_t offset, const int whence, int64_t &result_offset) = 0;
   virtual int truncate(const char *pathname, const int64_t len) = 0;
+  virtual int ftruncate(const ObIOFd &fd, const int64_t len)
+  { UNUSED(fd); UNUSED(len); return OB_NOT_SUPPORTED; }
   virtual int exist(const char *pathname, bool &is_exist) = 0;
   virtual int stat(const char *pathname, ObIODFileStat &statbuf) = 0;
   virtual int fstat(const ObIOFd &fd, ObIODFileStat &statbuf) = 0;
@@ -353,41 +242,6 @@ public:
     int64_t &write_size) = 0;
 
   virtual bool supports_native_aio() const { return false; }
-
-  //async io interfaces
-  virtual int io_setup(
-    uint32_t max_events,
-    ObIOContext *&io_context) { return OB_NOT_SUPPORTED; }
-  virtual int io_destroy(ObIOContext *io_context) { return OB_NOT_SUPPORTED; }
-  virtual int io_prepare_pwrite(
-    const ObIOFd &fd,
-    void *buf,
-    size_t count,
-    int64_t offset,
-    ObIOCB *iocb,
-    void *callback) { return OB_NOT_SUPPORTED; }
-  virtual int io_prepare_pread(
-    const ObIOFd &fd,
-    void *buf,
-    size_t count,
-    int64_t offset,
-    ObIOCB *iocb,
-    void *callback) { return OB_NOT_SUPPORTED; }
-  virtual int io_submit(
-    ObIOContext *io_context,
-    ObIOCB *iocb) { return OB_NOT_SUPPORTED; }
-  virtual int io_cancel(
-    ObIOContext *io_context,
-    ObIOCB *iocb) { return OB_NOT_SUPPORTED; }
-  virtual int io_getevents(
-    ObIOContext *io_context,
-    int64_t min_nr,
-    ObIOEvents *events,
-    struct timespec *timeout) { return OB_NOT_SUPPORTED; }
-  virtual ObIOCB *alloc_iocb() { return nullptr; }
-  virtual ObIOEvents *alloc_io_events(const uint32_t max_events) { return nullptr; }
-  virtual void free_iocb(ObIOCB *iocb) {}
-  virtual void free_io_events(ObIOEvents *io_event) {}
 
   // space management interface
   virtual int64_t get_total_block_size() const = 0;

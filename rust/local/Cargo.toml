@@ -8,5 +8,6 @@ publish = false
 crate-type = ["rlib"]
 
 [dependencies]
+file-io = { path = "../file-io", features = ["cxx"] }
 kv = { path = "../kv" }
 cxx = "1"

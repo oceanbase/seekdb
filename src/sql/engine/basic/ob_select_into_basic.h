@@ -91,7 +91,8 @@ public:
     total_compressed_bytes_(0),
     compressor_(NULL),
     allocator_(NULL),
-    compress_stream_finished_(true)
+    compress_stream_finished_(true),
+    write_error_(OB_SUCCESS)
   {}
 
   int init(ObFileAppender *file_appender,
@@ -128,6 +129,7 @@ private:
   ObOutfileStreamCompressor *compressor_;
   ObIAllocator *allocator_;
   bool compress_stream_finished_;
+  int write_error_;
   static const int64_t DEFAULT_COMPRESSED_BUFFER_SIZE;
   static const int64_t MIN_COMPRESSED_BUFFER_SIZE;
 };

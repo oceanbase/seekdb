@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_LOGSERVICE_OB_SERVER_LOG_BLOCK_MGR_
 #define OCEANBASE_LOGSERVICE_OB_SERVER_LOG_BLOCK_MGR_
 
+#include "rust/storage_io.h"
 #include <fcntl.h>                          // O_RDWR
 #include "lib/lock/ob_spin_lock.h"          // ObSpinLock
 #include "lib/container/ob_se_array.h"      // ObSEArray
@@ -41,28 +42,7 @@ class ObServerLogBlockMgr : public palf::ILogBlockPool
 public:
   static int check_clog_directory_is_empty(const char *clog_dir, bool &result);
 private:
-  static const int64_t GB = 1024 * 1024 * 1024ll;
-  static const int64_t MB = 1024 * 1024ll;
-  static const int64_t KB = 1024ll;
   static const int64_t BLOCK_SIZE = palf::PALF_PHY_BLOCK_SIZE;
-  static const int64_t LOG_POOL_META_SERIALIZE_SIZE = 4 * KB;
-  static const int64_t SLEEP_TS_US = 1 * 1000;
-#ifdef _WIN32
-  static const int CREATE_FILE_FLAG = O_RDWR | O_CREAT | O_EXCL;
-  static const int OPEN_FILE_FLAG = O_RDWR;
-  static const int OPEN_DIR_FLAG = O_RDONLY;
-  static const int CREATE_DIR_MODE = 0755;
-  static const int CREATE_FILE_MODE = 0644;
-#else
-  static const int CREATE_FILE_FLAG = O_RDWR | O_CREAT | O_EXCL | O_SYNC | O_DIRECT;
-  static const int OPEN_FILE_FLAG = O_RDWR | O_SYNC | O_DIRECT;
-  static const int OPEN_DIR_FLAG = O_DIRECTORY | O_RDONLY;
-  static const int CREATE_DIR_MODE =
-      S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IROTH;
-  static const int CREATE_FILE_MODE = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
-#endif
-  static const int64_t RUN_INTERVAL = 1 * 1000 * 1000;
-  static const int64_t PRINT_INTERVAL = 3 * 1000 * 1000;
 
 private:
   typedef common::RWLock RWLock;
@@ -96,7 +76,14 @@ public:
   int start(const int64_t log_disk_size);
   void stop() { stopped_.store(true); }
   void destroy();
-  int get_disk_usage(int64_t &in_use_size_byte);
+  int get_disk_usage(int64_t &in_use_size_byte) override final;
+  int set_capacity(int64_t bytes) override final;
+  bool can_reinitialize() const { return !is_inited_ && owner_->named_owner_replaceable(); }
+  const storage_io::NamedOwnerHandle &physical_owner() const { return *owner_; }
+  int rename_block_at(const file_io::DirectoryHandle &directory, const char *old_name, const char *new_name) override final;
+  int create_directory_at(const file_io::DirectoryHandle &directory, const char *name, uint32_t mode) override final;
+  int rename_directory_at(const file_io::DirectoryHandle &directory, const char *old_name, const char *new_name) override final;
+  int remove_directory_at(const file_io::DirectoryHandle &directory, const char *name) override final;
   int64_t get_log_disk_size();
 
   // @brief allocate a new block, and move it to the specified directory with the specified
@@ -104,15 +91,15 @@ public:
   // @param[in] the file description of directory.
   // @param[in] the name of this block.
   // @param[in] specified block size.
-  int create_block_at(const palf::FileDesc &dest_dir_fd,
-                      const char *dest_block_path,
+  int create_and_publish_block_at(const file_io::DirectoryHandle &directory,
+                      const char *temporary_name, const char *dest_block_path,
                       const int64_t block_size) override final;
 
   // @brief recycle a block, and move it to myself directory.
   // @param[in] the directory description of source directory.
   // @param[in] the name of this block.
-  int remove_block_at(const palf::FileDesc &src_dir_fd,
-                      const char *src_block_path) override final;
+  int remove_block_at(const file_io::DirectoryHandle &directory,
+                      const char *src_block_path, bool required = false) override final;
 
   // @brief before 'update_server_log_disk_size' in ObServerRuntimeController, need update it.
   // @param[in] current and requested local runtime log-disk sizes.
@@ -128,23 +115,17 @@ public:
 
 private:
   int do_load_(const char *log_disk_path);
-  int scan_log_disk_dir_(const char *log_disk_path, int64_t &has_allocated_block_cnt);
 
   bool check_space_is_enough_(const int64_t log_disk_size) const;
   int get_runtime_log_disk_size_(int64_t &log_disk_size) const;
 private:
   int64_t get_in_use_size_();
-  int allocate_block_at_(const palf::FileDesc &dir_fd, const char *block_path, const int64_t block_size);
-  int free_block_at_(const palf::FileDesc &dir_fd, const char *block_path);
   int get_has_allocated_blocks_cnt_in_(const char *log_disk_path,
                                        int64_t &has_allocated_block_cnt);
   int remove_tmp_file_or_directory_for_runtime_(const char *log_disk_path);
 private:
-  int unlinkat_until_success_(const palf::FileDesc &src_dir_fd, const char *block_path,
-                              const int flag);
-  int fsync_until_success_(const palf::FileDesc &src_fd);
-  int scan_runtime_dir_(const char *runtime_dir, int64_t &has_allocated_block_cnt);
-  int scan_ls_dir_(const char *ls_dir, int64_t &has_allocated_block_cnt);
+  int scan_runtime_dir_(const file_io::DirectoryHandle &directory, const char *runtime_dir, int64_t &has_allocated_block_cnt);
+  int scan_ls_dir_(const file_io::DirectoryHandle &directory, const char *ls_dir, int64_t &has_allocated_block_cnt);
 private:
   share::StartupResult &startup_result_;
   share::LocalIOConfig io_config_;
@@ -153,7 +134,7 @@ private:
   ObLogService *log_service_;
   // NB: in progress of expanding, the free size byte calcuated by BLOCK_SIZE * (max_block_id_ - min_block_id_) may be greater than
   //     curr_total_size_, if we calcuated log disk in use by curr_total_size_ - 'free size byte', the resule may be negative.
-  int64_t block_cnt_in_use_;
+  rust::Box<storage_io::NamedOwnerHandle> owner_;
   // Before start ObServerLogBlockMgr, not support log disk resize.
   bool is_started_;
   bool is_inited_;

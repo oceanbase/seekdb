@@ -81,7 +81,6 @@ namespace oceanbase
 {
 namespace common
 {
-class ObIOService;
 class ObOptStatMonitorManager;
 class ObRbMemMgr;
 class ObILobReadService;
@@ -509,7 +508,6 @@ public:
   share::ObISharedTimer * shared_timer() { return mods_shared_timer_; }
   blocksstable::ObSharedMacroBlockMgr * shared_macro_block_mgr() { return mods_shared_macro_block_mgr_; }
   storage::ObStorageMetaMemMgr * storage_meta_mem_mgr() { return mods_storage_meta_mem_mgr_; }
-  common::ObIOService * io_service() { return mods_io_service_; }
   storage::mds::ObMdsService * mds_service() { return mods_mds_service_; }
   share::ObSharedMemAllocMgr * shared_mem_alloc_mgr() { return mods_shared_mem_alloc_mgr_; }
   int set_memstore_threshold() override;
@@ -693,7 +691,6 @@ private:
   omt::ObSharedTimer * mods_shared_timer_ = nullptr;
   blocksstable::ObSharedMacroBlockMgr * mods_shared_macro_block_mgr_ = nullptr;
   storage::ObStorageMetaMemMgr * mods_storage_meta_mem_mgr_ = nullptr;
-  common::ObIOService * mods_io_service_ = nullptr;
   storage::mds::ObMdsService * mods_mds_service_ = nullptr;
   share::ObSharedMemAllocMgr * mods_shared_mem_alloc_mgr_ = nullptr;
   transaction::ObTransService * mods_trans_service_ = nullptr;

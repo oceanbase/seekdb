@@ -26,7 +26,9 @@ using namespace share;
 namespace palf
 {
 LogIOWorker::LogIOWorker()
-    : cb_thread_pool_(NULL),
+    : admission_lock_(),
+      accepting_tasks_(false),
+      cb_thread_pool_(NULL),
       palf_env_impl_(NULL),
       do_task_used_ts_(0),
       do_task_count_(0),
@@ -70,6 +72,7 @@ int LogIOWorker::init(const LogIOWorkerConfig &config,
     PALF_REPORT_INFO_KV(KP_(cb_thread_pool));
     throttle_ = throttle;
     log_io_worker_queue_size_stat_.set_extra_info(EXTRA_INFOS);
+    accepting_tasks_ = true;
     is_inited_ = true;
     PALF_LOG(INFO, "LogIOWorker init success", K(config), KP(cb_thread_pool));
   }
@@ -83,6 +86,12 @@ void LogIOWorker::destroy()
 {
   (void)stop();
   (void)wait();
+  if (nullptr != palf_env_impl_) {
+    ObLink *task = nullptr;
+    while (OB_SUCCESS == queue_.pop(task)) {
+      static_cast<LogIOTask *>(task)->free_this(palf_env_impl_);
+    }
+  }
   is_inited_ = false;
   last_working_time_ = OB_INVALID_TIMESTAMP;
   throttle_ = NULL;
@@ -92,10 +101,19 @@ void LogIOWorker::destroy()
   batch_io_task_mgr_.destroy();
 }
 
+void LogIOWorker::stop()
+{
+  ObSpinLockGuard guard(admission_lock_);
+  accepting_tasks_ = false;
+  share::ObThreadPool::stop();
+}
+
 int LogIOWorker::submit_io_task(LogIOTask *io_task)
 {
+  ObSpinLockGuard guard(admission_lock_);
   if (IS_NOT_INIT) { return OB_NOT_INIT; }
   if (OB_ISNULL(io_task)) { return OB_INVALID_ARGUMENT; }
+  if (!accepting_tasks_) { return OB_IN_STOP_STATE; }
   return queue_.push(io_task);
 }
 
@@ -105,17 +123,53 @@ void LogIOWorker::run1()
   (void) run_loop_();
 }
 
+bool LogIOWorker::is_stopping_() const
+{
+  return has_set_stop() || lib::Thread::current().has_set_stop();
+}
+
+bool LogIOWorker::wait_before_retry_(int64_t &delay_us) const
+{
+  int64_t remaining = delay_us;
+  while (remaining > 0 && !is_stopping_()) {
+    const int64_t interval = MIN(remaining, 10 * 1000L);
+    ob_usleep(interval);
+    remaining -= interval;
+  }
+  delay_us = MIN(delay_us * 2, 1000 * 1000L);
+  return !is_stopping_();
+}
+
 int LogIOWorker::handle_io_task_with_throttling_(LogIOTask *io_task)
 {
   int ret = OB_SUCCESS;
   const int64_t size = io_task->get_io_size();
   int tmp_ret = OB_SUCCESS;
+  if (is_stopping_()) {
+    return OB_IN_STOP_STATE;
+  }
   if (OB_SUCCESS != (tmp_ret = throttle_->throttling(size, palf_env_impl_))) {
     LOG_ERROR_RET(tmp_ret, "failed to do throttling");
   }
-  if (OB_FAIL(io_task->do_task(cb_thread_pool_, palf_env_impl_))) {
-  } else if (OB_SUCCESS != (tmp_ret = throttle_->after_append_log(size))) {
-    LOG_ERROR_RET(tmp_ret, "after_append failed");
+  int64_t retry_delay_us = 10 * 1000;
+  bool stale = false;
+  for (;;) {
+    if (is_stopping_()) {
+      ret = OB_IN_STOP_STATE;
+      break;
+    } else if (OB_SUCCESS == (ret = io_task->do_task(cb_thread_pool_, palf_env_impl_, stale))) {
+      if (OB_SUCCESS != (tmp_ret = throttle_->after_append_log(size))) {
+        LOG_ERROR_RET(tmp_ret, "after_append failed");
+      }
+      break;
+    } else if (stale) {
+      break;
+    } else {
+      if (10 * 1000 == retry_delay_us) {
+        PALF_LOG(WARN, "accepted IO task retained for retry", K(ret), KPC(io_task));
+      }
+      if (!wait_before_retry_(retry_delay_us)) break;
+    }
   }
   return ret;
 }
@@ -145,8 +199,7 @@ int LogIOWorker::run_loop_()
 {
   int ret = OB_SUCCESS;
 
-  while (false == has_set_stop()
-      && false == (OB_NOT_NULL(&lib::Thread::current()) ? lib::Thread::current().has_set_stop() : false)) {
+  while (!is_stopping_()) {
     ObLink *task = NULL;
     if (OB_SUCC(queue_.pop(task, QUEUE_WAIT_TIME))) {
       ATOMIC_STORE(&last_working_time_, common::ObTimeUtility::fast_current_time());
@@ -159,15 +212,16 @@ int LogIOWorker::run_loop_()
     }
   }
 
-  // After IOWorker has stopped, need clear queue_.
-  if (true == has_set_stop()) {
+  // Close admission before retiring the remaining accepted tasks.
+  stop();
+  if (is_stopping_()) {
     ObLink *task = NULL;
     ObILogAllocator *allocator = palf_env_impl_->get_log_allocator();
     CLOG_LOG(INFO, "before LogIOWorker destory", KPC(this), KPC(allocator));
     while (OB_SUCC(queue_.pop(task))) {
       LogIOTask *io_task = static_cast<LogIOTask *>(task);
       ATOMIC_STORE(&last_working_time_, common::ObTimeUtility::fast_current_time());
-      (void)handle_io_task_(io_task);
+      io_task->free_this(palf_env_impl_);
       ATOMIC_STORE(&last_working_time_, OB_INVALID_TIMESTAMP);
     }
     CLOG_LOG(INFO, "after LogIOWorker destory", KPC(this), KPC(allocator));
@@ -226,7 +280,7 @@ int LogIOWorker::reduce_io_task_(ObLink *task)
     }
   }
 
-  if (OB_FAIL(batch_io_task_mgr_.handle(cb_thread_pool_, palf_env_impl_))) {
+  if (OB_FAIL(batch_io_task_mgr_.handle(cb_thread_pool_, palf_env_impl_, *this))) {
   }
 
   if (false == last_io_task_has_been_reduced && OB_NOT_NULL(io_task)) {
@@ -283,12 +337,31 @@ int LogIOWorker::BatchLogIOFlushLogTaskMgr::insert(LogIOFlushLogTask *io_task)
   return ret;
 }
 
-int LogIOWorker::BatchLogIOFlushLogTaskMgr::handle(LogIOTaskCbThreadPool *cb_thread_pool, IPalfEnvImpl *palf_env_impl)
+int LogIOWorker::BatchLogIOFlushLogTaskMgr::handle(LogIOTaskCbThreadPool *cb_thread_pool,
+                                                   IPalfEnvImpl *palf_env_impl, const LogIOWorker &worker)
 {
   int ret = OB_SUCCESS;
   BatchLogIOFlushLogTask *io_task = &batch_io_task_;
   if (!empty()) {
-    if (OB_FAIL(io_task->do_task(cb_thread_pool, palf_env_impl))) {
+    int64_t retry_delay_us = 10 * 1000;
+    bool stale = false;
+    for (;;) {
+      if (worker.is_stopping_()) {
+        ret = OB_IN_STOP_STATE;
+        break;
+      } else if (OB_SUCCESS == (ret = io_task->do_task(cb_thread_pool, palf_env_impl, stale))) {
+        break;
+      } else if (stale) {
+        break;
+      } else {
+        if (10 * 1000 == retry_delay_us) {
+          PALF_LOG(WARN, "accepted IO batch retained for retry", K(ret), KPC(io_task));
+        }
+        if (!worker.wait_before_retry_(retry_delay_us)) break;
+      }
+    }
+    if (OB_FAIL(ret)) {
+      io_task->discard(palf_env_impl);
     } else {
       if (OB_NOT_NULL(wait_cost_stat_)) {
         wait_cost_stat_->stat(io_task->get_count(), io_task->get_accum_in_queue_time());

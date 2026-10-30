@@ -16,7 +16,10 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "lib/file/path_operations.h"
+#include "logservice/palf/log_meta.h"
 #include "share/ob_io_device_helper.h"
+#include "share/ob_local_device.h"
 #include "rust/config.h"
 #include "rust/config/config_checkers.h"
 #ifndef _WIN32
@@ -72,7 +75,7 @@ int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share:
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "storage/multi_data_source/ob_mds_event_buffer.h"
 #include "storage/tmp_file/ob_tmp_file_cache.h"
-#include "storage/blocksstable/ob_io_bench_controller.h"
+#include "storage/blocksstable/benchmark_session.h"
 #include "storage/meta_store/storage_meta_service.h"
 #include "storage/meta_store/ob_local_storage_meta_service.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
@@ -452,7 +455,7 @@ static int create_redo_path(const char *redo_dir, bool &created_leaf)
     if (OB_ISNULL(separator) || separator == redo_dir) {
       ret = OB_INVALID_ARGUMENT;
     } else if (OB_FAIL(parent_dir.assign(redo_dir, separator - redo_dir + (separator == redo_dir + 2 && ':' == redo_dir[1] ? 1 : 0)))) {
-    } else if (OB_FAIL(FileDirectoryUtils::create_full_path(parent_dir.ptr()))) {
+    } else if (OB_FAIL(path_operations::create_full_path(parent_dir.ptr()))) {
     } else if (0 == _mkdir(redo_dir)) {
       created_leaf = true;
     } else if (EEXIST != errno) {
@@ -492,7 +495,7 @@ static int check_need_initialize(const char *base_dir, const char *data_dir, con
   }
   if (OB_FAIL(ret)) {
 #else
-  if (OB_FAIL(FileDirectoryUtils::is_exists(data_file_path.ptr(), data_file_exists))) {
+  if (OB_FAIL(path_operations::is_exists(data_file_path.ptr(), data_file_exists))) {
 #endif
 #ifdef _WIN32
   } else if (OB_FAIL(create_redo_path(redo_dir, created_redo_leaf))) {
@@ -505,7 +508,7 @@ static int check_need_initialize(const char *base_dir, const char *data_dir, con
   } else if (data_file_exists && created_redo_leaf) {
     ret = OB_ERR_UNEXPECTED;
 #else
-  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(redo_dir))) {
+  } else if (OB_FAIL(path_operations::create_full_path(redo_dir))) {
     LOG_WARN("Failed to create redo path", KCSTRING(redo_dir), KCSTRING(strerror(errno)));
   } else if (OB_FAIL(ObServerLogBlockMgr::check_clog_directory_is_empty(redo_dir, redo_empty))) {
 #endif
@@ -517,12 +520,14 @@ static int check_need_initialize(const char *base_dir, const char *data_dir, con
     ret = OB_ERR_UNEXPECTED;
     // The logger is not initialized yet; LOG_STDERR also skips redirected streams.
     std::fprintf(stderr,
-        "The status of deployment environment is not consistent. "
-        "Please clear the directories and restart. ret=%d\n"
+        "The data file and redo directory are inconsistent; startup stopped. ret=%d\n"
+        "    data-file-exists: %d\n"
+        "    redo-directory-empty: %d\n"
         "    base-dir: %s\n"
         "    data-dir: %s\n"
-        "    redo-dir: %s\n",
-        ret, base_dir, data_dir, redo_dir);
+        "    redo-dir: %s\n"
+        "    PALF-dir: %s/sys/log_stream\n",
+        ret, data_file_exists, redo_empty, base_dir, data_dir, redo_dir, redo_dir);
     std::fflush(stderr);
   }
   return ret;
@@ -991,6 +996,12 @@ void ObServer::destroy()
   FLOG_INFO("destroy config manager success");
 
   if (!has_destroy_ && has_stopped_) {
+    storage::BenchmarkSession::get_instance().shutdown();
+
+    FLOG_INFO("begin to destroy net frame");
+    net_frame_.destroy();
+    FLOG_INFO("net frame destroyed");
+
 
     FLOG_INFO("begin to destroy OB_LOGGER");
     OB_LOGGER.stop();
@@ -1102,10 +1113,6 @@ void ObServer::destroy()
     FLOG_INFO("begin to destroy tmp page cache");
     tmp_file::ObTmpPageCache::get_instance().destroy();
     FLOG_INFO("tmp page cache destroyed");
-
-    FLOG_INFO("begin to destroy net frame");
-    net_frame_.destroy();
-    FLOG_INFO("net frame destroyed");
 
     FLOG_INFO("begin to destroy io manager");
     ObIOManager::get_instance().destroy();
@@ -1578,8 +1585,7 @@ void ObServer::set_stop()
   FLOG_INFO("[OBSERVER_NOTICE] observer is setted to stop");
 }
 
-/** Cancel package DDL before joining its loader; null modules support partial initialization. */
-static void stop_in_process_package_ddl(
+static void stop_package_ddl(
     rootserver::ObDDLServiceLauncher *launcher,
     rootserver::ObSystemPackageLoadService *loader)
 {
@@ -1599,11 +1605,9 @@ int ObServer::stop()
   FLOG_INFO("[OBSERVER_NOTICE] stop observer begin");
   LOG_DBA_INFO_V2(OB_SERVER_STOP_BEGIN, "observer stop begin.");
 
-  if (in_process_) {
-    // DDL retries must observe cancellation while schema and SQL services are still available.
-    // Otherwise session cleanup waits for a loader query that cannot publish its schema.
-    stop_in_process_package_ddl(mods_ddl_service_launcher_, mods_system_package_load_service_);
-  }
+  storage::BenchmarkSession::get_instance().shutdown();
+
+  stop_package_ddl(mods_ddl_service_launcher_, mods_system_package_load_service_);
 
 #ifndef __EMSCRIPTEN__
   FLOG_INFO("begin to stop OB_LOGGER");
@@ -1918,8 +1922,8 @@ int ObServer::init_data_dir_and_redo_dir(const ObServerOptions &opts)
 
   if (OB_FAIL(ret)) {
   } else if (!data_dir.empty()) {
-    if (OB_FAIL(FileDirectoryUtils::create_full_path(data_dir.ptr()))) {
-    } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(data_dir))) {
+    if (OB_FAIL(path_operations::create_full_path(data_dir.ptr()))) {
+    } else if (OB_FAIL(path_operations::to_absolute_path(data_dir))) {
     } else {
       ObString tmp_data_dir(data_dir.length(), data_dir.ptr());
       if (tmp_data_dir.prefix_match(current_dir)) {
@@ -1951,10 +1955,10 @@ int ObServer::init_data_dir_and_redo_dir(const ObServerOptions &opts)
   if (OB_FAIL(ret)) {
   } else if (!redo_dir.empty()) {
 #ifdef _WIN32
-    if (OB_FAIL(FileDirectoryUtils::to_absolute_path(redo_dir))) {
+    if (OB_FAIL(path_operations::to_absolute_path(redo_dir))) {
 #else
-    if (OB_FAIL(FileDirectoryUtils::create_full_path(redo_dir.ptr()))) {
-    } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(redo_dir))) {
+    if (OB_FAIL(path_operations::create_full_path(redo_dir.ptr()))) {
+    } else if (OB_FAIL(path_operations::to_absolute_path(redo_dir))) {
 #endif
     } else {
       ObString tmp_redo_dir(redo_dir.length(), redo_dir.ptr());
@@ -2087,6 +2091,16 @@ int ObServer::init_io()
   rust::String data_dir = config::data_dir();
   rust::String redo_dir = config::redo_dir();
   if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.init(data_dir.c_str(), redo_dir.c_str()))) {
+  } else {
+    char log_dir[MAX_PATH_SIZE] = {'\0'};
+    bool directory_exists = false;
+    const int length = snprintf(log_dir, sizeof(log_dir), "%s/sys/log_stream",
+        OB_FILE_SYSTEM_ROUTER.get_clog_dir());
+    if (length < 0 || length >= sizeof(log_dir)) {
+      ret = OB_BUF_NOT_ENOUGH;
+    } else if (OB_FAIL(palf::meta_store::check_directory(local_store_, log_dir, directory_exists))) {
+      LOG_ERROR("PALF directory check failed before log recovery", KR(ret), K(log_dir));
+    }
   }
 
   if (OB_SUCC(ret)) {
@@ -2105,9 +2119,8 @@ int ObServer::init_io()
       const int64_t max_io_depth = 256;
       if (OB_FAIL(ObIOManager::get_instance().set_io_config(io_config))) {
       } else {
-        //allow load benchmark fail, please ignore return code.
-        static storage::ObIOBenchController io_bench_controller;
-        if (OB_FAIL(ObIOCalibration::get_instance().init(io_bench_controller))) {
+        if (OB_FAIL(ObIOCalibration::get_instance().init())) {
+        } else if (OB_FAIL(storage::BenchmarkSession::get_instance().bind())) {
         }
 
         storage_env_.data_dir_ = OB_FILE_SYSTEM_ROUTER.get_data_dir();
@@ -2138,6 +2151,9 @@ int ObServer::init_io()
         } else if (0 != (io_error = share::probe_local_io(storage_env_.clog_dir_, log_io_config))) {
           ret = ObIODeviceLocalFileOp::convert_sys_errno(io_error);
           LOG_ERROR("log directory I/O probe failed", KR(ret), K(io_error), "directory", storage_env_.clog_dir_);
+        } else if (!log_block_mgr_.can_reinitialize()) {
+          ret = OB_STATE_NOT_MATCH;
+          LOG_ERROR("previous log physical owner has not drained", KR(ret));
         } else if (OB_FAIL(log_device_.init(storage_env_.clog_dir_,
                        io_config.disk_io_thread_count_, max_io_depth,
                        &ObIOManager::get_instance(), &ObDeviceManager::get_instance(), log_io_config))) {
@@ -2146,6 +2162,9 @@ int ObServer::init_io()
             storage_env_.clog_dir_,
             ObServerUtils::get_log_disk_info_in_config, log_io_config))) {
           LOG_ERROR("log block mgr init failed", KR(ret));
+        } else if (OB_FAIL(static_cast<share::ObLocalDevice *>(log_device_.get_local_device())->attach_named_owner(
+                       log_block_mgr_.physical_owner()))) {
+          LOG_ERROR("log physical owner attachment failed", KR(ret));
         } else if (OB_FAIL(ObServerUtils::cal_all_part_disk_size(config::datafile_size(),
                                                   config::log_disk_size(),
                                                   config::datafile_disk_percentage(),

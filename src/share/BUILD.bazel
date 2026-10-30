@@ -391,6 +391,7 @@ cc_library(
     name = "local_io_config",
     srcs = ["local_io_config.cpp"],
     hdrs = ["local_io_config.h"],
+    deps = ["//rust:file_io"],
     visibility = ["//src:__subpackages__"],
 )
 
@@ -443,30 +444,37 @@ _IO_UNITY_GROUP = select_unity_sources(
     "io",
     [
         "src/share/io/ob_io_define.cpp",
-        "src/share/io/io_schedule/ob_io_schedule_v2.cpp",
         "src/share/io/ob_io_struct.cpp",
         "src/share/io/ob_io_calibration.cpp",
         "src/share/io/ob_io_manager.cpp",
     ],
 )
 
+_IO_PUBLIC_HEADERS = [
+    "io/ob_io_calibration.h",
+    "io/ob_io_define.h",
+    "io/ob_io_manager.h",
+    "io/ob_io_struct.h",
+]
+
+_IO_PUBLIC_DEPS = [
+    "//rust:storage_io_headers",
+    ":core_types",
+    "//src/oblib:oblib_foundation",
+    "//src/oblib:oblib_compression",
+    "//src/oblib:oblib_common",
+    "//src/oblib:oblib_restore",
+]
+
+
 grouped_unity_cc_library(
     name = "io",
     unity_groups = [_IO_UNITY_GROUP],
-    public_hdrs = [
-        "io/io_schedule/ob_io_schedule_v2.h",
-        "io/ob_io_calibration.h",
-        "io/ob_io_define.h",
-        "io/ob_io_manager.h",
-        "io/ob_io_struct.h",
-    ],
-    deps = [
-        ":core_types",
-        ":io_bench_controller_interface",
-        "//src/oblib:oblib_foundation",
-        "//src/oblib:oblib_restore",
-    ],
+    public_hdrs = _IO_PUBLIC_HEADERS,
+    deps = _IO_PUBLIC_DEPS,
     implementation_deps = [
+        "//rust:storage_io",
+        ":redo_log_storage",
         ":config_parser_interface",
         ":device_manager_interface",
         ":errsim_interface",
@@ -475,7 +483,6 @@ grouped_unity_cc_library(
         ":task_control",
         ":tenant_runtime",
         ":unit_config_interface",
-        "//bazel/third_party:libaio_headers",
         "//src/oblib:oblib_base",
         "//src/oblib:oblib_collections_primitives",
         "//src/oblib:oblib_common",
@@ -523,6 +530,7 @@ cc_library(
     deps = [
         "//rust:local",
         ":_generated_inner_table_headers",
+        "//src/oblib:oblib_base",
         "//src/oblib:oblib_foundation",
     ],
     features = ["layering_check"],
@@ -1673,7 +1681,6 @@ _SHARE_RUNTIME_DEPS = _SHARE_RUNTIME_GENERATED_DEPS + [
     "//bazel/third_party:boost_headers",
     "//bazel/third_party:curl_headers",
     "//bazel/third_party:fast_float_headers",
-    "//bazel/third_party:libaio_headers",
     "//bazel/third_party:mariadb_headers",
     "//bazel/third_party:openssl_headers",
     "//bazel/third_party:protobuf_c_headers",
@@ -1799,6 +1806,8 @@ grouped_unity_cc_library(
     implementation_deps = [
         ":_share_implementation_headers",
         "//rust:config_headers",
+        "//rust:file_io_headers",
+        "//rust:storage_io_headers",
     ] + _SHARE_RUNTIME_COMPILE_DEPS + [
         "//src/oblib:common_sql_mode",
         "//src/oblib:oblib_base",

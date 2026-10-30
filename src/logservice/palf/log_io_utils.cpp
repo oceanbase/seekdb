@@ -14,123 +14,7 @@
  * limitations under the License.
  */
 
-#ifdef __linux__
-#include <linux/falloc.h> // FALLOC_FL_ZERO_RANGE for linux kernel 3.15
-#endif
-#ifdef __EMSCRIPTEN__
-#include "lib/file/wasm_file.h"
-#endif
-#include <sys/types.h>
-#include <sys/stat.h>
-#ifdef _WIN32
-#include <io.h>
-#include <fcntl.h>
-#include <string.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <basetsd.h>
-#include <windows.h>
-typedef SSIZE_T ssize_t;
-#ifndef O_DIRECTORY
-#define O_DIRECTORY 0
-#endif
-#ifndef O_DIRECT
-#define O_DIRECT 0
-#endif
-#ifndef O_NOATIME
-#define O_NOATIME 0
-#endif
-#ifndef FALLOC_FL_ZERO_RANGE
-#define FALLOC_FL_ZERO_RANGE 0
-#endif
-#define stat64 _stat64
-static bool ob_resolve_path_at(int dir_fd, const char *rel_path, char *out, size_t out_size) {
-  if (rel_path && (rel_path[0] == '/' || rel_path[0] == '\\' ||
-      (rel_path[0] != '\0' && rel_path[1] == ':'))) {
-    return false;
-  }
-  HANDLE h = (HANDLE)_get_osfhandle(dir_fd);
-  if (h == INVALID_HANDLE_VALUE) return false;
-  char dir_path[1024];
-  DWORD len = GetFinalPathNameByHandleA(h, dir_path, sizeof(dir_path), FILE_NAME_NORMALIZED);
-  if (len == 0 || len >= sizeof(dir_path)) return false;
-  const char *clean = dir_path;
-  if (len > 4 && strncmp(dir_path, "\\\\?\\", 4) == 0) clean = dir_path + 4;
-  int written = snprintf(out, out_size, "%s\\%s", clean, rel_path);
-  return written > 0 && (size_t)written < out_size;
-}
-static int ob_fstatat64(int dir_fd, const char *path, struct _stat64 *buf, int) {
-  char abs[1024];
-  const char *p = path;
-  if (ob_resolve_path_at(dir_fd, path, abs, sizeof(abs))) p = abs;
-  return _stat64(p, buf);
-}
-#define fstatat64 ob_fstatat64
-static int ob_openat(int dir_fd, const char *path, int flags, ...) {
-  int mode = 0;
-  if (flags & _O_CREAT) { mode = _S_IREAD | _S_IWRITE; }
-  char abs[1024];
-  const char *p = path;
-  if (ob_resolve_path_at(dir_fd, path, abs, sizeof(abs))) p = abs;
-  return _open(p, (flags & ~(O_DIRECT | O_NOATIME)) | _O_BINARY, mode);
-}
-#define openat ob_openat
-static int ob_renameat(int src_fd, const char *src, int dst_fd, const char *dst) {
-  char abs_src[1024], abs_dst[1024];
-  const char *rs = src, *rd = dst;
-  if (ob_resolve_path_at(src_fd, src, abs_src, sizeof(abs_src))) rs = abs_src;
-  if (ob_resolve_path_at(dst_fd, dst, abs_dst, sizeof(abs_dst))) rd = abs_dst;
-  return rename(rs, rd);
-}
-#define renameat ob_renameat
-static int ob_fsync(int fd) {
-  if (0 == _commit(fd)) {
-    return 0;
-  }
-  HANDLE h = (HANDLE)_get_osfhandle(fd);
-  if (h != INVALID_HANDLE_VALUE && FlushFileBuffers(h)) {
-    return 0;
-  }
-  // FlushFileBuffers may fail on directory handles opened without write access;
-  // treat as non-fatal on Windows (NTFS metadata is journaled).
-  return 0;
-}
-#define fsync ob_fsync
-// MSVCRT typedefs `off_t` as 32-bit `long`. Use int64_t explicitly so PALF
-// log file offsets and sizes can exceed 2 GiB on Windows.
-static int ob_fallocate(int fd, int, int64_t, int64_t len) {
-  return _chsize_s(fd, len) == 0 ? 0 : -1;
-}
-#define fallocate ob_fallocate
-static int ob_ftruncate(int fd, int64_t len) {
-  return _chsize_s(fd, len) == 0 ? 0 : -1;
-}
-static ssize_t ob_pwrite(int fd, const void *buf, size_t count, int64_t offset) {
-  long long prev = _lseeki64(fd, 0, SEEK_CUR);
-  _lseeki64(fd, offset, SEEK_SET);
-  int written = _write(fd, buf, (unsigned)count);
-  _lseeki64(fd, prev, SEEK_SET);
-  return written;
-}
-static ssize_t ob_pread(int fd, void *buf, size_t count, int64_t offset) {
-  long long prev = _lseeki64(fd, 0, SEEK_CUR);
-  _lseeki64(fd, offset, SEEK_SET);
-  int nread = _read(fd, buf, (unsigned)count);
-  _lseeki64(fd, prev, SEEK_SET);
-  return nread;
-}
-#else
-#include <unistd.h>
-#endif
-#ifdef __APPLE__
-#include <fcntl.h> // For fcntl, F_PREALLOCATE on macOS
-#include <string.h> // For memset
-#include <stdlib.h> // For calloc, free
-// macOS doesn't have stat64/fstatat64, use stat/fstatat instead
-#define stat64 stat
-#define fstatat64 fstatat
-#endif
+#include <string>
 #include "log_io_utils.h"
 #include "share/ob_errno.h"
 #include "logservice/ob_server_log_block_mgr.h"
@@ -140,435 +24,123 @@ namespace oceanbase
 namespace palf
 {
 
-const int64_t RETRY_INTERVAL = 10*1000;
-
-int open_directory(const char *dir_path)
+int open_parent_directory(const char *path, file_io::DirectoryHandle &parent, std::string &leaf)
 {
+  if (path == nullptr || path[0] == '\0') return OB_INVALID_ARGUMENT;
+  std::string full(path);
 #ifdef _WIN32
-  if (NULL == dir_path) {
-    errno = EINVAL;
-    return -1;
-  }
-  HANDLE h = CreateFileA(
-      dir_path,
-      GENERIC_READ | GENERIC_WRITE,
-      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-      NULL,
-      OPEN_EXISTING,
-      FILE_FLAG_BACKUP_SEMANTICS,
-      NULL);
-  if (h == INVALID_HANDLE_VALUE) {
-    h = CreateFileA(
-        dir_path,
-        GENERIC_READ,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-        NULL,
-        OPEN_EXISTING,
-        FILE_FLAG_BACKUP_SEMANTICS,
-        NULL);
-  }
-  if (h == INVALID_HANDLE_VALUE) {
-    errno = EACCES;
-    return -1;
-  }
-  int fd = _open_osfhandle((intptr_t)h, _O_RDONLY);
-  if (fd == -1) {
-    CloseHandle(h);
-    return -1;
-  }
-  return fd;
+  while (full.size() > 1 && (full.back() == '/' || full.back() == '\\')) full.pop_back();
 #else
-  return ::open(dir_path, O_DIRECTORY | O_RDONLY);
+  while (full.size() > 1 && full.back() == '/') full.pop_back();
 #endif
-}
-
-int openat_with_retry(const int dir_fd, 
-                      const char *block_path,
-                      const int flag,
-                      const int mode,
-                      int &fd)
-{
-  int ret = OB_SUCCESS;
-  if (-1 == dir_fd || NULL == block_path || -1 == flag || -1 == mode) {
-    ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "invalid argument", K(dir_fd), KP(block_path), K(flag), K(mode));
-  } else {
-    do {
-      if (-1 == (fd = ::openat(dir_fd, block_path, flag, mode))) {
-        ret = convert_sys_errno();
-        PALF_LOG(ERROR, "open block failed", K(ret), K(errno), K(block_path), K(dir_fd));
-        ob_usleep(RETRY_INTERVAL);
-      } else {
-        ret = OB_SUCCESS;
-        break;
-      }
-    } while (OB_FAIL(ret));
-  }
-  return ret;
-}
-int close_with_ret(const int fd)
-{
-  int ret = OB_SUCCESS;
-  if (-1 == fd) {
-    ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "invalid argument", K(fd));
-  } else if (-1 == (::close(fd))) {
-    ret = convert_sys_errno();
-    PALF_LOG(ERROR, "close block failed", K(ret), K(errno), K(fd));
-  } else {
-  }
-  return ret;
-}
-
-int check_file_exist(const char *file_name,
-                     bool &exist)
-{
-  int ret = OB_SUCCESS;
-  exist = false;
-#ifdef __APPLE__
-  struct stat file_info;
-#else
-  struct stat64 file_info;
-#endif
-  if (OB_ISNULL(file_name) || OB_UNLIKELY(strlen(file_name) == 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid arguments.", KCSTRING(file_name), K(ret));
-  } else {
-    exist = (0 == ::stat64(file_name, &file_info));
-  }
-  return ret;
-}
-
-int check_file_exist(const int dir_fd,
-                     const char *file_name,
-                     bool &exist)
-{
-  int ret = OB_SUCCESS;
-  exist = false;
-#ifdef __APPLE__
-  struct stat file_info;
-#else
-  struct stat64 file_info;
-#endif
-  const int64_t flag = 0;
-  if (OB_ISNULL(file_name) || OB_UNLIKELY(strlen(file_name) == 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid arguments.", KCSTRING(file_name), K(ret));
-  } else {
-    exist = (0 == ::fstatat64(dir_fd, file_name, &file_info, flag));
-  }
-  return ret;
-}
-
-bool check_rename_success(const char *src_name,
-                          const char *dest_name)
-{
-  bool bool_ret = false;
-  bool src_exist = false;
-  bool dest_exist = false;
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(check_file_exist(src_name, src_exist))) {
-  } else if (!src_exist && OB_FAIL(check_file_exist(dest_name, dest_exist))) {
-    PALF_LOG(WARN, "check_file_exist failed", KR(ret), K(src_name), K(dest_name));
-  } else if (!src_exist && dest_exist) {
-    bool_ret = true;
-    PALF_LOG(INFO, "check_rename_success return true",
-             KR(ret), K(src_name), K(dest_name), K(src_exist), K(dest_exist));
-  } else {
-    bool_ret = false;
-    LOG_DBA_ERROR(OB_ERR_UNEXPECTED, "msg", "rename file failed, unexpected error",
-                  KR(ret), K(errno), K(src_name), K(dest_name), K(src_exist), K(dest_exist));
-  }
-  return bool_ret;
-}
-
-bool check_renameat_success(const int src_dir_fd,
-                            const char *src_name,
-                            const int dest_dir_fd,
-                            const char *dest_name)
-{
-  bool bool_ret = false;
-  bool src_exist = false;
-  bool dest_exist = false;
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(check_file_exist(src_dir_fd, src_name, src_exist))) {
-  } else if (!src_exist && OB_FAIL(check_file_exist(dest_dir_fd, dest_name, dest_exist))) {
-    PALF_LOG(WARN, "check_file_exist failed", KR(ret), K(src_name), K(dest_name));
-  } else if (!src_exist && dest_exist) {
-    bool_ret = true;
-    PALF_LOG(INFO, "check_renameat_success return true",
-             KR(ret), K(src_name), K(dest_name), K(src_dir_fd), K(dest_dir_fd), K(src_exist), K(dest_exist));
-  } else {
-    bool_ret = false;
-    LOG_DBA_ERROR(OB_ERR_UNEXPECTED, "msg", "renameat file failed, unexpected error",
-                  KR(ret), K(errno), K(src_name), K(dest_name), K(src_exist), K(dest_exist));
-  }
-  return bool_ret;
-}
-
-int rename_with_retry(const char *src_name,
-                      const char *dest_name)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(src_name) || OB_ISNULL(dest_name)) {
-    ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", KP(src_name), KP(dest_name));
-  } else {
-    do {
-      if (-1 == ::rename(src_name, dest_name)) {
-        ret  = convert_sys_errno();
-        LOG_DBA_WARN(OB_IO_ERROR, "msg", "rename file failed",
-                     KR(ret), K(errno), K(src_name), K(dest_name));
-        // for xfs, source file not exist and dest file exist after rename return ENOSPC, therefore, next rename will return
-        // OB_NO_SUCH_FILE_OR_DIRECTORY, however, for some reason, we can not return OB_SUCCESS when rename return OB_NO_SUCH_FILE_OR_DIRECTORY.
-        // consider that, if file names with 'src_name' has been delted by human and file names with 'dest_name' not exist.
-        if (OB_NO_SUCH_FILE_OR_DIRECTORY == ret && check_rename_success(src_name, dest_name)) {
-          ret = OB_SUCCESS;
-          break;
-        }
-        usleep(RETRY_INTERVAL);
-      }
-    } while(OB_FAIL(ret));
-  }
-  return ret;
-}
-
-int renameat_with_retry(const int src_dir_fd,
-                        const char *src_name,
-                        const int dest_dir_fd,
-                        const char *dest_name)
-{
-  int ret = OB_SUCCESS;
-  if (src_dir_fd < 0 || OB_ISNULL(src_name)
-      || dest_dir_fd < 0 || OB_ISNULL(dest_name)) {
-    ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", KP(src_name), KP(dest_name));
-  } else {
-    do {
-      if (-1 == ::renameat(src_dir_fd, src_name, dest_dir_fd, dest_name)) {
-        ret  = convert_sys_errno();
-        LOG_DBA_WARN(OB_IO_ERROR, "msg", "renameat file failed",
-                     KR(ret), K(errno), K(src_name), K(dest_name), K(src_dir_fd), K(dest_dir_fd));
-        // for xfs, source file not exist and dest file exist after renameat return ENOSPC, therefore, next renameat will return
-        // OB_NO_SUCH_FILE_OR_DIRECTORY, however, for some reason, we can not return OB_SUCCESS when renameat return OB_NO_SUCH_FILE_OR_DIRECTORY.
-        // consider that, if file names with 'src_name' has been delted by human and file names with 'dest_name' not exist.
-        if (OB_NO_SUCH_FILE_OR_DIRECTORY == ret && check_renameat_success(src_dir_fd, src_name, dest_dir_fd, dest_name)) {
-          ret = OB_SUCCESS;
-          break;
-        }
-        ob_usleep(RETRY_INTERVAL);
-      }
-    } while(OB_FAIL(ret));
-  }
-  return ret;
-}
-
-int fsync_with_retry(const int dir_fd)
-{
-  int ret = OB_SUCCESS;
-  do {
-    if (-1 == ::fsync(dir_fd)) {
-      ret = convert_sys_errno();
-      CLOG_LOG(ERROR, "fsync dest dir failed", K(ret), K(dir_fd));
-      ob_usleep(RETRY_INTERVAL);
-    } else {
-      ret = OB_SUCCESS;
-      break;
-    }
-  } while (OB_FAIL(ret));
-  return ret;
-
-}
-
-int check_log_directory_entry(const char *dir_name, const char *entry_name, bool &exists)
-{
-  int ret = OB_SUCCESS;
-  exists = false;
-  if (OB_ISNULL(dir_name) || OB_ISNULL(entry_name) || '\0' == entry_name[0]) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
 #ifdef _WIN32
-    char entry_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-    const size_t entry_length = strlen(entry_name);
-    const DWORD parent_attributes = GetFileAttributesA(dir_name);
-    const int length = snprintf(entry_path, sizeof(entry_path), "%s/%s", dir_name, entry_name);
-    if (INVALID_FILE_ATTRIBUTES == parent_attributes
-        || 0 == (parent_attributes & FILE_ATTRIBUTE_DIRECTORY)
-        || 0 != (parent_attributes & FILE_ATTRIBUTE_REPARSE_POINT)
-        || length <= 0 || length >= static_cast<int>(sizeof(entry_path))
-        || NULL != strpbrk(entry_name, "*?\\/:")
-        // Win32 normalizes these suffixes; absence could hide a real NTFS leaf.
-        || '.' == entry_name[entry_length - 1] || ' ' == entry_name[entry_length - 1]
-        || 0 == strcmp(entry_name, ".") || 0 == strcmp(entry_name, "..")) {
-      ret = OB_IO_ERROR;
-    } else {
-      WIN32_FIND_DATAA exact_entry;
-      HANDLE find = FindFirstFileA(entry_path, &exact_entry);
-      if (INVALID_HANDLE_VALUE == find) {
-        const DWORD error = GetLastError();
-        // Only an exact missing leaf is absent. In particular, missing parents,
-        // access denial and I/O errors must fail closed, not skip an entry.
-        if (ERROR_FILE_NOT_FOUND != error) {
-          ret = OB_IO_ERROR;
-        } else {
-          const DWORD attributes_after = GetFileAttributesA(dir_name);
-          if (INVALID_FILE_ATTRIBUTES == attributes_after
-              || 0 == (attributes_after & FILE_ATTRIBUTE_DIRECTORY)
-              || 0 != (attributes_after & FILE_ATTRIBUTE_REPARSE_POINT)) {
-            ret = OB_IO_ERROR;
-          }
-        }
-      } else {
-        if (0 != (exact_entry.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
-          ret = OB_IO_ERROR;
-        } else {
-          exists = true;
-        }
-        if (!FindClose(find)) {
-          exists = false;
-          ret = OB_IO_ERROR;
-        }
-      }
-    }
+  const auto split = full.find_last_of("/\\");
 #else
-    exists = true;
+  const auto split = full.find_last_of('/');
 #endif
+  std::string parent_path = split == std::string::npos ? "." : full.substr(0, split + 1);
+  leaf = split == std::string::npos ? full : full.substr(split + 1);
+#ifdef _WIN32
+  if (split == std::string::npos && full.size() >= 2 && full[1] == ':') {
+    parent_path = full.substr(0, 2);
+    leaf = full.substr(2);
   }
-  return ret;
+#endif
+  return directory_error(parent.open_directory(
+      {reinterpret_cast<const uint8_t *>(parent_path.data()), parent_path.size()}), path);
+}
+
+int directory_error(const file_io::FsError &error, const char *path)
+{
+  if (error.domain == file_io::ErrorDomain::None) return OB_SUCCESS;
+  PALF_LOG_RET(WARN, OB_IO_ERROR, "directory operation failed", K(path), "native_domain", static_cast<int>(error.domain),
+      "native_error", error.native_code, "error",
+      common::ObString(static_cast<int32_t>(error.message.size()), error.message.data()));
+  return OB_IO_ERROR;
+}
+
+int next_directory_entry(const file_io::DirectoryHandle &directory, const char *path,
+                         file_io::DirectoryCursor &cursor,
+                         file_io::DirectoryStep &entry,
+                         file_io::ObservationResult &observation)
+{
+  for (;;) {
+    entry = cursor.next_entry();
+    if (entry.code == file_io::DirectoryStepCode::End) return OB_SUCCESS;
+    if (entry.code != file_io::DirectoryStepCode::Entry) return directory_error(entry.detail, path);
+    observation = file_io::inspect_at(directory, {entry.name.data(), entry.name.size()}, false);
+    const int ret = directory_error(observation.error, path);
+    if (ret != OB_SUCCESS) return ret;
+    if (observation.presence == file_io::Presence::Missing) continue;
+    if (observation.kind == file_io::EntryKind::Link) {
+      const std::string entry_path = std::string(path) + "/" +
+          std::string(reinterpret_cast<const char *>(entry.name.data()), entry.name.size());
+      PALF_LOG_RET(WARN, OB_IO_ERROR, "symbolic link in log directory", "path", entry_path.c_str());
+      return OB_IO_ERROR;
+    }
+    return OB_SUCCESS;
+  }
+}
+
+int entry_path(const char *parent, const common::ObString &name, char *output, size_t capacity)
+{
+  const int length = snprintf(output, capacity, "%s/%.*s", parent, name.length(), name.ptr());
+  return length > 0 && static_cast<size_t>(length) < capacity ? OB_SUCCESS : OB_ERR_UNEXPECTED;
 }
 
 int scan_dir(const char *dir_name, ObBaseDirFunctor &functor)
 {
-  int ret = OB_SUCCESS;
-  DIR *open_dir = NULL;
-  struct dirent *result = NULL;
-
-  if (OB_ISNULL(dir_name)) {
-    ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", K(ret), K(dir_name));
-  } else if (OB_ISNULL(open_dir = ::opendir(dir_name))) {
-    if (ENOENT != errno) {
-      ret = OB_FILE_NOT_OPENED;
-      PALF_LOG(WARN, "Fail to open dir, ", K(ret), K(dir_name));
-    } else {
-      ret = OB_NO_SUCH_FILE_OR_DIRECTORY;
-      PALF_LOG(WARN, "dir does not exist", K(ret), K(dir_name));
-    }
-  } else {
-    while ((NULL != (result = ::readdir(open_dir))) && OB_SUCC(ret)) {
-      bool exists = false;
-      if (0 == STRCMP(result->d_name, ".") || 0 == STRCMP(result->d_name, "..")) {
-      } else if (OB_FAIL(check_log_directory_entry(dir_name, result->d_name, exists))) {
-        PALF_LOG(WARN, "fail to check log directory entry", K(ret), K(dir_name), K(result->d_name));
-      } else if (exists && OB_FAIL((functor.func)(result))) {
-        PALF_LOG(WARN, "fail to operate dir entry", K(ret), K(dir_name));
-      }
-    }
+  if (dir_name == nullptr) return OB_INVALID_ARGUMENT;
+  auto directory = file_io::new_directory_handle();
+  const auto error = directory->open_directory({reinterpret_cast<const uint8_t *>(dir_name), strlen(dir_name)});
+  if (error.domain != file_io::ErrorDomain::None) {
+    return error.error == ENOENT ? OB_NO_SUCH_FILE_OR_DIRECTORY : OB_FILE_NOT_OPENED;
   }
-  // close dir
-  if (NULL != open_dir) {
-    ::closedir(open_dir);
+  return scan_dir(*directory, dir_name, functor);
+}
+
+int scan_dir(const file_io::DirectoryHandle &directory, const char *path, ObBaseDirFunctor &functor)
+{
+  auto cursor = file_io::directory_entries(directory);
+  file_io::DirectoryStep entry;
+  file_io::ObservationResult observation;
+  int ret = OB_SUCCESS;
+  while (OB_SUCC(ret)) {
+    if (OB_FAIL(next_directory_entry(directory, path, *cursor, entry, observation))) break;
+    if (entry.code == file_io::DirectoryStepCode::End) break;
+    const common::ObString name(static_cast<int32_t>(entry.name.size()), reinterpret_cast<const char *>(entry.name.data()));
+    ret = functor.func(name);
   }
   return ret;
 }
 
-int GetBlockCountFunctor::func(const dirent *entry)
+int parse_block_name(const common::ObString &name, block_id_t &id)
 {
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(entry)) {
-    ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid args", K(ret), KP(entry));
-  } else {
-    const char *entry_name = entry->d_name;
-    if (false == is_number(entry_name)) {
-      ret = OB_ERR_UNEXPECTED;
-      PALF_LOG(WARN, "this is block is not used for palf!!!", K(ret), K(entry_name));
-    } else {
-      count_ ++;
+  if (name.empty()) return OB_INVALID_ARGUMENT;
+  uint64_t value = 0;
+  for (int32_t i = 0; i < name.length(); ++i) {
+    const char digit = name.ptr()[i];
+    if (digit < '0' || digit > '9' || value > (LOG_MAX_BLOCK_ID - (digit - '0')) / 10) {
+      return OB_INVALID_ARGUMENT;
     }
+    value = value * 10 + digit - '0';
   }
-  return ret;
+  if (!is_valid_block_id(value)) return OB_INVALID_ARGUMENT;
+  id = value;
+  return OB_SUCCESS;
 }
 
-int TrimLogDirectoryFunctor::func(const dirent *entry)
+int TrimLogDirectoryFunctor::func(const common::ObString &name)
 {
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(entry)) {
-    ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid args", K(ret), KP(entry));
-  } else {
-    const char *entry_name = entry->d_name;
-    if (false == is_number(entry_name)) {
-      ret = OB_ERR_UNEXPECTED;
-      PALF_LOG(WARN, "this is block is not used for palf!!!", K(ret), K(entry_name));
-    } else {
-      uint32_t block_id = static_cast<uint32_t>(strtol(entry->d_name, nullptr, 10));
-      if (LOG_INVALID_BLOCK_ID == min_block_id_ || block_id < min_block_id_) {
-        min_block_id_ = block_id;
-      }
-      if (LOG_INVALID_BLOCK_ID == max_block_id_ || block_id > max_block_id_) {
-        max_block_id_ = block_id;
-      }
-    }
+  block_id_t block_id = LOG_INVALID_BLOCK_ID;
+  const int ret = parse_block_name(name, block_id);
+  if (ret != OB_SUCCESS) {
+    PALF_LOG(WARN, "invalid numeric log block name", K(ret), K(name), K_(dir));
+    return ret;
   }
-  return ret;
-}
-
-int reuse_block_at(const int dir_fd, const char *block_path)
-{
-  int ret = OB_SUCCESS;
-  int fd = -1;
-  if (-1 == (fd = ::openat(dir_fd, block_path, LOG_WRITE_FLAG))) {
-    ret = convert_sys_errno();
-    PALF_LOG(ERROR, "::openat failed", K(ret), K(block_path));
-#if defined(__EMSCRIPTEN__)
-  } else if (-1 == common::wasm::zero_file_range(fd, 0, PALF_PHY_BLOCK_SIZE)) {
-    ret = convert_sys_errno();
-    PALF_LOG(ERROR, "zeroing reused log block failed", K(ret), K(block_path));
-  } else {
-    PALF_LOG(INFO, "reuse_block_at success", K(ret), K(block_path));
-#elif defined(__APPLE__)
-  } else if (-1 == ftruncate(fd, PALF_PHY_BLOCK_SIZE)) {
-    ret = convert_sys_errno();
-    PALF_LOG(ERROR, "::ftruncate failed (macOS fallocate replacement)", K(ret), K(block_path));
-  } else {
-    // Zero out the file by writing zeros
-    char *zero_buf = static_cast<char *>(calloc(1, 64 * 1024)); // 64KB buffer
-    if (NULL == zero_buf) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      PALF_LOG(ERROR, "failed to allocate zero buffer", K(ret));
-    } else {
-      int64_t written = 0;
-      int64_t remain = PALF_PHY_BLOCK_SIZE;
-      while (OB_SUCC(ret) && remain > 0) {
-        int64_t to_write = (remain > 64 * 1024) ? 64 * 1024 : remain;
-        ssize_t n = ob_pwrite(fd, zero_buf, to_write, written);
-        if (n != to_write) {
-          ret = convert_sys_errno();
-          PALF_LOG(ERROR, "pwrite failed", K(ret), K(block_path));
-          break;
-        }
-        written += n;
-        remain -= n;
-      }
-      free(zero_buf);
-      if (OB_SUCC(ret)) {
-        PALF_LOG(INFO, "reuse_block_at success", K(ret), K(block_path));
-      }
-    }
-#else
-  } else if (-1 == ::fallocate(fd, FALLOC_FL_ZERO_RANGE, 0, PALF_PHY_BLOCK_SIZE)) {
-    ret = convert_sys_errno();
-    PALF_LOG(ERROR, "::fallocate failed", K(ret), K(block_path));
-  } else {
-    PALF_LOG(INFO, "reuse_block_at success", K(ret), K(block_path));
-#endif
-  }
-
-  if (-1 != fd) {
-    ::close(fd);
-  }
-  return ret;
+  if (LOG_INVALID_BLOCK_ID == min_block_id_ || block_id < min_block_id_) min_block_id_ = block_id;
+  if (LOG_INVALID_BLOCK_ID == max_block_id_ || block_id > max_block_id_) max_block_id_ = block_id;
+  return OB_SUCCESS;
 }
 
 } // end namespace palf

@@ -584,7 +584,7 @@ STORAGE_INTERFACE_CLOSURE_HEADERS = [
 
 
 STORAGE_SEMANTIC_HEADERS = [
-    "blocksstable/ob_io_bench_controller.h",
+    "blocksstable/benchmark_session.h",
     "ls/ob_i_ls_runtime_adapter.h",
     "memtable/ob_i_multi_source_data_unit.h",
     "meta_mem/ob_i_storage_meta_obj.h",

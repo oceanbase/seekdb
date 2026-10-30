@@ -17,8 +17,9 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "ob_io_manager.h"
+#include <stdexcept>
+#include <system_error>
 #include "lib/ob_running_mode.h"
-#include "share/io/io_schedule/ob_io_schedule_v2.h"
 #include "share/ob_io_device_helper.h"
 #include "share/rc/ob_server_runtime.h"
 
@@ -26,48 +27,17 @@ using namespace oceanbase::share;
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
 
-const int64_t STANDARD_IOPS_SIZE = 16 * (1<<10);
-
 namespace oceanbase
 {
 namespace common
 {
-// for local device
-int64_t get_norm_iops(const int64_t size, const double iops, const ObIOMode mode)
+static int64_t checked_metric(double value)
 {
-  int ret = OB_SUCCESS;
-  int64_t norm_iops = 0;
-  double bw = 0;
-  double iops_scale = 0;
-  bool is_io_ability_valid = false;
-  if (iops < std::numeric_limits<double>::epsilon()) {
-  } else if (FALSE_IT(bw = size * iops)) {
-  } else if (mode == ObIOMode::MAX_MODE) {
-    norm_iops = bw / STANDARD_IOPS_SIZE;
-  } else if (FALSE_IT(ObIOCalibration::get_instance().get_iops_scale(mode, size, iops_scale, is_io_ability_valid))) {
-  } else if (iops_scale < std::numeric_limits<double>::epsilon()) {
-    norm_iops = bw / STANDARD_IOPS_SIZE;
-  } else {
-    norm_iops = static_cast<int64_t>(iops / iops_scale);
-  }
-  return norm_iops;
+  const auto result = storage_io::calibration_integer(value);
+  if (result.error != OB_SUCCESS) { LOG_WARN_RET(result.error, "invalid io metric conversion", K(value)); }
+  return result.value;
 }
 
-// for local device
-int64_t get_norm_bw(const int64_t size, const ObIOMode mode)
-{
-  int ret = OB_SUCCESS;
-  int64_t norm_bw = size;
-  double iops_scale = 0;
-  bool is_io_ability_valid = false;
-  if (mode == ObIOMode::MAX_MODE) {
-  } else if (FALSE_IT(ObIOCalibration::get_instance().get_iops_scale(mode, size, iops_scale, is_io_ability_valid))) {
-  } else if (iops_scale < std::numeric_limits<double>::epsilon()) {
-  } else {
-    norm_bw = static_cast<int64_t>((double)STANDARD_IOPS_SIZE / iops_scale);
-  }
-  return max(norm_bw, 1);
-}
 }  // namespace common
 }  // namespace oceanbase
 ObIOManager::ObIOManager()
@@ -76,8 +46,7 @@ ObIOManager::ObIOManager()
     server_memory_limit_(ObIORuntimeOptions::DEFAULT_SERVER_MEMORY_LIMIT),
     mutex_(ObLatchIds::GLOBAL_IO_CONFIG_LOCK),
     io_config_(),
-    allocator_(),
-    fault_detector_(io_config_)
+    allocator_()
 {
 }
 
@@ -106,94 +75,77 @@ int ObIOManager::init(const ObIORuntimeOptions &runtime_options,
 {
   int ret = OB_SUCCESS;
   int64_t schedule_queue_count = 0 != schedule_thread_count ? schedule_thread_count : (lib::is_mini_mode() ? 2 : 8);
-  if (OB_UNLIKELY(is_inited_)) {
+  if (OB_UNLIKELY(ATOMIC_LOAD(&is_inited_))) {
     ret = OB_INIT_TWICE;
-  } else if (OB_UNLIKELY(!runtime_options.is_valid() || memory_limit <= 0 || schedule_queue_count <= 0)) {
+  } else if (OB_UNLIKELY(!runtime_options.is_valid() || memory_limit <= 0 || queue_depth < 2 || schedule_queue_count <= 0)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(allocator_.init(OB_MALLOC_MIDDLE_BLOCK_SIZE, "IO_MGR", memory_limit))) {
-  } else if (OB_FAIL(channel_map_.create(7, "IO_CHANNEL_MAP"))) {
-  } else if (OB_FAIL(fault_detector_.init())) {
   } else if (OB_ISNULL(io_service_ = OB_NEW(ObIOService, ObMemAttr("IO_MGR")))) {
-  } else if (OB_FAIL(io_service_->init(ObIOServiceConfig::default_instance()))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_FAIL(io_service_->init(ObIOServiceConfig::default_instance(), runtime_options.server_memory_limit_, queue_depth))) {
   } else {
     ObMemAttr attr("IO_MGR");
     allocator_.set_attr(attr);
     server_memory_limit_ = runtime_options.server_memory_limit_;
     io_config_.set_default_value();
-    is_inited_ = true;
+    is_stopping_ = false;
+    ATOMIC_STORE(&is_inited_, true);
   }
-  if (OB_UNLIKELY(!is_inited_)) {
+  if (OB_UNLIKELY(!ATOMIC_LOAD(&is_inited_))) {
     destroy();
   }
   return ret;
 }
 
-struct DestroyChannelMapFn
-{
-public:
-  DestroyChannelMapFn(ObIAllocator &allocator) : allocator_(allocator) {}
-  int operator () (oceanbase::common::hash::HashMapPair<int64_t, ObDeviceChannel *> &entry) {
-    if (nullptr != entry.second) {
-      entry.second->~ObDeviceChannel();
-      allocator_.free(entry.second);
-    }
-    return OB_SUCCESS;
-  }
-private:
-  ObIAllocator &allocator_;
-};
-
-struct ReloadIOConfigFn
-{
-public:
-  ReloadIOConfigFn(const ObIOConfig &conf) : conf_(conf) {}
-  int operator () (oceanbase::common::hash::HashMapPair<int64_t, ObDeviceChannel *> &entry)
-  {
-    int ret = OB_SUCCESS;
-    ObDeviceChannel *ch = entry.second;
-    if (nullptr != ch) {
-      if (OB_FAIL(ch->reload_config(conf_))) {
-      }
-    }
-    return ret;
-  }
-private:
-  const ObIOConfig &conf_;
-};
-
 void ObIOManager::destroy()
 {
   stop();
-  fault_detector_.destroy();
-  DestroyChannelMapFn destry_channel_map_fn(allocator_);
-  channel_map_.foreach_refactored(destry_channel_map_fn);
-  channel_map_.destroy();
-  OB_DELETE(ObIOService, "IO_MGR", io_service_);
-  io_service_ = nullptr;
+  ObIOService *service = nullptr;
+  {
+    ObMutexGuard guard(mutex_);
+    service = io_service_;
+    io_service_ = nullptr;
+    ATOMIC_STORE(&is_inited_, false);
+  }
+  OB_DELETE(ObIOService, "IO_MGR", service);
   allocator_.destroy();
-  is_inited_ = false;
   LOG_INFO("io manager is destroyed");
 }
 
 int ObIOManager::start()
 {
+  std::lock_guard<std::mutex> lifecycle(lifecycle_mutex_);
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-  } else if (OB_FAIL(io_service_->start())) {
-  } else if (OB_FAIL(fault_detector_.start())) {
+  ObRefHolder<ObIOService> service;
+  {
+    ObMutexGuard guard(mutex_);
+    if (!ATOMIC_LOAD(&is_inited_)) { return OB_NOT_INIT; }
+    if (is_stopping_) { return OB_STATE_NOT_MATCH; }
+    service.hold(io_service_);
+  }
+  if (OB_FAIL(service.get_ptr()->start())) {
   } else {
-    is_working_ = true;
+    ATOMIC_STORE(&is_working_, true);
   }
   return ret;
 }
 
 void ObIOManager::stop()
 {
-  is_working_ = false;
-  if (OB_NOT_NULL(io_service_)) {
-    io_service_->stop();
+  std::lock_guard<std::mutex> lifecycle(lifecycle_mutex_);
+  std::unordered_map<int64_t, std::shared_ptr<ObDeviceChannel>> channels;
+  ObRefHolder<ObIOService> service;
+  {
+    ObMutexGuard guard(mutex_);
+    ATOMIC_STORE(&is_working_, false);
+    is_stopping_ = true;
+    service.hold(io_service_);
+    channels.swap(channel_map_);
   }
+  if (service.get_ptr() != nullptr) { service.get_ptr()->stop_requests(); }
+  for (auto &entry : channels) { entry.second->stop(); }
+  for (auto &entry : channels) { entry.second->wait(); }
+  if (service.get_ptr() != nullptr) { service.get_ptr()->stop(); }
 }
 
 void ObIOManager::wait()
@@ -202,7 +154,7 @@ void ObIOManager::wait()
 
 bool ObIOManager::is_stopped() const
 {
-  return !is_working_;
+  return !ATOMIC_LOAD(&is_working_);
 }
 
 int ObIOManager::read(const ObIOInfo &info, ObIOHandle &handle)
@@ -231,9 +183,9 @@ int ObIOManager::write(const ObIOInfo &info)
 int ObIOManager::aio_read(const ObIOInfo &info, ObIOHandle &handle)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
+  if (OB_UNLIKELY(!ATOMIC_LOAD(&is_inited_))) {
     ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(!is_working_)) {
+  } else if (OB_UNLIKELY(!ATOMIC_LOAD(&is_working_))) {
     ret = OB_STATE_NOT_MATCH;
   } else if (OB_UNLIKELY(!info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
@@ -245,9 +197,9 @@ int ObIOManager::aio_read(const ObIOInfo &info, ObIOHandle &handle)
 int ObIOManager::aio_write(const ObIOInfo &info, ObIOHandle &handle)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
+  if (OB_UNLIKELY(!ATOMIC_LOAD(&is_inited_))) {
     ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(!is_working_)) {
+  } else if (OB_UNLIKELY(!ATOMIC_LOAD(&is_working_))) {
     ret = OB_STATE_NOT_MATCH;
   } else if (OB_UNLIKELY(!info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
@@ -260,9 +212,9 @@ int ObIOManager::pread(ObIOInfo &info, int64_t &read_size)
 {
   int ret = OB_SUCCESS;
   read_size = 0;
-  if (OB_UNLIKELY(!is_inited_)) {
+  if (OB_UNLIKELY(!ATOMIC_LOAD(&is_inited_))) {
     ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(!is_working_)) {
+  } else if (OB_UNLIKELY(!ATOMIC_LOAD(&is_working_))) {
     ret = OB_STATE_NOT_MATCH;
   } else if (OB_UNLIKELY(!info.is_valid() || nullptr == info.buf_)) {
     ret = OB_INVALID_ARGUMENT;
@@ -273,10 +225,11 @@ int ObIOManager::pread(ObIOInfo &info, int64_t &read_size)
     ObIOHandle handle;
     if (OB_FAIL(dispatch_aio(info, handle))) {
     } else {
-      while (OB_SUCC(ret) || OB_TIMEOUT == ret || OB_IO_TIMEOUT == ret) { // wait to die
+      bool finished = false;
+      while (!finished && (OB_SUCC(ret) || OB_TIMEOUT == ret || OB_IO_TIMEOUT == ret)) {
         if (OB_FAIL(handle.wait(MAX_IO_WAIT_TIME_MS))) {
-          if (OB_DATA_OUT_OF_RANGE != ret) {
-          }
+          const int status = handle.check_is_finished(finished);
+          if (OB_SUCCESS != status) { ret = status; }
         } else {
           break;
         }
@@ -294,9 +247,9 @@ int ObIOManager::pwrite(ObIOInfo &info, int64_t &write_size)
 {
   int ret = OB_SUCCESS;
   write_size = 0;
-  if (OB_UNLIKELY(!is_inited_)) {
+  if (OB_UNLIKELY(!ATOMIC_LOAD(&is_inited_))) {
     ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(!is_working_)) {
+  } else if (OB_UNLIKELY(!ATOMIC_LOAD(&is_working_))) {
     ret = OB_STATE_NOT_MATCH;
   } else if (OB_UNLIKELY(!info.is_valid() || nullptr == info.buf_)) {
     ret = OB_INVALID_ARGUMENT;
@@ -307,10 +260,11 @@ int ObIOManager::pwrite(ObIOInfo &info, int64_t &write_size)
     ObIOHandle handle;
     if (OB_FAIL(dispatch_aio(info, handle))) {
     } else {
-      while (OB_SUCC(ret) || OB_TIMEOUT == ret || OB_IO_TIMEOUT == ret) { // wait to die
+      bool finished = false;
+      while (!finished && (OB_SUCC(ret) || OB_TIMEOUT == ret || OB_IO_TIMEOUT == ret)) {
         if (OB_FAIL(handle.wait(MAX_IO_WAIT_TIME_MS))) {
-          if (OB_DATA_OUT_OF_RANGE != ret) {
-          }
+          const int status = handle.check_is_finished(finished);
+          if (OB_SUCCESS != status) { ret = status; }
         } else {
           break;
         }
@@ -319,23 +273,6 @@ int ObIOManager::pwrite(ObIOInfo &info, int64_t &write_size)
     if (OB_SUCC(ret) || OB_DATA_OUT_OF_RANGE == ret) {
       write_size = handle.get_data_size();
     }
-  }
-  return ret;
-}
-
-int ObIOManager::detect_read(const ObIOInfo &info, ObIOHandle &handle)
-{
-  int ret = OB_SUCCESS;
-  ObRefHolder<ObIOService> service_holder;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(!is_working_)) {
-    ret = OB_STATE_NOT_MATCH;
-  } else if (OB_UNLIKELY(!info.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(get_io_service(service_holder))) {
-  } else if (OB_FAIL(service_holder.get_ptr()->detect_aio(info, handle))) {
-  } else if (OB_FAIL(handle.wait())) {
   }
   return ret;
 }
@@ -353,20 +290,23 @@ int ObIOManager::dispatch_aio(const ObIOInfo &info, ObIOHandle &handle)
 
 int ObIOManager::set_io_config(const ObIOConfig &conf)
 {
+  std::lock_guard<std::mutex> lifecycle(lifecycle_mutex_);
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(!conf.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
+  ObRefHolder<ObIOService> service;
+  if (!ATOMIC_LOAD(&is_inited_)) { return OB_NOT_INIT; }
+  if (!conf.is_valid() || conf.data_storage_io_timeout_ms_ > INT64_MAX / 1000) { return OB_INVALID_ARGUMENT; }
+  if (OB_FAIL(get_io_service(service))) { return ret; }
+  {
     ObMutexGuard guard(mutex_);
-    ReloadIOConfigFn fn(conf);
-    if (OB_FAIL(channel_map_.foreach_refactored(fn))) {
-    } else {
-      io_config_ = conf;
+    for (auto &entry : channel_map_) {
+      if (OB_FAIL(entry.second->reload_config(conf))) { return ret; }
     }
   }
-  LOG_INFO("set io config for io manager, ", K(ret), K(conf));
+  if (OB_FAIL(service.get_ptr()->update_health_config(conf))) { return ret; }
+  {
+    ObMutexGuard guard(mutex_);
+    io_config_ = conf;
+  }
   return ret;
 }
 
@@ -375,77 +315,121 @@ const ObIOConfig &ObIOManager::get_io_config() const
   return io_config_;
 }
 
-ObIOFaultDetector &ObIOManager::get_device_health_detector()
-{
-  return fault_detector_;
-}
-
 int ObIOManager::get_device_health_status(ObDeviceHealthStatus &dhs, int64_t &device_abnormal_time)
 {
-  return fault_detector_.get_device_health_status(dhs, device_abnormal_time);
+  dhs = DEVICE_HEALTH_NORMAL;
+  device_abnormal_time = 0;
+  ObRefHolder<ObIOService> service;
+  int ret = get_io_service(service);
+  if (ret == OB_HASH_NOT_EXIST) { return OB_SUCCESS; }
+  storage_io::HealthStatus status{};
+  if (OB_SUCC(ret)) { ret = service.get_ptr()->health_status(status); }
+  if (OB_SUCC(ret)) {
+    dhs = status.warning ? DEVICE_HEALTH_WARNING : DEVICE_HEALTH_NORMAL;
+    device_abnormal_time = status.warning_wall_us;
+  }
+  return ret;
 }
 
 int ObIOManager::add_device_channel(ObIODevice *device_handle,
-                                    const int64_t async_channel_thread_count,
-                                    const int64_t sync_channel_thread_count,
-                                    const int64_t max_io_depth)
+    const int64_t async_channel_thread_count, const int64_t sync_channel_thread_count,
+    const int64_t max_io_depth)
 {
+  std::lock_guard<std::mutex> lifecycle(lifecycle_mutex_);
   int ret = OB_SUCCESS;
-  ObDeviceChannel *device_channel = nullptr;
-  void *buf = nullptr;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-  /* object device async channel count allow set 0 */
-  } else if (OB_ISNULL(device_handle) || async_channel_thread_count < 0 || sync_channel_thread_count < 0 || max_io_depth <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(buf = allocator_.alloc(sizeof(ObDeviceChannel)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (FALSE_IT(device_channel = new (buf) ObDeviceChannel)) {
-  } else if (OB_FAIL(device_channel->init(device_handle,
-                                          async_channel_thread_count,
-                                          sync_channel_thread_count,
-                                          max_io_depth,
-                                          allocator_))) {
-  } else if (OB_FAIL(channel_map_.set_refactored(reinterpret_cast<int64_t>(device_handle), device_channel))) {
-  } else {
-    LOG_INFO("add io device channel succ", KP(device_handle));
-    device_channel = nullptr;
+  std::shared_ptr<ObDeviceChannel> channel;
+  ObRefHolder<ObIOService> service;
+  if (!ATOMIC_LOAD(&is_inited_)) { return OB_NOT_INIT; }
+  if (nullptr == device_handle || async_channel_thread_count < 0 || sync_channel_thread_count < 0
+      || max_io_depth < 2) { return OB_INVALID_ARGUMENT; }
+  const int64_t key = reinterpret_cast<int64_t>(device_handle);
+  decltype(channel_map_) staged;
+  {
+    ObMutexGuard guard(mutex_);
+    if (is_stopping_) { return OB_STATE_NOT_MATCH; }
+    if (channel_map_.find(key) != channel_map_.end()) { return OB_HASH_EXIST; }
+    service.hold(io_service_);
+    try {
+      channel = std::make_shared<ObDeviceChannel>();
+      staged.emplace(key, channel);
+      channel_map_.reserve(channel_map_.size() + 1);
+    } catch (const std::bad_alloc &) { return OB_ALLOCATE_MEMORY_FAILED; }
+    catch (const std::system_error &) { return OB_ERR_SYS; }
+    catch (const std::length_error &) { return OB_SIZE_OVERFLOW; }
   }
-  if (OB_UNLIKELY(nullptr != device_channel)) {
-    device_channel->~ObDeviceChannel();
-    allocator_.free(device_channel);
+  auto node = staged.extract(key);
+  if (OB_FAIL(channel->init(device_handle, async_channel_thread_count, sync_channel_thread_count,
+      max_io_depth, *service.get_ptr()))) {
+  } else {
+    ObMutexGuard guard(mutex_);
+    channel_map_.insert(std::move(node));
   }
   return ret;
 }
 
 int ObIOManager::remove_device_channel(ObIODevice *device_handle)
 {
-  int ret = OB_SUCCESS;
-  ObDeviceChannel *device_channel = nullptr;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(device_handle)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(channel_map_.erase_refactored(reinterpret_cast<int64_t>(device_handle), &device_channel))) {
-  } else if (nullptr != device_channel) {
-    device_channel->~ObDeviceChannel();
-    allocator_.free(device_channel);
+  std::lock_guard<std::mutex> lifecycle(lifecycle_mutex_);
+  std::shared_ptr<ObDeviceChannel> channel;
+  ObRefHolder<ObIOService> service;
+  const int64_t key = reinterpret_cast<int64_t>(device_handle);
+  {
+    ObMutexGuard guard(mutex_);
+    if (!ATOMIC_LOAD(&is_inited_)) { return OB_NOT_INIT; }
+    if (nullptr == device_handle) { return OB_INVALID_ARGUMENT; }
+    const auto found = channel_map_.find(key);
+    if (found == channel_map_.end()) { return OB_HASH_NOT_EXIST; }
+    channel = found->second;
+    service.hold(io_service_);
   }
+  const int ret = service.get_ptr()->remove_device(channel->device_id());
+  if (ret != OB_SUCCESS) { return ret; }
+  {
+    ObMutexGuard guard(mutex_);
+    channel_map_.erase(key);
+  }
+  channel->stop();
+  channel->wait();
+  return OB_SUCCESS;
+}
+
+int ObIOManager::begin_request(ObIORequest &req, std::shared_ptr<ObDeviceChannel> &channel)
+{
+  ObMutexGuard guard(mutex_);
+  if (!ATOMIC_LOAD(&is_inited_)) { return OB_NOT_INIT; }
+  const auto found = channel_map_.find(reinterpret_cast<int64_t>(req.fd_.device_handle_));
+  if (found == channel_map_.end()) { return OB_HASH_NOT_EXIST; }
+  channel = found->second;
+  return channel->begin(req);
+}
+
+int ObIOManager::benchmark_device(ObIODevice *device, std::shared_ptr<ObDeviceChannel> &channel)
+{
+  ObMutexGuard guard(mutex_);
+  if (!ATOMIC_LOAD(&is_working_)) { return OB_NOT_INIT; }
+  const auto found = channel_map_.find(reinterpret_cast<int64_t>(device));
+  if (found == channel_map_.end()) { return OB_HASH_NOT_EXIST; }
+  channel = found->second;
+  return OB_SUCCESS;
+}
+
+int ObIOManager::refresh_io_service_config(const ObIOServiceConfig &replacement,
+    uint64_t expected_generation, ResourceConfigReceipt &receipt)
+{
+  int ret = OB_SUCCESS;
+  ObRefHolder<ObIOService> service;
+  if (OB_FAIL(get_io_service(service))) { return ret; }
+  ret = service.get_ptr()->replace_config(replacement, expected_generation, receipt);
   return ret;
 }
 
-int ObIOManager::get_device_channel(const ObIORequest &req, ObDeviceChannel *&device_channel)
+int ObIOManager::refresh_io_runtime_config(const ObIOServiceConfig::ResourceConfig &resources,
+    const ObIOServiceConfig::ParamConfig &params)
 {
-  // for now, different device_handle use same channel
   int ret = OB_SUCCESS;
-  ObIODevice *device_handle = req.fd_.device_handle_;
-  device_channel = nullptr;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(device_handle)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(channel_map_.get_refactored(reinterpret_cast<int64_t>(device_handle), device_channel))) {
-  }
+  ObRefHolder<ObIOService> service;
+  if (OB_FAIL(get_io_service(service))) { return ret; }
+  ret = service.get_ptr()->update_runtime_config(&resources, &params);
   return ret;
 }
 
@@ -453,12 +437,12 @@ int ObIOManager::refresh_io_resource_config(const ObIOServiceConfig::ResourceCon
 {
   int ret = OB_SUCCESS;
   ObRefHolder<ObIOService> service_holder;
-  if (OB_UNLIKELY(!is_inited_)) {
+  if (OB_UNLIKELY(!ATOMIC_LOAD(&is_inited_))) {
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(!io_resource_config.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(get_io_service(service_holder))) {
-  } else if (OB_FAIL(service_holder.get_ptr()->update_basic_io_resource_config(io_resource_config))) {
+  } else if (OB_FAIL(service_holder.get_ptr()->update_runtime_config(&io_resource_config, nullptr))) {
   }
   return ret;
 }
@@ -467,18 +451,19 @@ int ObIOManager::refresh_io_param_config(const ObIOServiceConfig::ParamConfig &i
 {
   int ret = OB_SUCCESS;
   ObRefHolder<ObIOService> service_holder;
-  if (OB_UNLIKELY(!is_inited_)) {
+  if (OB_UNLIKELY(!ATOMIC_LOAD(&is_inited_))) {
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(!io_param_config.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(get_io_service(service_holder))) {
-  } else if (OB_FAIL(service_holder.get_ptr()->update_basic_io_param_config(io_param_config))) {
+  } else if (OB_FAIL(service_holder.get_ptr()->update_runtime_config(nullptr, &io_param_config))) {
   }
   return ret;
 }
 
 int ObIOManager::get_io_service(ObRefHolder<ObIOService> &service_holder) const
 {
+  ObMutexGuard guard(mutex_);
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(io_service_)) {
     service_holder.hold(io_service_);
@@ -491,17 +476,8 @@ int ObIOManager::get_io_service(ObRefHolder<ObIOService> &service_holder) const
 
 void ObIOManager::print_channel_status()
 {
-  struct PrintFn
-  {
-    int operator () (oceanbase::common::hash::HashMapPair<int64_t, ObDeviceChannel*> &entry) {
-      if (OB_NOT_NULL(entry.second)) {
-        entry.second->print_status();
-      }
-      return OB_SUCCESS;
-    }
-  };
-  PrintFn fn;
-  channel_map_.foreach_refactored(fn);
+  ObMutexGuard guard(mutex_);
+  for (const auto &entry : channel_map_) { entry.second->print_status(); }
 }
 
 void ObIOManager::print_status()
@@ -512,47 +488,6 @@ void ObIOManager::print_status()
 
 /******************             IOService              **********************/
 
-int ObIOService::server_module_new(ObIOService *&io_service)
-{
-  int ret = OB_SUCCESS;
-  void *buf = nullptr;
-  io_service = nullptr;
-  if (OB_ISNULL(buf = ob_malloc(sizeof(ObIOService), ObMemAttr("IO_MGR")))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    FLOG_WARN("failed to alloc io service", K(ret));
-  } else {
-    io_service = new (buf) ObIOService();
-  }
-  return ret;
-}
-
-int ObIOService::server_module_init(ObIOService *&io_service)
-{
-  int ret = OB_SUCCESS;
-
-  if (OB_ISNULL(io_service)) {
-    {
-      ret = OB_INVALID_ARGUMENT;
-    }
-  } else if (OB_FAIL(io_service->init(ObIOServiceConfig::default_instance()))) {
-    FLOG_WARN("runtime io service initialization failed", K(1UL));
-  } else {
-    FLOG_INFO("runtime io service initialized", K(1UL), KPC(io_service));
-  }
-  return ret;
-}
-
-void ObIOService::server_module_destroy(ObIOService *&io_service)
-{
-  int ret = OB_SUCCESS;
-  if (OB_NOT_NULL(io_service)) {
-    io_service->~ObIOService();
-    ob_free(io_service);
-    io_service = nullptr;
-    FLOG_INFO("runtime io service destroyed");
-  }
-}
-
 ObIOService::ObIOService()
   : is_inited_(false),
     is_working_(false),
@@ -560,11 +495,8 @@ ObIOService::ObIOService()
     io_memory_limit_(0),
     request_count_(0),
     result_count_(0),
-    io_config_(),
     io_allocator_(),
-    callback_mgr_(),
-    io_config_lock_(ObLatchIds::IO_CONFIG_LOCK),
-    group_id_index_map_()
+    callback_mgr_()
 {
 
 }
@@ -574,149 +506,108 @@ ObIOService::~ObIOService()
   destroy();
 }
 
-int ObIOService::init(const ObIOServiceConfig &io_config)
+namespace {
+struct MemoryPlan {
+  int64_t bytes;
+  int64_t requests;
+  int64_t results;
+};
+MemoryPlan memory_plan(int64_t memory)
+{
+  const double gib = static_cast<double>(memory) / (1024LL * 1024LL * 1024LL);
+  if (gib < 0.5) { return {256LL * 1024LL * 1024LL, 5000, 5000}; }
+  if (gib <= 1) { return {256LL * 1024LL * 1024LL, 50000, 50000}; }
+  if (gib <= 4) { return {1024LL * 1024LL * 1024LL, 100000, 100000}; }
+  if (gib <= 8) { return {2048LL * 1024LL * 1024LL, 200000, 200000}; }
+  return {memory, 300000, 300000};
+}
+}
+
+int ObIOService::init(const ObIOServiceConfig &input, int64_t server_memory, int64_t queue_depth)
 {
   int ret = OB_SUCCESS;
-  const uint8_t IO_MODE_CNT = static_cast<uint8_t>(ObIOMode::MAX_MODE) + 1;
-  if (OB_UNLIKELY(is_inited_)) {
-    ret = OB_INIT_TWICE;
-  } else if (OB_UNLIKELY(!io_config.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(init_memory_pool( io_config.param_config_.memory_limit_))) {
-  } else if (OB_FAIL(io_usage_.init(io_config.group_configs_.count() / IO_MODE_CNT))) {
+  ObIOServiceConfig config;
+  storage_io::ResourceConfig native{};
+  std::shared_ptr<IOConfigSnapshot> candidate;
+  if (is_inited_) { return OB_INIT_TWICE; }
+  if (queue_depth < 2 || server_memory <= 0) { return OB_INVALID_ARGUMENT; }
+  if (OB_FAIL(config.deep_copy(input))) { return ret; }
+  config.request_limit_ = queue_depth;
+  config.probe_request_limit_ = std::min<int64_t>(100, std::max<int64_t>(1, queue_depth / 16));
+  if (OB_FAIL(prepare_config(config, server_memory, candidate, native))) {
+  } else if (OB_FAIL(init_memory_pool(config.param_config_.memory_limit_))) {
   } else if (OB_FAIL(io_sys_usage_.init(SYS_MODULE_CNT))) {
-  } else if (OB_FAIL(io_mem_stats_.init(SYS_MODULE_CNT , io_config.group_configs_.count() / IO_MODE_CNT))) {
-  } else if (OB_FAIL(init_group_index_map(io_config))) {
-  } else if (OB_FAIL(io_config_.deep_copy(io_config))) {
-  } else if(OB_FAIL(io_config_.group_configs_.reserve(16L * IO_MODE_CNT))) {
-  } else if (OB_FAIL(qsched_.init(io_config))) {
   } else {
-    
-    inc_ref();
-    is_inited_ = true;
+    rust_service_.emplace(storage_io::new_service_handle());
+    if (OB_FAIL(convert_storage_error((*rust_service_)->start_service(native)))) {
+    } else {
+      accepted_config_ = std::move(candidate);
+      inc_ref();
+      is_inited_ = true;
+    }
   }
-  if (OB_UNLIKELY(!is_inited_)) {
-    destroy();
-  }
+  if (!is_inited_) { destroy(); }
   return ret;
 }
 
 void ObIOService::destroy()
 {
-  ATOMIC_STORE(&is_working_, false);
-
-  const int64_t start_ts = ObTimeUtility::current_time();
-  if (is_inited_) {
-    while (1 != get_ref_cnt()) {
-      if (REACH_TIME_INTERVAL(1000L * 1000L)) { //1s
-        LOG_INFO("wait io service quit", K(start_ts), K(get_ref_cnt()));
-      }
-      ob_usleep((useconds_t)10L * 1000L); //10ms
-    }
-    dec_ref();
-    qsched_.destroy();
-  }
-
   int ret = OB_SUCCESS;
-
-  callback_mgr_.destroy();
-  io_memory_limit_ = 0;
-  request_count_ = 0;
-  result_count_ = 0;
-  group_id_index_map_.destroy();
-  io_allocator_.destroy();
-  LOG_INFO("destroy io service success");
-  
+  stop();
+  if (is_inited_) {
+    while (1 != get_ref_cnt()) { ob_usleep(10L * 1000L); }
+    dec_ref();
+  }
+  if (rust_service_) {
+    const int error = (*rust_service_)->shutdown_service();
+    if (error != 0) { LOG_ERROR("storage service shutdown failed", K(error)); }
+    rust_service_.reset();
+  }
+  accepted_config_.reset();
+  io_allocator_.reset();
+  io_memory_limit_ = request_count_ = result_count_ = 0;
   is_inited_ = false;
 }
 
 int ObIOService::start()
 {
-  int ret = OB_SUCCESS;
-  static const int64_t DEFAULT_QUEUE_DEPTH = 100000;
-  int64_t callback_thread_count = io_config_.get_callback_thread_count();
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-  } else if (is_working()) {
-    // do nothing
-  } else if (OB_FAIL(callback_mgr_.init(callback_thread_count,
-                     callback_thread_count * DEFAULT_QUEUE_DEPTH))) {
-  } else {
-    is_working_ = true;
-  }
+  std::lock_guard<std::mutex> guard(config_mutex_);
+  if (!is_inited_) { return OB_NOT_INIT; }
+  if (is_working()) { return OB_SUCCESS; }
+  const int64_t count = accepted_config_->config_.get_callback_thread_count();
+  if (count > INT32_MAX / 100000) { return OB_INVALID_ARGUMENT; }
+  const int ret = callback_mgr_.init(count, count * 100000);
+  if (ret == OB_SUCCESS) { ATOMIC_STORE(&is_working_, true); }
   return ret;
+}
+
+void ObIOService::stop_requests()
+{
+  std::lock_guard<std::mutex> guard(config_mutex_);
+  ATOMIC_STORE(&is_working_, false);
+  if (rust_service_) { (*rust_service_)->stop_service(); }
 }
 
 void ObIOService::stop()
 {
-  ATOMIC_STORE(&is_working_, false);
+  stop_requests();
   callback_mgr_.destroy();
 }
 
-bool ObIOService::is_working() const
-{
-  return ATOMIC_LOAD(&is_working_);
-}
-
-int ObIOService::calc_io_memory(const int64_t memory)
-{
-  int ret = OB_SUCCESS;
-  int64_t memory_benchmark = memory / (1L * 1024L * 1024L * 1024L); //base ob 1G
-  //1w req occupies 1.52M
-  //1w result occupies 2.44M
-  if (lib::is_mini_mode()) {
-    request_count_ = 5000;
-    result_count_ = 5000;
-    io_memory_limit_ = 256L * 1024L * 1024L;
-  } else if (memory_benchmark <= 1) {
-    // At a 1 GiB upper limit, pre-allocate 50k requests (7.6 MiB) and results (12.2 MiB).
-    request_count_ = 50000;
-    result_count_ = 50000;
-    io_memory_limit_ = 256L * 1024L * 1024L;
-  } else if (memory_benchmark <= 4) {
-    // At a 4 GiB upper limit, pre-allocate 100k requests (15.2 MiB) and results (24.4 MiB).
-    request_count_ = 100000;
-    result_count_ = 100000;
-    io_memory_limit_ = 1024 * 1024L * 1024L;
-  } else if (memory_benchmark <= 8) {
-    // At an 8 GiB upper limit, pre-allocate 200k requests and results.
-    request_count_ = 200000;
-    result_count_ = 200000;
-    io_memory_limit_ = 2048L * 1024L * 1024L;
-  } else {
-    //unlimited, pre-allocate 300k request and result
-    request_count_ = 300000;
-    result_count_ = 300000;
-    io_memory_limit_ = memory;
-  }
-  LOG_INFO("calc io memory success", K(memory), K(io_memory_limit_), K(request_count_), K(request_count_));
-  return ret;
-}
+bool ObIOService::is_working() const { return ATOMIC_LOAD(&is_working_); }
 
 int ObIOService::init_memory_pool(const int64_t memory)
 {
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(memory <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(calc_io_memory( memory))) {
-  } else if (OB_FAIL(io_allocator_.init(io_memory_limit_))) {
-  } else {
-    LOG_INFO("init io memory pool success", K(memory), K(io_memory_limit_), K(request_count_), K(request_count_));
+  if (memory <= 0) { return OB_INVALID_ARGUMENT; }
+  const MemoryPlan plan = memory_plan(memory);
+  try { io_allocator_ = std::make_shared<ObIOAllocator>(); }
+  catch (const std::bad_alloc &) { return OB_ALLOCATE_MEMORY_FAILED; }
+  const int ret = io_allocator_->init(plan.bytes);
+  if (ret == OB_SUCCESS) {
+    io_memory_limit_ = plan.bytes;
+    request_count_ = plan.requests;
+    result_count_ = plan.results;
   }
-  return ret;
-}
-
-int ObIOService::update_memory_pool(const int64_t memory)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(memory <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(calc_io_memory( memory))) {
-  } else if (OB_FAIL(io_allocator_.update_memory_limit(io_memory_limit_))) {
-  } else {
-    LOG_INFO("update io memory pool success", K(memory), K(io_memory_limit_), K(request_count_), K(request_count_));
-  }
-  //todo qilu :update three pool
   return ret;
 }
 
@@ -746,48 +637,121 @@ int ObIOService::alloc_and_init_result(const ObIOInfo &info, ObIOResult *&io_res
   }
 
   if (OB_FAIL(ret) && OB_NOT_NULL(io_result)) {
-    io_allocator_.free(io_result);
+    io_allocator_->free(io_result);
+    io_result = nullptr;
   }
   return ret;
 }
 
-//prepare request and result
-int ObIOService::alloc_req_and_result(const ObIOInfo &info, ObIOHandle &handle, ObIORequest *&io_request, RequestHolder &req_holder)
+int ObIOService::alloc_req_and_result(const ObIOInfo &info, ObIOHandle &handle,
+    ObIORequest *&request, RequestHolder &holder)
 {
   int ret = OB_SUCCESS;
-  ObIOResult *io_result = nullptr;
-  if (OB_FAIL(alloc_and_init_result(info, io_result))) {
-  } else if (OB_ISNULL(io_result)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(handle.set_result(*io_result))) {
-  } else if (OB_FAIL(alloc_io_request(io_request))) {
-    if (OB_ALLOCATE_MEMORY_FAILED == ret) {
-      //blocking foreground thread
-      ret = OB_SUCCESS;
-      if (OB_FAIL(try_alloc_req_until_timeout(ObTimeUtility::current_time() + info.timeout_us_, io_request))) {
-      }
-    } else {
+  ObIOResult *result = nullptr;
+  if (OB_FAIL(alloc_and_init_result(info, result))) { return ret; }
+  result->inc_ref("submission");
+  if (OB_FAIL(handle.set_result(*result))) {
+  } else if (OB_FAIL(alloc_io_request(request))) {
+    if (ret == OB_ALLOCATE_MEMORY_FAILED) {
+      ret = try_alloc_req_until_timeout(result->time_log_.begin_ts_ + result->timeout_us_, request);
     }
   }
   if (OB_SUCC(ret)) {
-    if (OB_ISNULL(io_request)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(io_request->basic_init())) {
+    ObThreadCondGuard guard(result->cond_);
+    if (OB_FAIL(guard.get_ret())) {
+    } else if (result->is_canceled_) {
+      ret = OB_CANCELED;
+    } else if (OB_FAIL(request->basic_init())) {
+    } else if (OB_FAIL(request->init(info, result))) {
     }
-  } 
-
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(io_request->init(info, io_result))) {
   }
-
   if (OB_FAIL(ret)) {
-    if (OB_NOT_NULL(io_request)) {
-      //free io_request manually
-      io_request->free();
-      io_request = nullptr;
+    {
+      ObThreadCondGuard guard(result->cond_);
+      if (OB_SUCCESS == guard.get_ret()) {
+        result->io_callback_ = nullptr;
+        result->callback_ownership_ = ObIOResult::CallbackOwnership::Detached;
+      }
     }
+    if (nullptr != request) { request->free(); request = nullptr; }
   } else {
-    req_holder.hold(io_request);
+    holder.hold(request);
+  }
+  result->dec_ref("submission");
+  return ret;
+}
+
+int ObIOService::submit_request(ObIORequest &req)
+{
+  int ret = OB_SUCCESS;
+  bool registered = false;
+  RequestHolder request_holder(&req);
+  std::optional<rust::Box<storage_io::CancelHandle>> rejected_control;
+  std::shared_ptr<ObDeviceChannel> channel;
+  ObIOResult &result = *req.io_result_;
+  {
+    ObThreadCondGuard result_guard(result.cond_);
+    if (OB_FAIL(result_guard.get_ret())) {
+    } else if (result.is_canceled_) {
+      ret = OB_CANCELED;
+    } else {
+      std::lock_guard<std::mutex> config_guard(config_mutex_);
+      if (!is_working()) {
+        ret = OB_STATE_NOT_MATCH;
+      } else {
+        result.config_snapshot_ = accepted_config_;
+        const auto mapped = accepted_config_->module_groups_.find(result.get_sys_module_id());
+        result.group_id_ = result.is_sys_module() && mapped != accepted_config_->module_groups_.end()
+            ? mapped->second : 0;
+        result.group_index_ = accepted_config_->group_indices_.at(result.group_id_);
+        result.time_log_.enqueue_ts_ = ObTimeUtility::fast_current_time();
+        ret = OB_IO_MANAGER.begin_request(req, channel);
+      }
+    }
+  }
+  if (OB_SUCC(ret)) { ret = convert_storage_error((*req.rust_request_)->wait_capacity()); }
+  if (OB_SUCC(ret)) {
+    ObThreadCondGuard guard(result.cond_);
+    if (OB_FAIL(guard.get_ret())) {
+    } else if (result.is_canceled_) {
+      ret = OB_CANCELED;
+    } else {
+      result.time_log_.dequeue_ts_ = ObTimeUtility::fast_current_time();
+      ret = channel->prepare_reserved(req);
+    }
+  }
+  if (OB_SUCC(ret)) {
+    ret = channel->register_pending(req);
+    registered = ret == OB_SUCCESS;
+  }
+  if (OB_SUCC(ret)) {
+    ObThreadCondGuard guard(result.cond_);
+    if (OB_FAIL(guard.get_ret())) {
+    } else if (result.is_canceled_) {
+      ret = OB_CANCELED;
+    } else {
+      result.time_log_.submit_ts_ = ObTimeUtility::fast_current_time();
+      const auto submitted = (*req.rust_request_)->publish();
+      ret = convert_storage_error(submitted.error);
+      if (OB_SUCC(ret)) {
+        req.rust_id_ = submitted.id;
+        result.callback_ownership_ = ObIOResult::CallbackOwnership::Adopted;
+      }
+    }
+  }
+  if (OB_FAIL(ret)) {
+    {
+      ObThreadCondGuard guard(result.cond_);
+      if (OB_SUCCESS == guard.get_ret()) {
+        result.io_callback_ = nullptr;
+        result.callback_ownership_ = ObIOResult::CallbackOwnership::Detached;
+        rejected_control.swap(result.rust_control_);
+      }
+    }
+    if (registered) { channel->unregister_pending(req); }
+    req.rust_request_.reset();
+    rejected_control.reset();
+    req.rust_lifetime_.reset();
   }
   return ret;
 }
@@ -805,7 +769,7 @@ int ObIOService::inner_aio(const ObIOInfo &info, ObIOHandle &handle)
   } else if (OB_ISNULL(info.fd_.device_handle_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(alloc_req_and_result(info, handle, req, req_holder))) {
-  } else if (OB_FAIL(qsched_.schedule_request(*req))) {
+  } else if (OB_FAIL(submit_request(*req))) {
   }
   if (OB_FAIL(ret)) {
     // io callback should be freed by caller
@@ -815,119 +779,248 @@ int ObIOService::inner_aio(const ObIOInfo &info, ObIOHandle &handle)
   return ret;
 }
 
-int ObIOService::detect_aio(const ObIOInfo &info, ObIOHandle &handle)
+int ObIOService::complete_request(ObIORequest &req)
 {
   int ret = OB_SUCCESS;
-  handle.reset();
-  ObIORequest *req = nullptr;
-  RequestHolder req_holder;
-  ObDeviceChannel *device_channel = nullptr;
-  ObTimeGuard time_guard("detect_aio_request", 100000); //100ms
-
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(!is_working())) {
     ret = OB_STATE_NOT_MATCH;
-  } else if (OB_UNLIKELY(info.callback_ != nullptr || info.user_data_buf_ != nullptr)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(alloc_req_and_result(info, handle, req, req_holder))) {
-  } else if (OB_FAIL(req->prepare())) {
-  } else if (FALSE_IT(time_guard.click("prepare_detect_req"))) {
-  } else if (OB_FAIL(OB_IO_MANAGER.get_device_channel(*req, device_channel))) {
-  } else {
-    if (OB_ISNULL(req->io_result_)) {
-      ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(callback_mgr_.complete_request(req))) {
+  }
+  return ret;
+}
+int ObIOService::prepare_config(const ObIOServiceConfig &replacement, int64_t server_memory,
+    std::shared_ptr<IOConfigSnapshot> &candidate, storage_io::ResourceConfig &native)
+{
+  int ret = OB_SUCCESS;
+  if (!replacement.is_valid() || server_memory <= 0) { return OB_INVALID_ARGUMENT; }
+  try {
+    candidate = std::make_shared<IOConfigSnapshot>();
+    if (OB_FAIL(candidate->config_.deep_copy(replacement))) { return ret; }
+    candidate->effective_server_memory_ = server_memory;
+    candidate->effective_io_buffer_limit_ = replacement.param_config_.io_buffer_limit_ == 0
+        ? std::max<int64_t>(1, server_memory / 5) : replacement.param_config_.io_buffer_limit_;
+    candidate->effective_wrapper_limit_ = memory_plan(replacement.param_config_.memory_limit_).bytes;
+    const int64_t probe_reserve = replacement.effective_probe_buffer_limit();
+    if (probe_reserve >= candidate->effective_io_buffer_limit_) { return OB_INVALID_ARGUMENT; }
+    native.health_warning_tolerance_us = replacement.health_warning_tolerance_us_;
+    native.health_blacklist_interval_us = replacement.health_blacklist_interval_us_;
+    native.health_wait_cap_us = replacement.health_wait_cap_us_;
+    native.max_records = replacement.request_limit_;
+    native.max_bytes = candidate->effective_io_buffer_limit_;
+    native.probe_records = replacement.probe_request_limit_;
+    native.probe_bytes = replacement.probe_buffer_limit_;
+    native.default_group = 0;
+    native.unlimited_capacity = replacement.resource_config_.max_iops_ == INT64_MAX;
+    native.capacity_iops = native.unlimited_capacity ? 0 : replacement.resource_config_.max_iops_;
+    const auto &base = replacement.resource_config_;
+    for (int64_t i = 0; i < replacement.group_configs_.count(); ++i) {
+      const auto &group = replacement.group_configs_.at(i);
+      if (group.mode_ != ObIOMode::MAX_MODE || group.deleted_ || group.cleared_) { continue; }
+      candidate->group_indices_.emplace(group.group_id_, i);
+      storage_io::GroupPolicy policy{};
+      policy.id = group.group_id_;
+      policy.minimum_iops = base.min_iops_ == INT64_MAX ? 0
+          : static_cast<uint64_t>(base.min_iops_ / 100 * group.min_percent_ + base.min_iops_ % 100 * group.min_percent_ / 100);
+      policy.unlimited = base.max_iops_ == INT64_MAX;
+      policy.maximum_iops = policy.unlimited ? 0
+          : static_cast<uint64_t>(base.max_iops_ / 100 * group.max_percent_ + base.max_iops_ % 100 * group.max_percent_ / 100);
+      policy.excess_weight = group.weight_percent_;
+      policy.burst = 1;
+      native.groups.push_back(policy);
+    }
+    for (const auto &mapping : replacement.module_groups_) {
+      candidate->module_groups_.emplace(mapping.module_id_, mapping.group_id_);
+    }
+    for (const auto &device : replacement.devices_) {
+      if (accepted_config_) {
+        for (const auto &previous : accepted_config_->config_.devices_) {
+          if (previous.id_ == device.id_ && device.max_probe_bytes_ < previous.max_probe_bytes_) {
+            return OB_INVALID_ARGUMENT;
+          }
+        }
+      }
+      if (device.max_probe_bytes_ > probe_reserve
+          || device.max_probe_bytes_ > candidate->effective_io_buffer_limit_ - probe_reserve) {
+        return OB_INVALID_ARGUMENT;
+      }
+      native.devices.push_back(storage_io::DevicePolicy{
+          device.id_, static_cast<size_t>(device.depth_), static_cast<size_t>(device.probe_depth_),
+          static_cast<size_t>(device.max_probe_bytes_)});
+    }
+    bool reuse_usage = accepted_config_ != nullptr
+        && accepted_config_->config_.group_configs_.count() == replacement.group_configs_.count();
+    if (reuse_usage) {
+      for (int64_t i = 0; i < replacement.group_configs_.count(); ++i) {
+        const auto &old = accepted_config_->config_.group_configs_.at(i);
+        const auto &next = replacement.group_configs_.at(i);
+        if (old.group_id_ != next.group_id_ || old.mode_ != next.mode_) { reuse_usage = false; break; }
+      }
+    }
+    if (reuse_usage) {
+      candidate->usage_ = accepted_config_->usage_;
     } else {
-      ObThreadCondGuard guard(req->io_result_->cond_);
-      if (OB_FAIL(guard.get_ret())) {
-      } else if (req->is_canceled()) {
-        ret = OB_CANCELED;
-      } else if (OB_FAIL(device_channel->submit(*req))) {
-        if (OB_EAGAIN != ret) {
-        }
-      } else {
-        time_guard.click("device_submit_detect");
-      }
+      candidate->usage_ = std::make_shared<ObIOUsage>();
+      if (OB_FAIL(candidate->usage_->init(replacement.group_configs_.count() / 3))) { return ret; }
     }
-  }
-  if (time_guard.get_diff() > 100000) {// 100ms
-    //print req
-    LOG_INFO("submit_detect_request cost too much time", K(ret), K(time_guard), K(req));
-  }
-  if (OB_FAIL(ret)) {
-    handle.reset();
-  }
+  } catch (const std::bad_alloc &) { ret = OB_ALLOCATE_MEMORY_FAILED; }
   return ret;
 }
 
-int ObIOService::enqueue_callback(ObIORequest &req)
+int ObIOService::replace_config_locked(const ObIOServiceConfig &replacement, uint64_t expected_generation,
+    int64_t server_memory, ResourceConfigReceipt &receipt)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(!is_working())) {
-    ret = OB_STATE_NOT_MATCH;
-  } else if (OB_FAIL(callback_mgr_.enqueue_callback(req))) {
-  }
-  return ret;
+  receipt = ResourceConfigReceipt{};
+  if (!is_inited_ || !rust_service_) { return OB_NOT_INIT; }
+  receipt.generation_ = accepted_config_->generation_;
+  if (expected_generation != accepted_config_->generation_) { return OB_EAGAIN; }
+  std::shared_ptr<IOConfigSnapshot> candidate;
+  storage_io::ResourceConfig native{};
+  if (OB_FAIL(prepare_config(replacement, server_memory, candidate, native))) { return ret; }
+  const int64_t callback_count = replacement.get_callback_thread_count();
+  if (callback_count > INT32_MAX / 100000) { return OB_INVALID_ARGUMENT; }
+  if (is_working() && OB_FAIL(callback_mgr_.prepare_thread_count(callback_count))) { return ret; }
+  const auto applied = (*rust_service_)->apply_config(expected_generation, native);
+  receipt.generation_ = applied.generation;
+  if (applied.error != 0) { return convert_storage_error(applied.error); }
+  publish_config(std::move(candidate), applied, receipt);
+  return OB_SUCCESS;
 }
-int ObIOService::update_basic_io_resource_config(const ObIOServiceConfig::ResourceConfig &io_resource_config)
+
+void ObIOService::publish_config(std::shared_ptr<IOConfigSnapshot> candidate,
+    const storage_io::ConfigReceipt &applied, ResourceConfigReceipt &receipt)
 {
-  int ret = OB_SUCCESS;
-  bool need_adjust_callback = false;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(!is_working())) {
-    ret = OB_STATE_NOT_MATCH;
-  } else {
-    // update basic io config
-    if (io_config_.resource_config_.weight_ != io_resource_config.weight_
-        || io_config_.resource_config_.max_iops_ != io_resource_config.max_iops_
-        || io_config_.resource_config_.min_iops_ != io_resource_config.min_iops_
-        || io_config_.resource_config_.max_net_bandwidth_ != io_resource_config.max_net_bandwidth_
-        || io_config_.resource_config_.net_bandwidth_weight_ != io_resource_config.net_bandwidth_weight_) {
-      LOG_INFO("update io resource config", K(io_config_.resource_config_), K(io_resource_config));
-      io_config_.resource_config_ =io_resource_config;
-      if (OB_FAIL(qsched_.update_config(io_config_))) {
-      }
+  const auto &replacement = candidate->config_;
+  const int64_t callback_count = replacement.get_callback_thread_count();
+  receipt.generation_ = applied.generation;
+  const MemoryPlan memory = memory_plan(replacement.param_config_.memory_limit_);
+  io_allocator_->commit_memory_limit(memory.bytes);
+  io_memory_limit_ = memory.bytes;
+  request_count_ = memory.requests;
+  result_count_ = memory.results;
+  if (is_working()) { callback_mgr_.commit_thread_count(callback_count); }
+  candidate->generation_ = applied.generation;
+  accepted_config_ = std::move(candidate);
+  {
+    ObMutexGuard manager_guard(OB_IO_MANAGER.mutex_);
+    if (OB_IO_MANAGER.io_service_ == this) {
+      ATOMIC_STORE(&OB_IO_MANAGER.server_memory_limit_, accepted_config_->effective_server_memory_);
     }
   }
+  receipt.effective_io_buffer_limit_ = accepted_config_->effective_io_buffer_limit_;
+  receipt.effective_wrapper_limit_ = accepted_config_->effective_wrapper_limit_;
+  receipt.configured_callback_threads_ = callback_count;
+  receipt.physical_reserve_debt_ = applied.physical_debt;
+  receipt.admission_debt_ = applied.normal_record_debt != 0 || applied.normal_byte_debt != 0
+      || applied.probe_record_debt != 0 || applied.probe_byte_debt != 0;
+}
+
+int ObIOService::replace_config(const ObIOServiceConfig &replacement, uint64_t expected_generation,
+    ResourceConfigReceipt &receipt)
+{
+  std::lock_guard<std::mutex> guard(config_mutex_);
+  if (!is_working()) { return OB_STATE_NOT_MATCH; }
+  return replace_config_locked(replacement, expected_generation, replacement.param_config_.memory_limit_, receipt);
+}
+
+int ObIOService::health_status(storage_io::HealthStatus &status) const
+{
+  return rust_service_ ? convert_storage_error((*rust_service_)->health_status(status)) : OB_NOT_INIT;
+}
+
+int ObIOService::update_health_config(const ObIOConfig &conf)
+{
+  int ret = OB_SUCCESS;
+  std::lock_guard<std::mutex> guard(config_mutex_);
+  if (!is_inited_) { return OB_NOT_INIT; }
+  ObIOServiceConfig replacement;
+  if (OB_FAIL(replacement.deep_copy(accepted_config_->config_))) { return ret; }
+  replacement.health_warning_tolerance_us_ = conf.data_storage_warning_tolerance_time_;
+  replacement.health_blacklist_interval_us_ = conf.read_failure_black_list_interval_;
+  replacement.health_wait_cap_us_ = conf.data_storage_io_timeout_ms_ * 1000;
+  ResourceConfigReceipt receipt;
+  return replace_config_locked(replacement, accepted_config_->generation_, accepted_config_->effective_server_memory_, receipt);
+}
+
+int ObIOService::update_runtime_config(const ObIOServiceConfig::ResourceConfig *resources,
+    const ObIOServiceConfig::ParamConfig *params)
+{
+  int ret = OB_SUCCESS;
+  std::lock_guard<std::mutex> guard(config_mutex_);
+  if (!is_inited_) { return OB_NOT_INIT; }
+  if (!is_working()) { return OB_STATE_NOT_MATCH; }
+  ObIOServiceConfig replacement;
+  if (OB_FAIL(replacement.deep_copy(accepted_config_->config_))) { return ret; }
+  if (resources != nullptr) { replacement.resource_config_ = *resources; }
+  if (params != nullptr) { replacement.param_config_ = *params; }
+  ResourceConfigReceipt receipt;
+  return replace_config_locked(replacement, accepted_config_->generation_,
+      params == nullptr ? accepted_config_->effective_server_memory_ : params->memory_limit_, receipt);
+}
+
+int ObIOService::register_device(const storage_io::DeviceOptions &options, int64_t depth,
+    int64_t probe_bytes, storage_io::DeviceHandle &endpoint)
+{
+  int ret = OB_SUCCESS;
+  std::lock_guard<std::mutex> guard(config_mutex_);
+  if (!is_inited_) { return OB_NOT_INIT; }
+  ObIOServiceConfig replacement;
+  if (OB_FAIL(replacement.deep_copy(accepted_config_->config_))) { return ret; }
+  const ObIOServiceConfig::DeviceResource device{options.id, depth, 1, probe_bytes};
+  if (OB_FAIL(replacement.devices_.push_back(device))) { return ret; }
+  std::shared_ptr<IOConfigSnapshot> candidate;
+  storage_io::ResourceConfig native{};
+  if (OB_FAIL(prepare_config(replacement, accepted_config_->effective_server_memory_, candidate, native))) {
+    return ret;
+  }
+  const int64_t callback_count = replacement.get_callback_thread_count();
+  if (callback_count > INT32_MAX / 100000) { return OB_INVALID_ARGUMENT; }
+  if (is_working() && OB_FAIL(callback_mgr_.prepare_thread_count(callback_count))) { return ret; }
+  const auto applied = (*rust_service_)->register_device(accepted_config_->generation_, native, options, endpoint);
+  if (applied.error != 0) { return convert_storage_error(applied.error); }
+  ResourceConfigReceipt receipt;
+  publish_config(std::move(candidate), applied, receipt);
   return ret;
 }
 
-int ObIOService::update_basic_io_param_config(const ObIOServiceConfig::ParamConfig &io_param_config)
+int ObIOService::remove_device(uint64_t device_id)
 {
   int ret = OB_SUCCESS;
-  bool need_adjust_callback = false;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(!is_working())) {
-    ret = OB_STATE_NOT_MATCH;
-  } else {
-    if (OB_FAIL(ret)) {
-    } else if (io_config_.param_config_.memory_limit_ != io_param_config.memory_limit_) {
-      LOG_INFO("update io memory limit", K(io_param_config.memory_limit_), K(io_config_.param_config_.memory_limit_));
-      if (OB_FAIL(update_memory_pool(io_param_config.memory_limit_))) {
-      } else {
-        io_config_.param_config_.memory_limit_ = io_param_config.memory_limit_;
-        need_adjust_callback = true;
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (io_config_.param_config_.callback_thread_count_ != io_param_config.callback_thread_count_) {
-      LOG_INFO("update io callback thread count", K(io_param_config.callback_thread_count_), K(io_config_.param_config_.callback_thread_count_));
-      io_config_.param_config_.callback_thread_count_ = io_param_config.callback_thread_count_;
-      need_adjust_callback = true;
-    }
-    if (OB_SUCC(ret) && need_adjust_callback) {
-      int64_t callback_thread_count = io_config_.get_callback_thread_count();
-      SERVER_MODULE_SCOPE {
-        if (OB_FAIL(callback_mgr_.update_thread_count(callback_thread_count))) {
-        }
-      }
-    }
+  std::lock_guard<std::mutex> guard(config_mutex_);
+  if (!is_inited_ || !rust_service_) { return OB_NOT_INIT; }
+  ObIOServiceConfig replacement;
+  if (OB_FAIL(replacement.deep_copy(accepted_config_->config_))) { return ret; }
+  replacement.devices_.reset();
+  bool found = false;
+  for (const auto &device : accepted_config_->config_.devices_) {
+    if (device.id_ == device_id) { found = true; }
+    else if (OB_FAIL(replacement.devices_.push_back(device))) { return ret; }
   }
-  return ret;
+  if (!found) { return OB_HASH_NOT_EXIST; }
+  std::shared_ptr<IOConfigSnapshot> candidate;
+  storage_io::ResourceConfig native{};
+  if (OB_FAIL(prepare_config(replacement, accepted_config_->effective_server_memory_, candidate, native))) {
+    return ret;
+  }
+  const auto removed = (*rust_service_)->remove_device(accepted_config_->generation_, device_id);
+  if (removed.error != 0) { return convert_storage_error(removed.error); }
+  candidate->generation_ = removed.generation;
+  accepted_config_ = std::move(candidate);
+  return OB_SUCCESS;
+}
+
+std::shared_ptr<const IOConfigSnapshot> ObIOService::config_snapshot() const
+{
+  std::lock_guard<std::mutex> guard(config_mutex_);
+  return accepted_config_;
+}
+
+int ObIOService::resource_stats(storage_io::ServiceStats &stats) const
+{
+  std::lock_guard<std::mutex> guard(config_mutex_);
+  return rust_service_ ? convert_storage_error((*rust_service_)->service_stats(stats)) : OB_NOT_INIT;
 }
 
 int ObIOService::try_alloc_req_until_timeout(const int64_t timeout_ts, ObIORequest *&req)
@@ -989,11 +1082,12 @@ int ObIOService::alloc_io_request(ObIORequest *&req)
   int ret = OB_SUCCESS;
   req = nullptr;
   void *buf = nullptr;
-  if (OB_ISNULL(buf = io_allocator_.alloc(sizeof(ObIORequest)))) {
+  if (OB_ISNULL(buf = io_allocator_->alloc(sizeof(ObIORequest)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     req = new (buf) ObIORequest;
     req->io_service_ = this;
+    req->allocation_owner_ = io_allocator_;
   }
   return ret;
 }
@@ -1003,66 +1097,61 @@ int ObIOService::alloc_io_result(ObIOResult *&result)
   int ret = OB_SUCCESS;
   result = nullptr;
   void *buf = nullptr;
-  if (OB_ISNULL(buf = io_allocator_.alloc(sizeof(ObIOResult)))) {
+  if (OB_ISNULL(buf = io_allocator_->alloc(sizeof(ObIOResult)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     result = new (buf) ObIOResult;
     result->io_service_ = this;
+    result->allocation_owner_ = io_allocator_;
   }
   return ret;
-}
-
-int ObIOService::init_group_index_map(const ObIOServiceConfig &io_config)
-{
-  int ret = OB_SUCCESS;
-  ObMemAttr attr("GROUP_INDEX_MAP");
-  if (OB_FAIL(group_id_index_map_.create(7, attr, attr))) {
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < io_config.group_configs_.count(); ++i) {
-      const ObIOServiceConfig::GroupConfig &config = io_config.group_configs_.at(i);
-      ObIOGroupKey key(config.group_id_, config.mode_);
-      if (OB_FAIL(group_id_index_map_.set_refactored(key, i, 1 /*overwrite*/))) {
-      }
-    }
-  }
-  return ret;
-}
-
-int ObIOService::get_group_index(const ObIOGroupKey &key, uint64_t &index)
-{
-  int ret = OB_SUCCESS;
-  index = static_cast<uint64_t>(key.mode_);
-  return ret;
-}
-
-const ObIOServiceConfig &ObIOService::get_io_config()
-{
-  return io_config_;
 }
 
 int64_t ObIOService::get_group_num()
 {
-  DRWLock::RDLockGuard guard(io_config_lock_);
-  const uint64_t MODE_CNT = static_cast<uint64_t>(ObIOMode::MAX_MODE) + 1;
-  int64_t group_num = io_config_.group_configs_.count() / MODE_CNT;
-  return group_num;
+  const auto snapshot = config_snapshot();
+  return snapshot ? snapshot->config_.group_configs_.count() / 3 : 0;
 }
-
 
 int ObIOService::print_io_status()
 {
+  auto calibration = calibration_snapshot();
+  const bool calibration_initialized = ObIOCalibration::get_instance().is_initialized();
+  auto metric_iops = [&](double size, double iops, ObIOMode mode) {
+    const auto bytes = storage_io::calibration_integer(size);
+    if (bytes.error != OB_SUCCESS) { LOG_WARN_RET(bytes.error, "invalid io size", K(size)); return int64_t{0}; }
+    auto result = calibration->normalized_iops(static_cast<int32_t>(mode), bytes.value,
+        iops, calibration_initialized);
+    if (result.error != OB_SUCCESS) { LOG_WARN_RET(result.error, "invalid normalized io metric", K(size), K(iops)); }
+    return result.value;
+  };
+  auto metric_scale = [&](ObIOMode mode, double size, double &scale, bool &valid) {
+    const auto bytes = storage_io::calibration_integer(size);
+    if (bytes.error != OB_SUCCESS) {
+      LOG_WARN_RET(bytes.error, "invalid io scale size", K(size));
+      scale = 0; valid = false; return;
+    }
+    auto result = calibration->calibration_scale(static_cast<int32_t>(mode), bytes.value,
+        calibration_initialized);
+    scale = result.value;
+    valid = result.calibrated;
+    if (result.error != OB_SUCCESS) { LOG_WARN_RET(result.error, "invalid io calibration scale", K(size)); }
+  };
+
   int ret = OB_SUCCESS;
+  const auto snapshot = config_snapshot();
+  if (!snapshot) { return OB_NOT_INIT; }
+  const ObIOServiceConfig &io_config_ = snapshot->config_;
+  ObIOUsage &io_usage_ = *snapshot->usage_;
   if (is_working() && is_inited_) {
     char io_status[1024] = { 0 };
     bool need_print_io_config = false;
-    io_usage_.calculate_io_usage();
-    io_sys_usage_.calculate_io_usage();
-    const ObIOUsageInfoArray &info = io_usage_.get_io_usage();
-    const ObIOUsageInfoArray &sys_info = io_sys_usage_.get_io_usage();
-    ObIOFailedReqInfoArray &failed_req_info = io_usage_.get_failed_req_usage();
-    ObIOFailedReqInfoArray &sys_failed_req_info = io_sys_usage_.get_failed_req_usage();
-    const ObIOMemStat &sys_mem_stat = io_mem_stats_.get_sys_mem_stat();
-    const ObIOMemStat &mem_stat = io_mem_stats_.get_mem_stat();
+    ObIOUsageInfoArray info;
+    ObIOUsageInfoArray sys_info;
+    if (OB_FAIL(io_usage_.snapshot(info, storage_io::StatisticsSampleMode::Advance))
+        || OB_FAIL(io_sys_usage_.snapshot(sys_info, storage_io::StatisticsSampleMode::Advance))) {
+      return ret;
+    }
     const int64_t MODE_COUNT = static_cast<int64_t>(ObIOMode::MAX_MODE) + 1;
     const int64_t GROUP_MODE_CNT = static_cast<int64_t>(ObIOGroupMode::MODECNT);
     int64_t ips = 0;
@@ -1076,12 +1165,12 @@ int ObIOService::print_io_status()
     for (int64_t i = 0; i < info.count(); ++i) {
       if (OB_TMP_FAIL(transform_usage_index_to_group_config_index(i, group_config_index))) {
         continue;
-      } else if (group_config_index >= io_config_.group_configs_.count() || info.count() != failed_req_info.count() || info.count() != mem_stat.group_mem_infos_.count()) {
+      } else if (group_config_index >= io_config_.group_configs_.count()) {
         continue;
       }
       mode = static_cast<ObIOMode>(group_config_index % MODE_COUNT);
       group_mode = static_cast<ObIOGroupMode>(i % GROUP_MODE_CNT);
-      ObIOServiceConfig::GroupConfig &group_config = io_config_.group_configs_.at(group_config_index);
+      const ObIOServiceConfig::GroupConfig &group_config = io_config_.group_configs_.at(group_config_index);
       if (group_config.deleted_) {
         continue;
       }
@@ -1101,23 +1190,25 @@ int ObIOService::print_io_status()
       bool is_io_ability_valid = false;  // unused
       int64_t norm_iops = 0;
       if (group_mode == ObIOGroupMode::LOCALREAD) {
-        norm_iops = get_norm_iops(info.at(i).avg_byte_, info.at(i).avg_iops_, ObIOMode::READ);
+        norm_iops = metric_iops(info.at(i).avg_byte_, info.at(i).avg_iops_, ObIOMode::READ);
       } else {
-        norm_iops = get_norm_iops(info.at(i).avg_byte_, info.at(i).avg_iops_, ObIOMode::WRITE);
+        norm_iops = metric_iops(info.at(i).avg_byte_, info.at(i).avg_iops_, ObIOMode::WRITE);
       }
-      if (OB_TMP_FAIL(failed_req_info.at(i).calc(failed_avg_size,
-              failed_req_iops,
-              failed_req_bw,
-              failed_avg_prepare_delay,
-              failed_avg_schedule_delay,
-              failed_avg_submit_delay,
-              failed_avg_device_delay,
-              failed_avg_total_delay))) {
+      const auto failed = io_usage_.sample_failure(i);
+      failed_avg_size = failed.average_bytes;
+      failed_req_iops = failed.iops;
+      failed_req_bw = failed.bytes_per_second;
+      failed_avg_prepare_delay = failed.prepare_us;
+      failed_avg_schedule_delay = failed.schedule_us;
+      failed_avg_submit_delay = failed.submit_us;
+      failed_avg_device_delay = failed.device_us;
+      failed_avg_total_delay = failed.total_us;
+      if (OB_TMP_FAIL(failed.error)) {
       } else if ((info.at(i).avg_byte_ + failed_avg_size) < std::numeric_limits<double>::epsilon()) {
       } else {
-        group_bw = static_cast<int64_t>(info.at(i).avg_byte_ * info.at(i).avg_iops_);
-        ObIOCalibration::get_instance().get_iops_scale(mode, failed_avg_size, failed_iops_scale, is_io_ability_valid);
-        ObIOCalibration::get_instance().get_iops_scale(mode, info.at(i).avg_byte_, iops_scale, is_io_ability_valid);
+        group_bw = checked_metric(info.at(i).avg_byte_ * info.at(i).avg_iops_);
+        metric_scale(mode, failed_avg_size, failed_iops_scale, is_io_ability_valid);
+        metric_scale(mode, info.at(i).avg_byte_, iops_scale, is_io_ability_valid);
         switch (group_mode) {
           case ObIOGroupMode::LOCALREAD: {
             if (iops_scale > std::numeric_limits<double>::epsilon()) {
@@ -1140,24 +1231,22 @@ int ObIOService::print_io_status()
           default:
             break;
         }
-        snprintf(io_status, sizeof(io_status),"group_id:%ld, group_name:%s, mode:%s, cur_req:%ld, hold_mem:%ld "
+        snprintf(io_status, sizeof(io_status),"group_id:%ld, group_name:%s, mode:%s "
             "[FAILED]:fail_size:%ld, fail_iops:%ld, fail_bw:%ld, [delay/us]:prepare:%ld, schedule:%ld, submit:%ld, rt:%ld, total:%ld, "
             "[SUCC]:size:%ld, iops:%ld, norm_iops:%ld, bw:%ld, [delay/us]:prepare:%ld, schedule:%ld, submit:%ld, rt:%ld, total:%ld",
             group_config.group_id_,
             group_name,
             mode_str,
-            mem_stat.group_mem_infos_.at(i).total_cnt_,
-            mem_stat.group_mem_infos_.at(i).total_size_,
-            static_cast<int64_t>(failed_avg_size),
-            static_cast<int64_t>(failed_req_iops + 0.5),
-            static_cast<int64_t>(failed_req_bw),
+            checked_metric(failed_avg_size),
+            checked_metric(failed_req_iops + 0.5),
+            checked_metric(failed_req_bw),
             failed_avg_prepare_delay,
             failed_avg_schedule_delay,
             failed_avg_submit_delay,
             failed_avg_device_delay,
             failed_avg_total_delay,
-            static_cast<int64_t>(info.at(i).avg_byte_),
-            static_cast<int64_t>(info.at(i).avg_iops_ + 0.5),
+            checked_metric(info.at(i).avg_byte_),
+            checked_metric(info.at(i).avg_iops_ + 0.5),
             norm_iops,
             static_cast<int64_t>(group_bw),
             info.at(i).avg_prepare_delay_us_,
@@ -1173,8 +1262,6 @@ int ObIOService::print_io_status()
     // SYS GROUPS
     for (int64_t i = 0; i < sys_info.count(); ++i) {
       if (OB_TMP_FAIL(transform_usage_index_to_group_config_index(i, group_config_index))) {
-        continue;
-      } else if (sys_info.count() != sys_failed_req_info.count()) {
         continue;
       }
       mode = static_cast<ObIOMode>(group_config_index % MODE_COUNT);
@@ -1195,27 +1282,29 @@ int ObIOService::print_io_status()
       int64_t failed_avg_total_delay = 0;
       int64_t norm_iops = 0;
       int64_t norm_failed_iops = 0;
-      if (OB_TMP_FAIL(sys_failed_req_info.at(i).calc(failed_avg_size,
-              failed_req_iops,
-              failed_req_bw,
-              failed_avg_prepare_delay,
-              failed_avg_schedule_delay,
-              failed_avg_submit_delay,
-              failed_avg_device_delay,
-              failed_avg_total_delay))) {
+      const auto failed = io_sys_usage_.sample_failure(i);
+      failed_avg_size = failed.average_bytes;
+      failed_req_iops = failed.iops;
+      failed_req_bw = failed.bytes_per_second;
+      failed_avg_prepare_delay = failed.prepare_us;
+      failed_avg_schedule_delay = failed.schedule_us;
+      failed_avg_submit_delay = failed.submit_us;
+      failed_avg_device_delay = failed.device_us;
+      failed_avg_total_delay = failed.total_us;
+      if (OB_TMP_FAIL(failed.error)) {
       } else if ((sys_info.at(i).avg_byte_ + failed_avg_size) < std::numeric_limits<double>::epsilon()) {
       } else {
         switch (group_mode) {
           case ObIOGroupMode::LOCALREAD: {
-            norm_iops = get_norm_iops(sys_info.at(i).avg_byte_, sys_info.at(i).avg_iops_, ObIOMode::READ);
-            norm_failed_iops = get_norm_iops(failed_avg_size, failed_req_iops, ObIOMode::READ);
+            norm_iops = metric_iops(sys_info.at(i).avg_byte_, sys_info.at(i).avg_iops_, ObIOMode::READ);
+            norm_failed_iops = metric_iops(failed_avg_size, failed_req_iops, ObIOMode::READ);
             ips += norm_iops;
             failed_ips += norm_failed_iops;
             break;
           }
           case ObIOGroupMode::LOCALWRITE: {
-            norm_iops = get_norm_iops(sys_info.at(i).avg_byte_, sys_info.at(i).avg_iops_, ObIOMode::WRITE);
-            norm_failed_iops = get_norm_iops(failed_avg_size, failed_req_iops, ObIOMode::WRITE);
+            norm_iops = metric_iops(sys_info.at(i).avg_byte_, sys_info.at(i).avg_iops_, ObIOMode::WRITE);
+            norm_failed_iops = metric_iops(failed_avg_size, failed_req_iops, ObIOMode::WRITE);
             ops += norm_iops;
             failed_ops += norm_failed_iops;
             break;
@@ -1223,25 +1312,23 @@ int ObIOService::print_io_status()
           default:
             break;
         }
-        group_bw = static_cast<int64_t>(sys_info.at(i).avg_byte_ * sys_info.at(i).avg_iops_);
+        group_bw = checked_metric(sys_info.at(i).avg_byte_ * sys_info.at(i).avg_iops_);
         snprintf(io_status, sizeof(io_status),
-                "sys_group_name:%s, mode:%s, cur_req:%ld, hold_mem:%ld "
+                "sys_group_name:%s, mode:%s "
                 "[FAILED]: fail_size:%ld, fail_iops:%ld, fail_bw:%ld, [delay/us]:prepare:%ld, schedule:%ld, submit:%ld, rt:%ld, total:%ld, "
                 "[SUCC]: size:%ld, iops:%ld, norm_iops:%ld, bw:%ld, [delay/us]:prepare:%ld, schedule:%ld, submit:%ld, rt:%ld, total:%ld",
                  get_io_sys_group_name(module),
                  mode_str,
-                 sys_mem_stat.group_mem_infos_.at(i).total_cnt_,
-                 sys_mem_stat.group_mem_infos_.at(i).total_size_,
-                 static_cast<int64_t>(failed_avg_size),
-                 static_cast<int64_t>(failed_req_iops + 0.5),
-                 static_cast<int64_t>(failed_req_bw),
+                 checked_metric(failed_avg_size),
+                 checked_metric(failed_req_iops + 0.5),
+                 checked_metric(failed_req_bw),
                  failed_avg_prepare_delay,
                  failed_avg_schedule_delay,
                  failed_avg_submit_delay,
                  failed_avg_device_delay,
                  failed_avg_total_delay,
-                 static_cast<int64_t>(sys_info.at(i).avg_byte_),
-                 static_cast<int64_t>(sys_info.at(i).avg_iops_ + 0.5),
+                 checked_metric(sys_info.at(i).avg_byte_),
+                 checked_metric(sys_info.at(i).avg_iops_ + 0.5),
                  norm_iops,
                  static_cast<int64_t>(group_bw),
                  sys_info.at(i).avg_prepare_delay_us_,
@@ -1258,7 +1345,7 @@ int ObIOService::print_io_status()
       int64_t iops = ips + ops;
       double failed_iops = failed_ips + failed_ops;
       LOG_INFO("[IO STATUS]", K_(ref_cnt), K_(io_config),
-          "hold_mem", io_allocator_.get_allocated_size(),
+          "hold_mem", io_allocator_->get_allocated_size(),
           "[FAILED]: "
           "fail_ips", lround(failed_ips),
           "fail_ops", lround(failed_ops),
@@ -1266,11 +1353,15 @@ int ObIOService::print_io_status()
           "[SUCC]: "
           "ips", ips,
           "ops", ops,
-          "iops", iops,
-          "iops_limit", 0);
+          "iops", iops);
     }
 
-    // print callback status
+    storage_io::ServiceStats resources{};
+    if (OB_SUCCESS == resource_stats(resources)) {
+      LOG_INFO("storage resources", K(resources.generation), K(resources.admitted_requests),
+          K(resources.reserved_bytes), K(resources.queued_requests), K(resources.awaiting_retirement),
+          K(resources.admission_debt), K(resources.physical_debt), K(resources.probe_attempts));
+    }
     {
       (void)callback_mgr_.to_string(io_status, sizeof(io_status));
       LOG_INFO("[IO STATUS CALLBACK]", KCSTRING(io_status));
@@ -1295,10 +1386,61 @@ void ObIOService::dec_ref()
   }
 }
 
-int ObIOService::get_throttled_time(uint64_t group_id, int64_t &throttled_time)
+namespace oceanbase
 {
-  int ret = OB_SUCCESS;
-  UNUSED(group_id);
-  throttled_time = 0;
-  return ret;
+namespace common
+{
+void ObIOManager::print_service_status()
+{
+  ObRefHolder<ObIOService> holder;
+  if (OB_SUCCESS == get_io_service(holder)) { holder.get_ptr()->print_io_status(); }
 }
+
+}
+}
+
+namespace oceanbase
+{
+namespace common
+{
+rust::Box<storage_io::CalibrationView> ObIOService::calibration_snapshot() const
+{
+  std::lock_guard<std::mutex> guard(config_mutex_);
+  return rust_service_ ? (*rust_service_)->calibration_snapshot() : storage_io::empty_calibration_view();
+}
+
+int ObIOService::replace_calibration(rust::Slice<const storage_io::CalibrationSample> samples)
+{
+  std::lock_guard<std::mutex> guard(config_mutex_);
+  return rust_service_ ? (*rust_service_)->replace_calibration(samples) : OB_NOT_INIT;
+}
+
+int ObIOService::reset_calibration()
+{
+  std::lock_guard<std::mutex> guard(config_mutex_);
+  return rust_service_ ? (*rust_service_)->reset_calibration() : OB_NOT_INIT;
+}
+
+}
+}
+
+namespace oceanbase { namespace common {
+storage_io::BeginBenchmarkDto ObIOService::begin_benchmark(
+    const storage_io::BenchmarkShapeDto &shape, storage_io::BenchmarkPreparationSlot &preparation,
+    storage_io::BenchmarkRunSlot &run)
+{
+  if (!rust_service_) { return {OB_NOT_INIT, false}; }
+  return (*rust_service_)->benchmark_begin(shape, preparation, run);
+}
+
+void ObIOService::stop_benchmarks()
+{
+  if (rust_service_) { (*rust_service_)->stop_benchmarks(); }
+}
+
+storage_io::BenchmarkStatusDto ObIOService::benchmark_status() const
+{
+  if (!rust_service_) { return {}; }
+  return (*rust_service_)->benchmark_status();
+}
+}}

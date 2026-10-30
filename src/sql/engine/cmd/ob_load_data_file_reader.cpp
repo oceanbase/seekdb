@@ -169,9 +169,8 @@ int ObRandomFileReader::open(const ObString &filename)
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-  } else if (OB_FAIL(file_reader_.open(filename.ptr(), false))) {
+  } else if (OB_FAIL(file_reader_.open(filename, false))) {
   } else {
-    filename_ = filename;
     offset_ = 0;
     eof_ = false;
     is_inited_ = true;
@@ -181,6 +180,7 @@ int ObRandomFileReader::open(const ObString &filename)
 
 int ObRandomFileReader::read(char *buf, int64_t count, int64_t &read_size)
 {
+  read_size = 0;
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
@@ -195,17 +195,21 @@ int ObRandomFileReader::read(char *buf, int64_t count, int64_t &read_size)
 
 int ObRandomFileReader::seek(int64_t offset)
 {
+  if (!is_inited_) { return OB_NOT_INIT; }
+  if (offset < 0) { return OB_INVALID_ARGUMENT; }
+  eof_ = false;
   offset_ = offset;
   return OB_SUCCESS;
 }
 
 int ObRandomFileReader::get_file_size(int64_t &file_size)
 {
+  file_size = 0;
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
   } else {
-    file_size = ::get_file_size(filename_.ptr());
+    ret = file_reader_.get_file_size(file_size);
   }
   return ret;
 }

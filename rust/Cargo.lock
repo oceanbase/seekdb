@@ -422,6 +422,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "file-io"
+version = "0.1.0"
+dependencies = [
+ "cxx",
+ "libc",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -524,6 +533,7 @@ dependencies = [
 name = "in-process"
 version = "0.1.0"
 dependencies = [
+ "file-io",
  "cxx",
  "libc",
 ]
@@ -559,7 +569,7 @@ dependencies = [
 name = "kv"
 version = "0.1.0"
 dependencies = [
- "windows-sys 0.61.2",
+ "file-io",
 ]
 
 [[package]]
@@ -588,6 +598,7 @@ name = "local"
 version = "0.1.0"
 dependencies = [
  "cxx",
+ "file-io",
  "kv",
 ]
 
@@ -612,11 +623,11 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "cxx",
+ "file-io",
  "libc",
  "log",
  "mio",
  "spdlog-rs",
- "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -909,11 +920,13 @@ name = "seekdb-rust"
 version = "0.1.0"
 dependencies = [
  "config",
+ "file-io",
  "in-process",
  "local",
  "logger",
  "regex-engine",
  "sql-nio",
+ "storage-io",
  "uuid-generator",
 ]
 
@@ -1062,6 +1075,15 @@ dependencies = [
  "socket2",
  "windows-sys 0.61.2",
  "x509-parser",
+]
+
+[[package]]
+name = "storage-io"
+version = "0.1.0"
+dependencies = [
+ "cxx",
+ "file-io",
+ "libc",
 ]
 
 [[package]]

@@ -72,6 +72,8 @@ register_toolchains("@cargo//:all")
 
 cargo_sources_repository = use_repo_rule("//bazel:cargo_toolchain.bzl", "cargo_sources_repository")
 _CARGO_MANIFESTS = [
+    "//rust:file-io/Cargo.toml",
+    "//rust:storage-io/Cargo.toml",
     "//rust:Cargo.toml", "//rust:config/Cargo.toml", "//rust:kv/Cargo.toml",
     "//rust:local/Cargo.toml", "//rust:sql-nio/Cargo.toml", "//rust:logger/Cargo.toml",
     "//rust:uuid-generator/Cargo.toml", "//rust:in-process/Cargo.toml", "//rust:seekdb-rust/Cargo.toml",

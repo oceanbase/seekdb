@@ -188,7 +188,7 @@ def main():
     channel = Path(__file__).with_name("rust-toolchain-version").read_text().strip()
     subprocess.run([
         "rustup", "toolchain", "install", channel, "--profile", "minimal",
-        "--no-update", "--no-self-update",
+        "--no-self-update",
     ], cwd=repo, check=True)
     subprocess.run(["rustup", "component", "add", "rust-src", "--toolchain", channel], check=True)
     subprocess.run(["rustup", "target", "add", "wasm32-unknown-emscripten", "--toolchain", channel], check=True)

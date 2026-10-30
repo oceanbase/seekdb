@@ -669,8 +669,7 @@ int ObServerRuntimeController::modify_server_io(const ObServerResourceConfig &re
     ObIOServiceConfig::ParamConfig io_param_config;
     io_param_config.memory_limit_ = resource_config.memory_size();
     io_param_config.callback_thread_count_ = config::_io_callback_thread_count();
-    if (OB_FAIL(OB_IO_MANAGER.refresh_io_resource_config(io_resource_config))) {
-    } else if (OB_FAIL(OB_IO_MANAGER.refresh_io_param_config(io_param_config))) {
+    if (OB_FAIL(OB_IO_MANAGER.refresh_io_runtime_config(io_resource_config, io_param_config))) {
     }
   }
   return ret;
@@ -1039,34 +1038,6 @@ int ObServerRuntimeController::dec_ddl_count()
   return ret;
 }
 
-namespace oceanbase
-{
-namespace common
-{
-void ObIOManager::print_service_status()
-{
-  int ret = OB_SUCCESS;
-  if (OB_NOT_NULL(::oceanbase::share::server_service<::oceanbase::omt::ObServerRuntimeController>())) {
-    {
-      ObRefHolder<ObIOService> service_holder;
-      if (OB_FAIL(get_io_service(service_holder))) {
-        if (OB_HASH_NOT_EXIST != ret) {
-        } else {
-          ret = OB_SUCCESS;
-        }
-      } else {
-        service_holder.get_ptr()->print_io_status();
-      }
-    }
-  }
-  if (OB_NOT_NULL(io_service_)) {
-    io_service_->print_io_status();
-  }
-}
-
-}  // namespace common
-}  // namespace oceanbase
-
 // the config read endpoint: share must not depend upward on observer
 namespace oceanbase
 {
@@ -1106,7 +1077,6 @@ int ObServer::obs_construct_modules()
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_shared_timer_))) { SERVER_LOG(WARN, "mods_shared_timer_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_shared_macro_block_mgr_))) { SERVER_LOG(WARN, "mods_shared_macro_block_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObStorageMetaMemMgr::server_module_new(mods_storage_meta_mem_mgr_))) { SERVER_LOG(WARN, "mods_storage_meta_mem_mgr_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(ObIOService::server_module_new(mods_io_service_))) { SERVER_LOG(WARN, "mods_io_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_mds_service_))) { SERVER_LOG(WARN, "mods_mds_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_shared_mem_alloc_mgr_))) { SERVER_LOG(WARN, "mods_shared_mem_alloc_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_trans_service_))) { SERVER_LOG(WARN, "mods_trans_service_ fail", KR(ret)); }
@@ -1286,7 +1256,6 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(ObSharedTimer::server_module_init(mods_shared_timer_))) { SERVER_LOG(WARN, "mods_shared_timer_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_init_default(mods_shared_macro_block_mgr_))) { SERVER_LOG(WARN, "mods_shared_macro_block_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_init_default(mods_storage_meta_mem_mgr_))) { SERVER_LOG(WARN, "mods_storage_meta_mem_mgr_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(ObIOService::server_module_init(mods_io_service_))) { SERVER_LOG(WARN, "mods_io_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(storage::mds::ObMdsService::server_module_init(mods_mds_service_))) { SERVER_LOG(WARN, "mods_mds_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(share::ObSharedMemAllocMgr::server_module_init(mods_shared_mem_alloc_mgr_))) { SERVER_LOG(WARN, "mods_shared_mem_alloc_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObTransService::server_module_init(mods_trans_service_))) { SERVER_LOG(WARN, "mods_trans_service_ fail", KR(ret)); }
@@ -1435,7 +1404,6 @@ int ObServer::obs_start_modules()
   if (OB_SUCC(ret) && OB_FAIL(ObSharedTimer::server_module_start(mods_shared_timer_))) { SERVER_LOG(WARN, "mods_shared_timer_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_shared_macro_block_mgr_))) { SERVER_LOG(WARN, "mods_shared_macro_block_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_storage_meta_mem_mgr_))) { SERVER_LOG(WARN, "mods_storage_meta_mem_mgr_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_io_service_))) { SERVER_LOG(WARN, "mods_io_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(storage::mds::ObMdsService::server_module_start(mods_mds_service_))) { SERVER_LOG(WARN, "mods_mds_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_shared_mem_alloc_mgr_))) { SERVER_LOG(WARN, "mods_shared_mem_alloc_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_trans_service_))) { SERVER_LOG(WARN, "mods_trans_service_ fail", KR(ret)); }
@@ -1504,7 +1472,6 @@ void ObServer::obs_stop_modules()
   server_module_stop_default(mods_trans_service_);
   server_module_stop_default(mods_shared_mem_alloc_mgr_);
   storage::mds::ObMdsService::server_module_stop(mods_mds_service_);
-  server_module_stop_default(mods_io_service_);
   server_module_stop_default(mods_storage_meta_mem_mgr_);
   ObSharedTimer::server_module_stop(mods_shared_timer_);
 }
@@ -1619,7 +1586,6 @@ void ObServer::obs_destroy_modules()
   server_module_destroy_default(mods_trans_service_);
   server_module_destroy_default(mods_shared_mem_alloc_mgr_);
   server_module_destroy_default(mods_mds_service_);
-  ObIOService::server_module_destroy(mods_io_service_);
   server_module_destroy_default(mods_storage_meta_mem_mgr_);
   // LS and cached tablets own memtable manager handles; release them before
   // destroying the pool that those handles return their managers to.

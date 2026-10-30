@@ -43,6 +43,7 @@ cxx_bridge(
     name = "local",
     src = "local/src/bridge.rs",
     hdrs = ["local/include/callbacks.h"],
+    deps = [":file_io_bridge"],
 )
 cxx_bridge(
     name = "config",
@@ -52,6 +53,16 @@ cxx_bridge(
 )
 cxx_bridge(name = "uuid_generator", src = "uuid-generator/src/bridge.rs")
 cxx_bridge(name = "logger", src = "logger/src/bridge.rs")
+cxx_bridge(name = "file_io", src = "file-io/src/bridge.rs")
+cxx_bridge(
+    name = "storage_io",
+    src = "storage-io/src/bridge.rs",
+    deps = [":file_io_bridge"],
+    cfgs = select({
+        "//bazel:storage_io_ownership_test_support_enabled": ['feature="ownership-test-support"'],
+        "//conditions:default": [],
+    }),
+)
 cxx_bridge(name = "regex_engine", src = "regex-engine/src/bridge.rs")
 cxx_bridge(
     name = "in_process",
@@ -76,6 +87,8 @@ filegroup(
         "config.h",
         "config/config_checkers.h",
         "logger.h",
+        "file_io.h",
+        "storage_io.h",
         "regex_engine.h",
         "uuid_generator.h",
         "in_process.h",
@@ -86,6 +99,10 @@ filegroup(
 
 cargo_library(
     name = "archive",
+    cargo_args = select({
+        "//bazel:storage_io_ownership_test_support_enabled": ["--features", "storage-io/ownership-test-support"],
+        "//conditions:default": [],
+    }),
     srcs = glob(
         ["**/*.rs", "**/*.py", "**/*.toml", "*.lock"],
         exclude = ["target/**", "config/generate.py"],
@@ -101,7 +118,7 @@ cargo_library(
 
 cc_library(
     name = "bridges",
-    deps = [":local_bridge", ":config_bridge", ":logger_bridge", ":regex_engine_bridge", ":sql_nio_bridge", ":uuid_generator_bridge"] + select({
+    deps = [":local_bridge", ":config_bridge", ":logger_bridge", ":file_io_bridge", ":storage_io_bridge", ":regex_engine_bridge", ":sql_nio_bridge", ":uuid_generator_bridge"] + select({
         "@platforms//os:windows": [],
         "@platforms//os:emscripten": [],
         "//conditions:default": [":in_process_bridge"],
@@ -127,8 +144,29 @@ cc_library(
 )
 
 cc_library(
+    name = "file_io",
+    srcs = [":archive"],
+    deps = [":file_io_bridge", ":_rust_runtime"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "storage_io",
+    srcs = [":archive"],
+    deps = [":storage_io_bridge", ":_rust_runtime"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
     name = "logger",
     srcs = [":archive"],
     deps = [":logger_bridge", ":_rust_runtime"],
     visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "sql_nio",
+    srcs = [":archive"],
+    deps = [":sql_nio_bridge", ":_rust_runtime"],
+    visibility = ["//src/oblib:__pkg__"],
 )

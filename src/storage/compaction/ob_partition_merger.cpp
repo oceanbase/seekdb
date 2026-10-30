@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
+#include "lib/file/path_operations.h"
 #include "rust/config.h"
 #include "ob_partition_merger.h"
 #include "share/rc/ob_server_runtime.h"
@@ -1362,7 +1363,7 @@ int ObPartitionMergeDumper::judge_disk_free_space(const char *dir_name, ObITable
   } else {
     int64_t total_space = 0;
     int64_t free_space = 0;
-    if (OB_FAIL(FileDirectoryUtils::get_disk_space(dir_name, total_space, free_space))) {
+    if (OB_FAIL(path_operations::get_disk_space(dir_name, total_space, free_space))) {
     } else if (table->is_sstable()) {
       if (free_space
           - static_cast<ObSSTable *>(table)->get_total_macro_block_count() *

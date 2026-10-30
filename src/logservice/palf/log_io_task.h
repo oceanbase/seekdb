@@ -62,7 +62,7 @@ public:
   virtual ~LogIOTask();
 	void reset();
 public:
-  int do_task(LogIOTaskCbThreadPool *cb_thread_pool, IPalfEnvImpl *palf_env_impl);
+  int do_task(LogIOTaskCbThreadPool *cb_thread_pool, IPalfEnvImpl *palf_env_impl, bool &stale);
   int after_consume(IPalfEnvImpl *palf_env_impl);
   LogIOTaskType get_io_task_type();
   int64_t get_init_task_ts();
@@ -100,7 +100,7 @@ public:
   int init(const FlushLogCbCtx &flush_log_cb_ctx,
            const LogWriteBuf &write_buf);
   void destroy();
-  INHERIT_TO_STRING_KV("LogIOTask", LogIOTask, K_(write_buf), K_(flush_log_cb_ctx), K(is_inited_));
+  INHERIT_TO_STRING_KV("LogIOTask", LogIOTask, K_(write_buf), K_(flush_log_cb_ctx), "stage", static_cast<int>(stage_), K(is_inited_));
 private:
   // IO thread will call this function to flush log
   int do_task_(LogIOTaskCbThreadPool *cb_thread_pool, IPalfHandleImplGuard &guard) override final;
@@ -111,6 +111,9 @@ private:
   int64_t get_io_size_() const override final;
 
 private:
+  enum class FlushStage { Append, Reuse, Callback };
+  int finish_flush_(LogIOTaskCbThreadPool *cb_thread_pool, IPalfHandleImplGuard &guard);
+  FlushStage stage_;
   FlushLogCbCtx flush_log_cb_ctx_;
   LogWriteBuf write_buf_;
   bool is_inited_;
@@ -132,6 +135,7 @@ private:
   void free_this_(IPalfEnvImpl *palf_env_impl) override final;
   int64_t get_io_size_() const override final {return 0;}
 private:
+  bool truncated_;
   TruncatePrefixBlocksCbCtx truncate_prefix_blocks_ctx_;
   bool is_inited_;
 };
@@ -147,16 +151,15 @@ public:
   void reuse();
   void destroy();
   int push_back(LogIOFlushLogTask *task);
-  int do_task(LogIOTaskCbThreadPool *cb_thread_pool, IPalfEnvImpl *palf_env_impl);
+  int do_task(LogIOTaskCbThreadPool *cb_thread_pool, IPalfEnvImpl *palf_env_impl, bool &stale);
+  void discard(IPalfEnvImpl *palf_env_impl);
   void reset_accum_in_queue_time() { accum_in_queue_time_ = 0; }
   int64_t get_count() const { return io_task_array_.count(); }
   int64_t get_accum_in_queue_time() const { return accum_in_queue_time_; }
 
   TO_STRING_KV("count", io_task_array_.count(), K_(lsn_array), K_(accum_size));
 private:
-  int push_flush_cb_to_thread_pool_(LogIOTaskCbThreadPool *cb_thread_pool, IPalfEnvImpl *palf_env_impl);
-  int do_task_(LogIOTaskCbThreadPool *cb_thread_pool, IPalfEnvImpl *palf_env_impl);
-  void clear_memory_(IPalfEnvImpl *palf_env_impl);
+  int do_task_(LogIOTaskCbThreadPool *cb_thread_pool, IPalfEnvImpl *palf_env_impl, bool &stale);
   static int64_t SINGLE_TASK_MAX_SIZE;
 private:
   BatchIOTaskArray io_task_array_;

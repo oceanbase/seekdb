@@ -1076,11 +1076,9 @@ int ObLoadDataSPImpl::create_log_file(ToolBox &box)
 
   if (OB_FAIL(box.file_appender.open(box.log_file_name, false, true))) {
   } else if (OB_FAIL(box.file_appender.append(box.load_info.ptr(),
-                                              box.load_info.length(),
-                                              false))) {
+                                              box.load_info.length()))) {
   } else if (OB_FAIL(box.file_appender.append(log_file_column_names,
-                                              strlen(log_file_column_names),
-                                              false))) {
+                                              strlen(log_file_column_names)))) {
   }
   return ret;
 }
@@ -1115,8 +1113,7 @@ int ObLoadDataSPImpl::log_failed_line(ToolBox &box,
                                 err_msg.length(),
                                 err_msg.ptr()))) {
     } else if (OB_FAIL(box.file_appender.append(box.expr_buffer->begin_ptr(),
-                                                log_buf_pos,
-                                                false))) {
+                                                log_buf_pos))) {
     } else {
     }
 
@@ -1328,8 +1325,9 @@ int ObLoadDataSPImpl::execute(ObExecContext &ctx, ObLoadDataStmt &load_stmt)
       ret = OB_SUCCESS;
     }
 
-    //release
-    OW (box.release_resources());
+    const bool generated_error_log = box.file_appender.is_opened();
+    const int cleanup_ret = box.release_resources();
+    if (OB_SUCC(ret)) { ret = cleanup_ret; }
 
     if (OB_SUCC(ret) && OB_NOT_NULL(ctx.get_physical_plan_ctx())) {
       ctx.get_physical_plan_ctx()->set_affected_rows(box.affected_rows);
@@ -1343,7 +1341,7 @@ int ObLoadDataSPImpl::execute(ObExecContext &ctx, ObLoadDataStmt &load_stmt)
     if (OB_FAIL(ret)) {
     }
 
-    if (box.file_appender.is_opened()) {
+    if (generated_error_log) {
       LOG_WARN("LOAD DATA error log generated");
     }
 
@@ -1662,6 +1660,12 @@ int ObLoadDataSPImpl::ToolBox::release_resources()
       }
       job_status->~ObLoadDataStat();
     }
+  }
+
+  const int finish_ret = file_appender.finish();
+  if (finish_ret != OB_SUCCESS) {
+    LOG_WARN("failed to finish LOAD DATA error log", K(finish_ret));
+    if (OB_SUCC(ret)) { ret = finish_ret; }
   }
 
   int tmp_ret = data_frag_mgr.clear_all_datafrag();

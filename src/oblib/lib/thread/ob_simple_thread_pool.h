@@ -99,6 +99,7 @@ public:
 
   // Thread count configuration
   int set_thread_count(int64_t n_threads);
+  void commit_bound_thread_count(int64_t n_threads);
   int set_adaptive_thread(int64_t min_thread_num, int64_t max_thread_num);
 
   // CRTP for lib::ObAdaptiveWorkerPool

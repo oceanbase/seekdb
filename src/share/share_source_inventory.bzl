@@ -304,7 +304,6 @@ SHARE_UNITY_GROUPS = [
         language = "c++",
         srcs = [
             "src/share/io/ob_io_define.cpp",
-            "src/share/io/io_schedule/ob_io_schedule_v2.cpp",
             "src/share/io/ob_io_struct.cpp",
             "src/share/io/ob_io_calibration.cpp",
             "src/share/io/ob_io_manager.cpp",

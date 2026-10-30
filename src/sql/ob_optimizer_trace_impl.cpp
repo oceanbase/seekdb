@@ -16,7 +16,7 @@
  
 #define USING_LOG_PREFIX SQL
 #include "ob_optimizer_trace_impl.h"
-#include "lib/file/file_directory_utils.h"
+#include "lib/file/path_operations.h"
 #include "share/ob_version.h"
 #include "sql/optimizer/ob_log_values.h"
 #include "sql/optimizer/ob_skyline_prunning.h"
@@ -46,19 +46,17 @@ int LogFileAppender::open()
   } else if (OB_FAIL(open_log_file())) {
   } else if (OB_FAIL(check_log_file_full(is_full))) {
   } else if (is_full) {
-    close();
-    if (OB_FAIL(generate_log_file_name())) {
+    if (OB_FAIL(close())) {
+    } else if (OB_FAIL(generate_log_file_name())) {
     } else if (OB_FAIL(open_log_file())) {
     }
   }
   return ret;
 }
 
-void LogFileAppender::close()
+int LogFileAppender::close()
 {
-  if (log_handle_.is_opened()) {
-    log_handle_.close();
-  }
+  return log_handle_.finish();
 }
 
 int LogFileAppender::set_identifier(const common::ObString &identifier)
@@ -75,7 +73,7 @@ int LogFileAppender::append(const char* buf, int64_t buf_len)
   int ret = OB_SUCCESS;
   if (!log_handle_.is_opened()) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(log_handle_.append(buf, buf_len, false))) {
+  } else if (OB_FAIL(log_handle_.append(buf, buf_len))) {
   }
   return ret;
 }
@@ -86,7 +84,7 @@ int LogFileAppender::check_log_file_full(bool &is_full)
   is_full = false;
   if (!log_handle_.is_opened()) {
     ret = OB_NOT_INIT;
-  } else if (log_handle_.get_file_pos() > MAX_LOG_FILE_SIZE) {
+  } else if (log_handle_.position() > MAX_LOG_FILE_SIZE) {
     is_full = true;
   }
   return ret;
@@ -118,7 +116,7 @@ int LogFileAppender::generate_log_file_name()
     } else if (!identifier_.empty() && 
               OB_FAIL(log_file_name_.append(identifier_))) {
     } else if (OB_FAIL(log_file_name_.append(".trac"))) {
-    } else if (OB_FAIL(FSU::is_exists(log_file_name_.ptr(), exists))) {
+    } else if (OB_FAIL(path_operations::is_exists(log_file_name_.ptr(), exists))) {
     } else if (exists) {
       ++i;
     }
@@ -133,8 +131,8 @@ int LogFileAppender::generate_log_file_name()
 int LogFileAppender::open_log_file()
 {
   int ret = OB_SUCCESS;
-  close();
-  if (OB_FAIL(log_handle_.open(ObString(log_file_name_.length(), 
+  if (OB_FAIL(close())) {
+  } else if (OB_FAIL(log_handle_.open(ObString(log_file_name_.length(),
                                         log_file_name_.ptr()), 
                                         false, 
                                         true))) {
@@ -223,9 +221,9 @@ int ObOptimizerTraceImpl::open()
   return ret;
 }
 
-void ObOptimizerTraceImpl::close()
+int ObOptimizerTraceImpl::close()
 {
-  log_handle_.close();
+  return log_handle_.close();
 }
 
 void ObOptimizerTraceImpl::resume_trace()

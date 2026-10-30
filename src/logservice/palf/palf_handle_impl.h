@@ -199,7 +199,7 @@ public:
                                const share::SCN &scn) = 0;
   virtual int inner_append_log(const LSNArray &lsn_array,
                                const LogWriteBufArray &write_buf_array,
-                               const SCNArray &scn_array) = 0;
+                               const SCNArray &scn_array, int64_t &completed_count) = 0;
   virtual int inner_truncate_prefix_blocks(const LSN &lsn) = 0;
   virtual int check_and_switch_state() = 0;
   virtual int check_and_switch_freeze_mode() = 0;
@@ -268,8 +268,7 @@ public:
            IPalfEnvImpl *palf_env_impl,
            const common::ObAddr &self,
            const int64_t palf_epoch,
-           LogIOAdapter *io_adapter,
-           bool &is_integrity);
+           LogIOAdapter *io_adapter);
   void destroy();
   int start();
   int bootstrap() override final;
@@ -370,7 +369,7 @@ public:
                        const share::SCN &scn) override final;
   int inner_append_log(const LSNArray &lsn_array,
                        const LogWriteBufArray &write_buf_array,
-                       const SCNArray &scn_array);
+                       const SCNArray &scn_array, int64_t &completed_count);
   int inner_truncate_prefix_blocks(const LSN &lsn) override final;
   // ==================================================================
   int check_and_switch_state() override final;

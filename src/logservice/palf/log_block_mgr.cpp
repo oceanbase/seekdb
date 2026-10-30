@@ -14,27 +14,11 @@
  * limitations under the License.
  */
 
+#include "lib/file/path_operations.h"
 #include "log_block_mgr.h"
 #include "log_writer_utils.h"                           // LogWriteBuf
-#include "log_io_utils.h"                               // openat_with_retry
+#include "log_io_utils.h"
 #include "log_io_adapter.h"                             // LogIOAdapter
-#ifdef _WIN32
-#include <io.h>
-#include <fcntl.h>
-#ifndef O_DIRECTORY
-#define O_DIRECTORY 0
-#endif
-#ifndef O_RDONLY
-#define O_RDONLY _O_RDONLY
-#endif
-static int ob_win_truncate(const char *path, int64_t length) {
-  int fd = ::_open(path, _O_RDWR | _O_BINARY);
-  if (fd == -1) return -1;
-  int rc = ::_chsize_s(fd, length);
-  ::_close(fd);
-  return rc == 0 ? 0 : -1;
-}
-#endif
 
 namespace oceanbase
 {
@@ -49,7 +33,7 @@ LogBlockMgr::LogBlockMgr() : curr_writable_handler_(),
                              min_block_id_(LOG_INVALID_BLOCK_ID),
                              max_block_id_(LOG_INVALID_BLOCK_ID),
                              log_block_pool_(NULL),
-                             dir_fd_(-1),
+                             directory_(file_io::new_directory_handle()),
                              align_size_(-1),
                              align_buf_size_(-1),
                              io_adapter_(NULL),
@@ -75,12 +59,11 @@ int LogBlockMgr::init(const char *log_dir,
     ret = OB_INIT_TWICE;
   } else if (NULL == log_dir || LOG_INVALID_LSN_VAL == log_block_size || OB_ISNULL(io_adapter)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (-1 == (dir_fd_ = open_directory(log_dir))) {
-    ret = convert_sys_errno();
-    PALF_LOG(ERROR, "open_directory failed", K(ret), K(log_dir));
+  } else if (OB_FAIL(directory_error(directory_->open_directory(
+                 {reinterpret_cast<const uint8_t *>(log_dir), strlen(log_dir)}), log_dir))) {
   } else if (OB_FAIL(curr_writable_handler_.init(log_block_size, align_size, align_buf_size, io_adapter))) {
   } else if (OB_FAIL(do_scan_dir_(log_dir, initial_block_id, log_block_pool))) {
-  } else if (OB_FAIL(try_recovery_last_block_(log_dir, log_block_size))) {
+
   } else {
     MEMCPY(log_dir_, log_dir, OB_MAX_FILE_NAME_LENGTH);
     log_block_size_ = log_block_size;
@@ -114,10 +97,7 @@ void LogBlockMgr::destroy()
   is_inited_ = false;
   align_size_ = -1;
   align_buf_size_ = -1;
-  if (-1 != dir_fd_) {
-    close_with_ret(dir_fd_);
-    dir_fd_ = -1;
-  }
+  directory_ = file_io::new_directory_handle();
   log_block_pool_ = NULL;
   curr_writable_handler_.destroy();
   curr_writable_block_id_ = LOG_INVALID_BLOCK_ID;
@@ -135,21 +115,32 @@ int LogBlockMgr::switch_next_block(const block_id_t next_block_id)
   char tmp_block_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (true == is_valid_block_id(curr_writable_block_id_) && next_block_id != curr_writable_block_id_ + 1) {
+  } else if (!is_valid_block_id(next_block_id)
+      || (next_block_id != max_block_id_ && next_block_id + 1 != max_block_id_)
+      || (is_valid_block_id(curr_writable_block_id_)
+          && next_block_id != curr_writable_block_id_ && next_block_id != curr_writable_block_id_ + 1)) {
     ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(ERROR, "block_id is not continous, unexpected error", K(ret), K(next_block_id), K(curr_writable_block_id_));
+    PALF_LOG(ERROR, "block_id is not continuous", K(ret), K(next_block_id), K(curr_writable_block_id_), K(max_block_id_));
   } else if (OB_FAIL(block_id_to_string(next_block_id, block_path, OB_MAX_FILE_NAME_LENGTH))) {
   } else if (OB_FAIL(block_id_to_tmp_string(next_block_id, tmp_block_path, OB_MAX_FILE_NAME_LENGTH))) {
-  } else if (OB_FAIL(log_block_pool_->create_block_at(dir_fd_, tmp_block_path, log_block_size_))) {
-  } else if (OB_FAIL(do_rename_and_fsync_(tmp_block_path, block_path))) {
-  } else if (OB_FAIL(construct_absolute_block_path(log_dir_, next_block_id, OB_MAX_FILE_NAME_LENGTH, block_path))) {
-  } else if (OB_FAIL(curr_writable_handler_.switch_next_block(block_path))) {
-  } else {
-    curr_writable_block_id_ = next_block_id;
-    ObSpinLockGuard guard(block_id_cache_lock_);
-    // NB: just only set 'max_block_id_' is continous with 'prev_block_id'.
-    max_block_id_ = next_block_id + 1;
-    PALF_LOG(INFO, "switch_next_block success", KPC(this));
+  } else if (next_block_id == max_block_id_) {
+    if (OB_FAIL(log_block_pool_->create_and_publish_block_at(
+        *directory_, tmp_block_path, block_path, log_block_size_))) {
+    } else {
+      ObSpinLockGuard guard(block_id_cache_lock_);
+      max_block_id_ = next_block_id + 1;
+    }
+  }
+  if (OB_SUCC(ret) && curr_writable_block_id_ != next_block_id) {
+    if (OB_FAIL(construct_absolute_block_path(log_dir_, next_block_id, OB_MAX_FILE_NAME_LENGTH, block_path))) {
+    } else {
+      curr_writable_block_id_ = LOG_INVALID_BLOCK_ID;
+      if (OB_FAIL(curr_writable_handler_.switch_next_block(block_path))) {
+      } else {
+        curr_writable_block_id_ = next_block_id;
+        PALF_LOG(INFO, "switch_next_block success", KPC(this));
+      }
+    }
   }
   return ret;
 }
@@ -242,17 +233,16 @@ int LogBlockMgr::delete_block(block_id_t block_id)
     ret = OB_ERR_UNEXPECTED;
     PALF_LOG(ERROR, "the block to be delted is not continous with min block", K(ret), K(block_id), K(tmp_min_block_id));
   } else {
-    // when there is no block on disk, need close curr_writable_handler_, otherwise, the next write will be failed.
-    {
-      ObSpinLockGuard guard(block_id_cache_lock_);
-      min_block_id_++;
-    }
-    if (min_block_id_ == max_block_id_) {
-      curr_writable_handler_.close();
-      curr_writable_block_id_ = LOG_INVALID_BLOCK_ID;
-    }
     if (OB_FAIL(do_delete_block_(block_id))) {
     } else {
+      {
+        ObSpinLockGuard guard(block_id_cache_lock_);
+        ++min_block_id_;
+      }
+      if (min_block_id_ == max_block_id_) {
+        curr_writable_handler_.close();
+        curr_writable_block_id_ = LOG_INVALID_BLOCK_ID;
+      }
       PALF_LOG(INFO, "delete_block success", K(ret), K(block_id));
     }
   }
@@ -265,6 +255,8 @@ int LogBlockMgr::load_block_handler(const block_id_t block_id, const offset_t of
   char block_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
   // just only load last not aligned data.
   if (OB_FAIL(construct_absolute_block_path(log_dir_, block_id, OB_MAX_FILE_NAME_LENGTH, block_path))) {
+  } else if (FALSE_IT(curr_writable_block_id_ = LOG_INVALID_BLOCK_ID)) {
+  } else if (OB_FAIL(curr_writable_handler_.close())) {
   } else if (OB_FAIL(curr_writable_handler_.open(block_path))) {
   } else if (OB_FAIL(curr_writable_handler_.load_data(offset))) {
   } else {
@@ -288,17 +280,18 @@ int LogBlockMgr::do_truncate_(const block_id_t block_id,
   int ret = OB_SUCCESS;
 	char block_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
   if (OB_FAIL(delete_block_from_back_to_front_until_(block_id))) {
-  } else if (block_id != curr_writable_block_id_) {
-		ret = OB_ERR_UNEXPECTED;
-		PALF_LOG(ERROR, "unexpected error, block id is not same sa curr_writable_block_id_", K(ret),
-				KPC(this), K(block_id));
+  } else if (block_id + 1 != max_block_id_) {
+    ret = OB_ERR_UNEXPECTED;
+    PALF_LOG(ERROR, "truncate target is not the last surviving block", K(ret), K(block_id), K(max_block_id_));
   } else if (OB_FAIL(construct_absolute_block_path(log_dir_, block_id, OB_MAX_FILE_NAME_LENGTH, block_path))) {
+  } else if (FALSE_IT(curr_writable_block_id_ = LOG_INVALID_BLOCK_ID)) {
   } else if (OB_FAIL(curr_writable_handler_.close())) {
   }  else if (OB_FAIL(curr_writable_handler_.open(block_path))) {
   } else if (OB_FAIL(curr_writable_handler_.truncate(offset))) {
   } else if (OB_FAIL(check_after_truncate_(block_path, offset))) {
   } else if (OB_FAIL(curr_writable_handler_.load_data(offset))) {
   } else {
+    curr_writable_block_id_ = block_id;
     PALF_LOG(INFO, "do_truncate_ success", K(ret), K(block_id), K(offset), K(min_block_id_), K(max_block_id_));
   }
 
@@ -318,19 +311,10 @@ int LogBlockMgr::check_after_truncate_(const char *block_path, const offset_t of
   // The min length of PADDING is 4K, therefore, read_offset may be 64MB-4KB,
   // in_read_size is 4K, otherwise, in_read_size is 8K.
   const int in_read_size = MIN(buf_len, log_block_size_-read_offset);
-  const int64_t RETRY_INTERVAL = 10 * 1000;
   OB_ASSERT(backoff < LOG_DIO_ALIGN_SIZE);
-  
-  do {
-    if (OB_FAIL(io_adapter_->open(block_path, LOG_READ_FLAG, FILE_OPEN_MODE, io_fd))) {
-      PALF_LOG(ERROR, "open by io_adapter failed", KPC(this), K(block_path));
-      ob_usleep(RETRY_INTERVAL);
-    } else {
-      ret = OB_SUCCESS;
-    }
-  } while (OB_FAIL(ret));
-  
-  if (OB_FAIL(ret)) {
+
+  if (OB_FAIL(io_adapter_->open(block_path, LOG_READ_FLAG, FILE_OPEN_MODE, io_fd))) {
+    PALF_LOG(ERROR, "open by io_adapter failed", K(ret), KPC(this), K(block_path));
   } else if (NULL == (expected_data = \
       reinterpret_cast<char*>(ob_malloc(buf_len, "LogBlockMgr")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -352,8 +336,12 @@ int LogBlockMgr::check_after_truncate_(const char *block_path, const offset_t of
     PALF_LOG(INFO, "check_after_truncate_ success", KPC(this), K(block_path), K(offset));
   }
   
-  if (!io_fd.is_valid() && OB_FAIL(io_adapter_->close(io_fd))) {
-    PALF_LOG(ERROR, "io_adapter close failed", KPC(this), K(block_path));
+  if (io_fd.is_valid()) {
+    const int close_ret = io_adapter_->close(io_fd);
+    if (close_ret != OB_SUCCESS) {
+      if (ret == OB_SUCCESS) ret = close_ret;
+      PALF_LOG(ERROR, "io_adapter close failed", K(close_ret), KPC(this), K(block_path));
+    }
   }
   if (NULL != buf) {
     ob_free_align(buf);
@@ -371,13 +359,16 @@ int LogBlockMgr::delete_block_from_back_to_front_until_(const block_id_t block_i
   block_id_t curr_block_id = max_block_id_ - 1;
   for (; true == is_valid_block_id(curr_block_id) && curr_block_id > block_id && OB_SUCC(ret);
          curr_block_id--) {
-    {
-      ObSpinLockGuard guard(block_id_cache_lock_);
-      max_block_id_--;
-    }
     if (OB_FAIL(do_delete_block_(curr_block_id))) {
     } else {
-			curr_writable_block_id_ = block_id;
+      {
+        ObSpinLockGuard guard(block_id_cache_lock_);
+        --max_block_id_;
+      }
+      if (curr_writable_block_id_ == curr_block_id) {
+        curr_writable_handler_.close();
+        curr_writable_block_id_ = LOG_INVALID_BLOCK_ID;
+      }
     }
   }
   return ret;
@@ -391,7 +382,7 @@ int LogBlockMgr::do_delete_block_(const block_id_t block_id)
   if (OB_FAIL(block_id_to_string(block_id, block_path, OB_MAX_FILE_NAME_LENGTH))) {
   } else if (OB_FAIL(block_id_to_tmp_string(block_id, tmp_block_path, OB_MAX_FILE_NAME_LENGTH))) {
   } else if (OB_FAIL(do_rename_and_fsync_(block_path, tmp_block_path))) {
-  } else if (OB_FAIL(log_block_pool_->remove_block_at(dir_fd_, tmp_block_path))) {
+  } else if (OB_FAIL(log_block_pool_->remove_block_at(*directory_, tmp_block_path, true))) {
   } else {
     PALF_LOG(INFO, "do_delete_block_ success", K(ret), KPC(this));
   }
@@ -428,46 +419,12 @@ int LogBlockMgr::do_scan_dir_(const char *dir,
 
 int LogBlockMgr::do_rename_and_fsync_(const char *old_block_path, const char *new_block_path)
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(renameat_with_retry(dir_fd_, old_block_path, dir_fd_, new_block_path))) {
-  } else if (OB_FAIL(fsync_with_retry(dir_fd_))) {
-  } else {}
-  return ret;
+  return log_block_pool_->rename_block_at(*directory_, old_block_path, new_block_path);
 }
 
 bool LogBlockMgr::empty_() const
 {
   return  min_block_id_ == max_block_id_;
-}
-
-int LogBlockMgr::try_recovery_last_block_(const char *log_dir,
-                                          const int64_t log_block_size)
-{
-  int ret = OB_SUCCESS;
-  int64_t file_size = 0;
-  char block_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-  block_id_t block_id = max_block_id_ - 1;
-  int fd = -1;
-  if (true == empty_()) {
-    PALF_LOG(INFO, "dir is empty, no need to recovery last block");
-  } else if (OB_FAIL(convert_to_normal_block(log_dir, block_id, block_path, OB_MAX_FILE_NAME_LENGTH))) {
-  } else if (OB_FAIL(FileDirectoryUtils::get_file_size(block_path, file_size))) {
-  } else if (file_size == log_block_size) {
-    PALF_LOG(INFO, "last block no need to recovery", K(block_id));
-#ifdef _WIN32
-  } else if (-1 == ob_win_truncate(block_path, log_block_size)) {
-#else
-  } else if (-1 == ::truncate(block_path, log_block_size)) {
-#endif
-    ret = convert_sys_errno();
-    PALF_LOG(ERROR, "ftruncate failed", K(ret), KPC(this), K(file_size));
-  } else {
-    PALF_LOG(INFO, "try_recovery_last_block_ success", "origin_size", file_size);
-  }
-  if (-1 != fd) {
-    ::close(fd);
-  }
-  return ret;
 }
 
 } // end of logservice

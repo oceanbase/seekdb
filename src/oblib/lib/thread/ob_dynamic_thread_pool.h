@@ -112,7 +112,9 @@ public:
   virtual int64_t worker_count() const = 0;
   virtual void notify_stop() {}
 
-  TO_STRING_KV(KCSTRING_(name), KP(this), K_(min_thread_cnt), K_(max_thread_cnt));
+  int64_t min_thread_count() const { return ATOMIC_LOAD(&min_thread_cnt_); }
+  int64_t max_thread_count() const { return ATOMIC_LOAD(&max_thread_cnt_); }
+  TO_STRING_KV(KCSTRING_(name), KP(this), "min_thread_cnt", min_thread_count(), "max_thread_cnt", max_thread_count());
 
   bool has_bind_;
   int64_t min_thread_cnt_;

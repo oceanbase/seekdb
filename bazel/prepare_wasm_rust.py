@@ -53,6 +53,9 @@ def prepare_workspace(repo, build, spec):
     (dependency / spec["path"]).write_bytes(data)
     (workspace / ".cargo").mkdir()
     (workspace / ".cargo/config.toml").write_text(
+        'target-applies-to-host = false\n'
+        '[unstable]\nhost-config = true\ntarget-applies-to-host = true\n'
+        '[host]\nrustflags = ' + json.dumps(["--sysroot", str(build / "sysroot")]) + '\n'
         '[patch.crates-io]\nspdlog-rs = { path = ' + json.dumps(str(dependency)) + ' }\n'
     )
     # Resolve the path patch offline before the subsequent --locked build.

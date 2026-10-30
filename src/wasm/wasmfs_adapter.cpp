@@ -36,6 +36,8 @@
 #include <emscripten/emscripten.h>
 #include <emscripten/wasmfs.h>
 #include <wasi/api.h>
+#include "paths.h"
+#include "wasmfs.h"
 
 extern "C" backend_t seekdb_create_memory_backend();
 
@@ -62,6 +64,36 @@ bool wal_index_file(const char *path)
 {
   const size_t length = std::strlen(path);
   return length >= 4 && std::strcmp(path + length - 4, "-shm") == 0;
+}
+
+int absolute_entry_path(int dirfd, const char *path, std::string &result)
+{
+  auto parsed = wasmfs::path::parseParent(path, dirfd);
+  if (const auto error = parsed.getError()) return error;
+  auto [current, leaf] = parsed.getParentChild();
+  result = leaf;
+  while (current != wasmfs::wasmFS.getRootDirectory()) {
+    auto parent = current->locked().getParent();
+    if (!parent) return -ENOENT;
+    auto locked_parent = parent->locked();
+    std::string name = locked_parent.getName(current);
+    if (name.empty()) {
+      // WasmFS getName omits mounts on backends that maintain their own identity.
+      auto entries = locked_parent.getEntries();
+      if (const auto error = entries.getError()) return error;
+      for (const auto &entry : *entries) {
+        if (locked_parent.getChild(entry.name) == current) {
+          name = entry.name;
+          break;
+        }
+      }
+    }
+    if (name.empty()) return -ENOENT;
+    result = name + "/" + result;
+    current = parent;
+  }
+  result.insert(0, "/");
+  return 0;
 }
 
 int move_directory_tree(const std::string &from, const std::string &to)
@@ -294,10 +326,17 @@ int __wrap___syscall_fcntl64(int fd, int cmd, ...)
 int __wrap___syscall_renameat(int olddirfd, intptr_t oldpath, int newdirfd, intptr_t newpath)
 {
   int ret = __real___syscall_renameat(olddirfd, oldpath, newdirfd, newpath);
-  if ((ret == -EBUSY || ret == -ENOTEMPTY) && text(oldpath)[0] == '/' && text(newpath)[0] == '/') {
+  if (ret == -EBUSY || ret == -ENOTEMPTY) {
     struct stat info;
-    if (stat(text(oldpath), &info) == 0 && S_ISDIR(info.st_mode)) {
+    if (fstatat(olddirfd, text(oldpath), &info, 0) == 0 && S_ISDIR(info.st_mode)) {
       std::lock_guard<std::mutex> lock(directory_move_mutex);
+      std::string source;
+      std::string destination;
+      const int source_error = absolute_entry_path(olddirfd, text(oldpath), source);
+      const int destination_error = absolute_entry_path(newdirfd, text(newpath), destination);
+      if (source_error != 0 || destination_error != 0) {
+        return source_error != 0 ? source_error : destination_error;
+      }
       std::string from;
       std::string to;
       int journal_ret = read_recorded_move(from, to);
@@ -306,14 +345,14 @@ int __wrap___syscall_renameat(int olddirfd, intptr_t oldpath, int newdirfd, intp
           && unlink(MOVE_JOURNAL) == 0) {
         journal_ret = -ENOENT;
       }
-      bool recorded = journal_ret == 0 && from == text(oldpath) && to == text(newpath);
+      bool recorded = journal_ret == 0 && from == source && to == destination;
       if (!recorded && ret == -EBUSY && journal_ret == -ENOENT) {
-        recorded = record_move(text(oldpath), text(newpath));
+        recorded = record_move(source.c_str(), destination.c_str());
       }
       if (recorded) {
-        ret = move_directory_tree(text(oldpath), text(newpath));
+        ret = move_directory_tree(source, destination);
         if (ret == 0) unlink(MOVE_JOURNAL);
-        std::fprintf(stderr, "seekdb-runtime: emulated directory move %s -> %s: %d\n", text(oldpath), text(newpath), ret);
+        std::fprintf(stderr, "seekdb-runtime: emulated directory move %s -> %s: %d\n", source.c_str(), destination.c_str(), ret);
       }
     }
   }

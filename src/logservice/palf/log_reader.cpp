@@ -149,16 +149,9 @@ int LogReader::inner_pread_(const ObIOFd &read_io_fd,
     ret = OB_BUF_NOT_ENOUGH;
     PALF_LOG(WARN, "buffer not enough to hold read result");
   } else {
-    int64_t retry_interval = 10 * 1000L;
-    do {
-      if (OB_FAIL(io_adapter_->pread(read_io_fd, limited_and_aligned_in_read_size, aligned_start_offset, read_buf, out_read_size, io_ctx))) {
-        PALF_LOG(WARN, "pread failed", K(ret), K(read_io_fd), K(aligned_start_offset), K(limited_and_aligned_in_read_size), K(backoff), K(errno), K(out_read_size));
-        if (OB_ALLOCATE_MEMORY_FAILED == ret) {
-          ret = OB_EAGAIN;
-          ob_usleep(retry_interval);
-        }
-      }
-    } while (OB_EAGAIN == ret);
+    if (OB_FAIL(io_adapter_->pread(read_io_fd, limited_and_aligned_in_read_size, aligned_start_offset, read_buf, out_read_size, io_ctx))) {
+      PALF_LOG(WARN, "pread failed", K(ret), K(read_io_fd), K(aligned_start_offset), K(limited_and_aligned_in_read_size), K(backoff), K(errno), K(out_read_size));
+    }
 
     if (OB_SUCC(ret)) {
       io_ctx.inc_read_io_cnt();

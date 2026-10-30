@@ -249,10 +249,13 @@ int LogIOAdapter::pread(const ObIOFd &io_fd,
   } else if (!io_fd.is_valid() || OB_ISNULL(buf) || 0 > count || 0 > offset) {
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argument", K(io_fd), KP(buf), K(count), K(offset));
-  } else if (count != (out_read_size = ob_pread(io_fd.second_id_, buf, count, offset))) {
-    ret = convert_sys_errno();
-    PALF_LOG(WARN, "ob_pread failed", K(ret), K(errno), K(offset), K(count), K(out_read_size), K(io_fd));
-  } else {
+  } else if (OB_ISNULL(io_fd.device_handle_)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(io_fd.device_handle_->pread(io_fd, offset, count, buf, out_read_size))) {
+    PALF_LOG(WARN, "pread failed", K(ret), K(offset), K(count), K(out_read_size), K(io_fd));
+  } else if (count != out_read_size) {
+    ret = OB_IO_ERROR;
+    PALF_LOG(WARN, "short pread", K(ret), K(offset), K(count), K(out_read_size), K(io_fd));
   }
   return ret;
 }                                          
@@ -263,13 +266,10 @@ int LogIOAdapter::truncate(const ObIOFd &io_fd, const int64_t offset)
   if (!io_fd.is_valid() || 0 > offset) {
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argument", K(io_fd), K(offset));
-#ifdef _WIN32
-  } else if (0 != ob_ftruncate(io_fd.second_id_, offset)) {
-#else
-  } else if (0 != ftruncate(io_fd.second_id_, offset)) {
-#endif
-    ret = convert_sys_errno();
-    PALF_LOG(WARN, "ftruncate failed", K(ret), K(errno), K(io_fd), K(offset));
+  } else if (OB_ISNULL(io_fd.device_handle_)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(io_fd.device_handle_->ftruncate(io_fd, offset))) {
+    PALF_LOG(WARN, "ftruncate failed", K(ret), K(io_fd), K(offset));
   }
   return ret;
 }

@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX CLOG
+#include "lib/file/path_operations.h"
 #include "ob_log_service.h"
 #include "logservice/palf_handle_guard.h"
 #include "logservice/ob_log_allocator_mgr.h"
@@ -89,7 +90,7 @@ int ObLogService::server_module_init(
                                       is_shared_storage_mode,
                                       replay_thread_quota,
                                       runtime_config))) {
-  } else if (OB_FAIL(FileDirectoryUtils::fsync_dir(clog_dir))) {
+  } else if (OB_FAIL(path_operations::fsync_dir(clog_dir))) {
   } else {
     CLOG_LOG(INFO, "ObLogService server_module_init success");
   }
@@ -149,10 +150,10 @@ int check_and_prepare_dir(const char *dir)
 {
   bool is_exist = false;
   int ret = OB_SUCCESS;
-  if (OB_FAIL(common::FileDirectoryUtils::is_exists(dir, is_exist))) {
+  if (OB_FAIL(common::path_operations::is_exists(dir, is_exist))) {
   } else if (is_exist == true) {
     CLOG_LOG(INFO, "director exist", K(ret), K(dir));
-  } else if (OB_FAIL(common::FileDirectoryUtils::create_directory(dir))) {
+  } else if (OB_FAIL(common::path_operations::create_directory(dir))) {
   } else {
     CLOG_LOG(INFO, "check_and_prepare_dir success", K(ret), K(dir));
   }

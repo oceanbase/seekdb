@@ -282,7 +282,6 @@ cc_library(
         ":oblib_encoding_primitives",
         ":oblib_foundation",
         ":oblib_memory_primitives",
-        "//bazel/third_party:libaio_headers",
         "//bazel/third_party:rapidjson_headers",
     ],
     includes = ["."],
@@ -453,9 +452,7 @@ cc_library(
     hdrs = [
         "common/log/ob_log_constants.h",
         "common/log/ob_log_cursor.h",
-        "common/log/ob_log_data_writer.h",
         "common/log/ob_log_entry.h",
-        "common/log/ob_log_generator.h",
     ],
     deps = [
         ":oblib_base",
@@ -550,7 +547,7 @@ cc_library(
 cc_library(
     name = "oblib_io_primitives",
     hdrs = [
-        "lib/file/file_directory_utils.h",
+        "lib/file/path_operations.h",
         "lib/file/ob_string_util.h",
         "lib/file/wasm_file.h",
     ],
@@ -681,9 +678,6 @@ cc_library(
 
 _OBLIB_PRIVATE_HEADERS = [
     "common/cell/ob_cell_reader.h",
-    "common/log/ob_log_dir_scanner.h",
-    "common/log/ob_log_reader.h",
-    "common/log/ob_single_log_reader.h",
     "common/ob_file_common_header.h",
     "common/row/ob_row_checksum.h",
     "common/timezone/ob_time_format.h",
@@ -796,7 +790,6 @@ cc_library(
         ":oblib_rpc",
         ":oblib_vector",
         "//bazel/third_party:curl_headers",
-        "//bazel/third_party:libaio_headers",
         "//bazel/third_party:libxml2_headers",
         "//bazel/third_party:mariadb_headers",
         "//bazel/third_party:openssl_headers",
@@ -875,6 +868,7 @@ grouped_unity_cc_library(
         ":_oblib_implementation_headers",
         ":oblib_foundation",
         "//rust:logger",
+        "//rust:file_io",
         "//bazel/third_party:fast_float_headers",
     ],
     copts = OBLIB_CXX_COPTS + openmp_copts(),
@@ -1232,6 +1226,7 @@ cc_library(
     name = "oblib_test_runtime",
     testonly = True,
     deps = [
+        "//rust:sql_nio",
         ":_malloc_hook_impl",
         ":_ob_malloc_impl",
         ":_oblib_bitmap_impl",

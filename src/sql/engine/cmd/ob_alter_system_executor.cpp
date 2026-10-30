@@ -243,16 +243,6 @@ int ObRefreshIOCalibraitonExecutor::execute(ObExecContext &ctx, ObRefreshIOCalib
     LOG_WARN("get task executor context failed");
   } else if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (!param.only_refresh_) {
-    ObIOAbility io_ability;
-    for (int64_t i = 0; OB_SUCC(ret) && i < param.calibration_list_.count(); ++i) {
-      const ObIOBenchResult &item = param.calibration_list_.at(i);
-      if (OB_FAIL(io_ability.add_measure_item(item))) {
-      }
-    }
-    if (OB_SUCC(ret) && param.calibration_list_.count() > 0 && !io_ability.is_valid()) {
-      ret = OB_INVALID_ARGUMENT;
-    }
   }
   if (OB_SUCC(ret) && OB_FAIL(ObIOCalibration::get_instance().refresh(
                                  param.only_refresh_, param.calibration_list_))) {

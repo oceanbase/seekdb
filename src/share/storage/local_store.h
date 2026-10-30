@@ -16,6 +16,8 @@
 
 #include "rust/local.h"
 #include "lib/ob_define.h"
+#include "lib/oblog/ob_log.h"
+#include "lib/string/ob_string.h"
 #include <algorithm>
 #include <cstring>
 #include <functional>
@@ -262,6 +264,23 @@ public:
     if (!path) { return OB_INVALID_ARGUMENT; }
     auto store = local::open_storage(rust::Str(path));
     const int ret = local_status(store->status());
+    auto summary = store->directory_summary();
+    if (summary.count != 0) {
+      SHARE_LOG(WARN, "directory durability unconfirmed; only first failure detail retained", K(ret),
+          "failed_flush_count", summary.count, "count_is_lower_bound", summary.count == UINT64_MAX,
+          "first_path", common::ObString(static_cast<int32_t>(summary.first_path.size()),
+              reinterpret_cast<const char *>(summary.first_path.data())),
+          "native_domain", static_cast<int>(summary.first_error.domain),
+          "native_error", summary.first_error.native_code, "error", summary.first_error.message.c_str());
+    }
+    if (OB_SUCCESS != ret) {
+      auto detail = store->open_error();
+      const auto sync = store->open_sync_error();
+      SHARE_LOG(WARN, "local storage open failed", K(ret), K(path), "error", detail.c_str(),
+          "sync_stage", static_cast<int>(sync.stage), "native_domain", static_cast<int>(sync.primary.domain),
+          "native_error", sync.primary.native_code, "close_domain", static_cast<int>(sync.close.domain),
+          "close_error", sync.close.native_code);
+    }
     if (OB_SUCCESS == ret) { store_.emplace(std::move(store)); }
     return ret;
   }

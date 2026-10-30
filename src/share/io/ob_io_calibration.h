@@ -17,31 +17,15 @@
 #ifndef OCEANBASE_SHARE_IO_OB_IO_CALIBRATION_H
 #define OCEANBASE_SHARE_IO_OB_IO_CALIBRATION_H
 
-#include "lib/thread/threads.h"
-#include "lib/queue/ob_fixed_queue.h"
 #include "lib/container/ob_array_iterator.h"
 #include "lib/container/ob_array_wrap.h"
-#include "lib/lock/ob_drw_lock.h"
+#include "rust/storage_io.h"
 #include "share/io/ob_io_define.h"
-#include "share/io/ob_i_io_bench_controller.h"
 
 namespace oceanbase
 {
 namespace common
 {
-
-struct ObIOBenchLoad final
-{
-public:
-  ObIOBenchLoad();
-  ~ObIOBenchLoad();
-  void reset();
-  bool is_valid() const;
-  TO_STRING_KV(K(mode_), K(size_));
-public:
-  ObIOMode mode_;
-  int64_t size_;
-};
 
 struct ObIOBenchResult final
 {
@@ -60,58 +44,24 @@ public:
   double rt_us_;
 };
 
-struct ObIOAbility final
-{
-public:
-  typedef ObArray<ObIOBenchResult> MeasureItemArray;
-  ObIOAbility();
-  ~ObIOAbility();
-  void reset();
-  bool is_valid() const;
-  int assign(const ObIOAbility &other);
-  bool operator==(const ObIOAbility &other) const;
-  int add_measure_item(const ObIOBenchResult &item);
-  const MeasureItemArray &get_measure_items(const ObIOMode mode) const;
-  int get_iops(const ObIOMode mode, const int64_t size, double&iops) const;
-  int get_rt(const ObIOMode mode, const int64_t size, double&rt_us) const;
-  TO_STRING_KV("measure_items", ObArrayWrap<MeasureItemArray>(measure_items_, (int)ObIOMode::MAX_MODE));
-private:
-  int find_item(const ObIOMode mode, const int64_t size, int64_t &item_idx) const;
-private:
-  MeasureItemArray measure_items_[static_cast<int>(ObIOMode::MAX_MODE)];
-  
-};
-
-/**
- * load benchmark result file from the config directory
- */
 class ObIOCalibration final
 {
 public:
   static ObIOCalibration &get_instance();
   static int parse_calibration_string(const ObString &calibration_string, ObIOBenchResult &item);
-  int init(ObIIOBenchController &benchmark_controller);
+  int init();
   void destroy();
-  int update_io_ability(const ObIOAbility &io_ability);
-  int reset_io_ability();
-  int get_io_ability(ObIOAbility &io_ability);
-  void get_iops_scale(const ObIOMode mode, const int64_t size, double &iops_scale, bool &is_io_ability_valid);
+  int replace(const ObIArray<ObIOBenchResult> &items);
+  int reset_calibration();
+  rust::Box<storage_io::CalibrationView> snapshot() const;
+  bool is_initialized() const { return is_inited_; }
   int refresh(const bool only_refresh, const ObIArray<ObIOBenchResult> &items);
-  int execute_benchmark();
-  int get_benchmark_status(int64_t &start_ts, int64_t &finish_ts, int &ret_code);
-  bool is_valid() { DRWLock::RDLockGuard guard(lock_); return io_ability_.is_valid(); }
 private:
   ObIOCalibration();
   ~ObIOCalibration();
   DISALLOW_COPY_AND_ASSIGN(ObIOCalibration);
 private:
-  static const ObIOMode BASELINE_IO_MODE = ObIOMode::READ;
-  static const int64_t BASELINE_IO_SIZE = 16L * 1024L;
   bool is_inited_;
-  double baseline_iops_;
-  ObIOAbility io_ability_;
-  DRWLock lock_;
-  ObIIOBenchController *benchmark_controller_;
 };
 
 }// end namespace oceanbase

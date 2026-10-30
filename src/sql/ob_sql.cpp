@@ -2379,7 +2379,7 @@ int ObSql::generate_plan(ParseResult &parse_result,
     }
 
     ObSQLSessionInfo *session_info = result.get_exec_context().get_my_session();
-    BEGIN_OPT_TRACE(session_info, ObString(strlen(sql_ctx.sql_id_), sql_ctx.sql_id_));
+    BEGIN_OPT_TRACE(session_info, ObString(strlen(sql_ctx.sql_id_), sql_ctx.sql_id_), ret);
     OPT_TRACE_ENV;
     OPT_TRACE_SESSION_INFO;
     OPT_TRACE_PARAMETERS;
@@ -2447,7 +2447,7 @@ int ObSql::generate_plan(ParseResult &parse_result,
         LOG_INFO("ddl stmt:", KPC(stmt));
       }
     }
-    END_OPT_TRACE(session_info);
+    END_OPT_TRACE(session_info, ret);
     if (OB_SUCC(ret)) {
       ObSqlPlan sql_plan(result.get_mem_pool());
       if (stmt->is_explain_stmt()) {

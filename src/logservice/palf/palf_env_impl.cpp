@@ -15,11 +15,8 @@
  */
 
 #define USING_LOG_PREFIX PALF
+#include "lib/file/path_operations.h"
 #include "palf_env_impl.h"
-#include <cinttypes>
-#ifdef _WIN32
-#include <direct.h>
-#endif
 #include "palf_handle.h"
 #include "share/ob_local_device.h"                            // ObLocalDevice
 #include "share/io/ob_io_manager.h"                           // ObIOManager
@@ -42,12 +39,15 @@ void PalfHandleImplFactory::free(IPalfHandleImpl *palf_handle_impl)
 }
 
 
-int PalfDiskOptionsWrapper::init(const PalfDiskOptions &disk_opts)
+int PalfDiskOptionsWrapper::init(const PalfDiskOptions &disk_opts, ILogBlockPool *physical_pool)
 {
   int ret = OB_SUCCESS;
-  if (false == disk_opts.is_valid()) {
+  ObSpinLockGuard guard(disk_opts_lock_);
+  if (false == disk_opts.is_valid() || physical_pool == nullptr) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(physical_pool->set_capacity(disk_opts.log_disk_usage_limit_size_))) {
   } else {
+    physical_pool_ = physical_pool;
     disk_opts_for_recycling_blocks_ = disk_opts_for_stopping_writing_ = disk_opts;
     status_ = Status::NORMAL_STATUS;
     cur_unrecyclable_log_disk_size_ = 0;
@@ -64,6 +64,7 @@ void PalfDiskOptionsWrapper::reset()
   status_ = Status::INVALID_STATUS;
   cur_unrecyclable_log_disk_size_ = -1;
   sequence_ = -1;
+  physical_pool_ = nullptr;
 }
 
 int PalfDiskOptionsWrapper::update_disk_options(const PalfDiskOptions &disk_opts_for_recycling_blocks)
@@ -100,6 +101,12 @@ void PalfDiskOptionsWrapper::change_to_normal(const int64_t sequence)
 {
   ObSpinLockGuard guard(disk_opts_lock_);
   if (sequence_ == sequence && Status::SHRINKING_STATUS == status_)  {
+    const int ret = physical_pool_ == nullptr ? OB_NOT_INIT
+        : physical_pool_->set_capacity(disk_opts_for_recycling_blocks_.log_disk_usage_limit_size_);
+    if (ret != OB_SUCCESS) {
+      PALF_LOG(WARN, "physical capacity update failed", K(ret));
+      return;
+    }
     status_ = Status::NORMAL_STATUS;
     disk_opts_for_stopping_writing_ = disk_opts_for_recycling_blocks_;
     PALF_LOG(INFO, "change_to_normal", KPC(this));
@@ -119,6 +126,10 @@ int PalfDiskOptionsWrapper::update_disk_options_not_guarded_by_lock_(const PalfD
     ret = OB_INVALID_ARGUMENT;
   } else if (disk_opts_for_recycling_blocks_ == disk_opts_for_recycling_blocks) {
     PALF_LOG(INFO, "no need update disk options", K(ret), K(disk_opts_for_recycling_blocks_), K(disk_opts_for_recycling_blocks));
+  } else if (physical_pool_ == nullptr) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(physical_pool_->set_capacity(
+                 (curr_stop_write_limit_size > next_stop_write_limit_size ? curr_stop_write_limit_size : next_stop_write_limit_size)))) {
   } else {
     if (curr_stop_write_limit_size > next_stop_write_limit_size) {
       status_ = Status::SHRINKING_STATUS;
@@ -169,7 +180,6 @@ PalfEnvImpl::PalfEnvImpl() : palf_meta_lock_(common::ObLatchIds::PALF_ENV_LOCK),
                              is_running_(false)
 {
   log_dir_[0] = '\0';
-  tmp_log_dir_[0] = '\0';
 }
 
 PalfEnvImpl::~PalfEnvImpl()
@@ -208,14 +218,11 @@ int PalfEnvImpl::init(
   } else if (OB_FAIL(block_gc_timer_task_.init(this))) {
   } else if ((pret = snprintf(log_dir_, MAX_PATH_SIZE, "%s", base_dir)) && false) {
     ret = OB_ERR_UNEXPECTED;
-  } else if ((pret = snprintf(tmp_log_dir_, MAX_PATH_SIZE, "%s/tmp_dir", log_dir_)) && false) {
-    ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(ERROR, "error unexpected", K(ret));
   } else if (pret < 0 || pret >= MAX_PATH_SIZE) {
     ret = OB_BUF_NOT_ENOUGH;
     PALF_LOG(ERROR, "construct log path failed", K(ret), K(pret));
   } else if (OB_FAIL(log_loop_thread_.init(this))) {
-  } else if (OB_FAIL(disk_options_wrapper_.init(options.disk_options_))) {
+  } else if (OB_FAIL(disk_options_wrapper_.init(options.disk_options_, log_block_pool))) {
   } else if (OB_FAIL(io_adapter_.init(log_local_device, io_manager))) {
   } else {
     store_ = &store;
@@ -295,7 +302,6 @@ void PalfEnvImpl::destroy()
   disk_not_enough_print_interval_in_loop_thread_ = OB_INVALID_TIMESTAMP;
   self_.reset();
   log_dir_[0] = '\0';
-  tmp_log_dir_[0] = '\0';
   disk_options_wrapper_.reset();
   enable_log_cache_ = false;
   io_adapter_.destroy();
@@ -328,6 +334,7 @@ int PalfEnvImpl::create_palf_handle_impl_(const AccessMode &access_mode,
   int pret = 0;
   char base_dir[MAX_PATH_SIZE] = {'\0'};
   PalfHandleImpl *palf_handle_impl = NULL;
+  bool directory_created = false;
   const int64_t palf_epoch = ATOMIC_AAF(&last_palf_epoch_, 1);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -349,6 +356,7 @@ int PalfEnvImpl::create_palf_handle_impl_(const AccessMode &access_mode,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     PALF_LOG(WARN, "alloc palf_handle_impl failed", K(ret));
   } else if (OB_FAIL(create_directory(base_dir))) {
+  } else if (FALSE_IT(directory_created = true)) {
   } else if (OB_FAIL(palf_handle_impl->init(*store_, access_mode, palf_base_info,
       base_dir, log_alloc_mgr_, log_block_pool_,
       log_io_worker_wrapper_.get_log_io_worker(), &log_shared_queue_th_, this,
@@ -363,7 +371,7 @@ int PalfEnvImpl::create_palf_handle_impl_(const AccessMode &access_mode,
   if (OB_FAIL(ret) && NULL != palf_handle_impl) {
     PalfHandleImplFactory::free(palf_handle_impl);
     palf_handle_impl = NULL;
-    if (NULL == palf_handle_) {
+    if (NULL == palf_handle_ && directory_created) {
       remove_directory_while_exist_(base_dir);
     }
   }
@@ -422,79 +430,39 @@ void PalfEnvImpl::revert_palf_handle_impl(IPalfHandleImpl *ipalf_handle_impl)
 int PalfEnvImpl::create_directory(const char *base_dir)
 {
   int ret = OB_SUCCESS;
-  int pret = 0;
-  const mode_t mode = S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH;
-  char tmp_base_dir[MAX_PATH_SIZE] = {'\0'};
-  char log_dir[MAX_PATH_SIZE] = {'\0'};
-  if (0 > (pret = snprintf(tmp_base_dir, MAX_PATH_SIZE, "%s%s", base_dir, TMP_SUFFIX))) {
-    ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(ERROR, "snprinf failed", K(pret), K(base_dir));
-  } else if (0 > (pret = snprintf(log_dir, MAX_PATH_SIZE, "%s/log", tmp_base_dir))) {
-    ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(ERROR, "snprinf failed", K(pret), K(base_dir));
-#ifdef _WIN32
-  } else if (-1 == (::_mkdir(tmp_base_dir))) {
-#else
-  } else if (-1 == (::mkdir(tmp_base_dir, mode))) {
-#endif
-    ret = convert_sys_errno();
-    PALF_LOG(WARN, "mkdir failed", K(ret), K(errno), K(tmp_base_dir), K(base_dir));
-#ifdef _WIN32
-  } else if (-1 == (::_mkdir(log_dir))) {
-#else
-  } else if (-1 == (::mkdir(log_dir, mode))) {
-#endif
-    ret = convert_sys_errno();
-    PALF_LOG(WARN, "mkdir failed", K(ret), K(errno), K(tmp_base_dir), K(base_dir));
-  } else if (OB_FAIL(rename_with_retry(tmp_base_dir, base_dir))) {
-  } else if (OB_FAIL(FileDirectoryUtils::fsync_dir(log_dir_))) {
+  auto parent = file_io::new_directory_handle();
+  auto temporary = file_io::new_directory_handle();
+  std::string name;
+  if (OB_FAIL(open_parent_directory(base_dir, *parent, name))) return ret;
+  const std::string tmp_name = name + TMP_SUFFIX;
+  if (OB_FAIL(log_block_pool_->create_directory_at(*parent, tmp_name.c_str(), 0775))) {
+  } else if (OB_FAIL(directory_error(file_io::open_child_directory(*parent,
+      {reinterpret_cast<const uint8_t *>(tmp_name.data()), tmp_name.size()}, *temporary)))) {
+  } else if (OB_FAIL(log_block_pool_->create_directory_at(*temporary, "log", 0775))) {
+  } else if (OB_FAIL(log_block_pool_->rename_directory_at(*parent, tmp_name.c_str(), name.c_str()))) {
   } else {
-    PALF_LOG(INFO, "prepare_directory_for_creating_ls success", K(ret), K(base_dir));
-  }
-  if (OB_FAIL(ret)) {
-    remove_directory_while_exist_(tmp_base_dir);
-    remove_directory_while_exist_(base_dir);
+    PALF_LOG(INFO, "prepare_directory_for_creating_ls success", K(base_dir));
   }
   return ret;
 }
 
-// step:
-// 1. rename log directory to tmp directory.
-// 2. delete tmp directory.
-// NB: '%s.tmp' is invalid block or invalid directory, before the restart phase of PalfEnvImpl,
-//     need delete these tmp block or directory.
 int PalfEnvImpl::remove_directory(const char *log_dir)
 {
   int ret = OB_SUCCESS;
-  int pret = 0;
-  char tmp_log_dir[MAX_PATH_SIZE] = {'\0'};
-  if (0 > (pret = snprintf(tmp_log_dir, MAX_PATH_SIZE, "%s%s", log_dir, TMP_SUFFIX))) {
-    ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(ERROR, "snprintf failed", K(ret), K(pret), K(log_dir), K(tmp_log_dir));
-  } else if (OB_FAIL(rename_with_retry(log_dir, tmp_log_dir))) {
-  } else if (OB_FAIL(FileDirectoryUtils::fsync_dir(log_dir_))) {
+  auto parent = file_io::new_directory_handle();
+  std::string name;
+  if (OB_FAIL(open_parent_directory(log_dir, *parent, name))) return ret;
+  const std::string tmp_name = name + TMP_SUFFIX;
+  const std::string temporary_path = std::string(log_dir) + TMP_SUFFIX;
+  if (OB_FAIL(log_block_pool_->rename_directory_at(*parent, name.c_str(), tmp_name.c_str()))) {
   } else {
-    char active_dir[MAX_PATH_SIZE] = {'\0'};
+    char active_dir[MAX_PATH_SIZE] = {};
     snprintf(active_dir, sizeof(active_dir), "%s/log_stream", log_dir_);
     if (0 == strcmp(log_dir, active_dir) && OB_FAIL(meta_store::remove(*store_))) {
       return ret;
     }
-    bool result = true;
-    do {
-      if (OB_FAIL(FileDirectoryUtils::is_exists(tmp_log_dir, result))) {
-      } else if (!result) {
-        PALF_LOG(WARN, "directory not exists", KPC(this), K(log_dir));
-        break;
-      } else if (OB_FAIL(remove_directory_rec(tmp_log_dir, log_block_pool_))) {
-      } else {
-      }
-      if (OB_FAIL(ret) && true == result) {
-        PALF_LOG(WARN, "remove directory failed, may be physical disk full", K(ret), KPC(this));
-        ob_usleep(100*1000);
-      }
-    } while (OB_FAIL(ret));
+    ret = remove_directory_rec(temporary_path.c_str(), log_block_pool_);
   }
-  (void)FileDirectoryUtils::fsync_dir(log_dir_);
   PALF_LOG(WARN, "remove_directory finished", KR(ret), K(log_dir), KP(this));
   return ret;
 }
@@ -599,8 +567,6 @@ int PalfEnvImpl::try_recycle_blocks()
          PALF_LOG(INFO, "LOG_DISK_OPTION", K(disk_options_wrapper_));
        }
     }
-
-    (void)remove_stale_incomplete_palf_();
   }
   return ret;
 }
@@ -608,48 +574,6 @@ int PalfEnvImpl::try_recycle_blocks()
 bool PalfEnvImpl::check_disk_space_enough()
 {
   return true == ATOMIC_LOAD(&diskspace_enough_);
-}
-
-PalfEnvImpl::RemoveStaleIncompletePalfFunctor::RemoveStaleIncompletePalfFunctor(PalfEnvImpl *palf_env_impl)
-  : palf_env_impl_(palf_env_impl)
-{}
-
- PalfEnvImpl::RemoveStaleIncompletePalfFunctor::~RemoveStaleIncompletePalfFunctor()
-{
-  palf_env_impl_ = NULL;
-}
-
-int PalfEnvImpl::RemoveStaleIncompletePalfFunctor::func(const dirent *entry)
-{
-  int ret = OB_SUCCESS;
-  char *saveptr = NULL;
-  char file_name[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-  const char *d_name = entry->d_name;
-  MEMCPY(file_name, d_name, strlen(d_name));
-  char *tmp = strtok_r(file_name, "_", &saveptr);
-  char *timestamp_str = NULL;
-  if (NULL == tmp || NULL == (timestamp_str = strtok_r(NULL, "_", &saveptr))) {
-    ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(WARN, "unexpected format", K(ret), K(tmp), K(file_name));
-  } else {
-    int64_t timestamp = atol(timestamp_str);
-    int64_t current_timestamp = ObTimeUtility::current_time();
-    int64_t delta = current_timestamp - timestamp;
-    constexpr int64_t week_us = 7 * 24 * 60 * 60 * 1000 * 1000ll;
-    if (delta <= week_us) {
-    } else {
-      char path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-      int pret = OB_SUCCESS;
-      if (0 > (pret = snprintf(path, MAX_PATH_SIZE, "%s/%s", palf_env_impl_->tmp_log_dir_, d_name))) {
-        ret = OB_ERR_UNEXPECTED;
-        PALF_LOG(WARN, "snprintf failed", K(ret), K(file_name), K(d_name));
-      } else if (OB_FAIL(FileDirectoryUtils::delete_directory_rec(path))) {
-      } else {
-        PALF_LOG(WARN, "current incomplete palf has bee staled, delete it", K(timestamp), K(current_timestamp), K(path));
-      }
-    }
-  }
-  return ret;
 }
 
 int PalfEnvImpl::get_disk_usage(int64_t &used_size_byte, int64_t &total_usable_size_byte)
@@ -720,22 +644,21 @@ int PalfEnvImpl::reload_palf_handle_impl_()
   PalfHandleImpl *tmp_palf_handle_impl = nullptr;
   char base_dir[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
   int64_t start_ts = ObTimeUtility::current_time();
-  bool is_integrity = true;
   bool dir_exist = false;
   const int64_t palf_epoch = ATOMIC_AAF(&last_palf_epoch_, 1);
-  if (0 > (pret = snprintf(base_dir, MAX_PATH_SIZE, "%s/log_stream", log_dir_))) {
-    ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(WARN, "snprint failed", K(ret), K(pret));
-  } else if (OB_FAIL(FileDirectoryUtils::is_exists(base_dir, dir_exist))) {
+  if ((pret = snprintf(base_dir, sizeof(base_dir), "%s/log_stream", log_dir_)) < 0
+      || pret >= sizeof(base_dir)) {
+    ret = OB_BUF_NOT_ENOUGH;
+    PALF_LOG(WARN, "construct PALF directory path failed", K(ret), K(pret), K(log_dir_));
+  } else if (OB_FAIL(meta_store::check_directory(*store_, base_dir, dir_exist))) {
   } else if (!dir_exist) {
-    ret = meta_store::remove(*store_);
-    PALF_LOG(INFO, "palf directory does not exist", K(base_dir));
+    PALF_LOG(INFO, "new PALF has no directory or metadata", K(base_dir));
   } else if (NULL == (tmp_palf_handle_impl = PalfHandleImplFactory::alloc())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     PALF_LOG(WARN, "alloc ipalf_handle_impl failed", K(ret));
   } else if (OB_FAIL(tmp_palf_handle_impl->load(*store_, base_dir, log_alloc_mgr_,
           log_block_pool_, log_io_worker_wrapper_.get_log_io_worker(), &log_shared_queue_th_,
-          this, self_, palf_epoch, &io_adapter_, is_integrity))) {
+          this, self_, palf_epoch, &io_adapter_))) {
   } else {
     palf_handle_ = tmp_palf_handle_impl;
     (void) tmp_palf_handle_impl->set_monitor_cb(monitor_);
@@ -750,9 +673,6 @@ int PalfEnvImpl::reload_palf_handle_impl_()
       PalfHandleImplFactory::free(tmp_palf_handle_impl);
       tmp_palf_handle_impl = NULL;
     }
-  } else if (false == is_integrity) {
-    PALF_LOG(WARN, "log stream is incomplete");
-    ret = move_incomplete_palf_into_tmp_dir_();
   }
   return ret;
 }
@@ -767,6 +687,9 @@ int PalfEnvImpl::get_total_used_disk_space_(int64_t &total_used_disk_space,
     total_unrecyclable_disk_space = 0;
   } else if (OB_FAIL(palf_handle_->get_total_used_disk_space(
                  total_used_disk_space, total_unrecyclable_disk_space))) {
+  }
+  if (OB_SUCC(ret)) {
+    ret = log_block_pool_ == nullptr ? OB_NOT_INIT : log_block_pool_->get_disk_usage(total_used_disk_space);
   }
   return ret;
 }
@@ -836,64 +759,6 @@ int PalfEnvImpl::remove_palf_handle_impl_()
     PalfHandleImplFactory::free(palf_handle_);
     palf_handle_ = nullptr;
     PALF_LOG(INFO, "remove_palf_handle_impl success", K(ret));
-  }
-  return ret;
-}
-
-int PalfEnvImpl::move_incomplete_palf_into_tmp_dir_()
-{
-  int ret = OB_SUCCESS;
-  int pret = 0;
-  const mode_t mode = S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH;
-  char src_log_dir[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-  char dest_log_dir[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-  bool tmp_dir_exist = false;
-  int64_t timestamp = ObTimeUtility::current_time();
-  IPalfHandleImpl *old_handle = palf_handle_;
-  palf_handle_ = nullptr;
-  if (NULL != old_handle) {
-    PalfHandleImplFactory::free(old_handle);
-  }
-  if (OB_FAIL(check_tmp_log_dir_exist_(tmp_dir_exist))) {
-    PALF_LOG(WARN, "check_tmp_log_dir_exist_ failed", K(ret), KPC(this), K(tmp_log_dir_));
-#ifdef _WIN32
-  } else if (false == tmp_dir_exist && (-1 == ::_mkdir(tmp_log_dir_))) {
-#else
-  } else if (false == tmp_dir_exist && (-1 == ::mkdir(tmp_log_dir_, mode))) {
-#endif
-    ret = convert_sys_errno();
-    PALF_LOG(ERROR, "mkdir tmp log dir failed", K(ret), KPC(this), K(tmp_log_dir_));
-  } else if (0 > (pret = snprintf(src_log_dir, MAX_PATH_SIZE, "%s/log_stream", log_dir_))) {
-    ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(ERROR, "snprintf failed, unexpected error", K(ret));
-  } else if (0 > (pret = snprintf(dest_log_dir, MAX_PATH_SIZE, "%s/log_stream_%" PRId64, tmp_log_dir_, timestamp))) {
-    ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(ERROR, "snprintf failed, unexpected error", K(ret));
-  } else if (OB_FAIL(rename_with_retry(src_log_dir, dest_log_dir))) {
-  } else if (OB_FAIL(FileDirectoryUtils::fsync_dir(log_dir_))) {
-  } else if (OB_FAIL(meta_store::remove(*store_))) {
-  }
-  return ret;
-}
-
-int PalfEnvImpl::check_tmp_log_dir_exist_(bool &exist) const
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(FileDirectoryUtils::is_exists(tmp_log_dir_, exist))) {
-  } else {
-  }
-  return ret;
-}
-
-int PalfEnvImpl::remove_stale_incomplete_palf_()
-{
-  int ret = OB_SUCCESS;
-  bool exist = false;
-  RemoveStaleIncompletePalfFunctor functor(this);
-  if (OB_FAIL(check_tmp_log_dir_exist_(exist))) {
-  } else if (false == exist) {
-  } else if (OB_FAIL(scan_dir(tmp_log_dir_, functor))){
-  } else {
   }
   return ret;
 }
@@ -997,7 +862,7 @@ int PalfEnvImpl::remove_directory_while_exist_(const char *log_dir)
 {
   int ret = OB_SUCCESS;
   bool result = true;
-  if (OB_FAIL(FileDirectoryUtils::is_exists(log_dir, result))) {
+  if (OB_FAIL(path_operations::is_exists(log_dir, result))) {
   } else if (!result) {
     PALF_LOG(WARN, "directory not exist, remove_directory success!", K(log_dir), K(result));
   } else if (OB_FAIL(remove_directory(log_dir))) {

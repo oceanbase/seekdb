@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_RESV
+#include "lib/file/path_operations.h"
 #include "sql/resolver/cmd/ob_load_data_resolver.h"
 #include "src/sql/resolver/dml/ob_del_upd_resolver.h"
 #include "lib/json/ob_json_print_utils.h"
@@ -600,7 +601,6 @@ int ObLoadDataResolver::resolve_filename(ObLoadDataStmt *load_stmt, ParseNode *n
       if (ObLoadFileLocation::SERVER_DISK == load_args.load_file_storage_) {
         load_args.file_name_ = file_name;
         char *full_path_buf = nullptr;
-        char *actual_path = nullptr;
         ObArray<ObString> match_array;
         if (OB_ISNULL(full_path_buf = static_cast<char *>(allocator_->alloc(MAX_PATH_SIZE)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -650,14 +650,10 @@ int ObLoadDataResolver::resolve_filename(ObLoadDataStmt *load_stmt, ParseNode *n
             for (int32_t i = 0; OB_SUCC(ret) && i < match_array.size(); i++) {
               //security check for mysql mode
               ObString secure_file_priv;
-#ifdef _WIN32
-              if (OB_ISNULL(actual_path = _fullpath(full_path_buf, match_array[i].ptr(), PATH_MAX))) {
-#else
-              if (OB_ISNULL(actual_path = realpath(match_array[i].ptr(), full_path_buf))) {
-#endif
+              if (OB_SUCCESS != path_operations::resolve_path(match_array[i].ptr(), full_path_buf, PATH_MAX)) {
                 ret = OB_FILE_NOT_EXIST;
               } else if (OB_FAIL(session_info_->get_secure_file_priv(secure_file_priv))) {
-              } else if (!session_info_->is_inner() && OB_FAIL(ObResolverUtils::check_secure_path(secure_file_priv, actual_path))) {
+              } else if (!session_info_->is_inner() && OB_FAIL(ObResolverUtils::check_secure_path(secure_file_priv, full_path_buf))) {
               } else if (OB_FAIL(load_args.file_iter_.add_files(&match_array[i]))) {
               }
             }

@@ -1,0 +1,16 @@
+[package]
+name = "file-io"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Owned file operations and platform I/O backends"
+
+[features]
+ownership-test-support = []
+
+[dependencies]
+cxx = { version = "=1.0.202", optional = true }
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_Globalization"] }

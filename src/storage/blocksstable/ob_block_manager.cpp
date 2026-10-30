@@ -19,7 +19,10 @@
 #include "share/ob_io_device_helper.h"
 #include "rust/config.h"
 #include "ob_block_manager.h"
-#include "ob_io_bench_controller.h"
+#include "benchmark_session.h"
+#include <stdexcept>
+#include <algorithm>
+#include "share/io/ob_io_manager.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/blocksstable/ob_shared_macro_block_manager.h"
 #include "storage/tmp_file/ob_tmp_file_manager.h"
@@ -36,6 +39,7 @@ using namespace oceanbase::blocksstable;
 using namespace oceanbase::tmp_file;
 using namespace oceanbase::storage;
 using namespace oceanbase::share;
+
 
 namespace oceanbase {
 namespace blocksstable {
@@ -277,6 +281,7 @@ int ObBlockManager::alloc_object(ObStorageObjectHandle &object_handle) {
 int ObBlockManager::alloc_block(ObMacroBlockHandle &macro_handle) {
   int ret = OB_SUCCESS;
   ObIOFd io_fd;
+  bool physical_owned = false;
   ObIODOpts opts;
   uint64_t write_seq = 0;
   ObIODOpt opt_array[1];
@@ -284,6 +289,8 @@ int ObBlockManager::alloc_block(ObMacroBlockHandle &macro_handle) {
   if (IS_NOT_INIT || !is_started()) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(inner_alloc_block(opts, io_fd))) {
+  } else {
+    physical_owned = true;
   }
 
   if (OB_SUCC(ret)) {
@@ -292,12 +299,16 @@ int ObBlockManager::alloc_block(ObMacroBlockHandle &macro_handle) {
       MacroBlockId macro_id(write_seq, io_fd.second_id_, 0);
       if (OB_FAIL(macro_handle.set_macro_block_id(macro_id))) {
       } else {
+        physical_owned = false;
         ATOMIC_AAF(&alloc_num_, 1);
         FLOG_INFO("successfully alloc block", K(macro_id));
       }
     }
   }
 
+  if (physical_owned) {
+    io_device_->free_block(io_fd);
+  }
   return ret;
 }
 
@@ -1367,341 +1378,122 @@ ObServerBlockManager &ObServerBlockManager::get_instance() {
 } // namespace blocksstable
 } // namespace oceanbase
 
-namespace oceanbase
-{
-namespace storage
-{
+namespace oceanbase { namespace storage {
 
-// Storage owns the macro blocks used by the benchmark. Keep this runner
-// private so the lower Share IO interface does not depend back on Storage.
-class ObIOBenchRunner : public lib::Threads
+BenchmarkSession &BenchmarkSession::get_instance()
 {
-public:
-  ObIOBenchRunner();
-  ~ObIOBenchRunner();
-  int init(const int64_t block_count);
-  int do_benchmark(const ObIOBenchLoad &load,
-                   const int64_t thread_count,
-                   ObIOBenchResult &result);
-  void destroy();
-  void run1() override;
-
-private:
-  bool is_inited_;
-  bool thread_inited_;
-  ObArray<blocksstable::ObMacroBlockHandle> block_handles_;
-  ObIOBenchLoad load_;
-  int64_t io_count_;
-  int64_t rt_us_;
-  char *write_buf_;
-  char *read_buf_;
-  int64_t block_count_;
-};
-
-ObIOBenchRunner::ObIOBenchRunner()
-  : lib::Threads(1),
-    is_inited_(false),
-    thread_inited_(false),
-    block_handles_(),
-    load_(),
-    io_count_(0),
-    rt_us_(0),
-    write_buf_(nullptr),
-    read_buf_(nullptr),
-    block_count_(0)
-{
+  static BenchmarkSession session;
+  return session;
 }
 
-ObIOBenchRunner::~ObIOBenchRunner()
+int BenchmarkSession::bind()
 {
-  destroy();
+  ObRefHolder<ObIOService> service;
+  return OB_IO_MANAGER.get_io_service(service);
 }
 
-int ObIOBenchRunner::init(const int64_t block_count)
+int BenchmarkSession::select_target_count(int64_t free_count, int64_t total_count, int64_t &selected)
 {
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(is_inited_)) {
-    ret = OB_INIT_TWICE;
-  } else if (OB_UNLIKELY(block_count <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(write_buf_ = static_cast<char *>(ob_malloc(OB_DEFAULT_MACRO_BLOCK_SIZE, "io_bench_write")))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_ISNULL(read_buf_ = static_cast<char *>(ob_malloc(OB_DEFAULT_MACRO_BLOCK_SIZE, "io_bench_read")))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else {
-    if (!false) {
-      // prepare macro blocks
-      for (int64_t i = 0; OB_SUCC(ret) && i < block_count; ++i) {
-        blocksstable::ObMacroBlockHandle block_handle;
-        if (OB_FAIL(OB_SERVER_BLOCK_MGR.alloc_block(block_handle))) {
-        } else if (OB_FAIL(block_handles_.push_back(block_handle))) {
-        }
-      }
-    }
-    if (OB_SUCC(ret)) {
-      is_inited_ = true;
-      block_count_ = block_count;
-    }
+  constexpr int64_t max_exact_integer = 9007199254740991LL;
+  if (total_count <= 0 || free_count < 0 || free_count > total_count
+      || total_count > max_exact_integer) { return OB_INVALID_ARGUMENT; }
+  if (free_count <= 512 || static_cast<double>(free_count) / total_count < 0.1) {
+    return OB_SERVER_OUTOF_DISK_SPACE;
   }
-  if (OB_UNLIKELY(!is_inited_)) {
-    destroy();
-  }
-  return ret;
-}
-
-int ObIOBenchRunner::do_benchmark(const ObIOBenchLoad &load,
-                                  const int64_t thread_count,
-                                  ObIOBenchResult &result)
-{
-  int ret = OB_SUCCESS;
-  result.reset();
-  const int64_t BENCHMARK_TIMEOUT_S = 5L;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(!load.is_valid() || thread_count <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    load_ = load;
-    io_count_ = 0;
-    rt_us_ = 0;
-    if (thread_inited_) {
-      lib::Threads::stop();
-      lib::Threads::wait();
-      lib::Threads::destroy();
-      thread_inited_ = false;
-    }
-    if (OB_FAIL(lib::Threads::set_thread_count(thread_count))) {
-    } else if (OB_FAIL(lib::Threads::init())) {
-    } else if (OB_FAIL(lib::Threads::start())) {
-    } else {
-      thread_inited_ = true;
-#ifdef _WIN32
-      Sleep(static_cast<DWORD>(BENCHMARK_TIMEOUT_S * 1000));
-#else
-      sleep(BENCHMARK_TIMEOUT_S);
-#endif
-      lib::Threads::stop();
-      lib::Threads::wait();
-      lib::Threads::destroy();
-      thread_inited_ = false;
-      if (io_count_ <= 0) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        result.mode_ = load_.mode_;
-        result.size_ = load_.size_;
-        result.iops_ = io_count_ / BENCHMARK_TIMEOUT_S;
-        result.rt_us_ = rt_us_ / io_count_;
-      }
-      LOG_INFO("IO BENCHMARK finished", K(ret), K_(load), K(result));
-    }
-    if (OB_FAIL(ret) && thread_inited_) {
-      lib::Threads::stop();
-      lib::Threads::wait();
-      lib::Threads::destroy();
-      thread_inited_ = false;
-    }
-  }
-  return ret;
-}
-
-void ObIOBenchRunner::destroy()
-{
-  if (thread_inited_) {
-    lib::Threads::stop();
-    lib::Threads::wait();
-    lib::Threads::destroy();
-    thread_inited_ = false;
-  }
-  if (nullptr != write_buf_) {
-    ob_free(write_buf_);
-    write_buf_ = nullptr;
-  }
-  if (nullptr != read_buf_) {
-    ob_free(read_buf_);
-    read_buf_ = nullptr;
-  }
-  is_inited_ = false;
-  block_handles_.reset();
-  load_.reset();
-  io_count_ = 0;
-  rt_us_ = 0;
-}
-
-void ObIOBenchRunner::run1()
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(block_count_ <= 0)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ObIOInfo io_info;
-    io_info.size_ = load_.size_;
-    io_info.buf_ = ObIOMode::READ == load_.mode_ ? nullptr : write_buf_;
-    io_info.user_data_buf_ = ObIOMode::READ == load_.mode_ ? read_buf_ : nullptr;
-    io_info.flag_.set_mode(load_.mode_);
-    io_info.flag_.set_sys_module_id(ObIOModule::CALIBRATION_IO);
-    io_info.flag_.set_wait_event(ObIOMode::READ == load_.mode_ ?
-        ObWaitEventIds::DB_FILE_DATA_READ : ObWaitEventIds::DB_FILE_COMPACT_WRITE);
-    io_info.flag_.set_unlimited(true);
-    io_info.flag_.set_unsealed();
-    ObIOHandle io_handle;
-    while (!has_set_stop()) {
-      io_handle.reset();
-      const int64_t block_idx = ObRandom::rand(0, block_count_ - 1);
-      io_info.fd_.device_handle_ = &LOCAL_DEVICE_INSTANCE;
-      io_info.offset_ = ObRandom::rand(0, OB_DEFAULT_MACRO_BLOCK_SIZE - load_.size_);
-      io_info.timeout_us_ = MAX_IO_WAIT_TIME_MS * 1000;
-      io_info.fd_.first_id_ = block_handles_[block_idx].get_macro_id().first_id();
-      io_info.fd_.second_id_ = block_handles_[block_idx].get_macro_id().second_id();
-
-      if (ObIOMode::WRITE == load_.mode_) {
-        io_info.offset_ = lower_align(io_info.offset_, DIO_READ_ALIGN_SIZE);
-      }
-      const int64_t begin_ts = ObTimeUtility::fast_current_time();
-      if (ObIOMode::READ == load_.mode_) {
-        if (OB_FAIL(OB_IO_MANAGER.read(io_info, io_handle))) {
-        }
-      } else {
-        if (OB_FAIL(OB_IO_MANAGER.write(io_info))) {
-        }
-      }
-      if (OB_SUCC(ret)) {
-        const int64_t rt = ObTimeUtility::fast_current_time() - begin_ts;
-        ATOMIC_INC(&io_count_);
-        ATOMIC_AAF(&rt_us_, rt);
-      }
-    }
-  }
-}
-
-ObIOBenchController::ObIOBenchController()
-  : lib::Threads(1),
-    thread_inited_(false),
-    running_mutex_(),
-    start_ts_(0),
-    finish_ts_(0),
-    ret_code_(OB_SUCCESS)
-{
-}
-
-ObIOBenchController::~ObIOBenchController()
-{
-  if (thread_inited_) {
-    lib::Threads::stop();
-    lib::Threads::wait();
-    lib::Threads::destroy();
-    thread_inited_ = false;
-  }
-}
-
-int ObIOBenchController::start_io_bench()
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(running_mutex_.trylock())) {
-    if (OB_UNLIKELY(OB_EAGAIN != ret)) {
-    } else {
-      ret = OB_SUCCESS;
-    }
-  } else {
-    if (thread_inited_) {
-      lib::Threads::stop();
-      lib::Threads::wait();
-      lib::Threads::destroy();
-      thread_inited_ = false;
-    }
-    if (OB_FAIL(lib::Threads::init())) {
-    } else if (OB_FAIL(lib::Threads::start())) {
-    } else {
-      thread_inited_ = true;
-    }
-    if (OB_FAIL(ret) && thread_inited_) {
-      lib::Threads::stop();
-      lib::Threads::wait();
-      lib::Threads::destroy();
-      thread_inited_ = false;
-    }
-    const int tmp_ret = running_mutex_.unlock();
-    if (OB_UNLIKELY(OB_SUCCESS != tmp_ret)) {
-    }
-  }
-  return ret;
-}
-
-int ObIOBenchController::get_benchmark_status(
-    int64_t &start_ts,
-    int64_t &finish_ts,
-    int &ret_code) const
-{
-  start_ts = start_ts_;
-  finish_ts = finish_ts_;
-  ret_code = ret_code_;
+  const int64_t count = static_cast<int64_t>(static_cast<double>(free_count) * 0.2);
+  selected = std::max<int64_t>(512, std::min<int64_t>(10240, count));
   return OB_SUCCESS;
 }
 
-void ObIOBenchController::run1()
+int BenchmarkSession::start()
 {
-  int ret = OB_SUCCESS;
-  ObMutexGuard guard(running_mutex_);
-  ObIOBenchRunner runner;
-  start_ts_ = ObTimeUtility::fast_current_time();
-  finish_ts_ = 0;
-  ret_code_ = OB_SUCCESS;
-
-  // prepare io bench runner
-  const double MIN_FREE_SPACE_PERCENTAGE = 0.1; // if auto extend is on, _datafile_usage_upper_bound_percentage maybe less than (1 - 0.1 = 0.9), may cause OB_SERVER_OUTOF_DISK_SPACE
-  const int64_t MIN_CALIBRATION_BLOCK_COUNT = 1024L * 1024L * 1024L / OB_DEFAULT_MACRO_BLOCK_SIZE;
-  const int64_t MAX_CALIBRATION_BLOCK_COUNT = 20LL * 1024LL * 1024LL * 1024LL / OB_DEFAULT_MACRO_BLOCK_SIZE;
-  int64_t free_block_count = OB_STORAGE_OBJECT_MGR.get_free_macro_block_count();
-  int64_t total_block_count = OB_STORAGE_OBJECT_MGR.get_total_macro_block_count();
-
-  if (free_block_count <= MIN_CALIBRATION_BLOCK_COUNT
-      || 1.0 * free_block_count / total_block_count < MIN_FREE_SPACE_PERCENTAGE) {
-    ret = OB_SERVER_OUTOF_DISK_SPACE;
-  } else {
-    int64_t benchmark_block_count = free_block_count * 0.2;
-    benchmark_block_count = min(benchmark_block_count, MAX_CALIBRATION_BLOCK_COUNT);
-    benchmark_block_count = max(benchmark_block_count, MIN_CALIBRATION_BLOCK_COUNT);
-    if (OB_FAIL(runner.init(benchmark_block_count))) {
-    }
-  }
-
-  // execute io benchmark
-  const int64_t bench_start_size = 4096;
-  const int64_t bench_thread_count = 16;
-  ObIOAbility io_ability;
-  // The target file is pre-allocated using fallocate. Due to the initial presence of file holes
-  // in ext4 and xfs file systems, read operations are optimized by the system to immediately return
-  // with no content. This optimization leads to unrepresentative read performance metrics.
-  // To ensure the validity of our performance testing, the sequence of operations has been adjusted
-  // to perform write operations first, thereby filling the file. This adjustment allows for the
-  // acquisition of more accurate read and write performance metrics.
-  for (int64_t i = static_cast<int64_t>(ObIOMode::MAX_MODE) - 1; OB_SUCC(ret) && !has_set_stop() && i >= 0; --i) {
-    for (int64_t size = bench_start_size; OB_SUCC(ret) && !has_set_stop() && size <= OB_DEFAULT_MACRO_BLOCK_SIZE; size *= 2) {
-      LOG_INFO("execute disk io benchmark", K(size), "mode", i);
-      ObIOBenchLoad load;
-      load.mode_ = static_cast<ObIOMode>(i);
-      load.size_ = size;
-      ObIOBenchResult result;
-      if (OB_FAIL(runner.do_benchmark(load, bench_thread_count, result))) {
-      } else if (OB_UNLIKELY(!result.is_valid())) {
-        ret = OB_ERR_SYS;
-      } else if (OB_FAIL(io_ability.add_measure_item(result))) {
-      }
-    }
-  }
-  if (OB_SUCC(ret) && !io_ability.is_valid()) {
-    ret = OB_ERR_SYS;
+  ObRefHolder<ObIOService> service;
+  std::shared_ptr<ObDeviceChannel> channel;
+  int ret = OB_IO_MANAGER.get_io_service(service);
+  if (OB_FAIL(ret)) { return ret; }
+  if (OB_SERVER_BLOCK_MGR.is_started()
+      && OB_FAIL(OB_IO_MANAGER.benchmark_device(&LOCAL_DEVICE_INSTANCE, channel))) { return ret; }
+  std::unique_lock<std::mutex> lock(session_mutex_, std::try_to_lock);
+  if (!lock.owns_lock()) { return OB_SUCCESS; }
+  if (run_ && (*run_)->benchmark_run_status().state == 4) { retire_locked(); }
+  auto preparation = storage_io::new_benchmark_preparation_slot();
+  auto run = storage_io::new_benchmark_run_slot();
+  const auto begun = service.get_ptr()->begin_benchmark({10240, 20, 16}, *preparation, *run);
+  if (begun.error != OB_SUCCESS) { return begun.error; }
+  if (!begun.preparing) { return OB_SUCCESS; }
+  std::vector<blocksstable::ObMacroBlockHandle> blocks;
+  int64_t count = 0;
+  if (!channel) { ret = OB_NOT_INIT; }
+  else {
+    ret = select_target_count(OB_STORAGE_OBJECT_MGR.get_free_macro_block_count(),
+        OB_STORAGE_OBJECT_MGR.get_total_macro_block_count(), count);
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(ObIOCalibration::get_instance().update_io_ability(io_ability))) {
+    try { blocks.reserve(count); }
+    catch (const std::bad_alloc &) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+    catch (const std::length_error &) { ret = OB_SIZE_OVERFLOW; }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+    blocksstable::ObMacroBlockHandle handle;
+    if (OB_FAIL(OB_SERVER_BLOCK_MGR.alloc_block(handle))) {
+    } else {
+      blocks.emplace_back();
+      if (OB_FAIL(blocks.back().set_macro_block_id(handle.get_macro_id()))) { break; }
+      ObIOFd fd;
+      fd.device_handle_ = &LOCAL_DEVICE_INSTANCE;
+      fd.first_id_ = handle.get_macro_id().first_id();
+      fd.second_id_ = handle.get_macro_id().second_id();
+      ret = channel->add_benchmark_target(fd, *preparation);
     }
   }
-
-  ret_code_ = ret;
-  finish_ts_ = ObTimeUtility::fast_current_time();
+  if (OB_SUCC(ret)) { ret = preparation->benchmark_commit(storage_io::production_benchmark_plan(), *run); }
+  if (OB_SUCC(ret)) {
+    blocks_.swap(blocks);
+    run_.emplace(std::move(run));
+  } else {
+    preparation->benchmark_discard_targets();
+    blocks.clear();
+    const int aborted = preparation->benchmark_abort(ret, *run);
+    if (aborted != OB_SUCCESS) { LOG_ERROR("benchmark preparation abort failed", K(aborted)); }
+    else { run->benchmark_wait_retired(); }
+  }
+  return ret;
 }
 
+int BenchmarkSession::status(int64_t &started, int64_t &finished, int &result) const
+{
+  ObRefHolder<ObIOService> service;
+  const int ret = OB_IO_MANAGER.get_io_service(service);
+  if (ret == OB_SUCCESS) {
+    const auto status = service.get_ptr()->benchmark_status();
+    started = status.started_wall_us;
+    finished = status.finished_wall_us;
+    result = status.ret_code;
+  }
+  return ret;
+}
 
-}  // namespace storage
-}  // namespace oceanbase
+void BenchmarkSession::retire_locked()
+{
+  if (run_) {
+    (*run_)->benchmark_stop();
+    (*run_)->benchmark_wait_retired();
+    blocks_.clear();
+    run_.reset();
+  }
+}
+
+void BenchmarkSession::shutdown()
+{
+  ObRefHolder<ObIOService> service;
+  if (OB_IO_MANAGER.get_io_service(service) == OB_SUCCESS) { service.get_ptr()->stop_benchmarks(); }
+  stop_and_drain();
+}
+
+void BenchmarkSession::stop_and_drain()
+{
+  std::lock_guard<std::mutex> lock(session_mutex_);
+  retire_locked();
+}
+
+}}

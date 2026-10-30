@@ -15,15 +15,14 @@
  */
 
 #include "ob_local_device.h"
+#include <limits>
+#include <mutex>
 #include "rust/config.h"
-#ifdef __EMSCRIPTEN__
-#include "lib/file/wasm_file.h"
-#endif
+#include "rust/file_io.h"
 #include "lib/profile/ob_trace_id.h"
 #include "share/config/ob_server_config.h"
 #include "share/ob_io_device_helper.h"
 #ifndef _WIN32
-#include <sys/statvfs.h>
 #include <unistd.h>
 #endif
 #if defined(__APPLE__)
@@ -41,12 +40,8 @@
 #elif defined(__linux__)
 #include <sys/vfs.h>
 #include <linux/falloc.h>
-#include <libaio.h>
 #endif
 
-#ifdef _WIN32
-#include "share/ob_statvfs_win32.h"
-#endif
 #if defined(__APPLE__)
 #ifndef FALLOC_FL_KEEP_SIZE
 #define FALLOC_FL_KEEP_SIZE 0x01
@@ -62,81 +57,108 @@ namespace share {
 const char *BLOCK_SSTBALE_DIR_NAME = "sstable";
 const char *BLOCK_SSTBALE_FILE_NAME = "block_file";
 
-/**
- * ---------------------------------------------ObLocalIOEvents---------------------------------------------------
- */
-#if defined(__linux__) && !defined(__ANDROID__)
-ObLocalIOEvents::ObLocalIOEvents()
-  : complete_io_cnt_(0),
-  io_events_(nullptr)
+namespace {
+rust::Slice<const uint8_t> path_bytes(const char *path)
 {
+  return {reinterpret_cast<const uint8_t *>(path), STRLEN(path)};
 }
 
-ObLocalIOEvents::~ObLocalIOEvents()
+void copy_file_stat(const file_io::FileStat &source, ObIODFileStat &destination)
 {
+  destination.rdev_ = source.rdev;
+  destination.dev_ = source.dev;
+  destination.inode_ = source.inode;
+  destination.mask_ = source.mask;
+  destination.mode_ = source.mode;
+  destination.nlink_ = source.nlink;
+  destination.uid_ = source.uid;
+  destination.gid_ = source.gid;
+  destination.size_ = source.size;
+  destination.block_cnt_ = source.block_cnt;
+  destination.block_size_ = source.block_size;
+  destination.atime_s_ = source.atime_s;
+  destination.mtime_s_ = source.mtime_s;
+  destination.ctime_s_ = source.ctime_s;
+  destination.btime_s_ = source.btime_s;
 }
 
-int64_t ObLocalIOEvents::get_complete_cnt() const
+template <typename Callback>
+int scan_directory(const char *path, Callback &&callback)
 {
-  return complete_io_cnt_;
-}
-
-int ObLocalIOEvents::get_ith_ret_code(const int64_t i) const
-{
-  int ret_code = -1;
-  if (nullptr != io_events_ && i < complete_io_cnt_) {
-    const int64_t res = static_cast<int64_t>(io_events_[i].res);
-    if (res >= 0) {
-      ret_code = 0;
-    } else {
-      ret_code = static_cast<int32_t>(-res);
+  if (nullptr == path) { return OB_INVALID_ARGUMENT; }
+  auto cursor = file_io::read_directory(path_bytes(path));
+  for (;;) {
+    const auto step = cursor->next_entry();
+    switch (step.code) {
+      case file_io::DirectoryStepCode::End: return OB_SUCCESS;
+      case file_io::DirectoryStepCode::OpenError:
+        return step.error == ENOENT ? OB_NO_SUCH_FILE_OR_DIRECTORY : OB_FILE_NOT_OPENED;
+      case file_io::DirectoryStepCode::ReadError:
+        return ObIODeviceLocalFileOp::convert_sys_errno(step.error);
+      case file_io::DirectoryStepCode::Entry: break;
+      default: return OB_ERR_UNEXPECTED;
     }
-  } else {
-    SHARE_LOG_RET(WARN, ret_code, "invalid member", KP(io_events_), K(i), K(complete_io_cnt_));
-  }
-  return ret_code;
-}
-
-int ObLocalIOEvents::get_ith_ret_bytes(const int64_t i) const
-{
-  int ret_val = 0;
-  if (nullptr != io_events_ && i < complete_io_cnt_) {
-    const int64_t res = static_cast<int64_t>(io_events_[i].res);
-    ret_val = res >= 0 ? static_cast<int32_t>(res) : 0;
-  }
-  return ret_val;
-}
-
-void *ObLocalIOEvents::get_ith_data(const int64_t i) const
-{
-  return (nullptr != io_events_ && i < complete_io_cnt_) ? io_events_[i].data : 0;
-}
-
-
-/**
- * ---------------------------------------------ObLocalDevice---------------------------------------------------
- */
+    dirent entry{};
+    if (step.name.size() >= sizeof(entry.d_name)) { return OB_BUF_NOT_ENOUGH; }
+    if (step.name_length != step.name.size()
+        || step.inode > static_cast<uint64_t>(std::numeric_limits<decltype(entry.d_ino)>::max())
+        || step.raw_type > static_cast<uint32_t>(std::numeric_limits<decltype(entry.d_type)>::max())) {
+      return OB_SIZE_OVERFLOW;
+    }
+    entry.d_ino = static_cast<decltype(entry.d_ino)>(step.inode);
+    entry.d_type = static_cast<decltype(entry.d_type)>(step.raw_type);
+    entry.d_reclen = step.record_length;
+#if defined(__APPLE__)
+    entry.d_seekoff = step.seek_offset;
+    entry.d_namlen = static_cast<decltype(entry.d_namlen)>(step.name_length);
+#else
+    if (step.offset < std::numeric_limits<decltype(entry.d_off)>::min()
+        || step.offset > std::numeric_limits<decltype(entry.d_off)>::max()) {
+      return OB_SIZE_OVERFLOW;
+    }
+    entry.d_off = static_cast<decltype(entry.d_off)>(step.offset);
+#ifdef _WIN32
+    static_assert(sizeof(entry.d_name) == 261, "pinned dirent name capacity changed");
+    if (step.record_length != 0 && step.record_length != sizeof(entry)) {
+      return OB_ERR_UNEXPECTED;
+    }
+    entry.d_namlen = static_cast<decltype(entry.d_namlen)>(step.name_length);
 #endif
+#endif
+    MEMCPY(entry.d_name, step.name.data(), step.name.size());
+    entry.d_name[step.name.size()] = '\0';
+    const int ret = callback(&entry);
+    if (OB_SUCCESS != ret) { return ret; }
+  }
+}
+
+int block_status(const storage_io::BlockStatus &status)
+{
+  switch (status.code) {
+    case storage_io::BlockCode::Ok: return OB_SUCCESS;
+    case storage_io::BlockCode::InvalidArgument: return OB_INVALID_ARGUMENT;
+    case storage_io::BlockCode::InvalidHeader: return OB_INVALID_DATA;
+    case storage_io::BlockCode::ChecksumMismatch: return OB_PHYSIC_CHECKSUM_ERROR;
+    case storage_io::BlockCode::Exhausted: return OB_SERVER_OUTOF_DISK_SPACE;
+    case storage_io::BlockCode::Memory: return OB_ALLOCATE_MEMORY_FAILED;
+    case storage_io::BlockCode::NotOpen: return OB_NOT_INIT;
+    case storage_io::BlockCode::AlreadyOpen: return OB_INIT_TWICE;
+    case storage_io::BlockCode::IoError: return status.error ? ObIODeviceLocalFileOp::convert_sys_errno(status.error) : OB_IO_ERROR;
+    default: return OB_ERR_UNEXPECTED;
+  }
+}
+}
 
 ObLocalDevice::ObLocalDevice()
-  : is_inited_(false),
+  : files_(file_io::new_file_registry()),
+    named_(storage_io::new_named_bindings()),
+    blocks_(storage_io::new_block_owner()),
+    is_inited_(false),
     is_marked_(false),
-    block_fd_(0),
     block_lock_(common::ObLatchIds::LOCAL_DEVICE_LOCK),
     block_size_(0),
     block_file_size_(0),
     disk_percentage_(0),
-    free_block_push_pos_(0),
-    free_block_pop_pos_(0),
-    free_block_cnt_(0),
-    total_block_cnt_(0),
-    free_block_array_(nullptr),
-    block_bitmap_(nullptr),
-    allocator_(),
-#if defined(__linux__) && !defined(__ANDROID__)
-    iocb_pool_(),
-#endif
-    is_fs_support_punch_hole_(true),
     space_provider_(nullptr)
 {
 
@@ -155,15 +177,11 @@ int ObLocalDevice::init(
     const LocalIOConfig &io_config,
     const ObILocalDeviceSpaceProvider *space_provider)
 {
+  std::unique_lock<std::shared_mutex> guard(file_session_lock_);
   int ret = OB_SUCCESS;
-  const ObMemAttr mem_attr = ObMemAttr("LDIOSetup");
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    SHARE_LOG(WARN, "The local device has been inited, ", K(ret));
-  } else if (OB_FAIL(allocator_.init(OB_MALLOC_MIDDLE_BLOCK_SIZE, default_blk_alloc, mem_attr))) {
-#if defined(__linux__) && !defined(__ANDROID__)
-  } else if (OB_FAIL(iocb_pool_.init(allocator_))) {
-#endif
+    SHARE_LOG(WARN, "The local device has been inited", K(ret));
   } else if (0 == opts.opt_cnt_) {
     // Log devices share the local-device implementation but do not own the
     // data block file, so LogIODeviceWrapper intentionally supplies no
@@ -197,7 +215,8 @@ int ObLocalDevice::init(
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_ISNULL(store_dir) || 0 == STRLEN(store_dir)) {
+      if (OB_ISNULL(store_dir) || OB_ISNULL(sstable_dir) || 0 == STRLEN(store_dir)
+          || STRLEN(store_dir) >= sizeof(store_dir_) || STRLEN(sstable_dir) >= sizeof(sstable_dir_)) {
         ret = OB_INVALID_ARGUMENT;
         SHARE_LOG(WARN, "invalid args", K(ret), KP(store_dir));
       } else {
@@ -221,7 +240,7 @@ int ObLocalDevice::init(
   }
 
   if (OB_UNLIKELY(!is_inited_)) {
-    destroy();
+    reset_file_session_();
   }
 
   return ret;
@@ -253,11 +272,11 @@ int ObLocalDevice::reconfig(const common::ObIODOpts &opts)
 
     if (OB_SUCC(ret)) {
       lib::ObMutexGuard guard(block_lock_);
-      int64_t new_datafile_size = block_file_size_;
+      int64_t new_datafile_size = get_total_block_size();
       if (OB_FAIL(ObIODeviceLocalFileOp::get_block_file_size(sstable_dir_, reserved_size, block_size_,
           datafile_size, datafile_disk_percentage, new_datafile_size))) {
       } else {
-        ret = resize_block_file(new_datafile_size);
+        ret = resize_block_file(new_datafile_size, reserved_size);
       }
     }
   }
@@ -285,364 +304,325 @@ int ObLocalDevice::start(const common::ObIODOpts &opts)
     SHARE_LOG(WARN, "invalid opt arguments", K(ret), K(opts.opts_[0].key_),
         K(opts.opts_[0].value_.value_int64));
   } else {
-    BlockFileAttr block_file_attr(store_path_, BLOCK_SSTBALE_DIR_NAME, BLOCK_SSTBALE_FILE_NAME,
-      block_fd_, block_file_size_, block_size_, total_block_cnt_, free_block_array_, block_bitmap_,
-      free_block_cnt_, free_block_push_pos_, free_block_pop_pos_, "LDBlockBitMap");
-    ret = ObIODeviceLocalFileOp::open_block_file(store_dir_, sstable_dir_, block_size_,
-        block_file_size_, disk_percentage_, opts.opts_[0].value_.value_int64, io_config_, block_file_attr);
+    const int64_t reserved = opts.opts_[0].value_.value_int64;
+    bool exists = false;
+    int64_t initial_size = 0;
+    if (block_size_ < DIO_READ_ALIGN_SIZE || block_size_ % DIO_READ_ALIGN_SIZE != 0) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (OB_FAIL(databuff_printf(store_path_, sizeof(store_path_), "%s/%s/%s",
+        store_dir_, BLOCK_SSTBALE_DIR_NAME, BLOCK_SSTBALE_FILE_NAME))) {
+    } else if (OB_FAIL(exist(store_path_, exists))) {
+    } else if (!exists && OB_FAIL(ObIODeviceLocalFileOp::get_block_file_size(sstable_dir_, reserved,
+        block_size_, block_file_size_, disk_percentage_, initial_size))) {
+    } else {
+      storage_io::BlockOptions options{};
+      options.block_size = block_size_;
+      options.initial_size = initial_size;
+      options.reserved_bytes = reserved;
+      options.direct_io = io_config_.direct_io;
+      options.punch_holes = config::_enable_block_file_punch_hole();
+      auto opened = blocks_->open_blocks(
+          {reinterpret_cast<const uint8_t *>(store_path_), STRLEN(store_path_)}, options);
+      ret = block_status(opened.status);
+      if (OB_SUCCESS != ret) {
+        SHARE_LOG(WARN, "block file open failed", K(ret), K(store_path_),
+            "native_domain", static_cast<int>(opened.primary_error.domain),
+            "native_error", opened.primary_error.native_code, "error", opened.primary_error.message.c_str());
+      }
+      auto &summary = opened.directory_summary;
+      if (summary.count != 0) {
+        SHARE_LOG(WARN, "directory durability unconfirmed; only first failure detail retained", K(ret),
+            "failed_flush_count", summary.count, "count_is_lower_bound", summary.count == UINT64_MAX,
+            "first_path", common::ObString(static_cast<int32_t>(summary.first_path.size()),
+                reinterpret_cast<const char *>(summary.first_path.data())),
+            "native_domain", static_cast<int>(summary.first_error.domain),
+            "native_error", summary.first_error.native_code, "error", summary.first_error.message.c_str());
+      }
+      if (opened.sync.stage != file_io::SyncStage::Complete) {
+        SHARE_LOG(WARN, "block file creation directory sync failed", K(ret), K(store_path_),
+            "stage", static_cast<int>(opened.sync.stage), "native_domain", static_cast<int>(opened.sync.primary.domain),
+            "native_error", opened.sync.primary.native_code, "error", opened.sync.primary.message.c_str(),
+            "sync_path", common::ObString(static_cast<int32_t>(opened.sync_path.size()),
+                reinterpret_cast<const char *>(opened.sync_path.data())),
+            "close_domain", static_cast<int>(opened.sync.close.domain), "close_error", opened.sync.close.native_code);
+      }
+      if (opened.cleanup_close.domain != file_io::ErrorDomain::None) {
+        SHARE_LOG(WARN, "block creation cleanup close failed", K(ret), K(store_path_),
+            "native_domain", static_cast<int>(opened.cleanup_close.domain), "native_error", opened.cleanup_close.native_code,
+            "error", opened.cleanup_close.message.c_str());
+      }
+      if (opened.cleanup_remove.domain != file_io::ErrorDomain::None) {
+        SHARE_LOG(WARN, "block creation cleanup removal failed", K(ret), K(store_path_),
+            "native_domain", static_cast<int>(opened.cleanup_remove.domain), "native_error", opened.cleanup_remove.native_code,
+            "error", opened.cleanup_remove.message.c_str());
+      }
+      if (opened.cleanup_sync.stage != file_io::SyncStage::Complete) {
+        SHARE_LOG(WARN, "block creation cleanup directory sync failed", K(ret), K(store_path_),
+            "stage", static_cast<int>(opened.cleanup_sync.stage), "native_domain", static_cast<int>(opened.cleanup_sync.primary.domain),
+            "native_error", opened.cleanup_sync.primary.native_code, "error", opened.cleanup_sync.primary.message.c_str(),
+            "close_domain", static_cast<int>(opened.cleanup_sync.close.domain), "close_error", opened.cleanup_sync.close.native_code);
+      }
+    }
   }
   return ret;
 }
 
 void ObLocalDevice::destroy()
 {
-  if (nullptr != block_bitmap_) {
-    ob_free(block_bitmap_);
-    block_bitmap_ = nullptr;
-  }
-  if (nullptr != free_block_array_) {
-    ob_free(free_block_array_);
-    free_block_array_ = nullptr;
-  }
-#if defined(__linux__) && !defined(__ANDROID__)
-  iocb_pool_.reset();
-#endif
-  allocator_.destroy();
-  total_block_cnt_ = 0;
-  free_block_cnt_ = 0;
-  free_block_pop_pos_ = 0;
-  free_block_push_pos_ = 0;
+  std::unique_lock<std::shared_mutex> guard(file_session_lock_);
+  reset_file_session_();
+}
+
+void ObLocalDevice::reset_file_session_()
+{
+  is_inited_ = false;
+  files_->clear_registry();
+  named_->clear_named_bindings();
+  blocks_->close_blocks();
   block_size_ = 0;
   block_file_size_ = 0;
-  if (block_fd_ > 0) {
-    ::close(block_fd_);
-  }
-  block_fd_ = 0;
-  is_inited_ = false;
   is_marked_ = false;
-  is_fs_support_punch_hole_ = true;
   space_provider_ = nullptr;
-
   MEMSET(store_dir_, 0, sizeof(store_dir_));
   MEMSET(sstable_dir_, 0, sizeof(sstable_dir_));
+  MEMSET(store_path_, 0, sizeof(store_path_));
 }
 
 //file/dir interfaces
 int ObLocalDevice::open(const char *pathname, const int flags, const mode_t mode, ObIOFd &fd, common::ObIODOpts *opts)
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObIODeviceLocalFileOp::open(pathname, io_config_.file_flags(flags), mode, fd, opts))) {
-  }
-  return ret;
+  UNUSED(opts);
+  std::unique_lock<std::shared_mutex> guard(file_session_lock_);
+  if (fd.is_valid()) return OB_INVALID_ARGUMENT;
+  fd.reset();
+  if (!is_inited_) return OB_NOT_INIT;
+  if (nullptr == pathname) return OB_INVALID_ARGUMENT;
+  uint64_t id = 0;
+  const auto path = path_bytes(pathname);
+  const int error = named_->named_enabled()
+      ? named_->open_named(*files_, path, io_config_.file_flags(flags), static_cast<uint32_t>(mode), id)
+      : files_->open_registered(path, io_config_.file_flags(flags), static_cast<uint32_t>(mode), id);
+  if (error != 0) return ObIODeviceLocalFileOp::convert_sys_errno(error);
+  fd.first_id_ = ObIOFd::NORMAL_FILE_ID;
+  fd.second_id_ = static_cast<int64_t>(id);
+  fd.third_id_ = -1;
+  fd.device_handle_ = this;
+  return OB_SUCCESS;
 }
 
 int ObLocalDevice::close(const ObIOFd &fd)
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObIODeviceLocalFileOp::close(fd))) {
-  }
-  return ret;
+  std::unique_lock<std::shared_mutex> guard(file_session_lock_);
+  if (!is_inited_) return OB_NOT_INIT;
+  if (!fd.is_normal_file() || (nullptr != fd.device_handle_ && fd.device_handle_ != this)) return OB_INVALID_ARGUMENT;
+  const int error = files_->close_registered(fd.second_id_);
+  named_->close_named_binding(fd.second_id_);
+  return error ? ObIODeviceLocalFileOp::convert_sys_errno(error) : OB_SUCCESS;
 }
 
 int ObLocalDevice::mkdir(const char *pathname, mode_t mode)
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObIODeviceLocalFileOp::mkdir(pathname, mode))) {
-  }
-  return ret;
+  if (nullptr == pathname || '\0' == *pathname) { return OB_INVALID_ARGUMENT; }
+  const int error = file_io::mkdir_path(path_bytes(pathname), static_cast<uint32_t>(mode));
+  return error ? ObIODeviceLocalFileOp::convert_sys_errno(error) : OB_SUCCESS;
 }
 
 int ObLocalDevice::rmdir(const char *pathname)
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObIODeviceLocalFileOp::rmdir(pathname))) {
-  }
-  return ret;
+  if (nullptr == pathname || '\0' == *pathname) { return OB_INVALID_ARGUMENT; }
+  const int error = file_io::rmdir_path(path_bytes(pathname));
+  return error ? ObIODeviceLocalFileOp::convert_sys_errno(error) : OB_SUCCESS;
 }
 
 int ObLocalDevice::unlink(const char *pathname)
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObIODeviceLocalFileOp::unlink(pathname))) {
-  }
-  return ret;
+  if (nullptr == pathname || '\0' == *pathname) { return OB_INVALID_ARGUMENT; }
+  const int error = file_io::unlink_path(path_bytes(pathname));
+  return error ? ObIODeviceLocalFileOp::convert_sys_errno(error) : OB_SUCCESS;
 }
 
 int ObLocalDevice::rename(const char *oldpath, const char *newpath)
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObIODeviceLocalFileOp::rename(oldpath, newpath))) {
-  }
-  return ret;
+  if (nullptr == oldpath || nullptr == newpath) { return OB_INVALID_ARGUMENT; }
+  const int error = file_io::rename_path(path_bytes(oldpath), path_bytes(newpath));
+  return error ? ObIODeviceLocalFileOp::convert_sys_errno(error) : OB_SUCCESS;
 }
 
 int ObLocalDevice::scan_dir(const char *dir_name, int (*func)(const dirent *entry))
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObIODeviceLocalFileOp::scan_dir(dir_name, func))) {
-  }
-  return ret;
+  if (nullptr == func) { return OB_INVALID_ARGUMENT; }
+  return scan_directory(dir_name, func);
 }
 
 int ObLocalDevice::scan_dir(const char *dir_name, common::ObBaseDirEntryOperator &op)
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObIODeviceLocalFileOp::scan_dir(dir_name, op))) {
-  }
-  return ret;
+  return scan_directory(dir_name, [&op](const dirent *entry) { return op.func(entry); });
 }
 
 int ObLocalDevice::fsync(const ObIOFd &fd)
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObIODeviceLocalFileOp::fsync(fd))) {
-  }
-  return ret;
+  std::shared_lock<std::shared_mutex> guard(file_session_lock_);
+  if (!is_inited_) return OB_NOT_INIT;
+  if (!fd.is_normal_file() || (nullptr != fd.device_handle_ && fd.device_handle_ != this)) return OB_INVALID_ARGUMENT;
+  const int error = named_->named_enabled() ? named_->sync_named(fd.second_id_, false) : files_->sync_registered(fd.second_id_, false);
+  return error ? ObIODeviceLocalFileOp::convert_sys_errno(error) : OB_SUCCESS;
 }
 
 int ObLocalDevice::fdatasync(const ObIOFd &fd)
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObIODeviceLocalFileOp::fdatasync(fd))) {
-  }
-  return ret;
+  std::shared_lock<std::shared_mutex> guard(file_session_lock_);
+  if (!is_inited_) return OB_NOT_INIT;
+  if (!fd.is_normal_file() || (nullptr != fd.device_handle_ && fd.device_handle_ != this)) return OB_INVALID_ARGUMENT;
+  const int error = named_->named_enabled() ? named_->sync_named(fd.second_id_, true) : files_->sync_registered(fd.second_id_, true);
+  return error ? ObIODeviceLocalFileOp::convert_sys_errno(error) : OB_SUCCESS;
 }
 
 int ObLocalDevice::fallocate(const ObIOFd &fd, mode_t mode, const int64_t offset, const int64_t len)
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObIODeviceLocalFileOp::fallocate(fd, mode, offset, len))) {
-  }
-  return ret;
+  std::shared_lock<std::shared_mutex> guard(file_session_lock_);
+  if (!is_inited_) return OB_NOT_INIT;
+  if (!fd.is_normal_file() || (nullptr != fd.device_handle_ && fd.device_handle_ != this) || offset < 0 || len < 0) return OB_INVALID_ARGUMENT;
+  const int error = named_->named_enabled() ? named_->allocate_named(fd.second_id_, mode, offset, len) : files_->allocate_registered(fd.second_id_, mode, offset, len);
+  return error ? ObIODeviceLocalFileOp::convert_sys_errno(error) : OB_SUCCESS;
 }
 
 int ObLocalDevice::lseek(const ObIOFd &fd, const int64_t offset, const int whence, int64_t &result_offset)
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObIODeviceLocalFileOp::lseek(fd, offset, whence, result_offset))) {
-  }
-  return ret;
+  std::shared_lock<std::shared_mutex> guard(file_session_lock_);
+  result_offset = 0;
+  if (!is_inited_) return OB_NOT_INIT;
+  if (!fd.is_normal_file() || (nullptr != fd.device_handle_ && fd.device_handle_ != this)) return OB_INVALID_ARGUMENT;
+  if (named_->named_enabled()) return OB_NOT_SUPPORTED;
+  uint64_t result = 0;
+  const int error = files_->seek_registered(fd.second_id_, offset, whence, result);
+  if (error) return ObIODeviceLocalFileOp::convert_sys_errno(error);
+  if (result > INT64_MAX) return OB_SIZE_OVERFLOW;
+  result_offset = static_cast<int64_t>(result);
+  return OB_SUCCESS;
 }
 
 int ObLocalDevice::truncate(const char *pathname, const int64_t len)
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObIODeviceLocalFileOp::truncate(pathname, len))) {
-  }
-  return ret;
+  if (nullptr == pathname || '\0' == *pathname) { return OB_INVALID_ARGUMENT; }
+  const int error = file_io::truncate_legacy_path(path_bytes(pathname), len);
+  return error ? ObIODeviceLocalFileOp::convert_sys_errno(error) : OB_SUCCESS;
+}
+
+int ObLocalDevice::ftruncate(const ObIOFd &fd, const int64_t len)
+{
+  std::shared_lock<std::shared_mutex> guard(file_session_lock_);
+  if (!is_inited_) return OB_NOT_INIT;
+  if (!fd.is_normal_file() || (nullptr != fd.device_handle_ && fd.device_handle_ != this) || len < 0) return OB_INVALID_ARGUMENT;
+  const int error = named_->named_enabled() ? named_->resize_named(fd.second_id_, len) : files_->truncate_registered(fd.second_id_, len);
+  return error ? ObIODeviceLocalFileOp::convert_sys_errno(error) : OB_SUCCESS;
 }
 
 int ObLocalDevice::exist(const char *pathname, bool &is_exist)
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObIODeviceLocalFileOp::exist(pathname, is_exist))) {
-  }
-  return ret;
+  if (nullptr == pathname || '\0' == *pathname) { return OB_INVALID_ARGUMENT; }
+  const int error = file_io::exists_path(path_bytes(pathname), is_exist);
+  return error ? ObIODeviceLocalFileOp::convert_sys_errno(error) : OB_SUCCESS;
 }
 
 int ObLocalDevice::stat(const char *pathname, ObIODFileStat &statbuf)
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObIODeviceLocalFileOp::stat(pathname, statbuf))) {
-  }
-  return ret;
+  if (nullptr == pathname || '\0' == *pathname) { return OB_INVALID_ARGUMENT; }
+  file_io::FileStat result{};
+  const int error = file_io::stat_path(path_bytes(pathname), result);
+  if (error) { return ObIODeviceLocalFileOp::convert_sys_errno(error); }
+  copy_file_stat(result, statbuf);
+  return OB_SUCCESS;
 }
 
 int ObLocalDevice::fstat(const ObIOFd &fd, ObIODFileStat &statbuf)
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObIODeviceLocalFileOp::fstat(fd, statbuf))) {
-  }
-  return ret;
+  std::shared_lock<std::shared_mutex> guard(file_session_lock_);
+  if (!is_inited_) return OB_NOT_INIT;
+  if (!fd.is_normal_file() || (nullptr != fd.device_handle_ && fd.device_handle_ != this)) return OB_INVALID_ARGUMENT;
+  file_io::FileStat result{};
+  const int error = named_->named_enabled() ? named_->stat_named(fd.second_id_, result) : files_->stat_registered(fd.second_id_, result);
+  if (error) return ObIODeviceLocalFileOp::convert_sys_errno(error);
+  copy_file_stat(result, statbuf);
+  return OB_SUCCESS;
 }
 
-//block interfaces
-int ObLocalDevice::mark_blocks(ObIBlockIterator &block_iter)
+int ObLocalDevice::mark_blocks(ObIBlockIterator &iter)
 {
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    SHARE_LOG(WARN, "The local device has not been inited, ", K(ret));
-  } else if (OB_UNLIKELY(is_marked_)) {
-    ret = OB_INIT_TWICE;
-    SHARE_LOG(WARN, "The local device has been masked, ", K(ret));
-  } else {
-    lib::ObMutexGuard guard(block_lock_);
-
-    MEMSET(block_bitmap_, 0, sizeof(bool) * total_block_cnt_);
-
-    for (int64_t i = 0; i < RESERVED_BLOCK_INDEX; ++i) {
-      block_bitmap_[i] = 1;
-    }
-
-    ObIOFd block_id;
-    int64_t block_idx = 0;
-    while (OB_SUCC(ret)) {
-      if (OB_SUCC(block_iter.get_next_block(block_id))) {
-        block_idx = block_id.second_id_;
-        if (block_idx >= total_block_cnt_ || block_idx < RESERVED_BLOCK_INDEX) {
-          ret = OB_INVALID_DATA;
-          SHARE_LOG(WARN, "Invalid block id,", K(block_idx), K_(total_block_cnt));
-        } else {
-          block_bitmap_[block_idx] = 1;
-        }
-      }
-    }
-
-    if (OB_ITER_END == ret) {
-      ret = OB_SUCCESS;
-    }
-
-    if (OB_FAIL(ret)) {
-      MEMSET(block_bitmap_, 0, sizeof(bool) * total_block_cnt_);
-    } else {
-      free_block_cnt_ = 0;
-      free_block_push_pos_ = 0;
-      for (int64_t i = RESERVED_BLOCK_INDEX; i < total_block_cnt_; ++i) {
-        if (!block_bitmap_[i]) {
-          free_block_array_[free_block_push_pos_++] = i;
-          free_block_cnt_++;
-          try_punch_hole(i); // ignore ret on purpose
-        }
-      }
-      is_marked_ = true;
-      SHARE_LOG(INFO, "The local block device has been masked, ", K(ret), K_(free_block_cnt),
-          K(total_block_cnt_));
-    }
-  }
-  return ret;
-}
-
-
-int ObLocalDevice::alloc_block(const common::ObIODOpts *opts, ObIOFd &block_id)
-{
-  UNUSED(opts);
-  int ret = OB_SUCCESS;
-  int64_t block_idx = 0;
-
+  if (!is_inited_) return OB_NOT_INIT;
   lib::ObMutexGuard guard(block_lock_);
-  if (OB_UNLIKELY(!is_inited_) || OB_UNLIKELY(!is_marked_)) {
-    ret = OB_NOT_INIT;
-    SHARE_LOG(WARN, "The ObLocalDevice is not ready, ", K(ret), K(is_inited_), K(is_marked_));
-  } else if (OB_UNLIKELY(free_block_cnt_ <= 0)) {
-    ret = OB_SERVER_OUTOF_DISK_SPACE;
-    SHARE_LOG(WARN, "Fail to alloc block", K(ret), K(free_block_cnt_), K(total_block_cnt_));
-  } else {
-    block_idx = free_block_array_[free_block_pop_pos_];
-    if (0 == block_bitmap_[block_idx]) {
-      block_bitmap_[block_idx] = 1;
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-      SHARE_LOG(ERROR, "unexpected error, bitmap isn't 0", K(ret), K(block_idx));
-    }
-    free_block_pop_pos_ = (free_block_pop_pos_ + 1) % total_block_cnt_;
-    --free_block_cnt_;
+  if (is_marked_) return OB_INIT_TWICE;
+  int ret = block_status(blocks_->restart_marking());
+  ObIOFd id;
+  while (OB_SUCC(ret)) {
+    ret = iter.get_next_block(id);
     if (OB_SUCC(ret)) {
-      block_id.first_id_ = 0;
-      block_id.second_id_ = block_idx;
+      if (id.second_id_ < RESERVED_BLOCK_INDEX) {
+        ret = OB_INVALID_DATA;
+      } else {
+        const uint64_t index = id.second_id_;
+        ret = block_status(blocks_->mark_blocks({&index, 1}));
+      }
     }
   }
-
+  if (ret == OB_ITER_END) ret = block_status(blocks_->finish_marking());
+  if (OB_SUCC(ret)) {
+    is_marked_ = true;
+    storage_io::BlockStats stats{};
+    if (block_status(blocks_->block_stats(stats)) == OB_SUCCESS && stats.reclamation_failures > 0) {
+      SHARE_LOG(WARN, "block reclamation failed during marking", "failures", stats.reclamation_failures);
+    }
+  } else {
+    blocks_->restart_marking();
+  }
   return ret;
 }
 
-int ObLocalDevice::alloc_blocks(
-    const common::ObIODOpts *opts,
-    const int64_t count,
-    common::ObIArray<ObIOFd> &blocks)
+int ObLocalDevice::alloc_block(const common::ObIODOpts *opts, ObIOFd &id)
 {
   UNUSED(opts);
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT || OB_UNLIKELY(!is_marked_)) {
-    ret = OB_NOT_INIT;
-    SHARE_LOG(WARN, "The ObLocalDevice is not ready, ", K(ret), K(is_inited_), K(is_marked_));
-  } else if (OB_UNLIKELY(0 == count)) {
-    // do nothing
-  } else {
-    blocks.reset();
-    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-      ObIOFd tmp_fd;
-      if (OB_FAIL(alloc_block(opts, tmp_fd)) && OB_SERVER_OUTOF_DISK_SPACE != ret) {
-        SHARE_LOG(WARN, "Alloc block fail", K(ret));
-      } else if (OB_SERVER_OUTOF_DISK_SPACE == ret) {
-        ret = OB_SUCCESS;
-        break;
-      } else if (OB_FAIL(blocks.push_back(tmp_fd))) {
-      }
-    }
+  if (!is_inited_ || !is_marked_) return OB_NOT_INIT;
+  rust::Vec<uint64_t> indices;
+  int ret = block_status(blocks_->allocate_blocks(1, indices));
+  if (OB_SUCC(ret)) {
+    if (indices.size() != 1) ret = OB_SERVER_OUTOF_DISK_SPACE;
+    else { id.first_id_ = 0; id.second_id_ = indices[0]; }
   }
   return ret;
 }
 
-void ObLocalDevice::free_block(const ObIOFd &block_id)
+int ObLocalDevice::alloc_blocks(const common::ObIODOpts *opts, const int64_t count,
+    common::ObIArray<ObIOFd> &out)
 {
+  if (count < 0) return OB_INVALID_ARGUMENT;
   int ret = OB_SUCCESS;
-  const int64_t block_idx = block_id.second_id_;
-  lib::ObMutexGuard guard(block_lock_);
-  if (OB_UNLIKELY(!is_inited_) || OB_UNLIKELY(!is_marked_)) {
-    ret = OB_NOT_INIT;
-    SHARE_LOG(WARN, "The ObLocalDevice is not ready, ", K(ret), K(is_inited_), K(is_marked_));
-  } else if (0 == block_idx || block_idx >= total_block_cnt_) {
-    ret = OB_INVALID_DATA;
-    SHARE_LOG(ERROR, "Invalid block id to free, ", K(ret), K(block_id));
-  } else if (1 == block_bitmap_[block_idx]) {
-    free_block_array_[free_block_push_pos_] = block_idx;
-    free_block_push_pos_ = (free_block_push_pos_ + 1) % total_block_cnt_;
-    block_bitmap_[block_idx] = 0;
-    ++free_block_cnt_;
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    SHARE_LOG(WARN, "unexpected error, bitmap isn't 1", K(ret), K(block_idx), K(block_id));
+  out.reset();
+  for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+    ObIOFd id;
+    ret = alloc_block(opts, id);
+    if (ret == OB_SERVER_OUTOF_DISK_SPACE) { ret = OB_SUCCESS; break; }
+    if (OB_SUCC(ret) && OB_FAIL(out.push_back(id))) free_block(id);
   }
-
-  if (OB_SUCC(ret) && OB_FAIL(try_punch_hole(block_idx))) {
-    SHARE_LOG(WARN, "try punch hole fail", K(ret), K(block_idx));
-  }
+  return ret;
 }
 
-int ObLocalDevice::try_punch_hole(const int64_t block_index)
+void ObLocalDevice::free_block(const ObIOFd &id)
 {
   int ret = OB_SUCCESS;
-  // FALLOC_FL_PUNCH_HOLE is only supported after glibc-2.17
-  // https://bugzilla.redhat.com/show_bug.cgi?id=1476120
-# if __linux && (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 17))
-  if (is_fs_support_punch_hole_ && config::_enable_block_file_punch_hole()) {
-    const int64_t len = block_size_;
-    const int64_t offset = block_size_ * block_index;
-    const int sys_ret = ::fallocate(block_fd_, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, offset, len);
-    if (sys_ret < 0) {
-      const int sys_err = errno;
-      if (EOPNOTSUPP == sys_err) {
-        // The file system containing the file referred to by fd does
-        // not support this operation; or the mode is not supported
-        // by the file system containing the file referred to by fd.
-        is_fs_support_punch_hole_ = false;
-        SHARE_LOG(WARN, "Punch hole not support", K(block_index), K(offset), K(len), K(sys_ret), K(sys_err), KERRMSG);
-      } else {
-        SHARE_LOG(ERROR, "Punch hole fail", K(block_index), K(offset), K(len), K(sys_ret), K(sys_err), KERRMSG);
-      }
-    } else {
-      SHARE_LOG(INFO, "Punch hole success", K(block_index), K(offset), K(len));
+  if (id.second_id_ < RESERVED_BLOCK_INDEX) {
+    SHARE_LOG(WARN, "invalid block release", K(id));
+  } else {
+    const auto result = blocks_->release_block(id.second_id_);
+    ret = block_status(result.status);
+    if (ret != OB_SUCCESS || result.reclamation_error != 0) {
+      SHARE_LOG(WARN, "block release or reclamation failed", K(ret), K(id),
+          "reclamation_error", result.reclamation_error, "os_error", result.reclamation_os_error);
     }
   }
-#endif
-  return ret;
 }
 
 int ObLocalDevice::fsync_block()
 {
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    SHARE_LOG(WARN, "The ObLocalDevice has not been inited, ", K(ret));
-  } else {
-    int sys_ret = 0;
-    if (0 != (sys_ret = ::fsync(block_fd_))) {
-      ret = ObIODeviceLocalFileOp::convert_sys_errno();
-      SHARE_LOG(WARN, "Fail to sync block file, ", K(ret), K(sys_ret), KERRMSG);
-    }
-  }
-  return ret;
+  return is_inited_ ? block_status(blocks_->sync_blocks()) : OB_NOT_INIT;
 }
 
 int ObLocalDevice::get_restart_sequence(uint32_t &restart_id) const
@@ -679,20 +659,37 @@ int ObLocalDevice::pread(
     void *buf,
     int64_t &read_size)
 {
+  std::shared_lock<std::shared_mutex> guard(file_session_lock_);
   int ret = OB_SUCCESS;
+  read_size = 0;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     SHARE_LOG(WARN, "The ObLocalDevice has not been inited, ", K(ret));
-  } else if (fd.is_block_file() && fd.second_id_ < RESERVED_BLOCK_INDEX) {
+  } else if (fd.is_block_file() && (fd.second_id_ < RESERVED_BLOCK_INDEX
+      || (fd.device_handle_ != nullptr && fd.device_handle_ != this))) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     if (fd.is_block_file()) {
-      const int64_t block_file_offset = get_block_file_offset(fd, offset);
-      if (OB_FAIL(ObIODeviceLocalFileOp::pread_impl(block_fd_, buf, size, block_file_offset, read_size))) {
+      if (offset < 0 || size < 0 || (size > 0 && nullptr == buf)) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        const auto result = storage_io::read_block(*blocks_, fd.second_id_, offset,
+            {static_cast<uint8_t *>(buf), static_cast<size_t>(size)});
+        read_size = result.bytes;
+        if (result.error) ret = ObIODeviceLocalFileOp::convert_sys_errno(result.error);
       }
     } else if (fd.is_normal_file()) {
-      if (OB_FAIL(ObIODeviceLocalFileOp::pread_impl(fd.second_id_, buf, size, offset, read_size))) {
+      if ((nullptr != fd.device_handle_ && fd.device_handle_ != this) || offset < 0 || size < 0 || (size > 0 && nullptr == buf)) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        const auto result = named_->named_enabled()
+            ? named_->read_named(fd.second_id_, {static_cast<uint8_t *>(buf), static_cast<size_t>(size)}, offset)
+            : files_->read_registered(fd.second_id_, {static_cast<uint8_t *>(buf), static_cast<size_t>(size)}, offset);
+        read_size = result.bytes;
+        if (result.error) ret = ObIODeviceLocalFileOp::convert_sys_errno(result.error);
       }
+    } else {
+      ret = OB_INVALID_ARGUMENT;
     }
 
     if (read_size < 0) {
@@ -710,20 +707,37 @@ int ObLocalDevice::pwrite(
     const void *buf,
     int64_t &write_size)
 {
+  std::shared_lock<std::shared_mutex> guard(file_session_lock_);
   int ret = OB_SUCCESS;
+  write_size = 0;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     SHARE_LOG(WARN, "The ObLocalDevice has not been inited, ", K(ret));
-  } else if (fd.is_block_file() && fd.second_id_ < RESERVED_BLOCK_INDEX) {
+  } else if (fd.is_block_file() && (fd.second_id_ < RESERVED_BLOCK_INDEX
+      || (fd.device_handle_ != nullptr && fd.device_handle_ != this))) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     if (fd.is_block_file()) {
-      const int64_t block_file_offset = get_block_file_offset(fd, offset);
-      if (OB_FAIL(ObIODeviceLocalFileOp::pwrite_impl(block_fd_, buf, size, block_file_offset, write_size))) {
+      if (offset < 0 || size < 0 || (size > 0 && nullptr == buf)) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        const auto result = storage_io::write_block(*blocks_, fd.second_id_, offset,
+            {static_cast<const uint8_t *>(buf), static_cast<size_t>(size)});
+        write_size = result.bytes;
+        if (result.error) ret = ObIODeviceLocalFileOp::convert_sys_errno(result.error);
       }
     } else if (fd.is_normal_file()) {
-      if (OB_FAIL(ObIODeviceLocalFileOp::pwrite_impl(fd.second_id_, buf, size, offset, write_size))) {
+      if ((nullptr != fd.device_handle_ && fd.device_handle_ != this) || offset < 0 || size < 0 || (size > 0 && nullptr == buf)) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        const auto result = named_->named_enabled()
+            ? named_->write_named(fd.second_id_, {static_cast<const uint8_t *>(buf), static_cast<size_t>(size)}, offset)
+            : files_->write_registered(fd.second_id_, {static_cast<const uint8_t *>(buf), static_cast<size_t>(size)}, offset);
+        write_size = result.bytes;
+        if (result.error) ret = ObIODeviceLocalFileOp::convert_sys_errno(result.error);
       }
+    } else {
+      ret = OB_INVALID_ARGUMENT;
     }
 
     if (write_size < 0) {
@@ -742,13 +756,14 @@ int ObLocalDevice::read(
   const int64_t size,
   int64_t &read_size)
 {
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    SHARE_LOG(WARN, "The ObLocalDevice has not been inited, ", K(ret));
-  } else if (OB_FAIL(ObIODeviceLocalFileOp::read(fd, buf, size, read_size))) {
-  }
-  return ret;
+  std::shared_lock<std::shared_mutex> guard(file_session_lock_);
+  read_size = 0;
+  if (!is_inited_) return OB_NOT_INIT;
+  if (!fd.is_normal_file() || (nullptr != fd.device_handle_ && fd.device_handle_ != this) || size < 0 || (size > 0 && nullptr == buf)) return OB_INVALID_ARGUMENT;
+  if (named_->named_enabled()) return OB_NOT_SUPPORTED;
+  const auto result = files_->read_next_registered(fd.second_id_, {static_cast<uint8_t *>(buf), static_cast<size_t>(size)});
+  read_size = result.bytes;
+  return result.error ? ObIODeviceLocalFileOp::convert_sys_errno(result.error) : OB_SUCCESS;
 }
 
 int ObLocalDevice::write(
@@ -757,344 +772,71 @@ int ObLocalDevice::write(
   const int64_t size,
   int64_t &write_size)
 {
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    SHARE_LOG(WARN, "The ObLocalDevice has not been inited, ", K(ret));
-  } else if (OB_FAIL(ObIODeviceLocalFileOp::write(fd, buf, size, write_size))) {
-  }
-  return ret;
+  std::shared_lock<std::shared_mutex> guard(file_session_lock_);
+  write_size = 0;
+  if (!is_inited_) return OB_NOT_INIT;
+  if (!fd.is_normal_file() || (nullptr != fd.device_handle_ && fd.device_handle_ != this) || size < 0 || (size > 0 && nullptr == buf)) return OB_INVALID_ARGUMENT;
+  if (named_->named_enabled()) return OB_NOT_SUPPORTED;
+  const auto result = files_->write_next_registered(fd.second_id_, {static_cast<const uint8_t *>(buf), static_cast<size_t>(size)});
+  write_size = result.bytes;
+  return result.error ? ObIODeviceLocalFileOp::convert_sys_errno(result.error) : OB_SUCCESS;
 }
 
-// Native Linux AIO implementation.
-#if defined(__linux__) && !defined(__ANDROID__)
 
-int ObLocalDevice::io_setup(
-    uint32_t max_events,
-    common::ObIOContext *&io_context)
+int ObLocalDevice::add_benchmark_target(const ObIOFd &fd, uint64_t device, int64_t length,
+    storage_io::BenchmarkPreparationSlot &preparation)
 {
-  int ret = OB_SUCCESS;
-  void *buf = nullptr;
+  std::shared_lock<std::shared_mutex> guard(file_session_lock_);
+  if (!is_inited_) { return OB_NOT_INIT; }
+  if (length <= 0) { return OB_INVALID_ARGUMENT; }
+  if (fd.is_normal_file()) {
+    if (fd.device_handle_ != nullptr && fd.device_handle_ != this) return OB_INVALID_ARGUMENT;
+    return named_->named_enabled()
+        ? storage_io::benchmark_add_named(preparation, *named_, device, fd.second_id_, 0, length, DIO_READ_ALIGN_SIZE)
+        : storage_io::benchmark_add_file(preparation, *files_, device, fd.second_id_, 0, length, DIO_READ_ALIGN_SIZE);
+  }
+  if (!fd.is_valid() || fd.second_id_ < RESERVED_BLOCK_INDEX
+      || (fd.device_handle_ != nullptr && fd.device_handle_ != this)) { return OB_INVALID_ARGUMENT; }
+  return storage_io::benchmark_add_block(preparation, *blocks_, device, fd.second_id_, 0, length, DIO_READ_ALIGN_SIZE);
+}
 
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    SHARE_LOG(WARN, "The ObLocalDevice has not been inited, ", K(ret));
-  } else if (OB_ISNULL(buf = allocator_.alloc(sizeof(ObLocalIOContext)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    SHARE_LOG(WARN, "Fail to allocate memory, ", K(ret));
+int ObLocalDevice::attach_named_owner(const storage_io::NamedOwnerHandle &owner)
+{
+  std::unique_lock<std::shared_mutex> guard(file_session_lock_);
+  if (!is_inited_) return OB_NOT_INIT;
+  const int error = named_->attach_named_owner(owner);
+  return error ? ObIODeviceLocalFileOp::convert_sys_errno(error) : OB_SUCCESS;
+}
+
+int ObLocalDevice::bind_request_target(const ObIOFd &fd, storage_io::RequestSlot &request, storage_io::RequestLifetime &lifetime)
+{
+  std::shared_lock<std::shared_mutex> guard(file_session_lock_);
+  if (!is_inited_) return OB_NOT_INIT;
+  int error = 0;
+  if (fd.is_normal_file()) {
+    if (fd.device_handle_ != this) return OB_INVALID_ARGUMENT;
+    error = named_->named_enabled()
+        ? storage_io::bind_named_target(*named_, fd.second_id_, request, lifetime)
+        : storage_io::bind_registered_target(*files_, fd.second_id_, request, lifetime);
+  } else if (fd.is_valid() && fd.second_id_ >= RESERVED_BLOCK_INDEX
+      && (fd.device_handle_ == nullptr || fd.device_handle_ == this)) {
+    error = storage_io::bind_block_target(*blocks_, fd.second_id_, request, lifetime);
   } else {
-    int sys_ret = 0;
-    ObLocalIOContext *local_context = nullptr;
-    local_context = new (buf) ObLocalIOContext();
-    if (0 != (sys_ret = ::io_setup(max_events, &(local_context->io_context_)))) {
-      // libaio on error it returns a negated error number (the negative of one of the values listed in ERRORS)
-      ret = ObIODeviceLocalFileOp::convert_sys_errno(-sys_ret);
-      SHARE_LOG(WARN, "Fail to setup io context, ", K(ret), K(sys_ret), KERRMSG);
-    } else {
-      io_context = local_context;
-    }
+    return OB_INVALID_ARGUMENT;
   }
-
-  if (OB_FAIL(ret) && nullptr != buf) {
-    allocator_.free(buf);
-  }
-  return ret;
+  return error ? ObIODeviceLocalFileOp::convert_sys_errno(error) : OB_SUCCESS;
 }
-
-int ObLocalDevice::io_destroy(common::ObIOContext *io_context)
-{
-  int ret = OB_SUCCESS;
-  ObLocalIOContext *local_io_context = nullptr;
-
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    SHARE_LOG(WARN, "The ObLocalDevice has not been inited, ", K(ret));
-  } else if (OB_ISNULL(io_context)) {
-    ret = OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "Invalid argument, ", KP(io_context));
-  } else if (OB_UNLIKELY(ObIOContextType::IO_CONTEXT_TYPE_LOCAL != io_context->get_type())) {
-    ret = OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "Invalid io context pointer", K(ret), KP(io_context),
-              "io_context_type", io_context->get_type());
-  } else if (OB_ISNULL(local_io_context = static_cast<ObLocalIOContext *> (io_context))) {
-    ret = OB_ERR_UNEXPECTED;
-    SHARE_LOG(WARN, "local io context is null", K(ret), KP(io_context));
-  } else {
-    int sys_ret = 0;
-    if ((sys_ret = ::io_destroy(local_io_context->io_context_)) != 0) {
-      // libaio on error it returns a negated error number (the negative of one of the values listed in ERRORS)
-      ret = ObIODeviceLocalFileOp::convert_sys_errno(-sys_ret);
-      SHARE_LOG(WARN, "Fail to destroy io context, ", K(ret), K(sys_ret), KERRMSG);
-    } else {
-      allocator_.free(io_context);
-    }
-  }
-  return ret;
-}
-
-int ObLocalDevice::io_prepare_pwrite(
-    const ObIOFd &fd,
-    void *buf,
-    size_t count,
-    int64_t offset,
-    ObIOCB *iocb,
-    void *callback)
-{
-  int ret = OB_SUCCESS;
-  ObLocalIOCB *local_iocb = nullptr;
-
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    SHARE_LOG(WARN, "The ObLocalDevice has not been inited, ", K(ret));
-  } else if (OB_ISNULL(buf) || OB_ISNULL(iocb)) {
-    ret = OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "Invalid argument, ", K(ret), KP(buf), KP(iocb));
-  } else if (OB_UNLIKELY(ObIOCBType::IOCB_TYPE_LOCAL != iocb->get_type())) {
-    ret = OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "Invalid iocb pointer", K(ret), KP(iocb), "iocb_type", iocb->get_type());
-  } else if (OB_ISNULL(local_iocb = static_cast<ObLocalIOCB *> (iocb))) {
-    ret = OB_ERR_UNEXPECTED;
-    SHARE_LOG(WARN, "local iocb is null", K(ret), KP(iocb));
-  } else if (fd.is_block_file() && fd.second_id_ < RESERVED_BLOCK_INDEX) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    if (fd.is_block_file()) {
-      ::io_prep_pwrite(&(local_iocb->iocb_), block_fd_, buf, count, get_block_file_offset(fd, offset));
-    } else {
-      ::io_prep_pwrite(&(local_iocb->iocb_), static_cast<int32_t>(fd.second_id_), buf, count, offset);
-    }
-    local_iocb->iocb_.data = callback;
-  }
-  return ret;
-}
-
-int ObLocalDevice::io_prepare_pread(
-  const ObIOFd &fd,
-  void *buf,
-  size_t count,
-  int64_t offset,
-  ObIOCB *iocb,
-  void *callback)
-{
-  int ret = OB_SUCCESS;
-  ObLocalIOCB *local_iocb = nullptr;
-
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    SHARE_LOG(WARN, "The ObLocalDevice has not been inited, ", K(ret));
-  } else if (OB_ISNULL(buf) || OB_ISNULL(iocb)) {
-    ret = OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "Invalid argument, ", K(ret), KP(buf), KP(iocb));
-  } else if (OB_UNLIKELY(ObIOCBType::IOCB_TYPE_LOCAL != iocb->get_type())) {
-    ret = OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "Invalid iocb pointer", K(ret), KP(iocb), "iocb_type", iocb->get_type());
-  } else if (OB_ISNULL(local_iocb = static_cast<ObLocalIOCB *> (iocb))) {
-    ret = OB_ERR_UNEXPECTED;
-    SHARE_LOG(WARN, "local iocb is null", K(ret), KP(iocb));
-  } else if (fd.is_block_file() && fd.second_id_ < RESERVED_BLOCK_INDEX) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    if (fd.is_block_file()) {
-      ::io_prep_pread(&(local_iocb->iocb_), block_fd_, buf, count, get_block_file_offset(fd, offset));
-    } else {
-      ::io_prep_pread(&(local_iocb->iocb_), static_cast<int32_t>(fd.second_id_), buf, count, offset);
-    }
-    local_iocb->iocb_.data = callback;
-  }
-
-  return ret;
-}
-
-int ObLocalDevice::io_submit(
-    common::ObIOContext *io_context,
-    common::ObIOCB *iocb)
-{
-  int ret = OB_SUCCESS;
-  ObTimeGuard time_guard("LocalDevice", 5000); //5ms
-  ObLocalIOContext *local_io_context = nullptr;
-  ObLocalIOCB *local_iocb = nullptr;
-  struct iocb *iocbp = nullptr;
-
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    SHARE_LOG(WARN, "The ObLocalDevice has not been inited, ", K(ret));
-  } else if (OB_ISNULL(io_context) || OB_ISNULL(iocb)) {
-    ret = OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "Invalid argument, ", KP(io_context), KP(iocb));
-  } else if (OB_UNLIKELY((ObIOContextType::IO_CONTEXT_TYPE_LOCAL != io_context->get_type())
-                         || (ObIOCBType::IOCB_TYPE_LOCAL != iocb->get_type()))) {
-    ret = OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "Invalid io_context or iocb pointer", K(ret), KP(io_context), "io_context_type",
-             io_context->get_type(), KP(iocb), "iocb_type", iocb->get_type());
-  } else if (OB_ISNULL(local_iocb = static_cast<ObLocalIOCB *> (iocb))) {
-    ret = OB_ERR_UNEXPECTED;
-    SHARE_LOG(WARN, "local iocb pointer is null", K(ret), KP(iocb));
-  } else if (OB_ISNULL(local_io_context = static_cast<ObLocalIOContext *> (io_context))) {
-    ret = OB_ERR_UNEXPECTED;
-    SHARE_LOG(WARN, "local io context pointer is null", K(ret), KP(io_context));
-  } else {
-    iocbp = &(local_iocb->iocb_);
-    int submit_ret = ::io_submit(local_io_context->io_context_, 1, &iocbp);
-    time_guard.click("LocalDevice_submit");
-    if (1 != submit_ret) {
-      // libaio on error it returns a negated error number (the negative of one of the values listed in ERRORS)
-      ret = ObIODeviceLocalFileOp::convert_sys_errno(-submit_ret);
-      SHARE_LOG(WARN, "Fail to submit aio, ", K(ret), K(submit_ret), K(errno), KERRMSG);
-    }
-  }
-  return ret;
-}
-
-int ObLocalDevice::io_cancel(
-    common::ObIOContext *io_context,
-    common::ObIOCB *iocb)
-{
-  int ret = OB_SUCCESS;
-  ObLocalIOContext *local_io_context = nullptr;
-  ObLocalIOCB *local_iocb = nullptr;
-  struct io_event local_event;
-
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    SHARE_LOG(WARN, "The ObLocalDevice has not been inited, ", K(ret));
-  } else if (OB_ISNULL(io_context) || OB_ISNULL(iocb)) {
-    ret = OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "Invalid argument, ", KP(io_context),KP(iocb));
-  } else if (OB_UNLIKELY((ObIOContextType::IO_CONTEXT_TYPE_LOCAL != io_context->get_type())
-                         || (ObIOCBType::IOCB_TYPE_LOCAL != iocb->get_type()))) {
-    ret = OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "Invalid io_context or iocb pointer", K(ret), KP(io_context), "io_context_type",
-             io_context->get_type(), KP(iocb), "iocb_type", iocb->get_type());
-  } else if (OB_ISNULL(local_iocb = static_cast<ObLocalIOCB *> (iocb))) {
-    ret = OB_ERR_UNEXPECTED;
-    SHARE_LOG(WARN, "local iocb pointer is null", K(ret), KP(iocb));
-  } else if (OB_ISNULL(local_io_context = static_cast<ObLocalIOContext *> (io_context))) {
-    ret = OB_ERR_UNEXPECTED;
-    SHARE_LOG(WARN, "local io context pointer is null", K(ret), KP(io_context));
-  } else {
-    int sys_ret = 0;
-    if ((sys_ret = ::io_cancel(local_io_context->io_context_, &(local_iocb->iocb_), &local_event)) < 0) {
-      // libaio on error it returns a negated error number (the negative of one of the values listed in ERRORS)
-      ret = ObIODeviceLocalFileOp::convert_sys_errno(-sys_ret);
-    }
-  }
-  return ret;
-}
-
-int ObLocalDevice::io_getevents(
-    common::ObIOContext *io_context,
-    int64_t min_nr,
-    common::ObIOEvents *events,
-    struct timespec *timeout)
-{
-  int ret = OB_SUCCESS;
-  ObLocalIOContext *local_io_context = nullptr;
-  ObLocalIOEvents *local_io_events = nullptr;
-
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    SHARE_LOG(WARN, "The ObLocalDevice has not been inited, ", K(ret));
-  } else if (OB_ISNULL(io_context) || OB_ISNULL(events)) {
-    ret = OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "Invalid argument, ", KP(io_context),KP(events));
-  } else if (OB_UNLIKELY((ObIOContextType::IO_CONTEXT_TYPE_LOCAL != io_context->get_type())
-                         || (ObIOEventsType::IO_EVENTS_TYPE_LOCAL != events->get_type()))) {
-    ret = OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "Invalid io_context or io_events pointer", K(ret), KP(io_context),
-      "io_context_type", io_context->get_type(), KP(events), "io_events_type", events->get_type());
-  } else if (OB_ISNULL(local_io_events = static_cast<ObLocalIOEvents *> (events))) {
-    ret = OB_ERR_UNEXPECTED;
-    SHARE_LOG(WARN, "local io events pointer is null", K(ret), KP(events));
-  } else if (OB_ISNULL(local_io_context = static_cast<ObLocalIOContext *> (io_context))) {
-    ret = OB_ERR_UNEXPECTED;
-    SHARE_LOG(WARN, "local io context pointer is null", K(ret), KP(io_context));
-  } else {
-    int sys_ret = 0;
-    {
-      while ((sys_ret = ::io_getevents(
-          local_io_context->io_context_,
-          min_nr,
-          local_io_events->max_event_cnt_,
-          local_io_events->io_events_,
-          timeout)) < 0 && -EINTR == sys_ret); // ignore EINTR
-    }
-    if (sys_ret < 0) {
-      // libaio on error it returns a negated error number (the negative of one of the values listed in ERRORS)
-      ret = ObIODeviceLocalFileOp::convert_sys_errno(-sys_ret);
-      SHARE_LOG(WARN, "Fail to get io events, ", K(ret), K(sys_ret), KERRMSG);
-    } else {
-      local_io_events->complete_io_cnt_ = sys_ret;
-    }
-  }
-  return ret;
-}
-
-common::ObIOCB* ObLocalDevice::alloc_iocb()
-{
-  ObLocalIOCB *iocb = nullptr;
-  ObLocalIOCB *buf = nullptr;
-  if (OB_LIKELY(is_inited_)) {
-    if (NULL != (buf = iocb_pool_.alloc())) {
-      iocb = new (buf) ObLocalIOCB();
-    }
-  }
-  return iocb;
-}
-
-common::ObIOEvents *ObLocalDevice::alloc_io_events(const uint32_t max_events)
-{
-  ObLocalIOEvents *io_events = nullptr;
-  char *buf = nullptr;
-  int64_t size = 0;
-
-  if (OB_LIKELY(is_inited_)) {
-    size = sizeof(ObLocalIOEvents) + max_events * sizeof(struct io_event);
-    if (NULL != (buf = (char*) allocator_.alloc(size))) {
-      MEMSET(buf, 0, size);
-      io_events = new (buf) ObLocalIOEvents();
-      io_events->max_event_cnt_ = max_events;
-      io_events->complete_io_cnt_ = 0;
-      io_events->io_events_ = reinterpret_cast<struct io_event*> (buf + sizeof(ObLocalIOEvents));
-    }
-  }
-  return io_events;
-}
-
-void ObLocalDevice::free_iocb(common::ObIOCB *iocb)
-{
-  int ret = OB_SUCCESS;
-  if (OB_LIKELY(is_inited_)) {
-    ObLocalIOCB *local_iocb = nullptr;
-    if (OB_UNLIKELY(ObIOCBType::IOCB_TYPE_LOCAL != iocb->get_type())) {
-      ret = OB_INVALID_ARGUMENT;
-      SHARE_LOG(WARN, "Invalid iocb pointer", K(ret), KP(iocb), "iocb_type", iocb->get_type());
-    } else if (OB_ISNULL(local_iocb = static_cast<ObLocalIOCB *>(iocb))) {
-      ret = OB_ERR_UNEXPECTED;
-      SHARE_LOG(WARN, "local iocb is null", K(ret), KP(iocb));
-    } else {
-      local_iocb->~ObLocalIOCB();
-      iocb_pool_.free(local_iocb);
-    }
-  }
-}
-
-void ObLocalDevice::free_io_events(common::ObIOEvents *io_event)
-{
-  if (OB_LIKELY(is_inited_)) {
-    allocator_.free(io_event);
-  }
-}
-
-#endif
 
 int64_t ObLocalDevice::get_total_block_size() const
 {
-  return ATOMIC_LOAD(&block_file_size_);
+  storage_io::BlockStats stats{};
+  return block_status(blocks_->block_stats(stats)) == OB_SUCCESS ? stats.capacity : 0;
 }
 
 int64_t ObLocalDevice::get_free_block_count() const
 {
-  return free_block_cnt_;
+  storage_io::BlockStats stats{};
+  return block_status(blocks_->block_stats(stats)) == OB_SUCCESS ? stats.free_blocks : 0;
 }
 
 int64_t ObLocalDevice::get_reserved_block_count() const
@@ -1110,7 +852,7 @@ int64_t ObLocalDevice::get_max_block_count(int64_t reserved_size) const
 int64_t ObLocalDevice::get_max_block_size(int64_t reserved_size) const
 {
   int ret = OB_SUCCESS;
-  struct statvfs svfs;
+  file_io::SpaceResult space{};
 
   const int64_t config_max_file_size = config::datafile_maxsize();
   const int64_t current_size = get_total_block_size();
@@ -1121,11 +863,11 @@ int64_t ObLocalDevice::get_max_block_size(int64_t reserved_size) const
   } else if (OB_ISNULL(sstable_dir_)) {
     ret = OB_ERR_UNEXPECTED;
     SHARE_LOG(WARN, "Failed to get max block size", K(ret), K(sstable_dir_));
-  } else if (OB_UNLIKELY(0 != statvfs(sstable_dir_, &svfs))) {
-    ret = ObIODeviceLocalFileOp::convert_sys_errno();
+  } else if (0 != (space = file_io::read_space({reinterpret_cast<const uint8_t *>(sstable_dir_), STRLEN(sstable_dir_)})).error) {
+    ret = ObIODeviceLocalFileOp::convert_sys_errno(space.error);
     SHARE_LOG(WARN, "Failed to get disk space", K(ret), K(sstable_dir_));
   } else {
-    const int64_t free_space = std::max(static_cast<int64_t>(0), (int64_t)(svfs.f_bavail * svfs.f_bsize));
+    const int64_t free_space = std::max(static_cast<int64_t>(0), (int64_t)(space.available));
     const int64_t max_file_size = std::max(current_size, current_size + free_space - reserved_size);
     /* when datafile_maxsize is large than current datafile_size, we should return
        the Maximun left space that can be extend. */
@@ -1158,13 +900,16 @@ int ObLocalDevice::get_data_disk_used_percentage_(
   } else if (OB_FAIL(space_provider_->get_reserved_size(reserved_size))) {
   } else {
     const int64_t max_block_cnt = get_max_block_count(reserved_size);
-    int64_t actual_free_block_cnt = free_block_cnt_;
-    if (max_block_cnt > total_block_cnt_) {
-      actual_free_block_cnt = max_block_cnt - total_block_cnt_ + free_block_cnt_;
+    storage_io::BlockStats stats{};
+    if (OB_FAIL(block_status(blocks_->block_stats(stats)))) return ret;
+    const int64_t total_block_cnt = stats.total_blocks;
+    int64_t actual_free_block_cnt = stats.free_blocks;
+    if (max_block_cnt > total_block_cnt) {
+      actual_free_block_cnt = max_block_cnt - total_block_cnt + stats.free_blocks;
     }
     const int64_t required_count = required_size / block_size_;
     const int64_t free_count = actual_free_block_cnt - required_count;
-    percent = 100 - 100 * free_count / total_block_cnt_;
+    percent = 100 - 100 * free_count / total_block_cnt;
   }
   return ret;
 }
@@ -1219,83 +964,10 @@ int ObLocalDevice::check_write_limited() const
   return ret;
 }
 
-int ObLocalDevice::resize_block_file(const int64_t new_size)
+int ObLocalDevice::resize_block_file(const int64_t new_size, const int64_t reserved_size)
 {
-  int ret = OB_SUCCESS;
-  const int64_t delta_size = new_size - block_file_size_;
-  if (delta_size <= 0) {
-    if (delta_size < 0) {
-      ret = OB_NOT_SUPPORTED;
-      SHARE_LOG(WARN, "Can not make the block file smaller", K(ret), K(new_size), K(block_file_size_));
-    }
-    return ret;
-  }
-
-  const ObMemAttr mem_attr("LDBlockBitMap");
-  const int64_t new_total_block_cnt = new_size / block_size_;
-  int64_t *new_free_block_array = nullptr;
-  bool *new_block_bitmap = nullptr;
-#ifdef __EMSCRIPTEN__
-  // A retry preserves the old blocks and any already-written tail.
-  if (0 != common::wasm::extend_file_with_zeros(block_fd_, new_size)) {
-    ret = ObIODeviceLocalFileOp::convert_sys_errno();
-    SHARE_LOG(WARN, "write data file extension failed", K(ret), K(new_size), K(errno));
-  }
-#else
-  const ObIOFd fd(this, ObIOFd::NORMAL_FILE_ID, block_fd_);
-  ret = ObIODeviceLocalFileOp::fallocate(fd, 0, block_file_size_, delta_size);
-#endif
-  // Publish additional blocks only after the new file length is durable.
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(fsync_block())) {
-  } else if (OB_ISNULL(new_free_block_array
-      = (int64_t *) ob_malloc(sizeof(int64_t) * new_total_block_cnt, mem_attr))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    SHARE_LOG(WARN, "Fail to allocate memory", K(ret), K(new_size), K(new_total_block_cnt));
-  } else if (OB_ISNULL(new_block_bitmap
-      = (bool *) ob_malloc(sizeof(bool) * new_total_block_cnt, mem_attr))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    SHARE_LOG(WARN, "Fail to allocate memory", K(ret), K(new_size), K(new_total_block_cnt));
-  } else {
-    if (free_block_pop_pos_ > free_block_push_pos_) {
-      MEMCPY(new_free_block_array, free_block_array_ + free_block_pop_pos_,
-          (total_block_cnt_ - free_block_pop_pos_) * sizeof(int64_t));
-      MEMCPY(new_free_block_array + total_block_cnt_ - free_block_pop_pos_, free_block_array_,
-          free_block_push_pos_ * sizeof(int64_t));
-    } else if (free_block_pop_pos_ < free_block_push_pos_) {
-      MEMCPY(new_free_block_array, free_block_array_ + free_block_pop_pos_,
-          (free_block_push_pos_ - free_block_pop_pos_) * sizeof(int64_t));
-    } else {
-      MEMCPY(new_free_block_array, free_block_array_, free_block_cnt_ * sizeof(int64_t));
-    }
-
-    free_block_pop_pos_ = 0;
-    free_block_push_pos_ = free_block_cnt_;
-    MEMSET(new_block_bitmap, 0, sizeof(bool) * new_total_block_cnt);
-    MEMCPY(new_block_bitmap, block_bitmap_, sizeof(bool) * total_block_cnt_);
-
-    ob_free(free_block_array_);
-    ob_free(block_bitmap_);
-    free_block_array_ = new_free_block_array;
-    block_bitmap_ = new_block_bitmap;
-    for (int64_t i = total_block_cnt_; i < new_total_block_cnt; ++i) {
-      free_block_array_[free_block_push_pos_++] = i;
-      ++free_block_cnt_;
-    }
-    total_block_cnt_ = new_total_block_cnt;
-    ATOMIC_STORE(&block_file_size_, new_size);
-    SHARE_LOG(INFO, "succeed to resize file", K(new_size), K(total_block_cnt_), K(free_block_cnt_));
-  }
-
-  if (OB_FAIL(ret)) {
-    if (nullptr != new_free_block_array) {
-      ob_free(new_free_block_array);
-    }
-    if (nullptr != new_block_bitmap) {
-      ob_free(new_block_bitmap);
-    }
-  }
-  return ret;
+  if (new_size < 0 || reserved_size < 0) return OB_INVALID_ARGUMENT;
+  return block_status(blocks_->grow_blocks(new_size, reserved_size));
 }
 
 } /* namespace share */

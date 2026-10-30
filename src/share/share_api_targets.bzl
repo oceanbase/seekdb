@@ -368,10 +368,6 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
             "//src/oblib:oblib_foundation",
         ],
     ),
-    "io_bench_controller_interface": struct(
-        hdrs = ["io/ob_i_io_bench_controller.h"],
-        deps = [],
-    ),
     "local_device_space_interface": struct(
         hdrs = ["ob_i_local_device_space_provider.h"],
         deps = [],
@@ -385,11 +381,13 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
             "ob_local_device.h",
         ],
         deps = [
+            "//rust:file_io_headers",
+            "//rust:storage_io_headers",
             ":local_io_config",
             ":io_device_interface",
             ":local_device_space_interface",
             "//src/oblib:oblib_foundation",
-            "//bazel/third_party:libaio_headers",
+            "//src/oblib:oblib_restore",
         ],
     ),
     "rpc_dispatch": struct(

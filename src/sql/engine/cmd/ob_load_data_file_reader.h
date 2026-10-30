@@ -138,7 +138,6 @@ public:
   int open(const ObString &filename);
   
 private:
-  ObString             filename_;
   common::ObFileReader file_reader_;
   int64_t              offset_;
   bool                 eof_;

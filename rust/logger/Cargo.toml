@@ -6,6 +6,7 @@ publish = false
 description = "seekdb runtime log backend using the unmodified spdlog-rs async pool."
 
 [dependencies]
+file-io = { path = "../file-io" }
 spdlog-rs = { version = "=0.5.3", features = ["multi-thread"] }
 chrono = "0.4"
 libc = "0.2"
@@ -14,9 +15,6 @@ log = "0.4"
 
 [dev-dependencies]
 mio = { version = "1", features = ["os-poll", "net"] }
-
-[target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
 
 [lints.clippy]
 # The documented pointer contracts are collected in src/bridge.rs.

@@ -96,6 +96,8 @@ grouped_unity_cc_library(
     public_hdrs = _PUBLIC_HDRS,
     private_hdrs = _PRIVATE_HDRS,
     deps = [
+        "//rust:file_io_headers",
+        "//rust:storage_io_headers",
         "//src/share:startup_result",
         "//src/share:local_io_config",
         ":append_callback_interface",
@@ -130,7 +132,6 @@ grouped_unity_cc_library(
         "//src/share:worker_runtime",
         "//bazel/third_party:absl_headers",
         "//bazel/third_party:curl_headers",
-        "//bazel/third_party:libaio_headers",
         "//bazel/third_party:mariadb_headers",
         "//bazel/third_party:openssl_headers",
         "//bazel/third_party:rapidjson_headers",

@@ -46,12 +46,7 @@ OBLIB_UNITY_GROUPS = {
             language = "c++",
             srcs = [
                 "src/oblib/common/log/ob_log_cursor.cpp",
-                "src/oblib/common/log/ob_log_data_writer.cpp",
-                "src/oblib/common/log/ob_log_dir_scanner.cpp",
                 "src/oblib/common/log/ob_log_entry.cpp",
-                "src/oblib/common/log/ob_log_generator.cpp",
-                "src/oblib/common/log/ob_log_reader.cpp",
-                "src/oblib/common/log/ob_single_log_reader.cpp",
             ],
         ),
         struct(
@@ -242,7 +237,7 @@ OBLIB_UNITY_GROUPS = {
                 "src/oblib/lib/checksum/ob_parity_check.cpp",
                 "src/oblib/lib/cpu/ob_cpu_topology.cpp",
                 "src/oblib/lib/encrypt/ob_encrypted_helper.cpp",
-                "src/oblib/lib/file/file_directory_utils.cpp",
+                "src/oblib/lib/file/path_operations.cpp",
                 "src/oblib/lib/file/ob_file.cpp",
                 "src/oblib/lib/file/ob_string_util.cpp",
                 "src/oblib/lib/hash/ob_link_hashmap.cpp",

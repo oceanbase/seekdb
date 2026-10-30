@@ -19,7 +19,6 @@ SDK_HEADERS = {
     "boost_headers": _headers("boost"),
     "curl_headers": _headers("curl"),
     "fast_float_headers": _headers("fast_float", ["include", "include/fast_float"]),
-    "libaio_headers": {"hdrs": ["include/libaio.h"], "includes": ["include"]},
     "libunwind_headers": {"hdrs": ["include/libunwind*.h", "include/unwind.h"], "includes": ["include"]},
     "libxml2_headers": _headers("libxml2", ["include/libxml2"]),
     "mariadb_headers": _headers("mariadb", ["include", "include/mariadb"]),

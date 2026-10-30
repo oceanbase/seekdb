@@ -119,7 +119,7 @@ C代码的实现文件命名为.c，头文件命名为.h，C++代码的实现文
 #include "common/ob_obj_type.h"
 #include "common/ob_schema_helper.h"
 #include "common/ob_define.h"
-#include "common/file_directory_utils.h"
+#include "lib/file/path_operations.h"
 ```
 
 ## 2.8 总结

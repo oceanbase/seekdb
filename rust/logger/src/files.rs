@@ -15,34 +15,14 @@
 //! seekdb's timestamped file convention on top of spdlog's public Sink API.
 //! Open files, append/reopen/rotation and retention have one owner.
 use chrono::Local;
-use std::ffi::CString;
+use file_io::{redirect_stdio, space, write_all as write_bytes, FileIdentity, Transfer};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 #[cfg(unix)]
-use std::os::unix::{ffi::OsStrExt, fs::MetadataExt, fs::OpenOptionsExt, io::AsRawFd};
-
-#[cfg(windows)]
-use std::os::windows::{ffi::OsStrExt, io::AsRawHandle};
-
-#[cfg(windows)]
-fn identity(file: &File) -> io::Result<(u32, u32, u32)> {
-    use windows_sys::Win32::Storage::FileSystem::{
-        GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
-    };
-    let mut info = std::mem::MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::uninit();
-    if unsafe { GetFileInformationByHandle(file.as_raw_handle(), info.as_mut_ptr()) } == 0 {
-        return Err(io::Error::last_os_error());
-    }
-    let info = unsafe { info.assume_init() };
-    Ok((
-        info.dwVolumeSerialNumber,
-        info.nFileIndexHigh,
-        info.nFileIndexLow,
-    ))
-}
+use std::os::unix::fs::OpenOptionsExt;
 
 pub(crate) struct Limits {
     pub size: u64,
@@ -64,21 +44,6 @@ pub(crate) struct Output {
 
 pub(crate) const BUFFER_CAPACITY: usize = 64 * 1024;
 const BUFFER_RECORDS: usize = 256;
-
-// Unlike write_all, retain the progress on failure. Buffered records are
-// discarded after an error, never retried with an already written prefix.
-fn write_bytes(writer: &mut impl Write, bytes: &[u8]) -> (usize, io::Result<()>) {
-    let mut written = 0;
-    while written < bytes.len() {
-        match writer.write(&bytes[written..]) {
-            Ok(0) => return (written, Err(io::ErrorKind::WriteZero.into())),
-            Ok(n) => written += n,
-            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
-            Err(e) => return (written, Err(e)),
-        }
-    }
-    (written, Ok(()))
-}
 
 fn open(path: &Path) -> io::Result<File> {
     let mut options = OpenOptions::new();
@@ -121,37 +86,7 @@ impl Output {
             return Ok(());
         }
         if let Some(file) = &self.file {
-            #[cfg(unix)]
-            let fd = file.as_raw_fd();
-            // std::File uses Win32 HANDLEs; stdout/stderr use CRT descriptors.
-            #[cfg(windows)]
-            let fd = {
-                let _ = file;
-                let path = CString::new(self.path.to_string_lossy().as_bytes())?;
-                let fd = unsafe {
-                    libc::open(
-                        path.as_ptr(),
-                        libc::O_WRONLY | libc::O_APPEND | libc::O_BINARY,
-                    )
-                };
-                if fd < 0 {
-                    return Err(io::Error::last_os_error());
-                }
-                fd
-            };
-            let result = (|| {
-                for target in [1, 2] {
-                    if unsafe { libc::dup2(fd, target) } < 0 {
-                        return Err(io::Error::last_os_error());
-                    }
-                }
-                Ok(())
-            })();
-            #[cfg(windows)]
-            unsafe {
-                libc::close(fd);
-            }
-            result?;
+            redirect_stdio(file)?;
         }
         Ok(())
     }
@@ -175,26 +110,14 @@ impl Output {
         self.flush()?;
         self.last_check = Instant::now();
         if let Some(file) = &self.file {
-            match fs::metadata(&self.path) {
+            match FileIdentity::at(&self.path) {
                 Err(e) if e.kind() == io::ErrorKind::NotFound => self.reopen()?,
                 Err(e) => return Err(e),
-                Ok(metadata) => {
-                    #[cfg(unix)]
-                    {
-                        let current = file.metadata()?;
-                        if metadata.ino() != current.ino() || metadata.dev() != current.dev() {
-                            self.reopen()?;
-                        } else {
-                            self.size = metadata.len();
-                        }
-                    }
-                    #[cfg(windows)]
-                    {
-                        if identity(file)? != identity(&open(&self.path)?)? {
-                            self.reopen()?;
-                        } else {
-                            self.size = metadata.len();
-                        }
+                Ok(identity) => {
+                    if identity != FileIdentity::of(file)? {
+                        self.reopen()?;
+                    } else {
+                        self.size = file.metadata()?.len();
                     }
                 }
             }
@@ -204,36 +127,13 @@ impl Output {
 
     fn check_disk(&mut self) -> io::Result<()> {
         self.last_disk_check = Instant::now();
-        #[cfg(unix)]
         if self.file.is_some() {
-            let path = CString::new(self.path.as_os_str().as_bytes())?;
-            let mut stat = std::mem::MaybeUninit::<libc::statvfs>::uninit();
-            if unsafe { libc::statvfs(path.as_ptr(), stat.as_mut_ptr()) } == 0 {
-                let stat = unsafe { stat.assume_init() };
-                // statvfs field widths differ between supported Unix targets.
-                #[allow(clippy::unnecessary_cast)]
-                let available = (stat.f_bfree as u64).saturating_mul(stat.f_frsize as u64);
-                self.can_print = available > 32 * 1024 * 1024;
-            }
-        }
-        #[cfg(windows)]
-        if self.file.is_some() {
-            let directory = self
-                .path
-                .parent()
-                .filter(|p| !p.as_os_str().is_empty())
-                .unwrap_or(Path::new("."));
-            let path: Vec<u16> = directory.as_os_str().encode_wide().chain(Some(0)).collect();
-            let mut available = 0;
-            if unsafe {
-                windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW(
-                    path.as_ptr(),
-                    &mut available,
-                    std::ptr::null_mut(),
-                    std::ptr::null_mut(),
-                )
-            } != 0
-            {
+            if let Ok(value) = space(&self.path) {
+                let available = if cfg!(windows) {
+                    value.available
+                } else {
+                    value.free
+                };
                 self.can_print = available > 32 * 1024 * 1024;
             }
         }
@@ -274,7 +174,10 @@ impl Output {
                 }
             } else {
                 self.flush()?;
-                let (written, result) = write_bytes(self.file.as_mut().unwrap(), bytes);
+                let Transfer {
+                    bytes: written,
+                    result,
+                } = write_bytes(self.file.as_mut().unwrap(), bytes);
                 self.size = self.size.saturating_add(written as u64);
                 result?;
             }
@@ -298,7 +201,10 @@ impl Output {
         if !self.buffered() {
             return Ok(());
         }
-        let (written, result) = write_bytes(self.file.as_mut().unwrap(), &self.buffer);
+        let Transfer {
+            bytes: written,
+            result,
+        } = write_bytes(self.file.as_mut().unwrap(), &self.buffer);
         self.size = self
             .size
             .saturating_sub((self.buffer.len() - written) as u64);
@@ -389,13 +295,13 @@ impl Output {
         prefix.push(".");
         let prefix = prefix.to_string_lossy();
         let mut archives = Vec::new();
-        for entry in fs::read_dir(dir)? {
+        for entry in file_io::read_dir(dir)? {
             let entry = entry?;
             let name = entry.file_name();
             let name = name.to_string_lossy();
             if let Some(suffix) = name.strip_prefix(prefix.as_ref()) {
                 if suffix.len() == 17 && suffix.bytes().all(|b| b.is_ascii_digit()) {
-                    archives.push(entry.path());
+                    archives.push(dir.join(entry.file_name()));
                 }
             }
         }
@@ -417,38 +323,6 @@ impl Output {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn interrupted_and_partial_writes_retain_exact_progress() {
-        struct Partial {
-            calls: usize,
-            bytes: Vec<u8>,
-        }
-        impl Write for Partial {
-            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-                self.calls += 1;
-                match self.calls {
-                    1 => Err(io::ErrorKind::Interrupted.into()),
-                    2 => {
-                        self.bytes.extend_from_slice(&bytes[..3]);
-                        Ok(3)
-                    }
-                    _ => Err(io::Error::from_raw_os_error(libc::ENOSPC)),
-                }
-            }
-            fn flush(&mut self) -> io::Result<()> {
-                Ok(())
-            }
-        }
-        let mut writer = Partial {
-            calls: 0,
-            bytes: Vec::new(),
-        };
-        let (written, result) = write_bytes(&mut writer, b"ab\ncd\n");
-        assert_eq!(written, 3);
-        assert_eq!(writer.bytes, b"ab\n");
-        assert_eq!(result.unwrap_err().raw_os_error(), Some(libc::ENOSPC));
-    }
 
     #[test]
     fn clock_rollback_does_not_walk_milliseconds_or_replace_archives() {

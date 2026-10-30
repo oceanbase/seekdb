@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use file_io::{publish_file, DirectoryDurability, DirectorySyncSummary};
+pub(crate) use file_io::{read_exact_at, write_all_at};
 use std::fs::{self, File, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -42,8 +44,12 @@ pub(crate) struct Files {
     pub lock: FileLock,
 }
 
-pub(crate) fn open(directory: &Path) -> Result<Files> {
-    create_directory(directory)?;
+pub(crate) fn open(
+    directory: &Path,
+    durability: DirectoryDurability,
+    summary: &mut DirectorySyncSummary,
+) -> Result<Files> {
+    create_directory(directory, durability, summary)?;
     let lock = options()
         .create(true)
         .truncate(false)
@@ -60,12 +66,10 @@ pub(crate) fn open(directory: &Path) -> Result<Files> {
     let lock = FileLock(lock);
     let path = directory.join("data");
     if !path.try_exists()? {
-        initialize(directory, &path)?;
+        initialize(directory, &path, durability, summary)?;
     }
     let data = options().open(path)?;
-    // A previous initializer may have renamed data.tmp and then failed its
-    // directory sync. Successful reopen must make publication durable too.
-    sync_directory(directory)?;
+    sync_directory(directory, durability, summary)?;
     let length = data.metadata()?.len();
     let pages = length / PAGE_SIZE as u64;
     if pages < 2 {
@@ -94,7 +98,12 @@ pub(crate) fn open(directory: &Path) -> Result<Files> {
     })
 }
 
-fn initialize(directory: &Path, destination: &Path) -> Result<()> {
+fn initialize(
+    directory: &Path,
+    destination: &Path,
+    durability: DirectoryDurability,
+    summary: &mut DirectorySyncSummary,
+) -> Result<()> {
     let temporary = directory.join("data.tmp");
     remove_if_exists(&temporary)?;
     let file = options().create_new(true).open(&temporary)?;
@@ -114,7 +123,7 @@ fn initialize(directory: &Path, destination: &Path) -> Result<()> {
     file.sync_all()?;
     drop(file);
     publish_file(&temporary, destination)?;
-    sync_directory(directory)?;
+    sync_directory(directory, durability, summary)?;
     Ok(())
 }
 
@@ -129,7 +138,11 @@ fn options() -> OpenOptions {
     options
 }
 
-fn create_directory(directory: &Path) -> io::Result<()> {
+fn create_directory(
+    directory: &Path,
+    durability: DirectoryDurability,
+    summary: &mut DirectorySyncSummary,
+) -> Result<()> {
     let mut missing = Vec::new();
     let mut current = directory;
     while !current.try_exists()? {
@@ -146,58 +159,22 @@ fn create_directory(directory: &Path) -> io::Result<()> {
             .parent()
             .filter(|parent| !parent.as_os_str().is_empty())
             .unwrap_or(Path::new(".")),
+        durability,
+        summary,
     )?;
     for path in missing.iter().rev() {
         match fs::create_dir(path) {
             Ok(()) => (),
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => (),
-            Err(error) => return Err(error),
+            Err(error) => return Err(error.into()),
         }
         sync_directory(
             path.parent()
                 .filter(|parent| !parent.as_os_str().is_empty())
                 .unwrap_or(Path::new(".")),
+            durability,
+            summary,
         )?;
-    }
-    Ok(())
-}
-
-#[cfg(unix)]
-fn sync_directory(directory: &Path) -> io::Result<()> {
-    File::open(directory)?.sync_all()
-}
-
-#[cfg(windows)]
-fn sync_directory(_directory: &Path) -> io::Result<()> {
-    // MoveFileExW with WRITE_THROUGH handles publication of data.tmp. Windows
-    // does not expose the Unix directory-fsync operation through std::fs.
-    Ok(())
-}
-
-#[cfg(unix)]
-fn publish_file(source: &Path, destination: &Path) -> io::Result<()> {
-    fs::rename(source, destination)
-}
-
-#[cfg(windows)]
-fn publish_file(source: &Path, destination: &Path) -> io::Result<()> {
-    use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Storage::FileSystem::{MoveFileExW, MOVEFILE_WRITE_THROUGH};
-    let source: Vec<u16> = source.as_os_str().encode_wide().chain(Some(0)).collect();
-    let destination: Vec<u16> = destination
-        .as_os_str()
-        .encode_wide()
-        .chain(Some(0))
-        .collect();
-    if unsafe {
-        MoveFileExW(
-            source.as_ptr(),
-            destination.as_ptr(),
-            MOVEFILE_WRITE_THROUGH,
-        )
-    } == 0
-    {
-        return Err(io::Error::last_os_error());
     }
     Ok(())
 }
@@ -208,56 +185,6 @@ fn remove_if_exists(path: &Path) -> io::Result<()> {
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(error),
     }
-}
-
-pub(crate) fn read_exact_at(file: &File, mut bytes: &mut [u8], mut offset: u64) -> io::Result<()> {
-    while !bytes.is_empty() {
-        #[cfg(unix)]
-        let result = {
-            use std::os::unix::fs::FileExt;
-            file.read_at(bytes, offset)
-        };
-        #[cfg(windows)]
-        let result = {
-            use std::os::windows::fs::FileExt;
-            file.seek_read(bytes, offset)
-        };
-        match result {
-            Ok(0) => return Err(io::Error::from(io::ErrorKind::UnexpectedEof)),
-            Ok(length) => {
-                bytes = &mut bytes[length..];
-                offset += length as u64;
-            }
-            Err(error) if error.kind() == io::ErrorKind::Interrupted => (),
-            Err(error) => return Err(error),
-        }
-    }
-    Ok(())
-}
-
-pub(crate) fn write_all_at(file: &File, mut bytes: &[u8], mut offset: u64) -> io::Result<()> {
-    while !bytes.is_empty() {
-        #[cfg(unix)]
-        let result = {
-            use std::os::unix::fs::FileExt;
-            file.write_at(bytes, offset)
-        };
-        #[cfg(windows)]
-        let result = {
-            use std::os::windows::fs::FileExt;
-            file.seek_write(bytes, offset)
-        };
-        match result {
-            Ok(0) => return Err(io::Error::from(io::ErrorKind::WriteZero)),
-            Ok(length) => {
-                bytes = &bytes[length..];
-                offset += length as u64;
-            }
-            Err(error) if error.kind() == io::ErrorKind::Interrupted => (),
-            Err(error) => return Err(error),
-        }
-    }
-    Ok(())
 }
 
 pub(crate) struct Allocation {
@@ -348,3 +275,42 @@ impl Drop for Allocation {
         let _ = fs::remove_file(&self.path);
     }
 }
+
+fn sync_directory(
+    path: &Path,
+    durability: DirectoryDurability,
+    summary: &mut DirectorySyncSummary,
+) -> Result<()> {
+    #[cfg(test)]
+    if let Some(source) = SYNC_FAULT.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let index = slot.calls;
+        slot.calls += 1;
+        if slot.fail_at == Some(index) {
+            slot.failure.take()
+        } else {
+            None
+        }
+    }) {
+        return Err(Error::DirectorySync {
+            path: path.to_owned(),
+            source,
+        });
+    }
+    durability
+        .sync_directory(path, summary)
+        .map_err(|source| Error::DirectorySync {
+            path: path.to_owned(),
+            source,
+        })
+}
+
+#[cfg(test)]
+#[derive(Default)]
+pub(crate) struct SyncFault {
+    pub fail_at: Option<usize>,
+    pub failure: Option<file_io::DirectorySyncError>,
+    pub calls: usize,
+}
+#[cfg(test)]
+thread_local! { pub(crate) static SYNC_FAULT: std::cell::RefCell<SyncFault> = std::cell::RefCell::default(); }

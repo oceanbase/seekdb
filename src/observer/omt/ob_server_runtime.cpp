@@ -308,6 +308,7 @@ ObServerRuntime::ObServerRuntime()
       gc_thread_(nullptr),
       has_created_(false),
       stopped_(0),
+      request_admission_(),
       modules_stopped_(false),
       req_queue_(),
       recv_mysql_cnt_(0),
@@ -439,7 +440,7 @@ int ObServerRuntime::create_modules()
 void ObServerRuntime::sleep_and_warn(ObServerRuntime* runtime)
 {
   ob_usleep(10_ms);
-  const int64_t ts = ObTimeUtility::current_time() - runtime->stopped_;
+  const int64_t ts = ObTimeUtility::current_time() - ATOMIC_LOAD(&runtime->stopped_);
   if (ts >= 3L * 60 * 1000 * 1000 && TC_REACH_TIME_INTERVAL(3L * 60 * 1000 * 1000)) {
     LOG_ERROR_RET(OB_SUCCESS, "runtime destructed for too long time.", K(runtime->id()), K(ts));
   }
@@ -451,23 +452,33 @@ void* ObServerRuntime::wait(void* t)
   ObServerRuntime* runtime = (ObServerRuntime*)t;
   lib::set_thread_name("UnitGC");
   lib::Thread::update_loop_ts();
+  while (!runtime->request_admission_.is_drained()) {
+    sleep_and_warn(runtime);
+  }
   runtime->handle_retry_req(true);
   while (runtime->req_queue_.size() > 0) {
     sleep_and_warn(runtime);
   }
-  while (runtime->workers_.get_size() > 0) {
+  for (;;) {
+    WList workers;
     if (OB_SUCC(runtime->workers_lock_.trylock())) {
-      DLIST_FOREACH_REMOVESAFE(wnode, runtime->workers_) {
-        const auto w = static_cast<ObThWorker*>(wnode->get_data());
-        runtime->workers_.remove(wnode);
-        destroy_worker(w);
+      DLIST_REMOVE_ALL_NORET(wnode, runtime->workers_) {
+        if (!workers.add_last(wnode)) {
+          ob_abort();
+        }
       }
       IGNORE_RETURN runtime->workers_lock_.unlock();
+      if (workers.is_empty()) {
+        break;
+      }
       if (REACH_TIME_INTERVAL(10_s)) {
         LOG_INFO(
-            "Runtime has some workers that need to stop", K(runtime->id()),
-            "workers", runtime->workers_.get_size(),
+            "Stopping runtime workers", K(runtime->id()),
+            "workers", workers.get_size(),
             K_(runtime->req_queue));
+      }
+      DLIST_REMOVE_ALL_NORET(wnode, workers) {
+        destroy_worker(static_cast<ObThWorker*>(wnode->get_data()));
       }
     }
     sleep_and_warn(runtime);
@@ -493,7 +504,7 @@ int ObServerRuntime::try_wait()
       LOG_WARN("try_wait again after wait successfully, there may be `kill -15` or failure of locking", K(id()), K(modules_stopped_));
     } else {
       // Recalculate after the process-shutdown session cleanup.
-      ATOMIC_STORE(&stopped_, ObTimeUtility::current_time()); // update, it is not 0 before here.
+      stop();
       if (OB_FAIL(ob_pthread_create(&gc_thread_, wait, this))) {
         ATOMIC_STORE(&has_created_, false);
         LOG_ERROR("runtime gc thread create failed", K(ret), K(errno), K(id()));
@@ -508,7 +519,7 @@ int ObServerRuntime::try_wait()
       ATOMIC_STORE(&gc_thread_, nullptr); // avoid try_wait again after wait success
       LOG_INFO("runtime pthread_tryjoin_np successfully", K(id()));
     }
-    const int64_t ts = ObTimeUtility::current_time() - stopped_;
+    const int64_t ts = ObTimeUtility::current_time() - ATOMIC_LOAD(&stopped_);
     // only warn for one time in all runtime.
     if (ts >= 3L * 60 * 1000 * 1000 && REACH_TIME_INTERVAL(3L * 60 * 1000 * 1000)) {
       LOG_ERROR_RET(OB_SUCCESS, "runtime destructed for too long time.", K(id()), K(ts));
@@ -584,13 +595,14 @@ int ObServerRuntime::get_new_request(
 
 int ObServerRuntime::recv_request(ObRequest &req)
 {
+  RequestAdmission::Guard admission(request_admission_);
   int ret = OB_SUCCESS;
   // Single classification point: the same high-priority decision that picks
   // the queue priority also drives the foreground expansion limit, so the
   // two can never drift apart (and expansion does not re-derive request
   // internals).
   bool is_high_prio = false;
-  if (has_stopped()) {
+  if (!admission.is_admitted()) {
     ret = OB_SERVER_RUNTIME_NOT_READY;
     LOG_WARN("receive request but runtime has already stopped", K(ret), K(id()));
   } else {
@@ -650,8 +662,9 @@ int ObServerRuntime::recv_request(ObRequest &req)
 
 int ObServerRuntime::push_retry_queue(rpc::ObRequest &req, const uint64_t timestamp)
 {
+  RequestAdmission::Guard admission(request_admission_);
   int ret = OB_SUCCESS;
-  if (has_stopped()) {
+  if (!admission.is_admitted()) {
     ret = OB_IN_STOP_STATE;
     LOG_WARN("receive retry request but runtime has already stopped", K(ret), K(id()));
   } else if (OB_FAIL(retry_queue_.push(req, timestamp))) {

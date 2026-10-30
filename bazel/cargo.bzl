@@ -78,12 +78,16 @@ def _cargo_build_impl(ctx):
                "--target-dir", "${CARGO_TARGET_DIR}", "--output", archive.path]
     if platform.rust_target:
         command += ["--target", platform.rust_target]
+    if ctx.attr.cargo_args:
+        command += ["--"] + ctx.attr.cargo_args
+    shell_arguments = {}
     if platform.os == "emscripten":
+        shell_arguments["arguments"] = ctx.attr.cargo_args
         command = '''wasm="$CARGO_TARGET_DIR/wasm"
 python "$CARGO_WORKSPACE/bazel/prepare_wasm_rust.py" "$("$RUSTC" --print sysroot)" "$wasm"
 export RUSTFLAGS="--sysroot=$wasm/sysroot -Ctarget-feature=+atomics,+bulk-memory,+mutable-globals -Cpanic=abort"
 export CXXFLAGS_wasm32_unknown_emscripten="-pthread -fexceptions"
-python "$wasm/workspace/build.py" --cargo "$CARGO" --target wasm32-unknown-emscripten --target-dir "$CARGO_TARGET_DIR" --output "%s" -- --no-default-features --features sql-nio/memory-transport -Zbuild-std=std,panic_abort
+python "$wasm/workspace/build.py" --cargo "$CARGO" --target wasm32-unknown-emscripten --target-dir "$CARGO_TARGET_DIR" --output "%s" -- --no-default-features --features sql-nio/memory-transport -Zbuild-std=std,panic_abort "$@"
 ''' % archive.path
     cargo_action(
         ctx,
@@ -95,6 +99,7 @@ python "$wasm/workspace/build.py" --cargo "$CARGO" --target wasm32-unknown-emscr
         work_dir = work_dir,
         mnemonic = "CargoBuild",
         progress_message = "Building Rust libraries for " + platform.os,
+        **shell_arguments
     )
     return [DefaultInfo(files = depset([archive]))]
 
@@ -104,6 +109,7 @@ cargo_library = rule(
         "srcs": attr.label_list(allow_files = True),
         "config_rs": attr.label(allow_single_file = True, mandatory = True),
         "platform_inputs": attr.label_list(allow_files = True),
+        "cargo_args": attr.string_list(),
     },
     fragments = ["apple", "cpp"],
     toolchains = CARGO_TOOLCHAINS,
