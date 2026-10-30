@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_REWRITE
 #include "sql/rewrite/ob_transform_pre_process.h"
+#include "sql/rewrite/ob_transform_simplify_expr.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/engine/expr/ob_expr_arg_case.h"
 #include "sql/resolver/dml/ob_select_resolver.h"
@@ -56,6 +57,17 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
         OPT_TRACE("flatten condition:", is_happened);
       }
     }  
+    if (OB_SUCC(ret) && stmt->has_vec_approx()) {
+      // ANN queries skip the main rewrite rules. Normalize their predicates
+      // without changing the vector ORDER BY or the query block's LIMIT.
+      SMART_VAR(ObTransformSimplifyExpr, simplifier, ctx_) {
+        if (OB_FAIL(simplifier.canonicalize_ann_conditions(stmt, is_happened))) {
+        } else {
+          trans_happened |= is_happened;
+          OPT_TRACE("canonicalize ANN conditions:", is_happened);
+        }
+      }
+    }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(try_gen_straight_join_leading(stmt, is_happened))) {
       } else {

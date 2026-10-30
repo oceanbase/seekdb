@@ -1,0 +1,195 @@
+# Regression for issue #1535: ANN queries must normalize scalar Boolean filters.
+--disable_warnings
+drop table if exists t_issue1535_absorption;
+--enable_warnings
+create table t_issue1535_absorption (
+  id int primary key,
+  embedding vector(3) not null,
+  category int,
+  parity varchar(8),
+  tag varchar(16) character set utf8mb4 collate utf8mb4_general_ci,
+  key idx_category(category),
+  vector key idx_embedding(embedding)
+    with (distance=l2, type=hnsw, lib=vsag, sync_mode=immediate));
+insert into t_issue1535_absorption values
+  (1, '[1,0,0]', 1, 'even', 'Alpha'),
+  (2, '[2,0,0]', 1, 'odd', 'alpha'),
+  (3, '[3,0,0]', 1, null, 'ALPHA'),
+  (4, '[4,0,0]', 2, 'even', 'Beta'),
+  (5, '[5,0,0]', 2, 'odd', 'beta'),
+  (6, '[6,0,0]', 2, null, 'BETA'),
+  (7, '[7,0,0]', null, 'even', null),
+  (8, '[8,0,0]', null, 'odd', null),
+  (9, '[9,0,0]', null, null, null);
+
+# Use the balanced 1,024-branch predicate from the reported workload.
+--let $branches = (category = 1 OR parity = 'even')
+--let $loop = 0
+while ($loop < 10)
+{
+  --let $branches = ($branches) AND ($branches)
+  --inc $loop
+}
+alter system flush plan cache;
+--disable_query_log
+--disable_result_log
+eval select id from t_issue1535_absorption
+where category = 1 AND ($branches)
+order by l2_distance(embedding, '[0,0,0]') approximate limit 9;
+--enable_result_log
+--enable_query_log
+select count(*) as vector_plans,
+       sum(instr(coalesce(p.filter_predicates, ''), 'parity') = 0) as absorbed_plans
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1535_absorption') > 0
+  and p.operator like 'VECTOR INDEX%';
+
+# Explicit rewrite opt-outs must retain the original Boolean branches.
+--echo # NO_REWRITE
+alter system flush plan cache;
+--disable_query_log
+--disable_result_log
+select /*+ NO_REWRITE */ id from t_issue1535_absorption
+where category = 1 AND (category = 1 OR parity = 'even')
+order by l2_distance(embedding, '[0,0,0]') approximate limit 9;
+--enable_result_log
+--enable_query_log
+select count(*) as vector_plans,
+       sum(instr(coalesce(p.filter_predicates, ''), 'parity') > 0) as preserved_plans
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1535_absorption') > 0
+  and p.operator like 'VECTOR INDEX%';
+
+--echo # NO_SIMPLIFY_EXPR
+alter system flush plan cache;
+--disable_query_log
+--disable_result_log
+select /*+ NO_SIMPLIFY_EXPR */ id from t_issue1535_absorption
+where category = 1 AND (category = 1 OR parity = 'even')
+order by l2_distance(embedding, '[0,0,0]') approximate limit 9;
+--enable_result_log
+--enable_query_log
+select count(*) as vector_plans,
+       sum(instr(coalesce(p.filter_predicates, ''), 'parity') > 0) as preserved_plans
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1535_absorption') > 0
+  and p.operator like 'VECTOR INDEX%';
+
+--echo # NO_QUERY_TRANSFORMATION
+alter system flush plan cache;
+--disable_query_log
+--disable_result_log
+select /*+ NO_QUERY_TRANSFORMATION */ id from t_issue1535_absorption
+where category = 1 AND (category = 1 OR parity = 'even')
+order by l2_distance(embedding, '[0,0,0]') approximate limit 9;
+--enable_result_log
+--enable_query_log
+select count(*) as vector_plans,
+       sum(instr(coalesce(p.filter_predicates, ''), 'parity') > 0) as preserved_plans
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1535_absorption') > 0
+  and p.operator like 'VECTOR INDEX%';
+
+--echo # Session transformation switch
+set @saved_transformation = @@ob_enable_transformation;
+set ob_enable_transformation = 0;
+alter system flush plan cache;
+--disable_query_log
+--disable_result_log
+select id from t_issue1535_absorption
+where category = 1 AND (category = 1 OR parity = 'even')
+order by l2_distance(embedding, '[0,0,0]') approximate limit 9;
+--enable_result_log
+--enable_query_log
+select count(*) as vector_plans,
+       sum(instr(coalesce(p.filter_predicates, ''), 'parity') > 0) as preserved_plans
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1535_absorption') > 0
+  and p.operator like 'VECTOR INDEX%';
+set ob_enable_transformation = @saved_transformation;
+
+--echo # Restoring transformation enables absorption again
+alter system flush plan cache;
+--disable_query_log
+--disable_result_log
+select id from t_issue1535_absorption
+where category = 1 AND (category = 1 OR parity = 'even')
+order by l2_distance(embedding, '[0,0,0]') approximate limit 9;
+--enable_result_log
+--enable_query_log
+select count(*) as vector_plans,
+       sum(instr(coalesce(p.filter_predicates, ''), 'parity') = 0) as absorbed_plans
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(s.statement, 't_issue1535_absorption') > 0
+  and p.operator like 'VECTOR INDEX%';
+
+# Preserve distance projection, alias ordering, OFFSET, and LIMIT.
+select id, l2_distance(embedding, '[0,0,0]') as distance
+from t_issue1535_absorption
+where category = 1 AND (category = 1 OR parity = 'even')
+order by distance approximate limit 1, 2;
+
+# Three-valued logic: TRUE, FALSE, and NULL all occur in P and Q.
+select id from t_issue1535_absorption
+where category = 1 AND (category = 1 OR parity = 'even')
+order by l2_distance(embedding, '[0,0,0]') approximate limit 9;
+select id from t_issue1535_absorption
+where category is null AND (category is null OR parity = 'even')
+order by l2_distance(embedding, '[0,0,0]') approximate limit 9;
+select id from t_issue1535_absorption
+where NOT (category = 1) AND (NOT (category = 1) OR parity = 'even')
+order by l2_distance(embedding, '[0,0,0]') approximate limit 9;
+select id from t_issue1535_absorption
+where category = 1 OR (category = 1 AND parity = 'even')
+order by l2_distance(embedding, '[0,0,0]') approximate limit 9;
+
+# Equality must respect the expression's collation.
+select id from t_issue1535_absorption
+where tag = 'ALPHA' AND (tag = 'alpha' OR category = 2)
+order by l2_distance(embedding, '[0,0,0]') approximate limit 9;
+select id from t_issue1535_absorption
+where tag collate utf8mb4_bin = 'Alpha'
+  AND (tag collate utf8mb4_bin = 'Alpha' OR category = 2)
+order by l2_distance(embedding, '[0,0,0]') approximate limit 9;
+select id from t_issue1535_absorption
+where tag = 'alpha'
+  AND (tag collate utf8mb4_bin = 'alpha' OR category = 2)
+order by l2_distance(embedding, '[0,0,0]') approximate limit 9;
+
+# An ANN block inside a derived table is visited without moving its LIMIT.
+select id from (
+  select id from t_issue1535_absorption
+  where category = 1 AND (category = 1 OR parity = 'even')
+  order by l2_distance(embedding, '[0,0,0]') approximate limit 2
+) nearest order by id;
+
+# A cached absorption based on equal parameters must not survive unequal values.
+prepare absorption_stmt from 'select id from t_issue1535_absorption where category = ? AND (category = ? OR parity = ?) order by l2_distance(embedding, IFNULL(CAST(? AS CHAR), ''[0,0,0]'')) approximate limit ?, ?';
+set @outer_category = 1, @inner_category = 1, @parity = 'odd',
+    @query_vector = null, @offset = 0, @topk = 9;
+execute absorption_stmt using @outer_category, @inner_category, @parity, @query_vector, @offset, @topk;
+set @inner_category = 2;
+execute absorption_stmt using @outer_category, @inner_category, @parity, @query_vector, @offset, @topk;
+set @inner_category = 1;
+execute absorption_stmt using @outer_category, @inner_category, @parity, @query_vector, @offset, @topk;
+set @inner_category = 2;
+execute absorption_stmt using @outer_category, @inner_category, @parity, @query_vector, @offset, @topk;
+set @inner_category = null;
+execute absorption_stmt using @outer_category, @inner_category, @parity, @query_vector, @offset, @topk;
+set @outer_category = null;
+execute absorption_stmt using @outer_category, @inner_category, @parity, @query_vector, @offset, @topk;
+set @outer_category = 1, @inner_category = 1, @offset = 1, @topk = 1;
+execute absorption_stmt using @outer_category, @inner_category, @parity, @query_vector, @offset, @topk;
+set @offset = 0, @topk = 0;
+execute absorption_stmt using @outer_category, @inner_category, @parity, @query_vector, @offset, @topk;
+set @topk = 9, @query_vector = '[3,0,0]';
+execute absorption_stmt using @outer_category, @inner_category, @parity, @query_vector, @offset, @topk;
+deallocate prepare absorption_stmt;
+
+drop table t_issue1535_absorption;
